@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -626,12 +627,7 @@ describe("the staffing paint routes", () => {
 
   it("validates a block against the venue's own changeover", async () => {
     const p = await painted();
-    await withTransaction(suite.db, (tx) =>
-      tx
-        .update(locations)
-        .set({ dayCutover: "03:00:00" })
-        .where(eq(locations.id, p.cfg.locationId)),
-    );
+    await withTransaction(suite.db, (tx) => seedBusinessDay(tx, { dayCutover: "03:00:00" }));
     const path = `${STAFFING}/seasons/${p.seasonId}`;
     const late = p.block({ startsAt: "05:00", endsAt: "07:00" });
     await answers(

@@ -191,10 +191,9 @@ describe("dashboard attendance wire and live reads", () => {
       "attendance_questions",
       "attendance_response_commands",
       "persons",
-      "locations",
+      "settings.business_day",
       "settings.venue",
-      "location_day_cutover_changes",
-      "location_business_day_settings",
+      "day_cutover_changes",
     ].map((type) => ({ type }));
     expect(lookup.dependencies).toEqual([{ type: "persons" }]);
     expect(queue.dependencies).toEqual(expected);
@@ -280,10 +279,9 @@ it.each([
   "attendance_questions",
   "attendance_response_commands",
   "persons",
-  "locations",
+  "settings.business_day",
   "settings.venue",
-  "location_day_cutover_changes",
-  "location_business_day_settings",
+  "day_cutover_changes",
 ])("a %s event refreshes mounted record reads passively", async (type) => {
   const cache = new LiveData();
   caches.push(cache);

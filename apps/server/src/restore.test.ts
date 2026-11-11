@@ -2152,6 +2152,8 @@ it("resolves an archive node's own location through the read-only source databas
   await suite.db.insert(locations).values({
     id: otherLocation,
   });
+  await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
+  await seedBusinessDay(suite.db, {});
   await suite.db
     .insert(nodes)
     .values({ id: otherNode, locationId: otherLocation, name: "Other node" });

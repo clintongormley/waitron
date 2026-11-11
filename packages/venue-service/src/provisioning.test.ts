@@ -511,7 +511,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
           dates: [{ date: "2026-06-04", closedAllDay: false }],
         },
         new Date("2026-01-01T12:00:00Z"),
-        0,
+        1,
       ),
     );
     const readDays = () =>

@@ -377,7 +377,7 @@ it("shows no copy of the address and previews its live replacement without chang
     ...receiptModel,
     venueAddress: ["Plaza Nueva 2", "41001 Sevilla"],
   });
-  api.liveData.invalidate([{ type: "locations" }]);
+  api.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(before + 1);
   expect(api.previewReceiptDraft.mock.lastCall![0].receipt.email).toBe("bar@example.com");
@@ -540,7 +540,7 @@ it.each(["en-GB", "es-ES"] as const)(
     expect(receiptRoot(el).textContent).not.toContain("Calle Mayor 1");
     expect(receiptRoot(el).textContent).not.toContain("28013 Madrid");
     api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: [] });
-    api.liveData.invalidate([{ type: "locations" }]);
+    api.liveData.invalidate([{ type: "settings.business_day" }]);
     await expect
       .poll(() => receiptRoot(el).querySelector("[data-test=venue-address]")?.textContent?.trim())
       .toBe(t("receipts.no_address"));

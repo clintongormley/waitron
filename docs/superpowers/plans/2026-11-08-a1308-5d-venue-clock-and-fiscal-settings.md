@@ -34,6 +34,10 @@ pair's `write-path.e2e.test.ts` (line 32 and lines 552–555); no assertion chan
 
 **Needs before it:** 5c.
 
+**Watcher correction, 2026-11-11 07:19:** the business-day parser accepts every stored string verbatim, including `""`; only non-strings are refused. The existing saved-zone classifier retains `venue.time_zone_invalid` / `missing`, and input writers keep their validation. This supersedes the non-empty parser requirement and its new empty-string refusal test below. Recorded in Lane H questions.md.
+
+**Watcher correction, 2026-11-11 07:40:** repair the shared fiscal fixture first and keep both protected fiscal files unedited if they pass. The shared helper now seeds the clock document and preserves its original operation description; the unedited pair passes 20 tests (`receipts/a1308-5d/fiscal-pair-helper-green.log`, Lane H). This supersedes the protected-file edit in item 6 and the PR second-line instruction above. The still-used `locationId` brand remains with those protected setup lines. The watcher cleared continuation up to about 2,400 authored additions, excluding the separate pure fixture-script commit; this is watcher clearance, not a new owner approval.
+
 ## What it builds
 
 1. **`settings.business_day`, version 1, owned by core** (tables-venuebox §2.2), in

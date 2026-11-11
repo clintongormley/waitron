@@ -145,8 +145,7 @@ export const BUSINESS_DAY_SETTINGS = defineSettingsDocument<BusinessDaySettings>
       return { ok: false, field: "doc" };
     const value = input as Record<string, unknown>;
     for (const field of Object.keys(value)) if (field !== "timeZone") return { ok: false, field };
-    if (typeof value.timeZone !== "string" || value.timeZone === "")
-      return { ok: false, field: "timeZone" };
+    if (typeof value.timeZone !== "string") return { ok: false, field: "timeZone" };
     return { ok: true, doc: { timeZone: value.timeZone } };
   },
 });

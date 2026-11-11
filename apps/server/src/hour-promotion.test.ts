@@ -1082,6 +1082,8 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   await spare.db.insert(locations).values({
     id: TENANT_A.locationId,
   });
+  await seedVenueSettings(spare.db, { operationDescription: "Hospitality" });
+  await seedBusinessDay(spare.db, {});
   await spare.db.insert(nodes).values({
     id: primary.nodeId,
     locationId: TENANT_A.locationId,

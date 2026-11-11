@@ -48,13 +48,14 @@ it("refuses a second venue row rather than answering UTC", async () => {
 });
 
 it.each(["", "Not/AZone"])("uses UTC for an invalid stored zone %j", async (timeZone) => {
-  await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, venueId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+  );
   try {
     expect(await readVenueTimeZone(suite.db)).toBe("UTC");
   } finally {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: venue.timeZone })
-      .where(eq(locations.id, venueId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${venue.timeZone}) where module = 'business_day'`,
+    );
   }
 });

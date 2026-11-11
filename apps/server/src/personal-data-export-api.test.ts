@@ -272,11 +272,9 @@ describe("GET /management-api/me/personal-data/export", () => {
   });
 
   it("dates the file in UTC when the venue's stored zone is unknown", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Not/AZone" })
-      .where(eq(locations.id, locationId))
-      .run();
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+    );
     const response = await ask(mounted());
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toBe(
@@ -300,11 +298,9 @@ describe("GET /management-api/me/personal-data/export", () => {
   });
 
   it("names the file for the real date when the box's clock reads 1970", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "UTC" })
-      .where(eq(locations.id, locationId))
-      .run();
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+    );
     const response = await ask(mounted({ now: () => new Date("1970-01-01T00:00:00Z") }));
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toBe(

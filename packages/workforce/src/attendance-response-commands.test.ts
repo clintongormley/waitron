@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -7,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   locations,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   dayCutoverChanges,
   newId,
   openVenueDatabase,
@@ -153,18 +154,19 @@ it.each(["zone", "cutover", "dated-cutover", "settings-revision"] as const)(
   async (kind) => {
     const before = await revision();
     if (kind === "zone")
-      await suite.db.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, locationId));
-    if (kind === "cutover")
-      await suite.db
-        .update(locations)
-        .set({ dayCutover: "05:00:00" })
-        .where(eq(locations.id, locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+      );
+    if (kind === "cutover") await seedBusinessDay(suite.db, { dayCutover: "05:00:00" });
     if (kind === "dated-cutover")
       await suite.db
         .insert(dayCutoverChanges)
         .values({ effectiveBusinessDay: "2026-01-05", dayCutover: "05:00:00" });
     if (kind === "settings-revision")
-      await suite.db.insert(locationBusinessDaySettings).values({ locationId, revision: 1 });
+      await suite.db
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day"));
     expect(await revision()).not.toBe(before);
   },
 );
@@ -477,7 +479,9 @@ it("a manager PIN does not let an unrelated worker answer someone else's item", 
 });
 it("a different time-zone revision refuses a new human append", async () => {
   const value = await command(pair());
-  await suite.db.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+  );
   await refused(() => send(value), "attendance.state_changed");
 });
 it("second-member append failure rolls back the first request and receipt", async () => {

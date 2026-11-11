@@ -131,7 +131,9 @@ describe("saved-zone script callers", () => {
   );
   it("refuses installed Demo's unusable saved zone before seeding catalogue or sales", async () => {
     const venue = await provision();
-    await suite.db.update(locations).set({ timeZone: "Invalid/Zone" });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
     const before = suite.db.all(sql`select * from catalogues`);
     const refusal = await seedInstalledDemo(suite.db, venue, {
       country: "ES",

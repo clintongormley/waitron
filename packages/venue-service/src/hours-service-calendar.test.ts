@@ -49,7 +49,7 @@ async function fixture() {
         weekday: day,
         slots: day === weekday ? [{ periodId: period.id, startsAt: "22:00", endsAt: "03:00" }] : [],
       }));
-    await replaceMenuWeek(tx, department!.id, week(1), at, 0);
+    await replaceMenuWeek(tx, department!.id, week(1), at, 1);
     const inactivePeriod = await saveMenuPeriod(tx, inactive!.id, {
       name: "Terrace",
       menuId: menu!.id,
@@ -63,7 +63,7 @@ async function fixture() {
         slots: [{ periodId: inactivePeriod.id, startsAt: "04:30", endsAt: "04:30" }],
       })),
       at,
-      0,
+      1,
     );
     await tx.update(departments).set({ active: false }).where(eq(departments.id, inactive!.id));
     return {
@@ -93,7 +93,7 @@ const special = (
         paint: ranges.length === 0 ? [] : [{ departmentId: f.department, date, ranges }],
       },
       at,
-      0,
+      1,
     ),
   );
 
@@ -135,10 +135,10 @@ describe("calendar follows department service periods", () => {
         f.department,
         monday([{ periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" }]),
         at,
-        0,
+        1,
         { seasonId: seasonId("Winter") },
       );
-      await replaceMenuWeek(tx, f.department, monday([]), at, 0, {
+      await replaceMenuWeek(tx, f.department, monday([]), at, 1, {
         seasonId: seasonId("Autumn"),
       });
     });

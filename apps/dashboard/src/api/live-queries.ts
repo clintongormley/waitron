@@ -302,7 +302,6 @@ export const QUERY_DEPENDENCIES = {
     "settings.business_day",
     "settings.venue",
     ...CURRENT_CLASSIFICATION_READS,
-    "settings.business_day",
     "day_cutover_changes",
   ],
   getReportPrinters: ["printers"],

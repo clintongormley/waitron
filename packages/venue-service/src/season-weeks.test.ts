@@ -129,7 +129,7 @@ describe("replaceMenuWeek writes season weeks", () => {
     const v = await venue();
     expect(await scoped((tx) => readSeasons(tx))).toEqual([]);
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
-    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 1));
     expect(Object.keys(await seasonIds())).toEqual(["Spring", "Summer", "Autumn", "Winter"]);
     expect(await departmentTuesdays(v)).toEqual(everySeason([lunch]));
     const weeks = await scoped((tx) => readDepartmentSeasonWeeks(tx, [v.departmentId]));
@@ -149,10 +149,10 @@ describe("replaceMenuWeek writes season weeks", () => {
     const v = await venue();
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
     const dinner = { periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" };
-    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 1));
     const { Winter } = await seasonIds();
     await scoped((tx) =>
-      replaceMenuWeek(tx, v.departmentId, menuWeek([dinner]), AT, 0, {
+      replaceMenuWeek(tx, v.departmentId, menuWeek([dinner]), AT, 1, {
         seasonId: Winter!,
       }),
     );
@@ -176,21 +176,21 @@ describe("replaceMenuWeek writes season weeks", () => {
     const v = await venue();
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
     const dinner = { periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" };
-    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 1));
     const { Winter } = await seasonIds();
     await scoped((tx) =>
-      replaceMenuWeek(tx, v.departmentId, menuWeek([dinner]), AT, 0, {
+      replaceMenuWeek(tx, v.departmentId, menuWeek([dinner]), AT, 1, {
         seasonId: Winter!,
       }),
     );
     await expect(
-      scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 5)),
+      scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 6)),
     ).rejects.toMatchObject({ code: "hours.clock_changed" });
     expect((await departmentTuesdays(v)).Winter).toEqual([dinner]);
-    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 1));
     expect(await departmentTuesdays(v)).toEqual(everySeason([lunch]));
     await expect(
-      scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 5)),
+      scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 6)),
     ).resolves.toBeUndefined();
   });
 
@@ -200,13 +200,13 @@ describe("replaceMenuWeek writes season weeks", () => {
       { periodId: v.lunch, startsAt: "13:00", endsAt: "14:00" },
       { periodId: v.lunch, startsAt: "14:00", endsAt: "16:00" },
     ];
-    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(split), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(split), AT, 1));
     const stored = [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === TUESDAY ? split : []));
     for (const seasonId of Object.values(await seasonIds()))
       await scoped((tx) => writeDepartmentSeasonWeeks(tx, v.departmentId, [seasonId], stored));
     expect(await departmentTuesdays(v)).toEqual(everySeason(split));
     await expect(
-      scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(split), AT, 5)),
+      scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(split), AT, 6)),
     ).resolves.toBeUndefined();
   });
 
@@ -222,7 +222,7 @@ describe("replaceMenuWeek writes season weeks", () => {
           { periodId: v.dinner, startsAt: "16:00", endsAt: "18:00" },
         ]),
         AT,
-        0,
+        1,
       ),
     );
     expect(await departmentTuesdays(v)).toEqual(
@@ -243,7 +243,7 @@ describe("replaceMenuWeek writes season weeks", () => {
           v.departmentId,
           menuWeek([{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" }]),
           AT,
-          0,
+          1,
           { seasonId },
         ),
       ),
@@ -260,11 +260,11 @@ describe("replaceMenuWeek writes season weeks", () => {
           v.departmentId,
           menuWeek([{ periodId: null as unknown as string, startsAt: "13:00", endsAt: "16:00" }]),
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toMatchObject({ code: "menu_timetable.invalid" });
-    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([]), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([]), AT, 1));
     const { Winter } = await seasonIds();
     const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
       weekday === TUESDAY
@@ -284,7 +284,7 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
   it("with no season named, gives a venue without seasons its four and closes every one, and the zone's read shows each season's week", async () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 1, AT));
     expect(Object.keys(await seasonIds())).toEqual(["Spring", "Summer", "Autumn", "Winter"]);
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
     const { Autumn } = await seasonIds();
@@ -298,10 +298,10 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 1, AT));
     const { Winter } = await seasonIds();
     await scoped((tx) =>
-      replaceZoneClosedWeek(tx, v.zoneId, closedWeek([afternoon]), 0, AT, {
+      replaceZoneClosedWeek(tx, v.zoneId, closedWeek([afternoon]), 1, AT, {
         seasonId: Winter!,
       }),
     );
@@ -326,21 +326,21 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 1, AT));
     const { Winter } = await seasonIds();
     await scoped((tx) =>
-      replaceZoneClosedWeek(tx, v.zoneId, closedWeek([afternoon]), 0, AT, {
+      replaceZoneClosedWeek(tx, v.zoneId, closedWeek([afternoon]), 1, AT, {
         seasonId: Winter!,
       }),
     );
     await expect(
-      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 5, AT)),
+      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 6, AT)),
     ).rejects.toMatchObject({ code: "hours.clock_changed" });
     expect((await zoneTuesdays(v)).Winter).toEqual([afternoon]);
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 1, AT));
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
     await expect(
-      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 5, AT)),
+      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([night]), 6, AT)),
     ).resolves.toBeUndefined();
   });
 
@@ -350,13 +350,13 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
       { startsAt: "13:00", endsAt: "14:00" },
       { startsAt: "14:00", endsAt: "16:00" },
     ];
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek(split), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek(split), 1, AT));
     const stored = [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === TUESDAY ? split : []));
     for (const seasonId of Object.values(await seasonIds()))
       await scoped((tx) => writeZoneSeasonWeeks(tx, v.zoneId, [seasonId], stored));
     expect(await zoneTuesdays(v)).toEqual(everySeason(split));
     await expect(
-      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek(split), 5, AT)),
+      scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek(split), 6, AT)),
     ).resolves.toBeUndefined();
   });
 
@@ -370,7 +370,7 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
           { startsAt: "14:00", endsAt: "16:00" },
           { startsAt: "13:00", endsAt: "14:00" },
         ]),
-        0,
+        1,
         AT,
       ),
     );
@@ -386,7 +386,7 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
           tx,
           v.zoneId,
           closedWeek([{ startsAt: "13:00", endsAt: "16:00" }]),
-          0,
+          1,
           AT,
           { seasonId },
         ),
@@ -397,7 +397,7 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
 
   it("writes every season range as closed, whatever kind it is handed", async () => {
     const v = await venue();
-    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([]), 0, AT));
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.zoneId, closedWeek([]), 1, AT));
     const { Winter } = await seasonIds();
     const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
       weekday === TUESDAY ? [{ startsAt: "13:00", endsAt: "16:00", kind: "open" }] : [],
@@ -439,7 +439,7 @@ describe("week writes", () => {
     const dinner = { periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" };
     const save = (tuesday: ServiceRange[], seasonId?: string) =>
       statementsOf((tx) =>
-        replaceMenuWeek(tx, v.departmentId, menuWeek(tuesday), AT, 0, { seasonId }),
+        replaceMenuWeek(tx, v.departmentId, menuWeek(tuesday), AT, 1, { seasonId }),
       );
     const rows = async () => {
       const names = Object.fromEntries(
@@ -480,7 +480,7 @@ describe("week writes", () => {
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
     const save = (tuesday: { startsAt: string; endsAt: string }[], seasonId?: string) =>
       statementsOf((tx) =>
-        replaceZoneClosedWeek(tx, v.zoneId, closedWeek(tuesday), 0, AT, { seasonId }),
+        replaceZoneClosedWeek(tx, v.zoneId, closedWeek(tuesday), 1, AT, { seasonId }),
       );
     const rows = async () => {
       const names = Object.fromEntries(
@@ -524,7 +524,7 @@ describe("week writes", () => {
           slots: weekday === 1 ? [dinner] : weekday === TUESDAY ? [lunch] : [],
         })),
         AT,
-        0,
+        1,
       );
       await replaceZoneClosedWeek(
         tx,
@@ -533,7 +533,7 @@ describe("week writes", () => {
           weekday,
           ranges: weekday === 1 ? [afternoon] : weekday === TUESDAY ? [night] : [],
         })),
-        0,
+        1,
         AT,
       );
     });
@@ -603,7 +603,7 @@ describe("season tables only", () => {
         v.departmentId,
         menuWeek([{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" }]),
         AT,
-        0,
+        1,
       ),
     );
     const { Winter } = await seasonIds();
@@ -624,7 +624,7 @@ describe("saveSeasonWeeks", () => {
   async function painted() {
     const v = await venue();
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
-    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek([lunch]), AT, 1));
     const more = await scoped(async (tx) => {
       const department = async (name: string) => {
         const id = (await createDepartment(tx, { name, orderStart: "table" })).id;
@@ -637,7 +637,7 @@ describe("saveSeasonWeeks", () => {
       return { terrace: await department("Terrace"), bar: await department("Bar") };
     });
     const bar = { periodId: more.bar.period, startsAt: "18:00", endsAt: "22:00" };
-    await scoped((tx) => replaceMenuWeek(tx, more.bar.id, menuWeek([bar]), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, more.bar.id, menuWeek([bar]), AT, 1));
     const { Winter } = await seasonIds();
     return { ...v, ...more, lunchRange: lunch, barRange: bar, winter: Winter! };
   }
@@ -671,7 +671,7 @@ describe("saveSeasonWeeks", () => {
           zones: [{ zoneId: p.zoneId, days: closedWeek([closed]) }],
         },
         AT,
-        0,
+        1,
       ),
     );
     expect(await tuesdays(p.departmentId)).toEqual({
@@ -696,7 +696,7 @@ describe("saveSeasonWeeks", () => {
         p.winter,
         { zones: [{ zoneId: p.zoneId, days: closedWeek([closed]) }] },
         AT,
-        0,
+        1,
       ),
     );
     expect((await stored()).departments).toEqual(before);
@@ -719,7 +719,7 @@ describe("saveSeasonWeeks", () => {
             ],
           },
           AT,
-          5,
+          6,
         ),
       ),
     ).rejects.toMatchObject({ code: "hours.clock_changed" });
@@ -741,7 +741,7 @@ describe("saveSeasonWeeks", () => {
             ],
           },
           AT,
-          5,
+          6,
         ),
       ),
     ).rejects.toMatchObject({ code: "hours.clock_changed" });
@@ -753,7 +753,7 @@ describe("saveSeasonWeeks", () => {
           p.winter,
           { departments: [{ departmentId: p.departmentId, days: menuWeek([p.lunchRange]) }] },
           AT,
-          5,
+          6,
         ),
       ),
     ).resolves.toBeUndefined();
@@ -768,7 +768,7 @@ describe("saveSeasonWeeks", () => {
       { departments: [{ departmentId: p.departmentId, days: menuWeek([]) }] },
     ])
       await expect(
-        scoped((tx) => saveSeasonWeeks(tx, seasonId, input, AT, 0)),
+        scoped((tx) => saveSeasonWeeks(tx, seasonId, input, AT, 1)),
       ).rejects.toMatchObject({ code: "season.not_found", params: { seasonId } });
     expect(await stored()).toEqual(before);
   });
@@ -795,7 +795,7 @@ describe("saveSeasonWeeks", () => {
             ],
           },
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toSatisfy(
@@ -829,7 +829,7 @@ describe("saveSeasonWeeks", () => {
             ],
           },
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toSatisfy(
@@ -863,7 +863,7 @@ describe("saveSeasonWeeks", () => {
             ],
           },
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toBe(failure);
@@ -887,7 +887,7 @@ describe("saveSeasonWeeks", () => {
             ],
           },
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId } });
@@ -902,7 +902,7 @@ describe("saveSeasonWeeks", () => {
             zones: [{ zoneId, days: closedWeek([]) }],
           },
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });
@@ -925,7 +925,7 @@ describe("saveSeasonWeeks", () => {
             ],
           },
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toSatisfy(

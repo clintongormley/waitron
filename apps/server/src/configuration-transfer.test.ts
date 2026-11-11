@@ -1,4 +1,5 @@
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
@@ -73,7 +74,7 @@ import {
   kitchenCourses,
   locations,
   dayCutoverChanges,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   printAgents,
   printers,
   printerHolders,
@@ -5353,10 +5354,7 @@ describe("venue detail edits and configuration boundaries", () => {
       modules: ALL_MODULES,
     });
     const venueId = await venueLocationId(suite.db);
-    await suite.db
-      .update(locations)
-      .set({ dayCutover: "04:30:00" })
-      .where(eq(locations.id, venueId));
+    await seedBusinessDay(suite.db, { dayCutover: "04:30:00" });
     const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
@@ -6564,10 +6562,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
   const sourceVenueId = await venueLocationId(suite.db);
   const scope = { locationId: sourceVenueId };
   const original = await withTransaction(suite.db, async (tx) => {
-    await tx
-      .update(locations)
-      .set({ dayCutover: "04:30:00" })
-      .where(eq(locations.id, scope.locationId));
+    await seedBusinessDay(tx, { dayCutover: "04:30:00" });
     const department = await createDepartment(tx, {
       name: "Period transfer",
       orderStart: "table",
@@ -6589,7 +6584,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
         slots: weekday === 5 ? [{ periodId: period.id, startsAt: "21:00", endsAt: "03:00" }] : [],
       })),
       new Date("2026-10-07T10:00:00Z"),
-      0,
+      1,
     );
     return [department.id, customer.id, staffFirst.id, staffSecond.id, period.id];
   });
@@ -7578,14 +7573,17 @@ describe("dated business-day configuration transfer", () => {
           slots: [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }],
         })),
         new Date("2026-11-02T12:00:00Z"),
-        0,
+        1,
       );
     });
     await suite.db.insert(dayCutoverChanges).values([
       { effectiveBusinessDay: "2026-11-04", dayCutover: "03:00:00" },
       { effectiveBusinessDay: "2026-11-10", dayCutover: "07:00:00" },
     ]);
-    await suite.db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 4 });
+    await suite.db
+      .update(businessDaySettingsTable)
+      .set({ revision: 5 })
+      .where(eq(businessDaySettingsTable.module, "business_day"));
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -7598,7 +7596,7 @@ describe("dated business-day configuration transfer", () => {
       versions,
     );
     expect(exported.venue.dayCutover).toBe("07:00:00");
-    expect(exported.tables).not.toHaveProperty("location_day_cutover_changes");
+    expect(exported.tables).not.toHaveProperty("day_cutover_changes");
     expect(exported.tables).not.toHaveProperty("location_business_day_settings");
     const request = venue("B33221177");
     request.dayCutover = exported.venue.dayCutover;
@@ -7637,11 +7635,19 @@ describe("dated business-day configuration transfer", () => {
       })),
     );
     expect(await targetSuite.db.select().from(dayCutoverChanges)).toEqual([]);
-    expect(await targetSuite.db.select().from(locationBusinessDaySettings)).toEqual([]);
+    expect(
+      await targetSuite.db
+        .select({ revision: businessDaySettingsTable.revision })
+        .from(businessDaySettingsTable)
+        .where(eq(businessDaySettingsTable.module, "business_day")),
+    ).toEqual([]);
     expect(await suite.db.select().from(dayCutoverChanges)).toHaveLength(2);
-    expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-      { locationId: venueId, revision: 4 },
-    ]);
+    expect(
+      await suite.db
+        .select({ revision: businessDaySettingsTable.revision })
+        .from(businessDaySettingsTable)
+        .where(eq(businessDaySettingsTable.module, "business_day")),
+    ).toEqual([{ revision: 5 }]);
   });
 
   it("keeps dated target history when the prepared venue is applied", async () => {
@@ -7654,7 +7660,10 @@ describe("dated business-day configuration transfer", () => {
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "03:00:00",
     });
-    await suite.db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 1 });
+    await suite.db
+      .update(businessDaySettingsTable)
+      .set({ revision: 2 })
+      .where(eq(businessDaySettingsTable.module, "business_day"));
     const rows = await suite.db.select().from(dayCutoverChanges);
     const model = await withTransaction(suite.db, (tx) =>
       readVenueDetails(tx, new Date("2026-11-05T12:00:00Z")),
@@ -7668,9 +7677,12 @@ describe("dated business-day configuration transfer", () => {
       ),
     ).toEqual(model);
     expect(await suite.db.select().from(dayCutoverChanges)).toEqual(rows);
-    expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-      { locationId: venueId, revision: 1 },
-    ]);
+    expect(
+      await suite.db
+        .select({ revision: businessDaySettingsTable.revision })
+        .from(businessDaySettingsTable)
+        .where(eq(businessDaySettingsTable.module, "business_day")),
+    ).toEqual([{ revision: 2 }]);
   });
 
   it("refuses pending export even before and during the transition lock", async () => {
@@ -7760,10 +7772,10 @@ describe("seasons in a configuration transfer", () => {
           weekday,
           slots,
         }));
-      await replaceMenuWeek(tx, department.id, week(dinner), HARVEST_SATURDAY, 0, {
+      await replaceMenuWeek(tx, department.id, week(dinner), HARVEST_SATURDAY, 1, {
         seasonId: ids.get("Harvest")!,
       });
-      await replaceMenuWeek(tx, department.id, week(lateBar), HARVEST_SATURDAY, 0, {
+      await replaceMenuWeek(tx, department.id, week(lateBar), HARVEST_SATURDAY, 1, {
         seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)!,
       });
       const terrace = await createServiceZone(tx, {
@@ -7777,7 +7789,7 @@ describe("seasons in a configuration transfer", () => {
           weekday,
           ranges,
         })),
-        0,
+        1,
         HARVEST_SATURDAY,
         { seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)! },
       );

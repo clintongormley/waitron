@@ -41,10 +41,9 @@ useVenueDb({
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
     departmentId = zone!.departmentId;
-    await db
-      .update(locations)
-      .set({ operationDescription: "Generic location service" })
-      .where(eq(locations.id, venue.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Generic location service"}) where module = 'venue'`,
+    );
     await authored("Dining meals");
   },
 });

@@ -40,7 +40,7 @@ describe("complete reporting clock", () => {
   it("reads retained rules in date order without replacing the baseline", async () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
-        sql`insert into location_day_cutover_changes (location_id, effective_business_day, day_cutover) values (${locationId}, '2026-12-01', '07:00:00'), (${locationId}, '2026-11-04', '03:00:00')`,
+        sql`insert into day_cutover_changes ( effective_business_day, day_cutover) values ('2026-12-01', '07:00:00'), ('2026-11-04', '03:00:00')`,
       );
     });
     expect(await readVenueClock(suite.db)).toEqual({

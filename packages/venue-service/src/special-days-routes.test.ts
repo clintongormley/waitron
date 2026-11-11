@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -10,7 +11,7 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   specialDays,
   withTransaction,
   type Database,
@@ -152,7 +153,7 @@ const expectedDetail = (r: Routed, id: string) => ({
   ],
 });
 
-const seeded = (r: Routed) => scoped((tx) => saveSpecialDay(tx, null, christmas(r), new Date(), 0));
+const seeded = (r: Routed) => scoped((tx) => saveSpecialDay(tx, null, christmas(r), new Date(), 1));
 const stored = (id: string) => scoped((tx) => readSpecialDay(tx, id));
 const countDays = async () => (await db.select().from(specialDays)).length;
 
@@ -171,7 +172,7 @@ describe("the special-day routes", () => {
     const r = await routed();
     const response = await r.send("POST", "", r.manager, {
       ...christmas(r),
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
     expect(response.status).toBe(201);
     const body = (await response.json()) as SpecialDayDetail;
@@ -200,7 +201,7 @@ describe("the special-day routes", () => {
           dates: [{ date: "2030-04-20", closedAllDay: true }],
         },
         new Date(),
-        0,
+        1,
       ),
     );
     const response = await r.send("GET", "", r.supervisor);
@@ -239,7 +240,7 @@ describe("the special-day routes", () => {
       name: "Christmas Eve",
       repeatsYearly: false,
       dates: [{ date: "2030-12-24", closedAllDay: false }],
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
     expect(response.status).toBe(200);
     const expected = {
@@ -255,7 +256,7 @@ describe("the special-day routes", () => {
     const r = await routed();
     const day = await seeded(r);
     await answers(
-      await r.send("DELETE", `/${day.id}`, r.manager, { expectedClockRevision: 0 }),
+      await r.send("DELETE", `/${day.id}`, r.manager, { expectedClockRevision: 1 }),
       204,
     );
     expect(await countDays()).toBe(0);
@@ -264,7 +265,7 @@ describe("the special-day routes", () => {
   it("refuses an unknown body key on POST and PUT, writing nothing", async () => {
     const r = await routed();
     const day = await seeded(r);
-    const body = { ...christmas(r), expectedClockRevision: 0, id: randomUUID() };
+    const body = { ...christmas(r), expectedClockRevision: 1, id: randomUUID() };
     await answers(await r.send("POST", "", r.manager, body), 400, {
       code: "management.request_invalid",
       params: { field: "id" },
@@ -280,11 +281,11 @@ describe("the special-day routes", () => {
   it("refuses a viewer every write, writing nothing", async () => {
     const r = await routed();
     const day = await seeded(r);
-    const body = { ...christmas(r), expectedClockRevision: 0 };
+    const body = { ...christmas(r), expectedClockRevision: 1 };
     for (const response of [
       await r.send("POST", "", r.supervisor, body),
       await r.send("PUT", `/${day.id}`, r.supervisor, body),
-      await r.send("DELETE", `/${day.id}`, r.supervisor, { expectedClockRevision: 0 }),
+      await r.send("DELETE", `/${day.id}`, r.supervisor, { expectedClockRevision: 1 }),
     ])
       await refusedAs(response, 403, "authorization.not_permitted");
     expect(await countDays()).toBe(1);
@@ -297,12 +298,12 @@ describe("the special-day routes", () => {
     const error = { code: "special_day.not_found", params: { specialDayId: missing } };
     await answers(await r.send("GET", `/${missing}`, r.manager), 404, error);
     await answers(
-      await r.send("PUT", `/${missing}`, r.manager, { ...christmas(r), expectedClockRevision: 0 }),
+      await r.send("PUT", `/${missing}`, r.manager, { ...christmas(r), expectedClockRevision: 1 }),
       404,
       error,
     );
     await answers(
-      await r.send("DELETE", `/${missing}`, r.manager, { expectedClockRevision: 0 }),
+      await r.send("DELETE", `/${missing}`, r.manager, { expectedClockRevision: 1 }),
       404,
       error,
     );
@@ -320,7 +321,10 @@ describe("the special-day routes", () => {
     const r = await routed();
     const day = await seeded(r);
     await scoped((tx) =>
-      tx.insert(locationBusinessDaySettings).values({ locationId: r.cfg.locationId, revision: 1 }),
+      tx
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day")),
     );
     const error = { code: "hours.clock_changed", params: {} };
     for (const expectedClockRevision of [undefined, 0]) {
@@ -340,7 +344,7 @@ describe("the special-day routes", () => {
     expect(await countDays()).toBe(1);
     expect(await stored(day.id)).toEqual(day);
     await answers(
-      await r.send("DELETE", `/${day.id}`, r.manager, { expectedClockRevision: 1 }),
+      await r.send("DELETE", `/${day.id}`, r.manager, { expectedClockRevision: 2 }),
       204,
     );
   });
@@ -372,7 +376,7 @@ describe("the special-day routes", () => {
         name: "Other",
         repeatsYearly: false,
         dates: [{ date: "2030-12-25", closedAllDay: false }],
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
       409,
       {
@@ -394,7 +398,7 @@ describe("the special-day routes", () => {
           ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
         },
       ],
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     };
     const error = {
       code: "special_day.invalid",
@@ -431,7 +435,7 @@ describe("the special-day routes", () => {
           ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
         },
       ],
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
     expect(response.status).toBe(201);
   });
@@ -450,7 +454,7 @@ describe("the special-day routes", () => {
           ],
         },
       ],
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
     expect(open.status).toBe(201);
   });
@@ -467,7 +471,7 @@ describe("the special-day routes", () => {
           ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
         },
       ],
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
     expect(closedDay.status).toBe(201);
   });
@@ -486,7 +490,7 @@ describe("the special-day routes", () => {
       await r.send("POST", "", r.manager, {
         ...christmas(r),
         zonePaint: zonePaint("18:00"),
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
       400,
       {
@@ -502,7 +506,7 @@ describe("the special-day routes", () => {
     const response = await r.send("POST", "", r.manager, {
       ...christmas(r),
       zonePaint: zonePaint("19:00"),
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
     expect(response.status).toBe(201);
     const body = (await response.json()) as SpecialDayDetail;
@@ -524,7 +528,7 @@ describe("the special-day routes", () => {
             ],
           },
         ],
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
       400,
       {
@@ -552,7 +556,7 @@ describe("the special-day routes", () => {
             ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
           },
         ],
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
       400,
       {
@@ -574,7 +578,7 @@ describe("the special-day routes", () => {
       name: "Broken",
       repeatsYearly: false,
       dates: [{ date: "2030-13-40", closedAllDay: false }],
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
     await answers(response, 400, {
       code: "special_day.invalid",
@@ -596,7 +600,7 @@ describe("the special-day routes", () => {
       const department = await r.send(method, path, r.manager, {
         ...christmas(r),
         paint: [departmentPaint],
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       });
       expect(department.status, method).toBe(400);
       expect(await department.json()).toEqual({
@@ -605,7 +609,7 @@ describe("the special-day routes", () => {
       const zone = await r.send(method, path, r.manager, {
         ...christmas(r),
         zonePaint: [zonePaint],
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       });
       expect(zone.status, method).toBe(400);
       expect(await zone.json()).toEqual({

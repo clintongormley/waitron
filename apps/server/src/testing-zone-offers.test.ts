@@ -156,10 +156,9 @@ describe("offerProducts", () => {
   it("keeps both menus orderable overnight and preserves a customer menu on repeat", async () => {
     const venue = await seedVenueWithMenu(suite.db);
     const first = await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "UTC" })
-        .where(eq(locations.id, venue.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+      );
       const offers = await offerProducts(tx, venue.cfg);
       await addProductToMenu(tx, {
         menuId: venue.catalogueId,

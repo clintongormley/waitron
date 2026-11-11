@@ -275,7 +275,7 @@ it("live values do not reset the opening baseline, and disconnect invalidates a 
   const { app, panel, liveData } = await mount({ getVenueDetails: async () => current });
   await change(panel, "addressLine1", "Different street");
   current = venueDetailsFixture({ addressLine1: "Live street" });
-  liveData.invalidate([{ type: "locations" }]);
+  liveData.invalidate([{ type: "settings.business_day" }]);
   const request = leave(app);
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   panel.remove();

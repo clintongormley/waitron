@@ -3,16 +3,18 @@ import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { stampDeployment } from "@waitron/db";
 import { nodeId } from "@waitron/shared";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
 import {
-  deviceProfiles,
+  BUSINESS_DAY_SETTINGS,
   dayCutoverChanges,
-  locationBusinessDaySettings,
+  readSettings,
+  deviceProfiles,
+  settings as businessDaySettingsTable,
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -302,6 +304,8 @@ it("first setup writes the venue document and an identical reapply keeps its rev
       revision: 2,
       doc: JSON.stringify({
         name: "Mostrador",
+        fiscalTerritory: "ES-common",
+        operationDescription: "venta en establecimiento",
         invoiceLocales: ["es-ES"],
         contentLanguages: ["es", "en"],
         defaultContentLanguage: "es",
@@ -1135,7 +1139,10 @@ it("reuses the current dated start without clearing the location timeline", asyn
     { effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
     { effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" },
   ]);
-  await suite.db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 3 });
+  await suite.db
+    .update(businessDaySettingsTable)
+    .set({ revision: 4 })
+    .where(eq(businessDaySettingsTable.module, "business_day"));
   const current = request("B10000008");
   current.dayCutover = "07:00";
   await expect(
@@ -1145,10 +1152,27 @@ it("reuses the current dated start without clearing the location timeline", asyn
     }),
   ).resolves.toMatchObject({ nodeId: first.nodeId });
   expect(await suite.db.select().from(dayCutoverChanges)).toHaveLength(2);
-  expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-    { locationId: venueId, revision: 3 },
-  ]);
+  expect(
+    await suite.db
+      .select({ revision: businessDaySettingsTable.revision })
+      .from(businessDaySettingsTable)
+      .where(eq(businessDaySettingsTable.module, "business_day")),
+  ).toEqual([{ revision: 4 }]);
   await expect(
     applyVenue(planVenue(original, ALL_MODULES), { db: suite.db, modules: ALL_MODULES }),
   ).rejects.toMatchObject({ code: "provisioning.second_venue" });
+});
+
+it("first setup writes the zone document and the first day-start row", async () => {
+  await applyVenue(planVenue(request("B10000019"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).toEqual({
+    doc: { timeZone: "Europe/Madrid" },
+    revision: 1,
+  });
+  expect(await suite.db.select().from(dayCutoverChanges)).toEqual([
+    { effectiveBusinessDay: "2000-01-01", dayCutover: "06:00:00" },
+  ]);
 });

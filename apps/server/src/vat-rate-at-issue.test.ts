@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -548,15 +549,15 @@ describe("the day is the invoice's own, read once", () => {
     const east = randomUUID();
     const utc = randomUUID();
 
-    const [location] = await suite.db
-      .select({ timeZone: locations.timeZone })
-      .from(locations)
-      .where(eq(locations.id, v.cfg.locationId));
+    const [location] = await Promise.resolve(
+      suite.db.all<{ timeZone: string }>(
+        sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+      ),
+    );
     try {
-      await suite.db
-        .update(locations)
-        .set({ timeZone: "Etc/GMT-2" })
-        .where(eq(locations.id, v.cfg.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Etc/GMT-2"}) where module = 'business_day'`,
+      );
       // 23:30 UTC on 31 December: already 1 January two hours east, still 31 December in UTC.
       at("2026-12-31T23:30:00.000Z", 120);
       await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
@@ -565,10 +566,9 @@ describe("the day is the invoice's own, read once", () => {
         lines: one(v, v.products.beer),
         tender: { method: "cash", amount: "2.50" },
       });
-      await suite.db
-        .update(locations)
-        .set({ timeZone: "Etc/UTC" })
-        .where(eq(locations.id, v.cfg.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Etc/UTC"}) where module = 'business_day'`,
+      );
       at("2026-12-31T23:30:00.000Z", 0);
       await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
         workingOrderId: utc,
@@ -586,10 +586,9 @@ describe("the day is the invoice's own, read once", () => {
         vatBreakdown: BEER_AT_10_PERCENT,
       });
     } finally {
-      await suite.db
-        .update(locations)
-        .set({ timeZone: location!.timeZone })
-        .where(eq(locations.id, v.cfg.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+      );
     }
   });
 });

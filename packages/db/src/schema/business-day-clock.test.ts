@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   CHECK_VIOLATION,
-  FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   isRefusal,
   locations,
@@ -25,17 +24,15 @@ beforeEach(async () => {
   });
   await seedBusinessDay(suite.db, {});
 });
-const change = (location: string, date: string, cutover: string) =>
+const change = (_location: string, date: string, cutover: string) =>
   withTransaction(suite.db, async (tx) => {
     await tx.execute(
-      sql`insert into location_day_cutover_changes (location_id, effective_business_day, day_cutover) values (${location}, ${date}, ${cutover})`,
+      sql`insert into day_cutover_changes ( effective_business_day, day_cutover) values (${date}, ${cutover})`,
     );
   });
-const revision = (location: string, value: number) =>
+const revision = (_location: string, value: number) =>
   withTransaction(suite.db, async (tx) => {
-    await tx.execute(
-      sql`insert into location_business_day_settings (location_id, revision) values (${location}, ${value})`,
-    );
+    await tx.execute(sql`update settings set revision = ${value} where module = 'business_day'`);
   });
 async function refused(action: () => Promise<unknown>, codes: readonly number[]) {
   const error = await action().then(
@@ -48,40 +45,40 @@ async function refused(action: () => Promise<unknown>, codes: readonly number[])
 describe("persisted business-day clock", () => {
   it("stores the baseline separately from dated starts and the revision", async () => {
     const { rows } = await suite.db.execute<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name in ('location_day_cutover_changes', 'location_business_day_settings') order by name`,
+      sql`select name from sqlite_master where type = 'table' and name in ('day_cutover_changes', 'location_day_cutover_changes', 'location_business_day_settings') order by name`,
     );
-    expect(rows.map((row) => row.name)).toEqual([
-      "location_business_day_settings",
-      "location_day_cutover_changes",
-    ]);
+    expect(rows.map((row) => row.name)).toEqual(["day_cutover_changes"]);
     await change(locationId, "2026-11-04", "03:00:00");
     await revision(locationId, 2);
     expect(
       (
         await suite.db.execute(
-          sql`select effective_business_day, day_cutover from location_day_cutover_changes`,
+          sql`select effective_business_day, day_cutover from day_cutover_changes where effective_business_day > '2000-01-01'`,
         )
       ).rows,
     ).toEqual([{ effective_business_day: "2026-11-04", day_cutover: "03:00:00" }]);
     expect(
-      (await suite.db.execute(sql`select revision from location_business_day_settings`)).rows,
+      (await suite.db.execute(sql`select revision from settings where module = 'business_day'`))
+        .rows,
     ).toEqual([{ revision: 2 }]);
-    expect((await suite.db.select().from(locations))[0]!.dayCutover).toBe("06:00:00");
+    expect(
+      suite.db.all(
+        sql`select day_cutover from day_cutover_changes where effective_business_day = '2000-01-01'`,
+      ),
+    ).toEqual([{ day_cutover: "06:00:00" }]);
   });
-  it.each(["change", "revision"])("refuses an unknown location in %s", async (kind) => {
-    await refused(
-      () =>
-        kind === "change" ? change("missing", "2026-11-04", "03:00:00") : revision("missing", 0),
-      FOREIGN_KEY_VIOLATION,
-    );
-  });
-  it("refuses a duplicate date for a location", async () => {
+  it("refuses a duplicate date for the venue", async () => {
     await change(locationId, "2026-11-04", "03:00:00");
     await refused(() => change(locationId, "2026-11-04", "07:00:00"), UNIQUE_VIOLATION);
   });
   it("refuses a duplicate revision row", async () => {
-    await revision(locationId, 0);
-    await refused(() => revision(locationId, 1), UNIQUE_VIOLATION);
+    await refused(
+      async () =>
+        await suite.db.execute(
+          sql`insert into settings select * from settings where module = 'business_day'`,
+        ),
+      UNIQUE_VIOLATION,
+    );
   });
   it.each(["2026-1-04", "2026-11-4", "2026-aa-04", "2026-11-04extra"])(
     "refuses malformed date %s",

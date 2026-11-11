@@ -1,6 +1,6 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as api from "./index.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { persons } from "./schema/identity/persons.js";
@@ -12,6 +12,8 @@ import { withTransaction } from "./tenancy.js";
 
 const doc = {
   name: "Harbour restaurant",
+  fiscalTerritory: "ES-common",
+  operationDescription: "Meals",
   addressLine1: "1 Main Street",
   addressLine2: null,
   postalCode: "10001",
@@ -30,6 +32,8 @@ describe("the venue document", () => {
     expect(api.VENUE_SETTINGS).toMatchObject({ module: "venue", version: 1, transfers: false });
     expect(api.VENUE_SETTINGS.defaults()).toEqual({
       name: "",
+      fiscalTerritory: "ES-common",
+      operationDescription: "Restaurant",
       addressLine1: null,
       addressLine2: null,
       postalCode: null,
@@ -127,6 +131,7 @@ describe("the venue document", () => {
   it("merges document fields with the remaining location fields and reads place in the clock query", async () => {
     await suite.db.insert(locations).values({});
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
+    await seeds.seedBusinessDay(suite.db, { timeZone: "Europe/London", dayCutover: "04:00:00" });
     expect(await withTransaction(suite.db, api.readVenue)).toEqual({
       name: doc.name,
       addressLine1: doc.addressLine1,
@@ -177,6 +182,8 @@ describe("the venue document", () => {
     expect(await api.readVenueSettings(suite.db)).toEqual({
       doc: {
         name: "Test venue",
+        fiscalTerritory: "ES-common",
+        operationDescription: "Restaurant",
         addressLine1: null,
         addressLine2: null,
         postalCode: null,
@@ -206,5 +213,115 @@ describe("the venue document", () => {
         code: "settings.invalid",
         params: { module: "venue", field: "version", version: 2 },
       });
+  });
+});
+
+describe("the business-day document", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("keeps an invalid zone as stored so the repair can read it", async () => {
+    await withTransaction(suite.db, (tx) =>
+      api.saveSettings(tx, api.BUSINESS_DAY_SETTINGS, {
+        doc: { timeZone: "Europe/Nowhere" },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    expect(await api.readSettings(suite.db, api.BUSINESS_DAY_SETTINGS)).toEqual({
+      doc: { timeZone: "Europe/Nowhere" },
+      revision: 1,
+    });
+    expect(api.BUSINESS_DAY_SETTINGS.parse({ timeZone: null })).toEqual({
+      ok: false,
+      field: "timeZone",
+    });
+  });
+
+  it("reads the zone, territory and description from the documents", async () => {
+    await suite.db.insert(locations).values({});
+    await withTransaction(suite.db, async (tx) => {
+      await api.createVenueSettings(
+        tx,
+        { ...doc, fiscalTerritory: "ES-canary", operationDescription: "New meals" },
+        null,
+      );
+      await api.saveSettings(tx, api.BUSINESS_DAY_SETTINGS, {
+        doc: { timeZone: "Atlantic/Canary" },
+        expectedRevision: 0,
+        personId: null,
+      });
+    });
+    await suite.db
+      .insert(api.dayCutoverChanges)
+      .values({ effectiveBusinessDay: "2000-01-01", dayCutover: "06:00:00" });
+    expect(await withTransaction(suite.db, api.readVenue)).toMatchObject({
+      timeZone: "Atlantic/Canary",
+      fiscalTerritory: "ES-canary",
+      operationDescription: "New meals",
+    });
+  });
+
+  it("refuses a venue with no business-day document", async () => {
+    await suite.db.insert(locations).values({});
+    await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
+    for (const read of [api.readVenue, api.readVenueClock])
+      await expect(withTransaction<unknown>(suite.db, read)).rejects.toMatchObject({
+        code: "venue.not_found",
+        params: {},
+      });
+  });
+
+  it("reads the business-day revision from its document", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await api.saveSettings(tx, api.BUSINESS_DAY_SETTINGS, {
+        doc: { timeZone: "Europe/London" },
+        expectedRevision: 0,
+        personId: null,
+      });
+      await api.saveSettings(tx, api.BUSINESS_DAY_SETTINGS, {
+        doc: { timeZone: "Europe/London" },
+        expectedRevision: 1,
+        personId: null,
+      });
+    });
+    expect(await api.readBusinessDayRevision(suite.db)).toBe(2);
+  });
+
+  it("uses the first day-start row as the base and later rows as ordered changes", async () => {
+    await suite.db.insert(locations).values({});
+    await withTransaction(suite.db, async (tx) => {
+      await api.createVenueSettings(tx, doc, null);
+      await api.saveSettings(tx, api.BUSINESS_DAY_SETTINGS, {
+        doc: { timeZone: "Europe/London" },
+        expectedRevision: 0,
+        personId: null,
+      });
+      await tx.run(sql`insert into day_cutover_changes (effective_business_day, day_cutover)
+        values ('2026-12-01', '05:00:00'), ('2000-01-01', '06:00:00')`);
+    });
+    expect(await withTransaction(suite.db, api.readVenueClock)).toEqual({
+      timeZone: "Europe/London",
+      dayCutover: "06:00",
+      cutoverChanges: [{ effectiveBusinessDay: "2026-12-01", dayCutover: "05:00" }],
+    });
+    await suite.db.run(sql`delete from day_cutover_changes`);
+    await expect(withTransaction(suite.db, api.readVenueClock)).rejects.toMatchObject({
+      code: "venue.not_found",
+    });
+  });
+
+  it("the clock fixture replaces only an explicit cutover and keeps the document revision", async () => {
+    await seeds.seedVenue(suite.db);
+    await seeds.seedBusinessDay(suite.db, { dayCutover: "04:30" });
+    await seeds.seedBusinessDay(suite.db);
+    expect((await api.readVenueClock(suite.db)).dayCutover).toBe("04:30");
+    expect(await api.readBusinessDayRevision(suite.db)).toBe(1);
+  });
+
+  it("refuses an empty fiscal territory", () => {
+    expect(api.VENUE_SETTINGS.parse({ ...doc, fiscalTerritory: "" })).toEqual({
+      ok: false,
+      field: "fiscalTerritory",
+    });
   });
 });

@@ -40,7 +40,7 @@ import {
   kitchenCourses,
   kitchenStations,
   locations,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   dayCutoverChanges,
   sales,
   venueLocationId,
@@ -320,7 +320,10 @@ describe("new department service periods", () => {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
     const id = await seedLocation(`Waiting ${randomUUID()}`);
     await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
-    await db.insert(locationBusinessDaySettings).values({ locationId: id, revision: 1 });
+    await db
+      .update(businessDaySettingsTable)
+      .set({ revision: 2 })
+      .where(eq(businessDaySettingsTable.module, "business_day"));
     await db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: `${dayCutover}:00`,
@@ -548,7 +551,7 @@ describe("venue service routing", () => {
           slots: weekday === 3 ? [{ periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" }] : [],
         })),
         new Date("2026-10-02T10:00:00Z"),
-        0,
+        1,
         { seasonId: summer.id },
       );
       const noPeriods = (await listVenueReadiness(tx)).filter(
@@ -2965,7 +2968,7 @@ describe("each served menu's structure and Device Home Page", () => {
           ],
         })),
         new Date("2026-10-02T10:00:00Z"),
-        0,
+        1,
       );
       return { lunchMenu, dinnerMenu };
     });
@@ -3034,7 +3037,7 @@ describe("each served menu's structure and Device Home Page", () => {
           ],
         })),
         new Date("2026-10-02T10:00:00Z"),
-        0,
+        1,
       );
       return { lunchMenu, drinksMenu };
     });

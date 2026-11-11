@@ -261,6 +261,8 @@ async function secondVenueRow(): Promise<void> {
   await suite.db.insert(locations).values({
     id: "d0000000-0000-4000-8000-000000000099",
   });
+  await seedVenueSettings(suite.db, { operationDescription: "Venta" });
+  await seedBusinessDay(suite.db, {});
 }
 
 it("refuses a copy holding two venue rows at admission, before anything is placed", async () => {

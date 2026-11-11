@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -12,7 +13,7 @@ import {
   CORE_MIGRATIONS,
   departmentDays,
   floorZones,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   dayCutoverChanges,
   locations,
   seasons,
@@ -119,9 +120,10 @@ describe("ensureDefaultSeasons", () => {
     };
     if (tenant) await seedVenue(db, venue);
     else {
-      const { name, province, invoiceLocales, ...columns } = venue;
+      const { name, province, invoiceLocales, operationDescription, ...columns } = venue;
       await db.insert(locations).values(columns);
-      await seedVenueSettings(db, { name, province, invoiceLocales });
+      await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
+      await seedBusinessDay(db);
     }
     const venueId = await venueLocationId(db);
     return venueId;
@@ -176,7 +178,7 @@ describe("ensureDefaultSeasons", () => {
   it("gives a venue whose seasons are all written by a later call the staff language", async () => {
     await staffVenue(false, null, "es-ES");
     const saved = await withTransaction(db, (tx) =>
-      saveSeasons(tx, { save: [], delete: [] }, AT, 0),
+      saveSeasons(tx, { save: [], delete: [] }, AT, 1),
     );
     expect(saved.map(({ name, startsOn, colour }) => ({ name, startsOn, colour }))).toEqual(
       starterSeasons("es"),
@@ -321,7 +323,7 @@ describe("seasonDeleteImpact", () => {
 });
 
 describe("saveSeasons", () => {
-  const change = (sent: Partial<SeasonChange>, revision = 0) =>
+  const change = (sent: Partial<SeasonChange>, revision = 1) =>
     scoped((tx) => saveSeasons(tx, { save: [], delete: [], ...sent }, AT, revision));
   const entry = (
     id: string | undefined,
@@ -396,7 +398,7 @@ describe("saveSeasons", () => {
 
   it("refuses a move under a stale clock revision before anything changes", async () => {
     const v = await autumnVenue();
-    expect(await refusal(change({ save: [entry(v.winter, "Winter", "11-15")] }, 1))).toEqual({
+    expect(await refusal(change({ save: [entry(v.winter, "Winter", "11-15")] }, 2))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
@@ -405,7 +407,7 @@ describe("saveSeasons", () => {
 
   it("renames and recolours under a stale clock revision, while a move under the same revision is refused", async () => {
     const v = await autumnVenue();
-    const renamed = await change({ save: [entry(v.lateAutumn, "Fall", "11-01", "teal")] }, 1);
+    const renamed = await change({ save: [entry(v.lateAutumn, "Fall", "11-01", "teal")] }, 2);
     expect(renamed).toContainEqual({
       id: v.lateAutumn,
       name: "Fall",
@@ -413,7 +415,7 @@ describe("saveSeasons", () => {
       colour: "teal",
     });
     expect(
-      await refusal(change({ save: [entry(v.lateAutumn, "Fall", "11-05", "teal")] }, 1)),
+      await refusal(change({ save: [entry(v.lateAutumn, "Fall", "11-05", "teal")] }, 2)),
     ).toEqual({ code: "hours.clock_changed", params: {} });
     expect(await seasonsOf()).toEqual([
       { name: "Autumn", startsOn: "09-01" },
@@ -438,7 +440,7 @@ describe("saveSeasons", () => {
   it("refuses a delete under a stale clock revision before anything changes", async () => {
     const v = await autumnVenue();
     const weeksBefore = await everyWeek();
-    expect(await refusal(change({ delete: [v.winter] }, 1))).toEqual({
+    expect(await refusal(change({ delete: [v.winter] }, 2))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
@@ -531,7 +533,7 @@ describe("saveSeasons", () => {
 
   it("refuses an add's bad or taken start, taken name, and stale revision", async () => {
     await autumnVenue();
-    const add = (name: string, startsOn: string, revision = 0) =>
+    const add = (name: string, startsOn: string, revision = 1) =>
       refusal(change({ save: [entry(undefined, name, startsOn)] }, revision));
     expect(await add("Leap", "02-29")).toEqual({
       code: "season.invalid",
@@ -545,7 +547,7 @@ describe("saveSeasons", () => {
       code: "season.invalid",
       params: { field: "save.0.name", reason: "taken" },
     });
-    expect(await add("Mid autumn", "10-01", 1)).toEqual({
+    expect(await add("Mid autumn", "10-01", 2)).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
@@ -718,8 +720,9 @@ describe("saveSeasons", () => {
     // crosses, is refused only after the renames, the new season and the delete are written.
     await scoped(async (tx) => {
       await tx
-        .insert(locationBusinessDaySettings)
-        .values({ locationId: v.cfg.locationId, revision: 1 });
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day"));
       await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2030-10-20",
         dayCutover: "03:00:00",
@@ -732,7 +735,7 @@ describe("saveSeasons", () => {
             save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Fair", "04-10")],
             delete: [v.lateAutumn],
           },
-          1,
+          2,
         ),
       ),
     ).toMatchObject({ code: "hours.clock_change_conflict" });

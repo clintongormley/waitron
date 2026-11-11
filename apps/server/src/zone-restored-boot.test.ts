@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   agreeInternet,
   archiveCommand,
@@ -70,10 +71,9 @@ it.each(["archive", "bucket"] as const)(
       await tx.delete(locations).where(ne(locations.id, node.locationId));
     });
     await recoveryInvoices();
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Invalid/Zone" })
-      .where(eq(locations.id, node.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
     const password = "SyntheticRestorePassword123";
     await suite.db.insert(persons).values({
       displayName: "Restore manager",
@@ -172,13 +172,13 @@ it.each(["archive", "bucket"] as const)(
       await withMockedKill(async (kills) => {
         const response = await request(path, "POST", {
           timeZone: "Europe/Madrid",
-          expectedClockRevision: 0,
+          expectedClockRevision: 1,
           confirmed: true,
         });
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({
           repaired: true,
-          clockRevision: 1,
+          clockRevision: 2,
           admission: "restart_required",
         });
         await vi.waitFor(() => expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]));
@@ -190,7 +190,22 @@ it.each(["archive", "bucket"] as const)(
       const placed = await openVenueDatabase(roots.venueDir);
       try {
         expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
-        expect((await placed.venue.select().from(locations))[0]!.timeZone).toBe("Europe/Madrid");
+        expect(
+          (
+            await Promise.resolve(
+              placed.venue.all<{
+                id: string;
+                bumpMode: string;
+                fireControl: string;
+                catalogueId: string | null;
+                timeZone: string;
+                dayCutover: string;
+              }>(
+                sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+              ),
+            )
+          )[0]!.timeZone,
+        ).toBe("Europe/Madrid");
         expect(
           await placed.venue
             .select()

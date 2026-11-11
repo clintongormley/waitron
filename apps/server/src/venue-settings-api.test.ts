@@ -128,7 +128,7 @@ async function sell() {
 describe("department invoice settings", () => {
   it("uses an edited department description for the next fiscal record while retaining the earlier record", async () => {
     await suite.db.execute(
-      sql`update locations set operation_description = 'Unrelated generic bootstrap' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.operationDescription', 'Unrelated generic bootstrap') where module = 'venue'`,
     );
     try {
       await sell();
@@ -150,7 +150,7 @@ describe("department invoice settings", () => {
       ]);
     } finally {
       await suite.db.execute(
-        sql`update locations set operation_description = 'Venta en establecimiento' where id = ${venue.cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.operationDescription', 'Venta en establecimiento') where module = 'venue'`,
       );
       await resetDescription();
     }

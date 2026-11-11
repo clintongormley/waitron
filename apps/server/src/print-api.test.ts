@@ -185,7 +185,18 @@ async function send(
 
 it("refuses the retired venue-wide receipt mode write without changing the location", async () => {
   const app = mountApp();
-  const before = await suite.db.select().from(locations).where(eq(locations.id, locationId));
+  const before = await Promise.resolve(
+    suite.db.all<{
+      id: string;
+      bumpMode: string;
+      fireControl: string;
+      catalogueId: string | null;
+      timeZone: string;
+      dayCutover: string;
+    }>(
+      sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+    ),
+  );
 
   const response = await send(
     app,
@@ -195,9 +206,20 @@ it("refuses the retired venue-wide receipt mode write without changing the locat
   );
 
   expect(response.status).toBe(404);
-  expect(await suite.db.select().from(locations).where(eq(locations.id, locationId))).toEqual(
-    before,
-  );
+  expect(
+    await Promise.resolve(
+      suite.db.all<{
+        id: string;
+        bumpMode: string;
+        fireControl: string;
+        catalogueId: string | null;
+        timeZone: string;
+        dayCutover: string;
+      }>(
+        sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+      ),
+    ),
+  ).toEqual(before);
 });
 
 /** Accepts through the verb; the accept route is `join-api.ts`'s. */
@@ -2439,18 +2461,20 @@ describe("mountPrintApi — management: print-test-page", () => {
   const NOW = new Date("2026-10-01T13:05:00.000Z");
 
   async function withVenueTimeZone<T>(timeZone: string, fn: () => Promise<T>): Promise<T> {
-    const [before] = await suite.db
-      .select({ timeZone: locations.timeZone })
-      .from(locations)
-      .where(eq(locations.id, locationId));
-    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, locationId));
+    const [before] = await Promise.resolve(
+      suite.db.all<{ timeZone: string }>(
+        sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+      ),
+    );
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
     try {
       return await fn();
     } finally {
-      await suite.db
-        .update(locations)
-        .set({ timeZone: before!.timeZone })
-        .where(eq(locations.id, locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${before!.timeZone}) where module = 'business_day'`,
+      );
     }
   }
 

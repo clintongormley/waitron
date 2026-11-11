@@ -197,7 +197,7 @@ it("a live read that moves an untouched draft to a newly fixed language turns pr
     receiptLanguageChoices: ["ca-ES"],
     fixedReceiptLanguage: "ca-ES",
   };
-  liveData.invalidate([{ type: "locations" }]);
+  liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => field(panel, "receiptLanguage")?.value).toBe("ca-ES");
   expect(unload()).toBe(true);
 });

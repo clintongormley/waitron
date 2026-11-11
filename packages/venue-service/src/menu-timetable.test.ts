@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -228,10 +229,7 @@ describe("service-period writers", () => {
     expect(localTimeOccurrences("2026-03-28", "02:30", ZONE)).toHaveLength(1);
     expect(localTimeOccurrences("2026-03-29", "02:30", ZONE)).toEqual([]);
     const v = await venue();
-    await db
-      .update(locations)
-      .set({ dayCutover: "02:30:00" })
-      .where(eq(locations.id, v.locationId));
+    await seedBusinessDay(db, { dayCutover: "02:30:00" });
     await saveDay(v, "2026-03-28", {
       paint: [
         { periodId: null, startsAt: "02:30", endsAt: "21:00" },
@@ -265,10 +263,7 @@ describe("service-period writers", () => {
 
   it("checks a start equal to the changeover on the business date", async () => {
     const v = await venue();
-    await db
-      .update(locations)
-      .set({ dayCutover: "02:30:00" })
-      .where(eq(locations.id, v.locationId));
+    await seedBusinessDay(db, { dayCutover: "02:30:00" });
     await saveDay(v, "2026-03-28", { paint: [slot(v.periods!.mananas, "02:30", "21:00")] });
     await expect(
       saveDay(v, "2026-03-29", { paint: [slot(v.periods!.mananas, "02:30", "21:00")] }),
@@ -329,10 +324,7 @@ describe("service-period writers", () => {
 
   it("uses the venue's changeover and refuses a range crossing the end of its business day", async () => {
     const v = await venue();
-    await db
-      .update(locations)
-      .set({ dayCutover: "08:00:00" })
-      .where(eq(locations.id, v.locationId));
+    await seedBusinessDay(db, { dayCutover: "08:00:00" });
     await expect(
       scoped((tx) =>
         replaceMenuWeek(
@@ -340,7 +332,7 @@ describe("service-period writers", () => {
           v.restaurant,
           weekOf((day) => (day === 1 ? [slot(v.periods!.mananas, "07:00", "09:00")] : [])),
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toMatchObject({
@@ -358,7 +350,7 @@ describe("service-period writers", () => {
           v.restaurant,
           weekOf((day) => (day === 1 ? [slot(v.periods!.mananas, "12:10", "14:00")] : [])),
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toMatchObject({
@@ -375,10 +367,7 @@ describe("service-period writers", () => {
 
   it("checks skipped times on the calendar date that owns each business-day endpoint", async () => {
     const v = await venue();
-    await db
-      .update(locations)
-      .set({ dayCutover: "06:00:00" })
-      .where(eq(locations.id, v.locationId));
+    await seedBusinessDay(db, { dayCutover: "06:00:00" });
     await expect(
       saveDay(v, "2026-03-28", { paint: [slot(v.periods!.noches, "21:00", "02:30")] }),
     ).rejects.toMatchObject({
@@ -653,13 +642,13 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
       brunch: await period(restaurant, "Brunch navideño", "Brunch de Navidad"),
       mediodiaDeli: await period(deli, "Mediodía deli", "Deli para llevar"),
     };
-    await replaceMenuWeek(tx, restaurant, restaurantWeek(periods), AT, 0);
+    await replaceMenuWeek(tx, restaurant, restaurantWeek(periods), AT, 1);
     await replaceMenuWeek(
       tx,
       deli,
       weekOf(() => [slot(periods.mediodiaDeli, "12:00", "15:00")]),
       AT,
-      0,
+      1,
     );
     return { ...v, periods };
   });
@@ -731,7 +720,7 @@ const saveDay = (
         paint: [{ departmentId: v.restaurant, date, ranges: options.paint ?? [] }],
       },
       AT,
-      0,
+      1,
     ),
   );
 
@@ -816,7 +805,7 @@ describe("the menu a zone starts on", () => {
             : null,
         ),
         AT,
-        0,
+        1,
       );
     });
     expect(await choice(v.barra, madrid(TUESDAY, "10:00"))).toEqual({
@@ -879,7 +868,7 @@ describe("the menu a zone starts on", () => {
         v.restaurant,
         precedingBusinessDay([slot(periods.madrugada, skipped, "04:00")]),
         AT,
-        0,
+        1,
       ),
     );
     expect(await choice(v.sala, forward.instant)).toEqual({
@@ -901,7 +890,7 @@ describe("the menu a zone starts on", () => {
           slot(periods.mananas, boundary, "05:00"),
         ]),
         AT,
-        0,
+        1,
       ),
     );
     for (const occurrence of [0, 1]) {
@@ -921,7 +910,7 @@ describe("the menu a zone starts on", () => {
     const v = await timed();
     await scoped(async (tx) => {
       await tx.execute(
-        sql`update locations set time_zone = 'Mars/Base' where id = ${v.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.timeZone', 'Mars/Base') where module = 'business_day'`,
       );
     });
     for (const zoneId of [v.sala, v.barra])
@@ -1058,7 +1047,9 @@ describe("a special date's menu timetable", () => {
 describe("the timetable's writers", () => {
   it("checks structural ranges but skips clock-gap checks when the clock cannot be read", async () => {
     const v = await timed();
-    await db.update(locations).set({ timeZone: "Mars/Base" }).where(eq(locations.id, v.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+    );
     const date = await saveDay(v, "2027-03-27", {
       paint: [slot(v.periods.mananas, "00:30", "02:30")],
     });
@@ -1146,8 +1137,8 @@ describe("the timetable's writers", () => {
       );
     // Saturday 3 October is past at AT: its clash with the Friday before is history.
     await saveDay(v, "2026-10-03", { paint: [slot(periods.mananas, "01:00", "03:00")] });
-    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("03:00"), AT, 0));
-    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("02:00"), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("03:00"), AT, 1));
+    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("02:00"), AT, 1));
     // Tuesday 6 October is yesterday at AT, so it is read, but its pair with Monday is past.
     await saveDay(v, "2026-10-06", { paint: [slot(periods.mananas, "01:00", "03:00")] });
     await scoped((tx) =>
@@ -1158,17 +1149,17 @@ describe("the timetable's writers", () => {
           weekday === 1 ? [slot(periods.madrugada, "22:00", "03:00")] : null,
         ),
         AT,
-        0,
+        1,
       ),
     );
-    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("02:00"), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("02:00"), AT, 1));
 
     await saveDay(v, "2026-10-24", { paint: [slot(periods.mananas, "02:30", "05:00")] });
-    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("03:00"), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.restaurant, fridayTail("03:00"), AT, 1));
     // The replacement week was written.
     expect((await resolve(v.sala, madrid("2026-10-31", "02:30"))).periodId).toBe(periods.madrugada);
     await expect(
-      scoped((tx) => replaceMenuWeek(tx, v.restaurant, weekOf(() => []).slice(1), AT, 0)),
+      scoped((tx) => replaceMenuWeek(tx, v.restaurant, weekOf(() => []).slice(1), AT, 1)),
     ).rejects.toMatchObject(invalid("days"));
     await expect(
       scoped((tx) =>
@@ -1177,7 +1168,7 @@ describe("the timetable's writers", () => {
           v.restaurant,
           weekOf(() => []),
           AT,
-          0,
+          1,
         ),
       ),
     ).resolves.toBeUndefined();
@@ -1188,7 +1179,7 @@ describe("the timetable's writers", () => {
           randomUUID(),
           weekOf(() => []),
           AT,
-          0,
+          1,
         ),
       ),
     ).rejects.toMatchObject({ code: "department.not_found" });
@@ -1204,7 +1195,7 @@ describe("the timetable's writers", () => {
         .from(menuPeriodStaffMenus)
         .where(eq(menuPeriodStaffMenus.periodId, periods.noches)),
     ).toEqual([{ menuId: menus.Cócteles }]);
-    await scoped((tx) => deletePeriod(tx, periods.noches, null, AT, 0));
+    await scoped((tx) => deletePeriod(tx, periods.noches, null, AT, 1));
     expect(
       await db
         .select()
@@ -1230,7 +1221,7 @@ describe("the opening-hours model's seasons", () => {
         v.restaurant,
         weekOf(() => []),
         AT,
-        0,
+        1,
       );
       const winter = (await readSeasons(tx)).find(
         (season) => season.name === starterSeasonName("Winter", "es"),
@@ -1240,7 +1231,7 @@ describe("the opening-hours model's seasons", () => {
         v.restaurant,
         weekOf((weekday) => (weekday === 5 ? [slot(dinner, "20:00", "23:00")] : [])),
         AT,
-        0,
+        1,
         { seasonId: winter.id },
       );
       await replaceZoneClosedWeek(
@@ -1250,7 +1241,7 @@ describe("the opening-hours model's seasons", () => {
           weekday,
           ranges: weekday === 5 ? [{ startsAt: "16:00", endsAt: "18:00" }] : [],
         })),
-        0,
+        1,
         AT,
         { seasonId: winter.id },
       );
@@ -1346,7 +1337,7 @@ describe("the opening-hours model's seasons", () => {
         v.restaurant,
         weekOf(() => []),
         AT,
-        0,
+        1,
       ),
     );
     const ids = await scoped((tx) => readSeasons(tx));
@@ -1371,7 +1362,7 @@ describe("the opening-hours model's seasons", () => {
         v.restaurant,
         weekOf(() => []),
         AT,
-        0,
+        1,
       );
       const first = (await readSeasons(tx))[0]!;
       await replaceMenuWeek(
@@ -1379,11 +1370,11 @@ describe("the opening-hours model's seasons", () => {
         v.restaurant,
         weekOf((weekday) => (weekday === 2 ? [slot(dinner, "20:00", "23:00")] : [])),
         AT,
-        0,
+        1,
         { seasonId: first.id },
       );
       await tx.execute(
-        sql`update locations set time_zone = 'Mars/Base' where id = ${v.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.timeZone', 'Mars/Base') where module = 'business_day'`,
       );
       return { dinner, first };
     });
@@ -1420,7 +1411,7 @@ describe("a period no longer placed anywhere but a past special day", () => {
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
     expect(restaurant.periods.find((period) => period.id === periods.brunch)!.weekdays).toEqual([]);
 
-    await scoped((tx) => deletePeriod(tx, periods.brunch, null, AT, 0));
+    await scoped((tx) => deletePeriod(tx, periods.brunch, null, AT, 1));
     expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, periods.brunch))).toEqual(
       [],
     );
@@ -1558,7 +1549,7 @@ describe("a special day cleared or deleted", () => {
       periodId: periods.mananas,
     });
 
-    await scoped((tx) => deleteSpecialDay(tx, christmas.id, AT, 0));
+    await scoped((tx) => deleteSpecialDay(tx, christmas.id, AT, 1));
     expect(await paintOn(v, CHRISTMAS)).toEqual({ days: 0, ranges: [] });
     expect(
       await db.select().from(specialDayDates).where(eq(specialDayDates.specialDayId, christmas.id)),
@@ -1705,12 +1696,12 @@ describe("statements", () => {
         v.restaurant,
         weekOf((weekday) => (weekday === 1 ? [slot(v.periods.mananas, "09:00", "12:00")] : [])),
         AT,
-        0,
+        1,
       ),
     );
     const few = await statementsOf((tx) => resolveDepartmentService(tx, v.restaurant, at));
     await scoped(async (tx) => {
-      await replaceMenuWeek(tx, v.restaurant, twentySlots(v.periods), AT, 0);
+      await replaceMenuWeek(tx, v.restaurant, twentySlots(v.periods), AT, 1);
       await updateMenuPeriod(tx, v.periods.noches, {
         staffMenuIds: [v.menus.Café, v.menus.Cócteles, v.menus.Bebidas],
       });
@@ -1738,9 +1729,9 @@ describe("statements", () => {
         plain.restaurant,
         weekOf(() => []),
         AT,
-        0,
+        1,
       );
-      await replaceMenuWeek(tx, busy.restaurant, twentySlots(busy.periods), AT, 0);
+      await replaceMenuWeek(tx, busy.restaurant, twentySlots(busy.periods), AT, 1);
     });
     const read = (v: Timed) =>
       statementsOf((tx) =>
@@ -1933,7 +1924,7 @@ describe("the venue's clock", () => {
     const v = await timed();
     const { periods } = v;
     expect(
-      await clockReads((tx) => replaceMenuWeek(tx, v.restaurant, restaurantWeek(periods), AT, 0)),
+      await clockReads((tx) => replaceMenuWeek(tx, v.restaurant, restaurantWeek(periods), AT, 1)),
     ).toBe(1);
   });
 });
@@ -1942,10 +1933,7 @@ describe("department service periods", () => {
   const FRIDAY = "2026-10-16";
   const serviceVenue = async () => {
     const v = await venue({ timetable: false });
-    await db
-      .update(locations)
-      .set({ dayCutover: "06:00:00" })
-      .where(eq(locations.id, v.locationId));
+    await seedBusinessDay(db, { dayCutover: "06:00:00" });
     return scoped(async (tx) => {
       const lunch = (
         await saveMenuPeriod(tx, v.restaurant, {
@@ -1984,7 +1972,7 @@ describe("department service periods", () => {
             : [],
         ),
         AT,
-        0,
+        1,
       );
       return { ...v, lunch, afternoon, night };
     });
@@ -2020,7 +2008,7 @@ describe("department service periods", () => {
             : [],
         ),
         AT,
-        0,
+        1,
       ),
     );
     expect(await read(v, FRIDAY, "11:59")).toMatchObject({ keepOpen: null });
@@ -2052,10 +2040,9 @@ describe("department service periods", () => {
 
   it("does not offer keep-open when the venue clock cannot be read", async () => {
     const v = await serviceVenue();
-    await db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     expect(await read(v, FRIDAY, "14:15")).toMatchObject({ open: true });
   });
 
@@ -2227,10 +2214,9 @@ describe("department service periods", () => {
 
   it("marks every period menu orderable when the venue clock cannot be read", async () => {
     const v = await serviceVenue();
-    await db
-      .update(locations)
-      .set({ timeZone: "Unreadable/Clock" })
-      .where(eq(locations.id, v.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Unreadable/Clock"}) where module = 'business_day'`,
+    );
     const result = await scoped((tx) =>
       listZoneOffers(tx, v.barra, { at: madrid(FRIDAY, "20:00") }),
     );
@@ -2255,7 +2241,7 @@ describe("department service periods", () => {
         v.restaurant,
         weekOf(() => []),
         AT,
-        0,
+        1,
       ),
     );
     const issues = await scoped((tx) => listVenueReadiness(tx));
@@ -2386,10 +2372,9 @@ describe("department service periods", () => {
     const v = await serviceVenue();
     const model = await scoped((tx) => readOpeningHoursModel(tx, AT));
     expect(model).toMatchObject({ timeZone: "Europe/Madrid", clockReadable: true });
-    await db
-      .update(locations)
-      .set({ timeZone: "unreadable" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"unreadable"}) where module = 'business_day'`,
+    );
     expect(await scoped((tx) => readOpeningHoursModel(tx, AT))).toMatchObject({
       timeZone: "unreadable",
       clockReadable: false,
@@ -2434,7 +2419,7 @@ describe("department service periods", () => {
         v.restaurant,
         weekOf((day) => (day === 5 ? [slot(v.lunch, "12:00", "14:00")] : [])),
         AT,
-        0,
+        1,
       ),
     );
     const service = await read(v, FRIDAY, time);
@@ -2451,7 +2436,7 @@ describe("department service periods", () => {
         v.restaurant,
         weekOf((day) => (day === 6 ? [slot(v.night, "21:00", "03:00")] : [])),
         AT,
-        0,
+        1,
       ),
     );
     const repeated = localTimeOccurrences("2026-10-25", "02:20", ZONE);
@@ -2676,10 +2661,9 @@ describe("department service periods", () => {
 
   it("fails open with each distinct period menu when the clock cannot be read", async () => {
     const v = await serviceVenue();
-    await db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     const service = await scoped((tx) => resolveDepartmentService(tx, v.restaurant, AT));
     expect(service).toMatchObject({
       departmentId: v.restaurant,
@@ -2784,9 +2768,9 @@ describe("the routing that names a period", () => {
         v.restaurant,
         weekOf(() => [slot(periods.mediodia, "12:00", "16:00")]),
         AT,
-        0,
+        1,
       );
-      await deletePeriod(tx, periods.noches, null, AT, 0);
+      await deletePeriod(tx, periods.noches, null, AT, 1);
     });
     expect(
       await db
@@ -2872,10 +2856,7 @@ describe("the routing that names a period", () => {
 describe("a service period occurrence", () => {
   async function occurrenceVenue() {
     const v = await venue({ timetable: false });
-    await db
-      .update(locations)
-      .set({ dayCutover: "06:00:00" })
-      .where(eq(locations.id, v.locationId));
+    await seedBusinessDay(db, { dayCutover: "06:00:00" });
     const period = await scoped((tx) =>
       saveMenuPeriod(tx, v.restaurant, {
         name: "Same name",
@@ -2893,7 +2874,7 @@ describe("a service period occurrence", () => {
           slot(period.id, "22:00", "02:00"),
         ]),
         AT,
-        0,
+        1,
       ),
     );
     return { ...v, periodId: period.id };
@@ -2949,10 +2930,9 @@ describe("a service period occurrence", () => {
       (await scoped((tx) => menuState(tx, randomUUID(), madrid(CHRISTMAS, "13:00")))).service
         .periodOccurrenceKey,
     ).toBeNull();
-    await db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     const service = await scoped((tx) => resolveDepartmentService(tx, v.restaurant, AT));
     expect(service.periodOccurrenceKey).toBeNull();
     expect(service.open).toBe(true);

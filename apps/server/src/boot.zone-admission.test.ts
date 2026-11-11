@@ -22,7 +22,7 @@ import {
   tenants,
   stampDeployment,
   withTransaction,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   writeNodeMembership,
   incidents,
 } from "@waitron/db";
@@ -240,7 +240,9 @@ function request(path: string, method = "GET", body?: unknown, token = managerTo
 }
 async function rawZone(value: string) {
   fixture.beforeServerStarts();
-  await suite.db.update(locations).set({ timeZone: value }).where(eq(locations.id, LOCATION));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${value}) where module = 'business_day'`,
+  );
 }
 async function refusal(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);
@@ -258,7 +260,7 @@ function noDuties(accountMail = 1) {
 describe("startup zone admission", () => {
   it("retains one committed repair after a lost answer and a failed restart", async () => {
     await rawZone("Invalid/Zone");
-    const input = { timeZone: "Europe/Madrid", expectedClockRevision: 0, confirmed: true };
+    const input = { timeZone: "Europe/Madrid", expectedClockRevision: 1, confirmed: true };
     await withMockedKill(async (kills) => {
       await boot();
       const answer = await request(PATH, "POST", input);
@@ -268,7 +270,7 @@ describe("startup zone admission", () => {
       expect(await status.json()).toMatchObject({
         eligible: false,
         admission: { state: "restart_required" },
-        clockRevision: 1,
+        clockRevision: 2,
       });
       await refusal(await request(PATH, "POST", input), 409, "venue.time_zone_repair_not_needed");
       expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
@@ -290,8 +292,30 @@ describe("startup zone admission", () => {
     expect(
       await suite.db.select().from(incidents).where(eq(incidents.code, "venue.time_zone_repaired")),
     ).toEqual(repaired);
-    expect((await suite.db.select().from(locations))[0]!.timeZone).toBe("Europe/Madrid");
-    expect((await suite.db.select().from(locationBusinessDaySettings))[0]!.revision).toBe(1);
+    expect(
+      (
+        await Promise.resolve(
+          suite.db.all<{
+            id: string;
+            bumpMode: string;
+            fireControl: string;
+            catalogueId: string | null;
+            timeZone: string;
+            dayCutover: string;
+          }>(
+            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+          ),
+        )
+      )[0]!.timeZone,
+    ).toBe("Europe/Madrid");
+    expect(
+      (
+        await suite.db
+          .select({ revision: businessDaySettingsTable.revision })
+          .from(businessDaySettingsTable)
+          .where(eq(businessDaySettingsTable.module, "business_day"))
+      )[0]!.revision,
+    ).toBe(1);
     await boot();
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
     expect(runPendingCardLoop).toHaveBeenCalledOnce();
@@ -306,8 +330,28 @@ describe("startup zone admission", () => {
     await expect(boot()).rejects.toBe(fault);
     noDuties(0);
     expect(listener.current).toBeUndefined();
-    expect((await suite.db.select().from(locations))[0]!.timeZone).toBe("Europe/Madrid");
-    expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([]);
+    expect(
+      (
+        await Promise.resolve(
+          suite.db.all<{
+            id: string;
+            bumpMode: string;
+            fireControl: string;
+            catalogueId: string | null;
+            timeZone: string;
+            dayCutover: string;
+          }>(
+            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+          ),
+        )
+      )[0]!.timeZone,
+    ).toBe("Europe/Madrid");
+    expect(
+      await suite.db
+        .select({ revision: businessDaySettingsTable.revision })
+        .from(businessDaySettingsTable)
+        .where(eq(businessDaySettingsTable.module, "business_day")),
+    ).toEqual([]);
   });
 
   it("does not bind or start any normal duty while raw-zone validation is delayed", async () => {
@@ -400,7 +444,7 @@ describe("startup zone admission", () => {
       await request(
         PATH,
         "POST",
-        { timeZone: "Europe/Madrid", expectedClockRevision: 0, confirmed: true },
+        { timeZone: "Europe/Madrid", expectedClockRevision: 1, confirmed: true },
         staffToken,
       ),
       403,
@@ -543,7 +587,7 @@ describe("startup zone admission", () => {
       await refusal(
         await request(PATH, "POST", {
           timeZone: "Europe/Madrid",
-          expectedClockRevision: 0,
+          expectedClockRevision: 1,
           confirmed: true,
         }),
         403,
@@ -676,7 +720,7 @@ describe("startup zone admission", () => {
       await boot();
       const repaired = await request(PATH, "POST", {
         timeZone: "Europe/Madrid",
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
         confirmed: true,
       });
       expect(repaired.status).toBe(200);
@@ -724,14 +768,14 @@ describe("startup zone admission", () => {
       await boot();
       const result = await request(PATH, "POST", {
         timeZone: "Europe/Madrid",
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
         confirmed: true,
       });
       expect(result.status).toBe(200);
       expect(await result.json()).toMatchObject({
         repaired: true,
         admission: "restart_required",
-        clockRevision: 1,
+        clockRevision: 2,
       });
       await vi.waitFor(() => expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]));
       expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
@@ -742,9 +786,27 @@ describe("startup zone admission", () => {
       await server!.close();
       server = undefined;
     });
-    const [location] = await suite.db.select().from(locations).where(eq(locations.id, LOCATION));
+    const [location] = await Promise.resolve(
+      suite.db.all<{
+        id: string;
+        bumpMode: string;
+        fireControl: string;
+        catalogueId: string | null;
+        timeZone: string;
+        dayCutover: string;
+      }>(
+        sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+      ),
+    );
     expect(location!.timeZone).toBe("Europe/Madrid");
-    expect((await suite.db.select().from(locationBusinessDaySettings))[0]!.revision).toBe(1);
+    expect(
+      (
+        await suite.db
+          .select({ revision: businessDaySettingsTable.revision })
+          .from(businessDaySettingsTable)
+          .where(eq(businessDaySettingsTable.module, "business_day"))
+      )[0]!.revision,
+    ).toBe(1);
     await boot();
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
     expect(runPendingCardLoop).toHaveBeenCalledOnce();

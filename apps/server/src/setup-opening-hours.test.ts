@@ -130,7 +130,7 @@ describe("setup's saved first opening hours", () => {
             weekday === 0 ? [] : [{ periodId: period!.id, startsAt: "09:00", endsAt: "17:00" }],
         })),
         new Date(),
-        0,
+        1,
       ),
     );
     expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
@@ -163,7 +163,7 @@ describe("setup's saved first opening hours", () => {
                 ],
         })),
         new Date(),
-        0,
+        1,
         { seasonId: other.id },
       ),
     );

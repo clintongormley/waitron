@@ -204,7 +204,9 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     try {
       await annotate(MADRID_NOON, [t]); // same zone, twice
       await annotate(MADRID_NOON, [t]);
-      await db.execute(sql`update locations set time_zone = ${tzB}`);
+      await db.execute(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${tzB}) where module = 'business_day'`,
+      );
       await annotate(MADRID_NOON, [t]); // a different zone
 
       const builtFor = (tz: string): Intl.DateTimeFormat[] =>

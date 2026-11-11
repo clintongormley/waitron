@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, nodes, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
@@ -46,7 +46,9 @@ describe("writing location zone", () => {
   ])(
     "accepts supported saved %s independently of country creation policy",
     async (timeZone, expected) => {
-      await suite.db.update(locations).set({ timeZone });
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       expect(await zone()).toBe(expected);
     },
   );
@@ -58,7 +60,9 @@ describe("writing location zone", () => {
     ["Europe/Madrid ", "invalid"],
     ["+02:00", "invalid"],
   ])("refuses saved %j before reading the source clock or writing", async (timeZone, reason) => {
-    await suite.db.update(locations).set({ timeZone });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
     const clock = source();
     const now = vi.spyOn(clock, "now");
     const write = vi.fn();
@@ -143,7 +147,9 @@ describe("prepared issue reading", () => {
   });
   it("reads a newly committed zone for the next preparation while retaining the old frozen reading", async () => {
     const first = await prepare();
-    await suite.db.update(locations).set({ timeZone: "Atlantic/Canary" });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', 'Atlantic/Canary') where module = 'business_day'`,
+    );
     expect((await prepare()).now().offsetMinutes).toBe(60);
     expect(first.now().offsetMinutes).toBe(120);
   });

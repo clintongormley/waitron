@@ -152,6 +152,8 @@ describe("the held document's check against the keys this box stores", () => {
     async (whose) => {
       const { db, nodeId } = await box();
       const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+      await seedVenueSettings(db, { operationDescription: "Venta" });
+      await seedBusinessDay(db, {});
       const mainId = await seedNode(db, loc!.id);
       await pinMainBoxKey(suite.node, nodeId, { nodeId: mainId, publicKey: MAIN.publicKey });
       const signerId = whose === "this box" ? nodeId : mainId;

@@ -1,3 +1,5 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, newId, type Transaction, withTransaction } from "@waitron/db";
@@ -134,18 +136,22 @@ it("returns an empty own inbox and one compatible subject revision for day and i
     revision: await run((tx) => readAttendanceRevision(tx, personId)),
     prompts: [],
     items: [],
-    timeZone: (await suite.db.select({ timeZone: locations.timeZone }).from(locations))[0]!
-      .timeZone,
+    timeZone: (
+      await Promise.resolve(
+        suite.db.all<{ timeZone: string }>(
+          sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+        ),
+      )
+    )[0]!.timeZone,
   });
   expect(value.timeZone).toBe("Europe/Madrid");
   expect((await day()).revision).toBe(value.revision);
   expect(await queue()).toEqual({ items: [] });
 });
 it("gives the inbox the venue's zone and no place list", async () => {
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "Atlantic/Canary" })
-    .where(eq(locations.id, locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"Atlantic/Canary"}) where module = 'business_day'`,
+  );
   const id = await question();
   const value = await inbox();
   expect(value).toEqual({
@@ -214,10 +220,12 @@ it("uses saved business bounds and retains an automatic original outside the bus
     }),
   );
   const id = await question({ open: start, automatic });
-  await suite.db
-    .update(locations)
-    .set({ dayCutover: "06:00:00", timeZone: "Europe/London" })
-    .where(eq(locations.id, locationId));
+  await (async () => {
+    await seedBusinessDay(suite.db, { dayCutover: "06:00:00" });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/London"}) where module = 'business_day'`,
+    );
+  })();
   const prompt = (await inbox()).prompts[0]!;
   expect(prompt.id).toBe(id);
   expect(prompt.day).toEqual({
@@ -562,10 +570,9 @@ it("selects calendar work dates from stored offsets after the venue's zone chang
       origin,
     }),
   );
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "America/New_York" })
-    .where(eq(locations.id, locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"America/New_York"}) where module = 'business_day'`,
+  );
   expect((await day()).record.entries).toEqual([]);
   const recorded = await day("2026-01-06");
   expect(recorded.timeZone).toBe("America/New_York");
@@ -577,10 +584,9 @@ it("selects calendar work dates from stored offsets after the venue's zone chang
 
 it("reads a person's day at the venue without being told a location", async () => {
   await shift();
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "Atlantic/Canary" })
-    .where(eq(locations.id, locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"Atlantic/Canary"}) where module = 'business_day'`,
+  );
   const value = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
   expect(value).toMatchObject({
     personId,

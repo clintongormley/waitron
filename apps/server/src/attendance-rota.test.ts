@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
@@ -228,10 +229,7 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
 
   it("keeps captured day bounds when the location's cutover is later changed", async () => {
     const id = await add(await version());
-    await suite.db
-      .update(locations)
-      .set({ dayCutover: "06:00" })
-      .where(eq(locations.id, locationId));
+    await seedBusinessDay(suite.db, { dayCutover: "06:00" });
     expect(
       (await send("PATCH", `roster/shifts/${id}`, { endsAt: "2026-01-05T18:00:00Z" })).status,
     ).toBe(204);

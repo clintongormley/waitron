@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
@@ -191,7 +192,7 @@ async function setupVenue(options: {
             ],
           })),
           MONDAY_10_00,
-          0,
+          1,
         );
       } else {
         await offerMenuThroughZone(tx, barZone, menus["Drinks menu"], { makeDefault: true });
@@ -406,7 +407,7 @@ async function mealVenue(weekdays: readonly number[] = [1], simulatorCard = fals
           : [],
       })),
       MONDAY_10_00,
-      0,
+      1,
     );
   });
   return v;
@@ -969,7 +970,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         MONDAY_10_00,
-        0,
+        1,
       ),
     );
     at(mondayAt("15:00"));
@@ -1004,10 +1005,9 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("accepts all period menus when the location clock cannot be read", async () => {
     at(mondayAt("13:00"));
     const v = await mealVenue();
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Unreadable/Zone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Unreadable/Zone"}) where module = 'business_day'`,
+    );
     const held = await park(v, v.diningZone, v.toast.breakfast);
     expect(held.status).toBe(200);
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
@@ -1210,7 +1210,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         MONDAY_10_00,
-        0,
+        1,
       ),
     );
     at(mondayAt("15:00"));
@@ -1257,7 +1257,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         MONDAY_10_00,
-        0,
+        1,
       ),
     );
     at(mondayAt("15:00"));
@@ -1871,7 +1871,7 @@ describe("menu-state follows department service periods", () => {
           ],
         })),
         MONDAY_10_00,
-        0,
+        1,
       );
     });
     return v;
@@ -1959,10 +1959,9 @@ describe("menu-state follows department service periods", () => {
 
   it("reports open service when the location clock cannot be read", async () => {
     const v = await setupPeriods();
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     at(new Date("2026-10-09T18:00:00Z"));
     const answer = await sendAsTill(v, "GET", `/api/menu-state?zoneId=${v.diningZone}`);
     expect(answer.status).toBe(200);
@@ -2011,7 +2010,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
               : [],
         })),
         MONDAY_10_00,
-        0,
+        1,
       );
       const cocktails = (await createCategory(tx, { name: "Cocktails" })).id;
       const mojito = await createProduct(tx, {

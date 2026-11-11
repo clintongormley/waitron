@@ -75,10 +75,10 @@ async function seasonVenue() {
           weekday,
           slots: weekday === SATURDAY ? [{ periodId, startsAt: "20:00", endsAt: "02:00" }] : [],
         }));
-      await replaceMenuWeek(tx, restaurant, saturday(dinner), SUNDAY_00_15, 0, {
+      await replaceMenuWeek(tx, restaurant, saturday(dinner), SUNDAY_00_15, 1, {
         seasonId: await seasonId("Autumn"),
       });
-      await replaceMenuWeek(tx, restaurant, saturday(lateBar), SUNDAY_00_15, 0, {
+      await replaceMenuWeek(tx, restaurant, saturday(lateBar), SUNDAY_00_15, 1, {
         seasonId: await seasonId("Winter"),
       });
       return {

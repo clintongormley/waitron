@@ -164,6 +164,8 @@ it("the pending-adoption start answers the main box's signed query", async () =>
   await suite.db.insert(locations).values({
     id: LOCATION,
   });
+  await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
     id: PRIMARY,
     locationId: LOCATION,

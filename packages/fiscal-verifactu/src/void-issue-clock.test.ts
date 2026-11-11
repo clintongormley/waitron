@@ -42,10 +42,9 @@ const backend = (clock = source) =>
   fiscal.FISCAL_SLOT.makeBackend({ db: suite.db, clock, environment: "preproduction" });
 beforeEach(async () => {
   seededNode = await seedTenantWithSif(suite.db);
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "Europe/Madrid" })
-    .where(eq(locations.id, seededNode.locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+  );
 });
 async function prepare(tx: Transaction, id: SaleId, clock = source) {
   return fiscal.prepareFiscalVoidClock(tx, id, clock, seededNode.nodeId);
@@ -80,7 +79,9 @@ function records(id: string) {
 
 describe("the venue's zone across a daylight-saving change", () => {
   it("keeps both repeated local times and the annulment in the saved Canary zone", async () => {
-    await suite.db.execute(sql`update locations set time_zone = 'Atlantic/Canary'`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.timeZone', 'Atlantic/Canary') where module = 'business_day'`,
+    );
     const sourceAt = (instant: string): TrustedClock => ({
       ...source,
       now: () => ({ ...source.now(), instant: new Date(instant) }),
@@ -140,10 +141,9 @@ describe("the void caller's original writing location", () => {
     "refuses unusable original zone %j without appending or allocating",
     async (timeZone) => {
       const old = await original();
-      await suite.db
-        .update(locations)
-        .set({ timeZone })
-        .where(eq(locations.id, seededNode.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const before = snapshot();
       await expect(annul(old.saleId)).rejects.toMatchObject({
         code: "venue.time_zone_invalid",

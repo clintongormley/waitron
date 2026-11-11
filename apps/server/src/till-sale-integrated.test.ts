@@ -331,10 +331,9 @@ describe("saved-zone payment transactions", () => {
           sql`select time_zone from locations where id = ${zoneVenue.cfg.locationId}`,
         )[0]!.time_zone;
         if (fault === "name")
-          await zoneDb.db
-            .update(locations)
-            .set({ timeZone: "Invalid/Zone" })
-            .where(eq(locations.id, zoneVenue.cfg.locationId));
+          await zoneDb.db.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+          );
         if (fault === "instant") source.set("invalid");
         if (fault === "formatter")
           vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockImplementation(() => {
@@ -354,10 +353,9 @@ describe("saved-zone payment transactions", () => {
           expect(deps.admission.snapshot()).toEqual({ state: "ready" });
         } finally {
           vi.restoreAllMocks();
-          await zoneDb.db
-            .update(locations)
-            .set({ timeZone: original })
-            .where(eq(locations.id, zoneVenue.cfg.locationId));
+          await zoneDb.db.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${original}) where module = 'business_day'`,
+          );
         }
       },
     );

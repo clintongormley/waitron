@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -94,7 +95,7 @@ beforeEach(async () => {
         ],
       })),
       new Date(),
-      0,
+      1,
     );
     const [admin] = await tx
       .select({ id: persons.id })
@@ -234,7 +235,7 @@ describe("the till keeps a zone open today", () => {
           slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "03:00" }],
         })),
         new Date(),
-        0,
+        1,
       );
       await replaceZoneClosedWeek(
         tx,
@@ -243,7 +244,7 @@ describe("the till keeps a zone open today", () => {
           weekday,
           ranges: [{ startsAt: "23:30", endsAt: "05:00" }],
         })),
-        0,
+        1,
       );
     });
   });
@@ -302,7 +303,7 @@ describe("the till keeps a zone open today", () => {
           slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "01:00" }],
         })),
         new Date(),
-        0,
+        1,
       ),
     );
     const answer = await call("PUT", writeZone(), { until: "01:30" });
@@ -343,10 +344,9 @@ describe("the till keeps a zone open today", () => {
     expect(await zoneRows()).toEqual([]);
   });
   it("refuses an unreadable location clock without writing", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     const answer = await call("PUT", writeZone(), { until: "01:30" });
     expect(answer.status).toBe(409);
     expect(answer.json).toMatchObject({ code: "time_zone.unreadable" });
@@ -412,7 +412,7 @@ describe("the till keeps a zone open today", () => {
         tx,
         zone,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
-        0,
+        1,
       ),
     );
     expect(await zoneState()).toMatchObject({ closed: false, closesAt: null });

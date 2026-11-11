@@ -117,10 +117,9 @@ it.each(["archive", "bucket"] as const)(
       expect(
         db.all(sql`select * from fiscal_allocations order by rowid`).slice(0, allocations.length),
       ).toEqual(allocations);
-      await db
-        .update(locations)
-        .set({ timeZone: "Invalid/Zone" })
-        .where(eq(locations.id, node.locationId));
+      await db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+      );
       const aeat = createFakeAeat({ serverNow: new Date("2026-10-18T12:00:00Z") });
       const sent: unknown[] = [];
       const client = aeat.client();
@@ -173,10 +172,9 @@ it.each(["archive", "bucket"] as const)(
             : "16-10-2026",
         );
       }
-      await db
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, node.locationId));
+      await db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       const [current] = (await db.select().from(invoiceSeries)).filter(
         (row) => row.retiredAt === null && row.purpose === "standard",
       );

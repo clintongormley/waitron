@@ -192,9 +192,9 @@ export async function createBareDepartment(
     departmentId,
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
     at,
-    0,
+    1,
   );
-  for (const period of initialPeriods) await deletePeriod(tx, period.id, null, at, 0);
+  for (const period of initialPeriods) await deletePeriod(tx, period.id, null, at, 1);
   return departmentId;
 }
 

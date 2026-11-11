@@ -145,10 +145,9 @@ function sentRecords(batches: EnvioRegistro[][]) {
   });
 }
 async function breakCurrentZone() {
-  await v.db
-    .update(locations)
-    .set({ timeZone: "Invalid/Zone" })
-    .where(eq(locations.id, v.cfg.locationId));
+  await v.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+  );
 }
 
 it.each(["cash", "reader"] as const)(

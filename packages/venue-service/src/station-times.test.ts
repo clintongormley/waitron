@@ -1,3 +1,5 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -146,10 +148,9 @@ describe("station times", () => {
   it("refuses a by-hand change when the venue clock is unreadable", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       await expect(
         setStationToday(tx, f.upstairs, "closed", new Date("2026-10-02T18:00:00Z")),
       ).rejects.toMatchObject({ code: "time_zone.unreadable" });
@@ -189,7 +190,7 @@ async function saveDate(tx: Transaction, date: string, closedAllDay = false) {
     null,
     { name: `Special ${date}`, repeatsYearly: false, dates: [{ date, closedAllDay }] },
     SAVED_AT,
-    0,
+    1,
   );
 }
 
@@ -347,10 +348,9 @@ describe("station status on special dates and calendar boundaries", () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
       await saveDate(tx, "2026-10-06", true);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       expect(await statusAt(tx, f.upstairs, "2026-10-06T10:00:00Z")).toEqual({
         open: true,
         why: "open",
@@ -363,7 +363,7 @@ describe("station status on special dates and calendar boundaries", () => {
     async (dayCutover) => {
       await db.transaction(async (tx) => {
         const f = await fixture(tx);
-        await tx.update(locations).set({ dayCutover }).where(eq(locations.id, f.cfg.locationId));
+        await seedBusinessDay(tx, { dayCutover: dayCutover });
         const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
         expect(await statusAt(tx, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
         expect(await statusAt(tx, f.downstairs, tuesdayHalfPastMidnight)).toEqual(openState);
@@ -678,10 +678,9 @@ describe("station today controls", () => {
       const f = await db.transaction(async (tx) => {
         const f = await fixture(tx);
         await setStationToday(tx, f.upstairs, "closed", at);
-        await tx
-          .update(locations)
-          .set({ timeZone: "Mars/Base" })
-          .where(eq(locations.id, f.cfg.locationId));
+        await tx.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+        );
         return f;
       });
       const before = await todayRows(f.upstairs);
@@ -700,10 +699,7 @@ describe("station today controls", () => {
 it("keeps today's station closure and actual expiry through the 26-hour tail", async () => {
   await db.transaction(async (tx) => {
     const f = await fixture(tx);
-    await tx
-      .update(locations)
-      .set({ dayCutover: "05:00:00" })
-      .where(eq(locations.id, f.cfg.locationId));
+    await seedBusinessDay(tx, { dayCutover: "05:00:00" });
     await tx.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",

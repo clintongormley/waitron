@@ -115,7 +115,11 @@ export async function seedTenants(db: Database): Promise<void> {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
     });
-    await seedVenueSettings(db, { name: "Local principal" });
+    await seedVenueSettings(db, {
+      name: "Local principal",
+      operationDescription: "Venta en establecimiento",
+    });
+    await seedBusinessDay(db, {});
     venueId = TENANT_A.locationId;
   }
   await db.insert(nodes).values([
@@ -133,7 +137,11 @@ export async function seedVenueNodes(db: Database): Promise<void> {
   await db.insert(locations).values({
     id: TENANT_A.locationId,
   });
-  await seedVenueSettings(db, { name: "Local principal" });
+  await seedVenueSettings(db, {
+    name: "Local principal",
+    operationDescription: "Venta en establecimiento",
+  });
+  await seedBusinessDay(db, {});
   await db.insert(nodes).values([
     { id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
     { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
@@ -249,7 +257,13 @@ async function insertLocationNodeSeries(
     existing.length === 1
       ? existing
       : await tx.insert(locations).values({}).returning({ id: locations.id });
-  if (existing.length !== 1) await seedVenueSettings(tx, { name: "Sala principal" });
+  if (existing.length !== 1) {
+    await seedVenueSettings(tx, {
+      name: "Sala principal",
+      operationDescription: "Venta en establecimiento",
+    });
+    await seedBusinessDay(tx);
+  }
   const [node] = await tx
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node 1" })

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -71,7 +72,7 @@ async function fixture() {
           slots: [{ periodId: period.id, startsAt: "12:00", endsAt: "16:00" }],
         })),
         now,
-        0,
+        1,
       );
       ids.push(period.id);
     }
@@ -315,10 +316,9 @@ it("returns the country's area options and the chosen venue area without inventi
   const after = await run((tx) => readSpecialDaysModel(tx, "2026-02-02", "2026-02-02", now));
   expect(after.area).toEqual({ ...before.area, required: false, chosen: "tenerife" });
   expect(after.days[0]!.tone).toBe("public_holiday");
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "unreadable" })
-    .where(eq(locations.id, f.cfg.locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"unreadable"}) where module = 'business_day'`,
+  );
   expect(
     await run((tx) => readSpecialDaysModel(tx, "2026-02-02", "2026-02-02", now)),
   ).toMatchObject({

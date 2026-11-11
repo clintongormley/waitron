@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StatementSync } from "node:sqlite";
 import { asc, eq, sql } from "drizzle-orm";
@@ -896,7 +897,7 @@ it("refuses a changed historical bound rather than relabeling an evaluated day",
     .set({ dirtyRevision: work!.dirtyRevision + 1 })
     .where(eq(attendanceDayWork.id, work!.id));
   const before = await rows();
-  await suite.db.update(locations).set({ dayCutover: "06:00" }).where(eq(locations.id, locationId));
+  await seedBusinessDay(suite.db, { dayCutover: "06:00" });
   await expect(next()).rejects.toMatchObject({ code: "attendance.invalid" });
   expect(await rows()).toEqual(before);
 });

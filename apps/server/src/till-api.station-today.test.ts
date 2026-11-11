@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -627,10 +628,9 @@ describe("the till's station day", () => {
       .update(kitchenStations)
       .set({ active: true })
       .where(eq(kitchenStations.id, grill));
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Invalid/Clock" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Clock"}) where module = 'business_day'`,
+    );
     const clock = await call("PUT", today(), close());
     expect(clock.status).toBe(409);
     expect(clock.json).toMatchObject({ code: "time_zone.unreadable" });

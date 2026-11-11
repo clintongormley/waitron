@@ -1,8 +1,7 @@
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, sql, inArray } from "drizzle-orm";
 import "./errors.js";
 import type { Transaction } from "./client.js";
-import { alias } from "drizzle-orm/sqlite-core";
 import { dayCutoverChanges } from "./schema/day-cutover-changes.js";
 import { locations } from "./schema/tenants.js";
 import { settings } from "./schema/settings.js";
@@ -105,8 +104,6 @@ function storedCutover(value: string): string {
   return /^([01]\d|2[0-3]):[0-5]\d:00$/.test(value) ? value.slice(0, 5) : value;
 }
 
-const businessDayDocument = alias(settings, "business_day_document");
-
 async function clockRows(tx: Transaction) {
   const rows = await tx
     .select({
@@ -114,33 +111,37 @@ async function clockRows(tx: Transaction) {
       defaultCatalogueId: locations.catalogueId,
       effectiveBusinessDay: dayCutoverChanges.effectiveBusinessDay,
       dayCutover: dayCutoverChanges.dayCutover,
-      venueDocument: {
+      document: {
         module: settings.module,
         version: settings.version,
         revision: settings.revision,
         doc: settings.doc,
       },
-      businessDayDocument: {
-        module: businessDayDocument.module,
-        version: businessDayDocument.version,
-        revision: businessDayDocument.revision,
-        doc: businessDayDocument.doc,
-      },
     })
     .from(locations)
-    .leftJoin(settings, eq(settings.module, "venue"))
-    .leftJoin(businessDayDocument, eq(businessDayDocument.module, "business_day"))
+    .leftJoin(settings, inArray(settings.module, ["venue", "business_day"]))
     .leftJoin(dayCutoverChanges, sql`true`)
     .orderBy(asc(dayCutoverChanges.effectiveBusinessDay));
-  const first = rows[0];
-  if (first === undefined) throw new AppError("venue.not_found", {});
-  if (rows.some((row) => row.id !== first.id)) throw new AppError("provisioning.second_venue", {});
-  const doc = requireVenue(decodeSettingsRow(first.venueDocument ?? undefined, VENUE_SETTINGS)).doc;
-  const businessDay = requireVenue(
-    decodeSettingsRow(first.businessDayDocument ?? undefined, BUSINESS_DAY_SETTINGS),
+  const location = rows[0];
+  if (location === undefined) throw new AppError("venue.not_found", {});
+  if (rows.some((row) => row.id !== location.id))
+    throw new AppError("provisioning.second_venue", {});
+  const doc = requireVenue(
+    decodeSettingsRow(
+      rows.find((row) => row.document?.module === "venue")?.document ?? undefined,
+      VENUE_SETTINGS,
+    ),
   ).doc;
+  const businessDay = requireVenue(
+    decodeSettingsRow(
+      rows.find((row) => row.document?.module === "business_day")?.document ?? undefined,
+      BUSINESS_DAY_SETTINGS,
+    ),
+  ).doc;
+  const dayRows = rows.filter((row) => row.document?.module === "venue");
+  const first = dayRows[0]!;
   if (first.effectiveBusinessDay === null) throw new AppError("venue.not_found", {});
-  return { rows, first, doc, businessDay };
+  return { rows: dayRows, first, doc, businessDay };
 }
 
 export async function readVenueClockAndPlace(

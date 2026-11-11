@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -9,7 +10,7 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   withTransaction,
   type Database,
   type Transaction,
@@ -73,7 +74,7 @@ async function routed() {
         slots: [{ periodId: dinner, startsAt: "19:00", endsAt: "23:00" }],
       })),
       new Date(),
-      0,
+      1,
     );
     const person = async (role: "manager" | "supervisor") => {
       const [row] = await tx
@@ -144,7 +145,7 @@ describe("the year read route", () => {
       { name: starterSeasonName("Autumn", "es"), lastDay: "11-30" },
       { name: starterSeasonName("Winter", "es"), lastDay: "02-28" },
     ]);
-    expect(year.clockRevision).toBe(0);
+    expect(year.clockRevision).toBe(1);
     expect(year.missingHolidays).toEqual([]);
   });
 
@@ -317,7 +318,7 @@ describe("the season routes", () => {
   const change = (sent: Record<string, unknown>) => ({
     save: [],
     delete: [],
-    expectedClockRevision: 0,
+    expectedClockRevision: 1,
     ...sent,
   });
   const invalid = (field: string) => ({
@@ -532,7 +533,10 @@ describe("the season routes", () => {
   it("refuses a stale clock revision on a move, an add and a delete, writing nothing", async () => {
     const r = await routed();
     await scoped((tx) =>
-      tx.insert(locationBusinessDaySettings).values({ locationId: r.cfg.locationId, revision: 1 }),
+      tx
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day")),
     );
     const before = await stored();
     const error = { error: { code: "hours.clock_changed", params: {} } };

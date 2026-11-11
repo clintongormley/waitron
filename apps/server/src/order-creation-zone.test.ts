@@ -224,7 +224,7 @@ it("a closed zone refuses new orders but still lets its existing bill split", as
         weekday,
         ranges: [{ startsAt: "05:00", endsAt: "05:00" }],
       })),
-      0,
+      1,
     ),
   );
   await expect(

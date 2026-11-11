@@ -174,7 +174,7 @@ it("an unchanged receipt read keeps the outstanding Defaults leave choice curren
   });
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);
-  receipt.liveData.invalidate([{ type: "locations" }]);
+  receipt.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => receipt.getDepartmentReceipt.mock.calls.length).toBe(2);
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(question.open).toBe(true);
@@ -198,7 +198,7 @@ it("an unchanged Defaults read leaves an outstanding receipt leave choice curren
   });
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);
-  receipt.liveData.invalidate([{ type: "locations" }]);
+  receipt.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(languageReadCount).toBe(2);
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(question.open).toBe(true);

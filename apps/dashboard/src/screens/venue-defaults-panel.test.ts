@@ -428,7 +428,7 @@ it("a clean draft adopts a live change and a dirty one keeps its value", async (
   expect(saveButton(el).disabled).toBe(true);
   await pick(el, "receiptLanguage", "gl-ES");
   r.state.stored = { ...r.state.stored, receiptLanguage: "eu-ES", defaultProductVatClass: "zero" };
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(3);
   await flush(el);
   expect(combo(el, "receiptLanguage")!.value).toBe("gl-ES");
@@ -503,9 +503,9 @@ it("keeps a refusal at the bottom through a failed read and its recovery", async
   const sentence = codeMessage("management.failed");
   await expect.poll(() => bottom(el)).toBe(sentence);
   r.api.getVenueDefaults.mockRejectedValueOnce({ code: "management.failed" });
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => q(el, "[data-test=read-error]")).toBeNull();
   expect(bottom(el)).toBe(sentence);
   expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
@@ -518,7 +518,7 @@ it("a staged language survives a live read and reconnecting, and once reverted a
   await edit(el);
   await pick(el, "receiptLanguage", "ca-ES");
   r.state.stored = { ...r.state.stored, receiptLanguage: "gl-ES" };
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
   await flush(el);
   expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
@@ -530,7 +530,7 @@ it("a staged language survives a live read and reconnecting, and once reverted a
   await pick(el, "receiptLanguage", "es-ES");
   expect(saveButton(el).disabled).toBe(true);
   expect(unload()).toBe(false);
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => combo(el, "receiptLanguage")!.value).toBe("gl-ES");
   expect(saveButton(el).disabled).toBe(true);
   expect(unload()).toBe(false);
@@ -574,7 +574,7 @@ it("a read begun before a successful save does not put back the old language", a
   const el = await mountWithLeave(r.api);
   const stale = deferred<VenueDefaults>();
   r.api.getVenueDefaults.mockImplementationOnce(() => stale.promise);
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
   await edit(el);
   await pick(el, "receiptLanguage", "ca-ES");
@@ -607,7 +607,7 @@ it("a save answer that arrives after a newer live value ends on the newer value"
   await save(el);
   const reads = r.api.getVenueDefaults.mock.calls.length;
   r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(reads + 1);
   await frame();
   await flush(el);
@@ -630,7 +630,7 @@ it("a live read begun during the save that answers after it does not leave the s
   const late = deferred<VenueDefaults>();
   r.api.getVenueDefaults.mockImplementationOnce(() => late.promise);
   const reads = r.api.getVenueDefaults.mock.calls.length;
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(reads + 1);
   r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
   pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
@@ -750,7 +750,7 @@ it.each(["answer", "failure"] as const)(
     await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
     await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(1);
     r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
-    r.liveData.invalidate([{ type: "locations" }]);
+    r.liveData.invalidate([{ type: "settings.business_day" }]);
     await expect.poll(() => savedLanguage(el)).toBe("Galician");
     if (outcome === "answer") reread.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
     else reread.reject({ code: "server.unavailable" });
@@ -996,7 +996,7 @@ it("a live update that fixes the language moves a staged choice to the fixed one
     receiptLanguageChoices: ["ca-ES"],
     fixedReceiptLanguage: "ca-ES",
   };
-  r.liveData.invalidate([{ type: "locations" }]);
+  r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => combo(el, "receiptLanguage")!.value).toBe("ca-ES");
   expect(combo(el, "receiptLanguage")!.options).toEqual([{ value: "ca-ES", label: "Catalan" }]);
   expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
@@ -1078,7 +1078,7 @@ async function savedOverNewerLiveValueThenFollowUpFails(
     const parent = el.parentNode!;
     el.remove();
     parent.appendChild(el);
-  } else r.liveData.invalidate([{ type: "locations" }]);
+  } else r.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(reads + 1);
   await expect
     .poll(() => (el as unknown as { model?: VenueDefaults }).model?.receiptLanguage)
@@ -1133,7 +1133,7 @@ it("a live read shown after a failed follow-up read stops the tries", async () =
   const r = withBackground();
   try {
     const el = await savedOverNewerLiveValueThenFollowUpFails(r);
-    r.liveData.invalidate([{ type: "locations" }]);
+    r.liveData.invalidate([{ type: "settings.business_day" }]);
     await expect.poll(() => savedLanguage(el)).toBe("Galician");
     expect(q(el, "[data-test=read-error]")).toBeNull();
     const reads = r.background.getVenueDefaults.mock.calls.length;

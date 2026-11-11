@@ -829,7 +829,7 @@ describe("receipt language warning", () => {
       choices: [],
       fixed: null,
     });
-    liveData.invalidate([{ type: "locations" }]);
+    liveData.invalidate([{ type: "settings.business_day" }]);
     await vi.waitFor(() => expect(receiptWarning(el)).not.toBeNull());
   });
 

@@ -44,10 +44,9 @@ describe("OpeningHoursApi.watchYear", () => {
     expect(QUERY_DEPENDENCIES["named-days"]).toEqual([
       "departments",
       "tenants",
-      "locations",
+      "settings.business_day",
       "settings.venue",
-      "location_business_day_settings",
-      "location_day_cutover_changes",
+      "day_cutover_changes",
       "seasons",
       "department_days",
       "department_day_ranges",
@@ -87,7 +86,7 @@ describe("OpeningHoursApi.watchYear", () => {
     liveData.invalidate([{ type: "special_days" }]);
     await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(model("2030-10-07")));
 
-    liveData.invalidate([{ type: "locations" }]);
+    liveData.invalidate([{ type: "settings.business_day" }]);
     await vi.waitFor(() => expect(failed).toHaveBeenCalledWith(new Error("offline")));
     expect(recovered).not.toHaveBeenCalled();
 

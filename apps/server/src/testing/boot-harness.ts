@@ -337,7 +337,8 @@ export async function seedTradingVenue(db: Database): Promise<void> {
   await db.insert(locations).values({
     id: TILL_LOCATION_ID,
   });
-  await seedVenueSettings(db, { name: "Barra" });
+  await seedVenueSettings(db, { name: "Barra", operationDescription: "Venta en establecimiento" });
+  await seedBusinessDay(db, {});
   await db.insert(nodes).values({
     id: TILL_ENV.WAITRON_NODE_ID,
     locationId: TILL_LOCATION_ID,

@@ -252,7 +252,12 @@ it.each([
     await source.db.insert(locations).values({
       id: LOCATION,
     });
-    await seedVenueSettings(source.db, { name: "Counter", province: "London" });
+    await seedVenueSettings(source.db, {
+      name: "Counter",
+      province: "London",
+      operationDescription: "Hospitality",
+    });
+    await seedBusinessDay(source.db, { timeZone: "Europe/London" });
     await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
     const server = await startServer({
       ...(await environment(true)),
@@ -291,7 +296,12 @@ it.each(["mirror", "primary"] as const)(
     await source.db.insert(locations).values({
       id: LOCATION,
     });
-    await seedVenueSettings(source.db, { name: "Counter", province: "London" });
+    await seedVenueSettings(source.db, {
+      name: "Counter",
+      province: "London",
+      operationDescription: "Hospitality",
+    });
+    await seedBusinessDay(source.db, { timeZone: "Europe/London" });
     await source.db.insert(nodes).values([
       { id: NODE, locationId: LOCATION, name: "Own box" },
       { id: originNode, locationId: LOCATION, name: "Origin box" },

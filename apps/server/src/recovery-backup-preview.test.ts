@@ -168,6 +168,8 @@ it("refuses a copy with two venue rows as an unknown identity", async () => {
   await suite.db.insert(locations).values({
     id: "d0000000-0000-4000-8000-000000000003",
   });
+  await seedVenueSettings(suite.db, { operationDescription: "Restaurant" });
+  await seedBusinessDay(suite.db, {});
   artifact = await packSelected();
   await expect(previewRecoveryArchive(args())).rejects.toMatchObject({
     code: "restore.identity_unknown",

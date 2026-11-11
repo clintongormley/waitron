@@ -137,7 +137,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "menu period delete derived department",
     "department.not_found",
-    (tx, f) => service.deletePeriod(tx, f.period, null, at, 0),
+    (tx, f) => service.deletePeriod(tx, f.period, null, at, 1),
   ],
   [
     "default period existing fast path",
@@ -147,7 +147,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "menu week",
     "department.not_found",
-    (tx, f) => service.replaceMenuWeek(tx, f.gone, week, at, 0),
+    (tx, f) => service.replaceMenuWeek(tx, f.gone, week, at, 1),
   ],
   [
     "menu date",
@@ -163,7 +163,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
           paint: [{ departmentId: f.gone, date: "2030-12-25", ranges: [] }],
         },
         at,
-        0,
+        1,
       ),
   ],
   [
@@ -206,7 +206,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "zone closed week",
     "service_zone.not_found",
-    (tx, f) => service.replaceZoneClosedWeek(tx, f.zone, closedWeek, 0, at),
+    (tx, f) => service.replaceZoneClosedWeek(tx, f.zone, closedWeek, 1, at),
   ],
   [
     "zone closed date",
@@ -222,7 +222,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
           zonePaint: [{ zoneId: f.zone, date: "2030-12-25", ranges: [] }],
         },
         at,
-        0,
+        1,
       ),
   ],
 ];
@@ -262,7 +262,7 @@ describe("deleted service targets", () => {
     await run(async (tx) => {
       await service.updateDepartment(tx, f.live, { tradingName: "Edited" });
       await service.configureZone(tx, { zoneId: f.liveZone, departmentId: f.live });
-      await service.replaceZoneClosedWeek(tx, f.liveZone, closedWeek, 0, at);
+      await service.replaceZoneClosedWeek(tx, f.liveZone, closedWeek, 1, at);
       await service.writeDepartmentReceipt(tx, f.live, { email: "live@example.com" });
     });
     expect(await run((tx) => service.readDepartmentReceipt(tx, f.cfg, f.live))).toEqual({

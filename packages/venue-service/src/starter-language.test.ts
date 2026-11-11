@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction, type Database } from "@waitron/db";
@@ -67,9 +68,10 @@ describe("readStarterStaffLanguage", () => {
     };
     if (tenant) await seedVenue(db, venue);
     else {
-      const { name, province, invoiceLocales, ...columns } = venue;
+      const { name, province, invoiceLocales, operationDescription, ...columns } = venue;
       await db.insert(locations).values(columns);
-      await seedVenueSettings(db, { name, province, invoiceLocales });
+      await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
+      await seedBusinessDay(db);
     }
     expect(await withTransaction(db, (tx) => readStarterStaffLanguage(tx))).toBe(expected);
   });

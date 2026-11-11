@@ -358,7 +358,8 @@ async function seedMirrorIdentity(
       id: MIRROR_LOCATION_ID,
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Barra" });
+  await seedVenueSettings(db, { name: "Barra", operationDescription: "Hospitality" });
+  await seedBusinessDay(db, {});
   const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
@@ -497,7 +498,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       expect(persisted.WAITRON_ENV).toBe("production");
       await server.close();
       await mirrorDb.execute(
-        sql`update locations set time_zone = 'Invalid/Zone' where id = ${MIRROR_LOCATION_ID}`,
+        sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
       );
       const records = mirrorDb.all(sql`select * from registros_facturacion order by secuencia`);
       const attempts = mirrorDb.all(sql`select * from envios order by registro_id`);

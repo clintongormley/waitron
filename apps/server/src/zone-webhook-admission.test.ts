@@ -157,10 +157,9 @@ describe("signed webhook settlement admission", () => {
     async (timeZone) => {
       const fixture = await seed();
       fixture.admission.admit();
-      await suite.db
-        .update(locations)
-        .set({ timeZone })
-        .where(eq(locations.id, fixture.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const before = await snapshot();
       const response = await post(fixture.app, event(fixture.sessionId));
       expect(await snapshot()).toEqual(before);

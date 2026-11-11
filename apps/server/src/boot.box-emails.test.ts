@@ -284,10 +284,9 @@ describe("the running server's managers' email check", () => {
     async (repair) => {
       const venue = await setupVenue(suite.db);
       if (repair)
-        await suite.db
-          .update(locations)
-          .set({ timeZone: "Invalid/Zone" })
-          .where(eq(locations.id, venue.cfg.locationId));
+        await suite.db.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+        );
       const booted: Booted = {};
       try {
         await bootServer(booted, venue, { intent: "prepare", development: false });
@@ -381,10 +380,9 @@ describe("the running server's managers' email check", () => {
         ),
       );
       if (repair)
-        await suite.db
-          .update(locations)
-          .set({ timeZone: "Invalid/Zone" })
-          .where(eq(locations.id, venue.cfg.locationId));
+        await suite.db.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+        );
       const booted: Booted = {};
       await suite.db.insert(persons).values(
         [1, 2].map((n) => ({

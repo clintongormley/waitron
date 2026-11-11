@@ -38,10 +38,9 @@ async function calendar(directory: string) {
     for (const [key, timeZone, at] of [...scenarios].sort(
       (a, b) => Date.parse(a[2]) - Date.parse(b[2]),
     )) {
-      await store.venue
-        .update(locations)
-        .set({ timeZone })
-        .where(eq(locations.id, v.cfg.locationId));
+      await store.venue.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const before = store.venue.all(sql`select * from registros_facturacion order by secuencia`);
       const instant = new Date(at);
       const clock = {

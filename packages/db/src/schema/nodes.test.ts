@@ -133,10 +133,18 @@ describe("nodes schema", () => {
       sql`select name, "notnull" from pragma_table_info('locations')`,
     );
     const byName = new Map(cols.rows.map((r) => [r.name, r.notnull]));
-    expect(byName.get("fiscal_territory")).toBe(1);
-    expect(byName.get("time_zone")).toBe(1);
-    expect(byName.get("day_cutover")).toBe(1);
-    for (const a of ["name", "address_line1", "address_line2", "postal_code", "city", "province"]) {
+    for (const a of [
+      "name",
+      "address_line1",
+      "address_line2",
+      "postal_code",
+      "city",
+      "province",
+      "fiscal_territory",
+      "operation_description",
+      "time_zone",
+      "day_cutover",
+    ]) {
       expect(byName.has(a)).toBe(false);
     }
   });

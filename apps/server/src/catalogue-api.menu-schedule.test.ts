@@ -193,7 +193,7 @@ async function status(app: Hono, menuId: string): Promise<MenuStatus> {
 
 async function setVenueZone(timeZone: string): Promise<void> {
   await suite.db.execute(
-    sql`update locations set time_zone = ${timeZone} where id = ${locationId}`,
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
   );
 }
 

@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -3798,10 +3799,9 @@ describe("opening hours", () => {
   it("uses the default when today's destinations loop through two closed stations", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
@@ -3832,10 +3832,9 @@ describe("opening hours", () => {
   it("routes to the destination chosen when closing for today", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
@@ -3858,10 +3857,9 @@ describe("opening hours", () => {
   it("routes only new work to today's chosen destination, leaving sent work as it was", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
@@ -3898,10 +3896,9 @@ describe("opening hours", () => {
   it("still fires and routes a sale's work when every department is Closed", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
@@ -3912,7 +3909,7 @@ describe("opening hours", () => {
       expect(departmentRows.length).toBeGreaterThan(0);
       const closedWeek = WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, slots: [] }));
       for (const row of departmentRows)
-        await replaceMenuWeek(tx, row.id, closedWeek, new Date(), 0);
+        await replaceMenuWeek(tx, row.id, closedWeek, new Date(), 1);
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
       try {
@@ -3929,10 +3926,9 @@ describe("opening hours", () => {
   it("ignores opening hours when the venue clock is unreadable", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
@@ -3952,10 +3948,9 @@ describe("opening hours", () => {
   it("keeps a sent dish's station when its note changes after that station closes", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
@@ -4034,10 +4029,9 @@ describe("opening hours", () => {
   it("sends added units to the sent dish's closed station without a make-at choice", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
@@ -4087,10 +4081,12 @@ describe("opening hours", () => {
   it("uses one clock reading for both routing and the fire stamp", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid", dayCutover: "21:00:00" })
-        .where(eq(locations.id, cfg.locationId));
+      await (async () => {
+        await tx.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+        );
+        await seedBusinessDay(tx, { dayCutover: "21:00:00" });
+      })();
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, { name: "Downstairs bar" });
@@ -4171,10 +4167,9 @@ describe("opening hours", () => {
   it("refuses a closed station with no active default before writing and honors a stored choice", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
       await tx
@@ -4234,10 +4229,9 @@ describe("a sale on a Spanish public holiday", () => {
   it("uses the same routing and prices on a public holiday until a station closes for today", async () => {
     const { cfg, catalogueId, coffeeId } = await setupVenue();
     const { upstairs, downstairs, product } = await withTransaction(db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       expect(await readHolidayFacts(tx, HOLIDAY, HOLIDAY)).toEqual([
         expect.objectContaining({ date: HOLIDAY, scope: "national" }),

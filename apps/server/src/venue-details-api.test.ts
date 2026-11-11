@@ -399,7 +399,7 @@ it("previews a late cutover on both transition days without moving it to the pre
 });
 it("can preview a valid replacement for an unreadable saved zone, including a named fixed-offset zone", async () => {
   await suite.db.execute(
-    sql`update locations set time_zone = 'legacy-invalid-zone' where id = ${venue.cfg.locationId}`,
+    sql`update settings set doc = json_set(doc, '$.timeZone', 'legacy-invalid-zone') where module = 'business_day'`,
   );
   const response = await app.request(
     "/management-api/venue-details/clock-preview?timeZone=Etc%2FGMT%2B2&dayCutover=00%3A00",

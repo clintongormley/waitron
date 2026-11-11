@@ -100,7 +100,7 @@ it("shows no copy of the saved address, and says so when there is none", async (
   expect(receiptRoot(el).textContent).not.toContain("Calle Mayor 1");
   expect(receiptRoot(el).textContent).not.toContain("28013 Madrid");
   api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: [] });
-  api.liveData.invalidate([{ type: "locations" }]);
+  api.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect
     .poll(() => receiptRoot(el).querySelector("[data-test=venue-address]")?.textContent?.trim())
     .toBe(t("receipts.no_address"));

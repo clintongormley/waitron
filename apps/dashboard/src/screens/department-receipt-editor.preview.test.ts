@@ -95,7 +95,7 @@ it("keeps the chosen preview language and width through typed text and passive l
   await chooseOption(receiptRoot(el).querySelector("wt-combobox[name=previewWidth]")!, "58mm");
   await editReceipt(el, "headerSubtitle-ca-ES", "Cafè");
   api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: ["New Street"] });
-  api.liveData.invalidate([{ type: "locations" }]);
+  api.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   await expect
     .poll(() => api.previewReceiptDraft.mock.lastCall?.[0])
@@ -154,7 +154,7 @@ it("an implicit preview language follows the saved venue language while retainin
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
   await editReceipt(el, "email", "bar@example.com");
   api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, receiptLanguage: "ca-ES" });
-  api.liveData.invalidate([{ type: "locations" }]);
+  api.liveData.invalidate([{ type: "settings.business_day" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   await expect.poll(() => api.previewReceiptDraft.mock.lastCall?.[0].language).toBe("ca-ES");
   expect(receiptField(el, "email").value).toBe("bar@example.com");

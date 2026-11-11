@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -292,10 +293,7 @@ describe("season staffing", () => {
   it("carries the venue's changeover and every season, by start", async () => {
     const v = await venue();
     const [winter] = await inTx(async (tx) => {
-      await tx
-        .update(locations)
-        .set({ dayCutover: "03:00:00" })
-        .where(eq(locations.id, v.cfg.locationId));
+      await seedBusinessDay(tx, { dayCutover: "03:00:00" });
       return tx
         .insert(seasons)
         .values({ name: "Winter", startsOn: "01-15", colour: "blue" })
@@ -414,12 +412,7 @@ describe("special-day staffing", () => {
 
   it("carries the venue's changeover", async () => {
     const v = await venue();
-    await inTx((tx) =>
-      tx
-        .update(locations)
-        .set({ dayCutover: "04:30:00" })
-        .where(eq(locations.id, v.cfg.locationId)),
-    );
+    await inTx((tx) => seedBusinessDay(tx, { dayCutover: "04:30:00" }));
     expect((await inTx((tx) => readSpecialDayStaffing(tx, v.specialDayId))).cutover).toBe("04:30");
   });
 
@@ -732,12 +725,7 @@ describe("venue clock", () => {
 
   it("orders blocks from the venue's changeover", async () => {
     const v = await venue();
-    await inTx((tx) =>
-      tx
-        .update(locations)
-        .set({ dayCutover: "03:00:00" })
-        .where(eq(locations.id, v.cfg.locationId)),
-    );
+    await inTx((tx) => seedBusinessDay(tx, { dayCutover: "03:00:00" }));
     const night = block(v.cook, { startsAt: "02:00", endsAt: "03:00" });
     const morning = block(v.cook, { startsAt: "04:00", endsAt: "05:00" });
     await inTx((tx) =>

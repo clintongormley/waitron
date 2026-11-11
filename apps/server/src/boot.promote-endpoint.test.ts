@@ -180,7 +180,8 @@ async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ n
       id: MIRROR_LOCATION_ID,
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Barra" });
+  await seedVenueSettings(db, { name: "Barra", operationDescription: "Hospitality" });
+  await seedBusinessDay(db, {});
   const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 

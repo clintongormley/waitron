@@ -1038,18 +1038,16 @@ describe("the status route", () => {
   });
 
   it("names the venue's time zone, so the card dates a pack as the paper does", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Atlantic/Canary" })
-      .where(eq(locations.id, await venueLocationId(suite.db)));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Atlantic/Canary"}) where module = 'business_day'`,
+    );
     expect(await read(fixture())).toMatchObject({ timeZone: "Atlantic/Canary" });
   });
 
   it("names UTC when the stored zone is one the runtime does not know, so the card can still format dates", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Mars/Olympus_Mons" })
-      .where(eq(locations.id, await venueLocationId(suite.db)));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Olympus_Mons"}) where module = 'business_day'`,
+    );
     expect(await read(fixture())).toMatchObject({ timeZone: "UTC" });
   });
 

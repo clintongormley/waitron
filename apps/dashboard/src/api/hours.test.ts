@@ -72,10 +72,9 @@ const dependencies = [
   "attendance_questions",
   "attendance_response_commands",
   "persons",
-  "locations",
+  "settings.business_day",
   "settings.venue",
-  "location_day_cutover_changes",
-  "location_business_day_settings",
+  "day_cutover_changes",
 ];
 it("query keys distinguish each selected scope and every hours source is declared", async () => {
   const { api, calls, activity } = await client();

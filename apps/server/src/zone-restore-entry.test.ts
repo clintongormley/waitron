@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   archiveHost,
   bucketCommand,
@@ -20,7 +21,9 @@ import { writeStreamRestore } from "./restore-stream.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 
 async function savedZone(timeZone: string) {
-  await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, node.locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+  );
 }
 
 it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
@@ -48,10 +51,18 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
     });
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
-      const [location] = await placed.venue
-        .select()
-        .from(locations)
-        .where(eq(locations.id, node.locationId));
+      const [location] = await Promise.resolve(
+        placed.venue.all<{
+          id: string;
+          bumpMode: string;
+          fireControl: string;
+          catalogueId: string | null;
+          timeZone: string;
+          dayCutover: string;
+        }>(
+          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+        ),
+      );
       expect(location!.timeZone).toBe(timeZone);
       expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
       const after = await placed.venue.select().from(invoiceSeries);
@@ -91,10 +102,18 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
   expect(entry.failures).toEqual([]);
   const placed = await openVenueDatabase(entry.f.roots.venueDir);
   try {
-    const [location] = await placed.venue
-      .select()
-      .from(locations)
-      .where(eq(locations.id, node.locationId));
+    const [location] = await Promise.resolve(
+      placed.venue.all<{
+        id: string;
+        bumpMode: string;
+        fireControl: string;
+        catalogueId: string | null;
+        timeZone: string;
+        dayCutover: string;
+      }>(
+        sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+      ),
+    );
     expect(location!.timeZone).toBe("Not/A_Zone");
     expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
     expect(

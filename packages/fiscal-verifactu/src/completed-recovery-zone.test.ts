@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import { renderRecoveryPack } from "@waitron/recovery-pack";
 import { beforeEach, expect, it } from "vitest";
@@ -42,7 +43,9 @@ for (const locale of ["en", "es"] as const)
   ])(
     `the %s saved zone keeps completed ${locale} recovery evidence readable without modifying history`,
     async (timeZone, time, zone) => {
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, node.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const before = await suite.db.select().from(registroSif);
       const part = await withTransaction(suite.db, (tx) =>
         FISCAL_RECOVERY_PACK_PAGE(tx, node, {
@@ -114,8 +117,20 @@ for (const locale of ["en", "es"] as const)
         await task.destroy();
       }
       expect(
-        (await suite.db.select().from(locations).where(eq(locations.id, node.locationId)))[0]!
-          .timeZone,
+        (
+          await Promise.resolve(
+            suite.db.all<{
+              id: string;
+              bumpMode: string;
+              fireControl: string;
+              catalogueId: string | null;
+              timeZone: string;
+              dayCutover: string;
+            }>(
+              sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+            ),
+          )
+        )[0]!.timeZone,
       ).toBe(timeZone);
       expect(await suite.db.select().from(registroSif)).toEqual(before);
     },

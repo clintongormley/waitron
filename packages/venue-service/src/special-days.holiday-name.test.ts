@@ -120,7 +120,7 @@ async function venue() {
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 
-const save = (input: unknown, at = AT) => scoped((tx) => saveSpecialDay(tx, null, input, at, 0));
+const save = (input: unknown, at = AT) => scoped((tx) => saveSpecialDay(tx, null, input, at, 1));
 const dates = (days: readonly string[]) => days.map((date) => ({ date, closedAllDay: false }));
 const yearly = (name: string, date: string) =>
   save({ name, repeatsYearly: true, dates: dates([date]) });
@@ -249,7 +249,7 @@ describe("one special day's own dates under name-following", () => {
           dates: [{ date: "2026-04-03", closedAllDay: true }],
         },
         AT,
-        0,
+        1,
       ),
     );
     expect(
@@ -275,7 +275,7 @@ describe("one special day's own dates under name-following", () => {
         day.id,
         { name: "Good Friday", repeatsYearly: true, dates: dates(["2026-04-03"]) },
         AT,
-        0,
+        1,
       ),
     );
     expect(saved.dates).toEqual([{ date: "2026-04-03", closedAllDay: false }]);
@@ -533,7 +533,7 @@ describe("saving either special day of a pair that came to share a date", () => 
     const friday = await yearly("Viernes Santo", "2026-04-03");
     const feria = await rawDay(v, "Feria", "2026-03-26", true);
     const update = (id: string, input: unknown) =>
-      scoped((tx) => saveSpecialDay(tx, id, input, AT, 0));
+      scoped((tx) => saveSpecialDay(tx, id, input, AT, 1));
     return { v, friday, feria, update };
   };
   const feriaOn = (date: string) => ({

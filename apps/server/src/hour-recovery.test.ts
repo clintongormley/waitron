@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
@@ -201,10 +202,14 @@ it.each([
   "selects the recovery module only for a supported recorded jurisdiction: %s",
   async (_name, country, fiscalTerritory, timeZone) => {
     await suite.db.update(tenants).set({ country });
-    await suite.db
-      .update(locations)
-      .set({ fiscalTerritory, timeZone })
-      .where(eq(locations.id, LOCATION));
+    await (async () => {
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.fiscalTerritory', ${fiscalTerritory}) where module = 'venue'`,
+      );
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
+    })();
     const f = await archive();
     const selection = (await previewRecoveryArchive(deps(f.artifact))).fiscalSelection;
     if (_name === "unreadable zone")
@@ -220,7 +225,14 @@ it.each([
 
 it("uses the recorded non-filing module for a supported non-fiscal territory", async () => {
   await suite.db.update(tenants).set({ country: "GB" });
-  await suite.db.update(locations).set({ fiscalTerritory: "GB-vat", timeZone: "Europe/London" });
+  await (async () => {
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.fiscalTerritory', ${"GB-vat"}) where module = 'venue'`,
+    );
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/London"}) where module = 'business_day'`,
+    );
+  })();
   const f = await archive({ modules: { "fiscal-verifactu": false, "fiscal-none": true } });
   expect((await previewRecoveryArchive(deps(f.artifact))).fiscalSelection).toEqual({
     country: "GB",

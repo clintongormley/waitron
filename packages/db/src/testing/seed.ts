@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
@@ -205,19 +205,33 @@ export async function seedBusinessDay(
   overrides: { timeZone?: string; dayCutover?: string } = {},
 ): Promise<void> {
   const current = await readSettings(db, BUSINESS_DAY_SETTINGS);
-  await saveSettings(db, BUSINESS_DAY_SETTINGS, {
-    doc: {
-      ...current.doc,
-      ...(overrides.timeZone === undefined ? {} : { timeZone: overrides.timeZone }),
-    },
-    expectedRevision: current.revision,
-    personId: null,
-  });
+  if (current.revision === 0 || overrides.timeZone !== undefined) {
+    await saveSettings(db, BUSINESS_DAY_SETTINGS, {
+      doc: {
+        ...current.doc,
+        ...(overrides.timeZone === undefined ? {} : { timeZone: overrides.timeZone }),
+      },
+      expectedRevision: current.revision,
+      personId: null,
+    });
+  }
+  const value = overrides.dayCutover ?? "06:00:00";
+  const stored = value.length === 5 ? `${value}:00` : value;
+  if (overrides.dayCutover !== undefined) {
+    await db
+      .delete(dayCutoverChanges)
+      .where(
+        and(
+          eq(dayCutoverChanges.effectiveBusinessDay, FIRST_DAY_START),
+          ne(dayCutoverChanges.dayCutover, stored),
+        ),
+      );
+  }
   await db
     .insert(dayCutoverChanges)
     .values({
       effectiveBusinessDay: FIRST_DAY_START,
-      dayCutover: overrides.dayCutover ?? "06:00:00",
+      dayCutover: stored,
     })
     .onConflictDoNothing({ target: dayCutoverChanges.effectiveBusinessDay });
 }
