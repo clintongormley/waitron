@@ -845,9 +845,8 @@ product failures.
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
   The provision, setup-api.throwaway, promote-api.handover, break-glass-command and
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
-  The provision-fiscal-slot, promote-api.authenticator and backup-api.settings-evidence.proof
-  suites also use Administrator for local administrator display names. Spanish samples remain
-  in backup-api.route and mirror-bundle-api, among other suites.
+  Spanish administrator display-name samples remain in backup-api.route and mirror-bundle-api,
+  among other suites.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
