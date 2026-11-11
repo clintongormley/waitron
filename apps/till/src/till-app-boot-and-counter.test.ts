@@ -1,3 +1,4 @@
+import { idleLiveReadFor } from "./widgets/test-helpers.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
 import {
@@ -173,7 +174,7 @@ const zone = (id: string, serviceMode: ServiceZoneSummary["serviceMode"]): Servi
 
 let api: TillApi;
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
-  return {
+  return idleLiveReadFor({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["look-zone"])),
     getContentLanguages: vi
       .fn()
@@ -226,7 +227,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     printPaymentSlip: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as unknown as TillApi;
+  } as unknown as TillApi);
 }
 
 function fakeSessionActivity() {
@@ -3826,6 +3827,7 @@ describe("department transfers across operator lifetimes", () => {
   function transfers() {
     const signals: AbortSignal[] = [];
     let change: (() => void) | undefined;
+    let types: readonly string[] = [];
     let incoming = [request];
     const calls = {
       listIncomingDepartmentTransfers: vi.fn(async () => ({
@@ -3836,10 +3838,15 @@ describe("department transfers across operator lifetimes", () => {
       listDepartmentSentTransfers: vi.fn(async () => ({
         requests: [{ ...request, id: "sent-1", status: "declined", reason: "Closing" }],
       })),
-      readDepartmentTransferEvents: vi.fn(
-        (reload: () => void, { signal }: { signal: AbortSignal }) => {
+      readLiveEvents: vi.fn(
+        (
+          interests: readonly string[],
+          onEvent: (name: string, data: string) => void,
+          { signal }: { signal: AbortSignal },
+        ) => {
+          types = interests;
           signals.push(signal);
-          change = reload;
+          change = () => onEvent("change", '[{"type":"department_transfer_requests"}]');
           return new Promise<void>((resolve) =>
             signal.addEventListener("abort", () => resolve(), { once: true }),
           );
@@ -3849,6 +3856,7 @@ describe("department transfers across operator lifetimes", () => {
     return {
       calls,
       signals,
+      types: () => types,
       refresh() {
         change?.();
       },
@@ -4216,7 +4224,7 @@ describe("department transfers across operator lifetimes", () => {
     expect(desk.calls.listDepartmentSentTransfers).toHaveBeenCalled();
     desk.empty();
     await vi.waitFor(() => expect(pendingCount(el)?.textContent).toContain("0"));
-    expect(desk.signals).toHaveLength(1);
+    expect(desk.types()).toContain("department_transfer_requests");
   });
 
   it("does not read or show transfer controls without the person's permission", async () => {
@@ -4225,10 +4233,10 @@ describe("department transfers across operator lifetimes", () => {
     await signIn(el, []);
     expect(pendingCount(el)).toBeNull();
     expect(desk.calls.listDepartmentSentTransfers).not.toHaveBeenCalled();
-    expect(desk.signals).toHaveLength(0);
+    expect(desk.types()).not.toContain("department_transfer_requests");
   });
 
-  it("ends its stream on logout and starts a fresh stream on sign-in", async () => {
+  it("removes transfer interests on logout and restores them on sign-in", async () => {
     const desk = transfers();
     const { el } = await mountApp(desk.calls);
     await signIn(el);
@@ -4236,8 +4244,8 @@ describe("department transfers across operator lifetimes", () => {
     expect(desk.signals[0]?.aborted).toBe(true);
     await vi.waitFor(() => expect(lock(el)).not.toBeNull());
     await signIn(el);
-    await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
-    expect(desk.signals[1]?.aborted).toBe(false);
+    await vi.waitFor(() => expect(desk.types()).toContain("department_transfer_requests"));
+    expect(desk.signals.at(-1)?.aborted).toBe(false);
   });
 
   it("aborts its stream when detached", async () => {
@@ -4248,22 +4256,19 @@ describe("department transfers across operator lifetimes", () => {
     expect(desk.signals[0]?.aborted).toBe(true);
   });
 
-  it("locks locally when the transfer stream reports a revoked session", async () => {
+  it("locks locally when a transfer read reports a revoked session", async () => {
     const desk = transfers();
-    let refuse!: (error: unknown) => void;
-    desk.calls.readDepartmentTransferEvents.mockImplementation((_reload, { signal }) => {
-      desk.signals.push(signal);
-      return new Promise<void>((_resolve, reject) => {
-        refuse = reject;
-      });
-    });
     const { el } = await mountApp(desk.calls);
     await signIn(el);
-    expect(desk.signals).toHaveLength(1);
-    refuse({ code: "session.expired", status: 401 });
+    desk.calls.listIncomingDepartmentTransfers.mockRejectedValueOnce({
+      code: "session.expired",
+      status: 401,
+    });
+    desk.refresh();
     await vi.waitFor(() => expect(lock(el)).not.toBeNull());
     expect(shell(el)).toBeNull();
-    expect(desk.signals[0]?.aborted).toBe(true);
+    expect(desk.types()).not.toContain("department_transfer_requests");
+    expect(desk.signals.at(-1)?.aborted).toBe(false);
   });
 
   it("clears the old server's stream and count when the router changes server", async () => {
@@ -4283,7 +4288,7 @@ describe("department transfers across operator lifetimes", () => {
   });
 
   it.each([true, false])(
-    "a profile switch replaces the stream only if it succeeds (%s)",
+    "a profile switch replaces the transfer interests only if it succeeds (%s)",
     async (succeeds) => {
       const desk = transfers();
       const identity = {
@@ -4311,17 +4316,17 @@ describe("department transfers across operator lifetimes", () => {
       const dialog = el.shadowRoot!.querySelector("till-profile-dialog")!;
       emit(dialog, "profile-switch", { profileId: "bar" });
       if (succeeds) {
-        await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
+        await vi.waitFor(() => expect(desk.types()).toContain("department_transfer_requests"));
         expect(desk.signals[0]?.aborted).toBe(true);
-        expect(desk.signals[1]?.aborted).toBe(false);
+        expect(desk.signals.at(-1)?.aborted).toBe(false);
       } else {
         await vi.waitFor(() =>
           expect((dialog as HTMLElement & { notice: unknown }).notice).toEqual({
             code: "device_profile.not_admitted",
           }),
         );
-        expect(desk.signals).toHaveLength(1);
-        expect(desk.signals[0]?.aborted).toBe(false);
+        expect(desk.types()).toContain("department_transfer_requests");
+        expect(desk.signals.at(-1)?.aborted).toBe(false);
         expect(pendingCount(el)?.textContent).toContain("1");
       }
     },
@@ -4333,7 +4338,7 @@ describe("department transfers across operator lifetimes", () => {
     "authorization.not_permitted",
   ])("a %s transfer-access refusal keeps its operator signed in", async (code) => {
     const desk = transfers();
-    desk.calls.readDepartmentTransferEvents.mockRejectedValue({ code, status: 403 });
+    desk.calls.listIncomingDepartmentTransfers.mockRejectedValue({ code, status: 403 });
     const { el } = await mountApp(desk.calls);
     await signIn(el);
     expect(shell(el)).not.toBeNull();
@@ -4341,7 +4346,7 @@ describe("department transfers across operator lifetimes", () => {
     expect(pendingCount(el)).toBeNull();
   });
 
-  it("stops the old profile's transfer stream before the new profile setup answers", async () => {
+  it("removes the old profile's transfer interests before the new profile setup answers", async () => {
     const desk = transfers();
     let setup!: (value: typeof till) => void;
     const getTill = vi
@@ -4377,12 +4382,12 @@ describe("department transfers across operator lifetimes", () => {
       profileId: "bar",
     });
     await vi.waitFor(() => expect(getTill).toHaveBeenCalledTimes(2));
-    expect(desk.signals).toHaveLength(1);
+    expect(desk.types()).not.toContain("department_transfer_requests");
     expect(desk.signals[0]?.aborted).toBe(true);
     expect(pendingCount(el)).toBeNull();
     setup(till);
-    await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
-    expect(desk.signals[1]?.aborted).toBe(false);
+    await vi.waitFor(() => expect(desk.types()).toContain("department_transfer_requests"));
+    expect(desk.signals.at(-1)?.aborted).toBe(false);
   });
 
   it("replaces private transfer state when another sign-in begins without a prior logout", async () => {
@@ -4394,9 +4399,9 @@ describe("department transfers across operator lifetimes", () => {
       displayName: "Bea",
       permissions: ["payment.take"],
     });
-    await vi.waitFor(() => expect(desk.signals).toHaveLength(2));
+    await vi.waitFor(() => expect(desk.types()).toContain("department_transfer_requests"));
     expect(desk.signals[0]?.aborted).toBe(true);
-    expect(desk.signals[1]?.aborted).toBe(false);
+    expect(desk.signals.at(-1)?.aborted).toBe(false);
     expect(shell(el)?.shadowRoot?.textContent).toContain("Bea");
   });
 
@@ -4536,7 +4541,7 @@ describe("department transfers across operator lifetimes", () => {
     const { el } = await mountApp(desk.calls);
     await signIn(el);
     expect(pendingCount(el)).toBeNull();
-    expect(desk.signals[0]?.aborted).toBe(false);
+    expect(desk.signals.at(-1)?.aborted).toBe(false);
     expect(desk.calls.listDepartmentSentTransfers).toHaveBeenCalled();
   });
 
@@ -4546,7 +4551,7 @@ describe("department transfers across operator lifetimes", () => {
     const { el } = await mountApp(desk.calls);
     await signIn(el);
     expect(pendingCount(el)).toBeNull();
-    expect(desk.signals[0]?.aborted).toBe(false);
+    expect(desk.signals.at(-1)?.aborted).toBe(false);
   });
 
   it("clears a delayed old-session answer before a new operator signs in", async () => {
@@ -5038,7 +5043,7 @@ describe("department transfers across operator lifetimes", () => {
         requests: [],
       })),
       listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
-      readDepartmentTransferEvents: desk.calls.readDepartmentTransferEvents,
+      readLiveEvents: desk.calls.readLiveEvents,
     });
     await flush(el);
     answer([
@@ -6351,8 +6356,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 requests: [],
               })),
               listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
-              readDepartmentTransferEvents: vi.fn(
-                (_reload: unknown, { signal }: { signal?: AbortSignal }) =>
+              readLiveEvents: vi.fn(
+                (
+                  _types: readonly string[],
+                  _onEvent: unknown,
+                  { signal }: { signal?: AbortSignal },
+                ) =>
                   new Promise<void>((resolve) => {
                     if (signal?.aborted) resolve();
                     else signal?.addEventListener("abort", () => resolve(), { once: true });

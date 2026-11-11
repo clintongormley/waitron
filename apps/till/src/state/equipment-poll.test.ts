@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EquipmentPoll } from "./equipment-poll.js";
 import type { DeviceEquipment } from "../api/client.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
 
 function equipment(readerId: string | null): DeviceEquipment {
   return {
@@ -45,6 +46,30 @@ afterEach(() => {
 });
 
 describe("EquipmentPoll", () => {
+  it("refreshes on printer changes while connected and still reads time-based notices every fifteen seconds", async () => {
+    const live = liveConnectionFixture();
+    const onEquipment = vi.fn();
+    const poll = new EquipmentPoll({
+      live: () => live.connection,
+      read: async () => equipment("reader-1"),
+      onEquipment,
+    });
+    try {
+      poll.start();
+      live.ready();
+      await settle();
+      expect(onEquipment).toHaveBeenCalledTimes(1);
+      live.change("printers");
+      await settle();
+      expect(onEquipment).toHaveBeenCalledTimes(2);
+      live.keepalive();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(onEquipment).toHaveBeenCalledTimes(3);
+    } finally {
+      poll.stop();
+      live.connection.stop();
+    }
+  });
   it("reads the device's equipment every 15 seconds once started, and reports each answer", async () => {
     const { read, reads } = pendingRead();
     const onEquipment = vi.fn();

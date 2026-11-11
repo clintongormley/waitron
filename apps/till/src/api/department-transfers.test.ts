@@ -1,3 +1,4 @@
+import { TillLiveConnection } from "./live-connection.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TillApi } from "./client.js";
 
@@ -209,20 +210,21 @@ describe("departmental transfer client", () => {
     });
   });
 
-  it("reloads on authenticated ready and change frames split across network chunks, ignoring keepalive and unknown events", async () => {
+  it("forwards device stream frames split across network chunks, including keepalive and unknown events", async () => {
     const source = stream();
     const reloads: string[] = [];
-    const done = source.api.readDepartmentTransferEvents((event) => reloads.push(event), {
+    const done = source.api.readLiveEvents(["devices"], (event) => reloads.push(event), {
       signal: source.abort.signal,
     });
     source.send(": comment\r\nevent: rea");
     source.send("dy\r\ndata: {}\r\n\r\nevent: keepalive\ndata: {}\n\nevent: change\ndata: {}\n");
     source.send("\nevent: unknown\ndata: {}\n\n");
-    await vi.waitFor(() => expect(reloads).toEqual(["ready", "change"]));
+    await vi.waitFor(() => expect(reloads).toEqual(["ready", "keepalive", "change", "unknown"]));
     source.end();
     await done;
     expect(source.fetchImpl).toHaveBeenCalledWith(
-      "https://primary.test/api/department-transfers/events",
+      "https://primary.test/api/live/events?resources=" +
+        encodeURIComponent('[{"type":"devices"}]'),
       {
         method: "GET",
         credentials: "include",
@@ -233,20 +235,34 @@ describe("departmental transfer client", () => {
     expect(source.body.locked).toBe(false);
   });
 
-  it("ends a revoked stream before any later reload and releases its reader", async () => {
+  it("stops a revoked device stream before later changes and releases its reader", async () => {
     const source = stream();
-    const reloads: string[] = [];
-    const done = source.api.readDepartmentTransferEvents((event) => reloads.push(event), {
-      signal: source.abort.signal,
+    let done!: Promise<void>;
+    const connection = new TillLiveConnection({
+      read: (types, onEvent, signal) => {
+        done = source.api.readLiveEvents(types, onEvent, { signal });
+        return done;
+      },
     });
-    const rejected = expect(done).rejects.toEqual({ code: "device_profile.not_admitted" });
-    source.send(
-      'event: ready\ndata: {}\n\nevent: session-invalid\ndata: {"code":"device_profile.not_admitted"}\n\nevent: change\ndata: {}\n\n',
-    );
-    await rejected;
-    expect(reloads).toEqual(["ready"]);
-    expect(source.cancelled).toBe(true);
-    expect(source.body.locked).toBe(false);
+    const changes = vi.fn();
+    const unauthorized = vi.fn();
+    connection.addEventListener("change", changes);
+    connection.addEventListener("unauthorized", unauthorized);
+    connection.addInterests("device", ["devices"]);
+    connection.start();
+    try {
+      source.send(
+        'event: ready\ndata: {}\n\nevent: session-invalid\ndata: {"code":"device.unauthorized"}\n\nevent: change\ndata: [{"type":"devices"}]\n\n',
+      );
+      await done;
+      expect(connection.up).toBe(false);
+      expect(unauthorized).toHaveBeenCalledOnce();
+      expect(changes).not.toHaveBeenCalled();
+      expect(source.cancelled).toBe(true);
+      expect(source.body.locked).toBe(false);
+    } finally {
+      connection.stop();
+    }
   });
 
   it.each([401, 403])(
@@ -259,7 +275,7 @@ describe("departmental transfer client", () => {
         );
       const reloads: string[] = [];
       await expect(
-        new TillApi("", fetchImpl).readDepartmentTransferEvents((event) => reloads.push(event)),
+        new TillApi("", fetchImpl).readLiveEvents(["devices"], (event) => reloads.push(event)),
       ).rejects.toEqual({ code: "department_transfer.not_allowed", status });
       expect(reloads).toEqual([]);
     },
@@ -268,7 +284,7 @@ describe("departmental transfer client", () => {
   it("cancels an idle reader on logout even when a transport ignores fetch's signal", async () => {
     const source = stream();
     const reloads: string[] = [];
-    const done = source.api.readDepartmentTransferEvents((event) => reloads.push(event), {
+    const done = source.api.readLiveEvents(["devices"], (event) => reloads.push(event), {
       signal: source.abort.signal,
     });
     source.send("event: ready\ndata: {}\n\n");
@@ -298,7 +314,7 @@ it("discovers all sent transfers without a selected tab and preserves cancellati
 it("reports malformed HTTP stream refusals as server errors without delivering events", async () => {
   const events: string[] = [];
   const api = new TillApi("", async () => new Response("proxy refused", { status: 502 }));
-  await expect(api.readDepartmentTransferEvents((event) => events.push(event))).rejects.toEqual({
+  await expect(api.readLiveEvents(["devices"], (event) => events.push(event))).rejects.toEqual({
     code: "server.internal",
     status: 502,
   });
@@ -307,8 +323,8 @@ it("reports malformed HTTP stream refusals as server errors without delivering e
 
 it("rejects a successful stream with no readable body", async () => {
   const api = new TillApi("", async () => new Response(null, { status: 204 }));
-  await expect(api.readDepartmentTransferEvents(() => {})).rejects.toThrow(
-    "Transfer stream has no body",
+  await expect(api.readLiveEvents(["devices"], () => {})).rejects.toThrow(
+    "Event stream has no body",
   );
 });
 
@@ -325,7 +341,7 @@ it("finishes logout and releases the reader when the transport refuses cancellat
   });
   const api = new TillApi("", async () => new Response(body));
   const events: string[] = [];
-  const done = api.readDepartmentTransferEvents((event) => events.push(event), {
+  const done = api.readLiveEvents(["devices"], (event) => events.push(event), {
     signal: abort.signal,
   });
   await vi.waitFor(() => expect(events).toEqual(["ready"]));

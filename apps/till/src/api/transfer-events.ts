@@ -1,9 +1,8 @@
-export async function readTransferEvents(
+export async function readEventStream(
   url: string,
   fetchImpl: typeof fetch,
-  reload: (event: "ready" | "change") => void,
+  onEvent: (event: string, data: string) => void,
   signal?: AbortSignal,
-  onRefused: (code: string) => void = () => {},
 ): Promise<void> {
   const response = await fetchImpl(url, {
     method: "GET",
@@ -22,10 +21,9 @@ export async function readTransferEvents(
       typeof error.code === "string"
         ? error.code
         : "server.internal";
-    onRefused(code);
     throw { code, status: response.status };
   }
-  if (response.body === null) throw new TypeError("Transfer stream has no body");
+  if (response.body === null) throw new TypeError("Event stream has no body");
   const reader = response.body.getReader();
   const cancel = () => {
     void reader.cancel().catch(() => undefined);
@@ -45,18 +43,7 @@ export async function readTransferEvents(
         const line = buffer.slice(0, end).replace(/\r$/, "");
         buffer = buffer.slice(end + 1);
         if (line === "") {
-          if (event === "session-invalid") {
-            const parsed: unknown = JSON.parse(data.join("\n"));
-            const code =
-              parsed !== null &&
-              typeof parsed === "object" &&
-              "code" in parsed &&
-              typeof parsed.code === "string"
-                ? parsed.code
-                : "session.required";
-            throw { code };
-          }
-          if (!signal?.aborted && (event === "ready" || event === "change")) reload(event);
+          if (!signal?.aborted) onEvent(event, data.join("\n"));
           event = "";
           data = [];
         } else if (line.startsWith("event:")) event = line.slice(6).replace(/^ /, "");

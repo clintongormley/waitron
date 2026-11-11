@@ -4,6 +4,7 @@ import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { TillSeatDialog } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -149,6 +150,24 @@ afterEach(() => {
 });
 
 describe("till-floor-screen's guest count and re-read", () => {
+  it("refreshes on table changes while connected and keeps its fifteen-second read", async () => {
+    const live = liveConnectionFixture();
+    try {
+      const el = await mount({ live: live.connection });
+      const seen = countRefreshes(el);
+      live.ready();
+      await Promise.resolve();
+      expect(seen.count).toBe(1);
+      live.change("dining_tables");
+      await Promise.resolve();
+      expect(seen.count).toBe(2);
+      vi.advanceTimersByTime(15_000);
+      expect(seen.count).toBe(3);
+    } finally {
+      cleanupWidgets();
+      live.connection.stop();
+    }
+  });
   it("leaves the seat dialog's placeholder empty for today's seats or a merge", async () => {
     const el = await mount({
       tables: [planned("t1", { seats: 6 }), planned("t2", { joinId: "j1", joinSeats: 10 })],

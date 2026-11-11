@@ -1,3 +1,5 @@
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { liveGate } from "./live-gate.js";
 import type { MenuStateAnswer } from "../api/client.js";
 
 /** How often a signed-in till reads its zones' menu state (plan decision D11). */
@@ -10,6 +12,7 @@ const POLL_MS = 15_000;
 const READ_LIMIT_MS = 25_000;
 
 export interface MenuStatePollOptions {
+  live?(): TillLiveConnection | undefined;
   read(zoneId: string, signal: AbortSignal): Promise<MenuStateAnswer>;
   /** The zones whose offers the till holds now, read afresh at every tick. */
   zones(): readonly string[];
@@ -24,7 +27,7 @@ export interface MenuStatePollOptions {
  */
 export class MenuStatePoll {
   readonly #options: MenuStatePollOptions;
-  #timer?: ReturnType<typeof setInterval>;
+  #timer?: { stop(): void };
   readonly #reads = new Set<AbortController>();
   #tickRead?: AbortController;
   #requested = 0;
@@ -40,7 +43,13 @@ export class MenuStatePoll {
   }
 
   start(): void {
-    if (this.#timer === undefined) this.#timer = setInterval(() => this.#tick(), POLL_MS);
+    if (this.#timer === undefined)
+      this.#timer = liveGate(this.#options.live?.(), {
+        types: TILL_LIVE_TYPES.menu!,
+        intervalMs: POLL_MS,
+        run: () => this.#tick(),
+        quietWhileConnected: false,
+      });
   }
 
   readNow(zoneId: string): Promise<void> {
@@ -48,7 +57,7 @@ export class MenuStatePoll {
   }
 
   stop(): void {
-    clearInterval(this.#timer);
+    this.#timer?.stop();
     this.#timer = undefined;
     for (const read of this.#reads) read.abort();
     this.#reads.clear();

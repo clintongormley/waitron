@@ -69,6 +69,20 @@ export interface Mounted<T extends HTMLElement> {
  * does. Pass `theme` to pin `data-theme` so a color-contrast a11y check means what it means in the app;
  * omit it to render in whatever theme the environment resolves to.
  */
+export function idleLiveReadFor<T extends object>(api: T): T {
+  if (!("readLiveEvents" in api))
+    Object.assign(api, {
+      readLiveEvents: vi.fn(
+        (_types: readonly string[], _onEvent: unknown, options: { signal?: AbortSignal } = {}) =>
+          new Promise<void>((resolve) => {
+            if (options.signal?.aborted) resolve();
+            else options.signal?.addEventListener("abort", () => resolve(), { once: true });
+          }),
+      ),
+    });
+  return api;
+}
+
 export async function mountWidget<T extends HTMLElement>(
   tag: string,
   props: Partial<T>,
@@ -84,6 +98,8 @@ export async function mountWidget<T extends HTMLElement>(
 
   const el = document.createElement(tag) as T;
   Object.assign(el, props);
+  if (tag === "till-app" && "api" in el && typeof el.api === "object" && el.api !== null)
+    idleLiveReadFor(el.api);
   host.appendChild(el);
   await (el as T & { updateComplete: Promise<unknown> }).updateComplete;
   return { el, host };
@@ -899,6 +915,7 @@ export function notingPersonRefusals<T extends object>(api: T): T {
   };
   // An own property, so a copy spread from this stub registers with the same listener.
   Object.assign(api, { namePersonFrom });
+  idleLiveReadFor(api);
   const wrapped = new WeakMap<object, unknown>();
   const wrap = (method: (...args: unknown[]) => unknown) =>
     new Proxy(method, {
@@ -916,7 +933,8 @@ export function notingPersonRefusals<T extends object>(api: T): T {
   return new Proxy(api, {
     get(target, key, receiver) {
       const value: unknown = Reflect.get(target, key, receiver);
-      if (typeof value !== "function" || key === "namePersonFrom") return value;
+      if (typeof value !== "function" || key === "namePersonFrom" || key === "readLiveEvents")
+        return value;
       if (!wrapped.has(value)) wrapped.set(value, wrap(value as (...args: unknown[]) => unknown));
       return wrapped.get(value);
     },

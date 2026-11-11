@@ -3,9 +3,16 @@
 Management (`/management-api/events`) and enrolled devices (`/api/live/events`) use the shared
 server loop in `live-stream.ts`. Wake checks read committed session/device state without taking
 the write lock or updating activity stamps. Management events carry resource identities; device
-events carry resource types only and need no person signed in. The transfer watch retains its
-empty-object event body and checks its person, device, permissions and profile at every wake.
-Keepalives remain every 15 seconds. The till's browser adoption belongs to jr13/jr14.
+events carry resource types only and need no person signed in. Keepalives remain every 15 seconds.
+
+Tills open the device connection after reading their identity and keep it across sign-out. Transfer
+interests follow the signed-in person; transfer reads still check that person's access. Menu,
+equipment and floor reads refresh on changes and retain their timers because their answers depend
+on time or server memory. Transfers keep their timer to detect ended person sessions; table-allergy
+timed reads stay quiet while connected and resume when thirty seconds of silence counts the
+connection down. Payment-owned equipment changes use the equipment timer, so disabling payments
+does not leave a rejected subscription. Handhelds and kitchen displays retain
+timed reads under jr11's measured tills-only fallback. The remaining screen reads belong to jr14.
 
 The dashboard treats thirty seconds without an event as a lost connection, re-reads its watched
 queries and reconnects with back-off. Keepalives keep the connection alive. Queries marked

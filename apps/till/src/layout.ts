@@ -22,6 +22,8 @@ export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
 
 /** An unknown form factor returns `undefined`, which boot treats as a normal operator till. */
 export type DeviceKind = "kds_station" | "handheld" | "till";
+export const LIVE_STREAM_KINDS: readonly DeviceKind[] = ["till"];
+
 export function kindOfFormFactor(ff: string): DeviceKind | undefined {
   switch (ff) {
     case "till":

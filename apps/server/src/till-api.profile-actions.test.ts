@@ -495,7 +495,6 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
       "GET /api/department-transfers/incoming",
       "GET /api/department-transfers/sent",
       "GET /api/department-transfers/:id",
-      "GET /api/department-transfers/events",
       "GET /api/working-orders/:id/department-transfers",
       "POST /api/working-orders/:id/department-transfers",
       "POST /api/department-transfers/:id/accept",
