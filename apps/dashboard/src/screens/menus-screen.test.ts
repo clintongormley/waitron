@@ -143,7 +143,7 @@ const products: Product[] = [
 ];
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: "Drinks", parentId: null, color: null },
+  { id: "c-drinks", name: "Beverages", parentId: null, color: null },
   { id: "c-beer", name: "Beer", parentId: "c-drinks", color: null },
   { id: "c-mains", name: "Mains", parentId: null, color: null },
 ];

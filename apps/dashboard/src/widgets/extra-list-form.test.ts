@@ -576,8 +576,8 @@ it("announces a product whose name holds a replacement pattern as written", asyn
   await addItem(el, "Bread $&");
   expect(text(el, "added-status")).toBe(t("extras.product_added").split("{name}").join("Bread $&"));
   const max = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "item-0-max-quantity");
-  expect(max.decreaseLabel("Máx $&")).toBe(t("action.decrease").split("{label}").join("Máx $&"));
-  expect(max.increaseLabel("Máx $&")).toBe(t("action.increase").split("{label}").join("Máx $&"));
+  expect(max.decreaseLabel("Max $&")).toBe(t("action.decrease").split("{label}").join("Max $&"));
+  expect(max.increaseLabel("Max $&")).toBe(t("action.increase").split("{label}").join("Max $&"));
 });
 
 it("adds nothing when the picker closes without a choice", async () => {
