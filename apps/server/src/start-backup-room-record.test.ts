@@ -42,7 +42,7 @@ const AT = "2026-10-29T03:00:00.000Z";
 
 async function seedVenueWithNode(): Promise<NodeId> {
   await seedVenue(db, {
-    name: "Sala",
+    name: "Main room",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
     timeZone: "Europe/Madrid",

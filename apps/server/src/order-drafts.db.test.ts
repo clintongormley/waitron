@@ -121,7 +121,7 @@ async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
-    name: "Sala",
+    name: "Main room",
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurante",
   });

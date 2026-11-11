@@ -165,7 +165,7 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
-    name: "Sala",
+    name: "Main room",
     invoiceLocales: [countryCourses ? "en-GB" : LOCALE],
     operationDescription: "Restaurante",
   });

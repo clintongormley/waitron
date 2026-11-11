@@ -835,6 +835,8 @@ product failures.
 - **A976. Finish the server's English test-venue defaults.** Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
+  Current-order, order-group, order-draft, served, certificate, backup-settings and backup-room
+  fixture names use `Main room`; recovery-pack cover names stay unchanged.
   The shared `setupVenue` uses Administrator,
   Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle, House salad, Croquettes
   and Octopus as staff keys, with Spanish customer and kitchen names unchanged. Tarta,
