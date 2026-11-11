@@ -1243,18 +1243,6 @@ trust sets built by hand), on the slice's branch; not run end to end. That repli
 S2's chart to D, or to a returned M, is not proven. Go-live is two boxes, where this cannot arise.
 Fix idea: at join, also pin the main box's own trusted keys.
 
-## A1278: the spare-adding route spends a reservation on a held chart it then refuses
-
-Predates A947 slice 3a. On main (01945cbce, in a throwaway worktree), the case "refuses 409
-membership.revoked_duplicate when the held chart's revoked list names a machine twice" in
-`apps/server/src/mirror-bundle-api.test.ts`, with a snapshot of the reservations added before and
-after, failed only on the snapshot: the route answered 409 `membership.revoked_duplicate` after
-making one signed outside reservation (`allocationId contract-P000042`). On the slice's branch the
-trust check and the readability check (`assertHeldDocumentReadable`) both run before the
-reservation, and both pass this chart: the main box signed it, and the readability check does not
-look for repeated ids. The same snapshot added on the branch still fails with that reservation.
-Wanted: refuse repeated ids before reserving.
-
 ## A1296: code-quality follow-ups from A947 slice 3a's finish review
 
 Raised by the finish-branch simplify review (2026-11-01) and not applied there, because each is a

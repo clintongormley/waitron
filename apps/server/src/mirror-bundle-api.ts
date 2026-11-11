@@ -11,7 +11,12 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { withMember, type Endorsement, type SignedMembershipDocument } from "@waitron/membership";
+import {
+  refuseUnverifiableChart,
+  withMember,
+  type Endorsement,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import {
   authorizeManager,
   checkManagerPassword,
@@ -66,10 +71,10 @@ export interface MirrorBundleApiDeps {
 }
 
 /**
- * The spare's store refuses a request signed 15 minutes or more from its own clock, and every
- * request the main box sends it is signed by the main box's; ten minutes leaves room for drift.
+ * Every request the main box sends the spare's store is signed by the main box's clock, and the
+ * store accepted one 14 minutes off its own and refused one 16 minutes off (probe P36).
  */
-export const MAX_CLOCK_GAP_MS = 10 * 60_000;
+const MAX_CLOCK_GAP_MS = 10 * 60_000;
 
 // `membership.write_contended` is transient, so the caller retries.
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -83,7 +88,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.bucket_stream_active": 409,
   "mirror.standby_name_taken": 409,
   "mirror.clocks_apart": 409,
-  "module.operation_invalid": 409,
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
@@ -129,7 +133,7 @@ export function mountMirrorBundleApi(
         typeof body.standbyContactUrl !== "string" ||
         (body.standbyContactUrl !== "" && !isBareOrigin(body.standbyContactUrl)) ||
         typeof body.standbyAt !== "number" ||
-        !Number.isFinite(body.standbyAt)
+        Number.isNaN(new Date(body.standbyAt).getTime())
       ) {
         throw new AppError("mirror.standby_invalid", {});
       }
@@ -148,6 +152,13 @@ export function mountMirrorBundleApi(
         const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
         await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
         await refuseBeforeReserving(deps, held, standby.nodeId, standbyAt);
+        // A Veri*Factu venue's spare refuses the bundle after the fetch, so refuse it here first
+        // (D12). Answered 409 here only: the same code for a malformed operation stays 400.
+        const veriFactu = await veriFactuRefusal(deps);
+        if (veriFactu !== null) {
+          log("warn", veriFactu.code, veriFactu.params);
+          return c.json({ error: { code: veriFactu.code, params: veriFactu.params } }, 409);
+        }
 
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
@@ -234,17 +245,21 @@ async function refuseBeforeReserving(
     throw new AppError("mirror.spare_already_joined", {});
   if ((await readStreamSettings(deps.appDb, deps.ring)) !== null)
     throw new AppError("mirror.bucket_stream_active", {});
-  // A Veri*Factu venue's spare refuses the bundle after the fetch, so refuse it here first (D12).
-  assertAdoptionModules(enabledModules(ALL_MODULES, await readModuleConfig(deps.stateDir)));
-  if (held === null) return;
   if (
-    held.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))
+    sameBoxName(deps.designated.nodeId, standbyNodeId) ||
+    held?.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))
   )
     throw new AppError("mirror.standby_name_taken", {});
-  const seen = new Set<string>();
-  for (const id of held.body.revoked ?? []) {
-    if (seen.has(id)) throw new AppError("membership.revoked_duplicate", { nodeId: id });
-    seen.add(id);
+  if (held !== null) refuseUnverifiableChart(held.body.nodes, held.body.revoked ?? []);
+}
+
+async function veriFactuRefusal(deps: MirrorBundleApiDeps): Promise<AppError | null> {
+  try {
+    assertAdoptionModules(enabledModules(ALL_MODULES, await readModuleConfig(deps.stateDir)));
+    return null;
+  } catch (error) {
+    if (error instanceof AppError && error.code === "module.operation_invalid") return error;
+    throw error;
   }
 }
 

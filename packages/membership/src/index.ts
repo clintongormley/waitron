@@ -31,7 +31,7 @@ export {
   MAX_REVOKED,
 } from "./verify.js";
 
-export { buildNextMembershipDocument } from "./build.js";
+export { buildNextMembershipDocument, refuseUnverifiableChart } from "./build.js";
 
 export { nextStandings, evictNode, withMember } from "./standings.js";
 

@@ -1992,10 +1992,6 @@ outstanding on code that exists.
 - **A1274: a lost node.db beside an intact venue.db reads as a sole primary.**
   [Detail](backlog/replication-cloud.md#a1274-a-lost-nodedb-beside-an-intact-venuedb-reads-as-a-sole-primary)
 
-- **A1278: the spare-adding route spends a reservation on a held chart it then refuses.** Predates
-  A947 slice 3a.
-  [Detail](backlog/replication-cloud.md#a1278-the-spare-adding-route-spends-a-reservation-on-a-held-chart-it-then-refuses)
-
 - **A1296: code-quality follow-ups from A947 slice 3a's finish review.** Parallel venue and node
   code paths, a second HTTPS client, a second durable-write helper.
   [Detail](backlog/replication-cloud.md#a1296-code-quality-follow-ups-from-a947-slice-3as-finish-review)

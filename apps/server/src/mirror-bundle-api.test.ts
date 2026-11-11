@@ -1071,6 +1071,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       }),
     );
     const chartBefore = await readNodeMembership(db);
+    const counterBefore = await allocationSnapshot();
 
     const res = await post(app, {
       personId: adminPersonId,
@@ -1083,6 +1084,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       error: { code: "membership.revoked_duplicate", params: { nodeId: "gone" } },
     });
     expect(await readNodeMembership(db)).toEqual(chartBefore);
+    expect(await allocationSnapshot()).toEqual(counterBefore);
   });
 
   describe("refusals before anything is reserved", () => {
@@ -1192,6 +1194,25 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await reservedAndListed()).toEqual(before);
     });
 
+    it("refuses a spare whose name is the main box's own", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const before = await reservedAndListed();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyNodeId: `${designated.nodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.standby_name_taken", params: {} },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
     it("refuses a spare whose name a listed box already has", async () => {
       const { designated, adminPersonId } = await setupVenue();
       const app = mountApp(designated, "https://relay.example:9000/");
@@ -1213,9 +1234,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await reservedAndListed()).toEqual(before);
     });
 
-    it("refuses a chart with a repeated revoked id before reserving", async () => {
+    it("refuses a chart that lists a box it also names as cleared, before reserving", async () => {
       const { designated, adminPersonId } = await setupVenue();
       const app = mountApp(designated, "https://relay.example:9000/");
+      const cleared = crypto.randomUUID();
       const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
       await writeNodeMembership(
         db,
@@ -1228,8 +1250,9 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
               contactUrl: "https://box.deli.test",
               standing: "serving-primary",
             },
+            { nodeId: cleared, contactUrl: "", standing: "serving-secondary" },
           ],
-          revoked: ["gone", "gone"],
+          revoked: [cleared],
         }),
       );
       const before = await reservedAndListed();
@@ -1242,7 +1265,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: { code: "membership.revoked_duplicate", params: { nodeId: "gone" } },
+        error: { code: "membership.revoked_node_listed", params: { nodeId: cleared } },
       });
       expect(await reservedAndListed()).toEqual(before);
     });
@@ -1311,6 +1334,9 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       ["missing", undefined],
       ["a string", "1700000000000"],
       ["null", null],
+      ["far past a date's range", 1e300],
+      ["just past a date's range", 8.64e15 + 1],
+      ["far before a date's range", -1e17],
     ])("refuses a standbyAt that is %s as mirror.standby_invalid", async (_kind, standbyAt) => {
       const { designated, adminPersonId } = await setupVenue();
       const app = mountApp(designated, "https://relay.example:9000/");

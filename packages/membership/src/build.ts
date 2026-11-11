@@ -39,7 +39,9 @@ export function buildNextMembershipDocument(args: {
   };
 }
 
-function refuseUnverifiableChart(
+/** Refuses a chart no receiver would verify: too many boxes or cleared ids, a repeated cleared id,
+ * or a listed box that is also cleared. */
+export function refuseUnverifiableChart(
   nodes: readonly MembershipNode[],
   revoked: readonly string[],
 ): void {

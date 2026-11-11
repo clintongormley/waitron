@@ -42,7 +42,7 @@ const suite = useVenueDb({
 });
 let LOCATION: string;
 const PRIMARY = "f1000000-0000-4000-8000-000000000002";
-const TARGET = "f1000000-0000-4000-8000-000000000003";
+const TARGET = "f2000000-0000-4000-8000-000000000003";
 const ADMIN = "f1000000-0000-4000-8000-000000000004";
 const PASSWORD = "public-test-admin";
 const HASH = hashPassword(PASSWORD);
@@ -361,7 +361,7 @@ it.each(["action", "sourceId", "targetNodeId"])(
       [field]: field === "action" ? "promote" : ADMIN,
     });
     const response = await post(await bundleApp(), "/management-api/mirror-bundle", body);
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(400);
     expect((await response.json()).error.code).toBe("module.operation_invalid");
     expect(collected).toEqual([]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
@@ -373,7 +373,7 @@ it("refuses reservation evidence for a module the enabled set does not reserve",
   const body = bundleBody();
   body.moduleOperation.binding.module = "disabled-regime";
   const response = await post(app, "/management-api/mirror-bundle", body);
-  expect(response.status).toBe(409);
+  expect(response.status).toBe(400);
   expect((await response.json()).error).toEqual({
     code: "module.operation_invalid",
     params: { module: "disabled-regime" },
