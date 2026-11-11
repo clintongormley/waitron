@@ -72,15 +72,23 @@ a timing receipt and the CA
 fingerprint are retained in the check directory. The throwaway browser ignores
 certificate errors for rendering; this does not qualify certificate trust.
 
-## Read the venue name from an existing disk
+## Return to an existing installation
 
 Run `--case existing-stick` with `B3_INSTALLER_IMAGE` set as below. It installs and starts
 an encrypted development disk, completes Prepare through the real setup route, then boots
-the stick again. The console names the taxpayer while installation stays refused. The rig
-checks the actual name token, retained unlock tokens and keyslots, disk hashes, host clock
-status and rejection of a socket connection from an unrelated user. Timed return and the
-graphical warning are later cuts. Keep the resulting JSON and serial logs with your source
-commit; this remains a disposable emulator check.
+the stick again. After Prepare, it waits for the server's existing startup counter to clear
+before powering off, so the rehearsal's rapid restarts do not send it into recovery.
+The console names the taxpayer and starts the installed disk after 15 seconds. Press any
+key to pause; it returns after 120 seconds without further typing. Reinstall, erase and
+recovery-key inspection remain unavailable on this console.
+
+The rig sends keys, observes the guest's restart with USB still attached and first, pauses
+QEMU to compare the target's whole-disk hash, then requires the unchanged TPM seal to open
+the disk and the app to answer `/health`. It also checks the selected EFI entry, consumed
+BootNext, unchanged BootOrder, root identity, boot bytes, unlock material, host clock and
+rejection of a socket connection from an unrelated user. Unit tests cover the silent
+countdown and repeated typing. Keep the JSON and serial logs with your source commit.
+Graphics and physical-device qualification remain later work.
 
 ## Install onto a virtual disk
 

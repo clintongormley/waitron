@@ -1,5 +1,7 @@
 # B3-17: measure the firmware’s one-time boot choice
 
+**11 November 2026, later cut:** the [B3-18b plan](2026-11-11-b3-18b-firmware-return.md) builds the development console return. The measurement below records the earlier firmware-only experiment.
+
 Sol high wrote the original installed-return proposal; Claude’s sole 546-second read recommended this smaller measurement first. The driver revised it accordingly. **The watcher cleared the firmware-only measurement at 09:39 on 11 November 2026 (Lane K’s questions.md), at signed proposal `0d1ac4a926`.** The parent B3 build authority is recorded in Lane K’s queue as owner 2026-11-01 “Yes, build it”; that does not mean the owner approved this cut.
 
 **Finish line.** A developer has a measured answer to whether the development firmware starts a selected EFI loader after a guest-requested restart with the source still attached and first in the ordinary boot order. This retires one uncertainty in [design §5.1 guard 3](../specs/2026-10-21-b3-usb-installer-design.md), not a usable reinstall feature. Today the development installer refuses an occupied target (`deploy/box/install-dev.sh:19`); its unit powers off. Product behavior stays as it is during this measurement.
