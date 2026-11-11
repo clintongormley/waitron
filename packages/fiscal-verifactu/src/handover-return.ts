@@ -173,7 +173,7 @@ export async function inspectReturnedPayments(
       matches("sales", sale) &&
       records.length > 0 &&
       records.every((row) => matches("registros_facturacion", row));
-    if (originalsMatch && canonicalize(incoming) === canonicalize(own)) continue;
+    if (canonicalize(incoming) === canonicalize(own)) continue;
     const original = { sale: normalized("sales", sale), records };
     const eligible =
       originalsMatch &&

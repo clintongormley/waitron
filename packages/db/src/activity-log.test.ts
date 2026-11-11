@@ -174,6 +174,26 @@ describe("activity log", () => {
         .where(eq(activityLog.id, entry.id)),
     ).toEqual([{ deviceId }]);
   });
+  it("replays an explicitly identified activity without changing its stored time", async () => {
+    const entry = {
+      id: "retryable-activity",
+      kind: "membership.node_cleared" as const,
+      subjectId: "node",
+      personId: actor,
+      data: { term: 3 },
+      at,
+    };
+    const first = await withTransaction(suite.db, (tx) => recordActivity(tx, entry));
+    expect(first.id).toBe(entry.id);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        recordActivity(tx, { ...entry, at: new Date(at.getTime() + 1000) }),
+      ),
+    ).toEqual(first);
+    expect((await suite.db.select().from(activityLog)).map((row) => [row.id, row.at])).toEqual([
+      [entry.id, at],
+    ]);
+  });
   it("records the time it is given", async () => {
     const time = new Date("2026-01-01T00:00:00.000Z");
     const entry = await add("node", time);

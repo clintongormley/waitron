@@ -354,11 +354,12 @@ it.each(["waiting", "sending", "needs-attention", "clock", "clash", "confirmed"]
     await handOver(await seedSuccessor("Main box"));
     const response = await request("en-GB", suite.db, state);
     const html = await response.text();
-    if (state === "confirmed") {
+    if (state === "confirmed" || state === "clash") {
       expect(html).toContain(
         "Resetting this box deletes its venue data, including sale lines and local backups",
       );
       expect(html).not.toContain("You can reset this box.");
+      if (state === "clash") expect(html).not.toContain("Do not reset this box.");
     } else {
       expect(html).toContain("Do not reset this box.");
       expect(html).not.toContain("You can reset this box.");

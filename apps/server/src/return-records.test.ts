@@ -1,5 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { openBackupQuery } from "@waitron/store";
 import * as nodeDatabase from "@waitron/node-db";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -495,7 +498,10 @@ it("ends the duty after a signed clash without scheduling another receiver pass"
 async function acceptanceSession(role: "admin" | "staff" = "admin", fresh = true) {
   registerModulePermissions([{ permission: "sample.accept", grantedFrom: "admin" }]);
   return database.withTransaction(suite.db, async (tx) => {
-    const [person] = await tx.insert(persons).values({ displayName: "Operator", role }).returning();
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: `Operator ${role}`, role })
+      .returning();
     const session = await startManagementSession(tx, { personId: person!.id });
     await setFreshManagementSignIn(tx, session.token, fresh);
     return { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, personId: person!.id };
@@ -587,6 +593,29 @@ it("accepts two signed clashing batches separately across restarted duties and r
     })),
   );
 
+  const directory = await mkdtemp(join(tmpdir(), "a1342-activity-copy-"));
+  try {
+    const file = join(directory, "venue.db");
+    await suite.db.archiveTo(file);
+    const copy = await openBackupQuery(file);
+    try {
+      const archived = [];
+      for await (const row of copy.query.rows(
+        "select person_id, data from activity_log where kind = 'handover.return_clash_accepted' order by rowid",
+      ))
+        archived.push({ personId: row.person_id, data: JSON.parse(String(row.data)) as unknown });
+      expect(archived).toEqual(
+        clashIds.map((clashId) => ({
+          personId: session.personId,
+          data: { clashId, sourceNodeId: source, module: "sample" },
+        })),
+      );
+    } finally {
+      await copy.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
   for (const kind of ["return-clash-evidence", "return-clash-acceptance"]) {
     const [event] = await suite.node
       .select()
@@ -669,7 +698,104 @@ it("resends after evidence persistence fails and retries a failed decision appen
         sql`select count(*) n from node_handover_events where kind = 'return-clash-acceptance'`,
       ),
     ).toEqual([{ n: 1 }]);
+    expect(
+      suite.db.all<{ n: number }>(
+        sql`select count(*) n from activity_log where kind = 'handover.return_clash_accepted'`,
+      ),
+    ).toEqual([{ n: 1 }]);
   } finally {
     append.mockRestore();
+  }
+});
+
+it("lists current clashes after an old source leaves the chart and refuses an unprivileged reader", async () => {
+  accounted = false;
+  const app = destination();
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+  const admin = await acceptanceSession();
+  const staff = await acceptanceSession("staff");
+  const refused = await app.request("/management-api/return-clashes", {
+    headers: { cookie: staff.cookie },
+  });
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  const chart = (await database.readNodeMembership(suite.db))!;
+  const body = { ...chart.body, nodes: chart.body.nodes.filter((row) => row.nodeId !== source) };
+  await writeNodeMembership(suite.db, {
+    ...chart,
+    body,
+    signature: signDocumentBody(body, await readNodeIdentityKey(suite.node, ring, receiver)),
+  });
+  const listed = await app.request("/management-api/return-clashes", {
+    headers: { cookie: admin.cookie },
+  });
+  expect(listed.status, await listed.clone().text()).toBe(200);
+  expect(await listed.json()).toEqual({ clashes: [], batches: [] });
+});
+
+it("stores a signed batch once and accounts separately for two clashes inside it", async () => {
+  const seat = modules[0]!.handover!.returnRecords!;
+  let heldVersion = 0;
+  const inspect = vi.spyOn(seat, "inspect").mockImplementation(async (_tx, _source, batch) =>
+    ["A", "B"].map((saleId) => ({
+      saleId,
+      fingerprint: returnDigest([batch, saleId, heldVersion]),
+      eligible: true,
+      outstanding: [saleId],
+      original: saleId,
+      incoming: batch,
+      held: "held",
+    })),
+  );
+  const receive = vi
+    .spyOn(seat, "receive")
+    .mockImplementation(async (_tx, _source, batch, _now, accepted = []) =>
+      ["A", "B"].every((saleId) => accepted.includes(returnDigest([batch, saleId, heldVersion]))),
+    );
+  try {
+    const app = destination();
+    const session = await acceptanceSession();
+    const sending = () => send(async (url, init) => app.request(String(url), init));
+    expect(await sending()).toBe("clash");
+    const list = async () =>
+      (
+        (await (
+          await app.request("/management-api/return-clashes", {
+            headers: { cookie: session.cookie },
+          })
+        ).json()) as { clashes: { clashId: string; accepted: boolean; eligible: boolean }[] }
+      ).clashes;
+    const initial = await list();
+    expect(initial).toHaveLength(2);
+    expect(
+      suite.node.all<{ n: number }>(
+        sql`select count(*) n from node_handover_events where kind = 'return-clash-evidence'`,
+      ),
+    ).toEqual([{ n: 1 }]);
+    for (const [index, clash] of initial.entries()) {
+      const response = await app.request(`/management-api/return-clashes/${clash.clashId}/accept`, {
+        method: "POST",
+        headers: { cookie: session.cookie, "content-type": "application/json" },
+        body: JSON.stringify({ actionKey: `group-${index}`, reason: "Keep held facts" }),
+      });
+      expect(response.status, await response.clone().text()).toBe(200);
+      expect(await sending()).toBe("clash");
+      const listed = await list();
+      expect(listed.filter((row) => row.accepted)).toHaveLength(index + 1);
+      if (index === 0) expect(listed).toHaveLength(2);
+      else expect(listed).toHaveLength(4);
+    }
+    heldVersion++;
+    expect(await sending()).toBe("clash");
+    const changed = await list();
+    expect(changed.filter((row) => row.eligible && !row.accepted)).toHaveLength(2);
+    expect(
+      suite.node.all<{ n: number }>(
+        sql`select count(*) n from node_handover_events where kind = 'return-clash-evidence' and envelope is not null`,
+      ),
+    ).toEqual([{ n: 2 }]);
+  } finally {
+    inspect.mockRestore();
+    receive.mockRestore();
   }
 });

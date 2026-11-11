@@ -837,6 +837,7 @@ it("preflights a different-id record clash before importing its orphan sale", as
   expect(receiver.db.all<{ id: string }>(sql`select id from sales`)).toEqual([
     { id: "receiver-sale" },
   ]);
+  expect(await inspectReturnedPayments(receiver.db, source.nodeId, suffix)).toEqual([]);
   expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
     existing.records,
   );

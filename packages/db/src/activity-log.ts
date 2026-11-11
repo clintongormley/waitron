@@ -7,10 +7,13 @@ import {
   type ActivitySubjectKind,
 } from "./activity-kinds.js";
 import type { Database, Transaction } from "./client.js";
+import { newId } from "./schema/columns.js";
 import { activityLog } from "./schema/activity-log.js";
 import { persons } from "./schema/identity/persons.js";
 
 export interface ActivityInput<K extends ActivityKind> {
+  /** An explicit id identifies one immutable event across retries. */
+  readonly id?: string;
   readonly kind: K;
   readonly subjectId: string;
   /** The person who acted; null only when no person acted. */
@@ -28,9 +31,11 @@ export async function recordActivity<K extends ActivityKind>(
   tx: Transaction,
   entry: ActivityInput<K>,
 ): Promise<RecordedActivity> {
+  const id = entry.id ?? newId();
   const [row] = await tx
     .insert(activityLog)
     .values({
+      id,
       kind: entry.kind,
       subjectKind: ACTIVITY_KINDS[entry.kind].subject,
       subjectId: entry.subjectId,
@@ -39,8 +44,14 @@ export async function recordActivity<K extends ActivityKind>(
       data: entry.data,
       at: entry.at ?? new Date(),
     })
+    .onConflictDoNothing({ target: activityLog.id })
     .returning({ id: activityLog.id, at: activityLog.at });
-  return row!;
+  if (row) return row;
+  const [original] = await tx
+    .select({ id: activityLog.id, at: activityLog.at })
+    .from(activityLog)
+    .where(eq(activityLog.id, id));
+  return original!;
 }
 
 export type ActivityEntry = {

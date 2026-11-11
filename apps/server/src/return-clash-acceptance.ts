@@ -24,7 +24,7 @@ import {
   requireManagementSession,
   type Logger,
 } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { returnDigest, returnVenue, type ReturnRecordsDeps } from "./return-records.js";
@@ -98,6 +98,9 @@ function binding(body: Record<string, CanonicalValue>) {
 function evidenceId(body: Record<string, CanonicalValue>, clash: ReturnDiscrepancy) {
   return returnDigest({ ...binding(body), fingerprint: clash.fingerprint });
 }
+function batchId(body: Record<string, CanonicalValue>) {
+  return returnDigest(binding(body));
+}
 async function events(deps: ReturnRecordsDeps, kind: string, node = deps.node as NodeTransaction) {
   return node
     .select()
@@ -111,6 +114,22 @@ async function events(deps: ReturnRecordsDeps, kind: string, node = deps.node as
     );
 }
 
+type StoredClash = ReturnDiscrepancy & { clashId: string };
+interface EvidenceGroup {
+  event: HandoverEvent;
+  clashes: StoredClash[];
+}
+function evidenceGroups(rows: HandoverEvent[]): EvidenceGroup[] {
+  const groups = new Map<unknown, { event?: HandoverEvent; clashes: StoredClash[] }>();
+  for (const row of rows) {
+    const group = groups.get(row.detail.batchId) ?? { clashes: [] };
+    if (row.envelope !== null) group.event = row;
+    group.clashes.push(...(row.detail.clashes as StoredClash[]));
+    groups.set(row.detail.batchId, group);
+  }
+  return [...groups.values()].map((group) => ({ event: group.event!, clashes: group.clashes }));
+}
+
 export async function retainReturnClashes(
   deps: ReturnRecordsDeps,
   node: NodeTransaction,
@@ -118,29 +137,32 @@ export async function retainReturnClashes(
   body: Record<string, CanonicalValue>,
   clashes: ReturnDiscrepancy[],
 ) {
-  const held = await events(deps, "return-clash-evidence", node);
-  for (const clash of clashes) {
-    const clashId = evidenceId(body, clash);
-    if (held.some((row) => row.detail.clashId === clashId)) continue;
-    await appendHandoverEventTx(node, {
-      nodeId: deps.nodeId,
-      operationId: null,
-      kind: "return-clash-evidence",
-      detail: { clashId, ...binding(body), clash },
-      envelope: JSON.stringify(raw),
-    });
-  }
+  if (!clashes.length) return;
+  const group = evidenceGroups(await events(deps, "return-clash-evidence", node)).find(
+    (row) => row.event.detail.batchId === batchId(body),
+  );
+  const fresh = clashes
+    .filter((clash) => !group?.clashes.some((held) => held.clashId === evidenceId(body, clash)))
+    .map((clash) => ({ ...clash, clashId: evidenceId(body, clash) }));
+  if (!fresh.length) return;
+  await appendHandoverEventTx(node, {
+    nodeId: deps.nodeId,
+    operationId: null,
+    kind: "return-clash-evidence",
+    detail: { batchId: batchId(body), ...binding(body), clashes: fresh },
+    envelope: group ? null : JSON.stringify(raw),
+  });
 }
 
-async function readEvidence(deps: ReturnRecordsDeps, event: HandoverEvent, tx: Transaction) {
-  const raw: unknown = JSON.parse(event.envelope!);
-  const checked = await checkedReturn(deps, raw, tx);
-  const clash = event.detail.clash as unknown as ReturnDiscrepancy;
-  if (event.detail.clashId !== evidenceId(checked.body, clash)) refuseReturn("evidence");
-  const current = (await checked.seat.inspect?.(tx, checked.source, checked.body.payload!))?.find(
-    (row) => row.fingerprint === clash.fingerprint,
-  );
-  return { ...checked, clash, current, clashId: String(event.detail.clashId) };
+async function readEvidence(deps: ReturnRecordsDeps, group: EvidenceGroup, tx: Transaction) {
+  const checked = await checkedReturn(deps, JSON.parse(group.event.envelope!) as unknown, tx);
+  if (
+    group.event.detail.batchId !== batchId(checked.body) ||
+    group.clashes.some((clash) => clash.clashId !== evidenceId(checked.body, clash))
+  )
+    refuseReturn("evidence");
+  const current = (await checked.seat.inspect?.(tx, checked.source, checked.body.payload!)) ?? [];
+  return { ...checked, clashes: group.clashes, current };
 }
 
 async function decisionBody(deps: ReturnRecordsDeps, event: HandoverEvent) {
@@ -164,20 +186,18 @@ export async function acceptedReturnFingerprints(
   body: Record<string, CanonicalValue>,
   tx: Transaction,
 ) {
-  const seat = deps.modules.find((module) => module.name === body.module)?.handover?.returnRecords;
-  if (!seat?.inspect) return [];
-  const clashes = await seat.inspect(tx, String(body.sourceNodeId), body.payload!);
+  const group = evidenceGroups(await events(deps, "return-clash-evidence")).find(
+    (row) => row.event.detail.batchId === batchId(body),
+  );
+  if (!group) return [];
+  const evidence = await readEvidence(deps, group, tx);
   const accepted: string[] = [];
   for (const event of await events(deps, "return-clash-acceptance")) {
     const decision = await decisionBody(deps, event);
-    const clash = clashes.find(
+    const clash = evidence.current.find(
       (row) => row.eligible && row.fingerprint === decision.body.fingerprint,
     );
     if (!clash || decision.body.evidenceDigest !== evidenceId(body, clash)) continue;
-    const evidence = (await events(deps, "return-clash-evidence")).find(
-      (row) => row.detail.clashId === decision.body.evidenceDigest,
-    );
-    if (!evidence || !(await readEvidence(deps, evidence, tx)).current?.eligible) continue;
     if (
       canonicalize(binding(body)) !==
       canonicalize(
@@ -219,29 +239,44 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
   app.get("/management-api/return-clashes", (c) =>
     run(c, log, async () => {
       const token = requireManagementSession(c);
-      const clashes = await withTransaction(deps.db, async (tx) => {
+      const report = await withTransaction(deps.db, async (tx) => {
         await authorize(tx, token);
-        const decisions = await events(deps, "return-clash-acceptance");
-        const result = [];
-        for (const event of await events(deps, "return-clash-evidence")) {
-          const evidence = await readEvidence(deps, event, tx);
-          let accepted = false;
-          for (const decision of decisions)
-            if ((await decisionBody(deps, decision)).body.evidenceDigest === evidence.clashId)
-              accepted = true;
-          result.push({
-            clashId: evidence.clashId,
+        const accepted = new Set<CanonicalValue>();
+        for (const decision of await events(deps, "return-clash-acceptance"))
+          accepted.add((await decisionBody(deps, decision)).body.evidenceDigest!);
+        const clashes = [];
+        const batches = [];
+        for (const group of evidenceGroups(await events(deps, "return-clash-evidence"))) {
+          const event = group.event;
+          let evidence;
+          try {
+            evidence = await readEvidence(deps, group, tx);
+          } catch (error) {
+            if (isAppError(error) && error.code === "handover.return_refused") continue;
+            throw error;
+          }
+          batches.push({
+            batchId: event.detail.batchId,
             ...binding(evidence.body),
-            ...evidence.clash,
-            eligible: evidence.current?.eligible === true,
-            accepted,
             sourceEnvelope: JSON.parse(event.envelope!) as CanonicalValue,
           });
+          for (const clash of evidence.clashes) {
+            const clashId = evidenceId(evidence.body, clash);
+            clashes.push({
+              batchId: event.detail.batchId,
+              ...binding(evidence.body),
+              ...clash,
+              eligible: evidence.current.some(
+                (row) => row.fingerprint === clash.fingerprint && row.eligible,
+              ),
+              accepted: accepted.has(clashId),
+            });
+          }
         }
-        return result;
+        return { clashes, batches };
       });
       c.header("Cache-Control", "no-store");
-      return c.json({ clashes });
+      return c.json(report);
     }),
   );
   app.post("/management-api/return-clashes/:clashId/accept", (c) =>
@@ -268,12 +303,11 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
           )
             refuseReturn("decision");
           const clashId = c.req.param("clashId");
-          const event = (await events(deps, "return-clash-evidence", node)).find(
-            (row) => row.detail.clashId === clashId,
+          const group = evidenceGroups(await events(deps, "return-clash-evidence", node)).find(
+            (row) => row.clashes.some((clash) => clash.clashId === clashId),
           );
-          if (!event) throw new AppError("handover.return_clash_not_found", { clashId });
-          const evidence = await readEvidence(deps, event, tx);
-          if (!evidence.current?.eligible) refuseReturn("clash changed or ineligible");
+          if (!group) throw new AppError("handover.return_clash_not_found", { clashId });
+          const evidence = await readEvidence(deps, group, tx);
           for (const event of await events(deps, "return-clash-acceptance", node)) {
             const prior = await decisionBody(deps, event);
             if (prior.body.actionKey === raw.actionKey || prior.body.evidenceDigest === clashId) {
@@ -287,17 +321,22 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
               return prior.decision;
             }
           }
+          const clash = evidence.current.find(
+            (row) => row.eligible && evidenceId(evidence.body, row) === clashId,
+          );
+          if (!clash) refuseReturn("clash changed or ineligible");
           const at = deps.now?.() ?? new Date();
           const signed = await signAsThisBox(deps, "return-clash-acceptance", {
             ...binding(evidence.body),
             evidenceDigest: clashId,
-            fingerprint: evidence.clash.fingerprint,
+            fingerprint: clash.fingerprint,
             personId,
             acceptedAt: at.toISOString(),
             reason: raw.reason,
             actionKey: raw.actionKey,
           });
           await recordActivity(tx, {
+            id: returnDigest({ clashId, personId, actionKey: raw.actionKey, reason: raw.reason }),
             kind: "handover.return_clash_accepted",
             subjectId: deps.nodeId,
             personId,
