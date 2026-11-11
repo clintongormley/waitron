@@ -194,7 +194,7 @@ it.each([
   { missingOrder: true },
   { label: "dos" },
   { node: "/dev/vdb2" },
-  { uuid: "not-a-guid" },
+  { uuid: "not-a-guid", entries: entry().replace(guid, "not-a-guid") },
   { entries: "", createdOrder: "0004,0001" },
   { nextReadback: null },
   { nextReadback: "0009" },
