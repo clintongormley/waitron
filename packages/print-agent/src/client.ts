@@ -151,7 +151,12 @@ export interface AgentClient {
    * `refused`. */
   enrolSelf(url: string, name: string): Promise<Result<{ token: string }>>;
   joinStatus(url: string, token: string): Promise<Result<JoinStatus>>;
-  pullJobs(url: string, token: string, inventory: AgentInventory): Promise<Result<PullReply>>;
+  pullJobs(
+    url: string,
+    token: string,
+    inventory: AgentInventory,
+    signal?: AbortSignal,
+  ): Promise<Result<PullReply>>;
   report(url: string, token: string, jobId: string, outcome: JobOutcome): Promise<Result<void>>;
   /** `null` when no A4 job is waiting for this agent. */
   claimPageJob(url: string, token: string): Promise<Result<PageJob | null>>;
@@ -203,7 +208,7 @@ async function foldFetch<T>(
   fetchImpl: typeof fetch,
   url: string,
   timeoutMs: number,
-  init: { method?: string; headers?: Record<string, string>; body?: string },
+  init: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal },
   parseOk: (response: Response) => Promise<T | undefined>,
   refusal?: (response: Response) => Promise<Failure | undefined>,
 ): Promise<Result<T>> {
@@ -214,7 +219,7 @@ async function foldFetch<T>(
       method: init.method ?? "GET",
       headers: { accept: "application/json", ...init.headers },
       body: init.body,
-      signal: controller.signal,
+      signal: init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal,
     });
     if (response.status === 401) return { ok: false, failure: { kind: "unauthorized" } };
     if (response.status === 403) return { ok: false, failure: { kind: "pairing_closed" } };
@@ -561,15 +566,16 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
         },
       );
     },
-    pullJobs(url, token, inventory) {
+    pullJobs(url, token, inventory, signal) {
       return foldFetch(
         opts.fetch,
-        `${url}/print-api/agent/jobs`,
-        timeoutMs,
+        `${url}/print-api/agent/jobs?wait=25`,
+        30_000,
         {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
           body: JSON.stringify(boundInventory(inventory)),
+          signal,
         },
         parsePullReply,
       );

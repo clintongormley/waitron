@@ -12,6 +12,9 @@ import {
   deviceProfiles,
   devices,
   joinRequests,
+  pagePrinters,
+  installChangeFeed,
+  subscribeToChanges,
   nowIso,
   printAgents,
   printJobs,
@@ -45,7 +48,8 @@ import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
-import { LiveEvents } from "./live-api.js";
+import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
+import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { mountPrintApi } from "./print-api.js";
 import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
 import { formatTestPage } from "./test-page.js";
@@ -133,6 +137,8 @@ beforeEach(() => seedPrintRouteFixture(suite.db));
 function mountApp(
   opts: {
     bus?: LiveEvents;
+    gate?: HandoverGate;
+    stopping?: AbortSignal;
     pairingOpen?: boolean;
     enrolRateLimiter?: EnrolRateLimiter;
     venueLocale?: SupportedLocale;
@@ -144,6 +150,7 @@ function mountApp(
   } = {},
 ): Hono {
   const app = new Hono();
+  if (opts.gate) app.use("*", opts.gate.middleware);
   const pairingMode = createPairingMode();
   if (opts.pairingOpen ?? true) pairingMode.open();
   mountPrintApi(
@@ -151,6 +158,7 @@ function mountApp(
     {
       db: suite.db,
       bus: opts.bus,
+      stopping: opts.stopping,
       cfg: { ...cfg, practiceMode: opts.practiceMode },
       pairingMode,
       readMembership: async () => MEMBERSHIP,
@@ -6202,4 +6210,187 @@ it("publishes a scanned Bluetooth device becoming paired, but not its pairing re
   expect(changes).toEqual([event, event]);
   await pull(app, token, { pairedBluetooth: [{ localKey: device.localKey }] });
   expect(changes).toEqual([event, event]);
+});
+
+describe("held print pulls", () => {
+  afterEach(() => vi.useRealTimers());
+  async function rig() {
+    const bus = new LiveEvents();
+    const gate = createHandoverGate();
+    const stop = new AbortController();
+    const app = mountApp({ bus, gate, stopping: AbortSignal.any([gate.closed, stop.signal]) });
+    const { token, agentId } = await joinAndAccept(app);
+    await installChangeFeed(suite.db, [
+      { table: "print_jobs", type: "print_jobs" },
+      { table: "invoice_deliveries", type: "invoice_deliveries" },
+    ]);
+    const unsubscribe = subscribeToChanges(changeSubscriber(bus, noopLog));
+    onTestFinished(() => {
+      stop.abort();
+      bus.close();
+      unsubscribe();
+    });
+    const request = (wait = "25", signal?: AbortSignal) =>
+      app.request(`/print-api/agent/jobs?wait=${wait}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ visible: [], scanned: [] }),
+        signal,
+      });
+    return { app, bus, gate, stop, token, agentId, request };
+  }
+  async function held(bus: LiveEvents, count = 1) {
+    await vi.waitFor(() => expect(bus.subscriberCount).toBe(count));
+  }
+
+  it("waits through another agent's USB job and answers when its own work arrives", async () => {
+    const r = await rig();
+    const usb = await createUsbPrinter(r.app, "other-usb");
+    const network = await createNetworkPrinter(r.app, "192.0.2.7", 9100);
+    const pending = r.request();
+    await held(r.bus);
+    const other = await enqueue(usb, new Uint8Array([1]));
+    // A complete unrelated claim turn leaves this pull held and the USB work queued.
+    await pull(r.app, r.token);
+    expect(r.bus.subscriberCount).toBe(1);
+    expect((await jobRow(other)).status).toBe("queued");
+    const own = await enqueue(network, new Uint8Array([2]));
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect((await response.json()).jobs).toMatchObject([{ id: own }]);
+    expect(r.bus.subscriberCount).toBe(0);
+  });
+
+  it.each(["0", "26", "1.5", "no"])("refuses wait=%s", async (wait) => {
+    const r = await rig();
+    const response = await r.request(wait);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "wait" } },
+    });
+  });
+
+  it("answers empty at the requested deadline", async () => {
+    const r = await rig();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const pending = r.request("1");
+    await held(r.bus);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await (await pending).json()).jobs).toEqual([]);
+    expect(r.bus.subscriberCount).toBe(0);
+  });
+
+  it.each(["gate", "stop", "bus"])("%s closing releases three admitted pulls", async (kind) => {
+    const r = await rig();
+    const pending = [r.request(), r.request(), r.request()];
+    await held(r.bus, 3);
+    if (kind === "gate") r.gate.close({ allowed: () => false });
+    else if (kind === "stop") r.stop.abort();
+    else r.bus.close();
+    for (const response of await Promise.all(pending))
+      expect((await response.json()).jobs).toEqual([]);
+    expect(await r.gate.settled(0)).toEqual({ remaining: [] });
+    expect(r.bus.subscriberCount).toBe(0);
+  });
+
+  it("an aborted held request claims nothing after a job arrives", async () => {
+    const r = await rig();
+    const printer = await createNetworkPrinter(r.app, "192.0.2.8", 9100);
+    const abort = new AbortController();
+    const pending = r.request("25", abort.signal);
+    await held(r.bus);
+    abort.abort();
+    const id = await enqueue(printer, new Uint8Array([3]));
+    await pending;
+    expect((await jobRow(id)).status).toBe("queued");
+    expect(r.bus.subscriberCount).toBe(0);
+  });
+
+  it.each(["queued", "printing"] as const)(
+    "settles a %s drawer at its deadline during a hold",
+    async (status) => {
+      const r = await rig();
+      const printer = await createUsbPrinter(r.app, "missing-drawer");
+      const now = Date.now();
+      const id = await withTransaction(suite.db, async (tx) => {
+        const { jobId } = await enqueuePrintJob(tx, printer, new Uint8Array([7]), "drawer");
+        await tx
+          .update(printJobs)
+          .set({
+            status,
+            createdAt: new Date(now - 29_000).toISOString(),
+            claimedAt: status === "printing" ? new Date(now - 59_000).toISOString() : null,
+            claimedBy: status === "printing" ? r.agentId : null,
+          })
+          .where(eq(printJobs.id, jobId));
+        return jobId;
+      });
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      vi.setSystemTime(now);
+      const pending = r.request();
+      await held(r.bus);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect((await jobRow(id)).last_error).toBe(
+        status === "queued" ? "print_job.drawer_expired" : "print_job.drawer_outcome_unknown",
+      );
+      expect((await (await pending).json()).jobs).toEqual([]);
+    },
+  );
+
+  it("a Bluetooth command ends the hold with that command", async () => {
+    const r = await rig();
+    const address = "AA:BB:CC:DD:EE:FF";
+    await pull(r.app, r.token, {
+      scanned: [{ transport: "bluetooth", localKey: address, printerLike: true }],
+    });
+    const pending = r.request();
+    await held(r.bus);
+    const command = await send(
+      r.app,
+      "POST",
+      `/management-api/print-agents/${r.agentId}/bluetooth/pair`,
+      {
+        cookie: managerCookie,
+        body: { address, pin: "1234" },
+      },
+    );
+    expect(command.status).toBe(202);
+    expect((await (await pending).json()).bluetoothCommands).toMatchObject([
+      { address, kind: "pair" },
+    ]);
+  });
+
+  it("an office test page wakes a held receipt pull, then can be claimed", async () => {
+    const r = await rig();
+    const [printer] = await suite.db
+      .insert(pagePrinters)
+      .values({
+        locationId,
+        name: "Office",
+        host: "192.0.2.9",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 300,
+        agentId: r.agentId,
+      })
+      .returning();
+    const pending = r.request();
+    await held(r.bus);
+    const requested = await send(
+      r.app,
+      "POST",
+      `/management-api/page-printers/${printer!.id}/test-page`,
+      { cookie: managerCookie },
+    );
+    expect(requested.status).toBe(202);
+    expect((await (await pending).json()).jobs).toEqual([]);
+    const claim = await send(r.app, "POST", "/print-api/agent/page-jobs/claim", {
+      bearer: r.token,
+    });
+    expect(claim.status).toBe(200);
+    expect((await claim.json()).id).toBe((await requested.json()).id);
+  });
 });

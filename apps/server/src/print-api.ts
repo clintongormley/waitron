@@ -19,6 +19,7 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   drawerOpens,
+  invoiceDeliveries,
   kitchenStations,
   printAgents,
   printJobs,
@@ -107,6 +108,7 @@ import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 export interface PrintApiDeps {
   bus?: LiveEvents;
+  stopping?: AbortSignal;
   db: Database;
   cfg: TradingContext;
   readMembership: () => Promise<SignedMembershipDocument | null>;
@@ -523,6 +525,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   const printerProbes = createPrinterProbes();
   const testPages = deps.testPages ?? createPageTestPages(() => deps.now?.() ?? new Date());
   const bluetoothCommands = createPrinterBluetoothCommands();
+  const pullWakes = new Set<(agentId?: string) => void>();
+  const wakePulls = (agentId?: string): void => {
+    for (const wake of pullWakes) wake(agentId);
+  };
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
@@ -579,6 +585,138 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (e.office !== undefined) marked.add(addressOf(e.host, e.office.port));
     }
     return marked;
+  };
+  const waitForJobs = async (
+    agentId: string,
+    visibleKeys: string[],
+    initial: Awaited<ReturnType<typeof claimInvoicePrintJobs>>,
+    wait: number,
+    signal: AbortSignal,
+  ): Promise<typeof initial> => {
+    if (wait === 0 || !deps.bus || initial.length > 0) return initial;
+    let notify = (): void => {};
+    let changed = false;
+    let reply = false;
+    let ended = signal.aborted || deps.stopping?.aborted === true;
+    const wake = (): void => {
+      changed = true;
+      notify();
+    };
+    const end = (): void => {
+      ended = true;
+      wake();
+    };
+    const wakeAgent = (id?: string): void => {
+      if (id === undefined || id === agentId) {
+        reply = true;
+        wake();
+      }
+    };
+    const unsubscribe = deps.bus.subscribe((event) => {
+      if (event.kind === "close") end();
+      else if (
+        event.change.resources.some(({ type }) =>
+          ["print_jobs", "invoice_deliveries", "page_printers"].includes(type),
+        )
+      ) {
+        if (
+          event.change.resources.some(({ type }) =>
+            ["invoice_deliveries", "page_printers"].includes(type),
+          )
+        )
+          reply = true;
+        wake();
+      }
+    });
+    pullWakes.add(wakeAgent);
+    signal.addEventListener("abort", end, { once: true });
+    deps.stopping?.addEventListener("abort", end, { once: true });
+    const claim = () =>
+      withTransaction(deps.db, (tx) =>
+        ended
+          ? Promise.resolve([])
+          : claimInvoicePrintJobs(tx, agentId, { visibleKeys }, deps.now?.()),
+      );
+    try {
+      // Subscribe before rechecking so work arriving after the first claim cannot be missed.
+      let claimed = await claim();
+      const deadline = performance.now() + wait * 1_000;
+      while (claimed.length === 0 && !ended && !reply) {
+        if (changed) {
+          changed = false;
+          claimed = await claim();
+          continue;
+        }
+        let remaining = deadline - performance.now();
+        if (remaining <= 0) break;
+        // Idle connections hold no write turn. Drawer expiry and claim leases still settle on time.
+        const pending = await deps.db
+          .select({
+            status: printJobs.status,
+            createdAt: printJobs.createdAt,
+            claimedAt: printJobs.claimedAt,
+          })
+          .from(printJobs)
+          .innerJoin(printers, eq(printers.id, printJobs.printerId))
+          .where(
+            and(
+              isNull(printers.deletedAt),
+              or(
+                eq(printJobs.status, "printing"),
+                and(eq(printJobs.kind, "drawer"), eq(printJobs.status, "queued")),
+              ),
+            ),
+          );
+        for (const job of pending) {
+          const at =
+            job.status === "queued"
+              ? Date.parse(job.createdAt) + 30_000
+              : Date.parse(job.claimedAt ?? "") + 60_000;
+          remaining = Math.min(
+            remaining,
+            Number.isFinite(at) && at > Date.now() ? at - Date.now() : 2_000,
+          );
+        }
+        const [page] = await deps.db
+          .select({ id: invoiceDeliveries.id })
+          .from(invoiceDeliveries)
+          .where(
+            and(
+              eq(invoiceDeliveries.medium, "a4"),
+              inArray(invoiceDeliveries.status, ["queued", "sending"]),
+            ),
+          )
+          .limit(1);
+        // Pending pages and discovery retain their two-second maintenance cadence on this same hold.
+        if (
+          page ||
+          testPages.anyWaiting() ||
+          testPages.printingOn().length > 0 ||
+          bluetoothCommands.current(agentId).length > 0 ||
+          printerProbes.current().length > 0 ||
+          openDiscoveryUntil(Date.now()) > Date.now()
+        )
+          remaining = Math.min(remaining, 2_000);
+        if (changed || ended || reply) continue;
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, Math.max(1, remaining));
+          notify = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+        });
+        const timedOut = !changed;
+        changed = false;
+        if (!ended) claimed = await claim();
+        if (timedOut) break;
+      }
+      return claimed;
+    } finally {
+      unsubscribe();
+      pullWakes.delete(wakeAgent);
+      signal.removeEventListener("abort", end);
+      deps.stopping?.removeEventListener("abort", end);
+    }
   };
   const requireAgentRow = async (tx: Transaction, id: string): Promise<void> => {
     const [row] = await tx
@@ -648,6 +786,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
+      const rawWait = c.req.query("wait");
+      const wait = rawWait === undefined ? 0 : Number(rawWait);
+      if (
+        rawWait !== undefined &&
+        (!/^\d+$/.test(rawWait) || !Number.isInteger(wait) || wait < 1 || wait > 25)
+      )
+        throw new AppError("management.request_invalid", { field: "wait" });
       const body = await readJsonBody<{
         visible?: unknown;
         scanned?: unknown;
@@ -733,7 +878,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
 
       // The claim commits within this request: no transaction is held across the agent's socket write,
       // and the agent reports the outcome in a separate request.
-      const claimed = await withTransaction(deps.db, async (tx) => {
+      let claimed = await withTransaction(deps.db, async (tx) => {
         if (host !== undefined || setupUrl !== undefined || setupPort !== undefined) {
           await tx
             .update(printAgents)
@@ -804,6 +949,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // failed, and before this reply's commands are read, so a command stops in the reply to the
       // pull that carried its outcome.
       bluetoothCommands.accept(agentId, bluetoothOutcomes);
+      claimed = await waitForJobs(agentId, visibleKeys, claimed, wait, c.req.raw.signal);
       // `servers` lets the agent follow the primary across a failover, as the till's pull does.
       const held = await deps.readMembership();
       const networkProbes = printerProbes.current();
@@ -960,6 +1106,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         }
         return bluetoothCommands.enqueue(agentId, "pair", address, pin);
       });
+      wakePulls(agentId);
       return c.json({ command }, 202);
     }),
   );
@@ -977,6 +1124,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         }
         return bluetoothCommands.enqueue(agentId, "forget", address);
       });
+      wakePulls(agentId);
       return c.json({ command }, 202);
     }),
   );
@@ -986,6 +1134,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       await gated(sessionId, async () => {});
       discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
+      wakePulls();
       return c.json({ discoveryUntil });
     }),
   );
@@ -997,6 +1146,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       await withPassiveManagementRead(() => gated(sessionId, async () => {}));
       discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
+      wakePulls();
       return c.json({ discoveryUntil });
     }),
   );
@@ -1006,7 +1156,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       await gated(sessionId, async () => {});
       const body = await readJsonBody<Record<string, unknown>>(c);
-      return c.json(printerProbes.add(body));
+      const probe = printerProbes.add(body);
+      wakePulls();
+      return c.json(probe);
     }),
   );
 
@@ -1152,6 +1304,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         return { now, discoveryUntil: openDiscoveryUntil(now) };
       },
       testPages,
+      wakeAgent: wakePulls,
       ...(deps.now === undefined ? {} : { now: deps.now }),
     },
     log,
