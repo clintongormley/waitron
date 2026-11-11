@@ -180,7 +180,7 @@ beforeEach(async () => {
     const [person] = await tx
       .insert(persons)
       .values({
-        displayName: "Administradora",
+        displayName: "Administrator",
         pinHash: hashPin("1234"),
         passwordHash: hashPassword(PASSWORD),
         role: "admin",

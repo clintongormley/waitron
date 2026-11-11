@@ -843,7 +843,8 @@ product failures.
   The single- and multi-bill editor suites use Anna and Lewis as local staff samples.
   The `floor-today-*` route suites use Anna as their staff sample.
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
-  Many server fixtures still use Administradora, among them the backup, stream and shared-helper fixtures.
+  Local provisioning, setup-mode, promotion, break-glass and backup-evidence administrator
+  samples use Administrator. Other local, stream and shared-helper staff samples remain Spanish.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
