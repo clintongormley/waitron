@@ -6413,6 +6413,19 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   (`alert.already_handled`, `alert.note_exists`, `alert.not_handled`) is worded by its code at the
   bottom, and none disables the button. The bell's and the Alerts screen's Mark handled take no
   note.
+- **Restart the box.** At the end of the page, after everything under the rows, a section headed
+  "Restart the box", drawn whether or not the box's read has answered. For a person with `person.admin` it holds a `secondary` "Restart the
+  box" button with a help-mode "?" that opens the guide's `box-status#restart` section. It opens a
+  dialog headed "Restart the box?" that says every till stops selling until Waitron has started
+  again, with Stop (`secondary`) and Restart (`primary`, with `loading` while it is sent; both
+  disabled, and the dialog not dismissible, while it is sent). A refusal shows in the dialog's
+  footer, worded by its code, except `node.read_only` (a mirror), which has its own sentence. Once
+  the box answers, the dialog closes and "The box is restarting. This page catches up by itself
+  once it is back." is announced in the section; the first successful box read after one that
+  failed since the answer, or any successful read 30 seconds or more after the answer, takes it
+  away. Anyone else sees "Only an administrator can
+  restart the box. Signing in as one signs you out here first." and a `secondary` "Sign in as an
+  administrator", which signs them out and returns to Box status after sign-in.
 - **Errors.** A refused Free shows its message above the rows, and a refused Retry now under the
   Tax agency row's words; a failed box read shows the read error above the rows, never replacing a
   press's refusal.

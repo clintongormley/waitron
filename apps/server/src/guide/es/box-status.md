@@ -2,7 +2,8 @@
 
 **Estado del equipo** muestra en una sola página si cada parte del equipo funciona: las ventas,
 Hacienda, la copia en el bucket, las impresoras, los lectores de tarjetas, el reloj y el espacio en
-disco. También es donde se libera espacio cuando el disco del equipo se llena. Para leer el
+disco. También es donde se libera espacio cuando el disco del equipo se llena, y donde un administrador
+reinicia Waitron en el equipo cuando una alerta lo indica. Para leer el
 registro del equipo, usa **Diagnóstico**.
 
 ## Abre la página {#open}
@@ -196,7 +197,7 @@ espacio.
 
 ## Reinicia el equipo {#restart}
 
-**Reiniciar el equipo** reinicia Waitron en el equipo; el equipo sigue encendido. Ninguna caja
+**Reiniciar el equipo** reinicia Waitron en el equipo sin apagarlo. Ninguna caja
 puede vender hasta que Waitron vuelva a arrancar, así que la página lo pregunta antes: elige
 **Reiniciar** para seguir o **Parar** para dejarlo. Úsalo cuando una alerta lo indique. La página
 se pone al día sola cuando vuelve el equipo.
@@ -281,7 +282,7 @@ relojes dicen que la hora del equipo está mal.** Un reloj que ha respondido de 
 aparece una sola vez, con su última respuesta. Nada puede confirmar la hora, ni siquiera un
 administrador; solo se puede poner en hora. La respuesta de Hacienda cuenta primero: cuando
 coincide con el equipo, los dispositivos que no coinciden no paran los cobros. El equipo solo guarda
-el desacuerdo de Hacienda en su memoria, así que lo olvida si el propio equipo se reinicia durante
+el desacuerdo de Hacienda en su memoria, así que lo olvida si Waitron se reinicia durante
 la parada; mientras Hacienda siga sin coincidir, vuelve con la siguiente respuesta.
 
 Cuando la hora de Hacienda no coincide con la del equipo durante la parada, el equipo pone su
@@ -364,7 +365,7 @@ incorrecta**, con la **Factura** y la **Hora registrada** de cada una, y dice **
 para tu asesor, revísala con su ayuda y después marca el aviso como resuelto aquí con una nota de
 lo que se hizo.** [Ventas con fecha incorrecta](box-status.md#sales-dated-wrongly) explica la
 descarga y la nota. La campana tiene un aviso con cuántas ventas son y la primera y la última hora,
-y el equipo envía un correo a las personas que gestionan el sistema. Si el propio equipo se reinició
+y el equipo envía un correo a las personas que gestionan el sistema. Si Waitron se reinició
 durante la parada, no puede estar seguro de cuándo empezó, así que puede faltar alguna venta en la
 lista, y el aviso lo dice. Cuando ninguna venta tiene la fecha mal, no hay lista ni aviso.
 
@@ -427,7 +428,7 @@ reinicia antes de poder hacerlo, ese cambio no tiene aviso ni correo.
 Cuando el equipo arranca con uno de estos problemas de hora y no puede obtener la hora de Hacienda,
 un empleado puede poner o confirmar la hora desde una caja, para que el local no tenga que esperar
 a un administrador. Un reinicio del equipo cuenta como arranque, sea tras un corte de luz, una
-actualización o a mano.
+actualización, **Reiniciar el equipo** o a mano.
 
 Aquí se llama arranque al tiempo que va desde que el equipo arranca hasta que el reloj deja de
 parar los cobros. En el medio minuto siguiente al arranque, más o menos, cuando el equipo ha
