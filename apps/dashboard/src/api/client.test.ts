@@ -2539,6 +2539,11 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     const overview = {
       businessDay: "2026-08-29",
       takings: { tenderTotal: "1234.50", tipTotal: "42.00", grossTotal: "1234.50" },
+      closureSummary: {
+        billsClosed: { count: 37, total: "1234.50" },
+        toBePaidByTransfer: "0.00",
+        received: "1234.50",
+      },
       counts: { sales: 37, corrections: 1, voids: 2 },
       openTables: { open: 3, total: 12 },
       topSellers: [{ name: "Coffee", quantity: "18.000", total: "36.00", variants: [] }],
@@ -2577,6 +2582,11 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         ],
         tenderTotal: "121.00",
         tipTotal: "5.00",
+      },
+      closureSummary: {
+        billsClosed: { count: 8, total: "121.00" },
+        toBePaidByTransfer: "0.00",
+        received: "121.00",
       },
       counts: { sales: 12, corrections: 0, voids: 1 },
       topSellers: [

@@ -201,14 +201,24 @@ export class OverviewScreen extends LitElement {
   }
 
   #renderOverview(overview: SalesOverview): TemplateResult {
-    const { takings, counts, openTables } = overview;
+    const { takings, closureSummary, counts, openTables } = overview;
     const money = (value: string) => formatMoney(value, currentLocale());
     return html`
       <p class="business-day" data-test="business-day">${overview.businessDay}</p>
       <div class="cards">
         <wt-card data-test="takings">
           <h2 slot="header">${t("overview.takings_title")}</h2>
-          ${renderMetric(t("overview.tender_total"), money(takings.tenderTotal), "tender-total")}
+          ${renderMetric(
+            t("overview.bills_closed"),
+            `${closureSummary.billsClosed.count} · ${money(closureSummary.billsClosed.total)}`,
+            "bills-closed",
+          )}
+          ${renderMetric(t("overview.tender_total"), money(closureSummary.received), "tender-total")}
+          ${renderMetric(
+            t("overview.to_be_paid_by_transfer"),
+            money(closureSummary.toBePaidByTransfer),
+            "transfer-total",
+          )}
           ${renderMetric(t("overview.tips"), money(takings.tipTotal), "tip-total")}
           ${renderMetric(t("overview.gross_total"), money(takings.grossTotal), "gross-total")}
         </wt-card>

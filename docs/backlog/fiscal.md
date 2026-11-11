@@ -352,8 +352,10 @@ route, recovery read and device-profile action, off by default
 ([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)), and the
 accountant's file (Task 6,
 [plan](../superpowers/plans/2026-11-11-a275-transfer-export.md): its server route, and a button on
-**Sales & takings** for a session holding `report.export`); no till screen sends a close until Task 7 puts it in
-the till's Pay flow, after A739 Cut B. A275 stays open pending the rest of the
+**Sales & takings** for a session holding `report.export`). Task 5 is built: the overview and Sales
+report show Bills closed and Deferred payment apart from money received
+([Task 5 plan](../superpowers/plans/2026-11-11-a275-closed-bills.md)). No till screen sends a close until
+Task 7 puts it in the till's Pay flow, after A739 Cut B. A275 stays open pending the rest of the
 build and acceptance. The reviewed plan includes an explicit recovery read,
 party completion before its retained result, live Bills exclusion, separate delivery/closing actors
 and bounded implementation checkpoints.

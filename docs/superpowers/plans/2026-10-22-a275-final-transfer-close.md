@@ -157,6 +157,8 @@ Types import existing types from `order-drafts.ts` and `invoice-selection.ts`. D
 
 ## Task 5: closure-day totals, frozen close and analytics
 
+_2026-11-11: cut to current `main` and built from [the Task 5 plan](2026-11-11-a275-closed-bills.md)._
+
 **Bounded checkpoints:** 5a owns reporting queries, retained-day attribution and frozen-close/race assertions with the reporting RED/GREEN/omission commands below. 5b owns report API/client twins and overview/Sales presentation with server/browser RED/GREEN and a wrong-total/transfer-label omission. Commit each independently.
 
 **Files:** Modify `packages/reporting/src/cash-up.ts` only as needed for transfer closure origin/day scoping; create `packages/reporting/src/transfer-close.test.ts`, `closed-bills.ts`, `closed-bills.test.ts` and export the new reader from `index.ts`; extend `daily-close.test.ts`, `record-daily-close.test.ts`. Modify `apps/server/src/report-api.ts` and `report-api.overview.test.ts`, `report-api.reports.test.ts`; dashboard `screens/dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`, matching tests, API twins and EN/ES text. Preserve `daily-close-hash.ts`, snapshot types and `counts.ts`'s issuance semantics.

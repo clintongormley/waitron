@@ -187,6 +187,8 @@ export const QUERY_DEPENDENCIES = {
     "sale_lines",
     "tenders",
     "tender_refunds",
+    "bill_payments",
+    "bill_payment_refunds",
     "working_orders",
     "dining_tables",
     "floor_today_tables",
@@ -226,6 +228,9 @@ export const QUERY_DEPENDENCIES = {
     "sale_voids",
     "tenders",
     "tender_refunds",
+    "bill_payments",
+    "bill_payment_refunds",
+    "working_orders",
     "sale_settlements",
 
     "day_cutover_changes",

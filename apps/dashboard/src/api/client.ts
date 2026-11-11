@@ -1478,9 +1478,17 @@ export interface SalesCounts {
   voids: number;
 }
 
+/** Bills closed in the day, and the tender split into what a transfer still owes and money received. */
+export interface ClosureSummaryDto {
+  billsClosed: { count: number; total: string };
+  toBePaidByTransfer: string;
+  received: string;
+}
+
 export interface SalesOverview {
   businessDay: string;
   takings: { tenderTotal: string; tipTotal: string; grossTotal: string };
+  closureSummary: ClosureSummaryDto;
   counts: SalesCounts;
   openTables: { open: number; total: number };
   topSellers: TopSellerRow[];
@@ -1499,6 +1507,7 @@ export interface DailyCloseDto {
   businessDay: string;
   vat: VatSummaryDto;
   cash: CashUpDto;
+  closureSummary: ClosureSummaryDto;
   counts: SalesCounts;
   topSellers: TopSellerRow[];
 }
