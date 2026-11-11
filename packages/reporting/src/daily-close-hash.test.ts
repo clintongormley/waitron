@@ -34,6 +34,15 @@ function dailyClose(): DailyClose {
       tipTotal: decimal("0.00"),
     },
     counts: { sales: 1, corrections: 0, voids: 0 },
+    departmentTakings: [
+      {
+        departmentId: null,
+        departmentName: null,
+        active: null,
+        byMethod: [{ method: "cash", amount: decimal("100.00"), tip: decimal("0.00") }],
+        billsClosed: { count: 1, total: decimal("100.00") },
+      },
+    ],
   };
 }
 
@@ -83,6 +92,15 @@ function content(over: Partial<CloseHashContent> = {}): CloseHashContent {
 const GENESIS_PREV = "";
 
 describe("computeCloseEntryHash", () => {
+  it("commits the frozen department amounts to the digest", () => {
+    const before = content();
+    const changed = structuredClone(before);
+    changed.snapshot.close.departmentTakings[0]!.byMethod[0]!.amount = decimal("99.00");
+    expect(computeCloseEntryHash(changed, GENESIS_PREV)).not.toBe(
+      computeCloseEntryHash(before, GENESIS_PREV),
+    );
+  });
+
   it("produces a 64-character uppercase hex digest", () => {
     expect(computeCloseEntryHash(content(), GENESIS_PREV)).toMatch(/^[0-9A-F]{64}$/);
   });

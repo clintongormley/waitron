@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   dailyCloses,
+  departments,
+  saleReceiptHeaders,
   captureError,
   constraintTarget,
   refusalError,
@@ -28,7 +30,7 @@ import { seedRefundableSale, seedTenderRefund } from "../test/tender-refund-fixt
 import { computeDailyClose } from "./daily-close.js";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
 import { isBusinessDayConflict, recordDailyClose } from "./record-daily-close.js";
-import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
+import type { CashCountInput, DailyCloseRecord, DailyCloseSnapshot } from "./close-types.js";
 import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
 
 // Every close here is awaited before the next; closes started together are in
@@ -104,6 +106,16 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
       at: "2026-08-04T10:00:00.000Z",
       invoiceNumber: 1,
     });
+    const [department] = await suite.db
+      .insert(departments)
+      .values({ name: "Dining", tradingName: "Dining" })
+      .returning();
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: paid.saleId,
+      departmentId: department!.id,
+      tradingName: "Dining",
+      printTradingName: true,
+    });
     const deviceB = await seedVenueDevice(suite.db, venue.locationId);
     const first = await record("2026-08-04", [
       { deviceId: venue.deviceId, openingFloat: "0.00", payouts: "0.00", countedCash: "100.00" },
@@ -118,6 +130,26 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
       origin: { ...venue, deviceId: deviceB },
     });
     expect(await runCompute("2026-08-04")).toEqual(first.snapshot.close);
+    await suite.db
+      .update(departments)
+      .set({ name: "Renamed dining", active: false })
+      .where(eq(departments.id, department!.id));
+    const [retained] = await suite.db
+      .select()
+      .from(dailyCloses)
+      .where(eq(dailyCloses.id, first.id));
+    expect((retained!.snapshot as DailyCloseSnapshot).close.departmentTakings).toEqual([
+      {
+        departmentId: department!.id,
+        departmentName: "Dining",
+        active: true,
+        byMethod: [{ method: "cash", amount: "100.00", tip: "0.00" }],
+        billsClosed: { count: 0, total: "0.00" },
+      },
+    ]);
+    expect((await runCompute("2026-08-04")).departmentTakings[0]!.departmentName).toBe(
+      "Renamed dining",
+    );
     const second = await record("2026-08-05", [
       { deviceId: deviceB, openingFloat: "50.00", payouts: "0.00", countedCash: "25.00" },
     ]);

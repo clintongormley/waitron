@@ -11,6 +11,7 @@ export {
 } from "./business-day.js";
 export type { VenueMoment } from "./business-day.js";
 export { computeClosedBills } from "./closed-bills.js";
+export { readDailyClose } from "./read-daily-close.js";
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeTopSellers } from "./top-sellers.js";
@@ -53,6 +54,7 @@ export type {
   ClosedBills,
   DailyClose,
   DailyCloseInput,
+  DepartmentTakings,
   InputVatRateLine,
   InputVatReturn,
   InputVatSummary,

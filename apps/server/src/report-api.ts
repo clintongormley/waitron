@@ -26,7 +26,7 @@ import {
 import {
   CATEGORY_REPORT_MODES,
   computeCategorySales,
-  computeClosedBills,
+  readDailyClose,
   computeDailyClose,
   computeOverdueOrders,
   computeTopSellers,
@@ -40,7 +40,7 @@ import {
   type CashUp,
   type CategoryReport,
   type CategoryReportMode,
-  type DailyCloseInput,
+  type DailyClose,
   type LiquidationPeriod,
 } from "@waitron/reporting";
 import { currentClassifications } from "@waitron/catalogue";
@@ -287,7 +287,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           limit: 5,
         });
         const openTables = await countOpenTables(tx);
-        const closureSummary = await summariseClosures(tx, input, close.cash);
+        const closureSummary = summariseClosures(close);
         return {
           businessDay,
           takings: {
@@ -296,6 +296,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
             grossTotal: close.vat.grossTotal,
           },
           closureSummary,
+          departmentTakings: close.departmentTakings,
           counts: close.counts,
           openTables,
           topSellers,
@@ -320,7 +321,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           cutoverChanges: clock.cutoverChanges,
         };
         // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
-        const close = await computeDailyClose(tx, input);
+        const close = await readDailyClose(tx, input);
         const topSellers = await computeTopSellers(tx, {
           nodeIds,
           fromBusinessDay: businessDay,
@@ -331,12 +332,13 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           limit: 10,
         });
         const cash = await namedCashUp(tx, close.cash);
-        const closureSummary = await summariseClosures(tx, input, close.cash);
+        const closureSummary = summariseClosures(close);
         return {
           businessDay,
           vat: close.vat,
           cash,
           closureSummary,
+          departmentTakings: close.departmentTakings,
           counts: close.counts,
           topSellers,
         };
@@ -477,8 +479,15 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
 }
 
 /** A transfer line is a final classification, never money received, so it stays out of `received`. */
-async function summariseClosures(tx: Transaction, input: DailyCloseInput, cash: CashUp) {
-  const billsClosed = await computeClosedBills(tx, input);
+function summariseClosures(close: DailyClose) {
+  const cash = close.cash;
+  const billsClosed = close.departmentTakings.reduce(
+    (total, row) => ({
+      count: total.count + row.billsClosed.count,
+      total: addDecimal(total.total, row.billsClosed.total),
+    }),
+    { count: 0, total: decimal("0.00") },
+  );
   let toBePaidByTransfer = decimal("0.00");
   let received = decimal("0.00");
   for (const line of cash.byOrigin.flatMap((row) => row.byMethod)) {

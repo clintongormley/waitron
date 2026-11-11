@@ -277,16 +277,6 @@ code, not run again here.
   per waiting change. Next: one browser-safe helper in `@waitron/shared` beside `businessDayAt`
   that every caller uses, and a write gate that runs the waiting-start check itself.
 
-## A897. Sales by department
-
-Each sale stores one
-department, which cannot be changed afterwards (`sale_receipt_headers`,
-`packages/db/src/schema/venue-service/service.ts`), but a sold line stores none (`sale_lines`,
-`packages/db/src/schema/sales.ts`), and no report groups sales by department
-(`packages/reporting/src`). Decide whether a bill that mixes departments needs a department on
-each sold line, then add a department breakdown to the sales screen, showing sales with no
-department as "Unallocated" rather than guessing a split.
-
 ## Loose ends left by A720.
 
 - Look at a picked, focused today in the Month. `--wt-focus-offset` and

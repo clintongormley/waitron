@@ -2539,6 +2539,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
     const overview = {
       businessDay: "2026-08-29",
       takings: { tenderTotal: "1234.50", tipTotal: "42.00", grossTotal: "1234.50" },
+      departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 37, total: "1234.50" },
         toBePaidByTransfer: "0.00",
@@ -2583,6 +2584,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         tenderTotal: "121.00",
         tipTotal: "5.00",
       },
+      departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 8, total: "121.00" },
         toBePaidByTransfer: "0.00",

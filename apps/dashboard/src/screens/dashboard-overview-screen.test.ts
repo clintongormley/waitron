@@ -12,6 +12,7 @@ useLocale("es-ES");
 const overview: SalesOverview = {
   businessDay: "2026-08-29",
   takings: { tenderTotal: "1234.50", tipTotal: "45.00", grossTotal: "1279.50" },
+  departmentTakings: [],
   closureSummary: {
     billsClosed: { count: 42, total: "1279.50" },
     toBePaidByTransfer: "0.00",
@@ -71,6 +72,56 @@ afterEach(() => {
 });
 
 describe("dashboard-overview-screen", () => {
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows department cash, card, deferred and closed bills in %s",
+    async (locale) => {
+      setLocale(locale);
+      const api = stubApi({
+        getSalesOverview: vi.fn().mockResolvedValue({
+          ...overview,
+          departmentTakings: [
+            {
+              departmentId: null,
+              departmentName: null,
+              active: null,
+              byMethod: [
+                { method: "cash", amount: "10.00", tip: "0.00" },
+                { method: "card", amount: "20.00", tip: "0.00" },
+                { method: "transfer", amount: "30.00", tip: "0.00" },
+              ],
+              billsClosed: { count: 2, total: "60.00" },
+            },
+            {
+              departmentId: "old-bar",
+              departmentName: "Bar",
+              active: false,
+              byMethod: [],
+              billsClosed: { count: 1, total: "5.00" },
+            },
+          ],
+        }),
+      });
+      const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
+      await flush(el);
+      const root = el.shadowRoot!;
+      const row = root.querySelector('[data-test="department-row-unallocated"]');
+      expect(row).not.toBeNull();
+      const values = [...row!.querySelectorAll("td")].map((td) => td.textContent?.trim());
+      expect(values).toEqual(
+        locale === "en-GB"
+          ? ["€10.00", "€20.00", "€30.00", "2 · €60.00"]
+          : ["10,00 €", "20,00 €", "30,00 €", "2 · 60,00 €"],
+      );
+      expect(row!.textContent).toContain(locale === "en-GB" ? "Unallocated" : "Sin asignar");
+      expect(root.querySelector('[data-test="department-row-old-bar"]')!.textContent).toContain(
+        locale === "en-GB" ? "Inactive" : "Inactivo",
+      );
+      expect(root.querySelector('[data-test="department-note"]')!.textContent).toContain(
+        locale === "en-GB" ? "invoice" : "factura",
+      );
+    },
+  );
+
   it("loads today's overview on connect and renders the takings totals", async () => {
     const api = stubApi();
     const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
@@ -104,6 +155,7 @@ describe("dashboard-overview-screen", () => {
       getSalesOverview: vi.fn().mockResolvedValue({
         ...overview,
         takings: { ...overview.takings, tenderTotal: "330.00" },
+        departmentTakings: [],
         closureSummary: {
           billsClosed: { count: 2, total: "320.00" },
           toBePaidByTransfer: "220.00",

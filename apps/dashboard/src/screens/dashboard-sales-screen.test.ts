@@ -39,6 +39,7 @@ const close: DailyCloseDto = {
     tenderTotal: "176.00",
     tipTotal: "8.00",
   },
+  departmentTakings: [],
   closureSummary: {
     billsClosed: { count: 10, total: "176.00" },
     toBePaidByTransfer: "0.00",
@@ -77,6 +78,7 @@ function overview(businessDay: string): SalesOverview {
   return {
     businessDay,
     takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+    departmentTakings: [],
     closureSummary: {
       billsClosed: { count: 0, total: "0.00" },
       toBePaidByTransfer: "0.00",
@@ -123,6 +125,42 @@ afterEach(() => {
 });
 
 describe("dashboard-sales-screen", () => {
+  it("shows department subtotals beside the retained till breakdown", async () => {
+    setLocale("en-GB");
+    const api = stubApi({
+      getDailyClose: vi.fn().mockResolvedValue({
+        ...close,
+        departmentTakings: [
+          {
+            departmentId: "dining",
+            departmentName: "Dining",
+            active: true,
+            byMethod: [
+              { method: "cash", amount: "80.00", tip: "5.00" },
+              { method: "card", amount: "96.00", tip: "3.00" },
+            ],
+            billsClosed: { count: 10, total: "176.00" },
+          },
+        ],
+      }),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+    const root = el.shadowRoot!;
+    const row = root.querySelector('[data-test="department-row-dining"]');
+    expect(row).not.toBeNull();
+    expect([...row!.querySelectorAll("td")].map((td) => td.textContent?.trim())).toEqual([
+      "€80.00",
+      "€96.00",
+      "€0.00",
+      "10 · €176.00",
+    ]);
+    expect(root.querySelector('[data-test="tender-row-device-1-cash"]')!.textContent).toContain(
+      "Bar 1",
+    );
+    expect(root.querySelector('[data-test="tender-total"]')!.textContent).toBe("€176.00");
+  });
+
   it("opens on Overview's business day when it differs from the UTC date", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-27T01:00:00Z"));
@@ -345,6 +383,7 @@ describe("dashboard-sales-screen", () => {
         tenderTotal: "230.00",
         tipTotal: "0.00",
       },
+      departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 2, total: "320.00" },
         toBePaidByTransfer: "220.00",

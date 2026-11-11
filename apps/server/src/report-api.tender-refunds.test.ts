@@ -199,6 +199,15 @@ it("publishes a named negative cash-up once despite the provider evidence, prese
       toBePaidByTransfer: "0.00",
       received: "-107.25",
     },
+    departmentTakings: [
+      {
+        departmentId: null,
+        departmentName: null,
+        active: null,
+        byMethod: [{ method: "card", amount: "-107.25", tip: "-7.25" }],
+        billsClosed: { count: 0, total: "0.00" },
+      },
+    ],
     counts: { sales: 0, corrections: 0, voids: 0 },
     topSellers: [],
   });
