@@ -411,7 +411,10 @@ The coverage-on baseline run 43034947887 recorded shard 1 at 266 s, shard 2 at
 The watcher's 2026-11-11 21:23 cut shortens only the menu test mount helper's
 loading poll, keeping the selector, timeout and every case. Compare its paired
 coverage-on file measurements in the pull request before attributing a saving.
-Product editor and product list, and any remaining menu cost, still need diagnosis.
+The watcher's 2026-11-11 23:38 cut shortens the disclosure duration only in the
+36 static product-editor phone-layout fixtures, keeping animation settlement and
+every geometry assertion. The remaining product-editor, product-list and menu costs still need
+a demonstrated cause before another cut.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.

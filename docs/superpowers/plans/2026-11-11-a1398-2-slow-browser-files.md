@@ -45,3 +45,7 @@ coverage-off run does not establish a CI saving. Keep a paired coverage-on file 
 and unchanged expanded case inventory in the pull request, then measure product-editor.
 The watcher waived another plan read for this cut; the finish-branch run-it review remains
 required. No other polling change or file split is cleared, and the four-minute goal stays open.
+
+## Watcher-cleared static layout cut, 2026-11-11 23:38
+
+The watcher cleared setting `--wt-duration-disclosure` to `1ms` only on the host of the 36 phone-layout fixtures in `product-editor.test.ts`. Keep the real header click, animation-finished wait, final geometry and every assertion; all other fixtures retain default motion. This is the explicit exception to the rendering-shortcut restriction above, not a shared-helper or production change. Compare paired coverage-on file runs and the unchanged case inventory before finish-branch.
