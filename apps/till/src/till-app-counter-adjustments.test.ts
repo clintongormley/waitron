@@ -2185,26 +2185,44 @@ describe("till-app: comping a stored counter order", () => {
     );
   });
 
-  it("reports an unconfirmed Counter cancellation after reloading its saved basket", async () => {
-    const consent = counterCancellationRead();
-    const cancelItem = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const el = await retrieved({ getCancellation: vi.fn().mockResolvedValue(consent), cancelItem });
-    await press(el, inBasket(el, '[data-cancel-line="0"]')!);
-    emit(el.shadowRoot!.querySelector("till-cancel-item-dialog")!, "cancel-item-choice", {
-      lineId: "l-1",
-      quantity: "1",
-      outcome: "remove_charge",
-      consent,
-    });
-    await vi.waitFor(() => expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2), {
-      timeout: 5000,
-    });
-    await flush(el);
-    expect(cancelItem).toHaveBeenCalledTimes(3);
-    expect(el.shadowRoot!.querySelector("till-cancel-item-dialog")).toBeNull();
-    expect(counter(el).store.revision).toBe(5);
-    expect(banner(el)?.textContent).toBe(t("adjust.unconfirmed"));
-  });
+  it.each([
+    ["read", undefined, "adjust.unconfirmed", 5],
+    ["failed", new TypeError("Reload failed"), "adjust.unconfirmed_unread", 4],
+    ["gone", { code: "working_order.not_found", status: 404 }, "held.stale", 4],
+  ] as const)(
+    "reports the %s result after an unconfirmed Counter cancellation",
+    async (_read, failure, message, revision) => {
+      const consent = counterCancellationRead();
+      const cancelItem = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const el = await retrieved({
+        getCancellation: vi.fn().mockResolvedValue(consent),
+        cancelItem,
+        ...(failure === undefined
+          ? {}
+          : {
+              retrieveWorkingOrder: vi
+                .fn()
+                .mockResolvedValueOnce(heldOrder(4))
+                .mockRejectedValue(failure),
+            }),
+      });
+      await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+      emit(el.shadowRoot!.querySelector("till-cancel-item-dialog")!, "cancel-item-choice", {
+        lineId: "l-1",
+        quantity: "1",
+        outcome: "remove_charge",
+        consent,
+      });
+      await vi.waitFor(() => expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2), {
+        timeout: 5000,
+      });
+      await flush(el);
+      expect(cancelItem).toHaveBeenCalledTimes(3);
+      expect(el.shadowRoot!.querySelector("till-cancel-item-dialog")).toBeNull();
+      expect(counter(el).store.revision).toBe(revision);
+      expect(banner(el)?.textContent).toBe(t(message));
+    },
+  );
 
   it("asks an approver for their PIN when the reason needs one", async () => {
     const el = await retrieved({
