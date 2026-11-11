@@ -853,8 +853,8 @@ product failures.
   The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;
   their Spanish product samples (Agua mineral in both, Cerveza in the till API) remain.
   Local draft, party-seating, zone-refusal, tab, split-bill and move/merge fixtures use Daily menu
-  for menus and Drinks or Dishes for categories where present. Other display samples in those
-  files remain.
+  for menus and Drinks or Dishes for renamed categories; the tab suite's category stays ES drinks.
+  Other display samples in those files remain.
   The till API modifier fixture uses Cheese, Preparation, Cold and Hot for distinct staff
   names; the till-sale size option uses Size and Large. Their customer and kitchen wording stays.
   Local party-suite table, party,
