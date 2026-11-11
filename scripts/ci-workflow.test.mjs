@@ -968,7 +968,7 @@ exit "$status"
   });
   it("stops after one final invalid inventory without another sleep", () => {
     const result = runWatch({ jobsError: true }, { FREEZE_CLOCK: "true" });
-    expect(result.status).toBe(1);
+    expect(result.status, result.output).toBe(1);
     expect(result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?")))).toHaveLength(
       11,
     );

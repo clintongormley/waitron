@@ -3909,7 +3909,7 @@ jobs:
           final=false
           while :; do
             if [ "$polls" -ge 10 ] || [ "$(date +%s)" -ge "$queue_end" ]; then
-              if [ "$valid_inventory" = true ] || [ "$final" = true ]; then break; fi
+              if [ "$valid_inventory" = true ]; then break; fi
               final=true
             fi
             polls=$((polls + 1))
