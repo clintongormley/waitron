@@ -3752,7 +3752,6 @@ async function bootServer(
       db,
       host: localHostRequests,
       live: () => config.onboardingIntent === "live",
-      log,
       wake: () => jobRunner.wake("box.name_tag"),
     }),
   );

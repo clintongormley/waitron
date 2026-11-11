@@ -60,8 +60,8 @@ export async function handleTagWrite(
       ok: true,
       tag: plan.kind === "write" ? "written" : plan.kind === "remove" ? "removed" : "unchanged",
     });
-  } catch (error) {
-    return refuse(error.code === "ENOSPC" ? "no_space" : "host_failed");
+  } catch {
+    return refuse("host_failed");
   }
 }
 

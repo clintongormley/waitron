@@ -1192,6 +1192,7 @@ client. No screen calls them yet.
 
 **For later slices, from PR 8's [re-map against main](../superpowers/plans/2026-11-06-b3-8-host-client.md#re-map-against-main-on-2026-11-06):**
 
+- The installed tag duty adds one pending socket request to the routes' two and the clock side, whose concurrent count is still unmeasured. Recount the combined demand against `MaxConnections=4` and measure a fifth connection. Tag failures retry with the existing job backoff and are logged; a dedicated alert policy remains open.
 - The socket's four connections (`MaxConnections=4`): PR 9's routes take at most two (its D7);
   what a connection over four meets is a Linux measurement, in PR 9's list below.
 - CI's `bundle-smoke` builds and starts a server bundle carrying the host protocol, so an export

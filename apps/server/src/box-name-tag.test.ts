@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { BoxHostRequests } from "./box-host-client.js";
 import { boxNameTagJob } from "./box-name-tag.js";
 
@@ -14,7 +14,7 @@ function duty(
 ) {
   return {
     tagWrite,
-    job: boxNameTagJob({ db: fx.db, host: { tagWrite }, live: () => live, log: () => {} }),
+    job: boxNameTagJob({ db: fx.db, host: { tagWrite }, live: () => live }),
   };
 }
 it("writes the composed legal name and actual boot intent", async () => {
@@ -36,6 +36,7 @@ it("clears the tag for no taxpayer or an unusable name", async () => {
     await job.pass(context);
     expect(tagWrite).toHaveBeenLastCalledWith(null);
     await seedTenant(fx.db);
+    await job.pass(context);
     await withTransaction(fx.db, (tx) =>
       tx
         .update(tenants)
@@ -43,19 +44,18 @@ it("clears the tag for no taxpayer or an unusable name", async () => {
         .where(eq(tenants.id, 1)),
     );
     await job.pass(context);
-    expect(tagWrite.mock.calls).toEqual([[null], [null]]);
+    expect(tagWrite.mock.calls).toEqual([[null], [{ name: "Test SL", live: false }], [null]]);
   } finally {
     await job.onStop?.();
   }
 });
-it("wakes on a committed rename, never on its rollback, and stops listening at close", async () => {
+it("listens to committed writes, never a rollback, and unregisters at close", async () => {
   await seedTenant(fx.db);
   const wake = vi.fn();
   const job = boxNameTagJob({
     db: fx.db,
     host: { tagWrite: async () => ({ available: true, tag: "written" }) },
     live: () => false,
-    log: () => {},
     wake,
   });
   try {
@@ -109,15 +109,54 @@ it("allows another venue write to finish while the host is pending", async () =>
     await job.onStop?.();
   }
 });
-it("ends unsupported-host attempts and lets a transient refusal retry", async () => {
+it.each(["missing", "unsupported"] as const)("ends %s-host attempts", async (reason) => {
+  const tagWrite = vi.fn<BoxHostRequests["tagWrite"]>(async () =>
+    reason === "missing"
+      ? { available: false, reason, detail: "ENOENT" }
+      : { available: false, reason, detail: "unknown_request" },
+  );
+  const { job } = duty(tagWrite);
+  try {
+    expect(await job.pass(context)).toMatchObject({ finished: true });
+  } finally {
+    await job.onStop?.();
+  }
+});
+it("hands transient failures to the runner's bounded retry instead of caching them", async () => {
+  await seedTenant(fx.db);
   const tagWrite = vi
     .fn<BoxHostRequests["tagWrite"]>()
     .mockResolvedValueOnce({ available: false, reason: "refused", refusal: "busy" })
-    .mockResolvedValueOnce({ available: false, reason: "unsupported", detail: "unknown_request" });
+    .mockResolvedValueOnce({ available: true, tag: "written" });
   const { job } = duty(tagWrite);
   try {
-    expect(await job.pass(context)).toMatchObject({ degraded: true });
-    expect(await job.pass(context)).toMatchObject({ finished: true });
+    await expect(job.pass(context)).rejects.toMatchObject({
+      code: "box_host.failed",
+      params: { reason: "host_failed" },
+    });
+    await job.pass(context);
+    expect(tagWrite).toHaveBeenCalledTimes(2);
+  } finally {
+    await job.onStop?.();
+  }
+});
+it("skips the host after an unrelated commit or an unchanged timer pass", async () => {
+  await seedTenant(fx.db);
+  const { job, tagWrite } = duty();
+  try {
+    await job.pass(context);
+    await seedVenueSettings(fx.db);
+    await job.pass(context);
+    await job.pass(context);
+    expect(tagWrite).toHaveBeenCalledTimes(1);
+    await withTransaction(fx.db, (tx) =>
+      tx.update(tenants).set({ legalName: "New Harbour Ltd" }).where(eq(tenants.id, 1)),
+    );
+    await job.pass(context);
+    expect(tagWrite.mock.calls).toEqual([
+      [{ name: "Test SL", live: false }],
+      [{ name: "New Harbour Ltd", live: false }],
+    ]);
   } finally {
     await job.onStop?.();
   }

@@ -530,3 +530,11 @@ it("refuses a competing tag writer before starting the adapter", () => {
     reason: "busy",
   });
 });
+
+it("answers one host_failed line when the tag adapter crashes before a reply", () => {
+  const sb = sandbox();
+  const host = join(sb.dir, "tag-host.mjs");
+  writeFileSync(host, `process.exit(3);`);
+  sb.env.WAITRON_BOX_TAG_HOST = host;
+  expect(answer(sb, 'tag.write {"tag":null,"actor":{"source":"server"}}')).toEqual({ ok: false, reason: "host_failed" });
+});

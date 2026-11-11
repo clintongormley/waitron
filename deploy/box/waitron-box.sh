@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# The box's host side of the app's clock requests: one request line in on stdin, one JSON line out
+# The box's host side of app requests: one request line in on stdin, one JSON line out
 # on stdout, run as root by waitron-box@.service for each connection to /run/waitron-box/box.sock.
 #
-#   waitron-box.sh <instance>            answer one request: clock.status, or clock.set <ms> <requester>
+#   waitron-box.sh <instance>            answer clock.status, clock.set or tag.write
 #   waitron-box.sh --restore <instance>  the unit's ExecStopPost: start again a time service the
 #                                        instance stopped, after any end of it (a kill included)
 #
-# The plan's decisions 1-3: docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md.
 set -u
 export LC_ALL=C
 
@@ -150,7 +149,7 @@ clock_set() {
 }
 
 main() {
-  local instance line rc arrived rest target requester
+  local instance line rc arrived rest target requester reply
   if [ "${1:-}" = --restore ]; then
     instance="${2:-}"
     [[ $instance =~ $UNIT_NAME ]] || exit 2
@@ -170,7 +169,7 @@ main() {
     mkdir -p -m 0700 "$STATE_DIR"
     exec 9> "$STATE_DIR/tag.lock"
     if ! flock -n 9; then refuse busy; exit 0; fi
-    printf '%s' "$line" | node "$TAG_HOST"
+    if reply="$(printf '%s' "$line" | node "$TAG_HOST")"; then answer "$reply"; else refuse host_failed; fi
     exit 0
   fi
   if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
