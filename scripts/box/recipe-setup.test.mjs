@@ -29,6 +29,11 @@ it.each([
   ['B3_DISK_START:{"action":"restart"}\n', true],
   ['B3_DISK_START:{"action":"ready"}\n', false],
   ['B3_INSTALLED:{}\nB3_DISK_START:{"action":"restart"}\n', false],
+  [
+    'B3_DISK_START:{"action":"restart"}\nB3_DISK_START:{"command":"systemctl","operation":"reboot","status":1}\n',
+    false,
+  ],
+  ['B3_DISK_START:{"action":"restart"}\ndisk_start.refused {}\n', false],
   ...[
     "Starting docker.service - Docker Application Container Engine...",
     "Started docker.service - Docker Application Container Engine.",

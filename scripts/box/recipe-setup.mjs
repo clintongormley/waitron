@@ -6,7 +6,8 @@ export function bootstrapSucceeded(serial) {
   return (
     plain.includes('"action":"restart"') &&
     !dockerStarted(plain) &&
-    !plain.includes("B3_INSTALLED:")
+    !plain.includes("B3_INSTALLED:") &&
+    !/B3_DISK_START:[^\r\n]*"status":[1-9]|disk_start\.refused/.test(plain)
   );
 }
 

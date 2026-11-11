@@ -205,7 +205,12 @@ export async function startDisk({
       key.fill(0);
     }
     report({ action: "restart", diskUuid });
-    await checked("systemctl", ["reboot", "--no-block"]);
+    await checked("systemctl", [
+      "start",
+      "reboot.target",
+      "--job-mode=replace-irreversibly",
+      "--no-block",
+    ]);
     return { action: "restart", diskUuid };
   }
   await store.withKey({ diskUuid }, async (key) => {

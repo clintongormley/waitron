@@ -141,7 +141,8 @@ async function startupFixture({ chip = false, empty = true, record = chip } = {}
   }
   const writes = [];
   let recordBeforeAdd = false,
-    enrollmentArgs;
+    enrollmentArgs,
+    restartArgs;
   const command = async (name, args, secret) => {
     if (args[0] === "luksDump") return { status: 0, stdout: JSON.stringify(metadata) };
     if (args.includes("--test-passphrase"))
@@ -162,14 +163,16 @@ async function startupFixture({ chip = false, empty = true, record = chip } = {}
       enrollmentArgs = args;
       metadata.keyslots[2] = {};
       metadata.tokens[0] = { type: "systemd-tpm2", keyslots: ["2"], "tpm2-pcrs": [5, 7, 8, 9, 15] };
-    } else if (name === "systemctl") writes.push("restart");
-    else throw new Error("unexpected command");
+    } else if (name === "systemctl") {
+      restartArgs = args;
+      writes.push("restart");
+    } else throw new Error("unexpected command");
     return { status: 0, stdout: "" };
   };
   return {
     writes,
     store,
-    facts: () => ({ recordBeforeAdd, enrollmentArgs }),
+    facts: () => ({ recordBeforeAdd, enrollmentArgs, restartArgs }),
     deps: {
       hostRoot: root,
       ownerUid: process.getuid(),
@@ -184,6 +187,12 @@ it("retains the key before enrollment and asks the box to restart without removi
   const f = await startupFixture();
   expect(await startDisk(f.deps)).toMatchObject({ action: "restart" });
   expect(f.writes).toEqual(["add-key", "enroll", "restart"]);
+  expect(f.facts().restartArgs).toEqual([
+    "start",
+    "reboot.target",
+    "--job-mode=replace-irreversibly",
+    "--no-block",
+  ]);
   expect(f.facts().recordBeforeAdd).toBe(true);
   expect(f.facts().enrollmentArgs).toContain(
     "--tpm2-pcrs=5+7+8+9+15:sha256=0000000000000000000000000000000000000000000000000000000000000000",
