@@ -6115,3 +6115,29 @@ it.each([false, true])(
     expect(changes).toEqual([event, event, event]);
   },
 );
+
+it("publishes a scanned Bluetooth device becoming paired, but not its pairing restamp", async () => {
+  const bus = new LiveEvents();
+  const changes: unknown[] = [];
+  bus.subscribe((event) => {
+    changes.push(event);
+  });
+  const app = mountApp({ bus });
+  const { token } = await joinAndAccept(app);
+  const device = { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:01" };
+  await pull(app, token, { scanned: [device] });
+  const read = async () =>
+    (await (
+      await send(app, "GET", "/management-api/discovered-printers", {
+        cookie: managerCookie,
+      })
+    ).json()) as { paired?: true }[];
+  expect((await read())[0]?.paired).toBeUndefined();
+  const event = { kind: "change", change: { resources: [{ type: "printer_discovery" }] } };
+  expect(changes).toEqual([event]);
+  await pull(app, token, { pairedBluetooth: [{ localKey: device.localKey }] });
+  expect((await read())[0]?.paired).toBe(true);
+  expect(changes).toEqual([event, event]);
+  await pull(app, token, { pairedBluetooth: [{ localKey: device.localKey }] });
+  expect(changes).toEqual([event, event]);
+});

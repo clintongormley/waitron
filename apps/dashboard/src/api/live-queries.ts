@@ -178,7 +178,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   pairingMode: ["pairing"],
   // A device's ask; `dependenciesOf` narrows a print agent's.
-  joinRequests: ["join_requests", "devices", "device_profiles"],
+  joinRequests: ["join_requests", "devices", "device_profiles", "pairing"],
   listDiscoveredPrinters: ["printer_discovery", "printers", "print_agents"],
   getSalesOverview: [
     "sales",

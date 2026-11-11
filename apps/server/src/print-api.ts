@@ -496,11 +496,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   const description = (entry: DiscoveredEntry | undefined) =>
     entry === undefined
       ? undefined
-      : Object.fromEntries(
-          Object.entries(entry).filter(
-            ([key]) => !["lastSeenAt", "scannedAt", "pairedAt", "visibleAt"].includes(key),
+      : {
+          ...Object.fromEntries(
+            Object.entries(entry).filter(
+              ([key]) => !["lastSeenAt", "scannedAt", "pairedAt", "visibleAt"].includes(key),
+            ),
           ),
-        );
+          paired: entry.transport === "bluetooth" && isListed(entry.pairedAt, Date.now()),
+        };
   const discovered = new Map<string, DiscoveredEntry>();
   const printerProbes = createPrinterProbes();
   const testPages = deps.testPages ?? createPageTestPages(() => deps.now?.() ?? new Date());

@@ -469,7 +469,7 @@ it.each([
   ["getReportPrinters", [], ["printers"]],
   // A device's ask also carries a returning device's own row and whether its profile was retired
   // (`returningDevicesOf`, apps/server/src/join-requests.ts).
-  ["joinRequests", ["device"], ["join_requests", "devices", "device_profiles"]],
+  ["joinRequests", ["device"], ["join_requests", "devices", "device_profiles", "pairing"]],
   // A print agent's ask reads no `devices` or `device_profiles` row; a stored battery report
   // rewrites a `devices` row.
   ["joinRequests", ["print_agent"], ["join_requests"]],
@@ -494,7 +494,7 @@ it.each([
     ],
   ],
 ] as const)(
-  "subscribes %s %j to exactly the tables its read selects from",
+  "subscribes %s %j to its live sources",
   async (name, args, types) => {
     const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
     expect(query.dependencies).toEqual(types.map((type) => ({ type })));
@@ -1369,5 +1369,42 @@ it("refreshes print queue visibility after fifteen seconds without table changes
   } finally {
     observed.unsubscribe();
     vi.useRealTimers();
+  }
+});
+
+it("refreshes device join claims passively when pairing changes", async () => {
+  let pairingBy: string | null = "Alex";
+  const request = {
+    id: "request-1",
+    kind: "device",
+    label: "Bar till",
+    createdAt: "2026-11-11T12:00:00Z",
+    returning: null,
+  };
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(
+        JSON.stringify([
+          { ...request, pairingBy: pairingBy === null ? null : { name: pairingBy, mine: false } },
+        ]),
+      ),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  const observed = api.liveData.observe(dashboardQuery(api, "joinRequests", ["device"]), () => {});
+  try {
+    await vi.waitFor(() =>
+      expect(observed.snapshot.value?.[0]?.pairingBy).toEqual({ name: "Alex", mine: false }),
+    );
+    pairingBy = "Sam";
+    api.liveData.invalidate([{ type: "pairing" }]);
+    await vi.waitFor(() =>
+      expect(observed.snapshot.value?.[0]?.pairingBy).toEqual({ name: "Sam", mine: false }),
+    );
+    expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get("x-waitron-live")).toBe("1");
+    pairingBy = null;
+    api.liveData.invalidate([{ type: "pairing" }]);
+    await vi.waitFor(() => expect(observed.snapshot.value?.[0]?.pairingBy).toBeNull());
+  } finally {
+    observed.unsubscribe();
   }
 });
