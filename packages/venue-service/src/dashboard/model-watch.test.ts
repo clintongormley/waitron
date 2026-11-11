@@ -16,6 +16,38 @@ afterEach(() => {
 });
 
 it.each([
+  ["venue-service:floor-plan-sets", [1]],
+  ["venue-service:period-floor-plans", [1]],
+  ["venue-service:prep-stations-list", [1]],
+  ["venue-service:opening-hours", [1, 2]],
+])("keeps only database-only model timers quiet while connected: %s", async (key, expected) => {
+  vi.useFakeTimers();
+  const data = new LiveData();
+  data.setConnected(true);
+  const watches = new ModelWatches(data);
+  let value = 1;
+  const applied: number[] = [];
+  const detach = watches.watch(
+    key,
+    ["rows"],
+    async () => value++,
+    (v) => applied.push(v),
+    vi.fn(),
+    vi.fn(),
+  );
+  try {
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(applied).toEqual(expected);
+    data.setConnected(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(applied.length).toBe(expected.length + 1);
+  } finally {
+    detach();
+    vi.useRealTimers();
+  }
+});
+
+it.each([
   ["live data", true],
   ["no live data", false],
 ])(

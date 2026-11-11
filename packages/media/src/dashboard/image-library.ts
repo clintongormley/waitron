@@ -669,6 +669,7 @@ export class ImageLibrary extends LitElement {
           key: `media:${JSON.stringify(query)}`,
           dependencies: QUERY_DEPENDENCIES.images.map((type) => ({ type })),
           refreshMs: 60_000,
+          quietWhileConnected: true,
           read: async () => {
             const api = initial ? this.api : (this.api.background ?? this.api);
             initial = false;

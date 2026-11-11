@@ -201,6 +201,7 @@ export class BookingsScreen extends LitElement {
         key: `bookings:${date}`,
         dependencies: QUERY_DEPENDENCIES.bookings.map((type) => ({ type })),
         refreshMs: 60_000,
+        quietWhileConnected: true,
         read: () => {
           const api = initial ? this.api : (this.api.background ?? this.api);
           initial = false;

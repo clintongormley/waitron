@@ -109,6 +109,10 @@ export class ModelWatches {
         key,
         dependencies: dependencies.map((type) => ({ type })),
         refreshMs: REFRESH_MS,
+        quietWhileConnected:
+          key === "venue-service:floor-plan-sets" ||
+          key === "venue-service:period-floor-plans" ||
+          key === "venue-service:prep-stations-list",
         read: stamped,
       },
       changed,

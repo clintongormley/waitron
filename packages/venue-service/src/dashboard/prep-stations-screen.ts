@@ -428,6 +428,7 @@ export class PrepStationsScreen extends LitElement {
           key: "venue-service:pass-coverage",
           dependencies: QUERY_DEPENDENCIES["pass-coverage"].map((type) => ({ type })),
           refreshMs: 60_000,
+          quietWhileConnected: true,
           read: () => this.api.readPassCoverage(),
         },
         (gaps) => {

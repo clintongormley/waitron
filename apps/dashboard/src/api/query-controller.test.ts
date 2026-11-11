@@ -27,6 +27,35 @@ function sharedApi(): DashboardApi {
 const wrap = async <T>(read: () => Promise<T>) => ({ answer: await read(), sentAt: 7 });
 
 describe("DashboardQueries", () => {
+  it("keeps a group of quiet queries quiet while connected and timed while down", async () => {
+    vi.useFakeTimers();
+    let serial = 0;
+    const api = {
+      ...sharedApi(),
+      getVenueTheme: async () => ({ ...theme, hash: String(++serial) }),
+    } as DashboardApi;
+    const queriesHost = host();
+    const queries = new DashboardQueries(queriesHost, () => api, vi.fn());
+    let hashes: string[] = [];
+    api.liveData.setConnected(true);
+    try {
+      const initial = queries.watchGroup("getVenueTheme", [[], []], (themes) => {
+        hashes = themes.map((value) => value.hash);
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await initial;
+      expect(hashes).toEqual(["1", "2"]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(hashes).toEqual(["1", "2"]);
+      api.liveData.setConnected(false);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(hashes).toEqual(["3", "4"]);
+    } finally {
+      queriesHost.disconnect();
+      vi.useRealTimers();
+    }
+  });
+
   for (const order of ["watch first", "watchSent first"] as const) {
     it(`gives a plain and a sent watch of one query each its own shape on a shared cache (${order})`, async () => {
       const api = sharedApi();

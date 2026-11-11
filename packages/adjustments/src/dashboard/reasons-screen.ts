@@ -530,6 +530,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           key: "adjustments:settings",
           dependencies: QUERY_DEPENDENCIES.settings.map((type) => ({ type })),
           refreshMs: 60_000,
+          quietWhileConnected: true,
           read: firstReadThenPassive(
             () => this.api,
             (api) => api.getSettings(),
@@ -576,6 +577,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           key: "adjustments:reasons",
           dependencies: QUERY_DEPENDENCIES.reasons.map((type) => ({ type })),
           refreshMs: 60_000,
+          quietWhileConnected: true,
           read: firstReadThenPassive(
             () => this.api,
             (api) => api.listReasons(),

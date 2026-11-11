@@ -3,7 +3,28 @@ import type { DeleteImpact } from "@waitron/shared";
 import { expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { DashboardApi } from "./client.js";
-import { QUERY_DEPENDENCIES, dashboardQuery } from "./live-queries.js";
+import { QUERY_DEPENDENCIES, dashboardQuery, type DashboardQueryName } from "./live-queries.js";
+
+it("quiets only the audited database queries while connected", () => {
+  const expected = `getCatalogueSettings listCatalogues getMenuStructure getMenuPrices getMenuHome
+    listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
+    listExtraLists getExtraList listMadeAt getVenueTheme listThemes listPrinters listPrinterProfiles
+    listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
+    listReaderHolders getProfileReaders listHeldPayments getDailyClose getSalesPeriod getCategorySales
+    getReportPrinters getOrderPrinters listOrderStaff listStaff getStaffRoster getProfile
+    listPendingAbsences listPendingSwaps getRoster listMySwaps listMyAbsences listDeviceProfiles
+    getDeviceProfile listProfileKitchenScreens getProfileScopeChoices listDevices listStations
+    listCourses listZones getFloorPlan getStationDeleteImpact getCourseDeleteImpact getReceiptLanguage
+    getVenueDefaults getVenuePrivacy listPurchaseInvoices clockMisdated clockMisdatedHandled
+    getContentLanguages getContentTranslationGaps getContentTranslationTargets getContentTranslationCells
+    getGoogleConfig getLocales getDepartmentReceipt pairingMode`.split(/\s+/);
+  const api = new DashboardApi();
+  const quiet = (Object.keys(QUERY_DEPENDENCIES) as DashboardQueryName[]).filter((name) => {
+    const args = name === "getMenuRead" ? ["menu-1", ["status"]] : [];
+    return dashboardQuery(api, name, args as never).quietWhileConnected;
+  });
+  expect(quiet.sort()).toEqual(expected.sort());
+});
 
 it("counts the initial screen read as activity and subsequent refreshes as passive", async () => {
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
