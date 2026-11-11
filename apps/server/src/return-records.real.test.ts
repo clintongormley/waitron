@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { FISCAL_PERMISSIONS } from "@waitron/fiscal-verifactu/src/permissions.js";
@@ -182,7 +183,9 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       .insert(persons)
       .values({ displayName: "Administrator", role: "admin" })
       .returning();
-    return (await startManagementSession(tx, { personId: person!.id })).token;
+    const session = await startManagementSession(tx, { personId: person!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
   });
   const remedies = new Hono();
   mountRecordRemedies(
@@ -212,7 +215,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       facts: { description: "Corrected restaurant service" },
     }),
   });
-  expect(correction.status).toBe(200);
+  expect(correction.status, await correction.clone().text()).toBe(200);
   const corrected = (await correction.json()) as { registroId: string };
   const settled = await withTransaction(current.db, listFilingCases);
   expect(settled).toEqual([
