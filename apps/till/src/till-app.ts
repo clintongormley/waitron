@@ -17441,8 +17441,11 @@ export class TillApp extends LitElement {
     if (live()) await this.#onTableClosed(party.id, asked.visit, asked.sent);
   }
 
-  async #readAfterFinishRefused(visit: number): Promise<void> {
-    if (this.settlementDocument?.surface === "table" && this.activeTabId !== undefined)
+  async #readAfterFinishRefused(visit: number, rereadFloor = false): Promise<void> {
+    if (
+      (rereadFloor || this.settlementDocument?.surface === "table") &&
+      this.activeTabId !== undefined
+    )
       await this.#rereadAmounts(this.activeTabId, visit);
     else await this.#loadPartyBills();
   }
@@ -17729,7 +17732,7 @@ export class TillApp extends LitElement {
         this.#closeFinishTable();
         if (code === "party.bill_outstanding") this.finishRefused = true;
         else this.errorKey = "table.finish_bill_holds_money";
-        await this.#readAfterFinishRefused(asked.visit);
+        await this.#readAfterFinishRefused(asked.visit, true);
       } else if (code === "party.unserved_dishes") {
         const opening = { composition: asked, controller: new AbortController() };
         this.#finishOpening = opening;
