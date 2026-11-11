@@ -169,7 +169,7 @@ there; the root script holds none by construction (Spanish stays in the package,
 3. **Version order is numeric**: with `v1.9.0` released, `1.10.0` is accepted and `1.8.9` refused;
    tags that are not `v<major>.<minor>.<patch>` are ignored — Task 6.
 4. **A place with accents and an apostrophe** (`L'Alfàs del Pi`) passes whole; one with a line
-   break or a `‹` is refused before anything is written — Task 5.
+   break, a `‹` or a `**` is refused before anything is written — Task 5.
 5. **The PDF draws every character of the text.** The font has glyphs for «, », –, ñ and the
    accented vowels (measured 2026-11-11 with `fontkit`'s `hasGlyphForCodePoint` over
    `src/assets/register-noto-sans.ttf`: all `true`; the control `漢` printed `false`). The PDF
@@ -427,8 +427,8 @@ entry is outside it, and Step 4 runs that. Files are `<root>/declarations/…`. 
 
 Checks run in this order, each stopping the command: the arguments, then the blockers (unless
 `--draft`), then the producer. All three refuse a version not matching
-`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, a place that is empty, holds a line break or a
-`‹`/`›`, and a date not `YYYY-MM-DD`. The library version is read from the `package.json` beside
+`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, a place that is empty, holds a line break, a
+`‹`/`›` or `**` (the place is written into the source before its markup is read), and a date not `YYYY-MM-DD`. The library version is read from the `package.json` beside
 the resolved `@waitron/verifactu` entry (its `exports` has no `./package.json`). An `AppError`
 prints its code and params to stderr and answers 1.
 
@@ -439,7 +439,7 @@ prints its code and params to stderr and answers 1.
   producer settings' own refusals (`sif.producer_unset` and the rest) are slice 1's and are not
   tested again here. `show --draft` prints the text and both blockers; `write` then `check` on the
   blocker-free variant → 0 and the file keeps `‹NIF›`; `check` after editing 1.a in the file →
-  `declaration.disagrees` `{ item: "1.a" }`; place `L'Alfàs del Pi` accepted, `A\nB` and `‹x›`
+  `declaration.disagrees` `{ item: "1.a" }`; place `L'Alfàs del Pi` accepted, `A\nB`, `‹x›` and `A**B`
   refused; the library version equals the `version` read from
   `node_modules/@waitron/verifactu/package.json` by path; `nodeIo()` names the package folder, and
   its `stdout` and `stderr` reach `process.stdout.write` and `process.stderr.write` (spied).
