@@ -26,6 +26,7 @@ import { optionSnapshotOf } from "../state/held-options.js";
 import { sameExtraSelections } from "../state/held-extras.js";
 import { productName, productUnit } from "./product-name.js";
 import { lineNutrition } from "./line-nutrition.js";
+import { extraNutrition } from "./diet-badges.js";
 import { optionAnswers } from "./option-snapshot.js";
 import type { LineNutrition } from "../api/client.js";
 import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
@@ -173,6 +174,34 @@ export class TillModifierPicker extends LitElement {
 
       .option-name {
         flex: 1;
+      }
+
+      .option-label {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        min-width: 0;
+      }
+
+      .extra-nutrition,
+      .extra-allergens {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+      }
+
+      .extra-nutrition {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+
+      .allergen-chip {
+        display: inline-block;
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
       }
 
       .option-delta,
@@ -982,6 +1011,15 @@ export class TillModifierPicker extends LitElement {
     return `${item.name} · ${amount}${unit ? ` ${unit}` : ""}`;
   }
 
+  /** Allergens only: the owner asked for declared-allergen labels, so no diet badge is drawn. */
+  #extraLabel(list: OfferedExtrasList, item: OfferedExtraItem) {
+    const test = `pick-${list.id}-${item.productId}`;
+    return html`<span class="option-label">
+      <span class="option-name">${this.#extraName(item)}</span>
+      ${extraNutrition({ addAllergens: item.addAllergens }, `${test}-allergens`, `${test}-diet`)}
+    </span>`;
+  }
+
   #renderPick(list: OfferedExtrasList, item: OfferedExtraItem, atListMax: boolean) {
     const checked = this.#countOf(list.id, item.productId) >= 1;
     return html`
@@ -997,7 +1035,7 @@ export class TillModifierPicker extends LitElement {
             this.#setCount(list.id, item.productId, (e.target as HTMLInputElement).checked ? 1 : 0);
           }}
         />
-        <span class="option-name">${this.#extraName(item)}</span>
+        ${this.#extraLabel(list, item)}
         <span class="option-delta">${this.#priceOf(item)}</span>
       </label>
     `;
@@ -1008,7 +1046,7 @@ export class TillModifierPicker extends LitElement {
     const test = `pick-${list.id}-${item.productId}`;
     return html`
       <div class="option stepper-option">
-        <span class="option-name">${this.#extraName(item)}</span>
+        ${this.#extraLabel(list, item)}
         <span class="option-delta">${this.#priceOf(item)}</span>
         <span class="stepper">
           <wt-button

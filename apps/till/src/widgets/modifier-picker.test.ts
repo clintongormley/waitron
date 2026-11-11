@@ -12,11 +12,12 @@ import {
 } from "./modifier-picker.js";
 import {
   sellingValuesOf,
+  type OfferedExtrasList,
   type OfferedModifier,
   type TillProduct,
   type TillZoneMenu,
 } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { WtTextarea } from "@waitron/ui";
 
 /**
@@ -1367,4 +1368,110 @@ describe("till-modifier-picker", () => {
       cleanupWidgets();
     }
   });
+});
+
+describe("an extra's declared allergens, before it is picked", () => {
+  /** The burger's extras list with `bacon` and `cheese` replaced by the given declarations. */
+  function burgerDeclaring(
+    bacon: Partial<OfferedExtrasList["items"][number]>,
+    cheese: Partial<OfferedExtrasList["items"][number]> = {},
+  ): TillProduct {
+    const extras = extrasList as OfferedExtrasList;
+    const [baconItem, cheeseItem] = extras.items;
+    return {
+      ...burger,
+      offeredModifiers: [
+        {
+          ...extras,
+          items: [
+            { ...baconItem!, ...bacon },
+            { ...cheeseItem!, ...cheese },
+          ],
+        },
+        cookedList,
+      ],
+    };
+  }
+
+  function chips(picker: TillModifierPicker, productId: string): string[] {
+    return [
+      ...picker.shadowRoot!.querySelectorAll(
+        `[data-test="pick-list-extras-${productId}-allergens"] .allergen-chip`,
+      ),
+    ].map((chip) => chip.textContent!.trim());
+  }
+
+  it("shows a tick-box extra's allergen inside its label, and in the checkbox's name", async () => {
+    const product = burgerDeclaring({ addAllergens: { milk: {} } });
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", { product });
+    const box = pickBox(el, "list-extras", "p-bacon")!;
+    expect(box.checked).toBe(false);
+    expect(chips(el, "p-bacon")).toEqual(["Milk"]);
+    expect(
+      box.closest("label")!.querySelector('[data-test="pick-list-extras-p-bacon-allergens"]'),
+    ).not.toBeNull();
+    await expect.element(page.getByRole("checkbox", { name: /Bacon.*Milk/ })).toBeInTheDocument();
+  });
+
+  it("shows every allergen a stepper extra declares, sorted", async () => {
+    const product = burgerDeclaring({}, { addAllergens: { nuts: {}, milk: {} } });
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", { product });
+    expect(pickBox(el, "list-extras", "p-cheese")).toBeNull();
+    expect(stepCount(el, "list-extras", "p-cheese")).toBe("0");
+    expect(chips(el, "p-cheese")).toEqual(["Milk", "Nuts"]);
+  });
+
+  it("adds nothing to the row of an extra whose allergens nobody entered", async () => {
+    const product = burgerDeclaring({ addAllergens: null });
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", { product });
+    const row = pickBox(el, "list-extras", "p-bacon")!.closest("label")!;
+    expect(row.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `Bacon · 1 ea ${formatMoney("1.50", currentLocale())}`,
+    );
+  });
+
+  it("draws the allergen but no diet badge for an extra suitable for vegans", async () => {
+    const product = burgerDeclaring({ addAllergens: { milk: {} }, suitableFor: ["vegan"] });
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", { product });
+    expect(chips(el, "p-bacon")).toEqual(["Milk"]);
+    expect(el.shadowRoot!.querySelector("[data-diet]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("diet.vegan"));
+  });
+
+  for (const theme of ["light", "dark"] as const)
+    it(`fits the longest Spanish allergen name at phone width (${theme})`, async () => {
+      const prior = currentLocale();
+      setLocale("es-ES");
+      await page.viewport(390, 844);
+      try {
+        const product = burgerDeclaring(
+          { addAllergens: { sulphites: {} } },
+          { addAllergens: { sulphites: {} } },
+        );
+        const { el } = await mountWidget<TillModifierPicker>(
+          "till-modifier-picker",
+          { product },
+          theme,
+        );
+        expect(chips(el, "p-bacon")).toEqual(["Dióxido de azufre y sulfitos"]);
+        expect(chips(el, "p-cheese")).toEqual(["Dióxido de azufre y sulfitos"]);
+        const modal = el.shadowRoot!.querySelector("wt-modal")!;
+        await modal.updateComplete;
+        const dialog = modal.shadowRoot!.querySelector("dialog")!;
+        expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+        expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+        for (const chip of el.shadowRoot!.querySelectorAll(".allergen-chip"))
+          expect(chip.getBoundingClientRect().right).toBeLessThanOrEqual(
+            dialog.getBoundingClientRect().right,
+          );
+        await page.screenshot({
+          element: dialog,
+          path: `__screenshots__/a1517-5-extra-allergens/es-ES-${theme}-390.png`,
+        });
+      } finally {
+        cleanupWidgets();
+        setLocale(prior);
+      }
+    });
 });
