@@ -190,8 +190,9 @@ guarded by `scripts/module-seams.test.ts`).
 14. **About from More or a corner opens at once,** headed "About Waitron", and the heading gains
     the version when `readLegalAbout()` answers; a failed read leaves it as is.
 15. **A development copy of the folder** is written by
-    `pnpm --filter @waitron/server exec tsx -e 'await (await import("./src/testing/declaration-folder.ts")).writeDeclarationFolder("src/declaration")'`
-    (Task 1 runs it once to confirm it works, and fixes the command here if it does not), and
+    `pnpm --filter @waitron/server exec tsx -e 'import("./src/testing/declaration-folder.ts").then((m) => m.writeDeclarationFolder("src/declaration"))'`
+    (Task 1 ran it on 2026-11-11: four files appeared and `git status` did not list them; the
+    first wording, with a top-level `await`, failed because `tsx -e` compiles to CommonJS), and
     `apps/server/src/declaration/` goes in `.gitignore` so a copy is never committed.
 
 ## Questions for the owner
