@@ -1621,7 +1621,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   _asesor_), who today would have to type in Waitron's sales and purchase invoices by hand.
   The owner chose [the generic workbook](superpowers/specs/2026-11-11-a1511-accountant-export-proposal.md#owner-decision-2026-11-11)
   on 11 November: one download per period, with issued invoices and recorded purchases in separate
-  sheets. Lane I is preparing the build plan; named-program import support needs a real
+  sheets. Lane I's [build plan](superpowers/plans/2026-11-11-a1511-accountant-export.md) awaits Claude's read
+  and watcher clearance; named-program import support needs a real
   accountant's import trial.
 
 - **One design for supplier invoices and credit notes** (bundle of 2, 2 important, size M, needs the owner). Holds A1326. [Detail](backlog/back-office.md#bundle-one-design-for-supplier-invoices-and-credit-notes)
