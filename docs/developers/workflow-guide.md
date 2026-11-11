@@ -135,7 +135,13 @@ What still needs a person:
   allows only `typed-rest-client` `~2.3.0`, while `typed-rest-client` 3.1.2 declares `qs`
   `^6.16.0`. Fix it with a root `pnpm.overrides` entry scoped to that parent (`parent>child`), after
   running the parent's code that uses the child on both versions, as the 2026-09-28 security-alert
-  fix did; receipts: _The receipt for the two overrides_, below.
+  fix did; receipts: _The receipt for the two overrides_, below. The same failure also came when
+  the parent's range already allowed the fix: on 2026-11-11 Dependabot's run 43045775511 reported
+  `fast-xml-parser` 5.11.1 as the latest it could reach, although `@waitron/verifactu` 0.2.1 asks
+  for `^5.11.1`. Its log shows it ran `pnpm update fast-xml-parser@5.12.0 --lockfile-only --no-save
+  -r`, which leaves 5.11.1 in place; `pnpm update -r --depth Infinity fast-xml-parser` moved it to
+  5.12.0 in the lockfile alone (A1504). Read the parent's range first; an override is for a range
+  that leaves the fix out.
 
   **The receipt for the two overrides** (A107, PR #796, 2026-09-28): four alerted packages were
   moved inside the ranges their parents already declare, and two are forced by root
