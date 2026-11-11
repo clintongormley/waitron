@@ -3,6 +3,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
+import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 import type { TrustPageInput } from "./trust-page.js";
 
@@ -182,5 +183,6 @@ ${!ready && !operator ? `<button id="connection-repair" type="button" hidden>${w
 <p id="connection-choice-help" class="note">${words.choiceHelp}</p>
 <div id="connection-choices"><button id="connection-check" class="secondary" type="button" hidden>${words.check}</button>
 <button id="connection-stop" class="secondary" type="button" hidden>${words.stop}</button></div>
+<p class="note"><a href="/legal/declaration" lang="es">${escape(DECLARATION_LINK_WORDS.title)}</a></p>
 </main><script>${script}</script></body></html>`;
 }

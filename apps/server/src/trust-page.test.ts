@@ -6,6 +6,7 @@ import {
   type TrustPageInput,
 } from "./trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
+import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 
 const base: TrustPageInput = {
   reachUrls: ["https://waitron.local", "https://192.168.1.50"],
@@ -20,6 +21,16 @@ const heading = (text: string): RegExp =>
   new RegExp(`<h2>[^<]*${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</h2>`);
 
 describe("renderTrustPage", () => {
+  it.each([true, false])(
+    "links the declaration at its foot (certificate available: %s)",
+    (caAvailable) => {
+      const html = renderTrustPage({ ...base, caAvailable });
+      expect(html).toContain(
+        `<p class="note"><a href="/legal/declaration" lang="es">${DECLARATION_LINK_WORDS.title}</a></p>\n</main>`,
+      );
+    },
+  );
+
   it("renders the CA download link at the given path, reach URLs and the https link", () => {
     const html = renderTrustPage({ ...base, caDownloadPath: "/setup-api/ca.crt" });
     expect(html).toContain("<!doctype html>");

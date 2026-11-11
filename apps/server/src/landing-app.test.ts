@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, beforeAll } from "vitest";
 import { buildLandingApp } from "./landing-app.js";
+import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 let material: SelfSignedMaterial;
@@ -218,3 +219,37 @@ it("provides connection help without shadowing the landing page and refuses malf
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it.each(["trust page", "connection repair"] as const)(
+  "answers the declaration address over plain HTTP on the %s",
+  async (shape) => {
+    const dir = stateDirWithCa();
+    try {
+      const app = buildLandingApp({
+        stateDir: dir,
+        reachUrls: ["https://waitron.local"],
+        httpsUrl: "https://waitron.local",
+        log: () => {},
+        ...(shape === "connection repair"
+          ? {
+              connection: {
+                stateDir: dir,
+                hostnames: ["waitron.local"],
+                listIpv4: () => [],
+                now: () => new Date(),
+                origins: ["http://waitron.local"],
+                reachUrls: ["https://waitron.local"],
+                onRepaired: async () => {},
+                log: () => {},
+              },
+            }
+          : {}),
+      });
+      const page = await app.request("http://waitron.local/legal/declaration");
+      expect(page.status).toBe(404);
+      expect(await page.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);

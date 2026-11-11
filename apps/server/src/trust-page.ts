@@ -1,6 +1,7 @@
 import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { renderConnectionPage } from "./connection-bootstrap-page.js";
+import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 
@@ -134,5 +135,6 @@ shows <span class="warning-words">“not secure”</span>, come back here and st
 <p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to Waitron</a></p>
 <ul>${urlItems}</ul></section>
 ${qrSvg ? `<section class="qr"><h2>Open this page on another device</h2><figure>${qrSvg}</figure></section>` : ""}
+<p class="note"><a href="/legal/declaration" lang="es">${escapeHtml(DECLARATION_LINK_WORDS.title)}</a></p>
 </main></body></html>\n`;
 }
