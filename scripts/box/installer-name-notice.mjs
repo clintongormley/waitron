@@ -1,8 +1,6 @@
 import { Buffer } from "node:buffer";
 import { performance } from "node:perf_hooks";
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
 import { WAITRON_LAYOUTS } from "./disk-state.mjs";
 import { decodeNameTag, findNameTag, NAME_TAG_METADATA_MAX_BYTES } from "./name-tag.mjs";
 
@@ -46,14 +44,8 @@ export async function installerNameNotice(target, run) {
     ]);
     const bytes = findNameTag(Buffer.from(metadata));
     const tag = bytes === null ? null : decodeNameTag(bytes);
-    return `This box already has Waitron (${tag?.name ?? "Venue name unavailable"}).`;
+    return { tag };
   } catch {
     return null;
   }
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const notice = process.argv.length === 3 ? await installerNameNotice(process.argv[2]) : null;
-  if (notice === null) process.exitCode = 1;
-  else console.log(notice);
 }

@@ -10,6 +10,7 @@ trap cleanup EXIT
 cp -a --reflink=auto "$root" "$work/root"
 installer="$work/root"
 install -m 0644 "$repo/scripts/box/installer-name-notice.mjs" "$installer/opt/waitron-host/box/"
+install -D -m 0644 "$repo/scripts/box/i18n/installer.mjs" "$installer/opt/waitron-host/box/i18n/installer.mjs"
 for module in installer-return installer-policy; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$installer/opt/waitron-host/box/"
 done

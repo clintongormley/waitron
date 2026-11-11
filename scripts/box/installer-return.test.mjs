@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { installerReturn } from "./installer-return.mjs";
 import { installerNameNotice } from "./installer-name-notice.mjs";
+import { INSTALLER_WORDS } from "./i18n/installer.mjs";
 
 vi.mock("./installer-name-notice.mjs", () => ({ installerNameNotice: vi.fn() }));
 vi.mock("node:child_process", () => ({ execFileSync: vi.fn() }));
@@ -28,7 +29,7 @@ function fixture({
   removedAfterNext = false,
 } = {}) {
   vi.useFakeTimers();
-  installerNameNotice.mockResolvedValue("This box already has Waitron (Harbour Restaurant Ltd).");
+  installerNameNotice.mockResolvedValue({ tag: { name: "Harbour Restaurant Ltd", live: false } });
   const input = new PassThrough();
   input.isTTY = true;
   input.isRaw = false;
@@ -82,6 +83,11 @@ it("starts the installed disk after fifteen silent seconds, without changing boo
   await vi.advanceTimersByTimeAsync(14999);
   expect(f.calls).toEqual([]);
   expect(f.text).toContain("Press any key to pause");
+  expect(f.text).toContain(INSTALLER_WORDS.es.countdown);
+  expect(f.text).toContain(INSTALLER_WORDS.es.notice.replace("{name}", "Harbour Restaurant Ltd"));
+  expect(f.text.split("\n")).toContain(
+    "Starting the installed box in 15 seconds. Press any key to pause.",
+  );
   await vi.advanceTimersByTimeAsync(1);
   await done;
   expect(f.calls).toEqual([
@@ -112,6 +118,7 @@ it("discards buffered keys and resets a two-minute idle return after each new ch
   expect(f.text).toContain("Reinstall, erase and recovery-key inspection are unavailable");
   expect(f.text).not.toContain("secret");
   expect(f.text.match(/Reinstall, erase/g)).toHaveLength(1);
+  expect(f.text).toContain(INSTALLER_WORDS.es.paused);
   expect(f.calls.at(-1)).toEqual(["systemctl", "reboot", "--no-block"]);
   expect(f.input.isPaused()).toBe(true);
 });
@@ -120,7 +127,11 @@ it("disables terminal echo before inviting typing", async () => {
   const f = fixture();
   let rawAtPrompt;
   f.output.on("data", (bytes) => {
-    if (bytes.toString().includes("Press any key")) {
+    const text = bytes.toString();
+    if (
+      rawAtPrompt === undefined &&
+      (text.includes(INSTALLER_WORDS.es.countdown) || text.includes("Press any key"))
+    ) {
       rawAtPrompt = f.input.isRaw;
       f.input.write("immediate typing");
     }
@@ -148,6 +159,7 @@ it.each(["non-tty", "raw-error", "eof", "error"])(
     await vi.advanceTimersByTimeAsync(14999);
     await done;
     expect(f.text).toContain("Keys unavailable");
+    expect(f.text).toContain(INSTALLER_WORDS.es.keysUnavailable);
     expect(f.calls.at(-1)).toEqual(["systemctl", "reboot", "--no-block"]);
   },
 );
@@ -215,6 +227,7 @@ it.each([
     "Cannot start the installed box. Remove the USB and restart.",
   );
   expect(f.text).toContain("Cannot start the installed box");
+  expect(f.text).toContain(INSTALLER_WORDS.es.failed);
   expect(f.calls.filter(([command]) => command === "systemctl")).toHaveLength(
     options.fail === "systemctl" ? 1 : 0,
   );

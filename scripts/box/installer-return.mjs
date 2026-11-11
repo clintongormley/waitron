@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { installerNameNotice } from "./installer-name-notice.mjs";
 import { INSTALLER_TIMINGS_MS } from "./installer-policy.mjs";
+import { formatInstallerNotice, INSTALLER_MESSAGES, INSTALLER_WORDS } from "./i18n/installer.mjs";
 
 const loader = "\\EFI\\BOOT\\BOOTX64.EFI";
-const failed = "Cannot start the installed box. Remove the USB and restart.";
+const failed = INSTALLER_WORDS.en.failed;
 const firmwareCommand = (command, args) =>
   execFileSync(command, args, {
     encoding: "utf8",
@@ -47,15 +48,13 @@ async function waitForReturn(input, output, notice) {
       if (bytes.length === 0) return;
       if (!interrupted) {
         interrupted = true;
-        output.write(
-          "Reinstall, erase and recovery-key inspection are unavailable. Starting the installed box after 120 seconds without typing.\n",
-        );
+        output.write(INSTALLER_MESSAGES.paused);
       }
       arm(INSTALLER_TIMINGS_MS.reinstallIdle);
     };
     const unavailable = () => {
       detach();
-      output.write("Keys unavailable; automatic return remains active.\n");
+      output.write(INSTALLER_MESSAGES.keysUnavailable);
     };
     let available = false;
     try {
@@ -67,7 +66,7 @@ async function waitForReturn(input, output, notice) {
     } catch {
       /* The automatic return remains available without a keyboard. */
     }
-    output.write(`${notice}\nStarting the installed box in 15 seconds. Press any key to pause.\n`);
+    output.write(`${formatInstallerNotice(notice)}\n${INSTALLER_MESSAGES.countdown}`);
     arm(INSTALLER_TIMINGS_MS.waitronStart);
     if (!available) {
       unavailable();
@@ -144,7 +143,7 @@ export async function installerReturn(
     );
     await run("systemctl", ["reboot", "--no-block"]);
   } catch {
-    output.write(`${failed}\n`);
+    output.write(INSTALLER_MESSAGES.failed);
     throw new Error(failed);
   }
 }

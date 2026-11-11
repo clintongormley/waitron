@@ -1,3 +1,5 @@
+> 2026-11-11: the [console warning cut](2026-11-11-b3-18c-console-warning.md) adds paired Spanish/English wording and the checked Live marking. The watcher deferred graphics to later kiosk/physical work; it is not dropped.
+
 > 2026-11-06: PR 9's plan (the server's routes for six of the host's requests, behind `system.manage`, built and mounted at boot): [2026-11-06-b3-9-host-routes.md](2026-11-06-b3-9-host-routes.md); `tag.write`'s duty is left to its own pull request (its D11).
 
 > 2026-11-06: PR 8's plan (#2495; the server's client for the host's seven requests, unwired): [2026-11-06-b3-8-host-client.md](2026-11-06-b3-8-host-client.md); it imports PR 7's module and declares its types in the server (its D1).
