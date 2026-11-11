@@ -26,6 +26,7 @@ import {
   nodeHandoverOperations,
   nodeHandoverRestriction,
   nodeMirrorLink,
+  nodePairLink,
   nodeMode,
   nodePrimaryKey,
   nodeRecoveryKey,
@@ -429,6 +430,7 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
 const NODE_TABLES: readonly (readonly [SQLiteTable, number])[] = [
   [nodeMode, 0],
   [nodeMirrorLink, 0],
+  [nodePairLink, 0],
   [nodePrimaryKey, 0],
   [nodeRecoveryKey, 1],
   [nodeSigningKey, 1],

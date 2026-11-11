@@ -961,7 +961,7 @@ calendar.
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
 `venue.db`'s `tenants`, `nodes`, `deployment`, `settings` and `activity_log`, and `node.db`'s `node_mode`, `node_mirror_link`,
-`node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
+`node_pair_link`, `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one

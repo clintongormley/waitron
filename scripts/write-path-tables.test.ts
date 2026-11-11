@@ -5,7 +5,7 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `tenants`, `nodes` and
- * `deployment`, `settings` and `activity_log`, and node.db's `node_mode`, `node_mirror_link`, `node_primary_key`,
+ * `deployment`, `settings` and `activity_log`, and node.db's `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`,
  * `node_recovery_key`, `node_signing_key`, `node_handover_operations`, `node_handover_events` and
  * `node_handover_restriction`.
  *

@@ -11,6 +11,7 @@ describe("the node-local manifest", () => {
     expect(NODE_LOCAL_MANIFEST.map((row) => `${row.item}|${row.where}|${row.class}`)).toEqual([
       "node_mode|node.db|destination-owned",
       "node_mirror_link|node.db|destination-owned",
+      "node_pair_link|node.db|destination-owned",
       "node_primary_key|node.db|destination-owned",
       "node_recovery_key|node.db|destination-owned",
       "node_signing_key|node.db|source-only",

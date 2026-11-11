@@ -36,6 +36,7 @@ const TLS = "M2 keeps its own; the venue authority reached it at joining";
 export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
   { item: "node_mode", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
   { item: "node_mirror_link", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
+  { item: "node_pair_link", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
   { item: "node_primary_key", where: "node.db", class: "destination-owned", treatment: KEEPS_OWN },
   {
     item: "node_recovery_key",

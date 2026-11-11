@@ -13,8 +13,9 @@ export const nodePairLink = table(
     nodeId: id("node_id").primaryKey(),
     role: label("role").$type<"streams" | "serves">().notNull(),
     state: label("state").$type<"pending" | "streaming" | "awaiting_copy" | "copied">().notNull(),
-    // The other box, a venue `nodes` row. Nothing in node.db establishes that the row exists:
-    // node.db holds no venue table, and no foreign key crosses the two files.
+    // The other box, a venue `nodes` row. Nothing establishes that the row exists, and nothing
+    // notices one that is missing: node.db holds no venue table, no foreign key crosses the two
+    // files, and the readers return the id as stored.
     peerNodeId: id("peer_node_id").notNull(),
     peerPublicKey: label("peer_public_key").notNull(),
     storeUrl: label("store_url").notNull(),
