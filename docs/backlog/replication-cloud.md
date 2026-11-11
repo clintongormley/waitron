@@ -514,9 +514,8 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 ## A1342: return a stopped box's records before reset
 
 A differing original or payment fact stops the return and leaves reset unconfirmed. PR2 still
-needs exact-clash acceptance and the remaining hand-over refusals. The owner chose its own
-signed acceptance record outside filing cases (watcher 2026-11-10 21:41). Do not use a
-return-clash filing case: a record has one case slot, which its later AEAT refusal needs. The
+needs exact-clash acceptance and the remaining hand-over refusals. Do not use a return-clash
+filing case: a record has one case slot, which its later AEAT refusal needs. The
 real signed-return/outbox probe reproduced a rejected invoice whose only case was a resolved
 return clash and whose correction answered `fiscal.remedy_invalid`.
 

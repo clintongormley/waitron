@@ -1101,7 +1101,7 @@ it("holds the return until a pending refund finishes, then returns it with its p
   await suite.db.insert(tenders).values({
     id: "refunded-tender",
     saleId: source.saleId,
-    method: "cash",
+    method: "card",
     amount: 12345,
     settledAt: "2026-07-20T17:21:00.000Z",
   });
@@ -1121,7 +1121,9 @@ it("holds the return until a pending refund finishes, then returns it with its p
       deviceId: device.deviceId,
       nodeId: source.nodeId,
       locationId: location!.location_id,
-      method: "cash",
+      method: "card",
+      provider: "recorded-provider",
+      providerPaymentRef: "recorded-charge",
       state: "pending",
       createdAt: "2026-07-20T17:21:01.000Z",
     })
@@ -1157,8 +1159,119 @@ it("holds the return until a pending refund finishes, then returns it with its p
     ),
   ).toEqual({ complete: false });
   expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
+  changed.refunds[0]!.id = "same-submission-another-id";
+  changed.refunds[0]!.reason = returned.refunds[0]!.reason!;
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, changed, now),
+    ),
+  ).toEqual({ complete: false });
+  expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
   changed.refunds[0]!.state = "pending";
   await expect(
     withTransaction(receiver.db, (tx) => receiveReturnedOriginals(tx, source.nodeId, changed, now)),
   ).rejects.toMatchObject({ code: "fiscal.return_invalid" });
 });
+
+it.each([
+  { applied: 7345, tip: 145, complete: true },
+  { applied: 7346, tip: 145, complete: false },
+  { applied: 7345, tip: 146, complete: false },
+])(
+  "accounts for the receiver's own refunds before confirming $applied plus $tip",
+  async ({ applied, tip, complete }) => {
+    const sourceNode = await seedNode(suite.db, "Source");
+    const currentNode = await seedNode(suite.db, "Receiver");
+    await copyBase();
+    const [sale] = await suite.db
+      .insert(sales)
+      .values({
+        source: "device",
+        deviceId: sourceNode.deviceId,
+        nodeId: sourceNode.nodeId,
+        seriesId: sourceNode.seriesId,
+        invoiceNumber: 1,
+        issuedAt: "2026-07-20T17:20:30.000Z",
+        issuedOffsetMinutes: 120,
+        total: 12345,
+        vatBreakdown: [{ rate: "21.00", base: "102.02", tax: "21.43" }],
+        locale: "es",
+        invoiceLocales: ["es"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      })
+      .returning();
+    const source = { ...sourceNode, saleId: sale!.id };
+    const [identity] = suite.db.all<{ nif: string; numero_instalacion: string }>(
+      sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
+    );
+    const pending = altaFor(source, saleId(sale!.id), 1, 1);
+    pending.input.IDEmisorFactura = identity!.nif;
+    pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+    pending.input.NumSerieFactura = "Source/1";
+    await withTransaction(suite.db, (tx) => appendToChain(tx, source.nodeId, pending));
+    await suite.db.insert(tenders).values({
+      id: "shared-payment",
+      saleId: source.saleId,
+      method: "cash",
+      amount: 12690,
+      tipAmount: 345,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    });
+    await suite.db
+      .insert(saleSettlements)
+      .values({ saleId: source.saleId, settledAt: "2026-07-20T17:21:00.000Z" });
+    const [location] = suite.db.all<{ location_id: string }>(
+      sql`select location_id from nodes where id = ${source.nodeId}`,
+    );
+    const refund = {
+      id: "source-refund",
+      saleId: source.saleId,
+      tenderId: "shared-payment",
+      submissionId: "source-submission",
+      fingerprint: "source-fingerprint",
+      appliedAmount: applied,
+      tipAmount: tip,
+      reason: "Service returned",
+      authorizedBy: "manager",
+      requestedBy: "operator",
+      source: "device" as const,
+      deviceId: source.deviceId,
+      nodeId: source.nodeId,
+      locationId: location!.location_id,
+      method: "cash" as const,
+      state: "completed" as const,
+      createdAt: "2026-07-20T17:21:01.000Z",
+      completedAt: "2026-07-20T17:21:02.000Z",
+    };
+    await suite.db.insert(tenderRefunds).values(refund);
+    const returned = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
+    const now = new Date("2026-07-20T17:22:00.000Z");
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, { ...returned, refunds: [] }, now),
+    );
+    const [currentLocation] = receiver.db.all<{ location_id: string }>(
+      sql`select location_id from nodes where id = ${currentNode.nodeId}`,
+    );
+    await receiver.db.insert(tenderRefunds).values({
+      ...refund,
+      id: "receiver-refund",
+      submissionId: "receiver-submission",
+      appliedAmount: 5000,
+      tipAmount: 200,
+      deviceId: currentNode.deviceId,
+      nodeId: currentNode.nodeId,
+      locationId: currentLocation!.location_id,
+    });
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, returned, now),
+      ),
+    ).toEqual({ complete });
+    expect(receiver.db.all<{ id: string }>(sql`select id from tender_refunds order by id`)).toEqual(
+      complete ? [{ id: "receiver-refund" }, { id: "source-refund" }] : [{ id: "receiver-refund" }],
+    );
+  },
+);

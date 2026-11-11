@@ -188,6 +188,31 @@ export async function receiveReturnedOriginals(
   for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
     if (!held(tx, "sales", sale.id))
       await insertRow(tx, "sales", { ...sale, working_order_id: null });
+    const incomingRefunds = returned.refunds.filter((row) => row.sale_id === sale.id);
+    let refundClash = false;
+    for (const tenderId of new Set(incomingRefunds.map((row) => row.tender_id))) {
+      const tender =
+        held(tx, "tenders", tenderId) ?? returned.tenders.find((row) => row.id === tenderId)!;
+      const refunds = new Map(
+        [
+          ...tx.all<ReturnRow>(
+            sql`select * from tender_refunds where tender_id = ${tenderId} and state <> 'failed'`,
+          ),
+          ...incomingRefunds.filter((row) => row.tender_id === tenderId),
+        ].map((row) => [row.id, row]),
+      );
+      const total = (key: "applied_amount" | "tip_amount") =>
+        [...refunds.values()].reduce((sum, row) => sum + BigInt(row[key]!), 0n);
+      if (
+        total("applied_amount") > BigInt(tender.amount!) - BigInt(tender.tip_amount!) ||
+        total("tip_amount") > BigInt(tender.tip_amount!)
+      )
+        refundClash = true;
+    }
+    if (refundClash) {
+      missing = true;
+      continue;
+    }
     try {
       await tx.transaction(async (paymentTx) => {
         for (const tender of returned.tenders.filter((row) => row.sale_id === sale.id)) {
