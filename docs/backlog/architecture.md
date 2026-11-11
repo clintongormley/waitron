@@ -846,7 +846,7 @@ product failures.
   The provision, setup-api.throwaway, promote-api.handover, break-glass-command and
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
   The backup-api.route and mirror-bundle-api suites use English staff display-name samples.
-  Other local staff samples remain to be checked.
+  Spanish staff display-name samples remain in other suites, including the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
