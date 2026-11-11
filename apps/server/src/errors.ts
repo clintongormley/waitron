@@ -251,9 +251,9 @@ declare module "@waitron/shared" {
     "handover.settings_changed": Record<string, never>;
     /** A final-state indicator's signature is not the handing-over box's own. */
     "handover.indicator_untrusted": Record<string, never>;
-    /** The copy a spare received is not the file the old box's indicator describes. */
+    /** The copy has no matching confirmation for this handover. */
     "handover.copy_mismatch": Record<string, never>;
-    /** The copy a spare received fails the database's own integrity check. */
+    /** The copy fails the database's own integrity check. */
     "handover.copy_damaged": Record<string, never>;
     "handover.source_still_answering": Record<string, never>;
     "handover.source_not_established": Record<string, never>;

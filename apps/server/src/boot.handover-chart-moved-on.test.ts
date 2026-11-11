@@ -100,9 +100,13 @@ async function spareEnv(): Promise<Record<string, string>> {
   };
 }
 
-async function post(path: string, body: unknown): Promise<{ status: number; body: unknown }> {
+async function post(
+  path: string,
+  body: unknown,
+  operationId = OPERATION,
+): Promise<{ status: number; body: unknown }> {
   const response = await fetch(
-    `http://127.0.0.1:${httpPort()}/api/node/handover/${OPERATION}/${path}`,
+    `http://127.0.0.1:${httpPort()}/api/node/handover/${operationId}/${path}`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -299,4 +303,118 @@ describe("a real restart after activating, then the same request again", () => {
     },
     180_000,
   );
+});
+
+describe("the emergency routes through a real spare start", () => {
+  const declaration = {
+    operationId: OPERATION,
+    signIn,
+    statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
+    reason: "Source switched off",
+    locale: "en",
+  };
+  async function startEmergency() {
+    const copy = await fixture.placeEmergencyCopy();
+    const body = {
+      ...copy.chart.body,
+      nodes: copy.chart.body.nodes.map((node) =>
+        node.nodeId === primary.nodeId ? { ...node, contactUrl: "http://127.0.0.1:1" } : node,
+      ),
+    };
+    await copy.close();
+    holdChart(join(dirs().spareVenue, "venue.db"), {
+      ...copy.chart,
+      body,
+      signature: signDocumentBody(body, copy.mainKey),
+    });
+    beforeServerStarts();
+    vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+    const env = await spareEnv();
+    started = await startServer(env, undefined, {
+      peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+      stepdown: { mount: () => {}, restart: () => {} },
+    });
+    const answer = await post("declare", declaration, "emergency");
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    return env;
+  }
+
+  it("declares, prepares and activates through the mirror gate, then repairs a lost node record on restart", async () => {
+    const env = await startEmergency();
+    const prepare = (proposal: unknown) =>
+      post("preparation", { moduleOperation: { binding, input: null }, signIn, proposal });
+    const challenge = await prepare({ action: "clock-challenge" });
+    expect(challenge.status, JSON.stringify(challenge.body)).toBe(200);
+    const compared = await prepare({
+      action: "compare-clocks",
+      browser: { challengeId: (challenge.body as { id: string }).id, instantMs: Date.now() },
+    });
+    const selected = await prepare({
+      action: "select",
+      comparisonId: (compared.body as { id: string }).id,
+    });
+    expect(selected.status, JSON.stringify(selected.body)).toBe(200);
+    const activationBody = {
+      moduleOperation: { binding, input: (selected.body as { input: unknown }).input },
+      signIn,
+    };
+    expect(await post("activate", activationBody)).toEqual({
+      status: 200,
+      body: { activated: true, restarting: true },
+    });
+    await started!.close();
+    const node = new DatabaseSync(join(dirs().spareVenue, "node.db"));
+    try {
+      node.exec(
+        "update node_handover_operations set state = 'emergency_declared'; delete from node_handover_events where kind = 'activated'",
+      );
+    } finally {
+      node.close();
+    }
+    beforeServerStarts();
+    started = await startServer(env, undefined, {
+      peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+    });
+    expect(await post("activate", activationBody)).toEqual({
+      status: 200,
+      body: { activated: true, restarting: false },
+    });
+    await started.close();
+    expect(readDisk()).toEqual({
+      chartTerm: 2,
+      state: "activated",
+      waiting: null,
+      placed: 0,
+      mode: "primary",
+      ownSif: 1,
+      activations: 1,
+    });
+  }, 180_000);
+
+  it("shares the declaration's wrong-password delay with preparation and activation", async () => {
+    await startEmergency();
+    const wrong = { ...signIn, password: "wrong" };
+    for (const step of ["declare", "preparation", "declare", "preparation"] as const) {
+      const answer =
+        step === "declare"
+          ? await post(step, { ...declaration, signIn: wrong }, "emergency")
+          : await post(step, {
+              moduleOperation: { binding, input: null },
+              signIn: wrong,
+              proposal: { action: "clock-challenge" },
+            });
+      expect(codeOf(answer)).toBe("password.invalid");
+    }
+    for (const step of ["declare", "preparation", "activate"] as const) {
+      const answer =
+        step === "declare"
+          ? await post(step, { ...declaration, signIn: wrong }, "emergency")
+          : await post(step, {
+              moduleOperation: { binding, input: null },
+              signIn: wrong,
+              proposal: { action: "clock-challenge" },
+            });
+      expect(codeOf(answer)).toBe("password.throttled");
+    }
+  }, 180_000);
 });

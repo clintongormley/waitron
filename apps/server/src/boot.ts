@@ -225,6 +225,7 @@ import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { mountHandoverActivationApi, postChartToSource } from "./handover-activation.js";
 import { readTakenOverFrom } from "./handover-collection.js";
 import { mountHandoverPreparationApi } from "./handover-preparation.js";
+import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { startHandoverDestinationDuty } from "./handover-destination-duty.js";
 import {
   placeAcceptedCopyForStart,
@@ -3617,6 +3618,18 @@ async function bootServer(
     log,
   );
   const handoverPasswordThrottle = createPasswordThrottle();
+  const emergencyHandover = mountHandoverEmergencyApi(
+    app,
+    {
+      ...peerDeps,
+      venueDir: config.venueDir,
+      modules: enabledModules(ALL_MODULES, moduleConfig),
+      origin: config.managementOrigin,
+      credentialKeyRing: totpKeyRing,
+      passwordThrottle: handoverPasswordThrottle,
+    },
+    log,
+  );
   mountHandoverPreparationApi(
     app,
     {
@@ -3638,6 +3651,7 @@ async function bootServer(
       nodePreparation,
       passwordThrottle: handoverPasswordThrottle,
       run: promoteRun,
+      emergency: emergencyHandover,
     },
     log,
   );

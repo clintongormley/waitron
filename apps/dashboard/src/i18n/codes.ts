@@ -1514,16 +1514,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La descripción de la copia final no está firmada por el equipo que hace el traspaso, así que el equipo de reserva no la ha aceptado. El equipo antiguo sigue detenido.",
   },
   "handover.copy_mismatch": {
-    en: "The copy the spare received is not the one the old box described, so the spare is fetching it again. The old box stays stopped.",
-    es: "La copia que ha recibido el equipo de reserva no es la que describió el equipo antiguo, así que la está pidiendo de nuevo. El equipo antiguo sigue detenido.",
+    en: "This copy has not been confirmed for this handover. A controlled handover fetches it again. After an emergency restart, repeat the declaration to check it again; a changed copy cannot activate a saved declaration.",
+    es: "Esta copia no está confirmada para este traspaso. Un traspaso controlado vuelve a pedirla. Tras reiniciar durante una emergencia, repite la declaración para comprobarla; una copia que haya cambiado no puede activar una declaración guardada.",
   },
   "handover.copy_damaged": {
-    en: "The copy the spare received is damaged, so the spare is fetching it again. The old box stays stopped.",
-    es: "La copia que ha recibido el equipo de reserva está dañada, así que la está pidiendo de nuevo. El equipo antiguo sigue detenido.",
+    en: "This copy is damaged, so this box has not taken over. Retry when a working copy is available.",
+    es: "Esta copia está dañada, así que este equipo no ha tomado el relevo. Reintenta cuando haya una copia válida disponible.",
   },
   "handover.chain_broken": {
-    en: "The records in the copy the spare received fail their own check, so the spare did not accept it. The old box stays stopped.",
-    es: "Los registros de la copia que ha recibido el equipo de reserva no superan su propia comprobación, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+    en: "The records in this copy failed their check, so this box has not taken over. Retry when a working copy is available.",
+    es: "Los registros de esta copia no han superado su comprobación, así que este equipo no ha tomado el relevo. Reintenta cuando haya una copia válida disponible.",
   },
   "handover.preparation_state_too_large": {
     en: "The two boxes' saved preparations would leave their file with too little room to be sure the spare can take over, so the spare did not accept this handover. The old box stays stopped.",
@@ -1582,8 +1582,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La descripción que ha enviado el equipo antiguo de su copia final no se puede leer en este equipo o no corresponde a este traspaso, así que este equipo no ha aceptado la copia. No ha cambiado nada en este equipo.",
   },
   "handover.copy_check_failed": {
-    en: "This box could not finish checking part of the old box's final copy, so it did not accept the copy. Nothing changed on this box.",
-    es: "Este equipo no ha podido terminar de comprobar parte de la copia final del equipo antiguo, así que no ha aceptado la copia. No ha cambiado nada en este equipo.",
+    en: "This box could not finish checking the copy, so it has not taken over. Try again.",
+    es: "Este equipo no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Reinténtalo.",
+  },
+  "handover.source_still_answering": {
+    en: "The old box still answers. Switch it off before declaring an emergency handover, or use a controlled handover. Before activation, it must be off or confirm that this box replaces it.",
+    es: "El equipo antiguo sigue respondiendo. Apágalo antes de declarar un traspaso de emergencia o usa un traspaso controlado. Antes de activar, debe estar apagado o confirmar que este equipo lo sustituye.",
+  },
+  "handover.source_not_established": {
+    en: "The old box's status could not be established. Check its address and connection, then try again.",
+    es: "No se ha podido determinar el estado del equipo antiguo. Comprueba su dirección y conexión y vuelve a intentarlo.",
+  },
+  "handover.controlled_unresolved": {
+    en: "This box has an unfinished handover that an emergency declaration cannot replace. Resume that handover before starting another.",
+    es: "Este equipo tiene un traspaso sin terminar que una declaración de emergencia no puede sustituir. Reanuda ese traspaso antes de iniciar otro.",
   },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",

@@ -51,7 +51,21 @@ const external = vi.hoisted(() => ({
   internet: vi.fn(),
   hashes: 0,
   duringHash: undefined as undefined | (() => Promise<void>),
+  integrityChecks: 0,
 }));
+vi.mock("node:worker_threads", async (original) => {
+  const real = await original<typeof import("node:worker_threads")>();
+  return {
+    ...real,
+    Worker: class extends real.Worker {
+      constructor(source: string | URL, options?: import("node:worker_threads").WorkerOptions) {
+        if ((options?.workerData as { path?: string } | undefined)?.path !== undefined)
+          external.integrityChecks += 1;
+        super(source, options);
+      }
+    },
+  };
+});
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: external.internet,
 }));
@@ -286,7 +300,9 @@ describe("emergency activation on a real copy", () => {
     const { input } = await selectName(s.app);
     expect((await s.repeat()).body).toEqual(s.declared);
     const before = Date.now();
+    const scans = external.integrityChecks;
     expect((await activate(s.app, input)).body).toEqual({ activated: true, restarting: true });
+    expect(external.integrityChecks).toBe(scans);
     expect(Date.now()).toBe(before);
     const rows = await activations(s.store);
     expect(rows).toHaveLength(1);

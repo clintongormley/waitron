@@ -105,6 +105,7 @@ function parse(raw: unknown) {
   if (!isOperationId(operationId)) refuseRequest("operationId");
   for (const key of ["sourceSwitchedOff", "noParallelRecovery", "missingTailAccepted"])
     if (!isRecord(statements) || statements[key] !== true) refuseRequest(`statements.${key}`);
+  if (!isRecord(statements) || Object.keys(statements).length !== 3) refuseRequest("statements");
   if (typeof reason !== "string" || reason.trim() === "" || reason.length > 500)
     refuseRequest("reason");
   if (locale !== "en" && locale !== "es") refuseRequest("locale");
@@ -170,6 +171,8 @@ export function mountHandoverEmergencyApi(
       password: string;
       totp: string | undefined;
     };
+    // End the sign-in transaction before checking the copy or the network. Only a passing check
+    // reaches the separate node transaction, so neither slow operation holds a write lock.
     const actor = await handoverSignInAttempt(throttle, credentials, () =>
       inTurn(deps.db, personId, async () => {
         const secret = await checkManagerPassword(deps.db, { personId }, password);

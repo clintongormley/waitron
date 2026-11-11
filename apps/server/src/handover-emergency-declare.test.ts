@@ -3,13 +3,13 @@ import { TLSSocket } from "node:tls";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { managementSessions } from "@waitron/identity";
+import { managementSessions, persons } from "@waitron/identity";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -172,6 +172,7 @@ it.each([
   ],
   [{ reason: "" }, "handover.request_invalid"],
   [{ reason: "x".repeat(501) }, "handover.request_invalid"],
+  [{ statements: { ...request.statements, unrecognised: true } }, "handover.request_invalid"],
   [{ provider: "cloud" }, "handover.request_invalid"],
 ] as const)("refuses invalid input %j before any operation is recorded", async (change, code) => {
   expect((await service().post({ ...request, ...change })).body.error?.code).toBe(code);
@@ -182,6 +183,53 @@ it("requires HTTPS on the box's own origin", async () => {
   expect((await service().post(request, false)).body.error?.code).toBe(
     "authorization.not_permitted",
   );
+});
+
+it("requires promotion permission in the copy", async () => {
+  await placed.venue.update(persons).set({ role: "staff" }).where(eq(persons.email, ADMIN_EMAIL));
+  expect((await service().post()).body.error?.code).toBe("authorization.not_permitted");
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+it("two declarations at once record one signed answer", async () => {
+  const s = service();
+  const [left, right] = await Promise.all([s.post(), s.post()]);
+  expect(left.status).toBe(200);
+  expect(right).toEqual(left);
+  expect(
+    placed.node.all<{ n: number }>(
+      sql`select count(*) as n from node_handover_events where kind = 'emergency_declared'`,
+    ),
+  ).toEqual([{ n: 1 }]);
+  expect(external.calls).toBe(1);
+});
+
+it("a failed declaration record rolls back the controlled replacement", async () => {
+  const oldId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  await beginHandover(
+    { node: placed.node, nodeId: standby.nodeId },
+    {
+      operationId: oldId,
+      scenario: "controlled",
+      venue: { country: "ES", taxId: "89890001K", environment: "preproduction" },
+      sourceNodeId: primary.nodeId,
+      destinationNodeId: standby.nodeId,
+      membership: { term: 1, digest: "a".repeat(64) },
+    },
+    "destination",
+  );
+  placed.node.run(
+    sql`create trigger refuse_emergency before insert on node_handover_events when new.kind = 'emergency_declared' begin select raise(abort, 'synthetic record failure'); end`,
+  );
+  try {
+    expect((await service().post()).status).toBe(500);
+    expect((await readHandoverOperation(placed.node, standby.nodeId, oldId))?.state).toBe(
+      "prepared",
+    );
+    expect(await readHandoverOperation(placed.node, standby.nodeId, OPERATION)).toBeNull();
+  } finally {
+    placed.node.run(sql`drop trigger refuse_emergency`);
+  }
 });
 
 it("refuses an uncertain transport failure rather than declaring the source stopped", async () => {

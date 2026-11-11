@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { workingOrderLines } from "@waitron/db";
-import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { invoiceSeries, sales, workingOrderLines } from "@waitron/db";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
@@ -86,6 +86,33 @@ it("refuses invalid activity rather than recording an empty interval", async () 
   await expect(checkEmergencyCopy({ venueDir: venueDir(), modules: [] })).rejects.toMatchObject({
     code: "handover.copy_check_failed",
   });
+});
+
+it("includes a sale's issue time in the latest dated activity", async () => {
+  const nodeId = await seedNode(venue.db);
+  const [series] = await venue.db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "A", purpose: "standard", nextNumber: 1 })
+    .returning();
+  await venue.db
+    .insert(sales)
+    .values({
+      source: "operator_script",
+      seriesId: series!.id,
+      nodeId,
+      invoiceNumber: 1,
+      issuedAt: "2026-11-11T10:00:00Z",
+      issuedOffsetMinutes: 0,
+      total: 100,
+      vatBreakdown: [],
+      locale: "en",
+      invoiceLocales: ["en"],
+      fiscalBackend: "none",
+      fiscalState: "not_applicable",
+    });
+  expect((await checkEmergencyCopy({ venueDir: venueDir(), modules: [] })).lastChangeAtMs).toBe(
+    1794391200000,
+  );
 });
 
 it("does not turn a failed activity read into a null time", async () => {

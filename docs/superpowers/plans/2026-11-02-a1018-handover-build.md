@@ -3206,6 +3206,10 @@ Notes from Slice 5's build:
 - M1 up with its final copy gone: both boxes wait on `handover.final_copy_changed`, and the exit is
   this slice's emergency path (read, not run).
 
+> **2026-11-11:** the [connected Slice 7 plan](2026-11-11-a1018-7-emergency-server.md)
+> supersedes Tasks 7.1–7.4’s gap-table and preview boundary. The watcher deferred both tables
+> to Slice 12a; committed signed activation evidence records the interval until then.
+
 #### Task 7.1: The gap tables
 
 **Files:** `packages/handover/src/schema/*.ts`, `drizzle/` (generated, the set's second
