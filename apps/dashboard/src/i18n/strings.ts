@@ -3796,6 +3796,8 @@ export const en = {
   "box_status.restart.confirm": "Restart",
   "box_status.restart.done":
     "The box is restarting. This page catches up by itself once it is back.",
+  "box_status.restart.read_only":
+    "This box only keeps a read-only copy of another box, so it can't be restarted from here.",
   "box_status.restart.sign_in_hint":
     "Only an administrator can restart the box. Signing in as one signs you out here first.",
   "box_status.restart_help_label": "When to restart the box",
@@ -7703,6 +7705,8 @@ export const es: Record<StringKey, string> = {
   "box_status.restart.confirm": "Reiniciar",
   "box_status.restart.done":
     "El equipo se está reiniciando. Esta página se pone al día sola cuando vuelva.",
+  "box_status.restart.read_only":
+    "Este equipo solo guarda una copia de solo lectura de otro equipo, así que no se puede reiniciar desde aquí.",
   "box_status.restart.sign_in_hint":
     "Solo un administrador puede reiniciar el equipo. Iniciar sesión como administrador cierra primero tu sesión aquí.",
   "box_status.restart_help_label": "Cuándo reiniciar el equipo",

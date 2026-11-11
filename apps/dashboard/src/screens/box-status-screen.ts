@@ -32,6 +32,10 @@ import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
 const LEAST_TO_FREE = 500_000;
 
+/** After a restart, a read this long after it was accepted counts as the box being back, even
+ * when no read caught the box away: the whole outage can fall between two health reads. */
+const RESTART_AWAY_MS = 30_000;
+
 const MISDATED = "clock.records_misdated";
 
 /** The server's margin for an administrator's device agreeing with the box. */
@@ -308,6 +312,8 @@ export class BoxStatusScreen extends LitElement {
   @state() private restarting = false;
   @state() private restartAsked = false;
   @state() private restartError = "";
+  /** When the box accepted the restart, and whether a health read has failed since. */
+  #restartAccepted: { at: number; outageSeen: boolean } | null = null;
   /** Bumped at every opening, so an answer for a closed check is dropped. */
   #clockCheckRun = 0;
   /** Whether a health read has finished, answered or failed: any read after it is automatic. */
@@ -319,6 +325,7 @@ export class BoxStatusScreen extends LitElement {
     () => this.api,
     () => {
       this.#healthAnswered = true;
+      if (this.#restartAccepted !== null) this.#restartAccepted.outageSeen = true;
       this.#readFailed("getBoxHealth");
     },
   );
@@ -348,6 +355,7 @@ export class BoxStatusScreen extends LitElement {
         this.#nothingLeftToRetry = this.#nothingToRetry(health);
         this.#followMisdated(health, this.#healthAnswered);
         this.#healthAnswered = true;
+        this.#restartAnswered();
         if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingLeftToRetry)
           this.retryAnswer = null;
         this.#readSucceeded("getBoxHealth");
@@ -1204,6 +1212,17 @@ export class BoxStatusScreen extends LitElement {
     return nothing;
   }
 
+  /** Ends the restarting note at a successful read after one that failed since the box accepted
+   * the restart, or at one `RESTART_AWAY_MS` after it. */
+  #restartAnswered(): void {
+    const accepted = this.#restartAccepted;
+    if (accepted === null) return;
+    // Shutdown is bounded by the server's SHUTDOWN_DEADLINE_MS (8 s), well inside this wait.
+    if (!accepted.outageSeen && Date.now() - accepted.at < RESTART_AWAY_MS) return;
+    this.#restartAccepted = null;
+    this.restartAsked = false;
+  }
+
   async #restart(): Promise<void> {
     if (this.restarting) return;
     this.restarting = true;
@@ -1212,8 +1231,11 @@ export class BoxStatusScreen extends LitElement {
       await this.api.restartBox();
       this.restartOpen = false;
       this.restartAsked = true;
+      this.#restartAccepted = { at: Date.now(), outageSeen: false };
     } catch (error) {
-      this.restartError = codeMessage(codeOf(error));
+      const code = codeOf(error);
+      this.restartError =
+        code === "node.read_only" ? t("box_status.restart.read_only") : codeMessage(code);
     } finally {
       this.restarting = false;
     }
@@ -1244,7 +1266,7 @@ export class BoxStatusScreen extends LitElement {
             data-test="box-restart-sign-in"
             @click=${() =>
               this.dispatchEvent(
-                new CustomEvent("restart-sign-in", { bubbles: true, composed: true }),
+                new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
               )}
             >${t("staff.sign_in_as_admin")}</wt-button
           >`;

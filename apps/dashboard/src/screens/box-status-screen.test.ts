@@ -1627,6 +1627,100 @@ describe("dashboard-box-status-screen's restart of the box", () => {
     expect(text(note)).toBe(t("box_status.restart.done"));
   });
 
+  async function restartAccepted(getBoxHealth: ReturnType<typeof vi.fn>) {
+    const api = stubApi({ restartBox: vi.fn().mockResolvedValue(undefined), getBoxHealth });
+    const el = await mountRestart(api);
+    await openConfirm(el);
+    await userEvent.click(q(el, "[data-test=box-restart-confirm]")!);
+    await flush(el);
+    expect(q(el, "[data-test=box-restart-done]")).not.toBeNull();
+    const read = async () => {
+      api.liveData.refresh();
+      await flush(el);
+    };
+    return { el, read };
+  }
+
+  it("keeps saying the box is restarting through the outage, and stops once the box answers again", async () => {
+    const { el, read } = await restartAccepted(
+      vi
+        .fn()
+        .mockResolvedValueOnce(health())
+        // The old process can still answer before it stops.
+        .mockResolvedValueOnce(health())
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(health()),
+    );
+    await read();
+    expect(q(el, "[data-test=box-restart-done]")).not.toBeNull();
+    await read();
+    expect(text(q(el, "[role=alert]"))).toBe(t("box_status.read_error"));
+    expect(q(el, "[data-test=box-restart-done]")).not.toBeNull();
+    await read();
+    expect(q(el, "[role=alert]")).toBeNull();
+    expect(qa(el, "ul.rows > li")).toHaveLength(7);
+    expect(q(el, "[data-test=box-restart-done]")).toBeNull();
+  });
+
+  it("stops saying the box is restarting at a read 30 seconds on, when no read caught the box away", async () => {
+    let now = Date.now();
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    onTestFinished(() => spy.mockRestore());
+    const { el, read } = await restartAccepted(vi.fn().mockResolvedValue(health()));
+    const at = now;
+    now = at + 29_999;
+    await read();
+    expect(q(el, "[data-test=box-restart-done]")).not.toBeNull();
+    now = at + 30_000;
+    await read();
+    expect(q(el, "[data-test=box-restart-done]")).toBeNull();
+  });
+
+  it("starts the wait again when the box accepts a second restart", async () => {
+    const { el, read } = await restartAccepted(
+      vi
+        .fn()
+        .mockResolvedValueOnce(health())
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(health()),
+    );
+    await read();
+    expect(q(el, "[data-test=box-restart-done]")).not.toBeNull();
+    await openConfirm(el);
+    await userEvent.click(q(el, "[data-test=box-restart-confirm]")!);
+    await flush(el);
+    await read();
+    expect(q(el, "[data-test=box-restart-done]")).not.toBeNull();
+  });
+
+  it("does not count a read that failed before the restart as the box being away", async () => {
+    const { el, read } = await restartAccepted(
+      vi.fn().mockRejectedValueOnce({ code: "connection.failed" }).mockResolvedValue(health()),
+    );
+    await read();
+    expect(q(el, "[data-test=box-restart-done]")).not.toBeNull();
+  });
+
+  it.each(["en", "es"] as const)(
+    "says a mirror cannot be restarted from here when the box refuses it as read-only (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountRestart(
+        restartApi(vi.fn().mockRejectedValue({ code: "node.read_only", params: {} })),
+      );
+      await openConfirm(el);
+      await userEvent.click(q(el, "[data-test=box-restart-confirm]")!);
+      await flush(el);
+      expect(dialog(el).open).toBe(true);
+      expect(text(dialog(el).shadowRoot!.querySelector(".footer [data-error]"))).toBe(
+        locale === "en"
+          ? "This box only keeps a read-only copy of another box, so it can't be restarted from here."
+          : "Este equipo solo guarda una copia de solo lectura de otro equipo, así que no se puede reiniciar desde aquí.",
+      );
+      expect(q(el, "[data-test=box-restart-done]")).toBeNull();
+    },
+  );
+
   it("closes on Stop without asking the box anything", async () => {
     const api = restartApi();
     const el = await mountRestart(api);
@@ -1659,11 +1753,11 @@ describe("dashboard-box-status-screen's restart of the box", () => {
     const signIn = q(el, "[data-test=box-restart-sign-in]")!;
     expect(text(signIn)).toBe(t("staff.sign_in_as_admin"));
     const asked = vi.fn();
-    document.body.addEventListener("restart-sign-in", asked);
+    document.body.addEventListener("admin-sign-in", asked);
     try {
       await userEvent.click(signIn);
     } finally {
-      document.body.removeEventListener("restart-sign-in", asked);
+      document.body.removeEventListener("admin-sign-in", asked);
     }
     expect(asked).toHaveBeenCalledOnce();
   });
