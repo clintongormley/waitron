@@ -218,8 +218,8 @@ it.each(["R1", "F3"])(
             correctionType: "S",
             correctedInvoices: [reference],
             correctionAmounts: {
-              BaseRectificada: "200.00",
-              CuotaRectificada: "20.00",
+              BaseRectificada: "0.00",
+              CuotaRectificada: "0.00",
               CuotaRecargoRectificado: "0.00",
             },
             recipients: [recipient],
@@ -244,8 +244,8 @@ it.each(["R1", "F3"])(
       importeRectificacion:
         invoiceType === "R1"
           ? {
-              BaseRectificada: "200.00",
-              CuotaRectificada: "20.00",
+              BaseRectificada: "0.00",
+              CuotaRectificada: "0.00",
               CuotaRecargoRectificado: "0.00",
             }
           : null,
@@ -260,7 +260,7 @@ it("can explicitly remove optional facts from the next version without removing 
         invoiceType: "R1",
         correctionType: "S",
         correctedInvoices: [reference],
-        correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+        correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
         recipients: [recipient],
       })
     ).status,
@@ -409,7 +409,6 @@ it("refuses an amount change under an explicit accepted-with-errors decision, wi
 it.each([
   { correctionType: "I", correctionAmounts: null },
   { correctedInvoices: [{ ...reference, NumSerieFactura: "PRIOR/2" }] },
-  { correctionAmounts: { BaseRectificada: "201.00", CuotaRectificada: "20.00" } },
 ])(
   "refuses changed corrective-reference decisions under a saved action key: %j",
   async (change) => {
@@ -417,7 +416,7 @@ it.each([
       invoiceType: "R1",
       correctionType: "S",
       correctedInvoices: [reference],
-      correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+      correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
       recipients: [recipient],
     };
     expect((await send(facts)).status).toBe(200);
@@ -428,6 +427,25 @@ it.each([
     expect(await snapshot()).toEqual(before);
   },
 );
+
+it("refuses a fix that gives an invoice non-zero correction amounts, without a write", async () => {
+  const before = await snapshot();
+  const res = await send({
+    invoiceType: "R1",
+    correctionType: "S",
+    correctedInvoices: [reference],
+    correctionAmounts: { BaseRectificada: "201.00", CuotaRectificada: "20.00" },
+    recipients: [recipient],
+  });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({
+    error: {
+      code: "fiscal.remedy_amount_changed",
+      params: { registroId: body.registroId, field: "correctionAmounts" },
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 it.each(
   [
@@ -680,6 +698,71 @@ describe("a fix never changes the invoice's amounts", () => {
       importeTotal: "12.10",
       descripcionOperacion: "Corrected restaurant service",
     });
+  });
+
+  /** Points `send` at a refused corrective invoice whose correction amounts are 200.00 + 20.00. */
+  async function targetRefusedCorrective() {
+    const saleId = await seedSale(suite.db, node, 3);
+    await withTransaction(suite.db, async (tx) => {
+      const pending = altaFor(node, saleId, 3, 3, "preproduction");
+      const original = await appendToChain(tx, node.nodeId, {
+        ...pending,
+        input: {
+          ...pending.input,
+          TipoFactura: "R1",
+          TipoRectificativa: "S",
+          FacturasRectificadas: [{ ...reference, FechaExpedicionFactura: new Date(NOW) }],
+          ImporteRectificacion: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+          Destinatarios: { IDDestinatario: [recipient] },
+        },
+      });
+      await tx
+        .insert(envios)
+        .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
+      const filingCase = await openFilingCase(tx, {
+        registroId: original.id,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: 1161, mensaje: null, csv: null },
+        now: NOW,
+      });
+      body = { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "corrective" };
+    });
+  }
+
+  it.each([
+    { BaseRectificada: "999.00", CuotaRectificada: "20.00" },
+    { BaseRectificada: "200.00", CuotaRectificada: "20.00", CuotaRecargoRectificado: "1.00" },
+    null,
+  ])(
+    "refuses a fix of a corrective invoice that changes its correction amounts to %j",
+    async (correctionAmounts) => {
+      await targetRefusedCorrective();
+      const before = await snapshot();
+      const res = await send({ correctionAmounts, description: "Corrected restaurant service" });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: {
+          code: "fiscal.remedy_amount_changed",
+          params: { registroId: body.registroId, field: "correctionAmounts" },
+        },
+      });
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it("accepts a fix of a corrective invoice restating its correction amounts as 200, 20.0 and 0", async () => {
+    await targetRefusedCorrective();
+    const row = await storedFix(
+      await send({
+        correctionAmounts: {
+          BaseRectificada: "200",
+          CuotaRectificada: "20.0",
+          CuotaRecargoRectificado: "0",
+        },
+        description: "Corrected restaurant service",
+      }),
+    );
+    expect(row).toMatchObject({ descripcionOperacion: "Corrected restaurant service" });
   });
 
   it("accepts a fix of the same invoice that changes only its description", async () => {

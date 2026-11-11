@@ -110,11 +110,11 @@ declare module "@waitron/shared" {
     "fiscal.remedy_invalid": { registroId: string };
     "fiscal.remedy_disabled": { kind: string };
     "fiscal.remedy_request_invalid": Record<string, never>;
-    /** A fix re-files the same invoice, so its rates, bases, VAT and total stay as filed; an amount
-     * error takes a corrective invoice. `ImporteRectificacion` is outside this check. */
+    /** A fix re-files the same invoice, so its rates, bases, VAT, total and a corrective's
+     * `ImporteRectificacion` stay as filed; an amount error takes a corrective invoice. */
     "fiscal.remedy_amount_changed": {
       registroId: string;
-      field: "breakdown" | "taxTotal" | "total";
+      field: "breakdown" | "taxTotal" | "total" | "correctionAmounts";
     };
     "fiscal.fingerprint_mismatch": Record<string, never>;
 

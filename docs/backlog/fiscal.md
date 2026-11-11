@@ -625,9 +625,9 @@ nested unknown fields and malformed choices are refused before the record builde
 validates the complete record. The saved decision includes all supplied facts and the prior outcome,
 so changing a fact on retry refuses while object key order does not matter. Tests compare original
 records, deliveries and sale rows. These are synthetic record corrections, not new accounting or
-refund operations; all production remedies remain disabled. _2026-11-11: a changed rate, base, VAT or
-total is now refused with `fiscal.remedy_amount_changed`, before the saved decision is compared; see
-[A1481](#a1481-a-fix-never-changes-an-invoices-rate-base-vat-or-total-owner-2026-11-11-option-a)._
+refund operations; all production remedies remain disabled. _2026-11-11: a changed rate, base, VAT,
+total or correction amount is now refused with `fiscal.remedy_amount_changed`, before the saved
+decision is compared; see [A1481](#a1481-a-fix-never-changes-an-invoices-amounts-owner-2026-11-11)._
 
 **2 November 2026, Task 8 explicit accepted-with-errors description decisions.** With a synthetic
 server policy, `priorOutcome: "accepted-with-errors"` requires both an accepted-with-errors delivery
@@ -1071,12 +1071,14 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Decisions and deliberate limits
 
-### A1481: a fix never changes an invoice's rate, base, VAT or total (owner, 2026-11-11, option A)
+### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
 A fix re-sends the same invoice, so `applyCorrectedRecordFacts` refuses a changed rate, base, VAT or
-total with `fiscal.remedy_amount_changed` before writing anything. An amount error takes a corrective
-invoice, which still carries new amounts; a fix's own `ImporteRectificacion` is not checked (watcher,
-2026-11-11 14:47). Recorded in the campaign's `questions.md`, 2026-11-11 14:12, 14:20 and 14:47.
+total with `fiscal.remedy_amount_changed` before writing anything (option A). A fix of a corrective
+invoice also refuses changed correction amounts (`ImporteRectificacion`; owner, 17:22, "correct"),
+and so does a fix that adds or removes non-zero ones. An amount error takes a new corrective
+invoice, which carries new amounts. Recorded in the campaign's `questions.md`, 2026-11-11 14:12,
+14:20 and 17:22.
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

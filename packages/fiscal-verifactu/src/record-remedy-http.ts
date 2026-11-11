@@ -40,6 +40,12 @@ const BREAKDOWN_AMOUNTS = [
   "CuotaRecargoEquivalencia",
 ] as const;
 
+const CORRECTION_AMOUNTS = [
+  "BaseRectificada",
+  "CuotaRectificada",
+  "CuotaRecargoRectificado",
+] as const;
+
 function sameAmount(left: string | undefined, right: string | undefined) {
   return compareDecimal(decimal(left ?? "0"), decimal(right ?? "0")) === 0;
 }
@@ -47,14 +53,21 @@ function sameAmount(left: string | undefined, right: string | undefined) {
 function refuseChangedAmounts(
   registroId: string,
   facts: CorrectedRecordFacts,
-  original: Pick<AltaInput, "Desglose" | "CuotaTotal" | "ImporteTotal">,
+  original: Pick<AltaInput, "Desglose" | "CuotaTotal" | "ImporteTotal" | "ImporteRectificacion">,
 ) {
-  const refuse = (field: "breakdown" | "taxTotal" | "total"): never => {
+  const refuse = (field: "breakdown" | "taxTotal" | "total" | "correctionAmounts"): never => {
     throw new AppError("fiscal.remedy_amount_changed", { registroId, field });
   };
   if (facts.total !== undefined && !sameAmount(facts.total, original.ImporteTotal)) refuse("total");
   if (facts.taxTotal !== undefined && !sameAmount(facts.taxTotal, original.CuotaTotal))
     refuse("taxTotal");
+  if (
+    facts.correctionAmounts !== undefined &&
+    CORRECTION_AMOUNTS.some(
+      (key) => !sameAmount(facts.correctionAmounts?.[key], original.ImporteRectificacion?.[key]),
+    )
+  )
+    refuse("correctionAmounts");
   const lines = facts.breakdown;
   if (lines === undefined) return;
   if (
