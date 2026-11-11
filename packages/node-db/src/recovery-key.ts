@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { nodeRecoveryKey } from "./schema/node-recovery-key.js";
 
@@ -51,4 +51,12 @@ export async function setRecoveryKeyTx(
       target: nodeRecoveryKey.nodeId,
       set: { verifier, keyName, updatedAt: now() },
     });
+}
+
+/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
+export async function deleteNodeRecoveryKeyOtherThanTx(
+  tx: NodeTransaction,
+  nodeId: string,
+): Promise<void> {
+  await tx.delete(nodeRecoveryKey).where(ne(nodeRecoveryKey.nodeId, nodeId));
 }

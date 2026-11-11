@@ -9,7 +9,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import { readMirrorLink, writeMirrorLink, writeMirrorLinkTx } from "./mirror-link.js";
+import {
+  deleteNodeMirrorLinkOtherThanTx,
+  readMirrorLink,
+  writeMirrorLink,
+  writeMirrorLinkTx,
+} from "./mirror-link.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -119,5 +124,17 @@ describe("node_mirror_link accessors", () => {
       ),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+  });
+});
+
+describe("deleteNodeMirrorLinkOtherThanTx", () => {
+  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
+
+  it("deletes every row but this node id's, and keeps this one's", async () => {
+    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
+      await withNodeTransaction(sweep.node, (tx) => writeMirrorLinkTx(tx, nodeId, SAMPLE));
+    }
+    await withNodeTransaction(sweep.node, (tx) => deleteNodeMirrorLinkOtherThanTx(tx, NODE));
+    expect(sweep.node.all(sql`select node_id from node_mirror_link`)).toEqual([{ node_id: NODE }]);
   });
 });

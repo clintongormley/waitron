@@ -1,5 +1,5 @@
 import { createPrivateKey, createPublicKey } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import {
   now,
   readMembershipTrustSet,
@@ -205,4 +205,12 @@ export async function rotateNodeSigningKeys(
     });
   }
   return result;
+}
+
+/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
+export async function deleteNodeSigningKeyOtherThanTx(
+  tx: NodeTransaction,
+  nodeId: string,
+): Promise<void> {
+  await tx.delete(nodeSigningKey).where(ne(nodeSigningKey.nodeId, nodeId));
 }

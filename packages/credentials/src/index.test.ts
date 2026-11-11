@@ -32,6 +32,12 @@ describe("the public surface", () => {
         "readNodeIdentity",
         "readNodeSigningKey",
         "sealNodeSigningKeyTx",
+        "deleteNodeSigningKeyOtherThanTx",
+        "deleteNodePairLinkOtherThanTx",
+        "deletePairLinkTx",
+        "readPairSecret",
+        "setPairLinkStateTx",
+        "writePairLinkTx",
       ].sort(),
     );
   });

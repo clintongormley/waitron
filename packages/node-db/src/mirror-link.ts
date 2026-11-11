@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { now, withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { nodeMirrorLink } from "./schema/node-mirror-link.js";
 
@@ -55,4 +55,12 @@ export async function writeMirrorLinkTx(
       target: nodeMirrorLink.nodeId,
       set: { ...link, adoptedAt: now() },
     });
+}
+
+/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
+export async function deleteNodeMirrorLinkOtherThanTx(
+  tx: NodeTransaction,
+  nodeId: string,
+): Promise<void> {
+  await tx.delete(nodeMirrorLink).where(ne(nodeMirrorLink.nodeId, nodeId));
 }

@@ -15,6 +15,7 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import {
+  deleteNodeSigningKeyOtherThanTx,
   establishNodeSigningKey,
   nodeSigningPublicKey,
   openNodeSigningKeyRow,
@@ -269,5 +270,19 @@ describe("openNodeSigningKeyRow", () => {
 describe("nodeSigningPublicKey", () => {
   it("derives the base64 SPKI public half of a base64 PKCS8 private key", () => {
     expect(nodeSigningPublicKey(PRIVATE_KEY)).toBe(PUBLIC_KEY);
+  });
+});
+
+describe("deleteNodeSigningKeyOtherThanTx", () => {
+  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
+
+  it("deletes every row but this node id's, and keeps this one's", async () => {
+    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
+      await withNodeTransaction(sweep.node, (tx) =>
+        sealNodeSigningKeyTx(tx, RING_V1, nodeId, PRIVATE_KEY),
+      );
+    }
+    await withNodeTransaction(sweep.node, (tx) => deleteNodeSigningKeyOtherThanTx(tx, NODE));
+    expect(sweep.node.all(sql`select node_id from node_signing_key`)).toEqual([{ node_id: NODE }]);
   });
 });

@@ -41,6 +41,10 @@ describe("the public surface", () => {
         "pinPrimaryKeyTx",
         "readPinnedPrimaryKey",
         "readPairLink",
+        "deleteNodeMirrorLinkOtherThanTx",
+        "deleteNodeModeOtherThanTx",
+        "deleteNodePrimaryKeyOtherThanTx",
+        "deleteNodeRecoveryKeyOtherThanTx",
       ].sort(),
     );
   });

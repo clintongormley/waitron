@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import {
   now,
   requireStamp,
@@ -100,4 +100,12 @@ export async function setPrimaryRoleTx(tx: NodeTransaction, nodeId: string): Pro
   // `mode` first, so the pair is never the `(mirror, primary)` that `node_mode_role_valid_ck` forbids.
   await setNodeModeTx(tx, nodeId, "primary");
   await setSingletonRoleTx(tx, nodeId, "primary");
+}
+
+/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
+export async function deleteNodeModeOtherThanTx(
+  tx: NodeTransaction,
+  nodeId: string,
+): Promise<void> {
+  await tx.delete(nodeMode).where(ne(nodeMode.nodeId, nodeId));
 }

@@ -22,6 +22,7 @@ export {
 export type { CredentialMeta, CredentialRef, CredentialRowMeta, RotationResult } from "./store.js";
 
 export {
+  deleteNodeSigningKeyOtherThanTx,
   establishNodeSigningKey,
   nodeSigningPublicKey,
   openNodeSigningKeyRow,
@@ -30,6 +31,15 @@ export {
   sealNodeSigningKeyTx,
 } from "./node-signing-key.js";
 export type { SealedSigningKeyRow } from "./node-signing-key.js";
+
+export {
+  deleteNodePairLinkOtherThanTx,
+  deletePairLinkTx,
+  readPairSecret,
+  setPairLinkStateTx,
+  writePairLinkTx,
+} from "./node-pair-link.js";
+export type { NewPairLink } from "./node-pair-link.js";
 
 export { CREDENTIALS_TABLES } from "./tables.js";
 

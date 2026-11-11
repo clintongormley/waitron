@@ -34,9 +34,15 @@ export type {
 export type { HandoverOperationState } from "./schema/node-handover.js";
 export { readPairLink } from "./pair-link.js";
 export type { PairLink, PairLinkRole, PairLinkState } from "./pair-link.js";
-export { readMirrorLink, writeMirrorLink, writeMirrorLinkTx } from "./mirror-link.js";
+export {
+  deleteNodeMirrorLinkOtherThanTx,
+  readMirrorLink,
+  writeMirrorLink,
+  writeMirrorLinkTx,
+} from "./mirror-link.js";
 export type { MirrorConnection } from "./mirror-link.js";
 export {
+  deleteNodeModeOtherThanTx,
   readNodeMode,
   setNodeMode,
   setNodeModeTx,
@@ -45,10 +51,15 @@ export {
   setSingletonRoleTx,
 } from "./mode.js";
 export {
+  deleteNodeRecoveryKeyOtherThanTx,
   readRecoveryKey,
   readRecoveryKeyName,
   readRecoveryKeyVerifier,
   setRecoveryKeyTx,
 } from "./recovery-key.js";
-export { pinPrimaryKeyTx, readPinnedPrimaryKey } from "./primary-key.js";
+export {
+  deleteNodePrimaryKeyOtherThanTx,
+  pinPrimaryKeyTx,
+  readPinnedPrimaryKey,
+} from "./primary-key.js";
 export type { PinnedPrimaryKey } from "./primary-key.js";
