@@ -48,6 +48,8 @@ to permanent docs and implementation files. Read the retained A760 measurements 
   `pnpm release tag`; neither is a current root script at this snapshot. Keep the existing
   [deployment instructions](../../deploy/README.md). The release implementation must deliver
   its own runbook before anyone follows those proposed commands.
+  > **2026-11-11:** A940 slice 2 delivered both commands and their [runbook](release.md); both
+  > refuse until the template's two release-blocker lines go.
 - **B3 USB installation, maintenance/support access, A799 real-upgrade rigs, A951 connection,
   A982 problem reports and A664 retention:** proposed or separately gated build/policy work.
   Illustrative maintenance-account commands are not an implemented access procedure.

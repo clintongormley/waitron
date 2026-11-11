@@ -16,6 +16,7 @@ records which procedures were retained or already had a permanent home on 22 Oct
 | Configure archive destinations and keep their keys                                                   | [Backups and support](backups-and-support.md#keep-the-recovery-pack)                                                                                                                                                       |
 | Run an authorised Amazon S3 rehearsal or clean up its interrupted run                                | [S3 rehearsal](../developers/aws-backup-rehearsal.md)                                                                                                                                                                      |
 | Qualify a verifier build and its Cloud recovery handoff                                              | [Verifier release](backup-verifier-release.md) and [authorised disposable fixture](../developers/authorised-cloud-restore-fixture.md)                                                                                      |
+| Cut a Waitron release and sign its declaration (both commands refuse until the template's two blocker lines go) | [Cut a release](release.md) |
 | Investigate logs, reconnect a print agent or pair a Bluetooth printer                                | [Backups and support](backups-and-support.md)                                                                                                                                                                              |
 | Install, update or try a branch on a box                                                             | [Deployment instructions](../../deploy/README.md)                                                                                                                                                                          |
 | Clock in, correct working time or download its record                                                | [Working time](working-time.md)                                                                                                                                                                                            |
@@ -43,7 +44,7 @@ starts no reset, migration or deployment.
 
 Repeat the source sweep for additions since the recorded audit. Move any newly delivered
 procedure here or into the guides before removing its only copy. Keep unfinished designs and
-their build authority separate: proposed release commands, USB installation, automatic failover,
+their build authority separate: USB installation, automatic failover,
 hosted stop proof and future fiscal remedies are not current procedures.
 
 The deletion and change to production migration policy remain go-live-day actions. This

@@ -1,10 +1,12 @@
 # Cut a release
 
 A release is a numbered version of Waitron, such as `1.0.0`, that boxes in production run. The law
-asks the software's producer to sign a declaration for every version: a statement, in Spanish,
-that this version meets the Veri\*Factu rules (the *declaración responsable*). Each version's
-signed text is committed as `packages/fiscal-verifactu/declarations/v<version>.md`, and a release
-is cut in two commands: `pnpm release prepare` writes that file and opens a pull request for it,
+asks the software's producer to write a declaration for every version and keep it visible in the
+software: a statement, in Spanish, that this version meets the Veri\*Factu rules (the
+*declaración responsable*). It names the date and place it was made, and needs no electronic
+signature. Each version's text is committed as
+`packages/fiscal-verifactu/declarations/v<version>.md`, and a release is cut by the owner, or by a
+lane on the owner's instruction, in two commands: `pnpm release prepare` writes that file and opens a pull request for it,
 and `pnpm release tag` puts the version's name (a git tag, `v1.0.0`) on `main` once that pull
 request has landed.
 
@@ -48,19 +50,21 @@ cd ~/workspace/worktrees/waitron-release-1.0.0
   whose route is gone or refused, and add a new one.
 - Item d) in the template mentions the cloud server and the spare box on site only if this
   release can do them.
-- Item d) still names every service of ours that this version can call in production (none
-  today). A release that adds one changes item d) and has its wording checked again.
+- Item d) still names every service of ours that this version can call in production. A release
+  that adds one changes item d) and has its wording checked again.
 - AEAT's frequently asked questions about the declaration, and its worked example, are read again
   for changes ([our notes on them](../compliance/verifactu-faq-notes.md)).
-- The repository is still public (`gh repo view clintongormley/waitron --json visibility`). Its
-  releases page is the public archive of every declaration.
+- The repository is still public (`gh repo view clintongormley/waitron --json visibility` answers
+  `"visibility":"PUBLIC"`). The declaration's annex item 2.b) links its releases page, which slice 4
+  makes the public archive of every declaration. If the repository is not public, stop: the
+  declarations move to a public place first, and this version's item 2.b) names the new address.
 
 ## 3. Load the producer's settings
 
 The declaration names its producer by name, tax number and postal address, read from three
 settings: `WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID` and `WAITRON_PRODUCER_ADDRESS`. Their
 real values are kept in `~/waitron-campaign-shared/private/producer-identity.env` and are never
-committed. Load them into the shell that will run `prepare` and `tag`, without printing them:
+committed. Load them into the shell that will run `prepare`, without printing them:
 
 ```sh
 while IFS= read -r line; do export "$line"; done < ~/waitron-campaign-shared/private/producer-identity.env
@@ -111,7 +115,7 @@ The release pull request lands like any other, after its CI.
 
 ## 6. Tag
 
-From the main checkout, brought up to date, with the producer's settings loaded as in step 3:
+From the main checkout, brought up to date (`tag` does not read the producer's settings):
 
 ```sh
 cd ~/workspace/repos/waitron
@@ -134,8 +138,9 @@ The tag's own CI run is the full one, and publishing the image waits for it.
 The push goes through the repository's pre-push hook, whose messages are printed as it runs.
 Nobody has pushed a tag through it yet: what it does with an annotated tag's id, which is the
 tag's own id rather than its commit's, was read (`.husky/pre-push:24-40`), not run. If the push
-stops, the command deletes the tag it made on your machine; fix what the hook's message names and
-run `pnpm release tag 1.0.0` again. Never push with `--no-verify`.
+stops, the command deletes the tag it made on your machine; fix what the push's messages name and
+run `pnpm release tag 1.0.0` again. If that run says `1.0.0 is already released`, the tag reached
+GitHub before the push stopped: go on to step 7. Never push with `--no-verify`.
 
 ## 7. Watch the tag's CI run
 
@@ -162,8 +167,6 @@ all of `--version`, `--place` and `--date`.
 ## When the producer or the system code changes
 
 A release that changes the producer, or the two-character code that names the system, says so in
-the first line of its pull request: every box that files opens a new installation when it is
-upgraded to it. No such release is cut while A993 (the step that opens that new installation by
-itself) is parked: until then a production box refuses to start under another producer's tax
-number (`sif.producer_changed`). Going back to an older release across such a change is not done,
-because it would open yet another installation.
+the first line of its pull request. No such release is cut while A993 is parked: until then a
+production box refuses to start under another producer's tax number (`sif.producer_changed`), and
+nothing opens the new installation such a change needs.
