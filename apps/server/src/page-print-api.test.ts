@@ -1046,7 +1046,7 @@ it("an A4 invoice queued during a held receipt pull wakes its agent", async () =
   await vi.waitFor(() => expect(bus.subscriberCount).toBe(1));
   const delivery = await queueA4(sale, office);
   let answered = false;
-  void pending.then(() => {
+  void Promise.resolve(pending).then(() => {
     answered = true;
   });
   await vi.waitFor(() => expect(answered).toBe(true), { timeout: 500 });

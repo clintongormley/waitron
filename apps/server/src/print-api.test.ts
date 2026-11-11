@@ -6257,7 +6257,7 @@ describe("held print pulls", () => {
     expect((await jobRow(other)).status).toBe("queued");
     const own = await enqueue(network, new Uint8Array([2]));
     let answered = false;
-    void pending.then(() => {
+    void Promise.resolve(pending).then(() => {
       answered = true;
     });
     await vi.waitFor(() => expect(answered).toBe(true), { timeout: 1_000 });
@@ -6435,7 +6435,7 @@ describe("held print pulls", () => {
     );
     expect(requested.status).toBe(202);
     let answered = false;
-    void pending.then(() => {
+    void Promise.resolve(pending).then(() => {
       answered = true;
     });
     await vi.waitFor(() => expect(answered).toBe(true), { timeout: 500 });
