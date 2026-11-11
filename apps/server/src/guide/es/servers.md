@@ -89,6 +89,3 @@ equipo vuelva a conectarse.
 El estado junto al botón es la opción que has guardado. Abre la dirección del personal para
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte
 que detiene permanentemente todos los servicios de Cloud.
-
-Si Servicios Cloud no puede usar la solicitud guardada de reconexión, conserva los archivos
-de Cloud de este equipo. No los borres para intentar conectarlo de nuevo.

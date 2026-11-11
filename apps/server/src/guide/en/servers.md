@@ -80,6 +80,3 @@ Cloud services stay in place. Choose **Turn on remote access** to let the box re
 
 The status beside this button is your saved choice. Open your staff address to check whether
 you can connect; this page does not test that connection. If a change fails, check the saved choice and choose **Refresh status** to retry the connection. **Stop Cloud access** is the separate permanent stop for all Cloud services.
-
-If Cloud services cannot use its saved reconnection request, keep this box’s Cloud files.
-Do not delete them to try to connect again.

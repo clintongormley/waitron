@@ -1242,7 +1242,7 @@ They do not exercise navigation through the unsaved-changes prompt. They read th
 key files, but check only that the Copy controls exist; clipboard contents were not exercised.
 Keep these limits separate from the open authenticated diagnosis and correction workflow.
 
-## Decisions and deliberate limits
+## Unusable Cloud reconnection request
 
-Cloud reconnection after a restore is test-only. An unusable saved reconnection request stops
-reconnection; the Cloud services page has no repair choice (watcher2026-11-11 12:44, A1500).
+The Cloud services page has no way to set an unusable reconnection request aside and request
+again. Cloud reconnection after a restore is test-only.
