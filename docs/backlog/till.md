@@ -1735,6 +1735,12 @@ the times the venue can take, the customer's booking form, confirmation and remi
 remote access (A951). While the box cannot be reached no booking is taken: Waitron Cloud's D88
 proposal keeps no booking queue of its own. Backlog only, not queued to a lane.
 
+A booking larger than any one table joins several small tables (owner, 2026-11-11: "when we do
+bookings, if somebody wants to book a table of 10 people then we need to join several small tables
+for that purpose"). A joined table is an ordinary group of its tables (owner's answer to R1's
+proposal 3, the same day), so a booking for 10 holds a group of tables, and the booking screens
+show the group's name. A bar counter's one-person fixed seats are joined the same way.
+
 
 ## Loose ends left by A526 (#1579).
 
