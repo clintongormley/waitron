@@ -1,3 +1,5 @@
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { liveGate } from "./live-gate.js";
 import type { DeviceEquipment } from "../api/client.js";
 
 /** How often a signed-in till reads its equipment, so it learns when another device took an item. */
@@ -10,6 +12,7 @@ const READ_LIMIT_MS = 25_000;
 /** `T` is what a read answers: the equipment, or the equipment with whatever the caller needs to
  * judge how fresh it is. */
 export interface EquipmentPollOptions<T = DeviceEquipment> {
+  live?(): TillLiveConnection | undefined;
   read(signal: AbortSignal): Promise<T>;
   onEquipment(equipment: T): void;
 }
@@ -22,7 +25,7 @@ export interface EquipmentPollOptions<T = DeviceEquipment> {
  */
 export class EquipmentPoll<T = DeviceEquipment> {
   readonly #options: EquipmentPollOptions<T>;
-  #timer?: ReturnType<typeof setInterval>;
+  #timer?: { stop(): void };
   readonly #reads = new Set<AbortController>();
   #requested = 0;
   #applied = 0;
@@ -37,11 +40,16 @@ export class EquipmentPoll<T = DeviceEquipment> {
 
   start(): void {
     if (this.#timer === undefined)
-      this.#timer = setInterval(() => void this.#read(++this.#requested), POLL_MS);
+      this.#timer = liveGate(this.#options.live?.(), {
+        types: TILL_LIVE_TYPES.equipment!,
+        intervalMs: POLL_MS,
+        run: () => void this.#read(++this.#requested),
+        quietWhileConnected: false,
+      });
   }
 
   stop(): void {
-    clearInterval(this.#timer);
+    this.#timer?.stop();
     this.#timer = undefined;
     for (const read of this.#reads) read.abort();
     this.#reads.clear();

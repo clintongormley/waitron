@@ -1,3 +1,5 @@
+import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
+import { liveRefresh } from "./state/live-gate.js";
 import {
   recoveryLink,
   recoveryRefusalOf,
@@ -407,7 +409,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
-import { kindOfFormFactor } from "./layout.js";
+import { kindOfFormFactor, LIVE_STREAM_KINDS } from "./layout.js";
 import {
   type KitchenScreenNotice,
   kitchenDisplayScreen,
@@ -596,6 +598,7 @@ interface TableAllergyRead {
   current: () => boolean;
   controller?: AbortController;
   timer?: ReturnType<typeof setTimeout>;
+  live?: { stop(): void };
 }
 function allergyFieldRefusal(error: unknown): AllergyFieldRefusal | undefined {
   if (
@@ -2246,6 +2249,11 @@ export class TillApp extends LitElement {
 
   sessionActivity: SessionActivity = new SessionActivity();
 
+  #live?: TillLiveConnection;
+  #liveApi?: TillApi;
+  readonly #pauseLive = () => this.#live?.stop();
+  readonly #resumeLive = () => this.#live?.start();
+
   #departmentTransfers?: DepartmentTransferMonitor;
   #transferApi?: TillApi;
   #transferViewRead = 0;
@@ -2339,6 +2347,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     const monitor = new DepartmentTransferMonitor({
       api: this.api,
+      live: this.#live,
       currentSource: () => this.#currentTransferTabId(),
       changed: () => {
         const previous = this.transferSnapshot;
@@ -2538,6 +2547,8 @@ export class TillApp extends LitElement {
     document.addEventListener("visibilitychange", this.#onVisibility);
     window.addEventListener("focus", this.#onDraftFocus);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
+    window.addEventListener("pagehide", this.#pauseLive);
+    window.addEventListener("pageshow", this.#resumeLive);
     this.addEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.start();
     this.#syncDepartmentTransfers();
@@ -2598,6 +2609,10 @@ export class TillApp extends LitElement {
     this.#candidateScope?.dispose();
     this.#candidateScope = undefined;
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
+    window.removeEventListener("pagehide", this.#pauseLive);
+    window.removeEventListener("pageshow", this.#resumeLive);
+    this.#live?.stop();
+    this.#live = undefined;
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
     super.disconnectedCallback();
@@ -3114,6 +3129,7 @@ export class TillApp extends LitElement {
   /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
   #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
+    live: () => this.#live,
     onTick: (signal) => {
       if (this.#themeHash !== undefined) followVenueTheme(this.#themeHash);
       const tab = this.#activeTab();
@@ -3138,6 +3154,7 @@ export class TillApp extends LitElement {
     onState: (zoneId, state) => this.#onMenuState(zoneId, state),
   });
   readonly #equipmentPoll = new EquipmentPoll({
+    live: () => this.#live,
     // The count is taken before the read is sent, so an answer a change overtook is set aside.
     read: async (signal) => ({
       changed: this.#equipmentChanged,
@@ -4025,6 +4042,7 @@ export class TillApp extends LitElement {
     const read = this.#allergyRead;
     this.#allergyRead = undefined;
     clearTimeout(read?.timer);
+    read?.live?.stop();
     read?.controller?.abort();
     for (const request of this.#allergyRequests) request.abort();
     this.#allergyRequests.clear();
@@ -4070,6 +4088,10 @@ export class TillApp extends LitElement {
         this.#orderScreenShown(),
     };
     this.#allergyRead = read;
+    read.live = liveRefresh(this.#live, {
+      types: TILL_LIVE_TYPES.allergy!,
+      run: () => void this.#refreshTableAllergy(),
+    });
     void this.#refreshTableAllergy();
   }
 
@@ -4102,7 +4124,10 @@ export class TillApp extends LitElement {
       // A passive read leaves the last snapshot and any action refusal intact.
     } finally {
       if (read.controller === controller) read.controller = undefined;
-      if (read.current()) read.timer = setTimeout(() => void this.#refreshTableAllergy(), 15_000);
+      if (read.current())
+        read.timer = setTimeout(() => {
+          if (!this.#live?.up) void this.#refreshTableAllergy();
+        }, 15_000);
     }
   }
 
@@ -4720,6 +4745,26 @@ export class TillApp extends LitElement {
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
       this.#deviceKind = kind ?? "till";
+      if (kind !== undefined && LIVE_STREAM_KINDS.includes(kind)) {
+        if (
+          this.#live === undefined ||
+          previousDeviceId !== identity.deviceId ||
+          this.#liveApi !== this.api
+        ) {
+          this.#live?.stop();
+          const api = this.api;
+          this.#liveApi = api;
+          this.#live = new TillLiveConnection({
+            read: (types, onEvent, signal) => api.readLiveEvents(types, onEvent, { signal }),
+          });
+          this.#live.addInterests("device", ["devices", "device_profiles"]);
+          this.#live.addEventListener("unauthorized", () => void this.#onDeviceUnauthorized());
+          this.#live.start();
+        }
+      } else {
+        this.#live?.stop();
+        this.#live = undefined;
+      }
       if (kind === "handheld") {
         this.handheldMode = true;
       } else if (kind === "kds_station") {
@@ -8995,6 +9040,8 @@ export class TillApp extends LitElement {
    * device forgets it and gets the picker, unless the device list fails to load).
    */
   async #onDeviceUnauthorized(): Promise<void> {
+    this.#live?.stop();
+    this.#live = undefined;
     this.makeNow = [];
     await this.#boot();
   }
@@ -20703,6 +20750,7 @@ export class TillApp extends LitElement {
     if (tab === "floor") {
       const navigation = this.#deviceNavigation();
       return html`<till-floor-screen
+        .live=${this.#live}
         embedded
         .zones=${
           navigation === null

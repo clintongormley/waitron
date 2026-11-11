@@ -17,11 +17,10 @@ import { assertDeviceStillProven, assertProfileAction } from "./device-session.j
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
-import { requireSession, readTillSession, assertRequestDevice } from "./till-session.js";
+import { requireSession } from "./till-session.js";
 import { checkZones, inScope, readZoneScope } from "./zone-access.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import { firedQuantity } from "./kitchen-print.js";
-import { liveStreamResponse } from "./live-stream.js";
 import "./errors.js";
 
 function uuid(value: unknown, field: string): string {
@@ -102,46 +101,6 @@ export function mountDepartmentTransferApi(
   log: Logger,
   run: Run,
 ): void {
-  const bus = deps.liveEvents;
-  if (bus !== undefined)
-    app.get("/api/department-transfers/events", (c) =>
-      run(c, log, async () => {
-        const authenticate = async () => {
-          const session = await requireSession(deps, c, { action: "take-orders", passive: true });
-          await withTransaction(deps.db, (tx) => monitoringActor(tx, session));
-        };
-        await authenticate();
-        return liveStreamResponse(c, {
-          bus,
-          interests: [
-            "department_transfer_requests",
-            "department_transfer_desks",
-            "department_transfer_destinations",
-            "order_service_contexts",
-          ].map((type) => ({ type })),
-          recheck: async () => {
-            const session = await readTillSession(deps.db, c);
-            assertProfileAction(session.device, "take-orders");
-            await assertRequestDevice(deps, c, session);
-            await monitoringActor(deps.db, session);
-          },
-          invalidCodes: new Set([
-            "session.required",
-            "session.person_not_signed_in",
-            "session.not_open",
-            "authorization.not_permitted",
-            "person.suspended",
-            "device.unauthorized",
-            "device.forbidden_action",
-            "device_profile.not_admitted",
-            "device_profile.access_invalid",
-          ]),
-          sendIds: false,
-          invalidationOnly: true,
-          log,
-        });
-      }),
-    );
   app.get("/api/department-transfers/destinations", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

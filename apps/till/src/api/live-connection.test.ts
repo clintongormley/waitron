@@ -20,7 +20,7 @@ function setup() {
     read: (types, event, signal) =>
       new Promise<void>((end) => {
         reads.push({ types, event, signal, end });
-        signal.addEventListener("abort", end, { once: true });
+        signal.addEventListener("abort", () => end(), { once: true });
       }),
   });
   connections.push(connection);

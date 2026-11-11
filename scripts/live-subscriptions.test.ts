@@ -4,8 +4,20 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
+import { enabledModules, parseModuleConfig } from "../packages/module/src/index.js";
 import { QUERY_DEPENDENCIES } from "../apps/dashboard/src/api/live-queries.js";
 import { liveResourceTypesForModules } from "../apps/server/src/live-resources.js";
+import { TILL_LIVE_TYPES } from "../apps/till/src/api/live-connection.js";
+
+it.each([{}, { bookings: false }])("every till interest names a resource the device stream accepts with %j", (overrides) => {
+  const modules = enabledModules(ALL_MODULES, parseModuleConfig({ modules: overrides }, ALL_MODULES));
+  const allowed = new Set(liveResourceTypesForModules(modules));
+  expect(
+    Object.entries(TILL_LIVE_TYPES).flatMap(([reader, types]) =>
+      types.filter((type) => !allowed.has(type)).map((type) => `${reader}:${type}`),
+    ),
+  ).toEqual([]);
+});
 
 it("every shipped dashboard query subscribes only to a declared server resource", async () => {
   const root = join(import.meta.dirname, "..");

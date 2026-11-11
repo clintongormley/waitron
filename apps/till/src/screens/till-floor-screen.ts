@@ -1,3 +1,5 @@
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { liveGate } from "../state/live-gate.js";
 import { zoneKeepOpen, servicePeriodStyles } from "../widgets/service-period.js";
 import { tillPath } from "../navigation.js";
 import {
@@ -1035,7 +1037,8 @@ export class TillFloorScreen extends LitElement {
   #revealDue = true;
   /** Where the screen last left the strip, so a scroll the person made is not undone. */
   #placedAt: number | undefined;
-  #rereadTimer?: ReturnType<typeof setInterval>;
+  @property({ attribute: false }) live?: TillLiveConnection;
+  #rereadTimer?: { stop(): void };
 
   readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
 
@@ -1055,12 +1058,16 @@ export class TillFloorScreen extends LitElement {
     this.#connection++;
     this.#clearJoin();
     clearTimeout(this.#reminderTimer);
-    clearInterval(this.#rereadTimer);
+    this.#rereadTimer?.stop();
     this.#rereadTimer = undefined;
     this.#stopWatchingTabs();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("live")) {
+      this.#rereadTimer?.stop();
+      this.#rereadTimer = undefined;
+    }
     if (changed.has("api") || changed.has("operatorSession") || changed.has("selectedZoneId"))
       this.#clearJoin();
     if (changed.has("selectedZoneId")) {
@@ -1126,14 +1133,16 @@ export class TillFloorScreen extends LitElement {
   /** A handheld re-reads in list view too, so its Ready bar stays current. */
   #watchFloor(): void {
     if ((this.#zone.view !== "map" && !this.handheld) || !this.isConnected) {
-      clearInterval(this.#rereadTimer);
+      this.#rereadTimer?.stop();
       this.#rereadTimer = undefined;
       return;
     }
-    this.#rereadTimer ??= setInterval(
-      () => this.#emit("floor-refresh", { poll: true } satisfies FloorRefreshDetail),
-      15_000,
-    );
+    this.#rereadTimer ??= liveGate(this.live, {
+      types: TILL_LIVE_TYPES.floor!,
+      intervalMs: 15_000,
+      run: () => this.#emit("floor-refresh", { poll: true } satisfies FloorRefreshDetail),
+      quietWhileConnected: false,
+    });
   }
 
   #fireDue(table: TableState): boolean {

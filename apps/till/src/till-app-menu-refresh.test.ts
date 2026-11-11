@@ -1,3 +1,4 @@
+import { idleLiveReadFor } from "./widgets/test-helpers.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -240,7 +241,7 @@ const till = {
 
 let api: Record<string, ReturnType<typeof vi.fn>>;
 function stubApi(overrides: Record<string, unknown> = {}) {
-  return {
+  return idleLiveReadFor({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["zone-dining"])),
     getContentLanguages: vi
       .fn()
@@ -274,7 +275,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as Record<string, ReturnType<typeof vi.fn>>;
+  } as Record<string, ReturnType<typeof vi.fn>>);
 }
 
 function fakeSessionActivity() {

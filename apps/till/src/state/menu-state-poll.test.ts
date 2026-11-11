@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MenuStatePoll } from "./menu-state-poll.js";
 import type { MenuState } from "../api/client.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
 
 function state(versionId: string): MenuState {
   return {
@@ -45,6 +46,31 @@ afterEach(() => {
 });
 
 describe("MenuStatePoll", () => {
+  it("refreshes on product changes while connected and still checks the clock every fifteen seconds", async () => {
+    const live = liveConnectionFixture();
+    const onState = vi.fn();
+    const poll = new MenuStatePoll({
+      live: () => live.connection,
+      read: async () => state("v1"),
+      zones: () => ["zone-1"],
+      onState,
+    });
+    try {
+      poll.start();
+      live.ready();
+      await settle();
+      expect(onState).toHaveBeenCalledTimes(1);
+      live.change("products");
+      await settle();
+      expect(onState).toHaveBeenCalledTimes(2);
+      live.keepalive();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(onState).toHaveBeenCalledTimes(3);
+    } finally {
+      poll.stop();
+      live.connection.stop();
+    }
+  });
   it("bounds its extra read to one in flight even with no menu zones", async () => {
     let answer!: () => void;
     const signals: AbortSignal[] = [];

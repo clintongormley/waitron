@@ -2681,8 +2681,8 @@ describe("a handheld's zones", () => {
       requests: [],
     })),
     listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
-    readDepartmentTransferEvents: vi.fn(
-      (_reload: () => void, { signal }: { signal: AbortSignal }) =>
+    readLiveEvents: vi.fn(
+      (_types: readonly string[], _onEvent: unknown, { signal }: { signal: AbortSignal }) =>
         new Promise<void>((resolve) =>
           signal.addEventListener("abort", () => resolve(), { once: true }),
         ),

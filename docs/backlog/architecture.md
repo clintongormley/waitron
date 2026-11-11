@@ -1071,7 +1071,10 @@ product failures.
   only. The dashboard detects a silent connection, quiets audited database-only re-read timers
   while connected and receives pairing, discovery, practice-inbox and backup state changes.
   Reads that depend on time, memory or external services keep their timers.
-  Browser adoption of the device stream remains for jr13/jr14. 111 product
+  Tills use the device stream for menu, equipment, floor, transfer and table-allergy refreshes;
+  the remaining screen reads belong to jr14. Handhelds and kitchen displays keep timed reads under
+  jr11's measured fallback. Before go-live, qualify silence recovery with a physical power cut;
+  jr13's SIGSTOP probe is a stand-in only. 111 product
   environment variables become 51. There is one state-folder layout; the box certificate and key
   share one PEM file, and a completed certificate repair ends after a start stays healthy. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror

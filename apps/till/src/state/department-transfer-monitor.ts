@@ -1,3 +1,5 @@
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { liveGate } from "./live-gate.js";
 import type { DepartmentTransfer, TillApi } from "../api/client.js";
 import { limited } from "./draft-sync.js";
 
@@ -10,6 +12,7 @@ export interface TransferSnapshot {
 }
 interface Options {
   api: TillApi;
+  live?: TillLiveConnection;
   changed(): void;
   currentSource?(): string | undefined;
   onAccessLost?(code: string): void;
@@ -54,9 +57,7 @@ export class DepartmentTransferMonitor {
   #incomingError: unknown;
   #sourceError: unknown;
   #active?: AbortController;
-  #poll?: ReturnType<typeof setInterval>;
-  #retry?: ReturnType<typeof setTimeout>;
-  #retryMs = 1000;
+  #poll?: { stop(): void };
   #sourceTabId?: string;
   #wholeDepartment = false;
   #incomingFlight?: object;
@@ -78,19 +79,20 @@ export class DepartmentTransferMonitor {
     if (this.#active !== undefined) return;
     const active = new AbortController();
     this.#active = active;
-    this.#retryMs = 1000;
     this.refresh();
-    this.#connect(active);
-    this.#poll = setInterval(() => this.refresh(), 15_000);
+    this.#poll = liveGate(this.options.live, {
+      types: TILL_LIVE_TYPES.transfers!,
+      intervalMs: 15_000,
+      run: () => this.refresh(),
+      quietWhileConnected: true,
+    });
   }
 
   stop(): void {
     this.#active?.abort();
     this.#active = undefined;
-    clearInterval(this.#poll);
-    clearTimeout(this.#retry);
+    this.#poll?.stop();
     this.#poll = undefined;
-    this.#retry = undefined;
     this.#incomingFlight = undefined;
     this.#sourceFlight = undefined;
     this.#incomingDirty = false;
@@ -150,36 +152,6 @@ export class DepartmentTransferMonitor {
   #loseAccess(code: string): void {
     this.stop();
     this.options.onAccessLost?.(code);
-  }
-
-  #connect(active: AbortController): void {
-    void this.options.api
-      .readDepartmentTransferEvents(
-        (event) => {
-          if (this.#active !== active) return;
-          if (event === "ready") this.#retryMs = 1000;
-          this.refresh();
-        },
-        { signal: active.signal },
-      )
-      .catch((error: unknown) => {
-        if (this.#active !== active) return;
-        const status =
-          error !== null && typeof error === "object" && "status" in error
-            ? error.status
-            : undefined;
-        const code = codeOf(error);
-        if (code !== undefined && (status === undefined || status === 401 || status === 403))
-          this.#loseAccess(code);
-      })
-      .finally(() => {
-        if (this.#active !== active) return;
-        this.#retry = setTimeout(() => {
-          this.#retry = undefined;
-          if (this.#active === active) this.#connect(active);
-        }, this.#retryMs);
-        this.#retryMs = Math.min(this.#retryMs * 2, 30_000);
-      });
   }
 
   async #bounded<T>(

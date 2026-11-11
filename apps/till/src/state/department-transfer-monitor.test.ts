@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as client from "../api/client.js";
 import { DepartmentTransferMonitor } from "./department-transfer-monitor.js";
 import type { DepartmentTransfer } from "../api/client.js";
+import { TillLiveConnection, TILL_LIVE_TYPES } from "../api/live-connection.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
 
 const pending: DepartmentTransfer = {
   id: "request-1",
@@ -31,7 +33,7 @@ async function settle() {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
 }
-function desk() {
+function desk(live?: TillLiveConnection) {
   let incoming = [pending];
   let sent = [pending];
   let readError: { code: string; status: number } | undefined;
@@ -39,7 +41,7 @@ function desk() {
   const reads: string[] = [];
   const api = new client.TillApi("", async (input, init) => {
     const url = String(input);
-    if (url.endsWith("/events")) {
+    if (url.startsWith("/api/live/events?")) {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           streams.push(controller);
@@ -61,9 +63,20 @@ function desk() {
     if (url === "/api/working-orders/tab-1/department-transfers") return json({ requests: sent });
     throw new Error(`Unexpected read ${url}`);
   });
+  const connection =
+    live ??
+    new TillLiveConnection({
+      read: (types, onEvent, signal) => api.readLiveEvents(types, onEvent, { signal }),
+    });
+  if (live === undefined) {
+    connection.addInterests("fixture", TILL_LIVE_TYPES.transfers!);
+    connection.start();
+  }
+  monitors.push(connection);
   const invalid: string[] = [];
   const monitor = new DepartmentTransferMonitor({
     api,
+    live: connection,
     changed() {},
     onAccessLost(code) {
       invalid.push(code);
@@ -72,6 +85,7 @@ function desk() {
   monitors.push(monitor);
   return {
     monitor,
+    connection,
     streams,
     reads,
     invalid,
@@ -87,7 +101,7 @@ function desk() {
     recover() {
       readError = undefined;
     },
-    signal(event: string, data = "{}") {
+    signal(event: string, data = '[{"type":"department_transfer_requests"}]') {
       streams.at(-1)!.enqueue(new TextEncoder().encode(`event: ${event}\ndata: ${data}\n\n`));
     },
   };
@@ -109,6 +123,23 @@ function consumedResponse(body: unknown) {
 }
 
 describe("DepartmentTransferMonitor", () => {
+  it("quiets its fifteen-second durable reads while the shared connection is up", async () => {
+    const live = liveConnectionFixture();
+    const source = desk(live.connection);
+    try {
+      source.monitor.start();
+      live.ready();
+      await settle();
+      expect(live.connection.up).toBe(true);
+      await expect.poll(() => source.reads.length).toBe(2);
+      const before = source.reads.length;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(source.reads).toHaveLength(before);
+    } finally {
+      source.monitor.stop();
+      live.connection.stop();
+    }
+  });
   it("loads pending requests once per desk and dismisses only the notification", async () => {
     const first = desk();
     const second = desk();
@@ -242,11 +273,13 @@ describe("DepartmentTransferMonitor", () => {
     expect(monitor.running).toBe(true);
   });
 
-  it("stops and clears another operator's rows on a stream permission refusal", async () => {
+  it("stops and clears another operator's rows on a transfer read permission refusal, keeping the device connection", async () => {
     const source = desk();
     source.monitor.start();
     await settle();
-    source.signal("session-invalid", '{"code":"device_profile.not_admitted"}');
+    source.signal("ready");
+    source.refuse("device_profile.not_admitted", 403);
+    source.signal("change");
     await settle();
     expect(source.monitor.running).toBe(false);
     await expect.poll(() => source.monitor.snapshot.incoming).toEqual([]);
@@ -254,7 +287,8 @@ describe("DepartmentTransferMonitor", () => {
     expect(source.invalid).toEqual(["device_profile.not_admitted"]);
     vi.advanceTimersByTime(60_000);
     await settle();
-    expect(source.streams).toHaveLength(1);
+    source.signal("ready");
+    await expect.poll(() => source.connection.up).toBe(true);
   });
 
   it("polls durable reads when the stream sends no change and retains the last queue after a read failure", async () => {
@@ -340,9 +374,9 @@ describe("DepartmentTransferMonitor", () => {
     expect(source.invalid).toEqual(["authorization.not_permitted"]);
   });
 
-  it("ends an initially forbidden connection without scheduling retries", async () => {
+  it("ends an initially forbidden transfer read without scheduling more reads", async () => {
     const api = new client.TillApi("", async (url) =>
-      String(url).endsWith("/events")
+      String(url).endsWith("/incoming")
         ? json({ error: { code: "device.forbidden_action", params: {} } }, 403)
         : json({ receiving: true, count: 0, requests: [] }),
     );
@@ -467,7 +501,7 @@ it("discovers all sent tabs across reconnect without watching a selected tab, re
   const reads: string[] = [];
   const api = new client.TillApi("", async (input) => {
     const url = String(input);
-    if (url.endsWith("/events"))
+    if (url.startsWith("/api/live/events?"))
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
@@ -481,7 +515,13 @@ it("discovers all sent tabs across reconnect without watching a selected tab, re
     if (url === "/api/department-transfers/sent") return json({ requests: sent });
     throw new Error(`Unexpected read ${url}`);
   });
-  const monitor = new DepartmentTransferMonitor({ api, changed() {} });
+  const connection = new TillLiveConnection({
+    read: (types, onEvent, signal) => api.readLiveEvents(types, onEvent, { signal }),
+  });
+  connection.addInterests("fixture", TILL_LIVE_TYPES.transfers!);
+  connection.start();
+  monitors.push(connection);
+  const monitor = new DepartmentTransferMonitor({ api, live: connection, changed() {} });
   monitors.push(monitor);
   monitor.watchDepartment();
   monitor.start();
