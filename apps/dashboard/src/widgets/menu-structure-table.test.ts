@@ -36,7 +36,7 @@ function product(id: string, name: string, image: string | null = null): Product
       abbreviation: { es: "ud" },
     },
     description: null,
-    kitchenName: `${name.toUpperCase()} COCINA`,
+    kitchenName: `${name.toUpperCase()} KITCHEN`,
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "2.00",
@@ -271,7 +271,7 @@ it("starts with sections closed and opens and closes one by a click on its row, 
   ).toEqual(["Lager", "Beer", "Lemonade"]);
   expect(row(el, "m-drinks/m-lager")!.getAttribute("aria-level")).toBe("3");
   const text = table(el).shadowRoot!.textContent!;
-  for (const wrong of ["Bebidas", "Something to drink", "for guests", "COCINA"])
+  for (const wrong of ["Bebidas", "Something to drink", "for guests", "KITCHEN"])
     expect(text).not.toContain(wrong);
   expect(row(el, "m-drinks")!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
     t("menus.collapse").replace("{name}", "Drinks"),
@@ -3180,7 +3180,7 @@ describe("search and the Available filter", () => {
     // The staff name, never the customer-facing or kitchen one.
     await search(el, "for guests");
     expect(shown(el)).toEqual([]);
-    await search(el, "COCINA");
+    await search(el, "KITCHEN");
     expect(shown(el)).toEqual([]);
     await search(el, "");
     expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);

@@ -79,7 +79,7 @@ it("words each change as its item, field, old value and new value", () => {
     "Soup: Name Soup → Broth",
     "Soup: Price €3.00 → €3.50",
     "Soup: VAT Reduced → General",
-    "Soup: Kitchen name SOUP COCINA → (empty)",
+    "Soup: Kitchen name SOUP KITCHEN → (empty)",
     "Starters: Internal name Starters → First",
   ]);
 });

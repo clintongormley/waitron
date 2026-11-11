@@ -1153,24 +1153,6 @@ product failures.
   [plan](../superpowers/plans/2026-11-01-a1301-remove-location.md),
   [working-time plan](../superpowers/plans/2026-11-02-a1301-working-time-slices.md)
 
-## A1241. Continue the dashboard test sample-name cleanup, one small slice per PR
-
-- **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
-  Historical-category and renamed-parent samples in the sales-category suite, plus catalogue,
-  device and floor-plan suites still carry Spanish sample names.
-  The `devices-screen.test.ts` suite still needs its
-  disabled-device, till, pairing, kitchen-screen profile, returning-device station and printer
-  sample names cleaned.
-  Menu-preview accessibility states still use `Terraza` as a sample menu name.
-  Audit the remaining `Terraza` occurrences in the menu-screen, look-card and equipment-label
-  test suites before the next cleanup slices.
-  Order and API suites also need their printer/venue samples audited.
-  The order-detail suite does not check its `row.tables` sample independently of `party.tables`.
-  Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search
-  fixture `Gin & Tónic`. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`,
-  which the in-flight A1089 reply-evidence branch changes. Recheck live branch paths before
-  the next slice.
-
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
 17 entries, size M. The first 15 are unchanged from the index they came from (backlog review,

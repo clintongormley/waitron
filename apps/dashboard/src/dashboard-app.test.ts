@@ -8194,7 +8194,7 @@ describe("the Products screen in the shell", () => {
     const api = stubApi({
       listCatalogues: vi
         .fn()
-        .mockResolvedValue([{ id: "cat-a", name: "Comida", active: true, version: 1 }]),
+        .mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true, version: 1 }]),
       listProducts: vi.fn().mockResolvedValue(listed),
       listUnits: vi.fn().mockResolvedValue([]),
       listExtraLists: vi.fn().mockResolvedValue([]),
@@ -8890,7 +8890,7 @@ describe("mounted public department dialogs", () => {
         {
           id: "d1",
           name: "Restaurant",
-          tradingName: "Casa",
+          tradingName: "House",
           active: true,
         },
         {

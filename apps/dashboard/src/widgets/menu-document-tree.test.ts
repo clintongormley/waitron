@@ -315,7 +315,7 @@ it.each([390, 1280])(
     await page.viewport(width, 900);
     const document = fixture();
     document.offers.juice!.name =
-      "Zumo de naranja recién exprimido para compartir con toda la mesa";
+      "Freshly pressed orange juice to share with everyone at the table";
     const el = await mount(document);
     const scroll = table(el).shadowRoot!.querySelector<HTMLElement>(".scroll")!;
     if (width === 390) await expect.poll(() => table(el).hasAttribute("narrow")).toBe(true);

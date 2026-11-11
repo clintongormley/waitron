@@ -115,7 +115,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
       abbreviation: { es: "ud" },
     },
     description: null,
-    kitchenName: `${name.toUpperCase()} COCINA`,
+    kitchenName: `${name.toUpperCase()} KITCHEN`,
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "2.00",
@@ -329,7 +329,7 @@ function variantProducts(): Product[] {
     id,
     name,
     customerName: { es: `${name} para clientes` },
-    kitchenName: `${name.toUpperCase()} COCINA`,
+    kitchenName: `${name.toUpperCase()} KITCHEN`,
     image: null,
     unitPrice,
     available: true,
@@ -2559,7 +2559,7 @@ it("shows the root's members, and expanding Drinks shows its members inline", as
   expect(names()).toEqual(["Burger", "Drinks", "Lager", "Beer", "Lemonade", "Favourites"]);
   // Staff names only.
   const shown = text(inStructure(el, "tbody"));
-  for (const wrong of ["Bebidas", "Something to drink", "for guests", "COCINA"])
+  for (const wrong of ["Bebidas", "Something to drink", "for guests", "KITCHEN"])
     expect(shown).not.toContain(wrong);
 });
 

@@ -371,7 +371,7 @@ it("shows a dish's patchable fields and nothing else, in every content language"
   expect(field(el, "wt-input", "name").value).toBe("Soup");
   expect(field(el, "wt-input", "name").required).toBe(true);
   expect(field(el, "wt-input", "customer-name-es").value).toBe("Soup para clientes");
-  expect(field(el, "wt-input", "kitchen-name").value).toBe("SOUP COCINA");
+  expect(field(el, "wt-input", "kitchen-name").value).toBe("SOUP KITCHEN");
   expect(field(el, "wt-price-input", "price").value).toBe("3.00");
   expect(form(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.value).toBe(
     "reduced",
@@ -2358,7 +2358,7 @@ it("retires a no-longer-fits refusal once the change it was about is typed back 
   await type(el, "wt-price-input", "price", "3");
   expect(bottomMessage(el)).toContain("no longer fits");
   await pick(el, "Salad");
-  await type(el, "wt-input", "kitchen-name", "SALAD COCINA");
+  await type(el, "wt-input", "kitchen-name", "SALAD KITCHEN");
   expect(el.changes).toEqual([]);
   expect(bottomMessage(el)).toBe("");
   expect(footerButton(el, "reload")).toBeNull();

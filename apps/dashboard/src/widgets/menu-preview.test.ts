@@ -883,7 +883,7 @@ it("shows the whole menu the publish would make live, read-only, under its own h
   expect(await topNames(tree)).toEqual(["Burger para clientes", "Drinks para clientes"]);
   expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
   expect((await topNames(tree)).join(" ")).toContain("para clientes");
-  expect((await topNames(tree)).join(" ")).not.toContain("COCINA");
+  expect((await topNames(tree)).join(" ")).not.toContain("KITCHEN");
 });
 
 it("still shows the whole menu, as it is live, when there is nothing to publish", async () => {
