@@ -3,6 +3,7 @@ import {
   assertNoStartAgainDeletion,
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
+  readRestoreFlowPhase,
 } from "@waitron/provisioning";
 import type { VenueLock } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
@@ -316,7 +317,13 @@ async function resolveRestoreTarget(
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
   const setupRefusal = (error: unknown) =>
-    deps.out(error instanceof AppError ? `restore failed: ${error.code}` : "restore failed");
+    deps.out(
+      error instanceof AppError && error.code === "restore.request_waiting"
+        ? sharedRefusal(error)
+        : error instanceof AppError
+          ? `restore failed: ${error.code}`
+          : "restore failed",
+    );
   try {
     await assertNoStartAgainDeletion(venueDir);
   } catch (error) {
@@ -331,6 +338,9 @@ async function resolveRestoreTarget(
     return 1;
   }
   try {
+    const phase = await readRestoreFlowPhase(stateDir);
+    if (phase === "staged" || phase === "placing")
+      throw new AppError("restore.request_waiting", {});
     if ((await inspectFirstSetupMarker(venueDir)) !== null)
       await assertVenueFirstSetupAllowed(venueDir);
   } catch (error) {
@@ -407,6 +417,8 @@ function sourceLiveRefusal(err: AppError, subject: string): string | null {
  */
 function sharedRefusal(err: unknown): string {
   if (!(err instanceof AppError)) return "restore failed";
+  if (err.code === "restore.request_waiting")
+    return "restore failed: restore.request_waiting — a restore saved from the setup page runs the next time the server starts and nothing was changed; start the server to run it, or choose this restore on the setup page instead, which replaces the saved one";
   if (err.code === "promotion.break_glass_invalid")
     return "restore failed: promotion.break_glass_invalid — use the selected backup's node recovery key";
   if (err.code === "provisioning.database_in_use") {

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -27,6 +27,7 @@ import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
 import type { RestoreFileDeps, ValidatedArtifact } from "./restore.js";
 import { runRestore } from "./restore-command.js";
+import { publishRestoreFlow } from "./restore-flow.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import type { restoreFromStream, RestoredVenue } from "./restore-stream.js";
 
@@ -173,6 +174,51 @@ describe("waitron-restore restore", () => {
     ]);
     expect(out.join("\n")).not.toContain(RECOVERY_KEY);
   });
+
+  it.each(["staged", "placing"] as const)(
+    "refuses a restore command while a %s restore waits and leaves it untouched",
+    async (phase) => {
+      const stateDir = await mkdtemp(join(tmpdir(), "restore-command-waiting-"));
+      try {
+        const artifactPath = await makeArtifact(stateDir);
+        const names = [
+          "record.json",
+          "artifact",
+          "key",
+          "venue.db",
+          "entries",
+          "placement.db",
+          "node-key",
+        ];
+        await publishRestoreFlow(stateDir, { version: 1, phase, request: {} }, async (dir) => {
+          for (const name of names.slice(1)) await writeFile(join(dir, name), `original ${name}`);
+        });
+        const bytes = () =>
+          Promise.all(names.map((name) => readFile(join(stateDir, "flows/restore", name))));
+        const before = await bytes();
+        const out: string[] = [];
+        const release = vi.fn();
+        const restore = vi.fn(async () => {});
+        expect(
+          await runRestore({
+            argv: ["restore", artifactPath],
+            env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY, WAITRON_STATE_DIR: stateDir },
+            lockVenue: async () => ({ release }),
+            out: (line) => out.push(line),
+            restore,
+          }),
+        ).toBe(1);
+        expect(out.at(-1)).toContain("restore.request_waiting");
+        expect(out.at(-1)).toContain("start the server");
+        expect(out.at(-1)).toContain("setup page");
+        expect(restore).not.toHaveBeenCalled();
+        expect(release).toHaveBeenCalledOnce();
+        expect(await bytes()).toEqual(before);
+      } finally {
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("uses the real restoreFromArtifact when no orchestrator is injected", async () => {
     // The environment gate refuses (production target, preproduction manifest) before a venue file
