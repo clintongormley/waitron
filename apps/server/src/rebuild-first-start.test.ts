@@ -169,6 +169,22 @@ async function storedRow(): Promise<unknown> {
 }
 
 describe("completeRebuild", () => {
+  it("finishes a first start while preserving a placing request for its Cloud retry", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const record = { version: 1, phase: "placing", request: { managedCloud: { pointId: "kept" } } };
+    await writeFile(
+      join(stateDir, RESTORE_RECORD),
+      JSON.stringify({ ...record, firstStart: { source: "archive" } }),
+    );
+    await writeFile(join(stateDir, "flows/restore/key"), "retained key");
+    expect(await completeRebuild(deps(stateDir))).toBe(true);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+    expect(JSON.parse(await readFile(join(stateDir, RESTORE_RECORD), "utf8"))).toEqual(record);
+    expect(await readFile(join(stateDir, "flows/restore/key"), "utf8")).toBe("retained key");
+    expect(await completeRebuild(deps(stateDir))).toBe(false);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+  });
+
   it.each(["archive", "stream"] as const)(
     "after a %s restore, presents a certificate naming THIS machine's addresses, from the same authority",
     async (source) => {

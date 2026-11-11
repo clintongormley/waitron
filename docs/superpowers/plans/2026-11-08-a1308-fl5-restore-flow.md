@@ -38,6 +38,12 @@ the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1
 **First line of the pull request:** "A restore staged before this change and not yet run is
 forgotten; stage it again (pre-live, CLAUDE.md §3 last data rule)."
 
+**2026-11-11 amendment — cleared by the watcher at 15:46 in Lane H questions.md:**
+`firstStart` keeps the old marker's independent meaning in every readable phase. A failed Cloud
+completion notice can leave `placing` with a first start owed. Completing that first start clears
+only `firstStart` when a staged/placing request remains; it ends the whole flow otherwise. No new
+flag, record or flow; unreadable-record Q2 and the requested folder layout stay unchanged.
+
 ## T4, by reading — Task 0 runs it on the base by killing the process
 
 `clearStagedRestore` (`restore-request.ts:345-356`) deletes eight files in one `Promise.all`, after
@@ -147,9 +153,10 @@ any code changes; Task 3 kills the new code at each step of the flow.
    phase `staged`/`placing` → today's behaviour.
 5. `rebuild-first-start.ts`: every "marker present" check (`:71-93`, `:104-145`, `:185-196`, and
    `boot.ts:1755`, `:1997-2011` at `9c66ef0356`) asks
-   `firstStartPending(stateDir): Promise<{ source } | null>` (phase `first-start` and `firstStart`
-   set). `completeRebuild`'s last step (`:143`) becomes: `removeAndSync(trading.env.replaced)`
-   ignoring `ENOENT`, then `endRestoreFlow`. `rejoin-command.ts:136`, which today removes only the
+   `firstStartPending(stateDir): Promise<{ source } | null>` (`firstStart` set in any readable
+   phase; the dated amendment above preserves the Cloud-notice retry). `completeRebuild`'s last step (`:143`) becomes: `removeAndSync(trading.env.replaced)`
+   ignoring `ENOENT`, then clear `firstStart` if a staged/placing request remains, otherwise
+   `endRestoreFlow`. `rejoin-command.ts:136`, which today removes only the
    rebuild marker, ends the flow only when its phase is `first-start`; a `staged` or `placing` flow
    is left as it is.
 6. Other readers re-pointed (phase `staged` or `placing` = "a restore is waiting"):

@@ -41,3 +41,30 @@ it.each([
   await expect(fs.readFile(join(dir, marker))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await fs.readFile(join(dir, "setup-operation.json"), "utf8")).toBe("existing progress");
 });
+
+it("refuses publication when the downloaded stream database cannot be flushed", async () => {
+  const dir = await fs.mkdtemp(join(tmpdir(), "stream-flush-"));
+  dirs.push(dir);
+  const databasePath = join(dir, "download.db");
+  await fs.writeFile(databasePath, "downloaded database");
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    const file = await actual.open(...args);
+    if (String(args[0]).endsWith("/venue.db") && args[1] === "r")
+      vi.spyOn(file, "sync").mockRejectedValue(
+        Object.assign(new Error("flush failed"), { code: "EIO" }),
+      );
+    return file;
+  });
+  await expect(
+    stageRestoreRequest(dir, {
+      kind: "stream",
+      databasePath,
+      entries: [],
+      environment: "preproduction",
+    }),
+  ).rejects.toMatchObject({ code: "EIO" });
+  await expect(fs.readFile(join(dir, "flows/restore/record.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});

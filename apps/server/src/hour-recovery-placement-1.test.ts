@@ -41,6 +41,7 @@ import { decryptArtifact } from "./artifact-cipher.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
+import { deferFirstStart } from "./rebuild-first-start.js";
 import { eq, sql } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -846,6 +847,10 @@ describe("selected-hour admission before archive placement", () => {
       ).toMatchObject({
         phase: "placing",
         request: { managedCloud: { pointId: managed.pointId } },
+      });
+      expect(await deferFirstStart(f.roots.stateDir, vi.fn())).toEqual({
+        mayStream: false,
+        failedSince: null,
       });
       const placed = await openVenueDatabase(f.roots.venueDir);
       let rows;

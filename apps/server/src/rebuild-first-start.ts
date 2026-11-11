@@ -1,3 +1,4 @@
+import { readRestoreFlowPhase } from "@waitron/provisioning";
 import { TRADING_ENV_FILE, TRADING_ENV_REPLACED_SUFFIX } from "@waitron/store";
 import { rm } from "node:fs/promises";
 import { syncFolderHolding } from "./fs-atomic.js";
@@ -26,7 +27,12 @@ import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { readStreamSettings } from "./stream-host.js";
 import { ownContactUrl } from "./box-name.js";
-import { endRestoreFlow, firstStartPending } from "./restore-flow.js";
+import {
+  endRestoreFlow,
+  firstStartPending,
+  readRestoreFlow,
+  updateRestoreFlow,
+} from "./restore-flow.js";
 import "./errors.js";
 
 export type RebuildSource = "archive" | "stream";
@@ -91,7 +97,7 @@ export async function assertRestoredMembershipReadable(
  * naming this machine's addresses, then the membership document one term higher naming this
  * machine's contact address. Does nothing, and returns false, when no restore has a pending first start.
  *
- * The flow is ended last, so a failure or a crash part-way re-runs every step at the next
+ * The first-start indication is cleared last, so a failure or a crash part-way re-runs every step at the next
  * start. Each re-run issues another leaf and, once the term has been stored, moves the term up
  * again.
  */
@@ -134,7 +140,11 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  await endRestoreFlow(deps.stateDir);
+  const phase = await readRestoreFlowPhase(deps.stateDir);
+  if (phase === "staged" || phase === "placing") {
+    const record = await readRestoreFlow(deps.stateDir);
+    await updateRestoreFlow(deps.stateDir, { ...record!, firstStart: undefined });
+  } else await endRestoreFlow(deps.stateDir);
   return true;
 }
 

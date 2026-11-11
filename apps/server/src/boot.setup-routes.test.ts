@@ -1,3 +1,4 @@
+import { publishRestoreFlow } from "./restore-flow.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { spawn } from "node:child_process";
@@ -1097,7 +1098,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
-  it("deletes setup validation's plaintext copy after staging a confirmed archive", async () => {
+  it("replaces a waiting restore and deletes setup validation's plaintext copy", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
     const source = await freshVenue();
@@ -1130,6 +1131,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         "validation-key",
       );
       await withSetupBoot(venue.directory, {}, async ({ post, stateDir, kills }) => {
+        await publishRestoreFlow(
+          stateDir,
+          { version: 1, phase: "staged", request: { version: 1, environment: "preproduction" } },
+          async (dir) => {
+            await writeFile(join(dir, "artifact"), "earlier archive");
+            await writeFile(join(dir, "key"), "earlier key");
+          },
+        );
         const response = await post("/setup-api/restore", {
           headers: {
             "content-type": "application/octet-stream",

@@ -126,13 +126,13 @@ it("syncs the published folder and both renamed parents before removing the ende
   expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
 });
 
-it("waits for placement to finish before reporting the first start", async () => {
+it("reports the first start independently of a waiting request", async () => {
   await publishRestoreFlow(
     stateDir,
     { ...staged, firstStart: { source: "archive" } },
     async () => {},
   );
-  expect(await firstStartPending(stateDir)).toBeNull();
+  expect(await firstStartPending(stateDir)).toEqual({ source: "archive" });
   await updateRestoreFlow(stateDir, firstStart);
   expect(await firstStartPending(stateDir)).toEqual({ source: "archive" });
 });

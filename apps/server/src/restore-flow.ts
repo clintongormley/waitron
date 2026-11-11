@@ -82,7 +82,6 @@ export async function firstStartPending(
 ): Promise<{ source: RebuildSource | "unknown" } | null> {
   const phase = await readRestoreFlowPhase(stateDir);
   if (phase === "unreadable") return { source: "unknown" };
-  if (phase !== "first-start") return null;
   const record = await readRestoreFlow(stateDir);
   if (record?.firstStart === undefined) return null;
   const source = record.firstStart.source;

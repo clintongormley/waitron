@@ -367,7 +367,7 @@ describe("waitron-rejoin rejoin", () => {
 });
 
 describe("waitron-rejoin rejoin — default wiring", () => {
-  it.each([undefined, "archive", "stream", "staged", "placing"] as const)(
+  it.each([undefined, "archive", "stream", "staged", "placing", "unreadable"] as const)(
     "with nothing injected, wipes a fenced node's real venue, re-migrates it and logs the acknowledged loss (restore source: %s)",
     async (source) => {
       const stateDir = await mkdtemp(join(tmpdir(), "rejoin-defaults-"));
@@ -396,12 +396,17 @@ describe("waitron-rejoin rejoin — default wiring", () => {
             stateDir,
             source === "staged" || source === "placing"
               ? { version: 1, phase: source, request: { artifact: "original" } }
-              : { version: 1, phase: "first-start", firstStart: { source } },
+              : {
+                  version: 1,
+                  phase: "first-start",
+                  firstStart: { source: source === "unreadable" ? "archive" : source },
+                },
             async (dir) => {
               await writeFile(join(dir, "artifact"), "original archive");
             },
           );
         }
+        if (source === "unreadable") await writeFile(join(stateDir, RESTORE_RECORD), "{not json");
         const pending = source === "staged" || source === "placing";
         const before = pending ? await readFile(join(stateDir, RESTORE_RECORD)) : null;
 

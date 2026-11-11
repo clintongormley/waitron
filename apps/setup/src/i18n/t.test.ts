@@ -45,10 +45,12 @@ it("fills each named placeholder, in the active locale", () => {
 
 it("inserts a value holding a replacement pattern as written", () => {
   expect(format("shell.bucket.refused_code", { code: "$&x" })).toBe(
-    "The copy could not be restored. ($&x)",
+    "The copy could not be restored. ($&x) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
   );
 });
 
 it("leaves a placeholder it was given no value for as written", () => {
-  expect(format("shell.bucket.refused_code", {})).toBe("The copy could not be restored. ({code})");
+  expect(format("shell.bucket.refused_code", {})).toBe(
+    "The copy could not be restored. ({code}) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+  );
 });

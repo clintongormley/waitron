@@ -133,8 +133,8 @@ export async function runRejoin(deps: {
         }),
       wipeDatabase: async () => {
         await deleteBackupRoomNote(stateDir);
-        if ((await readRestoreFlowPhase(stateDir)) === "first-start")
-          await endRestoreFlow(stateDir);
+        const phase = await readRestoreFlowPhase(stateDir);
+        if (phase === "first-start" || phase === "unreadable") await endRestoreFlow(stateDir);
         await wipeVenueDatabases(venueDir, stateDir);
         await migrate(venueDir);
         await clearTradingEnv(stateDir);

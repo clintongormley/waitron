@@ -129,7 +129,6 @@ export interface RestoreDeps extends ValidationDeps {
   readonly migrate?: typeof applyMigrations;
   /** Holds the venue folder for the whole write. Default {@link lockRestoreTarget}. */
   readonly lockVenue?: (directory: string) => Promise<VenueLock>;
-  /** Recorded in the first-start marker. Default `"archive"`. */
   readonly rebuildSource?: RebuildSource;
   readonly recordFirstStart?: (source: RebuildSource) => Promise<void>;
   readonly clearFirstStart?: () => Promise<void>;
