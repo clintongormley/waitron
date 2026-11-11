@@ -550,6 +550,22 @@ describe("till-floor-screen: Split tables… on a group", () => {
     );
   });
 
+  it("leaves an unticked group's party out of the split observations", async () => {
+    const api = stubApi();
+    const el = await mount(seatedAt(groupFloor(), "bar"), api);
+    send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["c5"], seats: 8 });
+    await settle(el);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "bar",
+      {
+        partIds: ["c5"],
+        seats: 8,
+        expectedParties: [],
+      },
+      7,
+    );
+  });
+
   it("includes the observed joined parent when its parts are free", async () => {
     const api = stubApi();
     const el = await mount(seatedAt(floor(), "long"), api);

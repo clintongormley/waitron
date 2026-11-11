@@ -500,9 +500,6 @@ in the zone's ⋮ menu. The device keeps your choice for each zone, so the zone 
 next time, and switching one zone leaves the others as they were. A zone you have not switched
 opens as a map when it has tables placed on its plan, and as a list when it has none.
 
-If **Split tables…** says someone else changed the table, reload the floor and choose the tables
-to split again.
-
 ## Reset a zone to today's plan {#zone-reset}
 
 To undo today's changes to a zone, open its ⋮ menu, choose **Reset to … plan** for the plan named there, and confirm **Reset**.
