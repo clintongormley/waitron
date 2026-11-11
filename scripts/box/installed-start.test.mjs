@@ -58,7 +58,7 @@ case "$name" in
  node)
   [ "$1" = /opt/waitron-host/box/disk-start.mjs ] || exit 99
   [ "\${DISK_CHECK_EXIT:-0}" = 0 ] || exit 1
-  echo '{"action":"ready","openedBy":"chip","emptyPassword":false,"keySlots":2,"tpmSlots":1}' ;;
+  echo '{"action":"ready","diskUuid":"installed-luks","openedBy":"chip","emptyPassword":false,"keySlots":2,"tpmSlots":1,"tpmPcrs":[5,7,8,9,15]}' ;;
  docker)
   echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"
   [ "\${DOCKER_EXIT:-43}" = 0 ] || exit "\${DOCKER_EXIT:-43}"
