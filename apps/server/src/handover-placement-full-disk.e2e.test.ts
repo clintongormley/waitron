@@ -92,7 +92,7 @@ for (const [name, leave] of CASES) {
     const start = await startsUntilPage(b);
 
     // Failing case, ENOSPC left as it was: `unknown` over the line, and a page that says nothing of the
-    // handover, the kept copy or the old box, and sends the person to whoever installed the box.
+    // handover, the kept copy or the old box: only the generic line.
     const state = await readRecoveryState(b.stateDir);
     expect(state.lastErrorCode).toBe("handover.placement_no_room");
     expect(start.page).toContain("This box&#39;s disk has no room for the copy of the venue");

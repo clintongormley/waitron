@@ -44,7 +44,7 @@ export const RECOVERY_PAGE_WORDS: Readonly<
       heading: string;
       stoppedHeading: string;
       retry: string;
-      forInstaller: string;
+      details: string;
       logTail: string;
       lastFailure: (at: string) => string;
       status: (level: string, failures: number) => string;
@@ -66,7 +66,7 @@ export const RECOVERY_PAGE_WORDS: Readonly<
     heading: "Waitron did not start",
     stoppedHeading: "Waitron stopped",
     retry: "Retry a normal boot",
-    forInstaller: "For whoever installed this box",
+    details: "Details",
     logTail: "Log tail",
     lastFailure: (at) => `Why the last start failed (${at})`,
     status: (level, failures) => `Level: ${level}. Failed ${failures} times.`,
@@ -87,7 +87,7 @@ export const RECOVERY_PAGE_WORDS: Readonly<
     heading: "Waitron no ha arrancado",
     stoppedHeading: "Waitron se ha detenido",
     retry: "Reintentar un arranque normal",
-    forInstaller: "Para quien instaló este equipo",
+    details: "Detalles",
     logTail: "Final del registro",
     lastFailure: (at) => `Por qué falló el último arranque (${at})`,
     status: (level, failures) => `Nivel: ${level}. Intentos fallidos: ${failures}.`,
@@ -176,25 +176,25 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       title:
         "This box's database was set up by a different version of Waitron than the one installed.",
       action:
-        "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
+        "Restore it from a backup, or reinstall. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
     },
     "es-ES": {
       title:
         "La base de datos de este equipo la configuró una versión de Waitron distinta de la instalada.",
       action:
-        "Restáurala desde una copia de seguridad, o reinstala. Si no tienes copia de seguridad, pide ayuda a quien instaló este equipo.",
+        "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     },
   },
   "provisioning.schema_mismatch": {
     "en-GB": {
       title: "The box's database does not match the installed software.",
       action:
-        "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
+        "Restore it from a backup, or reinstall. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
     },
     "es-ES": {
       title: "La base de datos del equipo no coincide con el software instalado.",
       action:
-        "Restáurala desde una copia de seguridad, o reinstala. Si no tienes copia de seguridad, pide ayuda a quien instaló este equipo.",
+        "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     },
   },
   "provisioning.database_unreachable": {
@@ -202,12 +202,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "Waitron could not open the box's database.",
       action:
-        "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, ask whoever installed this box for help: the box's database is a file on its disk, and the software cannot read it.",
+        "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, this is a fault in Waitron or this box's disk: the box's database is a file on its disk, and the software cannot read it.",
     },
     "es-ES": {
       title: "Waitron no ha podido abrir la base de datos del equipo.",
       action:
-        "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, pide ayuda a quien instaló este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
+        "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, es un fallo de Waitron o del disco de este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
     },
   },
   "storage.disk_full": {
@@ -227,12 +227,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "The box's database was only partly updated.",
       action:
-        "Ask whoever installed this box to look at it. Restoring a backup may not help: a restore runs the same update, and it can stop in the same place.",
+        "This is a fault in Waitron. Restoring a backup may not help: a restore runs the same update, and it can stop in the same place.",
     },
     "es-ES": {
       title: "La base de datos del equipo solo se actualizó en parte.",
       action:
-        "Pide a quien instaló este equipo que lo revise. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede detenerse en el mismo punto.",
+        "Es un fallo de Waitron. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede detenerse en el mismo punto.",
     },
   },
   "setup.environment_move_unfinished": {
@@ -312,32 +312,36 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
   "server.config_missing": {
     "en-GB": {
       title: "The box's configuration is incomplete.",
-      action: "Ask whoever installed this box to check its settings.",
+      action:
+        "This is a fault in Waitron's installation on this box: a setting the box needs is missing.",
     },
     "es-ES": {
       title: "La configuración del equipo está incompleta.",
-      action: "Pide a quien instaló este equipo que revise su configuración.",
+      action:
+        "Es un fallo de la instalación de Waitron en este equipo: falta un ajuste que el equipo necesita.",
     },
   },
   "server.config_invalid": {
     "en-GB": {
       title: "The box's configuration is invalid.",
-      action: "Ask whoever installed this box to check its settings.",
+      action:
+        "This is a fault in Waitron's installation on this box: a setting the box needs is not valid.",
     },
     "es-ES": {
       title: "La configuración del equipo no es válida.",
-      action: "Pide a quien instaló este equipo que revise su configuración.",
+      action:
+        "Es un fallo de la instalación de Waitron en este equipo: un ajuste que el equipo necesita no es válido.",
     },
   },
   [BOOT_INCOMPLETE]: {
     "en-GB": {
       title: "Waitron did not finish starting.",
-      action: "Press Retry. If it keeps failing, ask whoever installed this box to look at it.",
+      action: "Press Retry. If it keeps failing, this is a fault in Waitron or this box.",
     },
     "es-ES": {
       title: "Waitron no terminó de arrancar.",
       action:
-        "Pulsa «Reintentar un arranque normal». Si sigue fallando, pide a quien instaló este equipo que lo revise.",
+        "Pulsa «Reintentar un arranque normal». Si sigue fallando, es un fallo de Waitron o de este equipo.",
     },
   },
   // These four name no next step beyond the retry: Waitron's own steps should not produce them.
@@ -409,34 +413,36 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "A restore could not put the restored database in place.",
       action:
-        "Ask whoever installed this box to look at it before anything else. The details under “Why the last start failed” below, and the server's own output, say whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
+        "This is a fault in Waitron or this box's disk. The details under “Why the last start failed” below, and the server's own output, say whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
     },
     "es-ES": {
       title: "Una restauración no pudo poner en su sitio la base de datos restaurada.",
       action:
-        "Antes de nada, pide a quien instaló este equipo que lo revise. Los detalles de «Por qué falló el último arranque», más abajo, y la salida del propio servidor indican si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
+        "Es un fallo de Waitron o del disco de este equipo. Los detalles de «Por qué falló el último arranque», más abajo, y la salida del propio servidor indican si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
     },
   },
   "restore.database_set_aside": {
     "en-GB": {
       title: "This box's database was moved aside by a restore that did not finish.",
       action:
-        "Ask whoever installed this box to look at it before anything else. The database is in a folder inside the venue folder, named under “Why the last start failed” below and in the server's own output. It must be moved back, or the restore run again, before the box can start.",
+        "This is a fault in Waitron or this box's disk. The database is in a folder inside the venue folder, named under “Why the last start failed” below and in the server's own output. It must be moved back, or the restore run again, before the box can start.",
     },
     "es-ES": {
       title: "La base de datos de este equipo quedó apartada por una restauración que no terminó.",
       action:
-        "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece más abajo, en «Por qué falló el último arranque», y en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
+        "Es un fallo de Waitron o del disco de este equipo. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece más abajo, en «Por qué falló el último arranque», y en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
     },
   },
   "append_only.triggers_changed": {
     "en-GB": {
       title: "A safeguard on the box's permanent records was removed or changed.",
-      action: "Ask whoever installed this box to look at it before anything else.",
+      action:
+        "This is a fault in Waitron or this box's disk, or a program other than Waitron changed the box's database.",
     },
     "es-ES": {
       title: "Se ha quitado o cambiado una protección de los registros permanentes del equipo.",
-      action: "Antes de nada, pide a quien instaló este equipo que lo revise.",
+      action:
+        "Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron ha cambiado la base de datos del equipo.",
     },
   },
   "restore.membership_invalid": {
@@ -445,13 +451,13 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       title:
         "The list of machines in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
       action:
-        "The box will not start from this copy. Ask whoever installed this box to look at it before anything else.",
+        "The box will not start from this copy. Unless it was changed after it was saved, this is a fault in Waitron or this box's disk.",
     },
     "es-ES": {
       title:
         "La lista de equipos de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
       action:
-        "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
+        "El equipo no arrancará con esta copia. Salvo que se cambiara después de guardarse, es un fallo de Waitron o del disco de este equipo.",
     },
   },
   "migrations.apply_failed": {
@@ -460,13 +466,13 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "The box's database could not be updated for the installed version of Waitron.",
       action:
-        "Ask whoever installed this box to install a version of Waitron that fixes this. The step that failed was undone, so the box can start once a fixed version is installed. Restoring a backup may not help: a restore runs the same update, and it can fail in the same place.",
+        "This is a fault in Waitron. The step that failed was undone, so the box can start once a version of Waitron that fixes it is installed. Restoring a backup may not help: a restore runs the same update, and it can fail in the same place.",
     },
     "es-ES": {
       title:
         "No se ha podido actualizar la base de datos del equipo para la versión de Waitron instalada.",
       action:
-        "Pide a quien instaló este equipo que instale una versión de Waitron que lo corrija. El paso que falló se deshizo, así que el equipo podrá arrancar cuando se instale una versión corregida. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede fallar en el mismo punto.",
+        "Es un fallo de Waitron. El paso que falló se deshizo, así que el equipo podrá arrancar cuando se instale una versión de Waitron que lo corrija. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede fallar en el mismo punto.",
     },
   },
   "migrations.set_missing": {
@@ -547,17 +553,19 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
 };
 
 /**
- * Names a person rather than promising the reason is written down: a failure reading or counting
- * the recovery state reaches `node-entry.ts`'s outer handler, which logs its code and no detail.
+ * Promises no recorded reason: a failure reading or counting the recovery state reaches
+ * `node-entry.ts`'s outer handler, which logs its code and no detail.
  */
 export const GENERIC_TEXT: OperatorText = {
   "en-GB": {
     title: "Waitron could not start.",
-    action: "Ask whoever installed this box to look at it.",
+    action:
+      "Press “Retry a normal boot”. If it fails again, this is a fault in Waitron or this box.",
   },
   "es-ES": {
     title: "Waitron no ha podido arrancar.",
-    action: "Pide a quien instaló este equipo que lo revise.",
+    action:
+      "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, es un fallo de Waitron o de este equipo.",
   },
 };
 

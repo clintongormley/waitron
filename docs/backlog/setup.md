@@ -311,21 +311,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   the redirect.
   [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
 
-## The recovery page's operator texts send the person to whoever installed the box
-
-Left open by A1384 (#2527). The recovery page's operator texts
-(`apps/server/src/i18n/recovery-page.ts`: most codes' actions, among them
-`provisioning.database_ahead`, `provisioning.schema_mismatch` and the generic
-fallback, English and Spanish, plus the `forInstaller` heading "For whoever installed this box")
-send the person to whoever installed the box. CLAUDE.md §3's first rule (owner, 2026-10-25) names that as
-no remedy; `apps/server/src/recovery-surface.test.ts` still requires it beside a restore action,
-for #310's reason of 2026-09-11, from before the rule. Each code needs words a person with no
-terminal can act on: the owner's approved reinstall sentence (A1127, 2026-10-28;
-`shell.first_setup.disk_full`), a fault in Waitron where only a bug reaches
-the state (established at its site), or a new self-service step; a code with none of these goes to
-the owner. After A760 a box moved to the new image without a reset shows
-`provisioning.database_ahead`'s page.
-
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
 A1127 measured the room a lock, the emptying and the Start-again flow need on a 32 MiB HFS+ image,

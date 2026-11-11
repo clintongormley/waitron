@@ -43,8 +43,8 @@ referrals, not completed recovery experiments.
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
 | [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. The **What the box recorded** panel shows what the box recorded; repair (key numbers, an old credentials key, rewriting the record) remains open. |
 | [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Start the copy again (A1089 B1) restarts a copy that stopped or could not start, but not one refused because another box was found writing to the same bucket. Host-configuration diagnosis, reason-specific guidance for a stopped copy and ownership choices remain open, with authentication and evidence before resuming a primary. |
-| [Sealed state](#backup-state) | The alert names the cause (A1089 B2): a full disk, missing own files, or another. Missing own files and an unrecognised cause have no correction beyond a restart. |
-| [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
+| [Sealed state](#backup-state) | The alert names the cause (A1089 B2): a full disk, missing own files, or another. Missing own files now says it is a fault (A1089, 2026-11-11), with no route planned; an unrecognised cause has no correction beyond a restart. |
+| [Backup preparation](#backup-preparation) | Referral reworked (A1089, 2026-11-11): missing own files and any other cause now say it is a fault; any other cause also says Waitron tries again at the next scheduled backup. Still open: a supported disk-recovery choice when no reclaimable files remain ([below](#backup-preparation)). |
 | [Restored first start](#restore-start) | Preserve the completion refusal and offer a specific correction when restart fails again. |
 | [Fiscal integrity](#fiscal-integrity) | Offer evidence inspection and a supported decision/recovery path without editing immutable records. An administrator referral does not provide that path. |
 | [Filing cases](#fiscal-cases) | Build the released filing-case decision path; waiting or finding another person does not resolve a held case. |
@@ -52,7 +52,7 @@ referrals, not completed recovery experiments.
 | [Fiscal environment](#fiscal-environment) | Offer safe host-configuration or evidence/recovery choices; never relabel records or promote test data. |
 | [Reconciliation](#fiscal-reconcile) | Establish the caller, then offer evidence and a decision path rather than sending the person to an administrator or adviser. |
 | [Payments](#payments) | Preserve confirmed-outcome requirements. Give a way to inspect provider evidence and resolve the held payment without depending on a conversation with provider staff. |
-| [Boot recovery](#boot-recovery) | Recheck the recovery page's installer referrals and expose applicable restart, space, backup or reinstall choices. The earlier observation that its instructions were distinct does not qualify them as self-service. |
+| [Boot recovery](#boot-recovery) | Referral reworked (A1089, 2026-11-11): each row says plainly what happened and, where nothing at the box can fix it, that it is a fault, with the restart, retry, restore or reinstall choice it already named. `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). No other row gains a way out; the owner's answer names none for these rows, and its Restart the box button (A1498) was built as a dashboard restart of Waitron's server only (watcher, 2026-11-11 10:31), so the held-database row still says to switch the box off and on. |
 
 Take the four reworks in the order above, one small PR per area. Test the refusal and the available
 way out before calling it complete. Build a missing small action; record each substantial missing
@@ -173,6 +173,8 @@ Route: Missing: expose a non-secret cause and an action to retry after fixing it
 _2026-11-11, A1089 B2: the words no longer say to contact support. The alert now ends with words chosen by the failure's cause (`ALERT_WORDS.sealed_state`, `apps/dashboard/src/i18n/alert-messages.ts:523`, read by the `errorCode` param that `apps/server/src/alert-sources.ts:249` sends): for a full disk, free space on the Box status page, then switch the box off and on, since each start updates the copy again; for missing own files, that some of the box's own files are missing, with no next step; for any other cause, that each start tries again, so switch the box off and on. “Sales continue” is said for the last two only: a full disk can refuse sales (`apps/server/src/till-api.disk-full-gate.test.ts`). The alert clears once a refresh seals. Still open: missing own files and an unrecognised cause have no correction beyond a restart. The rest of this entry records the earlier tree._
 
 _2026-11-11, A1498: for a full disk and for any other cause the words now say to press Restart the box on the Box status page instead of switching the box off and on._
+
+_2026-11-11, A1089: for missing own files the words now add that this is a fault in Waitron or this box's disk, or a program other than Waitron removed them._
 
 ### `restore.first_start_failed`
 
@@ -437,6 +439,8 @@ State: A required backup state file is absent. A missing file is not proved to b
 
 Route: Missing: identify the safe recovery/reinstall procedure for the missing component. Do not manufacture replacement private keys and describe the resulting backup as equivalent.
 
+_2026-11-11, A1089 (owner, 2026-11-11 10:14, "As recommended", choosing the option ending "the rest say plainly what happened and that it is a fault"): the words no longer say to contact support. They say the files are missing and that this is a fault in Waitron or this box's disk, or a program other than Waitron removed them; the sealed-copy alert's words for the same code now say the same. The owner's answer plans no recovery route here. The rest of this entry records the earlier tree._
+
 ### `otherwise`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [backup-preparation](#backup-preparation).
@@ -451,6 +455,8 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:456` and `apps/dashboard/src
 State: Any other backup-run preparation error is reduced to the substitution fallback. Its cause is unknown, so it cannot qualify for a bug-only exception. Receipt: `apps/server/src/alert-sources.ts:186`; `apps/server/src/backup-sweep.ts:318`.
 
 Route: Missing: retain a safe error category and a usable next step. An unknown cause must not become an unconditional support instruction.
+
+_2026-11-11, A1089: the words no longer say to contact support. They say Waitron tries again at the next scheduled backup (a failed run is logged and the loop goes on: `tick` and `runBackupSweep` in `apps/server/src/backup-sweep.ts`, case "logs backup.failed and keeps looping when the dump throws" in `backup-sweep.test.ts`), and that a message that stays is a fault in Waitron or this box. The owner's answer of 2026-11-11 plans no further next step here. The rest of this entry records the earlier tree._
 
 ### `shell.first_setup.attempt_invalid`
 
@@ -672,7 +678,7 @@ rows name backup/reinstall, its disk-full row names freeing space or a bigger di
 boot row names a retry followed by the installer. Those are already distinct instructions rather
 than an endless wait. _2026-11-07: the database-ahead, schema and unknown-boot rows, and others, but not the disk-full
 row, also send the person to whoever installed the box, against CLAUDE.md §3's first rule
-([setup.md](setup.md#the-recovery-pages-operator-texts-send-the-person-to-whoever-installed-the-box))._ The page's rendered action is a boot retry (`:563`); a restore or reinstall
+(see [boot-recovery](#boot-recovery))._ _2026-11-11, A1089 and A1501 (#2829): no row names the installer now; see [boot-recovery](#boot-recovery)._ The page's rendered action is a boot retry (`:563`); a restore or reinstall
 is an operator procedure, not a second button. The actual accessibility of each installer procedure
 was not exercised by this audit. Do not describe this as qualified end-user recovery.
 
@@ -752,6 +758,8 @@ still block Start again on this path.
 _2026-11-11, A1089 slice 1: the resetting message now names pressing Reset this server again instead of support; a reset that never takes effect is still open._
 
 _2026-11-11, A1089 B3 dropped: a probe on main 3c064196a1 stopped the real join (`/setup-api/adopt`) at each of its five writes, then ran the staged reset. The reset was dropped only when stopped just after `trading.env` was written; that file sets `WAITRON_NODE_ID` (`apps/server/src/trading-config.ts:34`), and setup mode needs it unset (`apps/server/src/node-config.ts:36`, `apps/server/src/boot.ts:1345`). The probe did not try damaged files. Its steps are in the A1494 pull request._
+
+_2026-11-11, found in A1089's review: the setup wizard's page for a join that stopped part-way (`done.stalled.restarted`, `apps/setup/src/i18n/strings/finish.ts:78` and `:161`) still says to tell whoever installed this server. That page was not among the cases on the owner's 2026-11-11 decision list, so its words wait for this entry._
 
 ### setup-readiness
 
@@ -837,7 +845,7 @@ this box off if the other box replaced it; choosing which box keeps the bucket i
 
 ### backup-state
 
-**A failed sealed-state refresh needs a correction beyond a restart.** 2026-11-11, A1089 B2: the alert names the cause (full disk: free space on Box status, then restart; missing own files: says only that; any other cause: restart) and clears once a refresh seals. Still open: missing own files and an unrecognised cause have no correction beyond a restart. Do not promise current recovery keys before success.
+**A failed sealed-state refresh needs a correction beyond a restart.** 2026-11-11, A1089 B2: the alert names the cause (full disk: free space on Box status, then restart; missing own files: says only that; any other cause: restart) and clears once a refresh seals. 2026-11-11, A1089: missing own files now also says it is a fault in Waitron or this box's disk, or a program other than Waitron removed them; the owner's answer plans no route for it. Still open: an unrecognised cause has no correction beyond a restart. Do not promise current recovery keys before success.
 
 ### backup-preparation
 
@@ -865,9 +873,7 @@ backup cannot fit, there is no supported in-app disk-recovery workflow. Add an a
 choice with evidence and a safe Stop; do not delete database files, keys or saved backups to
 silence the alert. Changing retention is not immediate full-disk recovery.
 
-**Missing files and unknown preparation failures still need remedies.** Preserve the safe error
-category and establish the component's recovery route before replacing `recovery.state_incomplete`
-and the `backup_stop` fallback. Do not manufacture replacement private keys.
+_2026-11-11, A1089 (owner, 2026-11-11 10:14, "As recommended"): `recovery.state_incomplete` and the `backup_stop` fallback now say what happened and that it is a fault; the owner's answer plans no further remedy for them. Do not manufacture replacement private keys._
 
 ### backup-key
 
@@ -988,6 +994,8 @@ awaits the owner's scope decision. It changes no runtime behavior.
 | Available alert action | `packages/fiscal-verifactu/src/alerts.ts:12` claims fiscal incidents with `fiscal.view` and no target screen. `apps/dashboard/src/widgets/alert-format.ts:38` supplies a target only when the alert names one. The traced handled action acknowledges an incident; it does not change environment metadata or resubmit a record. |
 | Failed-start surface | `apps/server/src/recovery-surface.ts:351` gives the deployment mismatch an installer referral. A dashboard-only inspection would not repair that failed-start path. Its replacement needs its own authenticated recovery entry; lane A's setup/backup redesign is not authorised by this proposal. |
 | Restore boundary | `apps/server/src/restore-gate.ts:20` refuses a backup from the other environment. A backup is not evidence that missing record metadata may be filled in, nor that a later fiscal record can be discarded. |
+
+_2026-11-11, A1501 (#2829): the failed-start row now offers Start again/Stop instead of the installer referral; see [boot-recovery](#boot-recovery)._
 
 Existing checks run unchanged:
 
@@ -1219,8 +1227,9 @@ The earlier server-page inventory did not exercise those recovery procedures.
 
 _2026-11-11, A1089 slice 1: the held-database page (`holderStalledText`) now says, if Retry fails again, to switch the box off and on, which ends any program holding the database, instead of asking whoever installed the box. The other rows' installer referrals are still open._
 
-
 _2026-11-11, A1501: the wrong-environment database row now offers Start again/Stop, with a read-only administrator password check over HTTPS before moving the installed files aside. The next first setup offers fresh setup or another backup; this does not relabel records or change restore admission._
+
+_2026-11-11, A1089 (owner, 2026-11-11 10:14, "As recommended", choosing the option ending "the rest say plainly what happened and that it is a fault"): no other row of `OPERATOR_TEXT` or `GENERIC_TEXT` in `apps/server/src/i18n/recovery-page.ts` sends the person to whoever installed the box; `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). Each other row that named the installer now names the fault (in Waitron, its installation, or the box's disk) and keeps the restart, restore or reinstall step it already offered; the generic row now says to press Retry a normal boot; the two restore rows (`provisioning.database_ahead`, `provisioning.schema_mismatch`) instead say what reinstalling without a backup loses. The page's details heading is now "Details" / "Detalles". No action, route or button was added, and the owner's answer plans none beyond what each row names. Guards: the "sends nobody to someone else" cases in `apps/server/src/i18n/recovery-page.test.ts` and `apps/server/src/recovery-start-again.test.ts`. The lead paragraph records the earlier tree._
 
 ### Backup-key self-service rework, 2026-10-25
 

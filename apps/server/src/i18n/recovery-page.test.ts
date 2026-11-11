@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   BOOT_INCOMPLETE,
+  ENVIRONMENT_RECOVERY_TEXT,
   GENERIC_TEXT,
   OPERATOR_TEXT,
   RECOVERY_PAGE_WORDS,
@@ -21,11 +22,13 @@ describe("recovery page wording", () => {
     expect(GENERIC_TEXT).toEqual({
       "en-GB": {
         title: "Waitron could not start.",
-        action: "Ask whoever installed this box to look at it.",
+        action:
+          "Press “Retry a normal boot”. If it fails again, this is a fault in Waitron or this box.",
       },
       "es-ES": {
         title: "Waitron no ha podido arrancar.",
-        action: "Pide a quien instaló este equipo que lo revise.",
+        action:
+          "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, es un fallo de Waitron o de este equipo.",
       },
     });
   });
@@ -36,13 +39,13 @@ describe("recovery page wording", () => {
         title:
           "This box's database was set up by a different version of Waitron than the one installed.",
         action:
-          "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
+          "Restore it from a backup, or reinstall. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
       },
       "es-ES": {
         title:
           "La base de datos de este equipo la configuró una versión de Waitron distinta de la instalada.",
         action:
-          "Restáurala desde una copia de seguridad, o reinstala. Si no tienes copia de seguridad, pide ayuda a quien instaló este equipo.",
+          "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
       },
     });
   });
@@ -70,10 +73,55 @@ describe("recovery page wording", () => {
         "Si vuelve a fallar, apaga y enciende el equipo: así se cierra cualquier programa que tenga ocupada la base de datos.",
       );
       for (const lang of ["en-GB", "es-ES"] as const) {
-        expect(text[lang].action, lang).not.toMatch(/whoever installed|quien instaló/i);
+        expect(text[lang].action, lang).not.toMatch(
+          /whoever installed|quien instaló|support|soporte/i,
+        );
       }
     },
   );
+
+  it("sends nobody to someone else on any row, in either language", () => {
+    const rows: [string, Record<string, string>][] = [
+      ...Object.entries(OPERATOR_TEXT).flatMap(([code, text]) =>
+        (["en-GB", "es-ES"] as const).map(
+          (lang) => [`${code} ${lang}`, { ...text![lang] }] as [string, Record<string, string>],
+        ),
+      ),
+      ...(["en-GB", "es-ES"] as const).map(
+        (lang) =>
+          [`generic ${lang}`, { ...GENERIC_TEXT[lang] }] as [string, Record<string, string>],
+      ),
+      ...(["en-GB", "es-ES"] as const).map(
+        (lang) =>
+          [`environment ${lang}`, { ...ENVIRONMENT_RECOVERY_TEXT[lang] }] as [
+            string,
+            Record<string, string>,
+          ],
+      ),
+      ...(["en-GB", "es-ES"] as const).map(
+        (lang) =>
+          [
+            `page words ${lang}`,
+            Object.fromEntries(
+              Object.entries(RECOVERY_PAGE_WORDS[lang]).map(([key, value]) => [
+                key,
+                typeof value === "function"
+                  ? (value as (...args: unknown[]) => string)("x", 1)
+                  : value,
+              ]),
+            ),
+          ] as [string, Record<string, string>],
+      ),
+    ];
+    expect(rows.length).toBeGreaterThan(6);
+    for (const [label, fields] of rows) {
+      for (const [field, value] of Object.entries(fields)) {
+        expect(value, `${label} ${field}`).not.toMatch(
+          /whoever installed|quien instaló|support|soporte/i,
+        );
+      }
+    }
+  });
 
   // Reads the module's source as text; it does not observe what loads at runtime.
   it("imports only types", () => {

@@ -230,7 +230,7 @@ function renderPage(
       : `<h2>${escapeHtml(page.lastFailure(log.lastFailure.at))}</h2>
 <pre>${escapeHtml(log.lastFailure.detail)}</pre>
 `;
-  // The retry form sits above the installer detail: the operator's action is the point of the page.
+  // The retry form sits above the details section: the operator's action is the point of the page.
   // A settled `answer` (a finished Move) takes the place of the operator text and the retry form.
   const lead =
     answer ??
@@ -251,7 +251,7 @@ ${section}<form method="post" action="/recovery-api/retry">
 </head>
 <body>
 <h1>${escapeHtml(heading)}</h1>
-${lead}<h2>${escapeHtml(page.forInstaller)}</h2>
+${lead}<h2>${escapeHtml(page.details)}</h2>
 <p>${escapeHtml(status)}</p>
 ${freeSpaceLine(freeBytes, locale)}${triggerLines(state, page)}<p>${escapeHtml(lastError)}</p>
 ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>

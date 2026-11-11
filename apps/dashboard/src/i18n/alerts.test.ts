@@ -382,21 +382,23 @@ describe("a backup that stopped before reaching any destination", () => {
     );
   });
 
-  it("says files every backup must include are missing", () => {
+  it("says files every backup must include are missing, and that this is a fault", () => {
     const params = { errorCode: "recovery.state_incomplete" };
     expect(alertMessage("backup.run_stopped", params, "en")).toBe(
-      `${LEAD_EN} Some of the box's own files that every backup must include are missing. Contact support.`,
+      `${LEAD_EN} Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.`,
     );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} Faltan algunos archivos propios del equipo que toda copia debe incluir. Contacta con soporte.`,
+      `${LEAD_ES} Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.`,
     );
   });
 
-  it("sends any other cause to support, never showing the raw code", () => {
+  it("says any other cause is retried at the next backup and is otherwise a fault, never showing the raw code", () => {
     const params = { errorCode: "unknown" };
-    expect(alertMessage("backup.run_stopped", params, "en")).toBe(`${LEAD_EN} Contact support.`);
+    expect(alertMessage("backup.run_stopped", params, "en")).toBe(
+      `${LEAD_EN} Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron or this box.`,
+    );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} Contacta con soporte.`,
+      `${LEAD_ES} Waitron lo vuelve a intentar en la próxima copia programada. Si el mensaje sigue, es un fallo de Waitron o de este equipo.`,
     );
   });
 });
@@ -420,12 +422,12 @@ describe("a box that could not update the locked copy of its own keys and settin
     expect(say("storage.disk_full", "es")).toContain(t("nav.box_status", "es-ES"));
   });
 
-  it("says files the copy must include are missing", () => {
+  it("says files the copy must include are missing, and that this is a fault", () => {
     expect(say("recovery.state_incomplete", "en")).toBe(
-      `${LEAD_EN} Sales continue. Some of the box's own files that the copy must include are missing.`,
+      `${LEAD_EN} Sales continue. Some of the box's own files that the copy must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.`,
     );
     expect(say("recovery.state_incomplete", "es")).toBe(
-      `${LEAD_ES} Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir.`,
+      `${LEAD_ES} Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.`,
     );
   });
 

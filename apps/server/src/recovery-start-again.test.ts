@@ -365,6 +365,23 @@ describe("renderStartAgainSection", () => {
       expect(es[key], key).not.toBe(en[key]);
     }
   });
+
+  it("sends nobody to someone else, in either language", () => {
+    for (const locale of ["en-GB", "es-ES"] as const) {
+      const text = START_AGAIN_PAGE_TEXT[locale];
+      const sampled = {
+        ...text,
+        more: text.more(3),
+        throttled: text.throttled(4),
+        moved: text.moved("state/aside"),
+      };
+      for (const [key, value] of Object.entries(sampled)) {
+        expect(value, `${locale} ${key}`).not.toMatch(
+          /whoever installed|quien instaló|support|soporte/i,
+        );
+      }
+    }
+  });
 });
 
 const sockets: TLSSocket[] = [];
