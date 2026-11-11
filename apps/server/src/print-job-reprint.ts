@@ -11,7 +11,7 @@ import {
   canResendPrintJob,
   endMovedPrintJob,
   MAX_DELIVERY_ATTEMPTS,
-  printArea,
+  readPrintArea,
   textGrid,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
@@ -121,7 +121,7 @@ export async function reprintJobOn(
     } = await tx.execute<{ linked: number }>(
       sql`select ${linkedPrintoutSql(job.resendOf ?? job.id)} as linked`,
     );
-    const area = linked?.linked ? printArea(job.payload) : null;
+    const area = linked?.linked ? readPrintArea(job.payload) : null;
     const { rule, fits } = reprintRule(null, area?.widthDots ?? null);
     if (rule === "own" || area === null)
       throw new AppError("print_job.own_printer_only", { id: jobId });

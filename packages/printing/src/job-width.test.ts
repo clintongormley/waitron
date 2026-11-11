@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { esc, type EscSetting } from "./escpos.js";
 import { SETTING_WIDTHS } from "./layout.js";
-import { centredForPrinter, jobWidthDots } from "./job-width.js";
+import { jobWidthDots, readPrintArea } from "./job-width.js";
 import { escPosCommands } from "./testing/escpos-commands.js";
 
 /** Every command the builder sends, so each step of the walk is crossed. */
@@ -36,11 +36,12 @@ function withMargins(payload: Uint8Array, margin: number): number[] {
   return expected;
 }
 
-describe("jobWidthDots", () => {
+describe("readPrintArea and jobWidthDots", () => {
   it.each(SETTING_WIDTHS)(
     "reads $widthDots dots from a $paperWidth $resolution printout and from its first ten bytes",
     ({ paperWidth, resolution, widthDots }) => {
       const payload = ticket({ paperWidth, resolution }, widthDots);
+      expect(readPrintArea(payload)?.widthDots).toBe(widthDots);
       expect(jobWidthDots(payload)).toBe(widthDots);
       expect(jobWidthDots(payload.slice(0, 10))).toBe(widthDots);
     },
@@ -58,24 +59,25 @@ describe("jobWidthDots", () => {
     ["with no print area", esc(setting58).init().line("Hi").feedAndCut().bytes()],
     ["with two print-area widths", joined(ticket(setting58, 360), ticket(setting58, 384))],
   ])("answers null for a payload %s", (_case, payload) => {
+    expect(readPrintArea(payload)).toBeNull();
     expect(jobWidthDots(payload)).toBeNull();
   });
 });
 
-describe("centredForPrinter", () => {
+describe("readPrintArea(…).centredOn", () => {
   it.each([
     [360, 512, 76],
     [384, 576, 96],
     [512, 512, 0],
   ])("moves a %i-dot printout onto a %i-dot printer with a %i-dot margin", (job, dots, margin) => {
     const payload = ticket(setting58, job);
-    expect([...centredForPrinter(payload, dots)]).toEqual(withMargins(payload, margin));
+    expect([...readPrintArea(payload)!.centredOn(dots)]).toEqual(withMargins(payload, margin));
   });
 
   it("sets the margin of every print area, as a joined kitchen ticket has two", () => {
     const payload = joined(ticket(setting58, 360), ticket(setting58, 360).slice(2));
     expect(escPosCommands(payload).filter(({ name }) => name === "GS L")).toHaveLength(2);
-    expect([...centredForPrinter(payload, 512)]).toEqual(withMargins(payload, 76));
+    expect([...readPrintArea(payload)!.centredOn(512)]).toEqual(withMargins(payload, 76));
   });
 
   it("leaves image bytes that look like a margin command alone", () => {
@@ -85,16 +87,13 @@ describe("centredForPrinter", () => {
       .bitmap({ widthDots: 32, heightDots: 1, bits: Uint8Array.of(0x1d, 0x4c, 0x00, 0x00) })
       .feedAndCut()
       .bytes();
-    const centred = centredForPrinter(payload, 512);
+    const centred = readPrintArea(payload)!.centredOn(512);
     expect([...centred]).toEqual(withMargins(payload, 76));
     expect([...centred.slice(18, 22)]).toEqual([0x1d, 0x4c, 0x00, 0x00]);
     expect([...payload.slice(2, 6)]).toEqual([0x1d, 0x4c, 0x00, 0x00]);
   });
 
-  it.each([
-    ["wider than the printer", ticket(setting58, 512), 384],
-    ["unrecognised", Uint8Array.of(0x41), 512],
-  ])("refuses a printout %s", (_case, payload, dots) => {
-    expect(() => centredForPrinter(payload, dots)).toThrow(RangeError);
+  it("refuses a printout wider than the printer", () => {
+    expect(() => readPrintArea(ticket(setting58, 512))!.centredOn(384)).toThrow(RangeError);
   });
 });

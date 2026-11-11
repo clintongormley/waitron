@@ -16,10 +16,10 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   MAX_DELIVERY_ATTEMPTS,
-  centredForPrinter,
   createPrinter,
   enqueuePrintJob,
   esc,
+  readPrintArea,
   textGrid,
   updatePrinter,
   type EscSetting,
@@ -282,7 +282,7 @@ describe("reprintJobOn", () => {
     expect(await jobRow(first.jobId)).toMatchObject({
       printerId: target,
       resendOf: ticket,
-      payload: centredForPrinter(stored, dots(at80)),
+      payload: readPrintArea(stored)!.centredOn(dots(at80)),
     });
     await setJob(first.jobId, { status: "done" });
     const wider = await printerAt(at80fine);
@@ -290,7 +290,7 @@ describe("reprintJobOn", () => {
     expect(await jobRow(second.jobId)).toMatchObject({
       printerId: wider,
       resendOf: ticket,
-      payload: centredForPrinter(stored, dots(at80fine)),
+      payload: readPrintArea(stored)!.centredOn(dots(at80fine)),
     });
   });
 
@@ -302,7 +302,7 @@ describe("reprintJobOn", () => {
     expect(await jobRow(jobId)).toMatchObject({
       printerId: target,
       saleId: null,
-      payload: centredForPrinter(stored, dots(at80)),
+      payload: readPrintArea(stored)!.centredOn(dots(at80)),
     });
   });
 

@@ -20,7 +20,7 @@ const FIXED: ReadonlyMap<number, number> = new Map([
  * it on a wider printer. Null for anything `EscBuilder` does not send, a command cut short by the
  * end, or unless every `GS W` names one width.
  */
-export function printArea(
+export function readPrintArea(
   payload: Uint8Array,
 ): { widthDots: number; centredOn: (printerDots: number) => Uint8Array } | null {
   const margins: number[] = [];
@@ -62,16 +62,7 @@ export function printArea(
   };
 }
 
-/** The print area's width in dots that a printout was laid out for; see {@link printArea}. */
+/** The print area's width in dots that a printout was laid out for; see {@link readPrintArea}. */
 export function jobWidthDots(payload: Uint8Array): number | null {
-  return printArea(payload)?.widthDots ?? null;
-}
-
-/** A copy whose every `GS L` centres the printout's width on a printer `printerDots` wide. */
-export function centredForPrinter(payload: Uint8Array, printerDots: number): Uint8Array {
-  const area = printArea(payload);
-  if (area === null) {
-    throw new RangeError(`a printout of unknown width cannot be centred on ${printerDots} dots`);
-  }
-  return area.centredOn(printerDots);
+  return readPrintArea(payload)?.widthDots ?? null;
 }

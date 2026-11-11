@@ -17,7 +17,7 @@ export {
   PRINT_JOB_MOVED,
 } from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";
-export { centredForPrinter, jobWidthDots, printArea } from "./job-width.js";
+export { jobWidthDots, readPrintArea } from "./job-width.js";
 export type { EscSetting } from "./escpos.js";
 export { LOGO_MAX_HEIGHT_DOTS, ditherToRaster } from "./dither.js";
 export type { MonoRaster } from "./dither.js";
