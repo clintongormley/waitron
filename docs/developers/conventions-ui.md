@@ -1093,6 +1093,15 @@ same file, and "a returning disabled device" in
 `apps/server/src/join-requests.test.ts`. Built in W105b.
 
 
+Print agents offer Delete and Add, without Disable/Enable or a lifecycle status filter. Delete
+reuses revoke, hides the inactive agent and retains its identity and printer references. Add offers
+inactive trusted identities, including this box's agent, through the existing Allow route. The
+confirmation and Add explain that queued work may resume. Fresh pairing creates a new identity;
+A4 discovery can bind to it. Self-enrolment still refuses a revoked row. Guards: the agent
+Delete/Add cases in dashboard `printers-screen.test.ts`, the retained-token/queued-work case in
+`apps/server/src/print-api.test.ts`, Allow in `print-api.printer-wiring.test.ts` and revoked
+self-enrolment in `join-requests.test.ts`.
+
 ## Native centring starts inside the configured paper width
 
 Set the ESC/POS left margin to zero and the print area to the width the job's pictures are drawn to

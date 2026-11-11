@@ -116,6 +116,7 @@ describe("the user guides", () => {
       "calibrate",
       "printer-details",
       "print-queue",
+      "print-agents",
     ]);
   });
 

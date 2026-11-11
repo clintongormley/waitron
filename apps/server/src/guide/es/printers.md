@@ -55,3 +55,11 @@ conexión puede aparecer junto al último error de impresión comunicado.
 Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no se abrió**, comprueba
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
+
+## Agentes de impresión {#print-agents}
+
+En **Impresoras**, abre **Agentes** y elige **Eliminar** en el menú del agente. El agente deja de recibir trabajos de impresión; sus impresoras siguen en la lista.
+
+Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **Añadir** junto a su nombre guardado, incluido el agente de este servidor. Los trabajos que sigan pendientes pueden imprimirse cuando vuelva.
+
+Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba su número. Tras vincular un agente nuevo, busca y añade de nuevo sus impresoras A4.

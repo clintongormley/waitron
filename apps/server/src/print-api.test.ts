@@ -916,13 +916,14 @@ describe("mountPrintApi — agent claim + report", () => {
     expect(badSecret.status).toBe(401);
   });
 
-  it("a REVOKED agent fails the claim AND the report with 401 (instant revocation)", async () => {
+  it("a REVOKED agent fails the claim AND the report with 401 until Add allows the same identity", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     expect((await send(app, "POST", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
 
+    const queuedId = await enqueue(printerId, new Uint8Array([2]));
     const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
       cookie: managerCookie,
     });
@@ -935,6 +936,24 @@ describe("mountPrintApi — agent claim + report", () => {
       body: { status: "done" },
     });
     expect(report.status).toBe(401);
+    expect((await jobRow(queuedId)).status).toBe("queued");
+    expect(
+      (
+        await send(app, "POST", `/management-api/print-agents/${agentId}/allow`, {
+          cookie: managerCookie,
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
+          bearer: token,
+          body: { status: "done" },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await jobRow(jobId)).status).toBe("done");
+    expect((await pull(app, token)).jobs.map((job) => job.id)).toEqual([queuedId]);
   });
 });
 
