@@ -1617,9 +1617,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A1511. An export for the venue's accountant (owner, 2026-11-11; was SP17).** Wanted at go-live or
   soon after. Almost every Spanish venue hands its books to an outside accountant (_gestor_ or
   _asesor_), who today would have to type in Waitron's sales and purchase invoices by hand.
-  [Research proposal](superpowers/specs/2026-11-11-a1511-accountant-export-proposal.md) compares
-  accounting import choices and the smallest sales-and-purchases handoff. Choices await owner;
-  no implementation authorised.
+  The owner chose [the generic workbook](superpowers/specs/2026-11-11-a1511-accountant-export-proposal.md#owner-decision-2026-11-11)
+  on 11 November: one download per period, with issued invoices and recorded purchases in separate
+  sheets. Lane I is preparing the build plan; named-program import support needs a real
+  accountant's import trial.
 
 - **One design for supplier invoices and credit notes** (bundle of 2, 2 important, size M, needs the owner). Holds A1326. [Detail](backlog/back-office.md#bundle-one-design-for-supplier-invoices-and-credit-notes)
 

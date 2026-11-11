@@ -1,5 +1,7 @@
 # A1511: choose a workbook for your accountant
 
+The owner chose the generic workbook on 11 November 2026. See [the recorded decision](#owner-decision-2026-11-11) below; the original proposal and its evidence remain unchanged.
+
 **Recommend one period download with two XLSX sheets: issued invoices and recorded purchases.** Keep invoice detail and VAT splits so the accountant can map the columns into their program. Define this small export now; a real import checks its mapping rather than being a prerequisite for choosing it. Nothing is built or authorised for implementation. The export remains wanted at go-live or soon after.
 
 ## Which programs to target
@@ -29,6 +31,14 @@ The existing delivery writes CSV; XLSX encoding needs a new writer. That is addi
 ## Your choice
 
 **Choose the generic workbook first (recommended), or wait for the first accountant’s exact native format?** Confirm its mapping with sales/purchase examples, mixed VAT, simplified invoices and corrections before claiming importer support. Leave automatic sync, journal adapters, cash/card ledgers and AEAT-file qualification outside this cut.
+
+## Owner decision, 2026-11-11
+
+At 22:05, the watcher recorded the owner's answer, **“Build generic sheet (Recommended)”**, to option 1 above (watcher window, picker question 7 of 7; relayed in Lane I's `questions.md`, “WATCHER 2026-11-11 22:05 — A1511 accountant export”).
+
+Build one download per period with two spreadsheet sheets: invoices issued and purchases recorded. Issued invoices include their number, dates, customer, VAT base, rate and amount per rate, total, and corrections linked to their original invoice. Keep the proposal's recorded-purchase caveats and avoid claiming that the workbook imports into a named accounting program until a real accountant's import has been tried.
+
+This records the product choice; the export is not built. At 22:21, the watcher assigned the build plan and implementation to Lane I, with Claude's plan read and watcher clearance before building. Automatic sync, native journal adapters, cash/card ledgers and AEAT-file qualification remain outside this first download.
 
 ## Provenance
 
