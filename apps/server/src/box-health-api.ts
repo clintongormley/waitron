@@ -1,3 +1,4 @@
+import type { HttpBindings } from "@hono/node-server";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
@@ -33,11 +34,14 @@ import { invoiceNumberParts } from "./invoice-number-parts.js";
 import type { Logger } from "./logger.js";
 import { misdatedSalesFileName, renderMisdatedSalesCsv } from "./misdated-sales-csv.js";
 import { requestFromBox } from "./request-from-box.js";
+import { restartAfterResponse } from "./restart-after-response.js";
 
 export interface BoxHealthApiDeps {
   db: Database;
   readHealth: () => Promise<BoxHealth>;
   freeSpace: (personId: string) => Promise<FreedSpace>;
+  /** Stops this server process; Docker starts it again. */
+  restart: () => void;
   venue: { language: "en" | "es" };
   /** A seat that cannot confirm a clock stop has no confirmation routes. */
   clockConfirm: {
@@ -76,9 +80,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
  * checks run again as reads only, so a full disk does not refuse a manager on the routes that call
  * this. */
 export async function authorizeSystemManager(db: Database, c: Context): Promise<string> {
+  return authorizeOnAnyDisk(db, c, "system.manage");
+}
+
+async function authorizeOnAnyDisk(
+  db: Database,
+  c: Context,
+  permission: "system.manage" | "person.admin",
+): Promise<string> {
   const sessionId = requireManagementSession(c);
   const check = (tx: Database | Transaction, touch: false | undefined) =>
-    authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage", touch });
+    authorizeManager(tx, { managementSessionId: sessionId, permission, touch });
   try {
     return (await withTransaction(db, (tx) => check(tx, undefined))).authorizedBy;
   } catch (error) {
@@ -123,9 +135,9 @@ export async function requiredNameOf(tx: Transaction, personId: string): Promise
 }
 
 /** `GET /api/box/health`, `POST /api/box/free-space`, `GET /api/box/clock-misdated` and its
- * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/clock-challenge`,
- * `POST /api/box/clock-confirm` and `POST /api/box/clock-set`, all `person.admin` and refused on
- * the box itself. */
+ * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/restart`,
+ * `person.admin`; `POST /api/box/clock-challenge`, `POST /api/box/clock-confirm` and
+ * `POST /api/box/clock-set`, all `person.admin` and refused on the box itself. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
   const freeRun = createErrorBoundary(STATUS, "box-free-space.failed");
@@ -139,6 +151,17 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
     freeRun(c, log, async () => {
       const personId = await authorizeSystemManager(deps.db, c);
       return c.json(await deps.freeSpace(personId), 200);
+    }),
+  );
+  const restartRun = createErrorBoundary(STATUS, "box-restart.failed");
+  app.post("/api/box/restart", (c) =>
+    restartRun(c, log, async () => {
+      const outgoing = (c.env as HttpBindings).outgoing;
+      if (outgoing === undefined) throw new Error("Missing response lifecycle");
+      const personId = await authorizeOnAnyDisk(deps.db, c, "person.admin");
+      log("info", "box.restart_requested", { personId });
+      restartAfterResponse(outgoing, deps.restart);
+      return c.json({}, 202);
     }),
   );
   const clockConfirm = deps.clockConfirm;
