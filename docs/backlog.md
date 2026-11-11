@@ -489,7 +489,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   use the button and whether "sold out" switches back by itself the next day; today it never does.
   [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
 
-- **A1517. Allergen points to revisit before go-live (owner, 2026-11-11).** Five recommendations
+- **A1517. Allergen points to revisit before go-live (owner, 2026-11-11): go-live.** Five recommendations
   need the owner's choices before implementation. Runtime checks confirm that the filter retains
   unchecked dishes; choose their treatment before go-live.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)

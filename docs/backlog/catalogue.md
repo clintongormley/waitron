@@ -1152,30 +1152,24 @@ list.
 
 ## A1517. Allergen points to revisit before go-live
 
-**Before go-live (owner, 2026-11-11).** The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md)
-records five choices for the owner; no implementation is authorised yet. Focused runtime checks
-on 11 November passed 99 existing cases and seven final temporary probes. Receipts R1–R5 are
-in Lane I `receipts/a1517-20261111/probe-summary.json`; browser checks cover English/default layout.
+**Before go-live (owner, 2026-11-11).** The original observations below came from reading,
+not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
+11 November runtime checks, their limits and five choices for the owner; no implementation is
+authorised. It distinguishes the narrower measured cases from these original observations.
 
-1. **The filter retains unchecked dishes and ignores offered extras.** The filter keeps a dish
-   with missing declarations and a reviewed salad offering walnut topping when nuts are excluded.
-   The mounted unchecked tile has no warning. Choose hiding versus explicit warnings under an
-   active exclusion, including how the picker handles optional extras.
-2. **Paper and kitchen-screen declarations differ.** A sent milk-declaring burger supplies milk
-   to the kitchen queue but prints its name without a declaration when no guest allergy is recorded.
-   Guest-specific printed instructions have separate passing tests. Choose declarations on every
-   kitchen ticket versus guest-specific instructions only.
-3. **Guest information needs a choice.** The retired allergen destination is rejected and a sample
-   guest invoice has no allergen list; these probes do not establish absence across every public
-   surface. Choose a basic printable allergen sheet now versus venue-supplied material while menu
-   printing (A670) and the online menu (A509) remain separate work.
-4. **Extra choices omit declarations before selection.** Mounted checkbox and quantity choices
-   show neither their nut nor milk labels; a dish-information control shows milk. Choose visible
-   labels beside each choice versus information after selection.
-5. **Sent table rows use current declarations.** Changing milk to eggs changes a sent table row's
-   nutrition, while its stored context and menu version retain milk. Parked counter retrieval
-   retains its original declaration. Choose original published declarations versus current recipes
-   on sent table orders; keep distinct dish, variant and extra identities.
+1. **The till's allergen filter still shows dishes nobody has checked.** Filtering out an allergen
+   hides dishes that declare it but keeps dishes whose allergens were never entered, with no
+   warning on their tile. A test pins this on purpose (A738, the "A738 filter combinations" cases
+   in `apps/till/src/menu-filter.test.ts`). The filter also ignores the allergens of extras.
+2. **Paper kitchen tickets show no dish allergens** unless a guest at the table was flagged as
+   allergic. The kitchen screen shows them; a cook working from paper does not see them.
+3. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
+   retired), no printed menu (A670) and no online menu yet (A509). The data-protection guide tells
+   venues to put a notice "on the menu or allergen sheet".
+4. **The screen for choosing extras shows no allergens.** They appear only once the extra is on
+   the order.
+5. **Allergen icons on a sent order read the product as it is now**, not as it was when sold, so
+   a later edit changes what staff see on an earlier order.
 
 ## Decisions and deliberate limits
 
