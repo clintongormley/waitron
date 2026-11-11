@@ -5444,7 +5444,7 @@ reported `/tmp` 1581, 453, 232, 165, 253 ms and state 1241, 314, 183, 151, 168 m
 plain-reset fate. Only `tls/` and `records/` are kept. On a box that joined another, a plain reset keeps the `tls/`
 folder but empties it (see "A box that joined another holds that venue's authority as its own"). The root guard reads definitions as text:
 a constant holding a complete distinctive name, or a `join` whose first argument ends in
-`stateDir`. On base `9caea7f442`, its first run reported 93 definition sites. Its inline controls
+`stateDir`. It includes the Cloud folder and the layout module’s exported Cloud child paths. On base `9caea7f442`, its first run reported 93 definition sites. Its inline controls
 report a spare-file declaration and a TLS join, while accepting comments and format-item literals.
 
 The guard skips tests, declaration files, test fixtures, the print-agent programs and plain-Node

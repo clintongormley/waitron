@@ -7,6 +7,7 @@ import { syncsAndRenames, writtenDurably } from "./testing/durable-writes.js";
 import { expect, it, vi } from "vitest";
 import { cloudFixture as fixture } from "../test/cloud-fixture.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
+import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 vi.mock("node:fs/promises", { spy: true });
 
 it("saves the connection under cloud with private permissions and both flushes", async () => {
@@ -29,6 +30,38 @@ it("saves the connection under cloud with private permissions and both flushes",
     const created = events.indexOf(`mkdir ${folder}`);
     expect(created).not.toBe(-1);
     expect(events.indexOf(`sync ${f.stateDir}`, created)).toBeGreaterThan(created);
+  } finally {
+    await f.close();
+  }
+});
+
+it("flushes the Cloud parent when an unpaired snapshot tick precedes pairing", async () => {
+  const f = await fixture();
+  try {
+    f.reject();
+    const client = createCloudConnection(f.options);
+    const never = async (): Promise<never> => {
+      throw new Error("unpaired worker must not capture");
+    };
+    const worker = createCloudSnapshotWorker({
+      stateDir: f.stateDir,
+      connection: client,
+      sourceNodeId: randomUUID(),
+      isPrimary: () => true,
+      readClock: never,
+      createArchive: never,
+      upload: never,
+    });
+    const events = await syncsAndRenames(
+      { mkdir: vi.mocked(fs.mkdir), open: vi.mocked(fs.open), rename: vi.mocked(fs.rename) },
+      async () => {
+        await worker.tick(new AbortController().signal);
+        await expect(client.start()).rejects.toMatchObject({ code: "cloud.unavailable" });
+      },
+    );
+    expect(events, "the state folder must persist its new cloud entry").toContain(
+      "sync " + f.stateDir,
+    );
   } finally {
     await f.close();
   }

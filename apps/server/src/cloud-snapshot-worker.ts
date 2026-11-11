@@ -1,7 +1,8 @@
+import { mkdirDurable } from "@waitron/provisioning";
 import { CLOUD_SNAPSHOTS_DIR } from "@waitron/store";
 import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { chmod, lstat, open, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { CloudConnection } from "./cloud-client.js";
@@ -156,7 +157,7 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         deps.onScheduled?.(null);
         return;
       }
-      await mkdir(dir, { recursive: true, mode: 0o700 });
+      await mkdirDurable(dir, 0o700);
       if (!(await lstat(dir)).isDirectory()) unavailable();
       await chmod(dir, 0o700);
       await rm(join(dir, "staging"), { recursive: true, force: true });
