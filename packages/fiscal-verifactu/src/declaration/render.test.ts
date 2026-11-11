@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { declarationBlocks, fillProducer, renderDeclaration } from "./render.js";
 import { declarationItems, prepareDeclarationSource } from "./source.js";
 

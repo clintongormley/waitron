@@ -1,7 +1,10 @@
-// Weaker than its name for 1.c): the record and the declaration both take `softwareVersion()`, so
-// that pair cannot disagree until A940 slice 4 gives the build a release version.
+// Weaker than its name for 1.b) and 1.c). For 1.b) the test registers the node under
+// `WAITRON_ID_SISTEMA` itself, so it does not check the code a real setup registers. For 1.c) the
+// record and the declaration both take `softwareVersion()`, so they cannot disagree until A940
+// slice 4 gives the build a release version.
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
+import { expect, it, onTestFinished, vi } from "vitest";
 import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

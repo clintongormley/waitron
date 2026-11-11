@@ -1,10 +1,11 @@
-// Weaker than its name: it checks the headings AEAT's model fixes, not the values beside them.
+// Weaker than its name: it checks headings, not the values beside them.
 import { readFileSync } from "node:fs";
+import { expect, it } from "vitest";
 import { renderDeclaration } from "./render.js";
 import { prepareDeclarationSource } from "./source.js";
 
-// Typed by hand from the A940 design §4, which follows AEAT's worked example
-// (EjemplosDeclaracionResponsable V0.5.1) with the person-producer wording.
+// Typed by hand from the A940 design §4: AEAT's worked example V0.5.1's headings with §4's three
+// departures (the Orden's title, the person-producer wording, no 2.c)).
 const HEADINGS = [
   "DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN",
   "1.a) Nombre del sistema informático a que se refiere esta declaración responsable:",
@@ -24,7 +25,7 @@ const HEADINGS = [
   "2.b) Direcciones de internet de la persona productora del sistema informático a que se refiere esta declaración responsable:",
 ];
 
-it("bolds AEAT's headings, word for word and in order", () => {
+it("bolds the design §4 headings, in order", () => {
   const template = readFileSync(new URL("../../declarations/template.md", import.meta.url), "utf8");
   const functions = readFileSync(
     new URL("../../declarations/functions.md", import.meta.url),

@@ -1,4 +1,4 @@
-<!-- release-blocker: Item 1.d) is the draft sent to the asesor as Q53. Replace it with the answered wording, then delete this line. -->
+<!-- release-blocker: Item 1.d) is the draft sent to the asesor as Q53. Replace it with the answered wording, keeping the cloud-server phrase and the spare-server sentence only if this version can do them, then delete this line. -->
 <!-- release-blocker: A940 slice 4 has not landed: a v* tag would publish an image without this version or its declaration. Slice 4 deletes this line. -->
 **DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN**
 

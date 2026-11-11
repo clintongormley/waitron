@@ -26,7 +26,7 @@ packages/verifactu/schemas/
 # src/dr303-layout.ts is NOT here — it is prettier-checked like all src.
 packages/reporting/reference/
 
-# A legal text committed exactly as signed; Prettier escapes the asterisk of a «VERI*FACTU» in bold.
+# The declaración responsable's texts: Prettier escapes the asterisk of a «VERI*FACTU» in bold.
 packages/fiscal-verifactu/declarations/
 
 # The Iosevka font's licence, committed verbatim from the font's repository at its release tag

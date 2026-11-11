@@ -66,8 +66,8 @@ missing or carries a blocker (departure 3).
   `package.json` (`tsx`) and `tsconfig.json` (`include`), `pnpm-lock.yaml` (generated) and the two
   backlog files.
 - Pull request 2b creates `scripts/release/waitron-release.mjs` and its test, and
-  `docs/operations/release.md`. It modifies the root `package.json` (`"release"`), the two backlog
-  files and the design (one dated pointer).
+  `docs/operations/release.md`. It modifies the root `package.json` (`"release"`) and the two backlog
+  files.
 
 **The tests that matter.** Headings (Task 2), agree (Task 3), the slot refusals (Tasks 1–2), the
 blocker refusal in the package command (Task 5), and the root script's refusals before anything is
@@ -545,8 +545,8 @@ Size: production ~55; tests ~120.
 **Files:** create `docs/operations/release.md`; modify `docs/backlog.md` and
 `docs/backlog/fiscal.md` (A940's entries: slice 2 landed; both release commands refuse until the
 Q53 and slice-4 blocker lines are deleted; slices 3–6 remain, slice 4 with the tag-CI refusal of
-departure 3), and the design (one dated line under its banner notes pointing at this plan's
-"Departures from the design").
+departure 3). Pull request 1 already added the design's dated line pointing at this plan's
+"Departures from the design".
 
 **The runbook**, in plain English, in order: make the worktree (`python3
 ~/workspace/tools/worktree.py new waitron release/<version> --headless`); the checks before

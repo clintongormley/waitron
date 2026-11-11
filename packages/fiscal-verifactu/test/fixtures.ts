@@ -292,6 +292,9 @@ async function insertLocationNodeSeries(
  * hashed `IDEmisorFactura` is read from the SIF registration (`currentSif(tx, nodeId).nif`), not
  * from `tenants`. A test that needs `tenants.tax_id` itself to match must seed before anything
  * else does.
+ *
+ * `options.idSistemaInformatico` defaults to `"WT"`, not the `"W1"` a real first setup registers;
+ * a test comparing with `SOFTWARE_IDENTITY.code` passes `WAITRON_ID_SISTEMA`.
  */
 export async function seedTenantWithSif(
   db: Database,
