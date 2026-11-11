@@ -2,8 +2,9 @@
 
 **Status: DRAFT, under review** (fresh-context plan-against-design read, then a Fable second
 read). Build nothing until the owner approves it and it is queued to a lane.
-**Revision 2026-11-11 evening:** the fresh-context read's findings are applied (sixteen pull
-requests instead of eleven; sizing redone).
+**Revision 3, 2026-11-11 evening:** the fresh-context read's findings, the Fable read
+(`~/waitron-campaign-m/reports/ra.md`) and the owner's answers to its proposals (recorded in the
+design by `e69416d2cd`) are applied: eighteen pull requests, re-sized from source on `c00b1a6f39`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -14,12 +15,12 @@ requests instead of eleven; sizing redone).
 Admin always everything) and core job roles (rota and device sign-in, no permissions), as the
 owner-approved 11 November design states.
 
-**Architecture:** Sixteen pull requests, each leaving `main` working. The first seven change what
+**Architecture:** Eighteen pull requests, each leaving `main` working. The first eight change what
 needs no new storage for access roles: permission declarations without the ladder, comps by
-permission and limit, job roles moved into core, device sign-in by job role (with the test and
-demo fixtures that change first). The next two move every permission check onto one "person's
-authority" reading and then replace `persons.role` with stored roles. The last seven add the two
-rules, several roles per person, custom roles, and their page.
+permission and limit, job roles moved into core, device sign-in by job role (with the test, demo
+and import fixtures that must change first). The next three move every permission check and every
+reader of a level onto identity, then replace `persons.role` with stored roles. The last seven add
+the two rules, the email-change safeguards, several roles per person, custom roles and their page.
 
 **Tech Stack:** TypeScript, pnpm workspace, drizzle on `node:sqlite`, Hono routes, Lit `wt-*`
 components, Vitest (node and browser mode).
@@ -41,7 +42,9 @@ Today a person has one of four levels and each level holds everything below it. 
   someone holding "approve comps" enters their PIN. A limit of zero means "always needs approval".
 - Two rules stop anyone handing out more than they hold: you can give or take an access role only
   if you hold every permission in it; you can change another person's sign-in only if you hold
-  every permission they hold.
+  every permission they hold. Changing an existing person's email also needs its own permission
+  (Admin only by default), is logged, and tells the old address.
+- Any change to a person's access roles expires their outstanding invitation and reset links.
 
 ## Global constraints
 
@@ -56,30 +59,46 @@ Today a person has one of four levels and each level holds everything below it. 
   configuration bundle version by one above main's at build time (today
   `packages/provisioning/src/configuration-transfer.ts:559`, `value.version !== 18`), and updates
   `packages/provisioning/src/configuration-transfer.boundaries.test.ts`'s future-version input.
+- Import-into-a-venue tests live in `apps/server/src/configuration-transfer.test.ts` (it has a
+  database); `packages/provisioning/src/configuration-import.test.ts` tests only the staged file.
+- **The import keeps the importing administrator's memberships.** Import runs inside first setup,
+  after the administrator exists, and empties every transferred table before inserting the
+  bundle's (`configuration-transfer.ts:848-860`), skipping the exporting administrator's rows
+  (`:872-881`). From PR 6 the importing administrator is given the job roles the exporting
+  administrator held, or every imported job role if they held none; from PR 11 they keep their
+  Admin membership.
 - Built-in access role keys are exactly `staff`, `supervisor`, `manager`, `admin`. Their names are
   translated in code and never stored. Custom names are trimmed, nonempty, unique under
   `foldForUniqueness` (`packages/identity/src/fold.ts`), stored literally, never translated.
 - Admin holds every **declared** permission, including ones declared later; it stores none. An
-  undeclared permission ID authorizes nobody, Admin included. A saved permission list refuses an
-  undeclared ID.
+  undeclared permission ID authorizes nobody, Admin included. Saved and imported permission lists
+  refuse an undeclared ID. Rule 1 compares **declared** permissions only, so a stored retired ID
+  never locks a role.
 - **A usable Admin** is a distinct person who holds the Admin access role, is `active`, and has a
   password hash, a Google subject or a WebAuthn credential. PIN-only, pending and suspended people
   do not count. (No email condition: a Google or passkey sign-in needs none.)
+- **Links:** any change to a person's access roles expires their outstanding account actions with
+  today's `invalidatePersonAccountActions` (`packages/identity/src/staff.ts:158`), which marks every
+  unused action used (invitation, password reset, and a pending email-change proof); email or
+  status changes keep `revokePersonAccess`. There is no sender column and no check of who sent a
+  link (owner, option B).
+- **PINs:** nobody sets another person's PIN; an administrator can only clear it (owner, option A).
+  Adding a person needs an email, as today.
 - One `withTransaction` per mutation; queries inside it are awaited in turn, never `Promise.all`.
-  From PR 10, every mutation that can remove Admin from someone, suspend, reset to pending, remove
+  From PR 13, every mutation that can remove Admin from someone, suspend, reset to pending, remove
   a sign-in method, delete a role or import ends with the usable-Admin check before commit.
 - Activity entries go through `recordActivity` (`packages/db/src/activity-log.ts`) with kinds
-  declared in `packages/db/src/activity-kinds.ts`; `data` names people by id only. Access-role
-  membership mail goes through `enqueueMail` (`packages/db/src/outgoing-mail.ts`) with kind
-  `role_membership_changed` in the same transaction. Job-role changes are never emailed. Setup and
-  import log baseline memberships and email nothing.
+  declared in `packages/db/src/activity-kinds.ts`; `data` names people by id only and holds no
+  email address. Mail goes through `enqueueMail` (`packages/db/src/outgoing-mail.ts`) in the same
+  transaction. Job-role changes are never emailed. Setup and import log baseline memberships and
+  email nothing.
 - Every new error code is declared in its package's `errors.ts` and worded in English and Spanish
   where a screen shows it (`apps/dashboard/src/i18n/codes.ts`, `apps/till/src/i18n/strings.ts`).
   A refusal says what happened and what each choice does (CLAUDE.md §3).
 - Forms follow design-system Forms: `draftScopeFor`, `saveActionState`, an unchanged-draft early
   return, inline errors, one localized message above the buttons. No screen draws a native field.
-  Permission ticks and device job-role ticks are `wt-switch` rows (as the device profile's role
-  ticks are today); role tags on the staff editor are a `wt-combobox` with `multiple`.
+  Permission ticks and device job-role ticks are `wt-switch` rows; role tags on the staff editor
+  are a `wt-combobox` with `multiple`.
 - Every screen change updates `apps/server/src/guide/en/*.md` and `apps/server/src/guide/es/*.md`
   with shared `{#id}` headings; help bubbles are `wt-help-tooltip mode="help-mode"`, written from
   the code that does what they describe, and link to the guide.
@@ -98,107 +117,126 @@ Today a person has one of four levels and each level holds everything below it. 
 The inputs most likely to bite a person that no task's main tests would otherwise exercise. Each
 has a test in the task named after it.
 
-1. **A Manager taking over an Admin's sign-in.** A Manager holding `person.admin` changes an
-   Admin's email through the staff form, then asks the public page for a password reset to that
-   address. The email change itself must be refused; a link check cannot catch it because a
-   self-service reset records no sender. Tasks 10.1 and 13.3.
-2. **The last usable Admin, by every path.** Removing a membership, deleting a role, suspending,
-   resetting to pending, removing the last passkey, unlinking one's own Google sign-in, and import
-   must each refuse leaving no usable Admin. Tasks 10.2, 12.1, 14.1.
-3. **Every test and demo till still signs in after the admission rule flips.** Today a profile
-   with no admission rows admits everyone; afterwards it admits nobody. Tasks 5.x, 6.x and 7.2.
+1. **A Manager pointing someone's email at an address they read.** From PR 15 Managers hold
+   `person.admin`. Changing an existing person's email needs `person.email` (Admin-only) as well as
+   Rule 2, and each change is logged and the old address told. Tasks 12.1, 13.2, 15.1.
+2. **The last usable Admin, by every path.** Removing a membership (through the staff form's role
+   field before PR 14, through the new command after), deleting a role, suspending, resetting to
+   pending, removing the last passkey, unlinking one's own Google sign-in, and import. Tasks 13.1,
+   14.1, 16.1.
+3. **Every till still signs in after the admission rule flips**: test fixtures, the demo, the bench,
+   a box set up from an export. Today a profile with no admission rows admits everyone; afterwards
+   nobody. Tasks 5.x, 6.x, 7.2.
 4. **A zero limit with a rounding allowance.** A 0% item limit on a dish whose allowance is 2 cents
    must still need approval for a 1-cent reduction (`belowFloor`,
    `packages/adjustments/src/policy.ts:255-266`, would let it through). Task 2.1.
 5. **A person with no access role signing in to the dashboard.** They reach their own pages, never a
-   refusal loop or a signed-out shell. Tasks 8.3 and 13.3.
+   refusal loop or a signed-out shell. Tasks 10.2 and 15.3.
 
 ## Sizing
 
 ### What was counted, and how
 
-Counted on `0740fbf6b3` (first draft) and rechecked on `ed1ef72ef4` with `git grep` (`/usr/bin/grep`
-for counts):
+Counted on `0740fbf6b3` (first draft) and rechecked on `ed1ef72ef4` and `c00b1a6f39` with
+`git grep` (`/usr/bin/grep` for counts); the Fable read recounted five of these and they match.
 
-- The brief's identifier set touches **326 files: 97 production, 229 test or helper** (drizzle and
-  migration SQL excluded).
+- The brief's identifier set touches **326 files: 97 production, 229 test or helper**.
 - Tests that create people: **490 `insert(persons)` sites in 356 files**, **97 `update … set role`
   sites in 57 files**, **72 `persons.role` reads in 43 files**.
 - Tests that create device profiles: **205 `insert(deviceProfiles)` sites in 121 test or helper
-  files**, plus **344 `seedDevice(` calls in 134 files** that go through one helper
-  (`packages/db/src/testing/seed.ts:155`). All rely on "no admission rows admits everyone".
+  files**, plus **344 `seedDevice(` calls in 134 files** through one helper
+  (`packages/db/src/testing/seed.ts:148`).
+- Raw SQL that reads a level outside identity: `apps/server/src/recovery-environment.ts:133`,
+  `packages/provisioning/src/recover-provisioned-venue.ts:49`, `packages/provisioning/src/configuration-transfer.ts:853`,
+  `apps/server/src/handover-compare.ts:390`, `packages/workforce/src/corrections.ts:35`,
+  `apps/server/src/testing/bill-venue.ts:324`.
 - Dashboard tests with a `role: "<level>"` literal (mostly `/me` and staff-list mocks): **52 files**.
 - Per area, production/test files: permission registrations 8/52; `mirror.create|node.promote`
   15/20; staff-role tables 41/58; device admission 18/40; comp role lists 26/77; permission-check
   call sites 89/31.
-- Generated files: measured from two earlier rebuilds. Adding one table rewrote 266 generated lines
-  (`417612a422`); dropping workforce columns rewrote about 580 (`8cc7a2680a`). PR 3 rewrites both
-  core's and workforce's.
+- Generated files, from two earlier rebuilds: adding one table rewrote 266 generated lines
+  (`417612a422`); dropping workforce columns about 580 (`8cc7a2680a`).
 - Files read in full or in large part: the two designs; `packages/identity/src/{permissions,staff,profile-admission,authorize,management-session,credential,account-action,profile}.ts`;
   `packages/staffing/src/{staff-roles,routes,classification,backup-verification}.ts`;
   `packages/adjustments/src/{policy,settings,provisioning}.ts`;
-  `packages/db/src/schema/{identity/*,adjustments/reasons}.ts`; `packages/workforce/src/schema/staffing/staffing.ts`;
+  `packages/db/src/schema/{identity/*,adjustments/reasons,outgoing-mail}.ts`; `packages/workforce/src/schema/staffing/staffing.ts`;
+  `packages/workforce/src/{corrections,attendance-response-commands}.ts` (parts);
   `packages/db/src/{activity-log,activity-kinds,outgoing-mail}.ts`, `packages/db/src/testing/seed.ts`;
-  `apps/server/src/{mail-sender,box-alert-mail,me-api,box-health-api,till-box-clock-api,adjustments-api,device}.ts` (parts);
-  `apps/server/src/management-api.ts:1060-1290`; `apps/server/src/testing/signed-in-till.ts`;
+  `apps/server/src/{mail-sender,box-alert-mail,me-api,box-health-api,till-box-clock-api,adjustments-api,device,recovery-environment}.ts` (parts);
+  `apps/server/src/management-api.ts:570-660,1060-1430`; `apps/server/src/testing/{signed-in-till,bill-venue}.ts`;
   `apps/dashboard/src/dashboard-app.ts` navigation and session handling; `apps/till/src/api/live-connection.ts`;
-  `packages/provisioning/src/{venue-apply,configuration-transfer}.ts` (parts); `packages/composition/src/modules.ts`.
+  `packages/provisioning/src/{venue-apply,venue-plan,configuration-transfer,recover-provisioned-venue}.ts` (parts);
+  `apps/server/scripts/{demo-seed/seed,bench/bench-venue}.ts` (parts); `packages/composition/src/modules.ts`.
 
 ### What the hours mean
 
 Hours are **implementer-active time plus one CI fix round**, from the lanes' measured
 medium-effort dispatches (7–23 minutes, 43–87 turns each, `~/waitron-campaign-shared/effort-trial.md`).
-They leave out the review work: eleven of the sixteen PRs touch a risk trigger (auth,
-migrations, the money path or a cross-package contract) and so take the full path — per-task
-reviews, `/finish-branch`'s two Codex run-it reviews and its convention seat, and their fix rounds.
-The light-path PRs (5, 6, 15, 16, and 4 if its reviewer agrees) skip per-task reviews.
+They leave out the review work: twelve of the eighteen PRs touch a risk trigger (auth, migrations,
+the money path or a cross-package contract) and take the full path — per-task reviews,
+`/finish-branch`'s two Codex run-it reviews and its convention seat, and their fix rounds. The
+light-path PRs (4, 5, 6, 8, 17, 18) skip per-task reviews.
 
 | PR | Outcome | Prod files | Prod lines +/− | Test files | Test lines +/− | Generated | Path | Hours |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Permissions declared without the ladder | ~32 | +180 / −130 | ~70 | +190 / −160 | — | full | 2.5 |
+| 1 | Permissions declared without the ladder | ~34 | +190 / −140 | ~72 | +210 / −170 | — | full | 2.5 |
 | 2 | Comps by permission and limit | ~25 | +250 / −450 | ~45 | +300 / −420 | ~80 | full | 3 |
-| 3 | Job roles in core; staffing and workforce permanent | ~50 | +300 / −190 | ~62 | +320 / −220 | ~550 | full | 2.5 |
+| 3 | Job roles in core; staffing and workforce permanent | ~50 | +300 / −190 | ~62 | +330 / −220 | ~550 | full | 2.5 |
 | 4 | A used job role is hidden; job roles per person | ~14 | +330 / −260 | ~10 | +360 / −160 | — | light | 3 |
 | 5 | Test people and test devices behind helpers | 0 | 0 | ~480 | +1,300 / −1,250 | — | light | 3 |
-| 6 | Everyone set up holds a job role | ~8 | +120 / −10 | ~4 | +120 / −10 | demo JSON ~30 | light | 1.5 |
-| 7 | Device sign-in by job role | ~16 | +380 / −360 | ~40 | +420 / −420 | ~200 + demo JSON ~40 | full | 3 |
-| 8 | One authority reading for every check | ~36 | +280 / −230 | ~30 | +240 / −170 | — | full | 2.5 |
-| 9 | Access-role storage; `persons.role` removed | ~30 | +460 / −260 | ~35 | +340 / −240 | ~350 + demo JSON ~40 | full | 3 |
-| 10 | Rule 2 and the usable Admin | ~7 | +260 / −160 | ~8 | +520 / −220 | — | full | 2.5 |
-| 11 | Links checked when used | ~5 | +120 / −30 | ~4 | +220 / −20 | ~40 | full | 1.5 |
-| 12 | Membership changes with Rule 1, logged and mailed | ~6 | +330 / −20 | ~3 | +420 / −0 | — | full | 2 |
-| 13 | Access-role tags on the staff editor; Managers hold `person.admin` | ~18 | +450 / −320 | ~65 | +600 / −420 | — | full | 3 |
-| 14 | Custom access roles (server) | ~7 | +460 / −20 | ~5 | +620 / −0 | — | full | 2.5 |
-| 15 | Access roles page | ~8 | +900 / −20 | ~4 | +550 / −0 | — | light | 3 |
-| 16 | Permission help bubbles and guides | ~6 | +450 / −10 | ~2 | +150 / −0 | — | light | 2 |
-| **Total** | | | **≈ +5,270 / −2,470** | | **≈ +6,670 / −3,710** | **≈ 1,330** | | **≈ 40.5** |
+| 6 | Everyone set up or imported holds a job role | ~9 | +160 / −10 | ~5 | +170 / −10 | demo ~30 | light | 2 |
+| 7 | Device sign-in by job role | ~18 | +360 / −340 | ~42 | +440 / −400 | ~200 + demo ~70 | full | 3 |
+| 8 | Till's live sign-in list; job-role delete names devices left empty | ~6 | +120 / −20 | ~3 | +150 / −0 | — | light | 1.5 |
+| 9 | One authority reading for every permission check | ~24 | +200 / −170 | ~20 | +180 / −120 | — | full | 2 |
+| 10 | Every level reader through identity; dashboard by permission | ~12 | +200 / −120 | ~10 | +160 / −110 | — | full | 2.5 |
+| 11 | Access-role storage; `persons.role` removed | ~26 | +420 / −240 | ~30 | +330 / −230 | ~350 + demo ~40 | full | 2.5 |
+| 12 | Rule 2 on every route; the email-change permission | ~7 | +240 / −220 | ~8 | +560 / −300 | — | full | 2.5 |
+| 13 | The usable Admin; email changes logged and the old address told | ~9 | +330 / −20 | ~6 | +420 / −0 | ~10 | full | 2.5 |
+| 14 | Membership changes with Rule 1, logged, mailed, links expired | ~6 | +300 / −20 | ~3 | +420 / −0 | — | full | 2 |
+| 15 | Access-role tags on the staff editor; Managers hold `person.admin` | ~18 | +450 / −320 | ~65 | +600 / −420 | — | full | 3 |
+| 16 | Custom access roles (server) | ~7 | +460 / −20 | ~5 | +700 / −0 | — | full | 2.5 |
+| 17 | Access roles page | ~8 | +900 / −20 | ~4 | +550 / −0 | — | light | 3 |
+| 18 | Permission help bubbles and guides | ~6 | +450 / −10 | ~2 | +150 / −0 | — | light | 2 |
+| **Total** | | | **≈ +5,660 / −2,570** | | **≈ +7,330 / −3,810** | **≈ 1,330** | | **≈ 45** |
 
-**Range: 36–45 hours.** The first draft said 29.5. The difference is real work the first draft
-missed or under-counted, not padding: the device-profile fixtures and demo that the admission
-flip breaks (PRs 5–7, about +4.5 hours), Rule 2 on the path the dashboard actually uses and the
-tests that prove it through the HTTP routes (+0.5), the job-role deletion preview's removal and
-per-holder logging (+0.5), the 52 dashboard mock files that carry `role` (+1), and tasks split so
-none passes about 100 tool calls (which turns two over-full PRs into four, about +2 for repeated
-setup and CI). Remaining uncertainty: how many test files the PR 5 codemods cannot rewrite (each
-extra 20 by hand is about half an hour) and browser-test CI rounds on PRs 7, 13 and 15.
+**Range: 40–50 hours.** The first draft said 29.5 and the second 40.5. This revision's +4.5 hours
+is work the reads found, net of what the owner's answers removed: dropping the link-sender check
+(−1.5); the email-change permission (+0.5) and its log and old-address notice with a new mail kind
+(+1); the import keeping the administrator's memberships (+0.5); the demo and bench ticking their
+job roles, with a Madrid assertion (+0.5); the job-role delete warning about devices left with
+nobody (+1); moving six raw level readers behind identity so the storage PR fits three hours
+(+0.5 for the extra PR's setup and CI); the added rule tests (+0.75); one self-approval function
+(+0.25); and the extra PR splits (+1). Remaining uncertainty: how many test files the PR 5
+codemods cannot rewrite (each extra 20 by hand is about half an hour) and browser-test CI rounds
+on PRs 7, 15 and 17.
+
+### The transitional `role` field (PRs 11–15)
+
+From PR 11 to PR 15 the staff form still sends one `role`, written through
+`setBuiltInMembership` and read through `heldBuiltInKey`; PR 15 deletes both. It stays. Avoiding
+it needs either the staff editor's tags and the `roleIds` answers in the storage PR (about 6 hours,
+two PRs' worth that cannot be split, because removing `persons.role` breaks every reader at once),
+or memberships added while `persons.role` still decides (two stores of one fact for four PRs,
+which the no-compatibility rule forbids). The layer is two small functions with one writer each.
 
 ## Landing order and dependencies
 
 ```text
-1 ─┬─► 2 ───────────────────► 8 ─┐
-   └─► 3 ─┬─► 4                  │
-5 ────────┴─► 6 ──► 7 ───────────┴─► 9 ──► 10 ──► 11 ──► 12 ──► 13 ──► 14 ──► 15 ──► 16
+1 ──► 2 ──► 9 ──► 10 ───────────────┐
+1 ──► 3 ──► 4 ──┐                   │
+3 + 5 ──► 6 ────┴─► 7 ──► 8         │
+                    7 ──────────────┴─► 11 ──► 12 ──► 13 ──► 14 ──► 15 ──► 16 ──► 17 ──► 18
 ```
 
 - 2 and 3 may run in parallel after 1. 4 follows 3. 5 has no dependency and should start first.
-- 6 needs 3 (job roles in core) and 5 (helpers). 7 needs 6. 8 needs 1 and 2.
-- 9 needs 7 (device sign-in no longer reads `persons.role`), 8 and 5.
-- 10 → 11 → 12 → 13 in order: Managers get `person.admin` (13) only once both rules and the link
-  check exist. 14 → 15 → 16.
+- 6 needs 3 and 5. **7 needs 4** (it edits the hide branch 4 creates) and 6. 8 needs 7.
+- 9 needs 1 and 2; 10 needs 9.
+- 11 needs 5, 7 and 10.
+- 12 → 13 → 14 → 15 in order: Managers get `person.admin` (15) only once Rule 2, the email
+  safeguards and Rule 1 exist. 16 → 17 → 18.
 
-Coordination, not prerequisites: `origin/refactor/a1308-5d-venue-clock` (284 files, venue clock
-stores) overlaps PR 1's clock routes; rebase whichever lands second. A1308's people slice waits for
-PR 9.
+Coordination: `#2809` (A1308 5d, the venue clock out of locations) has landed; PR 1's clock-route
+references are rechecked against it below. A1308's people slice waits for PR 11.
 
 ---
 
@@ -229,7 +267,7 @@ the box. **Depends on:** nothing. **Risk trigger:** auth and permissions.
   `isDeclaredPermission(id: string): boolean`. `roleHasPermission(role, p)` and
   `permissionsForRole(role)` keep their signatures: Admin → `isDeclaredPermission(p)`; others →
   `p` declared with `role` in `defaultHolders`.
-- `PersonRoleValue` (`packages/shared/src/person-role.ts`) stays until PR 9.
+- `PersonRoleValue` (`packages/shared/src/person-role.ts`) stays until PR 11.
 - `role-parity.ts` asserts `DefaultHolder` and `ModuleDefaultHolder` are the same union both ways.
 
 - [ ] **Step 1: failing tests** in `permissions.test.ts`, keeping every holder assertion still true:
@@ -272,46 +310,58 @@ the 52 test files `git grep -l registerModulePermissions -- '*.test.ts'` lists.
   `pnpm --filter @waitron/media exec vitest run src/routes.test.ts src/routes-edit.test.ts src/routes-authorization.test.ts`.
 - [ ] **Step 4: Commit.**
 
-### Task 1.3: `node.manage` consumers and attendance self-approval
+### Task 1.3: `node.manage` consumers and one self-approval rule
 
 **Files:** the 15 production files `git grep -lE 'mirror\.create|node\.promote' -- apps packages ':!*.test.ts'`
 lists and their 20 tests; `packages/workforce/src/corrections.ts:34-50,341-354`,
+`packages/workforce/src/attendance-response-commands.ts:137,144`,
 `apps/server/src/management-attendance-api.ts:177`, `apps/server/src/till-attendance-api.ts:218-226`.
 
-**Interfaces:** `authorKindFor` answers `"manager"` when the recorder holds `workforce.correct`;
-self-approval needs `workforce.self_approve` and `workforce.correct`. `MANAGER_ROLES` is deleted.
-Dashboard nav `servers` item requires `node.manage`.
+**Interfaces:**
+- One function in workforce, called from all four sites:
+  `export function maySelfApproveAttendance(tx: Transaction, personId: string): Promise<boolean>`
+  — true when the person holds `workforce.self_approve` and `workforce.correct` (this PR reads the
+  level through `roleHasPermission`; PR 9 swaps it for the authority reading).
+- "Acts as a manager" (`authorKindFor`, and the `MANAGER_ROLES` check at
+  `attendance-response-commands.ts:137`) = holds `workforce.correct`. `MANAGER_ROLES` is deleted.
+- Dashboard nav `servers` item requires `node.manage`.
 
 - [ ] **Step 1:** `promote-api.test.ts`: `it("a Manager is refused node.manage")` asserting
   `authorization.not_permitted` with `params.permission === "node.manage"`. Workforce:
   `it("self-approval follows workforce.self_approve, not the Admin name")` — register
   `{ permission: "workforce.self_approve", defaultHolders: ["manager"] }` (a module ID, so allowed)
-  and a Manager approving their own worker request passes; with `[]` it throws
-  `correction.not_permitted`. Keep the Admin-approves-own case.
+  and a Manager approving their own worker request passes through `corrections.ts` and through
+  `attendance-response-commands.ts`; with `[]` both refuse. Keep the Admin-approves-own cases.
 - [ ] **Step 2–4:** fail, implement, pass; then `git grep -nE 'mirror\.create|node\.promote|sale\.discount' -- apps packages scripts docs/developers docs/operations docs/backlog docs/backlog.md README.md CLAUDE.md`
-  prints nothing (exit 1). **Step 5: Commit.**
+  prints nothing (exit 1), and `git grep -n 'role === "admin"' -- packages/workforce apps/server/src/*attendance*`
+  prints nothing. **Step 5: Commit.**
 
 ### Task 1.4: Box administration and restart
 
-**Files:** `apps/server/src/box-health-api.ts:86-100,155-165,265-290`, `apps/server/src/email-settings-api.ts:57,90,102`,
-`apps/server/src/till-box-clock-api.ts:137-145,213-226`, `apps/dashboard/src/dashboard-app.ts:3040-3041`,
-`CLAUDE.md` §5 (the clock rule's "an administrator's at any time) or an administrator's own
-device" → holders of Box administration), `docs/developers/conventions-data.md:4513,4683`,
-`docs/developers/design-system.md:6363,6420`, `apps/server/src/guide/{en,es}/box-status.md`,
-`apps/server/src/guide/{en,es}/email.md`. Tests: `box-health-api.test.ts`,
-`email-settings-api.test.ts`, `till-box-clock-api.test.ts`, the box-status screen test for `canRestart`.
+**Files (rechecked on `c00b1a6f39`, after #2809):** `apps/server/src/box-health-api.ts:82-100`
+(`authorizeOnAnyDisk`), `:155-165` (restart, `:160`), `:265-290` (`authorizeAdmin`, `:278`);
+`apps/server/src/email-settings-api.ts:57,90,102`; `apps/server/src/till-box-clock-api.ts:137-145`
+(`holdsAdmin`), `:209-229` (`asAdmin` and the approver's `authorize`);
+`apps/dashboard/src/dashboard-app.ts:3040-3041`; `CLAUDE.md` §5 (the clock rule's "an
+administrator's at any time) or an administrator's own device" → holders of Box administration);
+`docs/developers/conventions-data.md:4513,4683`; `docs/developers/design-system.md:6363,6420`;
+`apps/server/src/guide/{en,es}/box-status.md`, `apps/server/src/guide/{en,es}/email.md`.
+Tests: `box-health-api.test.ts`, `email-settings-api.test.ts`, `till-box-clock-api.test.ts`, the
+box-status screen test for `canRestart`.
 
 **Interfaces:** `POST /api/box/restart` → `system.manage`. `POST /api/box/clock-challenge`,
-`/clock-confirm`, `/clock-set`, the till clock confirmation's `holdsAdmin`/`authorize`,
-email-settings `canEdit` and its two write routes → `system.box_admin`. The demo email inbox keeps
-`person.admin` (design §3).
+`/clock-confirm`, `/clock-set`, the till's `holdsAdmin` and its approver `authorize`, email-settings
+`canEdit` and its two write routes → `system.box_admin`. The demo email inbox keeps `person.admin`
+(design §3).
 
 - [ ] **Step 1:** Tests: `it("a Manager may restart the box")` → 202. Box administration and
   `person.admin` are both Admin-only in this PR, so the gate change is proven by the refusal's
-  parameter: a Manager calling each of clock-challenge, clock-confirm, clock-set, the till clock
-  confirmation and the two email-settings writes is refused `authorization.not_permitted` with
-  `params.permission === "system.box_admin"` (today it names `person.admin`). PR 13 adds the
-  Manager-with-`person.admin` refusals.
+  parameter: a Manager session calling clock-challenge, clock-confirm, clock-set and the two
+  email-settings writes is refused `authorization.not_permitted` with
+  `params.permission === "system.box_admin"`. On the till: `it("a Manager's PIN offered as the
+  approver is refused naming system.box_admin")`, and `it("a Manager with no approver still
+  confirms as a staff member during start-up")` — the staff witness path at
+  `till-box-clock-api.ts:209-213,282-289` that CLAUDE.md §5 requires keeps working.
 - [ ] **Step 2–4:** fail, implement, pass; update the doc lines, CLAUDE.md §5 and both guides'
   who-can sentences; `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`.
 - [ ] **Step 5: Commit**, then `/finish-branch`.
@@ -325,6 +375,11 @@ reason's limits and the bill's comp limit, `adjustment.approve` approves past th
 zero limit always needs approval. The till's approval prompts stop naming a role. **Depends on:**
 PR 1. **Risk trigger:** money path, migration, cross-package contract. **First PR line:** core
 starting migration rebuilt, venue reset.
+
+**Consequence the PR description states** (owner, 2026-11-11, option A): Supervisors hold
+`adjustment.approve` by default, so a Supervisor alone may now give "On the house", "Discount", a
+Staff meal over 50% and anything over the bill limit, each of which needs a Manager today
+(`packages/adjustments/src/provisioning.ts:66-72`, `settings.ts:19`). No test changes for it.
 
 ### Task 2.1: Policy evaluates permissions and limits
 
@@ -396,12 +451,11 @@ Tests: `packages/db/src/schema/adjustments/{reasons,migrations}.test.ts`,
 (`listActivePersonsWithRoles`). Tests: `apps/server/src/{adjustments-apply,adjustments-api,line-cancel,default-cancel-reason,draft-discard}.test.ts`.
 
 **Interfaces:**
-- `planAdjustment` passes `actorPermissions: new Set(permissionsForRole(role))` (PR 8 swaps it).
+- `planAdjustment` passes `actorPermissions: new Set(permissionsForRole(role))` (PR 9 swaps it).
 - Approver check: `approves(approval, new Set(permissionsForRole(cred.role)))`.
 - `GET /api/adjustment-approvers?permission=<p>` replaces `?roles=`; `p` ∈ `adjustment.approve`,
-  `sale.refund`, `system.box_admin`, else `management.request_invalid` `{ field: "permission" }`
-  (the route's existing invalid code). Answers `listActivePersonsWithPermission(tx, p)`.
-- `listActivePersonsWithRoles` is deleted.
+  `sale.refund`, `system.box_admin`, else `management.request_invalid` `{ field: "permission" }`.
+  Answers `listActivePersonsWithPermission(tx, p)`. `listActivePersonsWithRoles` is deleted.
 - Wire approval: `{ by: "limit", permission, limit: { kind, amount: string | null, percentBp } } | { by: "refund", permission: "sale.refund" }`.
 
 - [ ] **Step 1:** `it("lists approvers by permission")` (Supervisor and Manager listed for
@@ -493,9 +547,8 @@ exported from `@waitron/db`.
 `IDENTITY_CONFIGURATION_TRANSFER` (`packages/identity/src/configuration-transfer.ts`) after
 `persons`; `packages/staffing/src/backup-verification.ts:96` (its `staff_roles` row check moves to
 identity's `IDENTITY_BACKUP_VERIFICATION`, keeping the same row rule and adding `hidden_at`);
-the bundle version. Tests: `packages/provisioning/src/configuration-import.test.ts`,
-`apps/server/src/configuration-transfer.test.ts` (a job role round-trips), the two backup
-verification suites.
+the bundle version. Tests: `apps/server/src/configuration-transfer.test.ts` (a job role and its
+holder round-trip), the two backup-verification suites.
 
 - [ ] **Step 1–4:** a job role and its holder round-trip through export and import under identity;
   identity's backup verification refuses a `staff_roles` row with an empty name. **Step 5: Commit.**
@@ -540,7 +593,7 @@ Tests: `staff-roles.test.ts`, `rota.test.ts`, `paint.test.ts`, `staff-roles-scre
   already has: EN "{count} people hold this role. Deleting it removes it from them, from every
   device and from the staffing plan. Shifts that used it keep its name." / ES "{count} personas
   tienen este puesto. Al eliminarlo se quita de ellas, de todos los dispositivos y del plan de
-  personal. Los turnos que lo usaron conservan su nombre."
+  personal. Los turnos que lo usaron conservan su nombre." (PR 8 adds the devices left with nobody.)
 - Visible-only reads: `listStaffRoles`, `listStaffRolesWithHolderNames`, name checks,
   `reorderStaffRoles`. `readRotaWeek` adds every role the week's shifts name, hidden included,
   with `hidden: true`. `assignmentTargets`, `setStaffRoleHolders`, `paint` refuse a hidden role
@@ -559,7 +612,7 @@ Tests: `staff-roles.test.ts`, `rota.test.ts`, `paint.test.ts`, `staff-roles-scre
 
 **Files:** `packages/staffing/src/{staff-roles,routes}.ts`, `packages/db/src/activity-kinds.ts`,
 `packages/provisioning/src/configuration-transfer.ts` (import loop). Tests: `staff-roles.test.ts`,
-`routes.test.ts`, `packages/provisioning/src/configuration-import.test.ts`.
+`routes.test.ts`, `apps/server/src/configuration-transfer.test.ts`.
 
 **Interfaces:**
 - Kinds (subject): `job_role.created` (`job_role`) `{ name }`; `job_role.renamed` (`job_role`)
@@ -623,9 +676,9 @@ export function builtInRoleForTest(db: Database | Transaction, personId: string)
 // packages/db/src/testing/seed.ts
 export function seedDeviceProfiles(db: Database | Transaction, values: DeviceProfileInsert | readonly DeviceProfileInsert[]): Promise<(typeof deviceProfiles.$inferSelect)[]>;
 ```
-`role` defaults to `"staff"` (today's column default). `seedDevice` creates its profile through
-`seedDeviceProfiles`. `packages/db/src/testing/` is under coverage and mutation, so the helper has
-its own test.
+`role` defaults to `"staff"` (today's column default). `seedDevice` (`seed.ts:148`) creates its
+profile through `seedDeviceProfiles`. `packages/db/src/testing/` is under coverage and mutation,
+so the helper has its own test.
 
 - [ ] **Step 1–4:** one and many rows, full rows returned, default staff, role round-trip.
   **Step 5: Commit.**
@@ -636,7 +689,7 @@ its own test.
 `apps/server/src/testing/`. **5.4:** packages that depend on `@waitron/identity` (core,
 fiscal-verifactu, workforce, workforce-es, staffing, venue-service, layouts, media, bookings,
 adjustments, provisioning, identity). `db`, `fiscal`, `catalogue`, `country-es` do not depend on
-identity (`fiscal` cannot: identity → module → fiscal) and keep `role:` until PR 9.
+identity (`fiscal` cannot: identity → module → fiscal) and keep `role:` until PR 11.
 
 The codemod is a throwaway script in the implementer's scratch folder, using the root
 `typescript` parser, run per task over that task's file set:
@@ -665,30 +718,40 @@ prints nothing outside `packages/db/src/testing/seed.ts`. **Commit**, `/finish-b
 
 ---
 
-## PR 6 — Everyone set up holds a job role (A1002 cut 7)
+## PR 6 — Everyone set up or imported holds a job role (A1002 cut 7)
 
-**Outcome:** a new venue has a "Team" job role held by the first admin; the demo's staff hold job
-roles; every person a test seeds holds a shared fixture job role. Nothing reads these for sign-in
-yet; PR 7 does. **Depends on:** PR 3, PR 5. **Risk trigger:** none (light path).
+**Outcome:** a new venue has a "Team" job role held by the first admin; a venue set up from an
+export gives its administrator job roles too; the demo's staff hold job roles; every person a test
+seeds holds a shared fixture job role. Nothing reads these for sign-in yet; PR 7 does.
+**Depends on:** PR 3, PR 5. **Risk trigger:** none (light path).
 
-### Task 6.1: Setup's "Team" and the demo
+### Task 6.1: Setup's "Team", the import, and the demo
 
-**Files:** `packages/provisioning/src/{venue-apply,starter-content}.ts`,
+**Files:** `packages/provisioning/src/{venue-apply,starter-content,configuration-transfer}.ts`,
 `packages/staffing/src/staff-roles.ts` (`createStarterStaffRole(tx, name): Promise<string>`, no
-activity), `apps/server/scripts/demo-seed/{seed-staff,staff}.ts`, `packages/country-es/src/demo/staff.ts`,
+activity), `apps/server/scripts/demo-seed/{seed-staff,data-set}.ts`, `packages/country-es/src/demo/staff.ts`,
 `packages/country-es/test-fixtures/demo/madrid-before-move.{en,es,manifest}.json` (regenerated by
 the demo's existing snapshot command; today `staff_roles: 0`). Tests: `venue-apply.test.ts`,
-`starter-content.test.ts`, `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`.
+`starter-content.test.ts`, `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`,
+`apps/server/src/configuration-transfer.test.ts`.
 
-**Interfaces:** `STARTER_JOB_ROLE_NAMES = { Team: { es: "Equipo" } } as const satisfies StaffNames`.
-`seed-admin` creates the person, then "Team" in the staff language, then the admin's
-`person_staff_roles` row, logging `job_role.member_added` with `personId: null`. The demo seeds
-"Waiter", "Kitchen" and "Manager on duty" job roles (`es`: "Camarero", "Cocina", "Encargado de
-turno") and gives each demo person one, the managers also "Manager on duty".
+**Interfaces:**
+- `STARTER_JOB_ROLE_NAMES = { Team: { es: "Equipo" } } as const satisfies StaffNames`.
+  `seed-admin` creates the person, then "Team" in the staff language, then the admin's
+  `person_staff_roles` row, logging `job_role.member_added` with `personId: null`.
+- Import: after inserting the bundle's rows, the importing administrator is given the job roles
+  the exporting administrator held (their `person_staff_roles` rows, which the loop skips at
+  `:881`), mapped to the new ids; if those are none, every imported visible job role. Logged as
+  baseline entries.
+- Demo: job roles "Waiter", "Kitchen", "Manager on duty" (`es`: "Camarero", "Cocina", "Encargado
+  de turno"); each demo person holds one, the managers also "Manager on duty".
 
-- [ ] **Step 1–4:** `it("setup's admin holds the starter job role")`; `it("names it in the staff
-  language")` → "Equipo"; the Madrid baseline test counts the demo's job roles and memberships.
-  **Step 5: Commit.**
+- [ ] **Step 1:** `it("setup's admin holds the starter job role")`; `it("names it in the staff
+  language")` → "Equipo"; in `configuration-transfer.test.ts`
+  `it("after an import the administrator holds the job roles the exporting administrator held")`
+  and `it("after an import of a bundle whose administrator held none, the administrator holds every
+  imported job role")`; the Madrid baseline test counts the demo's job roles and memberships.
+- [ ] **Step 2–4.** **Step 5: Commit.**
 
 ### Task 6.2: Fixture people hold the fixture job role
 
@@ -710,15 +773,16 @@ gives each seeded person that job role unless `jobRoles: []` is passed (`PersonS
 
 **Outcome:** a device profile's "Who can sign in" ticks job roles only; its sign-in screen lists
 everyone holding a ticked job role; per-person allow/deny is gone; a new profile ticks every job
-role. **Depends on:** PR 6. **Risk trigger:** auth (sign-in admission), migration. **First PR
-line:** core starting migration rebuilt, venue reset.
+role; fixtures, setup, the demo, the bench and an imported venue all still sign in. **Depends on:**
+PR 4, PR 6. **Risk trigger:** auth (sign-in admission), migration. **First PR line:** core starting
+migration rebuilt, venue reset.
 
 ### Task 7.1: Admission storage and rule
 
 **Files:** `packages/db/src/schema/identity/profile-admission.ts`, `packages/identity/src/profile-admission.ts`,
 `packages/identity/src/{classification,configuration-transfer,personal-data,errors,index}.ts`,
 `packages/db/src/{classification,index}.ts`, `packages/db/src/schema/identity/index.ts`,
-`packages/layouts/src/device-profile.ts`, `packages/staffing/src/staff-roles.ts` (hide branch),
+`packages/layouts/src/device-profile.ts`, `packages/staffing/src/staff-roles.ts` (PR 4's hide branch),
 `scripts/schema-constraints.test.ts`, generated drizzle, bundle version.
 Tests: `packages/identity/src/profile-admission.test.ts`.
 
@@ -733,7 +797,7 @@ Tests: `packages/identity/src/profile-admission.test.ts`.
   `device_profile.admission_invalid` `{ field: "admittedStaffRoleIds", reason: "not_found", staffRoleId }`;
   empty is valid.
 - `createDeviceProfile` ticks every visible job role; `createStaffRole` ticks none.
-- Hiding a job role (PR 4) also deletes its admission rows.
+- Hiding a job role also deletes its admission rows.
 
 - [ ] **Step 1:** `it("admits an active holder of a ticked job role")`; `it("admits nobody when no
   job role is ticked")`; `it("an access level alone admits nobody")` (an Admin with no job role);
@@ -742,27 +806,34 @@ Tests: `packages/identity/src/profile-admission.test.ts`.
 - [ ] **Step 2–4:** fail; implement; rebuild `--set core`; raise the bundle version; pass with the
   schema guards. **Step 5: Commit.**
 
-### Task 7.2: Fixtures tick the fixture job role
+### Task 7.2: Fixtures, setup, demo, bench and import still sign in
 
 **Files:** `packages/db/src/testing/seed.ts` (`seedDeviceProfiles` ticks `ensureFixtureJobRole`
 unless `admitted: []`), `apps/server/src/testing/*` that build profiles, setup's
-`seed-device-profiles` (ticks "Team" through `createDeviceProfile`).
+`seed-device-profiles` (ticks "Team" through `createDeviceProfile`), `apps/server/scripts/demo-seed/seed.ts`
+(ticks "Waiter" and "Manager on duty" on Counter and Handheld, "Kitchen" on Kitchen),
+`apps/server/scripts/bench/bench-venue.ts:397-427` (a "Bench team" job role held by its waiters and
+manager and ticked on its tills), the Madrid demo JSON.
 Tests: `apps/server/src/till-api.profile-actions.test.ts`, `till-api.profile-zones.test.ts`,
-`packages/provisioning/src/venue-apply.test.ts`, then the packages' suites.
+`packages/provisioning/src/venue-apply.test.ts`, `seed.madrid-baseline.test.ts`,
+`apps/server/src/configuration-transfer.test.ts`, then the packages' suites.
 
 - [ ] **Step 1:** `it("setup's admin can sign in on every starter profile")` (Counter, Kitchen,
-  Handheld). **Step 2–4:** run `pnpm --filter @waitron/server exec vitest run src/till-api` and the
+  Handheld); the Madrid baseline asserts **every demo person is on at least one profile's sign-in
+  list**; `it("after an import the administrator can sign in on every imported profile that ticks
+  a job role they hold")`; the bench's own check finds its waiters on its tills.
+- [ ] **Step 2–4:** run `pnpm --filter @waitron/server exec vitest run src/till-api` and the
   device, login and till-session suites first, then each package's suite in turn, fixing any test
   that builds a profile or person outside the helpers. **Step 5: Commit.**
 
-### Task 7.3: Profile screen, API and the till's live list
+### Task 7.3: Profile screen and API
 
-**Files:** `apps/server/src/management-api.ts:575-650`, `apps/dashboard/src/screens/device-profiles-screen.ts`
-(admission around `:330-365`, `:1190-1200`, `:1480-1500`, `:1690-1700`),
-`apps/dashboard/src/api/{client,live-queries}.ts`, `apps/till/src/api/live-connection.ts:9-16`,
-`apps/server/src/testing/clear-provision-fixture.ts`, the device-profile guide section EN/ES.
-Tests: `device-profiles-screen.test.ts` (+ `.unsaved`, `.a11y`), `management-api.*profile*.test.ts`,
-`apps/till/src/api/live-connection.test.ts`.
+**Files:** `apps/server/src/management-api.ts:570-660` (`ProfileBody`, `parseProfileAdmission`,
+`withProfileAccess`) and its device-profile routes `:1294-1430`;
+`apps/dashboard/src/screens/device-profiles-screen.ts` (admission around `:330-365`, `:1190-1200`,
+`:1480-1500`, `:1690-1700`); `apps/dashboard/src/api/{client,live-queries}.ts`;
+`apps/server/src/testing/clear-provision-fixture.ts`; the device-profile guide section EN/ES.
+Tests: `device-profiles-screen.test.ts` (+ `.unsaved`, `.a11y`), `management-api.*profile*.test.ts`.
 
 **Interfaces:**
 - Profile body `admittedStaffRoleIds: string[]` replaces `admittedRoles` and `personExceptions`;
@@ -770,25 +841,51 @@ Tests: `device-profiles-screen.test.ts` (+ `.unsaved`, `.a11y`), `management-api
 - "Who can sign in": one `wt-switch` per visible job role, in rota order; no people rows; a copied
   profile copies its ticks. Empty hint: EN "Nobody can sign in on devices with this profile." / ES
   "Nadie puede iniciar sesión en los dispositivos con este perfil."
-- The till's `DEVICE_TYPES` drops `device_profile_admission_persons` and adds `staff_roles` and
-  `person_staff_roles`, so a newly added waiter appears on the lock screen without a reload.
 
 - [ ] **Step 1:** `it("ticks job roles, not levels, and shows no people")`; `it("a copied profile
-  keeps its job-role ticks")`; `it("an empty selection saves and says nobody can sign in")`;
-  `it("a new holder of a ticked job role reaches the lock screen without reload")` (live-connection
-  subscribes to `person_staff_roles`).
+  keeps its job-role ticks")`; `it("an empty selection saves and says nobody can sign in")`.
 - [ ] **Step 2–4:** pass; light/dark and phone width by eye. **Step 5: Commit**, `/finish-branch`.
 
 ---
 
-## PR 8 — One authority reading for every check (A1002 cut 9)
+## PR 8 — The till's live sign-in list; job-role delete names empty devices (A1002 cut 9)
 
-**Outcome:** nothing outside identity decides from a level name; every permission check reads a
-person's authority; the dashboard shows screens by permission and knows a person is signed in from
-their id, not their level. Behaviour unchanged for the four levels. **Depends on:** PR 1, PR 2.
-**Risk trigger:** auth.
+**Outcome:** a newly added waiter appears on a till's lock screen without a reload; deleting a job
+role names the devices that would be left with nobody. **Depends on:** PR 7. **Risk trigger:**
+none (light path).
 
-### Task 8.1: `PersonAuthority`
+### Task 8.1: The till's live list
+
+**Files:** `apps/till/src/api/live-connection.ts:9-16`. Test: `apps/till/src/api/live-connection.test.ts`.
+
+**Interfaces:** `DEVICE_TYPES` drops `device_profile_admission_persons` and adds `staff_roles` and
+`person_staff_roles`.
+
+- [ ] **Step 1–4:** `it("a new holder of a ticked job role reaches the lock screen without
+  reload")`. **Step 5: Commit.**
+
+### Task 8.2: Devices left with nobody
+
+**Files:** `packages/staffing/src/{staff-roles,routes}.ts`, `packages/staffing/src/dashboard/{staff-roles-screen,staff-role-delete-copy,client,strings}.ts`.
+Tests: `staff-roles.test.ts`, `staff-roles-screen.test.ts`.
+
+**Interfaces:** `profilesLeftEmptyBy(tx, staffRoleId): Promise<{ id: string; name: string }[]>` —
+profiles whose only visible ticked job role is this one; `GET /management-api/staffing/staff-roles/:id/empty-devices`
+(gate `schedule.manage`) → `{ profiles }`. The confirmation adds, when not empty: EN "Deleting it
+leaves nobody able to sign in on: {profiles}." / ES "Al eliminarlo nadie podrá iniciar sesión en:
+{profiles}."
+
+- [ ] **Step 1–4:** a fresh venue's "Team" names all three starter profiles; a role ticked beside
+  another names none. **Step 5: Commit**, `/finish-branch`.
+
+---
+
+## PR 9 — One authority reading for every permission check (A1002 cut 10)
+
+**Outcome:** every permission check reads a person's authority instead of a level. Behaviour
+unchanged for the four levels. **Depends on:** PR 1, PR 2. **Risk trigger:** auth.
+
+### Task 9.1: `PersonAuthority`
 
 **Files:** Create `packages/identity/src/authority.ts`; modify `packages/identity/src/{authorize,credential,management-session,manager-login,login,staff,index}.ts`.
 Tests: `authority.test.ts`, `authorize.test.ts`, `credential.test.ts`, `manager-login.test.ts`.
@@ -811,20 +908,52 @@ being exported from `index.ts`.
 - [ ] **Step 1–4:** Supervisor holds `sale.refund`, not `report.export`; Admin holds a permission
   registered later; an unknown person holds nothing. **Step 5: Commit.**
 
-### Task 8.2: Server consumers
+### Task 9.2: Server consumers
 
 **Files:** the call sites `git grep -nE 'roleHasPermission|permissionsForRole' -- apps packages ':!*.test.ts'`
-lists outside identity (`apps/server/src/{alerts-api,attendance-export-api,bill-refunds,disk-stop-api,document-printer-offers,email-inbox-api,email-settings-api,manager-email-recipients,me-api,orders-api,pin-check-ahead,tender-refund-authorization,till-api,till-box-clock-api,adjustments-apply,management-attendance-api,till-attendance-api}.ts`,
-`packages/venue-service/src/routes.ts:703`, `packages/workforce/src/corrections.ts` (raw
-`select role from persons` → `readPersonAuthority`)). `handover-compare.ts:390-397` keeps reading
-the offered copy's `role` until PR 9.
+lists outside identity (`apps/server/src/{alerts-api,attendance-export-api,bill-refunds,disk-stop-api,document-printer-offers,email-inbox-api,email-settings-api,manager-email-recipients,me-api,orders-api,pin-check-ahead,tender-refund-authorization,till-api,till-box-clock-api,adjustments-apply}.ts`,
+`packages/venue-service/src/routes.ts:703`, and workforce's `maySelfApproveAttendance` from PR 1).
 
 - [ ] **Step 1–4:** each becomes `holds(x.authority, p)`; removing the old exports makes the
   existing suites the failing check (typecheck first); `manager-email-recipients.test.ts` gains
   `it("lists each eligible person once")`. Run `pnpm --filter @waitron/server typecheck` and each
-  touched suite. **Step 5: Commit.**
+  touched suite. **Step 5: Commit**, `/finish-branch`.
 
-### Task 8.3: Dashboard screens by permission; signed-in by person id
+---
+
+## PR 10 — Every level reader through identity; dashboard by permission (A1002 cut 11)
+
+**Outcome:** nothing outside identity reads a level, by drizzle or raw SQL; the dashboard shows
+screens by permission and knows a person is signed in from their id. Behaviour unchanged.
+**Depends on:** PR 9. **Risk trigger:** auth.
+
+### Task 10.1: Level readers behind identity
+
+**Files:** `packages/identity/src/authority.ts` (new readers); `apps/server/src/recovery-environment.ts:133`,
+`packages/provisioning/src/recover-provisioned-venue.ts:49`, `packages/provisioning/src/venue-apply.ts`
+(`:99-101`, `:215-217`, `:390-392`, `:516-518`, `:558-560`), `apps/server/src/break-glass-command.ts:94-130`,
+`apps/server/src/handover-compare.ts:388-400`, `packages/workforce/src/corrections.ts:35-40`
+(its raw `select role from persons`), `apps/server/src/testing/bill-venue.ts:324`.
+Tests: `recovery-environment.boot.test.ts`, `break-glass-command.test.ts`, `handover-compare.test.ts`,
+`venue-apply.test.ts`, `recover-provisioned-venue.test.ts`.
+
+**Interfaces:**
+- `listAdminHolders(tx: Database | Transaction, options?: { status?: "active" }): Promise<{ id: string; passwordHash: string | null }[]>`.
+- `isAdminHolder(tx, personId): Promise<boolean>`.
+- `holdsInCopy(query: CopyQuery, personId: string, permission: string): Promise<boolean>` — the
+  handover compare's reading of the offered copy (the type of `query` is the one
+  `handover-compare.ts` already uses).
+- `configuration-transfer.ts:853`'s raw `where role <> 'admin'` becomes "not an Admin holder",
+  through `listAdminHolders`.
+All read `persons.role` in this PR; PR 11 changes only their bodies.
+
+- [ ] **Step 1–4:** each caller's suite is the failing check once its raw SQL is replaced; add
+  `it("the recovery page refuses an active manager's password")` if `recovery-environment.boot.test.ts`
+  lacks it (the file's "refuses active manager" case pins it today). Then
+  `git grep -nE "role (<>|=) ?'(admin|manager|supervisor|staff)'|persons\.role|\.role as PersonRoleValue" -- apps packages ':!*.test.ts' ':!packages/identity/**' ':!**/drizzle/**'`
+  prints only `packages/catalogue` section-role matches. **Step 5: Commit.**
+
+### Task 10.2: Dashboard screens by permission; signed-in by person id
 
 **Files:** `apps/dashboard/src/dashboard-app.ts` (`:203-310` nav rules; `sessionRole` at `:955`
 and its uses at `:1020, :1046, :1075, :1111, :1118, :1218, :1265, :1317, :1327, :1340, :1415,
@@ -851,22 +980,23 @@ Tests: `apps/dashboard/src/dashboard-app.test.ts`.
 
 ---
 
-## PR 9 — Access-role storage; `persons.role` removed (A1002 cut 10)
+## PR 11 — Access-role storage; `persons.role` removed (A1002 cut 12)
 
 **Outcome:** the four built-in access roles are rows, people hold them through memberships,
 authority reads memberships, and `persons.role` is gone. Each person still holds exactly one
-built-in role, set through the existing staff form's `role` field (transitional; PR 13 replaces
-it). **Depends on:** PR 5, PR 7, PR 8. **Risk trigger:** migration, auth. **First PR line:** core
-starting migration rebuilt, venue reset.
+built-in role, set through the existing staff form's `role` field (transitional; PR 15 replaces
+it). Any change of that role expires the person's outstanding links. **Depends on:** PR 5, PR 7,
+PR 10. **Risk trigger:** migration, auth. **First PR line:** core starting migration rebuilt, venue
+reset.
 
-### Task 9.1: Tables, built-ins, authority
+### Task 11.1: Tables, built-ins, authority
 
 **Files:** Create `packages/db/src/schema/identity/roles.ts`, `packages/identity/src/roles.ts`;
 modify `packages/db/src/schema/identity/persons.ts` (drop `role`, `personRole`, `persons_role_ck`),
 `packages/db/src/schema/identity/index.ts`, `packages/db/src/{classification,index}.ts`,
-`packages/identity/src/{classification,authority,index}.ts`, `scripts/write-path-tables.json`,
-`scripts/schema-constraints.test.ts`, generated drizzle. Tests: `packages/identity/src/roles.test.ts`,
-`authority.test.ts`, `packages/db/src/schema/identity/roles.test.ts`.
+`packages/identity/src/{classification,authority,index}.ts` (PR 10's readers now read memberships),
+`scripts/write-path-tables.json`, `scripts/schema-constraints.test.ts`, generated drizzle.
+Tests: `packages/identity/src/roles.test.ts`, `authority.test.ts`, `packages/db/src/schema/identity/roles.test.ts`.
 
 **Interfaces:**
 - `roles`: `id`, `builtInKey` enum `staff|supervisor|manager|admin` nullable, `name` nullable,
@@ -879,7 +1009,7 @@ modify `packages/db/src/schema/identity/persons.ts` (drop `role`, `personRole`, 
 - `roles.ts`: `BUILT_IN_ROLE_KEYS`; `ensureBuiltInRoles(tx): Promise<Record<BuiltInRoleKey, string>>`
   (inserts missing ones with `defaultPermissionsFor(key)`, Admin `[]`);
   `setBuiltInMembership(tx, personId, key)` and `heldBuiltInKey(tx, personId): Promise<BuiltInRoleKey | null>`
-  (both transitional, deleted in PR 13).
+  (transitional, deleted in PR 15).
 - `readPersonAuthority`: memberships ⋈ roles; Admin → `declaredPermissions()`; else the union of
   held lists filtered by `isDeclaredPermission`. `PersonAuthority` adds `roleIds: readonly string[]`.
 
@@ -888,61 +1018,59 @@ modify `packages/db/src/schema/identity/persons.ts` (drop `role`, `personRole`, 
   stored undeclared permission authorizes nobody; no role holds nothing; the two CHECKs; "Café"
   then "CAFE" refused by the folded index. Rebuild `--set core`; schema guards. **Step 5: Commit.**
 
-### Task 9.2: Identity writers and readers
+### Task 11.2: Identity writers and readers
 
 **Files:** `packages/identity/src/{staff,credential,management-session,manager-login,login,authorize,personal-data}.ts`,
 `packages/shared/src/{person-role,index}.ts` (delete `PersonRoleValue`). Tests: identity's staff,
 lifecycle, authority, personal-data, login and session suites.
 
 **Interfaces:**
-- `updatePersonDetails`, `invitePerson`, `createPerson` keep `role: BuiltInRoleKey` input and write
-  it through `setBuiltInMembership`; their existing rules read `heldBuiltInKey` and the Admin
-  membership. Every "active admins" query becomes "active persons holding Admin".
+- `updatePersonDetails` and `invitePerson` keep `role: BuiltInRoleKey` input and write it through
+  `setBuiltInMembership`. **Only an Admin holder sets `admin` or changes an Admin holder's role**
+  (`actor.admin`, else `authorization.not_permitted` `{ permission: "person.admin" }`), replacing
+  today's "any `person.admin` holder" at `staff.ts:234-241`. Every "active admins" query becomes
+  "active persons holding Admin".
+- **Any change of the role expires the person's outstanding links** with
+  `invalidatePersonAccountActions` (today only on Admin gain or loss, `staff.ts:290`, `:522`).
 - `listActivePersonsWithPermission` reads all active people's memberships and roles in one query,
   never one authority read per person.
 - `PersonSummary.role` = `heldBuiltInKey`; `login.ts`'s client `role` field goes;
   `verifyPersonCredential`, `resolveManagementSession`, `authorizeManager` lose `role`.
 - Personal-data export lists `accessRoles: string[]` (built-in keys or custom names).
-- The unused exports `setEmail`, `resetPin`, `setPassword` and `setRole` (`staff.ts`; no production
-  caller, `git grep -nE '\b(setEmail|resetPin|setPassword|setRole)\(' -- apps packages ':!*.test.ts'`)
-  are deleted with their tests.
 
-- [ ] **Step 1–4:** existing suites are the failing check once the column is gone; add
-  `it("the last admin is counted by membership")`. **Step 5: Commit.**
+- [ ] **Step 1:** `it("the last admin is counted by membership")`; `it("only an Admin holder makes
+  someone Admin")` (a person given `person.admin` through the Manager row's stored permissions is
+  refused); `it("changing a person's role from Staff to Supervisor expires their invitation")`.
+- [ ] **Step 2–4.** **Step 5: Commit.**
 
-### Task 9.3: Setup, break-glass and handover
+### Task 11.3: Setup, transfer and import
 
-**Files:** `packages/provisioning/src/{venue-apply,recover-provisioned-venue}.ts`,
-`apps/server/src/break-glass-command.ts:94-135`, `apps/server/src/handover-compare.ts:388-400`,
-`packages/db/src/activity-kinds.ts`. Tests: `venue-apply.test.ts`, `break-glass-command.test.ts`,
-`handover-compare.test.ts`, `apps/server/src/first-fiscal-setup.e2e.test.ts`.
+**Files:** `packages/provisioning/src/venue-apply.ts` (seed-admin), `packages/identity/src/configuration-transfer.ts`,
+`packages/provisioning/src/configuration-transfer.ts:848-910`, `packages/db/src/activity-kinds.ts`,
+bundle version. Tests: `venue-apply.test.ts`, `apps/server/src/configuration-transfer.test.ts`,
+`configuration-transfer.security.test.ts`, `apps/server/src/first-fiscal-setup.e2e.test.ts`.
 
-**Interfaces:** `seed-admin` calls `ensureBuiltInRoles`, adds the Admin membership and logs
-`access_role.member_added` (`person`, `{ roleId, builtInKey, name: string | null }`) with
-`personId: null`; also declare `access_role.member_removed` with the same data. Setup's "is there
-an admin" reads the membership. Break-glass picks Admin holders. Handover compare reads the copy's
-`person_roles`/`roles` by raw SQL: `node.manage` if Admin or a held role's `permissions` JSON
-contains it.
+**Interfaces:**
+- `seed-admin` calls `ensureBuiltInRoles`, adds the Admin membership and logs
+  `access_role.member_added` (`person`, `{ roleId, builtInKey, name: string | null }`) with
+  `personId: null`; `access_role.member_removed` is declared with the same data.
+- `IDENTITY_CONFIGURATION_TRANSFER` adds `{ name: "roles" }`, `{ name: "person_roles" }` after
+  persons. The import deletes `person_roles` except the importing administrator's Admin membership
+  (they keep Admin). A bundle row with a `built_in_key` maps onto the target's built-in of that
+  key (`idMap.set(bundleId, targetId)`), updates its `permissions` (never Admin's), and is not
+  inserted. **Any role row's `permissions` naming an undeclared ID refuses the import**
+  `setup.request_invalid` `{ field: "roles.permissions" }`. Each imported membership is logged
+  with `personId: null`; no mail.
 
-- [ ] **Step 1–4:** `it("break-glass refuses a box with no Admin holder")`; `it("an offered copy's
-  custom role holding node.manage authorizes")`; setup's admin holds Admin. **Step 5: Commit.**
+- [ ] **Step 1:** in `configuration-transfer.test.ts`: `it("after an import the administrator still
+  holds Admin")`; `it("import keeps the target's built-ins and carries an edited Supervisor")`;
+  `it("an imported role naming an undeclared permission is refused")`; `it("imported memberships
+  are logged, not mailed")`.
+- [ ] **Step 2–4.** **Step 5: Commit.**
 
-### Task 9.4: Transfer and import
+### Task 11.4: Demo, bench and the remaining fixtures
 
-**Files:** `packages/identity/src/configuration-transfer.ts`, `packages/provisioning/src/configuration-transfer.ts:870-910`,
-bundle version. Tests: `configuration-import.test.ts`, `configuration-transfer.security.test.ts`.
-
-**Interfaces:** `{ name: "roles" }`, `{ name: "person_roles" }` after persons. A bundle row with a
-`built_in_key` maps onto the target's built-in of that key (`idMap.set(bundleId, targetId)`),
-updates its `permissions` (never Admin's) and is not inserted. Each imported membership is logged
-`access_role.member_added` with `personId: null`; no mail.
-
-- [ ] **Step 1–4:** `it("import keeps the target's built-ins and carries an edited Supervisor")`;
-  `it("imported memberships are logged, not mailed")`. **Step 5: Commit.**
-
-### Task 9.5: Demo, bench and the remaining fixtures
-
-**Files:** `packages/country-es/src/demo/{staff,casa-delgado-*}.ts`, `apps/server/scripts/demo-seed/{seed-staff,staff}.ts`,
+**Files:** `packages/country-es/src/demo/{staff,casa-delgado-*}.ts`, `apps/server/scripts/demo-seed/{seed-staff,data-set}.ts`,
 `apps/server/scripts/bench/bench-venue.ts`, the Madrid demo JSON, `packages/identity/test/person-rows.ts`
 (now `ensureBuiltInRoles` plus memberships), and by hand the `role:` fields left in `db`, `fiscal`,
 `catalogue`, `country-es` tests.
@@ -952,104 +1080,122 @@ updates its `permissions` (never Admin's) and is not inserted. Each imported mem
 
 ---
 
-## PR 10 — Rule 2 and the usable Admin (A1002 cut 11)
+## PR 12 — Rule 2 on every route; the email-change permission (A1002 cut 13)
 
-**Outcome:** you can change another person's email, status, PIN or sign-in methods, or send them an
-invitation or reset, only if you hold every permission they hold, on every route the dashboard
-uses; a change that would leave no usable Admin is refused. **Depends on:** PR 9. **Risk
-trigger:** auth.
+**Outcome:** you can change another person's email or status, clear their PIN, suspend or
+reactivate them, or send them an invitation or reset, only if you hold every permission they hold;
+changing an existing person's email also needs "Change other people's email addresses"
+(`person.email`, Admin only by default). **Depends on:** PR 11. **Risk trigger:** auth.
 
-### Task 10.1: Rule 2 on the routes
+### Task 12.1: Rule 2 and `person.email` on the routes
 
-**Files:** Create `packages/identity/src/admin-anchor.ts` (the cover check); modify
-`packages/identity/src/{staff,account-action,errors}.ts`, `apps/dashboard/src/i18n/codes.ts`.
-Tests: `apps/server/src/management-api.staff-rule2.test.ts` (new), `packages/identity/src/staff-authority.test.ts`.
+**Files:** Create `packages/identity/src/admin-anchor.ts` (the cover check, extended in PR 13);
+modify `packages/identity/src/{staff,account-action,permissions,errors}.ts`,
+`apps/dashboard/src/i18n/codes.ts`. Tests: `apps/server/src/management-api.staff-rule2.test.ts`
+(new), `packages/identity/src/staff-authority.test.ts`.
 
 **Interfaces:**
 - `export function assertActorCovers(actor: PersonAuthority, target: PersonAuthority): void` —
   throws `person.holds_more` `{ personId }` unless `(actor.admin || !target.admin)` and every target
   permission is in the actor's.
+- New core permission `person.email`, label "Change other people's email addresses", defaults `[]`.
 - Applied to another person in: `updatePersonDetails` **whenever the email or the status changes**
-  (`staff.ts:257-259` today needs only `person.admin`), `clearPersonPin`, `deactivatePerson`,
-  `resetPersonLogin`, `reactivatePersonForInvitation`, `queueInvitation` and the invitation route.
-  So a Manager can never set an Admin's address, and the public reset page (which records no
-  sender) cannot then deliver an Admin's reset to them (Review focus 1).
+  (an email change also needs `person.email`, else `authorization.not_permitted`
+  `{ permission: "person.email" }`); `clearPersonPin`; `deactivatePerson`; `resetPersonLogin`;
+  `reactivatePersonForInvitation`; `queueInvitation` and the invitation route. Setting the email
+  when inviting someone new stays under `person.admin`.
+- The unused exports `setEmail`, `resetPin`, `setPassword`, `setRole` and `createPerson`
+  (`staff.ts`; `git grep -nE '\b(setEmail|resetPin|setPassword|setRole|createPerson)\(' -- apps packages ':!*.test.ts'`
+  prints nothing) are deleted with their tests. Nobody sets another person's PIN.
 - Wording `person.holds_more`: EN "This person can do things you can't, so only someone who can do
   everything they can may change their sign-in." / ES "Esta persona puede hacer cosas que tú no,
   así que solo alguien que pueda hacer todo lo que ella hace puede cambiar su acceso."
-- Test actor: Managers hold `person.admin` only from PR 13, so each test gives the Manager built-in
-  row `person.admin` by updating its stored `permissions` in the test database before signing in.
+- Test actor: Managers hold `person.admin` only from PR 15, so each test gives the Manager built-in
+  row `person.admin` (and, where a test needs it, `person.email`) by updating its stored
+  `permissions` in the test database before signing in. A "more" target is a person holding a
+  hand-inserted custom role `{ name: "Accountant", permissions: ["report.view", "fiscal.remedy"] }`.
 
-- [ ] **Step 1:** HTTP tests through `PUT /management-api/staff/:id`, `POST …/reset-pin`,
-  `…/reset-login`, `…/reactivate`, `…/invitation`, `…/deactivate`, each with the refusal code:
-  such a Manager changes a waiter's email (ok) and status (ok); changes an Admin's email or status
-  → `person.holds_more`; resets a waiter's PIN (ok); deactivates a person whose custom role grants
-  `system.box_admin` → `person.holds_more`; sends an Admin an invitation or reset → `person.holds_more`.
-  Self-service changes of one's own email and password still pass.
-- [ ] **Step 2–4.** **Step 5: Commit.**
-
-### Task 10.2: The usable-Admin check on every path
-
-**Files:** `packages/identity/src/{admin-anchor,staff,profile,passkey}.ts`,
-`packages/provisioning/src/configuration-transfer.ts` (end of the import transaction),
-`apps/dashboard/src/i18n/codes.ts`. Tests: `packages/identity/src/admin-anchor.test.ts`,
-`staff-lifecycle.test.ts`, `profile.test.ts`, `configuration-import.test.ts`.
-
-**Interfaces:** `export function assertUsableAdminRemains(tx: Transaction): Promise<void>` throws
-`person.last_admin` unless a usable Admin (Global constraints) remains. Runs last in
-`updatePersonDetails`, `deactivatePerson`, `resetPersonLogin`, own passkey removal
-(`profile.ts:402`), `unlinkOwnGoogle` (`profile.ts:229`), and the configuration import. Wording
-adds: EN "Keep at least one active Admin who can sign in to the dashboard." / ES "Mantén al menos
-un administrador activo que pueda entrar al panel."
-
-- [ ] **Step 1:** each refused with `person.last_admin` when it would leave none: suspending the
-  last usable Admin (another Admin is PIN-only); resetting them to pending; removing their last
-  passkey with no password or Google; unlinking their Google when it is their only method; an
-  import whose result has no usable Admin. Each passes when a second usable Admin exists
-  (Review focus 2).
+- [ ] **Step 1:** HTTP tests, each with its refusal code. Through **each** of
+  `PUT /management-api/staff/:id` (email, then status), `POST …/reset-pin`, `…/reset-login`,
+  `…/reactivate`, `…/invitation`, `…/deactivate`: the Manager succeeds on a waiter, and is refused
+  `person.holds_more` on the Accountant **and** on an Admin. Email specifically: a Manager holding
+  `person.admin` but not `person.email` changing a waiter's email → `authorization.not_permitted`
+  naming `person.email`; holding both, still refused for the Accountant (Rule 2 on top). Inviting a
+  new person with an email still works with `person.admin` alone. Self-service changes of one's own
+  email and password still pass.
 - [ ] **Step 2–4.** **Step 5: Commit**, `/finish-branch`.
 
 ---
 
-## PR 11 — Links checked when used (A1002 cut 12)
+## PR 13 — The usable Admin; email changes logged and the old address told (A1002 cut 14)
 
-**Outcome:** role changes no longer cancel a person's outstanding links; a link an administrator
-sent records the sender and is re-checked against the sender when used. **Depends on:** PR 10.
-**Risk trigger:** auth, migration. **First PR line:** core starting migration rebuilt, venue reset.
+**Outcome:** a change that would leave no usable Admin is refused on every path; every email change
+made by someone other than the person is logged with who made it and a notice goes to the old
+address. **Depends on:** PR 12. **Risk trigger:** auth, migration (mail kind). **First PR line:**
+core starting migration rebuilt, venue reset.
 
-### Task 11.1: Sender recorded and checked
+### Task 13.1: The usable-Admin check on every path
 
-**Files:** `packages/db/src/schema/identity/management-account-actions.ts`,
-`packages/identity/src/{account-action,staff}.ts`, `apps/server/src/account-mail.ts`, generated
-drizzle. Tests: `account-action.test.ts`, `account-action.concurrency.test.ts`, `staff-lifecycle.test.ts`.
+**Files:** `packages/identity/src/{admin-anchor,staff,profile,passkey}.ts`,
+`packages/provisioning/src/configuration-transfer.ts` (end of the import transaction),
+`apps/dashboard/src/i18n/codes.ts`. Tests: `packages/identity/src/admin-anchor.test.ts`,
+`staff-lifecycle.test.ts`, `profile.test.ts`, `apps/server/src/configuration-transfer.test.ts`,
+`apps/server/src/management-api.staff-rule2.test.ts`.
+
+**Interfaces:** `export function assertUsableAdminRemains(tx: Transaction): Promise<void>` throws
+`person.last_admin` unless a usable Admin (Global constraints) remains. Runs last in
+`updatePersonDetails` (including its transitional `role` field), `deactivatePerson`,
+`resetPersonLogin`, own passkey removal (`profile.ts:402`), `unlinkOwnGoogle` (`profile.ts:229`),
+and the configuration import. Wording adds: EN "Keep at least one active Admin who can sign in to
+the dashboard." / ES "Mantén al menos un administrador activo que pueda entrar al panel."
+
+- [ ] **Step 1:** each refused with `person.last_admin` when it would leave none (another Admin is
+  PIN-only): changing the last usable Admin to Manager through `PUT /management-api/staff/:id`'s
+  `role` field; suspending them; resetting them to pending; removing their last passkey with no
+  password or Google; unlinking their Google when it is their only method; an import whose result
+  has no usable Admin. Each passes when a second usable Admin exists (Review focus 2).
+- [ ] **Step 2–4.** **Step 5: Commit.**
+
+### Task 13.2: Email-change log and the old-address notice
+
+**Files:** `packages/db/src/schema/outgoing-mail.ts` (kind), `packages/db/src/outgoing-mail.ts`
+(`MAIL_LIFETIME_MS`), `packages/db/src/activity-kinds.ts`, `packages/identity/src/{staff,email-change-mail}.ts`,
+create `apps/server/src/email-changed-mail.ts` and `apps/server/src/i18n/email-changed-email.ts`,
+`apps/server/src/boot.ts` (owners list), generated drizzle. Tests: `packages/identity/src/staff.email.test.ts`,
+`apps/server/src/email-changed-mail.test.ts`.
 
 **Interfaces:**
-- `management_account_actions.issued_by` `id` nullable, FK → persons restrict. The table is in no
-  configuration transfer.
-- `issueAccountAction(tx, input & { issuedBy: string | null })`; `issueQueuedAccountAction` passes
-  `mail.requestedBy ?? null`; self-service recovery passes `null`.
-- `inspectAccountAction` and `completeAccountAction` refuse `account_action.invalid` when
-  `issued_by` is set and the issuer, read at redemption, is not active, lacks `person.admin`, or
-  fails `assertActorCovers(issuer, target)`.
-- `invalidatePersonAccountActions` is no longer called on a role change (`staff.ts:289-290`,
-  `:521-522`, or wherever PR 9 left those writes); `revokePersonAccess` on email or status change
-  stays.
+- Mail kind `email_changed` added to `outgoingMailKinds`; `MAIL_LIFETIME_MS.email_changed = 86400000`.
+- Activity kind `person.email_changed` (`person`) `{}` — the actor is `personId`; no address in
+  `data`.
+- `updatePersonDetails`, when someone other than the person changes the email, records the entry
+  and calls `queueEmailChangedNotice(tx, { activityId, personId, actorId, oldEmail, editorName, at })`:
+  `enqueueMail` with `kind: "email_changed"`, `dedupeKey: email-changed:<activityId>`,
+  `subjectId: activityId`, `personId`, `requestedBy: actorId`,
+  `params: { oldEmail, editorName, at }` (the old address cannot be read at claim, so it travels in
+  the row, which expires after a day).
+- `emailChangedMail(deps: { venueLocale: string; readTimeZone(): Promise<string> }): MailKindOwner<EmailChangedWords>`
+  sends to `params.oldEmail` in the person's language: EN subject "Your sign-in email was changed",
+  text "{actor} changed the email address you sign in with at {venue} on {when}. Messages for your
+  account now go to the new address." / ES "Se cambió tu correo de acceso", "{actor} cambió el
+  correo con el que entras en {venue} el {when}. Los mensajes de tu cuenta ahora van a la nueva
+  dirección."
 
-- [ ] **Step 1:** `it("a role change leaves an outstanding invitation usable")`; `it("an invitation
-  sent by a Manager is refused once the person holds more than the Manager")` (Manager given
-  `person.admin` as in 10.1); `it("an invitation from a since-suspended sender is refused")`;
-  `it("self-service reset links have no sender")`; keep expiry, single-use and reissue assertions.
+- [ ] **Step 1:** an administrator changing a waiter's email writes one `person.email_changed`
+  entry naming the administrator and queues one `email_changed` mail to the old address; the person
+  changing their own email writes neither; rollback leaves neither; the Spanish notice for a
+  Spanish-speaking person.
 - [ ] **Step 2–4:** rebuild `--set core`; schema guards. **Step 5: Commit**, `/finish-branch`.
 
 ---
 
-## PR 12 — Membership changes with Rule 1, logged and mailed (A1002 cut 13)
+## PR 14 — Membership changes with Rule 1, logged, mailed, links expired (A1002 cut 15)
 
 **Outcome:** identity can change a person's access roles under Rule 1 with the changed-while-editing
-check, logging each change and emailing the person; the server sends that email. No route uses it
-until PR 13. **Depends on:** PR 11. **Risk trigger:** auth.
+check, expiring their outstanding links, logging each change and emailing the person. No route uses
+it until PR 15. **Depends on:** PR 13. **Risk trigger:** auth.
 
-### Task 12.1: Membership command
+### Task 14.1: Membership command
 
 **Files:** `packages/identity/src/{roles,errors}.ts`. Tests: `packages/identity/src/roles.memberships.test.ts`.
 
@@ -1063,26 +1209,28 @@ export function setPersonAccessRoles(tx: Transaction, input: {
 - Needs `person.admin` and a fresh sign-in (`requireFreshManagementSignIn`, as role changes need
   today, `staff.ts:261-262`). Sets compared without order, else `person.roles_changed` `{}`.
   Unknown ID → `role.not_found` `{ roleId }`; duplicate → `management.request_invalid` `{ field: "roleIds" }`.
-- Each added or removed role: Admin needs `actor.admin`; any other needs every permission in the
-  role's stored list within the actor's, else `role.not_permitted` `{ roleId }`. The check is on
-  the role, not the person's total.
-- Writes, then one `recordActivity` and one `queueRoleMembershipMail` (12.2) per change, then
-  `assertUsableAdminRemains`.
+- Each added or removed role: Admin needs `actor.admin`; any other needs every **declared**
+  permission in the role's stored list within the actor's, else `role.not_permitted` `{ roleId }`.
+  The check is on the role, not the person's total.
+- When the set changes: `invalidatePersonAccountActions` for the person, one `recordActivity` and
+  one `queueRoleMembershipMail` (14.2) per change, then `assertUsableAdminRemains`.
 
-- [ ] **Step 1:** (actors given `person.admin` as in 10.1) adding a custom role within the actor's
+- [ ] **Step 1:** (actors given `person.admin` as in 12.1) adding a custom role within the actor's
   permissions to a person who holds Accountant → ok; removing Accountant → `role.not_permitted`;
   adding or removing Admin → `role.not_permitted`; a custom role holding every current permission
-  cannot stand in for Admin; stale `expectedRoleIds` → `person.roles_changed`; a session past its
-  fresh sign-in → the existing fresh-sign-in code; reordered sets log nothing; removing the last
-  usable Admin's Admin → `person.last_admin`; a person may end with no roles.
+  cannot stand in for Admin; a role storing a retired ID (`sale.discount`) can still be given by an
+  Admin and by an actor holding its declared permissions; stale `expectedRoleIds` →
+  `person.roles_changed`; past the fresh sign-in → the existing fresh-sign-in code; the person's
+  outstanding invitation is expired after any change and kept after a no-op; reordered sets log
+  nothing; removing the last usable Admin's Admin → `person.last_admin`; a person may end with no
+  roles.
 - [ ] **Step 2–4.** **Step 5: Commit.**
 
-### Task 12.2: Membership mail
+### Task 14.2: Membership mail
 
 **Files:** Create `packages/identity/src/role-mail.ts`, `apps/server/src/role-membership-mail.ts`,
-`apps/server/src/i18n/role-membership-email.ts`; modify `apps/server/src/boot.ts` (owners list
-beside `accountActionMail`). Tests: `packages/identity/src/role-mail.test.ts`,
-`apps/server/src/role-membership-mail.test.ts`.
+`apps/server/src/i18n/role-membership-email.ts`; modify `apps/server/src/boot.ts` (owners list).
+Tests: `packages/identity/src/role-mail.test.ts`, `apps/server/src/role-membership-mail.test.ts`.
 
 **Interfaces:**
 - `queueRoleMembershipMail(tx, input: { activityId: string; personId: string; actorId: string | null; change: "added" | "removed"; roleId: string; builtInKey: BuiltInRoleKey | null; roleName: string | null; editorName: string; at: Date }): Promise<void>`
@@ -1104,16 +1252,16 @@ beside `accountActionMail`). Tests: `packages/identity/src/role-mail.test.ts`,
 
 ---
 
-## PR 13 — Access-role tags on the staff editor; Managers hold `person.admin` (A1002 cut 14)
+## PR 15 — Access-role tags on the staff editor; Managers hold `person.admin` (A1002 cut 16)
 
 **Outcome:** the staff editor shows access-role tags and saves them; staff answers carry `roleIds`
-instead of `role`; Managers hold `person.admin` by default. **Depends on:** PR 12. **Risk
-trigger:** auth.
+instead of `role`; Managers hold `person.admin` by default (not `person.email`). **Depends on:**
+PR 14. **Risk trigger:** auth.
 
-### Task 13.1: Routes and answers
+### Task 15.1: Routes and answers
 
 **Files:** `apps/server/src/{management-api,me-api}.ts`, `packages/identity/src/{staff,roles,permissions}.ts`.
-Tests: `management-api.*staff*.test.ts`, `me-api.test.ts`.
+Tests: `management-api.*staff*.test.ts`, `management-api.staff-rule2.test.ts`, `me-api.test.ts`.
 
 **Interfaces:**
 - `GET /management-api/access-roles` (gate `person.manage` or `person.admin`) →
@@ -1121,26 +1269,29 @@ Tests: `management-api.*staff*.test.ts`, `me-api.test.ts`.
   custom by localized name.
 - `PUT /management-api/staff/:id/access-roles` `{ roleIds, expectedRoleIds }` → `{ roleIds }`.
 - Staff list, summary and `/me` carry `roleIds: string[]`; `role` leaves every staff body and
-  answer; invite and create take `roleIds` (Rule 1 applies). `setBuiltInMembership` and
-  `heldBuiltInKey` are deleted.
+  answer; invite takes `roleIds` (Rule 1 applies). `setBuiltInMembership` and `heldBuiltInKey`
+  are deleted.
 - `person.admin` defaults become `["manager"]`.
 
 - [ ] **Step 1:** `PUT …/access-roles` without a fresh sign-in → the existing fresh-sign-in code;
-  a default Manager editing an Admin's email or status through `PUT /management-api/staff/:id` →
-  `person.holds_more` (Review focus 1); `/me` answers `roleIds` and no `role`.
+  a default Manager changing a waiter's email through `PUT /management-api/staff/:id` →
+  `authorization.not_permitted` naming `person.email`; a default Manager changing an Admin's status
+  → `person.holds_more` (Review focus 1); `/me` answers `roleIds` and no `role`.
 - [ ] **Step 2–4.** **Step 5: Commit.**
 
-### Task 13.2: Box administration stays Admin's
+### Task 15.2: Box administration stays Admin's
 
 **Files:** tests only: `box-health-api.test.ts`, `till-box-clock-api.test.ts`, `email-settings-api.test.ts`.
 
 - [ ] **Step 1–4:** a default Manager (now holding `person.admin`) is refused
   `authorization.not_permitted` `{ permission: "system.box_admin" }` at clock-challenge,
-  clock-confirm, clock-set, the till clock confirmation (`till-box-clock-api.ts:137-145`) and both
-  email-settings writes. A default Manager can open the demo test inbox, which keeps `person.admin`
-  (design §3, demo only) — assert it so the change is visible. **Step 5: Commit.**
+  clock-confirm, clock-set and both email-settings writes; on the till, a default Manager's PIN
+  offered as the clock approver is refused naming `system.box_admin`, and a default Manager with no
+  approver still confirms as a staff member during start-up. A default Manager can open the demo
+  test inbox, which keeps `person.admin` (design §3, demo only) — assert it so the change is
+  visible. **Step 5: Commit.**
 
-### Task 13.3: Staff editor and app shell
+### Task 15.3: Staff editor and app shell
 
 **Files:** `apps/dashboard/src/api/client.ts`, `apps/dashboard/src/widgets/{person-form,person-edit,staff-list}.ts`,
 `apps/dashboard/src/screens/staff-screen.ts`, `apps/dashboard/src/i18n/{domain,strings,codes}.ts`,
@@ -1151,8 +1302,9 @@ Tests: `management-api.*staff*.test.ts`, `me-api.test.ts`.
 **Interfaces:**
 - Editor row "Access roles — what they may do" / ES "Roles de acceso — lo que puede hacer", a
   `wt-combobox multiple`; a role the viewer cannot give (Rule 1 from `/me` permissions and the
-  role's list) has no remove control and is not offered. No roles: EN "No access role" / ES "Sin
-  rol de acceso". The staff list shows every role; its filter matches any selected role, each
+  role's declared list) has no remove control and is not offered. No roles: EN "No access role" /
+  ES "Sin rol de acceso". The email field is read-only unless the viewer holds `person.email` or is
+  editing themselves. The staff list shows every role; its filter matches any selected role, each
   person once.
 - Refusals: `role.not_permitted` EN "You can only give or take away a role whose permissions you
   all have." / ES "Solo puedes dar o quitar un rol cuyos permisos tengas todos.";
@@ -1162,21 +1314,23 @@ Tests: `management-api.*staff*.test.ts`, `me-api.test.ts`.
 - Mocks change `role` to `roleIds` mechanically (one commit, no assertion changed).
 
 - [ ] **Step 1:** two tags save with the set read; a role the viewer cannot give has no remove
-  control; stale save keeps the draft; filter by two roles lists a two-role person once; the app
-  shell, given a real `/me` answer from the server for a person with `roleIds: []` (captured from
-  `me-api.test.ts`), stays signed in on My schedule (Review focus 5).
-- [ ] **Step 2–4.** Guides EN/ES for roles and the two rules. **Step 5: Commit**, `/finish-branch`.
+  control; stale save keeps the draft; filter by two roles lists a two-role person once; the email
+  field is read-only for a default Manager editing a waiter; the app shell, given a real `/me`
+  answer from the server for a person with `roleIds: []` (captured from `me-api.test.ts`), stays
+  signed in on My schedule (Review focus 5).
+- [ ] **Step 2–4.** Guides EN/ES for roles, the two rules and the email permission. **Step 5:
+  Commit**, `/finish-branch`.
 
 ---
 
-## PR 14 — Custom access roles, server (A1002 cut 15)
+## PR 16 — Custom access roles, server (A1002 cut 17)
 
 **Outcome:** holders of `person.admin` can create, copy, rename, edit the permissions of and delete
 access roles within Rule 1; built-ins keep fixed names and Admin's list is locked; every change is
-logged, and deletion emails each person who loses the role. **Depends on:** PR 13. **Risk
-trigger:** auth.
+logged, and deletion expires each holder's links and emails each person who loses the role.
+**Depends on:** PR 15. **Risk trigger:** auth.
 
-### Task 14.1: Lifecycle
+### Task 16.1: Lifecycle
 
 **Files:** `packages/identity/src/{roles,errors}.ts`, `packages/db/src/activity-kinds.ts`.
 Tests: `packages/identity/src/roles.lifecycle.test.ts`.
@@ -1188,53 +1342,53 @@ export function renameAccessRole(tx, input: { managementSessionId: string; roleI
 export function setAccessRolePermissions(tx, input: { managementSessionId: string; roleId: string; permissions: readonly string[]; expectedPermissions: readonly string[] }): Promise<void>;
 export function deleteAccessRole(tx, input: { managementSessionId: string; roleId: string }): Promise<{ removedFrom: number }>;
 ```
-- All need `person.admin` and the actor holding every permission the role carries before and after
-  (Rule 1); each ticked permission must be held → `role.not_permitted`. Undeclared →
+- All need `person.admin` and the actor holding every declared permission the role carries before
+  and after (Rule 1); each ticked permission must be held → `role.not_permitted`. Undeclared →
   `role.permission_unknown` `{ permission }`. Names: trimmed, nonempty (`role.name_required`),
   unique folded among custom roles (`role.name_taken` `{ name }`). Stale → `role.changed` `{}`.
 - Built-ins: rename/delete → `role.built_in` `{ roleId }`; Admin's permissions → `role.built_in`.
 - Copy reads the source's current effective permissions (Admin: `declaredPermissions()`), takes no
-  people, and is an ordinary custom role; copying needs Rule 1 on the copy's list.
-- Delete removes each membership (logged `access_role.member_removed`, mailed through
-  `queueRoleMembershipMail`), deletes the row and logs `access_role.deleted`.
+  people, and is an ordinary custom role; Rule 1 applies to the copy's list.
+- Delete removes each membership (`invalidatePersonAccountActions` for each holder, logged
+  `access_role.member_removed`, mailed through `queueRoleMembershipMail`), deletes the row and logs
+  `access_role.deleted`.
 - Kinds (`access_role` subject): `access_role.created` `{ name, permissions, copiedFromRoleId: string | null }`;
   `access_role.renamed` `{ from, to }`; `access_role.deleted` `{ name, permissions }`;
   `access_role.permission_added` / `access_role.permission_removed` `{ permission }`, one per
   permission. A permission edit queues no mail.
 
 - [ ] **Step 1:** a Manager creates "Accountant" with `report.view`, `report.export`, `fiscal.view`;
-  ticking `node.manage` → `role.not_permitted`; **a Manager copying Admin → `role.not_permitted`**;
-  an Admin copying Admin gets today's declared list and no people; "Café" then "CAFE" →
-  `role.name_taken`; renaming Manager or editing Admin → `role.built_in`; removing `payment.take`
-  from Staff stops a Staff holder taking payment; stale `expectedPermissions` → `role.changed`;
-  deleting a role held by three people logs three removals and queues mail for those with email;
-  a permission edit queues no mail.
+  ticking `node.manage` → `role.not_permitted`; a Manager copying Admin → `role.not_permitted`; an
+  Admin copying Admin gets today's declared list and no people. Rule 1's "before" half: on a role
+  carrying `fiscal.remedy`, a Manager removing one of its permissions, renaming it and deleting it
+  are each `role.not_permitted`. "Café" then "CAFE" → `role.name_taken`; renaming Manager or
+  editing Admin → `role.built_in`; removing `payment.take` from Staff stops a Staff holder taking
+  payment; stale `expectedPermissions` → `role.changed`; deleting a role held by three people logs
+  three removals, expires their links and queues mail for those with email; a permission edit
+  queues no mail.
 - [ ] **Step 2–4.** **Step 5: Commit.**
 
-### Task 14.2: Routes and import check
+### Task 16.2: Routes
 
-**Files:** Create `apps/server/src/access-roles-api.ts` (mounted from `management-api.ts`);
-`packages/provisioning/src/configuration-transfer.ts`. Tests: `apps/server/src/access-roles-api.test.ts`,
-`configuration-import.test.ts`.
+**Files:** Create `apps/server/src/access-roles-api.ts` (mounted from `management-api.ts`).
+Tests: `apps/server/src/access-roles-api.test.ts`.
 
 **Interfaces:** `POST /management-api/access-roles` `{ name, permissions, copiedFrom? }` → 201
 `{ id }`; `PUT …/:id/name` `{ name, expectedName }`; `PUT …/:id/permissions`
 `{ permissions, expectedPermissions }`; `DELETE …/:id` → `{ removedFrom }`. Each one
-`withTransaction` with `requireFreshManagementSignIn`. An imported custom role naming an undeclared
-permission → `setup.request_invalid` `{ field: "roles.permissions" }`.
+`withTransaction` with `requireFreshManagementSignIn`.
 
-- [ ] **Step 1–4:** each verb's success and one refusal; the import refusal. **Step 5: Commit**,
-  `/finish-branch`.
+- [ ] **Step 1–4:** each verb's success and one refusal. **Step 5: Commit**, `/finish-branch`.
 
 ---
 
-## PR 15 — Access roles page (A1002 cut 16)
+## PR 17 — Access roles page (A1002 cut 18)
 
 **Outcome:** People → Access roles lists the roles; each role's page shows its permissions as
 labelled ticks grouped by area; Admin's page is locked; Copy and Delete confirm once. **Depends
-on:** PR 14. **Risk trigger:** none (light path).
+on:** PR 16. **Risk trigger:** none (light path).
 
-### Task 15.1: Permission labels
+### Task 17.1: Permission labels
 
 **Files:** Create `apps/dashboard/src/i18n/permissions.ts`. Test: `permissions.test.ts` beside it.
 
@@ -1247,16 +1401,16 @@ export const PERMISSION_TEXT: Readonly<Record<string, PermissionText>>;
 Areas (design §10): Sales — `payment.take`, `sale.void`, `sale.refund`, `sale.rectify`,
 `cash.drawer`, `adjustment.apply`, `adjustment.approve`; Reports and tax — `report.view`,
 `report.export`, `fiscal.view`, `fiscal.remedy`, `personal_data.export`; People and rota —
-`person.manage`, `person.admin`, `schedule.manage`, `workforce.correct`, `workforce.self_approve`;
-Venue and system — `catalogue.manage`, `venue.view`, `venue.configure`, `hardware.manage`,
-`purchase.manage`, `adjustment.manage`, `booking.manage`, `system.manage`, `system.box_admin`,
-`node.manage`. Short EN/ES labels; `help` arrives in PR 16. A module permission absent from the map
-shows under Venue and system with its ID.
+`person.manage`, `person.admin`, `person.email`, `schedule.manage`, `workforce.correct`,
+`workforce.self_approve`; Venue and system — `catalogue.manage`, `venue.view`, `venue.configure`,
+`hardware.manage`, `purchase.manage`, `adjustment.manage`, `booking.manage`, `system.manage`,
+`system.box_admin`, `node.manage`. Short EN/ES labels; `help` arrives in PR 18. A module
+permission absent from the map shows under Venue and system with its ID.
 
 - [ ] **Step 1–4:** every declared ID (after `ALL_MODULE_PERMISSIONS` is registered) has an entry
   and both languages have each label. **Step 5: Commit.**
 
-### Task 15.2: The page
+### Task 17.2: The page
 
 **Files:** Create `apps/dashboard/src/screens/access-roles-screen.ts`; modify `apps/dashboard/src/dashboard-app.ts`
 (team group `{ screen: "access-roles", labelKey: "nav.access_roles", requiresPermission: "person.admin" }`),
@@ -1277,16 +1431,16 @@ Delete confirms once: EN "{count} people hold {role}. Deleting it takes it away 
 
 ---
 
-## PR 16 — Permission help bubbles and guides (A1002 cut 17)
+## PR 18 — Permission help bubbles and guides (A1002 cut 19)
 
 **Outcome:** each permission on a role's page has a help bubble saying what it covers, written
 from the code that checks it and linking to the guide; the Access roles and Job roles pages link
-to each other; the guide gains an Access roles section. **Depends on:** PR 15. **Risk trigger:**
+to each other; the guide gains an Access roles section. **Depends on:** PR 17. **Risk trigger:**
 none (light path; the text is checked against the code).
 
-### Task 16.1 and 16.2: Help text from the code (two tasks)
+### Task 18.1 and 18.2: Help text from the code (two tasks)
 
-**16.1:** Sales and Reports-and-tax permissions. **16.2:** People-and-rota and Venue-and-system.
+**18.1:** Sales and Reports-and-tax permissions. **18.2:** People-and-rota and Venue-and-system.
 
 For each permission the implementer runs `git grep -n '"<id>"' -- apps packages ':!*.test.ts'`,
 reads each gate, and writes two or three sentences naming the screens and actions it opens, EN and
@@ -1296,7 +1450,7 @@ ES, as `help` keys in `PERMISSION_TEXT`; each bubble (`wt-help-tooltip mode="hel
 - [ ] **Each task:** test that every permission in its areas has a `help` key in both languages and
   the bubble renders with the guide link; then write the text. **Commit.**
 
-### Task 16.3: Guide and cross-links
+### Task 18.3: Guide and cross-links
 
 **Files:** `apps/server/src/guide/{en,es}/staff.md` (new `{#access-roles}`), `apps/dashboard/src/help-guide.ts`,
 `apps/dashboard/src/screens/access-roles-screen.ts`, `packages/staffing/src/dashboard/staff-roles-screen.ts`.
