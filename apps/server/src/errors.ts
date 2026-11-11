@@ -1403,6 +1403,10 @@ declare module "@waitron/shared" {
     "backup.recovery_key_too_short": { min: number };
     /** WAITRON_BACKUP_DESTINATIONS is not a valid JSON array of destination descriptors. */
     "backup.destinations_invalid": { reason: string };
+    /** A box's backup settings this box would not write as its `backup.env`: a name outside
+     * `WAITRON_BACKUP_`, a value that is not text, or one the file would not keep. `reason` names
+     * the check and never a value, which may be the backup recovery key. */
+    "spare.settings_invalid": { reason: string };
     /** The backup schedule env vars are inconsistent or malformed: an interval AND a wall-clock
      * schedule both set, or a bad weekday token or `WAITRON_BACKUP_AT` time. `reason` is a short
      * machine tag. */

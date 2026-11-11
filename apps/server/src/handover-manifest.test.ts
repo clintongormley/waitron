@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
@@ -9,7 +9,13 @@ import { canonicalize } from "@waitron/membership";
 import { isAppError } from "@waitron/shared";
 import { resolveBackupConfig } from "./backup-config.js";
 import { loadBoxEnv } from "./box-env.js";
-import { buildNodeLocalManifest, readOfferSettings } from "./handover-manifest.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
+import {
+  backupSettingsDigestOf,
+  buildNodeLocalManifest,
+  readBackupSettings,
+  readOfferSettings,
+} from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 
 const CURRENT_KEY = randomBytes(32);
@@ -395,5 +401,58 @@ describe("readOfferSettings", () => {
     expect(
       await readOfferSettings(stateDir, ringWithRotation(), "handover.settings_unreadable"),
     ).toEqual({ backupSettings: null, moduleSettings: null, ringVersions: [2, 3] });
+  });
+});
+
+describe("readBackupSettings", () => {
+  const dirs: string[] = [];
+  async function folder(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "handover-backup-settings-"));
+    dirs.push(dir);
+    return dir;
+  }
+  afterEach(async () => {
+    for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+  });
+
+  it("the backup settings it reads hash to the digest the offer carries", async () => {
+    const source = await folder();
+    await writeFile(
+      join(source, "backup.env"),
+      "WAITRON_BACKUP_RECOVERY_KEY=key-0123456789abcdef\nWAITRON_BACKUP_DIR=\nWAITRON_BACKUP_KEY_ROTATED_AT=2026-11-01T00:00:00.000Z\n",
+    );
+    const settings = await readBackupSettings(source);
+    expect(settings).toEqual({
+      WAITRON_BACKUP_RECOVERY_KEY: "key-0123456789abcdef",
+      WAITRON_BACKUP_KEY_ROTATED_AT: "2026-11-01T00:00:00.000Z",
+    });
+    const offered = await readOfferSettings(
+      source,
+      ringWithRotation(),
+      "handover.settings_unreadable",
+    );
+    expect(offered.backupSettings).not.toBeNull();
+    expect(backupSettingsDigestOf(settings)).toBe(offered.backupSettings);
+
+    const copy = await folder();
+    await replaceBackupSettings(copy, settings);
+    expect(
+      (await readOfferSettings(copy, ringWithRotation(), "handover.settings_unreadable"))
+        .backupSettings,
+    ).toBe(offered.backupSettings);
+  });
+
+  it("no file, or only empty values, reads null", async () => {
+    const dir = await folder();
+    expect(await readBackupSettings(dir)).toBeNull();
+    expect(backupSettingsDigestOf(null)).toBeNull();
+    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=\nWAITRON_BACKUP_RETAIN=\n");
+    expect(await readBackupSettings(dir)).toBeNull();
+  });
+
+  it("a read error other than a missing file is thrown", async () => {
+    const dir = await folder();
+    await mkdir(join(dir, "backup.env"));
+    await expect(readBackupSettings(dir)).rejects.toMatchObject({ code: "EISDIR" });
   });
 });

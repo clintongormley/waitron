@@ -178,10 +178,10 @@ function ringVersions(ring: KeyRing): number[] {
 
 /**
  * Only the settings holding a value, so a file with no values left, or a dangling link, is the same
- * as no file. An empty value is unset (`isUnset`), the same as no line unless it hides that name in
- * `trading.env` or `secrets.env`, which this digest does not read.
+ * as no file: `null`. An empty value is unset (`isUnset`), the same as no line unless it hides that
+ * name in `trading.env` or `secrets.env`, which this does not read.
  */
-async function backupSettingsDigest(stateDir: string): Promise<string | null> {
+export async function readBackupSettings(stateDir: string): Promise<Record<string, string> | null> {
   let text: string;
   try {
     text = await readFile(join(stateDir, BACKUP_SETTINGS), "utf8");
@@ -190,7 +190,15 @@ async function backupSettingsDigest(stateDir: string): Promise<string | null> {
     throw error;
   }
   const settings = Object.entries(parseEnvFile(text)).filter(([, value]) => !isUnset(value));
-  return settings.length === 0 ? null : sha256Hex(canonicalize(Object.fromEntries(settings)));
+  return settings.length === 0 ? null : Object.fromEntries(settings);
+}
+
+export function backupSettingsDigestOf(settings: Record<string, string> | null): string | null {
+  return settings === null ? null : sha256Hex(canonicalize(settings));
+}
+
+async function backupSettingsDigest(stateDir: string): Promise<string | null> {
+  return backupSettingsDigestOf(await readBackupSettings(stateDir));
 }
 
 /**
