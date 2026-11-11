@@ -26,6 +26,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
+  migrationSetOf,
   modulesWithSets,
   type ConfigurationTransferTable,
   type WaitronModule,
@@ -148,7 +149,6 @@ export async function buildConfigurationBundle(
         : { defaultLanguage: doc.defaultContentLanguage!, languages: doc.contentLanguages },
     holidayArea: doc.holidayArea,
     settings: await exportSettingsDocuments(db, modules),
-    // A trading box's versions also name its switched-off modules, which setup refuses.
     modules: Object.fromEntries(
       Object.entries(moduleVersions).filter(([name]) =>
         modulesWithSets(modules).some((module) => module.name === name),
@@ -659,11 +659,26 @@ function checkedRows(
 ): Array<readonly [ConfigurationTransferTable, Array<Record<string, unknown>>]> {
   const declared = declarations(modules);
   const expected = new Set(declared.map((table) => table.name));
-  if (Object.keys(bundle.tables).some((name) => !expected.has(name))) {
+  const emptyTables = new Set(
+    modules.flatMap((module) =>
+      module.tier === "toggleable" &&
+      module.configurationTransfer?.kind === "tables" &&
+      (bundle.modules[migrationSetOf(module)] === undefined ||
+        module.configurationTransfer.tables.every(
+          (table) => bundle.tables[table.name] === undefined,
+        ))
+        ? module.configurationTransfer.tables.map((table) => table.name)
+        : [],
+    ),
+  );
+  if (Object.keys(bundle.tables).some((name) => !expected.has(name) || emptyTables.has(name))) {
     throw new AppError("setup.request_invalid", { field: "tables" });
   }
   return declared.map((table) => {
-    const rows = bundle.tables[table.name];
+    const rows =
+      bundle.tables[table.name] === undefined && emptyTables.has(table.name)
+        ? []
+        : bundle.tables[table.name];
     if (!Array.isArray(rows) || rows.length > MAX_ROWS_PER_TABLE) {
       throw new AppError("setup.request_invalid", { field: `table:${table.name}` });
     }
@@ -693,7 +708,10 @@ export function validateConfigurationBundle(
   const serverSets = new Set(versioned.map((module) => module.name));
   const exportSets = new Set(Object.keys(bundle.modules));
   const exportOnly = [...exportSets].filter((name) => !serverSets.has(name)).sort();
-  const serverOnly = [...serverSets].filter((name) => !exportSets.has(name)).sort();
+  const serverOnly = versioned
+    .filter((module) => module.tier !== "toggleable" && !exportSets.has(module.name))
+    .map((module) => module.name)
+    .sort();
   if (exportOnly.length > 0 || serverOnly.length > 0) {
     throw new AppError("setup.configuration_parts_differ", { exportOnly, serverOnly });
   }
@@ -701,9 +719,7 @@ export function validateConfigurationBundle(
   if (unrecorded !== undefined) {
     throw new AppError("setup.request_invalid", { field: `module:${unrecorded.name}` });
   }
-  const differences = versioned.map(
-    (module) => bundle.modules[module.name]! - targetVersions[module.name]!,
-  );
+  const differences = [...exportSets].map((name) => bundle.modules[name]! - targetVersions[name]!);
   if (differences.some((difference) => difference > 0)) {
     throw new AppError("setup.configuration_newer", {});
   }

@@ -2308,7 +2308,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; design approved).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md); [plan](superpowers/plans/2026-11-07-a646-modules-page.md).
-  Building in lane D: the configuration-export rule first, then the Modules list and the card providers.
+  Remaining build in lane D: the Modules list and card-provider controls. Other optional modules
+  will be listed but cannot be switched. Exports with optional modules off load with those modules on and empty.
   Google sign-in is no longer part of it (owner, 2026-11-11): see A1507 under Later and parked.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
