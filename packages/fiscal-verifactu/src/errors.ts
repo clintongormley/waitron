@@ -464,6 +464,8 @@ declare module "@waitron/shared" {
     "declaration.functions_malformed": { line: number };
     /** A declaration's signing date is not a calendar date written `YYYY-MM-DD`; `date` is as given. */
     "declaration.date_invalid": { date: string };
+    /** The `declaration` command was given no known subcommand, an option it does not take, or a version or place it refuses; `argument` names which. */
+    "declaration.argument_invalid": { argument: string };
     /** A producer value given to the declaration holds a line break or control character; `field` names it, never its value. */
     "declaration.producer_invalid": { field: "name" | "taxId" | "address" };
   }
