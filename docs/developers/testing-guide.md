@@ -1938,6 +1938,14 @@ unset `AI_AGENT` and `CLAUDECODE` for the run (std-env checks others too): the o
 with either set and shown with neither; passing
 `--reporter=default` instead has not been measured.
 
+## A child that loads the Stripe SDK writes a line to its error output under Claude Code
+
+When `CLAUDECODE` or `CLAUDE_CODE_CHILD_SESSION` is set, stripe@23.1.0 writes a
+`<claude-code-hint … />` line to standard error as it loads (`esm/stripe.core.js:139`). A test that
+reads such a child's error output exactly removes both variables from the child's environment:
+`packages/provisioning/test/child-environment.ts`, or a fixed variable list as in
+`apps/server/src/first-fiscal-launch.test.ts`.
+
 ## A run that shows no `Tests` count is no evidence that anything passed
 
 Measured 2026-10-03 with Vitest 4.1.11 in `packages/shared`: `vitest run src/capitalise.test.ts

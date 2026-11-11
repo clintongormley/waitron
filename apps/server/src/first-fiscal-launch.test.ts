@@ -76,7 +76,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 const dirs: string[] = [];
 // The CLI's environment is named, not inherited: the Stripe SDK bundled into it writes a line to
-// stderr when the caller is a Claude Code session (stripe@23.0.0 esm/stripe.core.js:139), and the
+// stderr when the caller is a Claude Code session (stripe@23.1.0 esm/stripe.core.js:139), and the
 // test reads stderr whole.
 function callerEnvironment(): NodeJS.ProcessEnv {
   return Object.fromEntries(
