@@ -22,3 +22,9 @@
 - [ ] Finish-branch: initial rebase, two Claude run-it angles, one fresh read of fixes, normal hook/current-head CI. Owner lands. No sale-path read changes; no per-slice bench.
 
 **Estimated added/removed lines:** production +100–160/−220–320; tests +220–320/−750–1,050; support +0–20/−0–40; docs +30–50/−40–70. Report actual categories; material growth goes to the watcher.
+
+**Watcher clearance, 2026-11-11 21:08 (Lane H questions.md):** Build rules 1, 2 and 4, Cloud bookkeeping failure, deletions, replacement kill tests and protection comparison. Hold Q2, the way out and their runbook wording pending the owner; no owner approval of this plan is claimed.
+
+- **O1:** Inline the existing committed-binding validation into `hour-recovery-state.ts`, preserving its refusal checks, because the ask explicitly deletes `restore-committed.ts` while this other caller remains.
+- **O4:** The request-layer test includes interruption after setup-operation removal but before the final record replacement; retry must pass admission and complete from the retained source.
+- **O5:** Before each attempt, under the existing venue hold, remove only `RESTORE_STAGING_DIR` before validation recreates it; a retry test seeds an earlier attempt’s decrypt scratch and checks it is gone while `flows/restore` attachments remain. Boot's `emptyScratch` runs too late for repeatedly failing pre-boot restores.
