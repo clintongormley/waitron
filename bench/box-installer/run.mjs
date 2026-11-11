@@ -11,6 +11,7 @@ import { mkdir, readFile, writeFile, copyFile, truncate, open, stat } from "node
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { runDiskCommand } from "../../scripts/box/disk-start.mjs";
+import { findNameTag, decodeNameTag } from "../../scripts/box/name-tag.mjs";
 import { diskRecoveryKeyPassphrase } from "../../scripts/box/disk-recovery-key.mjs";
 import { parseRigArgs } from "../../scripts/box/rig-contract.mjs";
 import {
@@ -25,7 +26,11 @@ import {
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
 const started = Date.now();
-if (caseName === "installed-setup" || caseName === "installed-refusals") {
+if (
+  caseName === "installed-setup" ||
+  caseName === "installed-refusals" ||
+  caseName === "existing-stick"
+) {
   await installedRun();
   process.exit(0);
 }
@@ -407,6 +412,51 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       execFileSync("losetup", ["-d", loop]);
     }
   }
+  async function headerProof(label) {
+    const before = await diskHash(target);
+    const layout = JSON.parse(
+      execFileSync("sfdisk", ["--json", target], { encoding: "utf8" }),
+    ).partitiontable;
+    const part = layout.partitions[2];
+    const loop = execFileSync(
+      "losetup",
+      [
+        "--find",
+        "--show",
+        "--read-only",
+        "--offset",
+        String(part.start * layout.sectorsize),
+        "--sizelimit",
+        String(part.size * layout.sectorsize),
+        target,
+      ],
+      { encoding: "utf8" },
+    ).trim();
+    let metadata;
+    try {
+      metadata = JSON.parse(
+        execFileSync("cryptsetup", ["--disable-locks", "luksDump", "--dump-json-metadata", loop], {
+          encoding: "utf8",
+        }),
+      );
+    } finally {
+      execFileSync("losetup", ["-d", loop]);
+    }
+    const after = await diskHash(target);
+    if (before !== after) throw new Error("header proof changed target");
+    const bytes = findNameTag(Buffer.from(JSON.stringify(metadata)));
+    const result = {
+      tag: bytes === null ? null : decodeNameTag(bytes),
+      keyslots: metadata.keyslots,
+      otherTokens: Object.fromEntries(
+        Object.entries(metadata.tokens).filter(([, token]) => token.type !== "waitron-name-tag"),
+      ),
+      before,
+      after,
+    };
+    await writeFile(join(runDir, `${label}-header.json`), JSON.stringify(result, null, 2));
+    return result;
+  }
   const proof = join(tpmRoot, "proof.img");
   await writeFile(proof, "", { mode: 0o600 });
   await truncate(proof, 32 * 1024 ** 2);
@@ -468,9 +518,14 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       );
       const copy =
         "mkdir -m 0700 /run/b3-key-proof; mount /dev/vdb /run/b3-key-proof; cp /var/lib/waitron-host/disk-recovery/*.json /run/b3-key-proof/; sync; umount /run/b3-key-proof";
+      const clock = `const fs=require("node:fs"),net=require("node:net"); const p="/run/waitron-box/box.sock"; const s=fs.statSync(p); if(s.uid!==0||s.gid!==10001||(s.mode&511)!==432)throw Error("socket permissions"); const c=net.connect(p); let text=""; c.setTimeout(2000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>c.write("clock.status\\n"));c.on("data",b=>text+=b);c.on("end",()=>{if(JSON.parse(text).ok!==true)throw Error(text);console.log("B3_CLOCK:"+text.trim())});c.on("error",e=>{throw e})`;
+      const deny = `const net=require("node:net");const c=net.connect("/run/waitron-box/box.sock");c.setTimeout(2000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>{c.destroy();process.exitCode=1});c.on("error",e=>{if(e.code!=="EACCES")throw e;console.log("B3_SOCKET_DENIED:EACCES")})`;
+      const probe = (code, denied = false) =>
+        `printf %s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
+      const checks = caseName === "existing-stick" ? `; ${probe(clock)}; ${probe(deny, true)}` : "";
       args.push(
         "-smbios",
-        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${copy}'\n`).toString("base64")}`,
+        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${copy}${checks}'\n`).toString("base64")}`,
       );
     }
     await writeFile(join(runDir, `${name}-args.json`), JSON.stringify(args));
@@ -617,6 +672,61 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
           await page.getByText("Prepare your restaurant", { exact: true }).click();
           await page.locator("setup-admin-screen").waitFor();
           await page.screenshot({ path: join(runDir, `${name}-prepare.png`) });
+          if (caseName === "existing-stick" && name === "again") {
+            const prepared = await context.request.post("https://127.0.0.1/setup-api/provision", {
+              data: {
+                mode: "prepare",
+                venue: {
+                  country: "ES",
+                  taxId: "50000000R",
+                  legalName: "Harbour Restaurant Ltd",
+                  name: "Harbour dining room",
+                  taxpayerDomicile: "Mayor 1, Madrid",
+                  fiscalTerritory: "ES-common",
+                  invoiceLocales: ["es-ES"],
+                  operationDescription: "Restaurant service",
+                  addressLine1: "Mayor 1",
+                  addressLine2: null,
+                  postalCode: "28013",
+                  city: "Madrid",
+                  province: "Madrid",
+                  timeZone: "Europe/Madrid",
+                  dayCutover: "05:00",
+                  admin: {
+                    firstNames: "Alex",
+                    lastNames: "Example",
+                    displayName: "Alex",
+                    email: "alex@example.test",
+                    password: "SYNTHETIC-owner-password",
+                    pin: "4826",
+                  },
+                },
+                email: {
+                  server: "127.0.0.1",
+                  port: 1025,
+                  encryption: "none",
+                  from: "venue@example.test",
+                },
+              },
+            });
+            if (prepared.status() !== 200)
+              throw new Error(`Prepare HTTP ${prepared.status()}: ${await prepared.text()}`);
+            const until = Date.now() + 120000;
+            while (true) {
+              const health = await context.request
+                .get("https://127.0.0.1/health")
+                .catch(() => null);
+              const body = health === null ? null : await health.json().catch(() => null);
+              const tag = body?.jobs?.["box.name_tag"];
+              if (tag?.state === "waiting" && tag.lastOkAt && tag.consecutiveFailures === 0) {
+                observed.tagJob = tag;
+                break;
+              }
+              if (Date.now() >= until)
+                throw new Error(`tag writer deadline: ${JSON.stringify(body)}`);
+              await new Promise((done) => setTimeout(done, 200));
+            }
+          }
           await writeFile(join(runDir, `${name}-observed.json`), JSON.stringify(observed, null, 2));
         } finally {
           await browser.close();
@@ -629,7 +739,40 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       }
     }
     const first = await inspect("first");
+    const beforeTag = caseName === "existing-stick" ? await headerProof("before-prepare") : null;
     const again = await inspect("again");
+    if (caseName === "existing-stick") {
+      const afterTag = await headerProof("after-prepare");
+      if (
+        JSON.stringify(afterTag.tag) !==
+        JSON.stringify({ name: "Harbour Restaurant Ltd", live: false })
+      )
+        throw new Error("real writer tag mismatch");
+      if (
+        JSON.stringify(beforeTag.keyslots) !== JSON.stringify(afterTag.keyslots) ||
+        JSON.stringify(beforeTag.otherTokens) !== JSON.stringify(afterTag.otherTokens)
+      )
+        throw new Error("tag writer changed unlock material");
+      for (const name of ["first", "again"]) {
+        const serial = await readFile(join(runDir, `${name}-serial.log`), "utf8");
+        if (!rigLine(serial, "B3_CLOCK:") || !serial.includes("B3_SOCKET_DENIED:EACCES"))
+          throw new Error("clock/socket binding not qualified");
+      }
+      const before = await diskHash(target);
+      const guest = await boot(
+        "existing-stick",
+        true,
+        "This box already has Waitron (Harbour Restaurant Ltd).",
+        300000,
+      );
+      await guest.finish();
+      const after = await diskHash(target);
+      if (before !== after) throw new Error("existing-stick changed target");
+      await writeFile(
+        join(runDir, "existing-stick.json"),
+        JSON.stringify({ tag: afterTag.tag, before, after, writer: again.tagJob }, null, 2),
+      );
+    }
     const sourcePcr = Buffer.from(rigLine(install.serial, "B3_PCRS:"), "base64").toString();
     const bootstrapPcr = Buffer.from(rigLine(bootstrap.serial, "B3_PCRS:"), "base64").toString();
     const pcr = (text, index) =>

@@ -32,3 +32,7 @@ declare module "*/scripts/box/wifi-boot-copy.mjs" {
   export const WIFI_COPY_STATES: readonly string[];
   export const WIFI_COPY_FAILURES: readonly string[];
 }
+
+declare module "*/scripts/box/name-tag.mjs" {
+  export function usableVenueName(value: unknown): string | null;
+}

@@ -127,6 +127,14 @@ async function answerOf(response: Response) {
 }
 
 describe("the box host routes in the running server", () => {
+  it("binds the local name-tag duty at server startup", async () => {
+    const host = fakeHost();
+    await withServer({ boxHostRequests: host }, async () => {
+      await vi.waitFor(() => expect(host.tagWrite).toHaveBeenCalledTimes(1));
+      expect(host.tagWrite.mock.calls[0]?.[0]).toEqual({ name: expect.any(String), live: false });
+    });
+  });
+
   it("ask the stand-in boot was handed, as the signed-in manager, and refuse staff", async () => {
     const host = fakeHost();
     await withServer({ boxHostRequests: host }, async (venue, managerId) => {

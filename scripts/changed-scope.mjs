@@ -96,6 +96,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
   ["scripts/vitest-duration-sequencer.mjs", ["apps/server"]],
   ["scripts/box/host-protocol.mjs", ["apps/server"]],
+  ["scripts/box/name-tag.mjs", ["apps/server"]],
   ["scripts/box/wifi-record.mjs", ["apps/server"]],
   ["scripts/box/wifi-boot-copy.mjs", ["apps/server"]],
   [

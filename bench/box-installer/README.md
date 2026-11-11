@@ -72,6 +72,16 @@ a timing receipt and the CA
 fingerprint are retained in the check directory. The throwaway browser ignores
 certificate errors for rendering; this does not qualify certificate trust.
 
+## Read the venue name from an existing disk
+
+Run `--case existing-stick` with `B3_INSTALLER_IMAGE` set as below. It installs and starts
+an encrypted development disk, completes Prepare through the real setup route, then boots
+the stick again. The console names the taxpayer while installation stays refused. The rig
+checks the actual name token, retained unlock tokens and keyslots, disk hashes, host clock
+status and rejection of a socket connection from an unrelated user. Timed return and the
+graphical warning are later cuts. Keep the resulting JSON and serial logs with your source
+commit; this remains a disposable emulator check.
+
 ## Install onto a virtual disk
 
 To rehearse installation and independent startup, use the same tool container and output:

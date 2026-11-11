@@ -35,10 +35,16 @@ install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron
 install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"
 systemctl --root="$root" enable waitron-dev.service
 install -d -m 0755 "$root/opt/waitron-host/box"
-for module in disk-start disk-key disk-recovery-key preboot disk-state; do
+for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host host-protocol wifi-record wifi-boot-copy; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
 done
 install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"
+install -D -m 0755 "$repo/deploy/box/waitron-box.sh" "$root/usr/local/lib/waitron/waitron-box.sh"
+for unit in waitron-box.socket waitron-box@.service; do
+  install -m 0644 "$repo/deploy/box/$unit" "$root/etc/systemd/system/"
+done
+chroot "$root" groupadd --system --gid 10001 waitron-box
+systemctl --root="$root" enable waitron-box.socket
 for unit in waitron-disk-start waitron-disk-ready; do
   install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"
 done
@@ -60,7 +66,7 @@ for kind in app agent mailpit; do
 done
 app="$(tar -xOf "$inputs/app.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
 agent="$(tar -xOf "$inputs/agent.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
-printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\n' "$app" "$agent" > "$root/opt/waitron/.env"
+printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\nWAITRON_BOX_SOCKET_DIR=/run/waitron-box\n' "$app" "$agent" > "$root/opt/waitron/.env"
 chmod 0600 "$root/opt/waitron/.env"
 install -D -m 0644 "$output/sandbox/usr/share/keyrings/docker.asc" "$root/usr/share/keyrings/docker.asc"
 install -D -m 0644 "$output/sandbox/etc/apt/sources.list.d/docker.sources" "$root/etc/apt/sources.list.d/docker.sources"

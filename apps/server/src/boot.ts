@@ -6,6 +6,7 @@ import {
   type BoxHostRequests,
   type ClockServiceStatus,
 } from "./box-host-client.js";
+import { boxNameTagJob } from "./box-name-tag.js";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { createLiveModuleOperation } from "./live-module-operation.js";
@@ -2376,6 +2377,7 @@ async function bootServer(
     });
   const tillClock = systemClock();
   const boxHost = seams.boxHost ?? boxHostClient();
+  const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
   // Before the tills' routes, which set the clock through it.
   const correction = clockCorrection({
     host: boxHost,
@@ -3359,7 +3361,7 @@ async function bootServer(
     },
     log,
   );
-  mountBoxHostApi(app, { db, host: seams.boxHostRequests ?? boxHostRequests() }, log);
+  mountBoxHostApi(app, { db, host: localHostRequests }, log);
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
@@ -3745,6 +3747,15 @@ async function bootServer(
   // A running menu pass must settle before the stream stops on a failed start.
   undoOnFailure.splice(undoOnFailure.indexOf(stopJobRunner), 1);
   undoOnFailure.push(stopJobRunner);
+  jobRunner.add(
+    boxNameTagJob({
+      db,
+      host: localHostRequests,
+      live: () => config.onboardingIntent === "live",
+      log,
+      wake: () => jobRunner.wake("box.name_tag"),
+    }),
+  );
   jobRunner.add(
     menuActivationJob({
       db,

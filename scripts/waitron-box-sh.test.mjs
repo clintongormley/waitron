@@ -499,3 +499,34 @@ describe("the box's systemd units", () => {
     );
   });
 });
+
+it("forwards a complete tag over 700 characters while keeping its host lock", () => {
+  const sb = sandbox();
+  const host = join(sb.dir, "tag-host.mjs");
+  const received = join(sb.dir, "received");
+  writeFileSync(
+    host,
+    `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(received)}, fs.readFileSync(0)); console.log('{"ok":true,"tag":"written"}');`,
+  );
+  sb.env.WAITRON_BOX_TAG_HOST = host;
+  const line =
+    'tag.write {"tag":{"name":"' +
+    "\\ud83d\\ude00".repeat(256) +
+    '","live":false},"actor":{"source":"server"}}';
+  expect(line.length).toBeGreaterThan(700);
+  expect(answer(sb, line)).toEqual({ ok: true, tag: "written" });
+  expect(readFileSync(received, "utf8")).toBe(line);
+  expect(sb.calls()).toContainEqual(["flock", "-n", "9"]);
+  expect(touchesClock(sb.calls())).toEqual([]);
+});
+
+it("refuses a competing tag writer before starting the adapter", () => {
+  const sb = sandbox({ WB_FLOCK_RC: "1" });
+  const host = join(sb.dir, "tag-host.mjs");
+  writeFileSync(host, `throw new Error('must not run');`);
+  sb.env.WAITRON_BOX_TAG_HOST = host;
+  expect(answer(sb, 'tag.write {"tag":null,"actor":{"source":"server"}}')).toEqual({
+    ok: false,
+    reason: "busy",
+  });
+});

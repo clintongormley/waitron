@@ -16,6 +16,7 @@ UPTIME_FILE="${WAITRON_BOX_UPTIME:-/proc/uptime}"
 TIMESYNC_CLOCK="${WAITRON_BOX_TIMESYNC_CLOCK:-/var/lib/systemd/timesync/clock}"
 TIMESYNC_SYNCHRONIZED="${WAITRON_BOX_TIMESYNC_SYNCHRONIZED:-/run/systemd/timesync/synchronized}"
 READ_SECONDS="${WAITRON_BOX_READ_SECONDS:-5}"
+TAG_HOST="${WAITRON_BOX_TAG_HOST:-/opt/waitron-host/box/name-tag-host.mjs}"
 
 # 2024-10-28T00:00:00Z and 2100-01-01T00:00:00Z, in milliseconds.
 FIRST_TARGET_MS=1730073600000
@@ -158,13 +159,21 @@ main() {
   fi
   instance="${1:-}"
   [[ $instance =~ $UNIT_NAME ]] || exit 2
-  IFS= read -r -t "$READ_SECONDS" -n 701 line
+  IFS= read -r -t "$READ_SECONDS" -n 4097 line
   rc=$?
   arrived="$(uptime_ms)"
-  if [ "$rc" -gt 128 ] || { [ "$rc" -ne 0 ] && [ -z "$line" ]; } || [ ${#line} -gt 700 ]; then
+  if [ "$rc" -gt 128 ] || { [ "$rc" -ne 0 ] && [ -z "$line" ]; } || [ ${#line} -gt 4096 ]; then
     refuse request_invalid
     exit 0
   fi
+  if [[ "$line" = "tag.write "* ]] && [ -f "$TAG_HOST" ]; then
+    mkdir -p -m 0700 "$STATE_DIR"
+    exec 9> "$STATE_DIR/tag.lock"
+    if ! flock -n 9; then refuse busy; exit 0; fi
+    printf '%s' "$line" | node "$TAG_HOST"
+    exit 0
+  fi
+  if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
   case "$line" in
     clock.status) clock_status ;;
     "clock.set "*)
