@@ -154,7 +154,7 @@ describe("declaration pages", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
-  async function expectDamaged(root: string, file: string): Promise<void> {
+  async function expectDamaged(root: string, file: string, code?: string): Promise<void> {
     for (const address of ADDRESSES) {
       const log = vi.fn();
       const app = appFor(root, log);
@@ -165,7 +165,11 @@ describe("declaration pages", () => {
       expect(html).toContain(DECLARATION_PAGE_WORDS.en.damaged);
       expect(html).not.toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
       expect(log).toHaveBeenCalledTimes(1);
-      expect(log).toHaveBeenCalledWith("warn", "declaration.folder_damaged", { file });
+      expect(log.mock.calls[0]).toStrictEqual([
+        "warn",
+        "declaration.folder_damaged",
+        code === undefined ? { file } : { file, code },
+      ]);
       const spanish = await app.request(address, { headers: { "Accept-Language": "es" } });
       expect(visibleText(await spanish.text())).toContain(DECLARATION_PAGE_WORDS.es.damagedTitle);
     }
@@ -179,7 +183,7 @@ describe("declaration pages", () => {
     async (file) => {
       const root = await newFolder();
       await unlink(join(root, file));
-      await expectDamaged(root, file);
+      await expectDamaged(root, file, "ENOENT");
     },
   );
 
@@ -206,6 +210,32 @@ describe("declaration pages", () => {
     await expectDamaged(root, "declaration.txt");
   });
 
+  it.each([
+    ["11.2.3", "1.2.3"],
+    ["1.2.30", "1.2.3"],
+    // The library version the declaration names in another paragraph.
+    ["1.2.3", "0.2.1"],
+  ])(
+    "a declaration stating %s beside a release.json naming %s is damaged",
+    async (declared, named) => {
+      const root = await newFolder(
+        { version: named, releasedOn: "2026-10-22" },
+        undefined,
+        declared,
+      );
+      await expectDamaged(root, "declaration.txt");
+    },
+  );
+
+  it("a declaration.txt stating its version on two 1.c) lines is damaged", async () => {
+    const root = await newFolder();
+    const text = await readFile(join(root, "declaration.txt"), "utf8");
+    const line = text.split("\n").find((candidate) => candidate.startsWith("1.c) "))!;
+    expect(line.endsWith(": 1.2.3")).toBe(true);
+    await writeFile(join(root, "declaration.txt"), `${text}\n${line}\n`);
+    await expectDamaged(root, "declaration.txt");
+  });
+
   it.each(["<p>x</p>", "<body>\n<p>x</p>\n</body>\n<body>\n\n</body>", "\n</body><body>\n"])(
     "a declaration.html not in the renderer's shape is damaged: %s",
     async (html) => {
@@ -219,7 +249,7 @@ describe("declaration pages", () => {
     const file = join(base, "a-file");
     await writeFile(file, "x");
     await expectDamaged(file, ".");
-    await expectDamaged(join(file, "declaration"), ".");
+    await expectDamaged(join(file, "declaration"), ".", "ENOTDIR");
   });
 
   it.skipIf(process.getuid?.() === 0)("a folder that cannot be read is damaged", async () => {
@@ -229,7 +259,9 @@ describe("declaration pages", () => {
       const log = vi.fn();
       const response = await appFor(root, log).request("/legal/declaration");
       expect(response.status).toBe(500);
-      expect(log).toHaveBeenCalledTimes(1);
+      expect(log.mock.calls).toStrictEqual([
+        ["warn", "declaration.folder_damaged", { file: "release.json", code: "EACCES" }],
+      ]);
     } finally {
       await chmod(root, 0o755);
     }

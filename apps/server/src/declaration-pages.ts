@@ -5,10 +5,10 @@ import { applicationVersion } from "@waitron/db";
 import type { LegalAbout } from "@waitron/shared";
 import type { Context, Hono } from "hono";
 import { boxPageAnswer, renderBoxPage } from "./guide-pages.js";
+import { escapeHtml } from "./html-page.js";
 import { DECLARATION_LINK_WORDS, DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
-import { escapeHtml } from "./recovery-surface.js";
 
 export type DeclarationFolder =
   | {
@@ -20,7 +20,9 @@ export type DeclarationFolder =
       text: string;
     }
   | { kind: "none" }
-  | { kind: "damaged"; file: string };
+  | Damaged;
+
+type Damaged = { kind: "damaged"; file: string; code?: string };
 
 export interface DeclarationPagesDeps {
   /** The folder holding the release's four files; defaults to `declarationRoot()`. */
@@ -68,34 +70,46 @@ function bodyOf(html: string): string | undefined {
   return html.slice(start + open.length, end);
 }
 
-async function read(root: string, file: string): Promise<Buffer | undefined> {
+/** Whether the text has one `1.c)` line (`renderDeclaration`'s version item) ending `: <version>`. */
+function declares(text: string, version: string): boolean {
+  const lines = text.split("\n").filter((line) => line.startsWith("1.c) "));
+  return lines.length === 1 && lines[0]!.endsWith(`: ${version}`);
+}
+
+function damaged(file: string, error?: unknown): Damaged {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return typeof code === "string" ? { kind: "damaged", file, code } : { kind: "damaged", file };
+}
+
+async function read(root: string, file: string): Promise<Buffer | Damaged> {
   try {
     return await readFile(join(root, file));
-  } catch {
-    return undefined;
+  } catch (error) {
+    return damaged(file, error);
   }
 }
 
 export async function readDeclarationFolder(root: string): Promise<DeclarationFolder> {
   try {
-    if (!(await stat(root)).isDirectory()) return { kind: "damaged", file: "." };
+    if (!(await stat(root)).isDirectory()) return damaged(".");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "none" };
-    return { kind: "damaged", file: "." };
+    return damaged(".", error);
   }
   const json = await read(root, "release.json");
-  const release = json === undefined ? undefined : releaseFrom(json.toString("utf8"));
-  if (release === undefined) return { kind: "damaged", file: "release.json" };
+  if (!Buffer.isBuffer(json)) return json;
+  const release = releaseFrom(json.toString("utf8"));
+  if (release === undefined) return damaged("release.json");
   const html = await read(root, "declaration.html");
-  const body = html === undefined ? undefined : bodyOf(html.toString("utf8"));
-  if (body === undefined) return { kind: "damaged", file: "declaration.html" };
+  if (!Buffer.isBuffer(html)) return html;
+  const body = bodyOf(html.toString("utf8"));
+  if (body === undefined) return damaged("declaration.html");
   const pdf = await read(root, "declaration.pdf");
-  if (pdf === undefined) return { kind: "damaged", file: "declaration.pdf" };
-  const text = (await read(root, "declaration.txt"))?.toString("utf8");
-  // A release.json from another render names a version its declaration does not.
-  if (text === undefined || !text.includes(release.version)) {
-    return { kind: "damaged", file: "declaration.txt" };
-  }
+  if (!Buffer.isBuffer(pdf)) return pdf;
+  const txt = await read(root, "declaration.txt");
+  if (!Buffer.isBuffer(txt)) return txt;
+  const text = txt.toString("utf8");
+  if (!declares(text, release.version)) return damaged("declaration.txt");
   return { kind: "release", ...release, body, pdf: new Uint8Array(pdf), text };
 }
 
@@ -121,7 +135,10 @@ export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log
 
   async function folder(): Promise<DeclarationFolder> {
     const found = await readDeclarationFolder(root);
-    if (found.kind === "damaged") log("warn", "declaration.folder_damaged", { file: found.file });
+    if (found.kind === "damaged") {
+      const { file, code } = found;
+      log("warn", "declaration.folder_damaged", code === undefined ? { file } : { file, code });
+    }
     return found;
   }
 
