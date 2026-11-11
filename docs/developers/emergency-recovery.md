@@ -175,10 +175,11 @@ If this restore cannot finish, open the recovery page over HTTPS and choose **Th
 away**. Enter an active administrator's password from the selected backup, or choose **Stop** to
 leave the restore waiting. An unreadable record also stops the box. For a setup-page restore,
 this choice remains available when its separately saved administrator hashes can be read.
-Before copying begins, discard preserves the destination database. Once copying has begun, the
-previous database is gone: discard removes the partial databases and restored configuration,
-including both `trading.env` and `trading.env.replaced`. It keeps the box's TLS files, so your
-browser can reconnect. You can then restore another backup or set up again.
+A readable request that has not begun copying keeps the destination database. A marked or
+unreadable request removes the destination databases, including any previous database put back
+after a failed attempt. Discard removes the restored configuration and both identity files
+(`trading.env` and `trading.env.replaced`); it does not recover old data. It keeps the box's TLS
+files, so your browser can reconnect. You can then restore another backup or set up again.
 
 This choice covers restores started from setup. If a command-line restore is stuck at first start, or its first-start record is unreadable,
 run `waitron-restore restore` again with the backup and its recovery credentials. The command

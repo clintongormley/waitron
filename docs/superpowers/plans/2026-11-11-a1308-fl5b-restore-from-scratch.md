@@ -18,3 +18,6 @@
 
 
 **Changed test checks.** Unreadable v2 state now rejects with `restore.flow_unreadable`, replacing the old continue-without-restore expectation (owner 22:04). The synthetic replay refusal uses the existing hook wrapper (watcher 21:40); its refusal and counter assertions stay. Shared password security cases move out of the environment-page suite into the shared helper suite; environment-specific behavior remains there. The CLI retry rehearsal runs the real command and placement twice, with fixture outside confirmation, over a pending first-start record. The source/identity/chain assertions in the protected fiscal pair remain unedited.
+
+
+**Watcher clearance, 2026-11-12 00:31 (Lane H questions.md).** Keep this slice's current cleanup and accurate page/runbook wording, and open the PR. A readable record does not save whether the previous database was put back. The watcher has asked the owner whether to add that saved fact in a separate small follow-up so discard can preserve an intact previous venue. This slice adds no rollback outcome flag. Lane M's read still follows the PR before the owner lands it.
