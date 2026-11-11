@@ -1338,7 +1338,7 @@ changed tax number fails the publish unless the repository variable
 the job builds with `load: true`, checks the three values inside the image and runs the server's
 own producer check there, then pushes from the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
 plan's 8g Step 5) is still to do.
-Slice 2, parts 1 and 2a landed: the text, its renderer, the A4 PDF and the package's `declaration` command (`show`, `write`, `check`; `show --draft` prints the whole draft); next, the release commands (2b) ([plan](../superpowers/plans/2026-11-11-a940-2-release-declaration.md)); slices 3 to 6 follow, and 1b (A993) waits until a producer change is scheduled.
+Slice 2, parts 1 and 2a landed: the text, its renderer, the A4 PDF's renderer (no command writes a PDF yet) and the package's `declaration` command (`show`, `write`, `check`); next, the release commands (2b) ([plan](../superpowers/plans/2026-11-11-a940-2-release-declaration.md)); slices 3 to 6 follow, and 1b (A993) waits until a producer change is scheduled.
 Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 
