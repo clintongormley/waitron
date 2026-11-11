@@ -407,6 +407,8 @@ infer either from the missing outcome alone.
 1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is
 ever seen. For later packing comparisons, use qualified runs with one coverage mode; never mix
 runs from before and after A1427.
+Db, provisioning, venue-service and fiscal-verifactu keep the file-count split because their
+measured shards are inside the four-minute target; revisit a package when a job passes about four minutes.
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 
@@ -859,7 +861,7 @@ A1424's live qualification was added on 7 November 2026.
   [Receipt](../developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk),
   [processor time](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
-- **Job-sharding levers:** the seven sharded packages use measured-duration packing
+- **Job-sharding levers:** server, dashboard and till use measured-duration packing
   ([tables and refresh](../developers/ci-and-gates.md#package-duration-tables)); bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.

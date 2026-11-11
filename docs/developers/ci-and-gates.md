@@ -1101,7 +1101,7 @@ coverage bars are enforced in the merge job, not in a shard. Then the
 dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-payments-stripe`,
 `test-payments-sumup`, `test-adjustments`, `test-staffing`), the dedicated Node coverage jobs
 (`test-identity`, `test-workforce`), the unsharded browser jobs (`test-ui`, `test-setup`) and
-`test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). The seven sharded packages use measured-duration packing (see
+`test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Server, dashboard and till use measured-duration packing (see
 [Package duration tables](#package-duration-tables)); packing cannot divide a slow file, and `N` must never exceed a
 package's test-file count (guard: "run no more shards than the package has test files" in
 `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts`, not what
@@ -2510,7 +2510,7 @@ neither a speed comparison nor whole-run qualification.
 ### Package duration tables
 
 When one shard finishes much later than its siblings, check the setup and file timings before
-refreshing its weights. Server, dashboard, till, db, provisioning, venue-service and fiscal-verifactu
+refreshing its weights. Server, dashboard and till
 read their own `test-durations.json` through the same duration sequencer. Each keeps its existing
 shard count, worker limits, project groups and coverage merge. Packing spreads estimated work;
 it does not shorten a slow file or establish lower total runner minutes.
@@ -2520,10 +2520,6 @@ it does not shorten a slow file or establish lower total runner minutes.
 | apps/server | test-server | 24 |
 | apps/dashboard | test-dashboard | 4 |
 | apps/till | test-till | 7 |
-| packages/db | test-heavy | 3 |
-| packages/provisioning | test-provisioning | 6 |
-| packages/venue-service | test-venue-service | 4 |
-| packages/fiscal-verifactu | test-fiscal-verifactu | 4 |
 
 For any row, collect only that job's logs from qualified runs in one coverage mode, then run:
 
@@ -2532,8 +2528,10 @@ node scripts/test-durations.mjs <package-directory>/test-durations.json <log> [<
 ```
 
 Use the six-run refresh procedure above with the row's job prefix in place of `test-server`.
-The watcher cleared A1398's initial tables from coverage-on nightlies 42741652586 and 42944859790
-on 11 November at 14:36; till uses only the latter because its earlier checkout took 11 seconds.
+The watcher cleared dashboard's initial table from coverage-on nightlies 42741652586 and 42944859790,
+and till's from the latter only because its earlier checkout took 11 seconds. The 11 November
+14:53 scope decision leaves db, provisioning, venue-service and fiscal-verifactu on Vitest's
+file-count split while their jobs stay inside the four-minute target.
 The retained measurement inputs showed no relevant overlapping incident or download HTTP 5xx;
 the accepted jobs' slowest checkouts were at most 10 seconds. This exception supplies initial
 weights, not a measured speed improvement.
@@ -2544,12 +2542,12 @@ can therefore warn immediately. Retained rows for retired files do not create te
 refresh from current logs rather than inventing measurements. See
 [Inspect duration warnings](#inspect-duration-warnings-before-refreshing-the-table) before changing a table.
 
-The six-package discovery case in `scripts/vitest-duration-sequencer.test.mjs` loads each real
-config through Vitest and checks original specification identities across the configured shard
-count, including their project objects, and the local positive timing table. It discovers tests
-without running their bodies; it does not check run-time completeness, freshness or wall time.
-The existing root consumer guard checks that edits to the shared sequencer select all seven
-packages in CI. Current-head CI supplies execution and coverage evidence.
+The dashboard/till discovery cases in `scripts/vitest-duration-sequencer.test.mjs` load each real
+config through Vitest and check original specification identities across the configured shard
+count, including their project objects, and the local positive timing table. They also require at least one discovered path to match a timing row.
+They discover tests without running their bodies; they do not check run-time completeness, freshness or wall time.
+The existing root consumer guard checks that edits to the shared sequencer select server, dashboard and till
+in CI. Current-head CI supplies execution and coverage evidence.
 
 **Guards, each weaker than its name.** The "apps/server's config packs every server test file into
 exactly one shard" case in `scripts/vitest-duration-sequencer.test.mjs` checks that the config's table
@@ -5024,7 +5022,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### Root entry: CI's test jobs measure coverage, never plain test
 
-**11 November 2026:** all seven sharded packages now use [package duration tables](#package-duration-tables); the copied server-only exception below describes the earlier layout.
+**11 November 2026:** server, dashboard and till now use [package duration tables](#package-duration-tables); the copied server-only exception below describes the earlier layout.
 
 - **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
   the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the

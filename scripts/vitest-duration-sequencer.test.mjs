@@ -311,10 +311,6 @@ describe("duration packing across package projects", () => {
   it.each([
     ["apps/dashboard", "test-dashboard"],
     ["apps/till", "test-till"],
-    ["packages/db", "test-heavy"],
-    ["packages/provisioning", "test-provisioning"],
-    ["packages/venue-service", "test-venue-service"],
-    ["packages/fiscal-verifactu", "test-fiscal-verifactu"],
   ])(
     "%s packs each discovered project spec once with its own timing table",
     async (dir, job) => {
