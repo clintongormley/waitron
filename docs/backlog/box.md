@@ -1022,12 +1022,6 @@ client. No screen calls them yet.
   OWE and enterprise networks and the password cases get no Wi-Fi unlock in version 1.
 - The address fallback widens `freezeLockedTarget`'s one-name rule for the recovery certificate
   and `decideLockedRequest`'s host rule together.
-- A weak test assertion, not a production defect: `apps/server/src/box-tls-repair.test.ts:397`
-  checks a repaired leaf with `X509Certificate.checkIssued`, which matches the issuer's name and
-  key identifier, both of which another CA can copy, and not the signature. So the test would also
-  pass for a leaf another key signed with copied issuer fields; a `verify(ca.publicKey)` assertion
-  would check the signature. Production checks the signature
-  (`apps/server/src/box-tls-repair.ts:163-164`).
 
 **For later slices, from PR 3's [re-map against main](../superpowers/plans/2026-11-03-b3-3-installer-policy.md#re-map-against-main-on-2026-11-03):**
 

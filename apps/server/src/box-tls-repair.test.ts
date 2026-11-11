@@ -393,11 +393,9 @@ it("requires new trust when the retained CA cannot be the issuer used by the box
   expect(await inspectBoxTls(f)).toMatchObject({ state: "repair-required", trust: "new-required" });
   expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "new-required" });
   const installedCa = new X509Certificate(await readFile(join(f.stateDir, "tls", "ca.crt")));
-  expect(
-    new X509Certificate(await readFile(join(f.stateDir, "tls", "server.crt"))).checkIssued(
-      installedCa,
-    ),
-  ).toBe(true);
+  const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls", "server.crt")));
+  expect(leaf.checkIssued(installedCa)).toBe(true);
+  expect(leaf.verify(installedCa.publicKey)).toBe(true);
 });
 
 it.each(["ca.crt", "ca.key", "server.crt", "server.crt.previous", "secrets.env"])(
