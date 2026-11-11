@@ -273,7 +273,7 @@ it.each([
   expect(() =>
     validateConfigurationBundle(
       bundle as never,
-      [moduleWith([{ name: "zz_parents", omit: ["private"] }])],
+      [{ ...moduleWith([{ name: "zz_parents", omit: ["private"] }]), tier: "toggleable" }],
       { "synthetic-transfer": 1 },
     ),
   ).toThrow(expect.objectContaining(invalid(field)));
@@ -285,9 +285,13 @@ it.each([
 ])("refuses a module version $exported against this box's 1 as $code", ({ exported, code }) => {
   const bundle = { ...configurationBundle(), modules: { "synthetic-transfer": exported } };
   expect(() =>
-    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
-      "synthetic-transfer": 1,
-    }),
+    validateConfigurationBundle(
+      bundle,
+      [{ ...moduleWith([{ name: "zz_parents" }]), tier: "toggleable" }],
+      {
+        "synthetic-transfer": 1,
+      },
+    ),
   ).toThrow(expect.objectContaining({ code, params: {} }));
 });
 
@@ -325,10 +329,10 @@ it.each([
   },
 );
 
-it("refuses an export that lacks a module the box runs as parts that differ", () => {
+it.each(["mandatory", "provision-only"] as const)("refuses missing %s set", (tier) => {
   const bundle = { ...configurationBundle(), modules: {} };
   expect(() =>
-    validateConfigurationBundle(bundle, [moduleWith([{ name: "zz_parents" }])], {
+    validateConfigurationBundle(bundle, [{ ...moduleWith([]), tier }], {
       "synthetic-transfer": 1,
     }),
   ).toThrow(
@@ -337,6 +341,40 @@ it("refuses an export that lacks a module the box runs as parts that differ", ()
       params: { exportOnly: [], serverOnly: ["synthetic-transfer"] },
     }),
   );
+});
+
+it("imports an absent optional set as empty, including a module sharing its set", async () => {
+  await applyVenue(planVenue(gbVenue, []), { db: suite.db, modules: [] });
+  await scratch(async (tx) => {
+    await tx.execute(sql`create table zz_parents (id text primary key)`);
+    await tx.execute(sql`create table zz_children (id text primary key)`);
+    await tx.execute(sql`insert into zz_parents values ('seeded')`);
+    await tx.execute(sql`insert into zz_children values ('seeded')`);
+    const modules = [
+      { ...moduleWith([{ name: "zz_parents" }]), tier: "toggleable" as const },
+      fakeSetlessModule("synthetic-child", "synthetic-transfer", {
+        configurationTransfer: { kind: "tables", tables: [{ name: "zz_children" }] },
+      }),
+    ];
+    await importConfigurationTables(tx, configurationBundle(), modules, {
+      "synthetic-transfer": 1,
+    });
+    expect((await tx.execute(sql`select * from zz_parents`)).rows).toEqual([]);
+    expect((await tx.execute(sql`select * from zz_children`)).rows).toEqual([]);
+  });
+});
+
+it("refuses table rows from an optional set whose version is absent", () => {
+  const bundle = { ...configurationBundle(), tables: { zz_parents: [{ id: "unversioned" }] } };
+  expect(() =>
+    validateConfigurationBundle(
+      bundle,
+      [{ ...moduleWith([{ name: "zz_parents" }]), tier: "toggleable" }],
+      {
+        "synthetic-transfer": 1,
+      },
+    ),
+  ).toThrow(expect.objectContaining(invalid("tables")));
 });
 
 it("names every part that differs, both ways and sorted, before comparing versions", () => {

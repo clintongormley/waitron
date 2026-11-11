@@ -45,6 +45,7 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { buildConfigurationBundle, encodeConfigurationBundle } from "./configuration-transfer.js";
 import { provisionAllocatedTestVenue as provisionVenue } from "./testing/allocated-provision.js";
 import { venueModuleConfig } from "./provision.js";
+import { readModuleConfig } from "./module-config.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -1754,19 +1755,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       { venue: { taxId: "60000011A" } },
     ],
     [
-      "refuses the export of a box with bookings switched off as running different parts, naming bookings as this server's alone",
+      "imports the export of a box with bookings switched off, leaving bookings on and empty",
       () =>
         venueModuleConfig(
           parseModuleConfig({ modules: { bookings: false } }, ALL_MODULES),
           "ES-common",
         ),
-      400,
-      {
-        error: {
-          code: "setup.configuration_parts_differ",
-          params: { exportOnly: [], serverOnly: ["bookings"] },
-        },
-      },
+      200,
+      { venue: { taxId: "60000011A" } },
     ],
   ] as const)(
     "%s",
@@ -1826,17 +1822,47 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         await server.close();
         server = undefined;
 
-        await withSetupBoot(target.directory, { WAITRON_ENV: "dev" }, async ({ post }) => {
-          const staged = await post("/setup-api/configuration", {
-            headers: {
-              "content-type": "application/octet-stream",
-              "x-waitron-export-passphrase": PASSPHRASE,
-            },
-            body: artifact,
-          });
-          expect(await staged.json()).toMatchObject(answer);
-          expect(staged.status).toBe(status);
-        });
+        await withSetupBoot(
+          target.directory,
+          { WAITRON_ENV: "dev" },
+          async ({ post, stateDir, kills }) => {
+            const staged = await post("/setup-api/configuration", {
+              headers: {
+                "content-type": "application/octet-stream",
+                "x-waitron-export-passphrase": PASSPHRASE,
+              },
+              body: artifact,
+            });
+            expect(await staged.json()).toMatchObject(answer);
+            expect(staged.status).toBe(status);
+            if (
+              !enabledModules(ALL_MODULES, sourceModules()).some(
+                (module) => module.name === "bookings",
+              )
+            ) {
+              const provisioned = await post("/setup-api/provision", {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  mode: "live",
+                  configurationImport: true,
+                  venue: provisionVenueBody(TAX_ID),
+                }),
+              });
+              expect(await provisioned.json()).toMatchObject({
+                provisioned: true,
+                restarting: true,
+              });
+              expect(provisioned.status).toBe(200);
+              await poll(() => (kills.length > 0 ? kills.length : undefined));
+              expect(
+                enabledModules(ALL_MODULES, await readModuleConfig(stateDir)).map(
+                  (module) => module.name,
+                ),
+              ).toContain("bookings");
+              expect(target.store.venue.all(sql`select * from bookings`)).toEqual([]);
+            }
+          },
+        );
       } finally {
         await server?.close();
         await target.store.close();

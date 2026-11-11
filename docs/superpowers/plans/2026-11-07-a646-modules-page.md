@@ -1,5 +1,7 @@
 # A646 Modules page implementation plan
 
+> **2026-11-11:** the watcher's 14:54 reviewer-account scope read supersedes this eight-slice build. See [the remaining A646 scope](../../backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up). Only the independent optional-set import repair is cleared before the revised plan's re-read.
+
 > Execute inline, one green slice per PR, using `superpowers:executing-plans`. Read TDD before code. Before build, obtain Claude's completed plan review through `~/workspace/tools/claude-seat.sh review-branch`.
 
 **Goal:** Configure optional integrations without interrupting service or losing administrative access.
