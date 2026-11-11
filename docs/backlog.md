@@ -929,7 +929,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
   the Seats prompt opens (2026-10-14; owner decided 2026-10-17).** It first sends the merge or
   join with no seat count, gets `400 merge.seats_required`, then opens the Seats prompt and sends
