@@ -119,7 +119,8 @@ lista eliminada, junto con su cargo, y descarta cualquier respuesta a una lista 
 Para cambiar un plato ya enviado en una mesa, abre sus detalles en **Enviado**, cámbialo y pulsa
 **Cambiar plato**. Solo se guarda ese plato, y la cocina recibe el cambio. Una fila de platos iguales
 cambia entera; para cambiar solo uno, usa **Retirar** y cámbialo en **Nuevo pedido**. Cuando la
-cocina ya ha empezado un plato no se puede cambiar: usa **Cancelar…** para quitarlo de la cuenta.
+cocina ya ha empezado un plato, o ya se ha servido parte de él, no se puede cambiar: usa
+**Cancelar…** para quitarlo de la cuenta.
 El plato conserva el precio al que se vendió.
 
 Para que la caja deje de pedir una lista sin eliminarla, desactiva su interruptor **Activa**, o
@@ -167,7 +168,7 @@ puede distinguir una respuesta renombrada de una distinta. Así que, una vez vue
 corregida la carta, el siguiente cambio que se haga en ese pedido aparcado, aunque sea en otra línea, guarda el
 texto nuevo en todas las líneas que llevan la respuesta renombrada. Esas líneas conservan los
 precios a los que se vendieron. Una línea que la cocina ya tiene se retira y se le vuelve a enviar
-como una comanda nueva. La caja rechaza el cambio si la cocina ya ha empezado esa línea, o si
+como una comanda nueva. La caja rechaza el cambio si la cocina ya ha empezado esa línea, si ya se ha servido parte de ella, o si
 **Cambios tras el envío** de la estación de esa línea, o de uno de sus extras enviado a otra
 estación, no lo permite. Cambia los nombres
 entre servicios y no mientras haya pedidos aparcados. Una lista de extras es la excepción, porque un

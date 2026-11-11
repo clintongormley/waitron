@@ -537,6 +537,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "ticket_item.not_found": 404,
   "ticket.item_held": 409,
   "ticket.already_started": 409,
+  "ticket.already_served": 409,
+  "ticket.already_sent": 409,
   "course.not_found": 404,
   "station.no_default": 409,
   "station.no_replacement": 409,

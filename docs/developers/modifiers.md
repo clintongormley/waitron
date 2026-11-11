@@ -302,7 +302,9 @@ be told from a different answer. Giving the comparison an id to use would mean p
 line, and an options answer deliberately carries none. Pinned by "keeps the price of a held line whose options
 list was renamed between the two sends, freezing the new name"
 (`apps/server/src/working-order.test.ts`). On a line the kitchen already has, a changed answer is a
-change like any other: the kitchen gets a recall notice and a new ticket. An EXTRAS list is different: its children are compared by
+change like any other: the kitchen gets a recall notice and a new ticket, unless the kitchen has started it, any of it has been served, or its stations'
+Changes after sending refuse it (`ticket.already_started`, `ticket.already_served`,
+`ticket.already_fired`). An EXTRAS list is different: its children are compared by
 the list's and the picked product's ids, so renaming the list — or the product — disturbs nothing and
 the line is preserved.
 
@@ -381,7 +383,7 @@ Six things it is worth knowing about that payload:
   (`offerModifiers`, `apps/server/src/working-order.ts`) for a basket priced afresh, which includes
   a new line or a new pick in an edit of a saved order. On the held-order edit path, a pick the stored
   line already holds is kept even when its product has since sold out — through an edit of a line
-  the kitchen does not have (held or recalled), and a quantity drop of one it has — with two exceptions: a
+  the kitchen does not have (held or recalled), and a quantity drop of one it has through Change dish (the whole-order save refuses that drop) — with two exceptions: a
   CHANGE to a line the kitchen has sends the line again with the picks it keeps, so a sold-out one
   is refused `product.unavailable`; and a line whose quantity rises, the kitchen's or not, is priced
   afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and

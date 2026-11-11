@@ -1020,8 +1020,9 @@ declare module "@waitron/shared" {
      * refuses a line that already holds a ticket item before any of its writes), a re-course of a
      * line that is fired or waiting for the pass (`setLineCourse`), and, when a station's choice of
      * changes after sending refuses it, a recall (`recallToDraft`, `recallLines`), or a change or
-     * quantity rise in an edit (`applyLineEdits`), of a dish with work there. It names the order,
-     * not a ticket item.
+     * quantity rise in an edit (`applyLineEdits`), of a dish with work there; and, whatever the
+     * stations allow, a whole-order save (`updateHeldOrder`) that leaves out or lowers such a dish.
+     * It names the order, not a ticket item.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**
@@ -1051,9 +1052,22 @@ declare module "@waitron/shared" {
     /**
      * A recall or station move named a line already preparing or ready. A move also refuses a line
      * sent out of the kitchen or partly served. Recalling un-fires a line back to held only while
-     * nothing is cooking; the correction for a started line is a cancel.
+     * nothing is cooking; the correction for a started line is a cancel. An edit (`applyLineEdits`)
+     * changing or lowering a started dish, or a whole-order save leaving it out, is refused the same
+     * way.
      */
     "ticket.already_started": { ticketItemId: string };
+    /**
+     * An edit (`applyLineEdits`) would change a dish some of which has been marked served, or a
+     * whole-order save (`updateHeldOrder`) would leave it out or lower its count. `lineId` is the
+     * served line.
+     */
+    "ticket.already_served": { workingOrderId: string; lineId: string };
+    /**
+     * A whole-order save (`updateHeldOrder`) would leave out or lower a dish stamped sent that has
+     * no kitchen record, such as a drink handed over at the bar. `lineId` is the sent line.
+     */
+    "ticket.already_sent": { workingOrderId: string; lineId: string };
     /** A kitchen-course name already exists in this venue. `name` is the operator's own text. */
     "course.name_taken": { name: string };
     /**

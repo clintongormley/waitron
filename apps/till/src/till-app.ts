@@ -974,6 +974,7 @@ const LINE_REFUSALS = new Set([
   "extras.unsupported_product",
   "ticket.already_started",
   "ticket.already_fired",
+  "ticket.already_served",
   "ticket.not_sent",
   "ticket.made_here",
   "working_order.already_collected",
@@ -1020,6 +1021,14 @@ const ACTIONABLE_REFUSALS = new Set([
   "clock.behind_chain",
   "menu_period.ended",
   "station.no_default",
+]);
+
+/** A counter basket save refused because it would change, lower or leave out a dish already sent. */
+const SENT_DISH_SAVE_REFUSALS = new Map<string, StringKey>([
+  ["ticket.already_served", "held.sent_dish_served"],
+  ["ticket.already_started", "held.sent_dish_started"],
+  ["ticket.already_fired", "held.sent_dish_fired"],
+  ["ticket.already_sent", "held.sent_dish_sent"],
 ]);
 
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
@@ -1539,7 +1548,10 @@ type CounterError =
 
 /** A dish's change refused because the kitchen has it, said where its Sent window cannot. */
 interface SentDishRefusal {
-  key: "table.change_dish_started_void" | "table.change_dish_fired_void";
+  key:
+    | "table.change_dish_started_void"
+    | "table.change_dish_fired_void"
+    | "table.change_dish_served_void";
   dish: string;
 }
 
@@ -1547,6 +1559,7 @@ interface SentDishRefusal {
 function sentDishRefusal(code: string | undefined, dish: string): SentDishRefusal | undefined {
   if (code === "ticket.already_started") return { key: "table.change_dish_started_void", dish };
   if (code === "ticket.already_fired") return { key: "table.change_dish_fired_void", dish };
+  if (code === "ticket.already_served") return { key: "table.change_dish_served_void", dish };
   return undefined;
 }
 
@@ -7850,6 +7863,11 @@ export class TillApp extends LitElement {
         await this.#reloadChangedOrder(id);
         return false;
       }
+      const sentDish = code === undefined ? undefined : SENT_DISH_SAVE_REFUSALS.get(code);
+      if (sentDish !== undefined) {
+        await this.#reloadChangedOrder(id, sentDish);
+        return false;
+      }
       if (await this.#recoverSettlingEdit(id, error, "counter", () => !movedOn())) return false;
       if (code !== "working_order.not_open") throw error;
       return true;
@@ -9251,14 +9269,20 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders();
   }
 
-  /** Loads the order again after a save was refused for an out-of-date copy. A failed read of the
-   * held list keeps the sentence. */
-  async #reloadChangedOrder(id: string): Promise<void> {
+  /** Loads the order again after a save was refused for an out-of-date copy, or (`sentDish`) for a
+   * dish already sent, whose sentence names Cancel and so is said only once Cancel is on screen.
+   * A failed read of the held list keeps the sentence. */
+  async #reloadChangedOrder(id: string, sentDish?: StringKey): Promise<void> {
     const session = this.#operatorSession;
     try {
       await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
       if (session !== this.#operatorSession) return;
-      this.errorKey = "held.changed_elsewhere";
+      this.errorKey =
+        sentDish === undefined
+          ? "held.changed_elsewhere"
+          : adjustableListing(this.#store, this.counterLines, false) === null
+            ? "held.reread_failed"
+            : sentDish;
     } catch (error) {
       if (session !== this.#operatorSession) return;
       const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";

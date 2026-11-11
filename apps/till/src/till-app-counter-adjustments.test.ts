@@ -1770,33 +1770,6 @@ describe("till-app: comping a stored counter order", () => {
     });
     const raise = (el: TillApp) => press(el, inBasket(el, ".line .step-inc")!);
 
-    it("keeps the basket and says the park failed, reading nothing again, when a save is refused for a dish the kitchen has started", async () => {
-      const updateWorkingOrder = vi
-        .fn()
-        .mockRejectedValue({ code: "ticket.already_started", status: 409 });
-      const el = await retrieved({ ...startsMeanwhile(), updateWorkingOrder });
-      const reads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
-      await raise(el);
-      counter(el).store.addProduct(product("bravas", "Bravas", "5.00"), "1");
-
-      emit(counter(el), "park-order", {});
-      await flush(el);
-
-      expect(updateWorkingOrder).toHaveBeenCalledOnce();
-      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(reads);
-      expect(banner(el)!.textContent!.trim()).toBe(t("held.park_error"));
-      const store = counter(el).store;
-      expect(store.dirty).toBe(true);
-      expect(store.revision).toBe(4);
-      expect(
-        store.lines.map((line) => [line.workingOrderLineId, line.product.id, line.quantity]),
-      ).toEqual([
-        ["l-1", "croquetas", "2"],
-        ["l-2", "cana", "1"],
-        [undefined, "bravas", "1"],
-      ]);
-    });
-
     const extraStarted = (lines: TabLines): TabLines => {
       const dish = { ...lines.lines[0]!, sentAt: null, firedAt: null, state: null };
       const extra = tabLine({
@@ -2135,6 +2108,140 @@ describe("till-app: comping a stored counter order", () => {
     ]);
     expect(approval(el)).toBeNull();
     expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("till-app: a counter save refused for a dish already sent", () => {
+  // The till read the Caña as not sent; by the time the basket is saved, it has been.
+  const sentListing = (revision: number): TabLines => {
+    const lines = listing(revision);
+    lines.lines[1] = { ...lines.lines[1]!, sentAt: "2026-09-30T09:05:00.000Z" };
+    return lines;
+  };
+  const sentMeanwhile = () => ({
+    retrieveWorkingOrder: vi
+      .fn()
+      .mockResolvedValueOnce(heldOrder(4))
+      .mockResolvedValue(heldOrder(5)),
+    getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(sentListing(5)),
+  });
+  const words = {
+    "ticket.already_served": {
+      en: "A dish on this order has already been served and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+      es: "Un plato de este pedido ya se ha servido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    },
+    "ticket.already_started": {
+      en: "The kitchen has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+      es: "La cocina ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    },
+    "ticket.already_fired": {
+      en: "A dish on this order has already gone to the kitchen and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+      es: "Un plato de este pedido ya ha ido a cocina y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    },
+    "ticket.already_sent": {
+      en: "A dish on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+      es: "Un plato de este pedido ya se ha enviado y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    },
+  } as const;
+  const codes = Object.keys(words) as (keyof typeof words)[];
+  const removeCanaAddBravas = async (el: TillApp) => {
+    const store = counter(el).store;
+    store.removeLine(1);
+    store.addProduct(product("bravas", "Bravas", "5.00"), "1");
+    await flush(el);
+  };
+  const inLanguage = async (language: "en" | "es", body: () => Promise<void>) => {
+    const previous = currentLocale();
+    setLocale(language);
+    try {
+      await body();
+    } finally {
+      setLocale(previous);
+    }
+  };
+
+  it.each(
+    codes.flatMap((code) =>
+      (["en", "es"] as const).map((language) => [language, code] as [typeof language, typeof code]),
+    ),
+  )(
+    "in %s, a Park refused %s loads the order again, says what happened and that Cancel takes the dish off",
+    async (language, code) => {
+      const updateWorkingOrder = vi.fn().mockRejectedValue({ code, status: 409 });
+      const el = await retrieved({ ...sentMeanwhile(), updateWorkingOrder });
+      await inLanguage(language, async () => {
+        expect(inBasket(el, '[data-cancel-line="1"]')).toBeNull();
+        await removeCanaAddBravas(el);
+
+        emit(counter(el), "park-order", {});
+        await flush(el);
+
+        expect(updateWorkingOrder).toHaveBeenCalledOnce();
+        expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+        expect(banner(el)!.textContent!.trim()).toBe(words[code][language]);
+        const store = counter(el).store;
+        expect(store.dirty).toBe(false);
+        expect(store.revision).toBe(5);
+        expect(store.lines.map((line) => [line.workingOrderLineId, line.product.id])).toEqual([
+          ["l-1", "croquetas"],
+          ["l-2", "cana"],
+        ]);
+        expect(inBasket(el, '[data-cancel-line="1"]')!.textContent!.trim()).toBe(
+          language === "en" ? "Cancel" : "Cancelar",
+        );
+      });
+    },
+  );
+
+  it.each([
+    ["Send", "place-order", {}, "placeOrder"],
+    ["Pay in cash", "confirm-payment", { method: "cash", amount: "10" }, "recordSale"],
+    ["Pay by card", "collect-card", {}, "pay"],
+    ["Pay the rest", "counter-bill-pay", {}, "getBillBalance"],
+  ] as const)(
+    "a %s refused because a dish was served loads the order again and says so, going no further",
+    async (_, event, detail, next) => {
+      const updateWorkingOrder = vi
+        .fn()
+        .mockRejectedValue({ code: "ticket.already_served", status: 409 });
+      const onward = vi.fn();
+      const el = await (event === "place-order" ? placeCounter : retrieved)({
+        ...sentMeanwhile(),
+        updateWorkingOrder,
+        [next]: onward,
+      });
+      await removeCanaAddBravas(el);
+
+      emit(counter(el), event, detail);
+      await flush(el, 6);
+
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(onward).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
+      expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+      expect(banner(el)!.textContent!.trim()).toBe(words["ticket.already_served"].en);
+      expect(counter(el).store.dirty).toBe(false);
+      expect(inBasket(el, '[data-cancel-line="1"]')).not.toBeNull();
+    },
+  );
+
+  it("says the order could not be read again, not to use Cancel, when the order's lines cannot be read", async () => {
+    const el = await retrieved({
+      ...sentMeanwhile(),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValueOnce(listing(4))
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+      updateWorkingOrder: vi.fn().mockRejectedValue({ code: "ticket.already_sent", status: 409 }),
+    });
+    await removeCanaAddBravas(el);
+
+    emit(counter(el), "park-order", {});
+    await flush(el);
+
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(inBasket(el, '[data-cancel-line="1"]')).toBeNull();
+    expect(banner(el)!.textContent!.trim()).toBe(t("held.reread_failed"));
   });
 });
 

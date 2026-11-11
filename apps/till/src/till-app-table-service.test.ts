@@ -3029,6 +3029,33 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });
 
+  it.each([
+    [
+      "es-ES",
+      "Burger ya se ha servido y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+    ],
+    [
+      "en-GB",
+      "Burger has already been served and can no longer be changed. Use Void… to take it off the bill.",
+    ],
+  ])(
+    "in %s, says a served dish cannot be changed and how to take it off, and reloads the line's actions",
+    async (locale, words) => {
+      const { el } = await openBurgerTab({
+        updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_served" }),
+      });
+      setLocale(locale);
+      await flush(el);
+      const reads = vi.mocked(api.getTabLines).mock.calls.length;
+
+      emit(tableOrder(el)!, "change-line", change);
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(words);
+      expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
+    },
+  );
+
   const settle = (el: TillApp) => async () => {
     await flush(el);
     await flush(el);
