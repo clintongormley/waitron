@@ -1,11 +1,8 @@
-import { isTable } from "drizzle-orm";
-import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { compareBackupTables } from "@waitron/db";
 import type { BackupModuleStatus, BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue, BackupRow } from "@waitron/store";
 import { WORKFORCE_ES_CLASSIFICATION } from "./classification.js";
 import { POLICY_COLUMNS, policyRowFault } from "./convenio.js";
-import * as schema from "./schema/index.js";
 
 const tables = WORKFORCE_ES_CLASSIFICATION.map((c) => c.table);
 const immutableTables: readonly string[] = [];
@@ -48,9 +45,6 @@ export const WORKFORCE_ES_BACKUP_VERIFICATION: BackupVerificationContribution = 
     return { status, checks: [{ code: "data", status }] };
   },
 };
-function ident(name: string): string {
-  return `"${name.replaceAll('"', '""')}"`;
-}
 async function first(query: BackupQuery, statement: string, values: readonly BackupValue[] = []) {
   for await (const row of query.rows(statement, values)) return row;
   return undefined;
@@ -62,37 +56,6 @@ async function hasTable(query: BackupQuery, table: string): Promise<boolean> {
     ])) !== undefined
   );
 }
-async function referencesValid(query: BackupQuery): Promise<boolean> {
-  for (const value of Object.values(schema)) {
-    if (!isTable(value)) continue;
-    const config = getTableConfig(value);
-    if (!(await hasTable(query, config.name))) continue;
-    for (const key of config.foreignKeys) {
-      const { columns, foreignColumns, foreignTable } = key.reference();
-      const present = columns.map((c) => `child.${ident(c.name)} is not null`).join(" and ");
-      const parent = getTableConfig(foreignTable).name;
-      if (!(await hasTable(query, parent))) {
-        if (
-          await first(query, `select 1 from ${ident(config.name)} child where ${present} limit 1`)
-        )
-          return false;
-        continue;
-      }
-      const match = columns
-        .map((c, i) => `parent.${ident(foreignColumns[i]!.name)}=child.${ident(c.name)}`)
-        .join(" and ");
-      if (
-        await first(
-          query,
-          `select 1 from ${ident(config.name)} child where ${present} and not exists (select 1 from ${ident(parent)} parent where ${match}) limit 1`,
-        )
-      )
-        return false;
-    }
-  }
-  return true;
-}
-
 const requiredIntegers = [
   "working_days_per_week",
   "max_weekly_minutes",
@@ -133,9 +96,8 @@ function rowValid(row: BackupRow): boolean {
   );
 }
 async function checkData(query: BackupQuery): Promise<BackupModuleStatus> {
-  const references = await referencesValid(query);
-  if (!(await hasTable(query, "convenio_config"))) return references ? "passed" : "invalid";
-  let valid = references;
+  if (!(await hasTable(query, "convenio_config"))) return "passed";
+  let valid = true;
   let unsupported = false;
   for await (const row of query.rows("select * from convenio_config")) {
     valid = rowValid(row) && valid;

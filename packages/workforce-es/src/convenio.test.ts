@@ -221,3 +221,6 @@ it("accepts absent and null policies and a complete configured row at the transf
   ])
     expect(() => transfer.validate({ convenio_config: [row] })).not.toThrow();
 });
+it("accepts a configuration bundle that carries no convenio_config table", () => {
+  expect(() => transfer.validate({})).not.toThrow();
+});
