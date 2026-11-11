@@ -390,6 +390,44 @@ describe("a backup that stopped before reaching any destination", () => {
   });
 });
 
+describe("a box that could not update the locked copy of its own keys and settings", () => {
+  const LEAD_EN =
+    "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved.";
+  const LEAD_ES =
+    "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar.";
+  const say = (errorCode: string, lang: "en" | "es") =>
+    alertMessage("backup.sealed_state_failed", { errorCode }, lang);
+
+  it("says a full disk stopped it, and to free space on Box status and restart, never that sales continue", () => {
+    expect(say("storage.disk_full", "en")).toBe(
+      `${LEAD_EN} The box's disk is full. Free space on the Box status page, then switch the box off and on: each start updates the copy again.`,
+    );
+    expect(say("storage.disk_full", "es")).toBe(
+      `${LEAD_ES} El disco del equipo está lleno. Libera espacio en Estado del equipo y después apaga y enciende el equipo: cada arranque vuelve a actualizar la copia.`,
+    );
+    expect(say("storage.disk_full", "en")).toContain(t("nav.box_status", "en-GB"));
+    expect(say("storage.disk_full", "es")).toContain(t("nav.box_status", "es-ES"));
+  });
+
+  it("says files the copy must include are missing", () => {
+    expect(say("recovery.state_incomplete", "en")).toBe(
+      `${LEAD_EN} Sales continue. Some of the box's own files that the copy must include are missing.`,
+    );
+    expect(say("recovery.state_incomplete", "es")).toBe(
+      `${LEAD_ES} Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir.`,
+    );
+  });
+
+  it("says each start tries again for any other cause, never showing the raw code", () => {
+    expect(say("unknown", "en")).toBe(
+      `${LEAD_EN} Sales continue. Each start tries again, so switch the box off and on.`,
+    );
+    expect(say("unknown", "es")).toBe(
+      `${LEAD_ES} Las ventas continúan. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.`,
+    );
+  });
+});
+
 it("says the box deleted its oldest backups for low disk space, and the day they were taken", () => {
   const one = { count: 1, date: "2026-10-28", lastDate: "2026-10-28", severalDays: false };
   const three = { count: 3, date: "2026-10-28", lastDate: "2026-10-28", severalDays: false };

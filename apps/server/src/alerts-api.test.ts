@@ -695,7 +695,7 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
         now: () => NOW,
         readStream: () => ({ state: "off" }),
       }),
-      sealedStateAlertSource({ failedSince: null }),
+      sealedStateAlertSource({ failedSince: null, errorCode: null }),
       firstStartAlertSource({ failedSince: null }),
       awaitingCertAlertSource({ current: opts.awaitingCert ?? false }),
       printingAlertSource(),

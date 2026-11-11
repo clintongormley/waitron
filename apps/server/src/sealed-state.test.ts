@@ -79,7 +79,7 @@ const deps = (over: Partial<SealedStateDeps> = {}): SealedStateDeps => ({
   readRecoveryKey: async () => KEY,
   now: () => new Date("2026-09-23T10:00:00.000Z"),
   log: vi.fn(),
-  status: { failedSince: null },
+  status: { failedSince: null, errorCode: null },
   ...over,
 });
 
@@ -276,23 +276,41 @@ describe("createSealedStateRefresher", () => {
 
   it("remembers since when refreshes have failed, and forgets once one seals", async () => {
     let at = new Date("2026-09-23T10:00:00.000Z");
-    const status: SealedStateStatus = { failedSince: null };
+    const status: SealedStateStatus = { failedSince: null, errorCode: null };
     const refresher = createSealedStateRefresher(deps({ status, now: () => at }));
     await rm(join(stateDir, "secrets.env"));
     expect(await refresher.refresh()).toBe("failed");
     expect(status.failedSince).toBe("2026-09-23T10:00:00.000Z");
+    expect(status.errorCode).toBe("recovery.state_incomplete");
     at = new Date("2026-09-23T11:00:00.000Z");
     expect(await refresher.refresh()).toBe("failed");
     expect(status.failedSince).toBe("2026-09-23T10:00:00.000Z");
+    // A later failure with another cause replaces the cause but keeps the first time.
+    await mkdir(join(stateDir, "secrets.env"));
+    expect(await refresher.refresh()).toBe("failed");
+    expect(status.failedSince).toBe("2026-09-23T10:00:00.000Z");
+    expect(status.errorCode).toBe("unknown");
+    await rm(join(stateDir, "secrets.env"), { recursive: true });
     await writeFile(join(stateDir, "secrets.env"), "secrets.env-contents");
     expect(await refresher.refresh()).toBe("sealed");
     expect(status.failedSince).toBeNull();
+    expect(status.errorCode).toBeNull();
+  });
+
+  it("names a full disk as the cause of a failed refresh", async () => {
+    const status: SealedStateStatus = { failedSince: null, errorCode: null };
+    const full = Object.assign(new Error("database or disk is full"), { errcode: 13 });
+    const refresher = createSealedStateRefresher(
+      deps({ status, readRecoveryKey: () => Promise.reject(full) }),
+    );
+    expect(await refresher.refresh()).toBe("failed");
+    expect(status.errorCode).toBe("storage.disk_full");
   });
 
   // Without a key no row is expected, so there is nothing out of date to warn about.
   it("forgets a failure once the box has no recovery key", async () => {
     let key: string | undefined = KEY;
-    const status: SealedStateStatus = { failedSince: null };
+    const status: SealedStateStatus = { failedSince: null, errorCode: null };
     const refresher = createSealedStateRefresher(
       deps({ status, readRecoveryKey: async () => key }),
     );
@@ -302,6 +320,7 @@ describe("createSealedStateRefresher", () => {
     key = undefined;
     expect(await refresher.refresh()).toBe("no_key");
     expect(status.failedSince).toBeNull();
+    expect(status.errorCode).toBeNull();
   });
 
   it("logs a system error's code beside its own, and never its message or path", async () => {
@@ -389,7 +408,7 @@ describe("createSealedStateRefresher", () => {
   });
 
   it("answers failed without rejecting when the thrown value's code cannot be read, and the next refresh still runs", async () => {
-    const status: SealedStateStatus = { failedSince: null };
+    const status: SealedStateStatus = { failedSince: null, errorCode: null };
     const unreadable = {
       get code(): never {
         throw new Error("no code");
@@ -408,6 +427,7 @@ describe("createSealedStateRefresher", () => {
     );
     expect(await refresher.refresh()).toBe("failed");
     expect(status.failedSince).toBe("2026-09-23T10:00:00.000Z");
+    expect(status.errorCode).toBe("unknown");
     expect(await refresher.refresh()).toBe("sealed");
   });
 

@@ -246,7 +246,7 @@ export function sealedStateAlertSource(holder: SealedStateStatus): AlertSource {
         {
           key: "backup.sealed_state_failed",
           code: "backup.sealed_state_failed",
-          params: {},
+          params: { errorCode: holder.errorCode ?? "unknown" },
           severity: "error",
           since: holder.failedSince,
           screen: BACKUP_SCREEN,
