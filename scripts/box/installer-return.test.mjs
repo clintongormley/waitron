@@ -1,9 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { PassThrough } from "node:stream";
+import process from "node:process";
+import console from "node:console";
+import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { installerReturn } from "./installer-return.mjs";
 import { installerNameNotice } from "./installer-name-notice.mjs";
 
 vi.mock("./installer-name-notice.mjs", () => ({ installerNameNotice: vi.fn() }));
+vi.mock("node:child_process", () => ({ execFileSync: vi.fn() }));
 const guid = "1764b79f-2a5b-4430-a72c-614275564f09";
 // Captured efibootmgr 18 output: B3-17 source guest, 11 November 2026.
 const entry = (id = "0004", active = "*", loader = "\\EFI\\BOOT\\BOOTX64.EFI") =>
@@ -14,6 +19,7 @@ function fixture({
   type,
   fail,
   order = "0001,0002,0000,0003",
+  missingOrder = false,
 } = {}) {
   vi.useFakeTimers();
   installerNameNotice.mockResolvedValue("This box already has Waitron (Harbour Restaurant Ltd).");
@@ -31,7 +37,7 @@ function fixture({
   const calls = [];
   let next;
   let made = false;
-  const run = async (command, args) => {
+  const run = (command, args) => {
     calls.push([command, ...args]);
     if (command === fail) throw new Error("firmware refused");
     if (command === "sfdisk")
@@ -46,7 +52,7 @@ function fixture({
     if (command === "systemctl") return "";
     if (args[0] === "--create-only") made = true;
     if (args[0] === "--bootnext") next = args[1];
-    return `BootCurrent: 0001\nBootOrder: ${next ? order : "0001,0002,0000,0003"}\n${next ? `BootNext: ${next}\n` : ""}${made ? created : entries}\n`;
+    return `BootCurrent: 0001\n${missingOrder ? "" : `BootOrder: ${next ? order : "0001,0002,0000,0003"}\n`}${next ? `BootNext: ${next}\n` : ""}${made ? created : entries}\n`;
   };
   return {
     input,
@@ -61,10 +67,12 @@ function fixture({
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 it("starts the installed disk after fifteen silent seconds, without changing boot order", async () => {
   const f = fixture();
+  f.input.pause();
   const done = installerReturn("/dev/vdb", f);
   await vi.advanceTimersByTimeAsync(14999);
   expect(f.calls).toEqual([]);
@@ -80,6 +88,7 @@ it("starts the installed disk after fifteen silent seconds, without changing boo
   ]);
   expect(f.input.isRaw).toBe(false);
   expect(f.input.listenerCount("data")).toBe(0);
+  expect(f.input.isPaused()).toBe(true);
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -91,6 +100,7 @@ it("discards buffered keys and resets a two-minute idle return after each new ch
   expect(f.calls).toEqual([]);
   f.input.write("secret typed with no Enter");
   await vi.advanceTimersByTimeAsync(119999);
+  f.input.emit("data", "");
   expect(f.calls).toEqual([]);
   await vi.advanceTimersByTimeAsync(1);
   await done;
@@ -158,6 +168,7 @@ it("creates a missing exact entry without inserting it into BootOrder, then veri
 
 it.each([
   { type: "not-an-esp" },
+  { missingOrder: true },
   { entries: "", created: "" },
   { order: "0004,0001" },
   { fail: "efibootmgr" },
@@ -188,3 +199,41 @@ it("leaves a foreign or unreadable disk at the occupied refusal without starting
   expect(f.calls).toEqual([]);
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it.each([false, true])(
+  "the shell entry point uses bounded commands and reports failure (%s)",
+  async (refused) => {
+    const f = fixture();
+    if (refused) installerNameNotice.mockResolvedValue(null);
+    execFileSync.mockImplementation(f.run);
+    const output = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const originalArgv = process.argv;
+    const originalCode = process.exitCode;
+    try {
+      process.argv = [process.execPath, resolve("scripts/box/installer-return.mjs"), "/dev/vdb"];
+      vi.resetModules();
+      const done = import("./installer-return.mjs");
+      if (!refused) {
+        await vi.waitFor(() => expect(output).toHaveBeenCalled());
+        await vi.advanceTimersByTimeAsync(15000);
+      }
+      await done;
+      if (refused) {
+        expect(process.exitCode).toBe(1);
+        expect(error).toHaveBeenCalledWith("install.refused:occupied");
+        expect(execFileSync).not.toHaveBeenCalled();
+      } else {
+        expect(f.calls.at(-1)).toEqual(["systemctl", "reboot", "--no-block"]);
+        expect(
+          execFileSync.mock.calls.every(
+            ([, , options]) => options.timeout === 12000 && options.maxBuffer === 1048576,
+          ),
+        ).toBe(true);
+      }
+    } finally {
+      process.argv = originalArgv;
+      process.exitCode = originalCode;
+    }
+  },
+);
