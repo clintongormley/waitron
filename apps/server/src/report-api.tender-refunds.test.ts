@@ -194,6 +194,11 @@ it("publishes a named negative cash-up once despite the provider evidence, prese
       tenderTotal: "-107.25",
       tipTotal: "-7.25",
     },
+    closureSummary: {
+      billsClosed: { count: 0, total: "0.00" },
+      toBePaidByTransfer: "0.00",
+      received: "-107.25",
+    },
     counts: { sales: 0, corrections: 0, voids: 0 },
     topSellers: [],
   });
