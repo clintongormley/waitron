@@ -17,7 +17,7 @@ Source-only finding, not a runtime verification: `packages/db/src/schema/venue-s
 Owner, 2026-11-11 14:01: "is the total per venue or per department? i don't care what till it comes from, but there should be sub-totals by department", then "All takings by department". Recorded in `/Users/clintongormley/waitron-campaign-d/queue.md`, A897; background: `docs/backlog/service-periods.md#a897-sales-by-department`.
 
 Author: Codex. Claude read the draft (223 seconds); findings applied. Watcher 2026-11-11 14:35 required storing department figures in the close and directed no further read. No owner approval of this approach is claimed.
-**Build waits for the owner answer, PR #2819 landing and watcher clearance.** Everything below is conditional on whole-bill attribution being chosen. If the owner chooses a split, revise the plan before build; no per-line schema or allocation protocol is planned here.
+**Build waits for the owner answer and PR #2819 landing.** The watcher's 14:35 direction clears the revised frozen-day scope, subject to those conditions. Everything below is conditional on whole-bill attribution being chosen. If the owner chooses a split, revise the plan before build; no per-line schema or allocation protocol is planned here.
 Dependency inspected only as source: local `feat/a275-closed-bills` at `821e9e90dd`; recheck the landed tree before editing. Its `ClosureSummaryDto` still uses `toBePaidByTransfer` internally. Visible wording must be **Deferred payment / Pago aplazado**.
 
 ## Smallest usable finish line
