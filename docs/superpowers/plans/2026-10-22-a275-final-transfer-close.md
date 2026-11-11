@@ -1,5 +1,7 @@
 # A275 final transfer closure Implementation Plan
 
+_2026-11-11 (owner, 13:49): the words people see are now "Deferred payment" / «Pago aplazado», not "To be paid by transfer" / «A pagar por transferencia» — the payment is deferred, not necessarily by bank transfer. Task 7's till button reads "Close as deferred payment" / «Cerrar como pago aplazado». Code names keep `transfer` until a follow-up rename._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Work inline in a registered worktree; do not dispatch agents unless the driver explicitly assigns independent work.
 
 **Goal:** You issue the invoice at the meal, close the entire eligible bill finally as **To be paid by transfer**, and export its invoice for your accountant to reconcile outside Waitron.

@@ -350,8 +350,8 @@ Tasks 0–4 and 6 are built: the `transfer_closures` table, the party readiness 
 ([2026-11-09 plans](../superpowers/plans/2026-11-09-a275-transfer-close-command.md)), its till
 route, recovery read and device-profile action, off by default
 ([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)); the wording:
-receipts, Orders, Find bill's Transactions and the Counter screen name a closed bill To be paid
-by transfer, and Orders' Paid filter no longer lists it; it has a filter of its own
+receipts, Orders, Find bill's Transactions and the Counter screen name a closed bill Deferred
+payment (owner, 2026-11-11: not "To be paid by transfer", since the payment need not be a bank transfer), and Orders' Paid filter no longer lists it; it has a filter of its own
 ([Task 4 plan](../superpowers/plans/2026-11-11-a275-transfer-labels.md)); and the
 accountant's file (Task 6,
 [plan](../superpowers/plans/2026-11-11-a275-transfer-export.md): its server route, and a button on

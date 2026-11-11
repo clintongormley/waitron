@@ -1,5 +1,7 @@
 # A275 Task 4: every screen and document names a transfer-closed bill "To be paid by transfer"
 
+_2026-11-11 (owner, 13:49): the words people see are now "Deferred payment" / «Pago aplazado», not "To be paid by transfer" / «A pagar por transferencia» — the payment is deferred, not necessarily by bank transfer. Task 7's till button reads "Close as deferred payment" / «Cerrar como pago aplazado». Code names keep `transfer` until a follow-up rename._
+
 **Status: proposed 2026-11-11 and revised the same day after a fresh-context review; cleared by the watcher 2026-11-11 04:35 (lane L `questions.md`); built on `feat/a275-transfer-labels`.**
 Tasks 0–2 (#2664) and Task 3 (#2740) landed: `closeBillByTransferTx` (`apps/server/src/transfer-close.ts`)
 issues or reuses the invoice and settles the sale with one tender row whose method is `transfer`
