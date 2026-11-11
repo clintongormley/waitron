@@ -5047,6 +5047,11 @@ control still sends before the wait. Run them with
 **2026-11-11 (A1308-fl5b):** staged restores now retry from their retained source and remove
 unfinished database files before each marked retry. Neither restore path reads the destination
 for committed replay or calls `assertNotAhead`. Boot and bucket preparation retain their checks.
+An unreadable staged record stops the box. The recovery page can discard a staged restore with an
+administrator password from its selected backup, using separately saved hashes. Boot removes
+those hashes after its first-start step returns and before serving, including when that step
+allows serving with an alert. After copying began, discard removes both identity files and the
+partial data; neither old identity wins, and setup can run again.
 The A1415 note immediately below describes the superseded implementation; follow
 [interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore).
 

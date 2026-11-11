@@ -1,8 +1,4 @@
-import {
-  ENVIRONMENT_RECOVERY_TEXT,
-  OPERATOR_TEXT,
-  RECOVERY_PAGE_WORDS,
-} from "./i18n/recovery-page.js";
+import { OPERATOR_TEXT, RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import { TLSSocket } from "node:tls";
 import type { Context, Hono } from "hono";
 import {
@@ -194,7 +190,7 @@ ${shown.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n")}
 `;
 }
 
-function bottomText(message: StartAgainMessage, text: StartAgainPageText): string {
+export function bottomText(message: StartAgainMessage, text: StartAgainPageText): string {
   switch (message.kind) {
     case "passwordMissing":
     case "choiceMissing":
@@ -217,7 +213,7 @@ function bottomText(message: StartAgainMessage, text: StartAgainPageText): strin
  * The password box is the page's one native text field: the page loads no script, so no field
  * primitive can run on it (A1098 Q1).
  */
-function passwordInput(passwordInvalid: string): string {
+export function passwordInput(passwordInvalid: string): string {
   return `<input type="password" id="start-again-password" name="password" autocomplete="current-password" required${passwordInvalid}>`;
 }
 
@@ -538,38 +534,4 @@ export function mountStartAgainChoice(
     restartAfterResponse(outgoingOf(c), deps.onFinished, log);
     return recorded({ code, secure: true, message: moved }, movedPage(locale, moved.folder));
   });
-}
-
-export function renderEnvironmentSection(input: {
-  locale: SupportedLocale;
-  secure: boolean;
-  message?: StartAgainMessage;
-}): string {
-  const { locale, secure, message } = input;
-  const shared = START_AGAIN_PAGE_TEXT[locale];
-  const text = ENVIRONMENT_RECOVERY_TEXT[locale];
-  if (message?.kind === "moved") return `<p>${escapeHtml(shared.moved(message.folder))}</p>`;
-  const passwordError =
-    message?.kind === "wrongPassword"
-      ? text.wrong
-      : message?.kind === "passwordMissing"
-        ? shared.passwordMissing
-        : "";
-  const error =
-    message?.kind === "moveUnavailable"
-      ? text.unavailable
-      : message === undefined
-        ? ""
-        : passwordError || bottomText(message, shared);
-  const explanation = `<p>${escapeHtml(text.detail)}</p><p>${escapeHtml(shared.moveUnsent)}</p>`;
-  if (!secure)
-    return `${explanation}<p>${escapeHtml(shared.insecureForm)}</p>${error === "" ? "" : `<p>${escapeHtml(error)}</p>`}`;
-  return `${explanation}<form method="post" action="/recovery-api/environment/start-again">
-<p><label for="start-again-password">${escapeHtml(shared.password)} *</label></p>
-<p>${passwordInput(passwordError === "" ? "" : ' aria-invalid="true" aria-describedby="environment-password-error"')}</p>
-${passwordError === "" ? "" : `<p id="environment-password-error">${escapeHtml(passwordError)}</p>`}
-${error === "" ? "" : `<p>${escapeHtml(passwordError === "" ? error : shared.fixFields)}</p>`}
-<p><button type="submit" name="choice" value="move">${escapeHtml(text.move)}</button>
-<button type="submit" name="choice" value="keep" formnovalidate>${escapeHtml(text.stop)}</button></p>
-</form>`;
 }

@@ -1,4 +1,9 @@
-import { SCRATCH_DIR, RESTORE_FLOW_DIR, SETUP_OPERATION_FILE } from "@waitron/store";
+import {
+  openBackupQuery,
+  SCRATCH_DIR,
+  RESTORE_FLOW_DIR,
+  SETUP_OPERATION_FILE,
+} from "@waitron/store";
 import {
   assertNoStartAgainDeletion,
   assertVenueFirstSetupAllowed,
@@ -191,7 +196,7 @@ export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
 export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
   request: R,
-  validate?: (request: R) => Promise<void>,
+  validate?: (request: R) => Promise<readonly string[] | void>,
 ): Promise<void> {
   if (request.kind === "stream" && "snapshotVerification" in request) cloudRecoveryUnavailable();
   const checkSnapshot = async () => {
@@ -231,7 +236,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
   const context = recoveryContext(request.recoveryContext);
   if (context !== undefined && (secret === undefined || recoveryOperation === undefined))
     invalidRecoveryContext();
-  await validate?.(request);
+  const adminVerifiers = await validate?.(request);
   if (secret !== undefined && recoveryOperation !== undefined) {
     assertSource(
       recoveryOperation,
@@ -275,6 +280,8 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
         await writeFileDurable(join(dir, ARTIFACT), request.artifact, 0o600);
         await writeFileDurable(join(dir, KEY), request.recoveryKey, 0o600);
       }
+      if (adminVerifiers !== undefined && adminVerifiers.length > 0)
+        await writeFileDurable(join(dir, "admin-verifiers"), JSON.stringify(adminVerifiers), 0o600);
       if (secret !== undefined) await writeFileDurable(join(dir, NODE_KEY), secret, 0o600);
     },
   );
@@ -317,7 +324,11 @@ export async function stageStreamRestore(
           request.databasePath,
           deps,
         );
-        await validated.discard();
+        try {
+          return await readRestoreAdminVerifiers(validated.databasePath);
+        } finally {
+          await validated.discard();
+        }
       },
     );
   } finally {
@@ -442,20 +453,7 @@ async function runHeld(
   };
   await rm(join(deps.stateDir, RESTORE_STAGING_DIR), { recursive: true, force: true });
   if (flow.phase === "placing") {
-    await deleteBackupRoomNote(deps.stateDir);
-    for (const name of [VENUE_FILE, NODE_FILE]) {
-      const target = join(deps.venueDir, name);
-      for (const suffix of ["", ...SIDE_FILE_SUFFIXES, INCOMING_SUFFIX])
-        await rm(`${target}${suffix}`, { force: true });
-    }
-    await rm(litestreamMetaDir(join(deps.venueDir, VENUE_FILE)), { recursive: true, force: true });
-    const identity = join(deps.stateDir, TRADING_ENV_FILE);
-    try {
-      await rename(`${identity}${TRADING_ENV_REPLACED_SUFFIX}`, identity);
-      await syncFolderHolding(identity);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
+    await clearRestorePlacement(deps);
   }
   const marker = (flow.request ?? {}) as {
     version?: unknown;
@@ -620,4 +618,44 @@ async function runHeld(
   });
   await dropAttachments(deps.stateDir);
   return true;
+}
+
+export async function readRestoreAdminVerifiers(databasePath: string): Promise<readonly string[]> {
+  const opened = await openBackupQuery(databasePath);
+  try {
+    const hashes: string[] = [];
+    for await (const row of opened.query.rows(
+      "select password_hash from persons where role = 'admin' and status = 'active'",
+    )) {
+      if (typeof row.password_hash === "string" && row.password_hash !== "")
+        hashes.push(row.password_hash);
+    }
+    return hashes;
+  } finally {
+    await opened.close();
+  }
+}
+
+export async function clearRestorePlacement(
+  deps: Pick<StagedRestoreDeps, "stateDir" | "venueDir">,
+): Promise<void> {
+  await deleteBackupRoomNote(deps.stateDir);
+  for (const name of [VENUE_FILE, NODE_FILE]) {
+    const target = join(deps.venueDir, name);
+    for (const suffix of ["", ...SIDE_FILE_SUFFIXES, INCOMING_SUFFIX])
+      await rm(`${target}${suffix}`, { force: true });
+  }
+  await rm(litestreamMetaDir(join(deps.venueDir, VENUE_FILE)), { recursive: true, force: true });
+  await syncFolderHolding(join(deps.venueDir, VENUE_FILE));
+  await restorePreviousIdentity(deps.stateDir);
+}
+
+export async function restorePreviousIdentity(stateDir: string): Promise<void> {
+  const identity = join(stateDir, TRADING_ENV_FILE);
+  try {
+    await rename(`${identity}${TRADING_ENV_REPLACED_SUFFIX}`, identity);
+    await syncFolderHolding(identity);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 }

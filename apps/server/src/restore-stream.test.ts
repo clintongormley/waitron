@@ -1345,6 +1345,35 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     }
   };
 
+  it("saves the selected stream database's administrator verifier before discarding the validation copy", async () => {
+    const deps = await stageDeps({
+      restoreGeneration: async (args) => {
+        await copyFixture(args);
+        const selected = new DatabaseSync(args.outPath);
+        try {
+          selected
+            .prepare(
+              "insert into persons (id, display_name, role, status, password_hash, created_at) values (?, ?, ?, ?, ?, ?)",
+            )
+            .run(
+              "b27c0642-6311-44ec-80cc-7868717ca4b3",
+              "Selected administrator",
+              "admin",
+              "active",
+              "stream-password-hash",
+              "2026-11-11T12:00:00.000Z",
+            );
+        } finally {
+          selected.close();
+        }
+      },
+    });
+    await stageStreamRestore(deps);
+    expect(
+      JSON.parse(await readFile(join(deps.stateDir, "flows/restore/admin-verifiers"), "utf8")),
+    ).toEqual(["stream-password-hash"]);
+  });
+
   it("stages real SQLite without reading its database into memory", async () => {
     const deps = await stageDeps();
     bulkReadGuard.stateDir = deps.stateDir;

@@ -1,3 +1,4 @@
+import { syncFolderHolding } from "./fs-atomic.js";
 import { TRADING_ENV_REPLACED_SUFFIX } from "@waitron/store";
 import { TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
@@ -789,9 +790,7 @@ export async function clearReplacedDatabases(
   /** Tests inject failures here; production passes nothing. */
   fs: Pick<PlacementFs, "rm"> = { rm },
 ): Promise<void> {
-  const folders = (await readdir(venueDir, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith(ASIDE_PREFIX))
-    .map((entry) => entry.name);
+  const folders = await replacedDatabaseFolders(venueDir);
   const main = lstatSync(join(venueDir, VENUE_FILE), { throwIfNoEntry: false });
   if (main === undefined || !main.isFile()) {
     for (const folder of folders) {
@@ -1091,4 +1090,16 @@ export async function validateArtifactFile(
 }
 export async function restoreFromArtifactFile(deps: RestoreFileDeps): Promise<void> {
   return restoreOwned(await validateArtifactFile(deps), deps);
+}
+
+async function replacedDatabaseFolders(venueDir: string): Promise<string[]> {
+  return (await readdir(venueDir, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(ASIDE_PREFIX))
+    .map((entry) => entry.name);
+}
+
+export async function discardRestoreSetAside(venueDir: string): Promise<void> {
+  for (const name of await replacedDatabaseFolders(venueDir))
+    await rm(join(venueDir, name), { recursive: true, force: true });
+  await syncFolderHolding(join(venueDir, VENUE_FILE));
 }

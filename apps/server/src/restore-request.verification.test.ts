@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { locations, nodes, tenants } from "@waitron/db";
+import { locations, nodes, tenants, persons } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
@@ -25,6 +25,7 @@ import {
   stageRestoreRequest,
   type ArchiveRestoreRequest,
 } from "./restore-request.js";
+import * as requestRuntime from "./restore-request.js";
 import { restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
 
 vi.mock("./backup-verification-target.js", { spy: true });
@@ -373,7 +374,10 @@ it.each([
     await writeFile(join(f.stateDir, "flows/restore/record.json"), raw);
     const restore = vi.fn(async () => {});
     const before = await f.evidence();
-    if (fault === "malformed") await expect(runStagedRestore(f.deps, restore)).resolves.toBe(false);
+    if (fault === "malformed")
+      await expect(runStagedRestore(f.deps, restore)).rejects.toMatchObject({
+        code: "restore.flow_unreadable",
+      });
     else await expect(runStagedRestore(f.deps, restore)).rejects.toThrow(unavailable);
     expect(restore).not.toHaveBeenCalled();
     expect(await f.marker()).toBe(raw);
@@ -626,4 +630,40 @@ describe("comparison immediately before real archive placement", () => {
       expect(await f.evidence()).toEqual(before);
     },
   );
+});
+
+it("stages only the selected database's active administrator hashes, never request-supplied hashes", async () => {
+  const db = adminDb.db;
+  await db.insert(persons).values([
+    {
+      displayName: "Active administrator",
+      role: "admin",
+      status: "active",
+      passwordHash: "active-hash",
+    },
+    {
+      displayName: "Suspended administrator",
+      role: "admin",
+      status: "suspended",
+      passwordHash: "suspended-hash",
+    },
+    { displayName: "Manager", role: "manager", status: "active", passwordHash: "manager-hash" },
+    { displayName: "No password", role: "admin", status: "active" },
+  ]);
+  const f = await fixture();
+  const databasePath = join(f.root, "selected.db");
+  await db.archiveTo(databasePath);
+  const hashes = await requestRuntime.readRestoreAdminVerifiers(databasePath);
+  expect(hashes).toEqual(["active-hash"]);
+  await stageRestoreRequest(
+    f.stateDir,
+    { ...f.request, adminVerifiers: ["wire-hash"] },
+    async () => hashes,
+  );
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, "flows/restore/admin-verifiers"), "utf8")),
+  ).toEqual(["active-hash"]);
+});
+const adminDb = useVenueDb({
+  migrations: migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null),
 });

@@ -16,7 +16,15 @@ export interface RestoreFlowRecord {
   readonly request?: StagedRequestFields;
   readonly firstStart?: { readonly source: RebuildSource };
 }
-const ATTACHMENTS = ["artifact", "key", "venue.db", "entries", "placement.db", "node-key"] as const;
+const ATTACHMENTS = [
+  "artifact",
+  "key",
+  "venue.db",
+  "entries",
+  "placement.db",
+  "node-key",
+  "admin-verifiers",
+] as const;
 export type RestoreAttachment = (typeof ATTACHMENTS)[number];
 
 const recordPath = (stateDir: string) => join(stateDir, RESTORE_FLOW_DIR, "record.json");
@@ -65,7 +73,11 @@ export async function updateRestoreFlow(
 }
 
 export async function dropAttachments(stateDir: string): Promise<void> {
-  await Promise.all(ATTACHMENTS.map((name) => rm(attachmentPath(stateDir, name), { force: true })));
+  await Promise.all(
+    ATTACHMENTS.filter((name) => name !== "admin-verifiers").map((name) =>
+      rm(attachmentPath(stateDir, name), { force: true }),
+    ),
+  );
 }
 
 export async function endRestoreFlow(stateDir: string): Promise<void> {
@@ -92,4 +104,34 @@ export async function firstStartPending(
   if (record?.firstStart === undefined) return null;
   const source = record.firstStart.source;
   return { source: source === "archive" || source === "stream" ? source : "unknown" };
+}
+
+export async function restoreAdminVerifiers(stateDir: string): Promise<readonly string[] | null> {
+  try {
+    const hashes: unknown = JSON.parse(
+      await readFile(attachmentPath(stateDir, "admin-verifiers"), "utf8"),
+    );
+    if (
+      !Array.isArray(hashes) ||
+      hashes.length === 0 ||
+      hashes.some((hash) => typeof hash !== "string" || hash === "")
+    )
+      return null;
+    return hashes as string[];
+  } catch (error) {
+    if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === "ENOENT")
+      return null;
+    throw error;
+  }
+}
+
+export async function disarmRestoreDiscard(stateDir: string): Promise<void> {
+  const path = attachmentPath(stateDir, "admin-verifiers");
+  try {
+    await rm(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  await syncFolderHolding(path);
 }

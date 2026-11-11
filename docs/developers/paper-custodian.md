@@ -513,8 +513,10 @@ needs a fresh review and matching outside recovery evidence.
 The backend checks this binding before replacing a staged request and again at restart. Every
 failed attempt keeps its request and staged key. On a marked retry, it removes the unfinished
 databases and places the selected source again; it never uses that partial copy for committed
-replay. Completion removes the request and its private attachments. Restaging replaces the
-credential, and every attempt still authenticates the key. See
+replay. Completion removes the request and its source attachments; independently saved
+administrator password hashes remain until boot passes its first-start step, then are removed
+before serving. A blocking failure retains those hashes for the recovery page's authenticated
+**Throw this restore away** action. Restaging replaces the credential, and every attempt still authenticates the key. See
 [interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore). A write
 interrupted before request publication leaves no runnable request; the next start removes its
 unpublished scratch files. These rules do not establish that a copied

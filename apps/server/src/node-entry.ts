@@ -471,6 +471,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     const exit = deps.exit ?? DEFAULT_EXIT;
     await deps.serveRecovery(
       recoveryApp({
+        restore: {
+          roots: { stateDir: rooted.stateDir, venueDir: rooted.venueDir },
+          onFinished: async () => {
+            exit(0);
+          },
+        },
         state: fullDiskAtStart(await deps.readRecoveryState(rooted.stateDir), now()),
         uncounted: true,
         logDir: deps.logDir ?? join(rooted.stateDir, LOGS_DIR),
@@ -517,6 +523,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     });
     await deps.serveRecovery(
       recoveryApp({
+        restore: {
+          roots: { stateDir: rooted.stateDir, venueDir: rooted.venueDir },
+          onFinished: async () => {
+            exit(0);
+          },
+        },
         state: refusedAtStart(await deps.readRecoveryState(rooted.stateDir), admission.code, now()),
         refusedAtStart: true,
         logDir,
@@ -614,6 +626,12 @@ async function runAdmittedEntry(
     const httpPort = httpPortFrom(deps.baseEnv);
     await deps.serveRecovery(
       recoveryApp({
+        restore: {
+          roots: { stateDir: deps.stateDir, venueDir: deps.venueDir },
+          onFinished: async () => {
+            exit(0);
+          },
+        },
         state,
         ...(state.lastErrorCode !== "deployment.environment_mismatch"
           ? {}

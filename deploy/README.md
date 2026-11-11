@@ -653,7 +653,13 @@ command against it treat that entrypoint differently:
   at the next start. Once it is marked `placing`, that start deletes the unfinished database
   files and restores the old identity copy before retrying. Any failure, including Cloud's
   completion step, keeps the request and prevents the server from starting. Completion removes
-  the request last, leaving only the separate first-start checks. Outside "as they were": a restore that is killed; a folder made to hold a
+  the request last, leaving only the separate first-start checks. If the staged restore cannot
+  finish, use **Throw this restore away** on the HTTPS recovery page with an administrator
+  password from the selected backup. Before copying, this keeps the destination database;
+  afterwards it removes the partial databases and restored configuration, including the old
+  identity copy. You can then restore again or set up. Command-line restores do not offer this
+  button: run the command again with the backup and its recovery credentials.
+  Outside "as they were": a restore that is killed; a folder made to hold a
   secret (such as `tls/`) on a box that had none; the backup room note, deleted before anything
   changes and written again by the next backup; Litestream's `.venue.db-litestream/` folder beside
   the old database, which is not put back if the move fails after removing it; a move that could

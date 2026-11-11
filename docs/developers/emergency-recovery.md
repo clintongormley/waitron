@@ -166,11 +166,24 @@ failed move. A corrupt partial database does not need to be opened to retry the 
 A failure keeps the request and attachments for the next start. This includes failure to record
 completion with Cloud: the box cannot start serving until that step succeeds. Completion first
 removes the setup operation, then replaces the request with a `first-start` record and removes its
-private attachments. First start finishes the separate recovery checks and removes the old
-identity copy; it does not repeat the restore.
+source attachments. First start finishes the separate recovery checks and removes the old
+identity copy; it does not repeat the restore. The saved administrator password hashes remain
+until boot's `runFirstStart` or `deferFirstStart` returns, then boot removes them durably before
+serving. A blocking first-start refusal retains them; an ordinary first-start failure that allows
+serving does not.
 
-These rules apply to a saved staged request. A direct command-line restore still runs when you
-invoke the command. Its within-attempt file rollback is unchanged.
+If this restore cannot finish, open the recovery page over HTTPS and choose **Throw this restore
+away**. Enter an active administrator's password from the selected backup, or choose **Stop** to
+leave the restore waiting. An unreadable restore record also stops the box and offers this choice.
+Before copying begins, discard preserves the destination database. Once copying has begun, the
+previous database is gone: discard removes the partial databases and restored configuration,
+including both `trading.env` and `trading.env.replaced`. It keeps the box's TLS files, so your
+browser can reconnect. You can then restore another backup or set up again.
+
+This choice covers restores started from setup. If a command-line restore is stuck at first start,
+run `waitron-restore restore` again with the backup and its recovery credentials. The command
+retries the restore over the pending first-start record. Its within-attempt file rollback is
+unchanged.
 
 The process-kill cases in `src/restore-emergency-crash.e2e.test.ts` compare a restarted restore with
 its completed database result, retaining the saved name, backup counters, earlier records, chain

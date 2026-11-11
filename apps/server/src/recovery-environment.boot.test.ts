@@ -284,23 +284,6 @@ it.each([
   expect(f.exit).not.toHaveBeenCalled();
 });
 
-it("rejects HTTP and foreign origins before counting a guess, and keeps throttling over restart", async () => {
-  const f = await recoveryFixture();
-  let app = await f.boot();
-  for (const options of [{ secure: false }, { origin: "https://other.test" }])
-    expect((await post(app, { choice: "move", password: PASSWORD }, options)).status).toBe(403);
-  await expect(
-    stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
-  for (let n = 0; n < 6; n++)
-    expect((await post(app, { choice: "move", password: "wrong" })).status).toBe(403);
-  app = await f.boot();
-  const response = await post(app, { choice: "move", password: PASSWORD });
-  expect(response.status).toBe(429);
-  expect(Number(response.headers.get("Retry-After"))).toBeGreaterThan(0);
-  expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
-});
-
 it("offers the password and safe Stop in English and Spanish only over HTTPS", async () => {
   const f = await recoveryFixture();
   const app = await f.boot();

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import * as flow from "./restore-flow.js";
 import * as atomic from "./fs-atomic.js";
 import {
   attachmentPath,
@@ -157,4 +158,26 @@ it("refuses to treat an unreadable flow as a completed restore", async () => {
   await expect(firstStartPending(stateDir)).rejects.toMatchObject({
     code: "restore.flow_unreadable",
   });
+});
+
+it("retains private discard authority through an unreadable record and drops it durably before serving", async () => {
+  const hashes = ["saved-password-hash"];
+  await publishRestoreFlow(stateDir, staged, async (folder) => {
+    await atomic.writeFileDurable(join(folder, "admin-verifiers"), JSON.stringify(hashes), 0o600);
+  });
+  expect((await stat(join(stateDir, "flows/restore/admin-verifiers"))).mode & 0o777).toBe(0o600);
+  await writeFile(join(stateDir, "flows/restore/record.json"), "broken");
+  expect(await flow.restoreAdminVerifiers(stateDir)).toEqual(hashes);
+  await dropAttachments(stateDir);
+  expect(await flow.restoreAdminVerifiers(stateDir)).toEqual(hashes);
+  const synced: string[] = [];
+  const original = atomic.syncFolderHolding;
+  vi.spyOn(atomic, "syncFolderHolding").mockImplementation(async (path) => {
+    synced.push(path);
+    expect(await flow.restoreAdminVerifiers(stateDir)).toBeNull();
+    await original(path);
+  });
+  await flow.disarmRestoreDiscard(stateDir);
+  expect(synced).toContain(join(stateDir, "flows/restore/admin-verifiers"));
+  expect(await flow.restoreAdminVerifiers(stateDir)).toBeNull();
 });
