@@ -283,7 +283,7 @@ function notIssuedLine(found: NotIssuedHereView): TemplateResult {
             : html`<span class="fingerprint">${found.fingerprint}</span>`,
         )}
         ${field(
-          t("fiscal_filing.history.not_issued.sent_by"),
+          t("fiscal_filing.history.not_issued.system"),
           system === null
             ? null
             : `${system.taxId} · ${system.softwareId} · ${system.installation}`,
@@ -294,17 +294,21 @@ function notIssuedLine(found: NotIssuedHereView): TemplateResult {
 }
 
 function identityChangeLine(change: IdentityChangeView): TemplateResult {
-  const earlier = change.earlierInstallationName;
+  const names = { earlier: change.earlierInstallationName, new: change.installationName };
+  const held = change.lastHeldInvoice;
   return html`<li>
     <span
-      >${t("fiscal_filing.history.identity.line", {
-        earlier,
-        new: change.installationName,
-        number: t("fiscal_filing.history.identity.invoice", {
-          number: change.lastHeldInvoice.numSerieFactura,
-          date: change.lastHeldInvoice.fechaExpedicionFactura,
-        }),
-      })}</span
+      >${
+        held === null
+          ? t("fiscal_filing.history.identity.line_none_held", names)
+          : t("fiscal_filing.history.identity.line", {
+              ...names,
+              number: t("fiscal_filing.history.identity.invoice", {
+                number: held.numSerieFactura,
+                date: held.fechaExpedicionFactura,
+              }),
+            })
+      }</span
     >
     <span class="muted"
       >${t("fiscal_filing.history.identity.changed", {

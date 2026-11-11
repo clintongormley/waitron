@@ -53,7 +53,7 @@ says that an invoice is missing.
   box no longer uses, that this box did not issue.
 - **Identity changes without a handover**: each time this box's fiscal identity changed other than
   by a handover, for example after a restore, with the last invoice the box holds under the earlier
-  identity.
+  identity, if it holds any.
 
 When either list has a line, export the page and give the file to your tax adviser: it carries both
 lists.

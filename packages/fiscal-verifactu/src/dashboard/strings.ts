@@ -195,11 +195,13 @@ const en = {
   "fiscal_filing.history.not_issued.line":
     "AEAT holds invoice {number} of {date}; this box did not issue it.",
   "fiscal_filing.history.not_issued.series": "Series {series}",
-  "fiscal_filing.history.not_issued.sent_by": "Sent by",
+  "fiscal_filing.history.not_issued.system": "Invoicing system (as AEAT holds it)",
   "fiscal_filing.history.not_issued.none": "None found.",
   "fiscal_filing.history.identity": "Identity changes without a handover",
   "fiscal_filing.history.identity.line":
     "The fiscal identity changed from {earlier} to {new} without a handover. The last invoice this box holds under {earlier} is {number}. Invoices under {earlier} that this box does not hold may exist.",
+  "fiscal_filing.history.identity.line_none_held":
+    "The fiscal identity changed from {earlier} to {new} without a handover. This box holds no invoice under {earlier}. Invoices under {earlier} that this box does not hold may exist.",
   "fiscal_filing.history.identity.invoice": "{number} ({date})",
   "fiscal_filing.history.identity.changed": "Changed {time}",
   "fiscal_filing.history.identity.none": "The fiscal identity has not changed without a handover.",
@@ -475,11 +477,13 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.history.not_issued.line":
     "La AEAT tiene la factura {number} del {date}; este equipo no la emitió.",
   "fiscal_filing.history.not_issued.series": "Serie {series}",
-  "fiscal_filing.history.not_issued.sent_by": "Enviada por",
+  "fiscal_filing.history.not_issued.system": "Sistema informático según la AEAT",
   "fiscal_filing.history.not_issued.none": "No se ha encontrado ninguna.",
   "fiscal_filing.history.identity": "Cambios de identidad sin traspaso",
   "fiscal_filing.history.identity.line":
     "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. La última factura que este equipo tiene bajo {earlier} es la {number}. Puede haber facturas bajo {earlier} que este equipo no tiene.",
+  "fiscal_filing.history.identity.line_none_held":
+    "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. Este equipo no tiene ninguna factura bajo {earlier}. Puede haber facturas bajo {earlier} que este equipo no tiene.",
   "fiscal_filing.history.identity.invoice": "{number} ({date})",
   "fiscal_filing.history.identity.changed": "Cambio: {time}",
   "fiscal_filing.history.identity.none": "La identidad fiscal no ha cambiado sin un traspaso.",

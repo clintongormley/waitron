@@ -110,12 +110,12 @@ export interface NotIssuedHereView extends LookupObservationView {
   seriesCode: string;
 }
 
-/** A new fiscal identity activated other than by a handover, after an earlier one with records. */
+/** A new fiscal identity activated other than by a handover, after an earlier one. */
 export interface IdentityChangeView {
   installationName: string;
   earlierInstallationName: string;
-  /** The earlier identity's record with the highest chain position that this box holds. */
-  lastHeldInvoice: { numSerieFactura: string; fechaExpedicionFactura: string };
+  /** The earlier identity's record with the highest chain position that this box holds, if any. */
+  lastHeldInvoice: { numSerieFactura: string; fechaExpedicionFactura: string } | null;
   /** A label only: no clock reading decides which changes are listed or their order. */
   activatedAt: string;
 }

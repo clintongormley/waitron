@@ -180,36 +180,34 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
 }
 
 /**
- * Identities are ordered by `registro_sif` insertion (`rowid`), never by a stored time: an
- * activation writes its identity and its `fiscal_allocations` row in one transaction, so the
- * identity inserted before a new one is the one it replaced, whatever either box's clock said.
+ * A change's earlier identity is the identity of this taxpayer and environment inserted just
+ * before its own (`registro_sif.rowid`), never one chosen by a clock: an activation inserts its
+ * identity and its `fiscal_allocations` row in one transaction.
  */
 async function readIdentityChanges(
   tx: Transaction,
   taxId: string,
   environment: string,
 ): Promise<MissingHistory["identityChanges"]> {
-  const rows = await tx.execute<{
-    installation: string;
-    activated_at: string;
-    earlier_installation: string;
-    num_serie_factura: string;
-    fecha_expedicion_factura: string;
-  }>(sql`
-    with held as (
-      select s.rowid as position, s.numero_instalacion as installation, (
-        select r.id from registros_facturacion r
-        where r.node_id = s.node_id and r.sif_id = s.id and r.entorno = ${environment}
-        order by r.secuencia desc limit 1
-      ) as last_id
+  const rows = await tx.execute<
+    { installation: string; activated_at: string; earlier_installation: string } & (
+      | { num_serie_factura: string; fecha_expedicion_factura: string }
+      | { num_serie_factura: null; fecha_expedicion_factura: null }
+    )
+  >(sql`
+    with identities as (
+      select s.rowid as position, s.id, s.node_id, s.numero_instalacion as installation
       from registro_sif s
-      where s.nif = ${taxId}
+      where s.nif = ${taxId} and (
+        exists (select 1 from fiscal_allocations a where a.sif_id = s.id and a.environment = ${environment})
+        or exists (select 1 from registros_facturacion r where r.sif_id = s.id and r.entorno = ${environment})
+      )
     ),
     changes as (
       select a.rowid as position, a.activated_at, n.numero_instalacion as installation, (
-        select h.position from held h
-        where h.last_id is not null and h.position < n.rowid
-        order by h.position desc limit 1
+        select i.position from identities i
+        where i.position < n.rowid
+        order by i.position desc limit 1
       ) as earlier
       from fiscal_allocations a join registro_sif n on n.id = a.sif_id
       where a.taxpayer_nif = ${taxId} and a.environment = ${environment}
@@ -218,20 +216,28 @@ async function readIdentityChanges(
           and json_type(a.approval, '$.oldMachineRelinquished') = 'true'
         )
     )
-    select c.installation, c.activated_at, h.installation as earlier_installation,
+    select c.installation, c.activated_at, e.installation as earlier_installation,
       r.num_serie_factura, r.fecha_expedicion_factura
     from changes c
-    join held h on h.position = c.earlier
-    join registros_facturacion r on r.id = h.last_id
+    join identities e on e.position = c.earlier
+    left join registros_facturacion r on r.id = (
+      select l.id from registros_facturacion l
+      -- an identity's records are appended by the node it belongs to
+      where l.node_id = e.node_id and l.sif_id = e.id and l.entorno = ${environment}
+      order by l.secuencia desc limit 1
+    )
     order by c.position
   `);
   return rows.rows.map((row) => ({
     installationName: row.installation,
     earlierInstallationName: row.earlier_installation,
-    lastHeldInvoice: {
-      numSerieFactura: row.num_serie_factura,
-      fechaExpedicionFactura: row.fecha_expedicion_factura,
-    },
+    lastHeldInvoice:
+      row.num_serie_factura === null
+        ? null
+        : {
+            numSerieFactura: row.num_serie_factura,
+            fechaExpedicionFactura: row.fecha_expedicion_factura,
+          },
     activatedAt: new Date(row.activated_at).toISOString(),
   }));
 }

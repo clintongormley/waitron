@@ -56,7 +56,7 @@ Ninguna de las dos listas dice que falte una factura.
   serie que este equipo ya no usa y que este equipo no emitió.
 - **Cambios de identidad sin traspaso**: cada vez que la identidad fiscal de este equipo cambió sin
   un traspaso, por ejemplo tras una restauración, con la última factura que el equipo tiene bajo la
-  identidad anterior.
+  identidad anterior, si tiene alguna.
 
 Si alguna de las dos listas tiene una línea, exporta la página y da el archivo a tu asesor fiscal:
 incluye las dos listas.

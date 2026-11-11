@@ -295,6 +295,29 @@ describe("vf-fiscal-filing-screen", () => {
     );
   });
 
+  it("says the box holds no invoice under the earlier identity when it holds none", async () => {
+    const answer = (): Promise<FilingOverviewAnswer> =>
+      Promise.resolve(
+        overview({
+          missingHistory: {
+            notIssuedHere: [],
+            identityChanges: [{ ...IDENTITY_CHANGE, lastHeldInvoice: null }],
+          },
+        }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    expect(text(screen, "[data-test=identity-changes] li")).toBe(
+      "The fiscal identity changed from BOX-01 to BOX-02 without a handover. This box holds no invoice under BOX-01. Invoices under BOX-01 that this box does not hold may exist. " +
+        `Changed ${formatIsoMinute("2026-11-03T08:00:00.000Z")}`,
+    );
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(text(spanish.screen, "[data-test=identity-changes] li")).toContain(
+      "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. Este equipo no tiene ninguna factura bajo BOX-01. Puede haber facturas bajo BOX-01 que este equipo no tiene.",
+    );
+  });
+
   it("says so when neither possibly-missing-history list has anything", async () => {
     const answer = (): Promise<FilingOverviewAnswer> =>
       Promise.resolve(overview({ missingHistory: { notIssuedHere: [], identityChanges: [] } }));

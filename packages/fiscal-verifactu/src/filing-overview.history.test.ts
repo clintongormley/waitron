@@ -7,6 +7,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   appendPendingAlta,
   insertPendingAlta,
+  seedIndependentChain,
   seedPendingEnvios,
   type SeededDrain,
 } from "../test/drain-fixtures.js";
@@ -268,6 +269,138 @@ describe("readFilingOverview: possibly missing history", () => {
           earlierInstallationName: first,
           lastHeldInvoice: { numSerieFactura: "S1/1", fechaExpedicionFactura: "2026-07-20" },
           activatedAt: "2026-07-21T00:00:00.000Z",
+        },
+      ],
+    });
+  });
+
+  it("names the identity a handover brought in, holding no invoice, when the next change is not a handover", async () => {
+    await stampDeployment(suite.db, "production");
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await activate(seeded, {
+      installation: await installationOf(seeded.sifId),
+      sifId: seeded.sifId,
+      activatedAt: "2026-07-20T00:00:00.000Z",
+    });
+    await activate(seeded, {
+      installation: "B",
+      activatedAt: "2026-07-21T00:00:00.000Z",
+      handover: true,
+    });
+    await activate(seeded, { installation: "C", activatedAt: "2026-07-22T00:00:00.000Z" });
+
+    const overview = await read(seeded);
+
+    expect(overview.missingHistory.identityChanges).toEqual([
+      {
+        installationName: "C",
+        earlierInstallationName: "B",
+        lastHeldInvoice: null,
+        activatedAt: "2026-07-22T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("names, for each change, the identity inserted just before it, even one holding no invoice", async () => {
+    await stampDeployment(suite.db, "production");
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const first = await installationOf(seeded.sifId);
+    await activate(seeded, { installation: "B", activatedAt: "2026-07-21T00:00:00.000Z" });
+    await activate(seeded, { installation: "C", activatedAt: "2026-07-22T00:00:00.000Z" });
+
+    const overview = await read(seeded);
+
+    expect(overview.missingHistory.identityChanges).toEqual([
+      {
+        installationName: "B",
+        earlierInstallationName: first,
+        lastHeldInvoice: { numSerieFactura: "S1/1", fechaExpedicionFactura: "2026-07-20" },
+        activatedAt: "2026-07-21T00:00:00.000Z",
+      },
+      {
+        installationName: "C",
+        earlierInstallationName: "B",
+        lastHeldInvoice: null,
+        activatedAt: "2026-07-22T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("lists identity changes in insertion order whatever their activation clocks say", async () => {
+    await stampDeployment(suite.db, "production");
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const first = await installationOf(seeded.sifId);
+    const b = await activate(seeded, {
+      installation: "B",
+      activatedAt: "2026-07-23T00:00:00.000Z",
+    });
+    await appendPendingAlta(suite.db, { ...seeded, sifId: b }, 2);
+    await activate(seeded, { installation: "C", activatedAt: "2026-07-21T00:00:00.000Z" });
+    await activate(seeded, { installation: "D", activatedAt: "2026-07-25T00:00:00.000Z" });
+
+    const overview = await read(seeded);
+
+    expect(
+      overview.missingHistory.identityChanges.map((change) => [
+        change.installationName,
+        change.earlierInstallationName,
+        change.lastHeldInvoice?.numSerieFactura ?? null,
+      ]),
+    ).toEqual([
+      ["B", first, "S1/1"],
+      ["C", "B", "S2/1"],
+      ["D", "C", null],
+    ]);
+  });
+
+  it("lists invoices AEAT holds under retired series in the order they were found, whatever their found times say", async () => {
+    await stampDeployment(suite.db, "production");
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    await retire(await seriesConflict(seeded, "S1", "S1/7", "2026-07-21T05:00:00.000Z"));
+    await retire(await seriesConflict(seeded, "S2", "S2/7", "2026-07-21T04:00:00.000Z"));
+    await retire(await seriesConflict(seeded, "S3", "S3/7", "2026-07-21T06:00:00.000Z"));
+
+    const overview = await read(seeded);
+
+    expect(
+      overview.missingHistory.notIssuedHere.map((found) => found.invoice.NumSerieFactura),
+    ).toEqual(["S1/7", "S2/7", "S3/7"]);
+  });
+
+  it("never names another tax number's identity, activation or retired-series invoice", async () => {
+    await stampDeployment(suite.db, "production");
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const first = await installationOf(seeded.sifId);
+    const otherSifId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    await seedIndependentChain(suite.db, { sifId: otherSifId, secuencia: 5 });
+    const [other] = await suite.db
+      .select({ nodeId: registroSif.nodeId, nif: registroSif.nif })
+      .from(registroSif)
+      .where(eq(registroSif.id, otherSifId));
+    const otherTaxpayer = {
+      ...seeded,
+      ...other!,
+      nodeId: brandNodeId(other!.nodeId),
+      sifId: otherSifId,
+    };
+    await activate(otherTaxpayer, {
+      installation: "O",
+      sifId: otherSifId,
+      activatedAt: "2026-07-21T00:00:00.000Z",
+    });
+    await retire(await seriesConflict(otherTaxpayer, "Z", "Z/7", "2026-07-21T05:00:00.000Z"));
+    await activate(seeded, { installation: "B", activatedAt: "2026-07-22T00:00:00.000Z" });
+
+    const overview = await read(seeded);
+
+    expect(overview.missingHistory).toEqual({
+      notIssuedHere: [],
+      identityChanges: [
+        {
+          installationName: "B",
+          earlierInstallationName: first,
+          lastHeldInvoice: { numSerieFactura: "S1/1", fechaExpedicionFactura: "2026-07-20" },
+          activatedAt: "2026-07-22T00:00:00.000Z",
         },
       ],
     });
