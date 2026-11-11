@@ -675,6 +675,8 @@ lines), and the lane says so to the watcher before passing 1,400. Tests about 2.
 - **S4.** The end-to-end file in section A.
 - **S5.** Top sellers (finding 3) and the extras fallback in the category report (finding 2), with
   a category assertion after a part correction.
+  (2026-11-11: S5 moved out of slice 3b into its own PR, branch `feat/a802-report-fixes`, when
+  #2775 was closed under the owner's option A.)
 
 Size under A: about 180 code and 540 test lines, about 720 in all; tests about three times the code
 (question 1 asks; the clearance's point 3 trims the tests to about twice the code). Under B: about

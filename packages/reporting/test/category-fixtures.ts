@@ -31,6 +31,7 @@ export interface LineSpec {
   category?: string;
   id?: string;
   parentLineId?: string;
+  correctsLineId?: string;
   quantity?: string;
 }
 
@@ -64,6 +65,7 @@ export function sellLines(
       category: l.category,
       id: l.id,
       parentLineId: l.parentLineId,
+      correctsLineId: l.correctsLineId,
     })),
   });
 }

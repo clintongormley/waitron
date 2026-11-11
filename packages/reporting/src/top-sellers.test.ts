@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { saleId } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import {
   seedNodeAndSeries,
   seedSale,
@@ -767,6 +770,353 @@ describe("computeTopSellers", () => {
     // 3.000 sold − 1.000 returned = 2.000 net; 30.00 − 10.00 = 20.00 net.
     const rows = await run();
     expect(rows).toEqual([{ name: coffeeName, quantity: "2.000", total: "20.00", variants: [] }]);
+  });
+
+  it("returns a dish only with the correction that completes its line's money", async () => {
+    const coffeeLine = randomUUID();
+    const invoice = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "12.10",
+      lines: [
+        {
+          id: coffeeLine,
+          vatRate: "10.00",
+          lineTotal: "11.00",
+          lineGross: "12.10",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "1.000",
+        },
+      ],
+    });
+    const correct = (invoiceNumber: number, minute: string, net: string, gross: string) =>
+      seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: new Date(`2026-08-04T10:${minute}:00Z`).toISOString(),
+        total: `-${gross}`,
+        correctsSaleId: invoice,
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: `-${net}`,
+            lineGross: `-${gross}`,
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "-1.000",
+            correctsLineId: coffeeLine,
+          },
+        ],
+      });
+    await correct(2, "01", "5.50", "6.05");
+    await correct(3, "02", "5.47", "6.02");
+
+    // €12.07 of €12.10 given back: the dish still counts as sold.
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "1.000", total: "0.03", variants: [] },
+    ]);
+
+    // The money is back in gross, not in net: 10.99 of 11.00.
+    await correct(4, "03", "0.02", "0.03");
+
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "0.000", total: "0.01", variants: [] },
+    ]);
+  });
+
+  it("returns a free dish once when two corrections name it", async () => {
+    const coffeeLine = randomUUID();
+    const invoice = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "0.00",
+      lines: [
+        {
+          id: coffeeLine,
+          vatRate: "10.00",
+          lineTotal: "0.00",
+          lineGross: "0.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "1.000",
+        },
+      ],
+    });
+    for (const [invoiceNumber, minute] of [
+      [2, "01"],
+      [3, "02"],
+    ] as const) {
+      await seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: new Date(`2026-08-04T10:${minute}:00Z`).toISOString(),
+        total: "0.00",
+        correctsSaleId: invoice,
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: "0.00",
+            lineGross: "0.00",
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "-1.000",
+            correctsLineId: coffeeLine,
+          },
+        ],
+      });
+    }
+
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+    ]);
+  });
+
+  it("returns a dish with a whole-invoice credit of a line that stored no gross", async () => {
+    const line = randomUUID();
+    const invoice = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "22.00",
+      lines: [
+        {
+          id: line,
+          vatRate: "10.00",
+          lineTotal: "20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "2.000",
+        },
+      ],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: noonUtc,
+      total: "-22.00",
+      correctsSaleId: invoice,
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "-20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "-2.000",
+          correctsLineId: line,
+        },
+      ],
+    });
+
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+    ]);
+  });
+
+  describe("voided corrections of a line", () => {
+    let coffeeLine: string;
+    let invoice: Awaited<ReturnType<typeof seedSale>>;
+    let nextNumber: number;
+
+    beforeEach(async () => {
+      coffeeLine = randomUUID();
+      nextNumber = 2;
+      invoice = await seedSale(suite.db, venue, {
+        invoiceNumber: 1,
+        issuedAt: noonUtc,
+        total: "12.10",
+        lines: [
+          {
+            id: coffeeLine,
+            vatRate: "10.00",
+            lineTotal: "11.00",
+            lineGross: "12.10",
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "1.000",
+          },
+        ],
+      });
+    });
+
+    const correct = (issuedAt: string, net: string, gross: string, id?: SaleId) =>
+      seedSale(suite.db, venue, {
+        id,
+        invoiceNumber: nextNumber++,
+        issuedAt,
+        total: `-${gross}`,
+        correctsSaleId: invoice,
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: `-${net}`,
+            lineGross: `-${gross}`,
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "-1.000",
+            correctsLineId: coffeeLine,
+          },
+        ],
+      });
+    const day = (businessDay: string) => ({
+      fromBusinessDay: businessDay,
+      toBusinessDay: businessDay,
+    });
+
+    it("leaves out of a later correction's sum a correction voided before it", async () => {
+      const first = await correct("2026-08-04T10:01:00.000Z", "5.50", "6.05");
+      await seedVoid(suite.db, { saleId: first }, "2026-08-04T10:02:00.000Z");
+      await correct("2026-08-04T10:03:00.000Z", "5.50", "6.05");
+
+      // Only half the money is back: the dish is still sold.
+      expect(await run()).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "5.50", variants: [] },
+      ]);
+    });
+
+    it("reverses at a later void only the dishes the correction returned", async () => {
+      const half = await correct("2026-08-04T10:01:00.000Z", "5.50", "6.05");
+      await seedVoid(suite.db, { saleId: half }, "2026-08-05T10:00:00.000Z");
+
+      expect(await run(day("2026-08-05"))).toEqual([
+        { name: coffeeName, quantity: "0.000", total: "5.50", variants: [] },
+      ]);
+    });
+
+    it("gives the dish back at a later void of the correction that returned it", async () => {
+      const whole = await correct("2026-08-04T10:01:00.000Z", "11.00", "12.10");
+      await seedVoid(suite.db, { saleId: whole }, "2026-08-05T10:00:00.000Z");
+
+      expect(await run(day("2026-08-04"))).toEqual([
+        { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+      ]);
+      expect(await run(day("2026-08-05"))).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "11.00", variants: [] },
+      ]);
+    });
+
+    it("orders corrections issued in the same millisecond by invoice number, not sale id", async () => {
+      // The second-issued correction holds the lower id, so an order by id reads it first.
+      await correct(
+        "2026-08-04T10:01:00.000Z",
+        "5.50",
+        "6.05",
+        saleId("ffffffff-ffff-4fff-8fff-ffffffffffff"),
+      );
+      const completing = await correct(
+        "2026-08-04T10:01:00.000Z",
+        "5.50",
+        "6.05",
+        saleId("00000000-0000-4000-8000-000000000001"),
+      );
+      await seedVoid(suite.db, { saleId: completing }, "2026-08-05T10:00:00.000Z");
+
+      expect(await run(day("2026-08-05"))).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "5.50", variants: [] },
+      ]);
+    });
+
+    it("keeps a closed day's count when an earlier correction is voided after it", async () => {
+      const first = await correct("2026-08-04T10:01:00.000Z", "5.50", "6.05");
+      await correct("2026-08-05T10:00:00.000Z", "5.50", "6.05");
+      const closed = await run(day("2026-08-05"));
+      expect(closed).toEqual([
+        { name: coffeeName, quantity: "-1.000", total: "-5.50", variants: [] },
+      ]);
+
+      await seedVoid(suite.db, { saleId: first }, "2026-08-06T10:00:00.000Z");
+
+      expect(await run(day("2026-08-05"))).toEqual(closed);
+      expect(await run(day("2026-08-06"))).toEqual([
+        { name: coffeeName, quantity: "0.000", total: "5.50", variants: [] },
+      ]);
+    });
+  });
+
+  describe("corrections of a correction", () => {
+    let nextNumber: number;
+
+    beforeEach(() => {
+      nextNumber = 1;
+    });
+
+    /** A one-line coffee invoice, correcting `of`'s line when given. */
+    const issue = async (
+      minute: string,
+      quantity: string,
+      net: string,
+      gross: string,
+      of?: { sale: SaleId; line: string },
+      day = "04",
+    ) => {
+      const line = randomUUID();
+      const sale = await seedSale(suite.db, venue, {
+        invoiceNumber: nextNumber++,
+        issuedAt: new Date(`2026-08-${day}T10:${minute}:00Z`).toISOString(),
+        total: gross,
+        correctsSaleId: of?.sale,
+        lines: [
+          {
+            id: line,
+            vatRate: "10.00",
+            lineTotal: net,
+            lineGross: gross,
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity,
+            correctsLineId: of?.line,
+          },
+        ],
+      });
+      return { sale, line };
+    };
+
+    it("counts no dish at a reversal of a refund that returned none", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const partial = await issue("01", "-1.000", "-5.00", "-5.50", invoice);
+      await issue("02", "1.000", "5.00", "5.50", partial);
+
+      expect(await run()).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "10.00", variants: [] },
+      ]);
+    });
+
+    it("sells the dish again at a partial reversal of the refund that returned it", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const refund = await issue("01", "-1.000", "-10.00", "-11.00", invoice);
+      await issue("02", "1.000", "5.00", "5.50", refund);
+
+      // Half the money is kept again, so the line is no longer wholly refunded.
+      expect(await run()).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "5.00", variants: [] },
+      ]);
+    });
+
+    it("returns the dish again at a reversal of that partial reversal", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const refund = await issue("01", "-1.000", "-10.00", "-11.00", invoice);
+      const reversal = await issue("02", "1.000", "5.00", "5.50", refund);
+      await issue("03", "-1.000", "-5.00", "-5.50", reversal);
+
+      expect(await run()).toEqual([
+        { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+      ]);
+    });
+
+    it("judges a reversal at the moment the first correction in its chain was issued", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const first = await issue("01", "-1.000", "-5.00", "-5.50", invoice);
+      const second = await issue("02", "-1.000", "-5.00", "-5.50", invoice);
+      await seedVoid(
+        suite.db,
+        { saleId: first.sale },
+        new Date("2026-08-05T10:00:00Z").toISOString(),
+      );
+      await issue("00", "1.000", "5.00", "5.50", second, "06");
+
+      expect(await run({ fromBusinessDay: "2026-08-06", toBusinessDay: "2026-08-06" })).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "5.00", variants: [] },
+      ]);
+      expect(await run({ toBusinessDay: "2026-08-06" })).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "10.00", variants: [] },
+      ]);
+    });
   });
 
   it("buckets by issuance and the cutover: a 01:30-local sale is outside its calendar day", async () => {

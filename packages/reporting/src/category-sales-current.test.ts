@@ -201,4 +201,37 @@ describe("computeCategorySales in current categories", () => {
     ]);
     expect(rolledClassifier.mock.calls[0]![0]).toEqual(["p-burger"]);
   });
+
+  it("classifies a correction of an extra alone by its dish's product with extrasIntoDish", async () => {
+    const dish = randomUUID();
+    const extra = randomUUID();
+    const invoice = await sell("2026-08-04", [
+      { id: dish, productId: "p-burger", net: "10.00", gross: "11.00" },
+      { id: extra, parentLineId: dish, productId: "p-cheese", net: "1.00", gross: "1.10" },
+    ]);
+    await sellLines(
+      suite.db,
+      venue,
+      at("2026-08-04"),
+      [
+        {
+          correctsLineId: extra,
+          productId: "p-cheese",
+          net: "-0.50",
+          gross: "-0.55",
+          quantity: "-1.000",
+        },
+      ],
+      invoice,
+    );
+    const classifier = todaysClassifier();
+
+    const rolled = await run(classifier, { extrasIntoDish: true });
+
+    expect(rows(rolled.tree).map((r) => `${r.path}: ${r.gross}/${r.net} ${r.direct}`)).toEqual([
+      "Food: 11.55/10.50 0.00/0.00/0",
+      "Food > Burgers: 11.55/10.50 11.55/10.50/3",
+    ]);
+    expect(classifier.mock.calls[0]![0]).toEqual(["p-burger"]);
+  });
 });
