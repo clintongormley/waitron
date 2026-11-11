@@ -314,31 +314,36 @@ async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMe
     },
     ...(key === undefined ? {} : { onHandshake: (address) => checked.keep(key, address) }),
   };
+  let knownTried = false;
   try {
-    return await openByName(url, host, tracked, known);
+    let failure: unknown = new Error("no address");
+    if (known !== undefined) {
+      knownTried = true;
+      try {
+        return await firstToConnect(url, host, [known], tracked, isIP(host) === 0);
+      } catch (error) {
+        if (!(error instanceof NotConnected)) throw error;
+        failure = error.failure;
+      }
+    }
+    return await openHeard(url, host, tracked, known, failure);
   } catch (error) {
-    if (known !== undefined && !reachedTcp) throw new CheckedAddressUnreached(error);
+    if (knownTried && !reachedTcp) throw new CheckedAddressUnreached(error);
     throw error;
   }
 }
 
-async function openByName(
+/** The addresses the lookup answers with for `host`, other than `known`, tried after it. */
+async function openHeard(
   url: URL,
   host: string,
   options: BoxRequest,
   known: string | undefined,
+  earlier: unknown,
 ): Promise<IncomingMessage> {
   const { signal } = options;
   const lookup = options.lookup ?? askVenueNetwork;
-  let failure: unknown = new Error("no address");
-  if (known !== undefined) {
-    try {
-      return await firstToConnect(url, host, [known], options, isIP(host) === 0);
-    } catch (error) {
-      if (!(error instanceof NotConnected)) throw error;
-      failure = error.failure;
-    }
-  }
+  let failure = earlier;
   const unknown = (addresses: readonly string[]) => addresses.filter((a) => a !== known);
   const first = await untilStopped(() => lookup(host, { fresh: false }), signal);
   try {

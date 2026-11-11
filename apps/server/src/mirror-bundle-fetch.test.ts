@@ -1333,13 +1333,13 @@ describe("a box named on the venue's network is found by asking it", () => {
       const port = portOf(box);
       await switchOff(box);
       let tried = 0;
-      const counting = createTcpServer();
-      counting.on("connection", (socket: Socket) => {
+      const counting = createTcpServer((socket) => {
         tried++;
         socket.destroy();
       });
-      await onIpv6Loopback(counting, Number(port));
-      // The remembered address refuses; the network then claims it again, then ::1.
+      await new Promise<void>((resolve) => counting.listen(Number(port), "127.0.0.1", resolve));
+      closers.push(() => new Promise<void>((resolve) => counting.close(() => resolve())));
+      // The remembered address drops each connection; the network then claims it again, then ::1.
       await failureOf(call(port, checked, () => Promise.resolve(fresh("127.0.0.1", "::1"))));
       expect(tried).toBe(1);
     });
