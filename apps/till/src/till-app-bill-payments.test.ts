@@ -3815,7 +3815,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
   it("says why a merge of a bill holding money was refused, lists both bills as they were, and reads them again", async () => {
     const mergeBills = vi
       .fn()
-      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-4" });
+      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-9" });
     const { el, order, reads } = await openHolding({ mergeBills });
     const before = listed(order);
 
@@ -3823,7 +3823,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
     await flush(el);
 
     expect(mergeBills).toHaveBeenCalledOnce();
-    expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
+    expect(text(banner(el))).toBe(`Bill 2: ${codeMessage("bill.payments_received")}`);
     expect(before).toEqual([
       { bill: "wo-4", owes: money("70.00") },
       { bill: "wo-9", owes: money("12.00") },

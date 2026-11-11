@@ -4258,21 +4258,6 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     expect(newOrderRefusesPaid(el)).toEqual({ billStatus: "settled", locked: true, lines: 0 });
   });
 
-  it("a successful read with no bill returns to the floor and makes no bill", async () => {
-    const createPartyBill = vi.fn();
-    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
-    const el = await onBillTwo(bills, { createPartyBill });
-    bills.mockResolvedValue([]);
-
-    await rereadAfterAnotherTill(el);
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
-    await flush(el);
-
-    expect(tableOrder(el)).toBeNull();
-    expect(floor(el)).not.toBeNull();
-    expect(createPartyBill).not.toHaveBeenCalled();
-  });
-
   it("lines typed on the vanished bill are not sent to the new bill, and are offered for review", async () => {
     let merged = false;
     const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);

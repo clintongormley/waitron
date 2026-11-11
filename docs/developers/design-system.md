@@ -1110,8 +1110,7 @@ Tab button and no side drawer.
   screen sends nothing; choosing another sends `switch-bill` with its id.
 - **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the
   lowest-numbered bill still owing, else the lowest-numbered listed bill, and a `role="status"` line
-  says "Bill 2 is no longer at this table. Now showing Bill 1." A successful read with no bill
-  returns to the floor. Choosing another bill or opening another table
+  says "Bill 2 is no longer at this table. Now showing Bill 1." Choosing another bill or opening another table
   clears it. A bill paid elsewhere is not vanished: it stays on screen, with no line.
 - **The ⋮** is a `wt-row-actions` (label "Table actions", `align="end"`, `opens-below`) holding two
   `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by

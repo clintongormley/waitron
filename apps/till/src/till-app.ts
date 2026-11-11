@@ -12715,10 +12715,6 @@ export class TillApp extends LitElement {
       return;
     const gone = this.activeTabId;
     const next = billToShow(gone, bills);
-    if (next === undefined) {
-      this.#leaveTable();
-      return;
-    }
     const afterSplit =
       gone === undefined &&
       this.#billAfterSplit?.partyId === partyId &&
@@ -12736,17 +12732,24 @@ export class TillApp extends LitElement {
       );
       const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
-      this.billGone = fill(t(numbered ? "table.bill_gone" : "table.bill_gone_unnumbered"), {
-        gone: numbered ? billLabel(was) : "",
-        shown: billLabel(shown!),
-      });
+      this.billGone =
+        shown === undefined
+          ? null
+          : fill(t(numbered ? "table.bill_gone" : "table.bill_gone_unnumbered"), {
+              gone: numbered ? billLabel(was) : "",
+              shown: billLabel(shown),
+            });
       if (sync !== undefined && sync.billId === gone) {
         this.#dropDraft();
-        this.#leftBillDrafts.set(sync, this.#carryCandidate(sync.personId, gone, next));
+        this.#leftBillDrafts.set(
+          sync,
+          next !== undefined && this.#carryCandidate(sync.personId, gone, next),
+        );
       }
     }
     await this.#loadTabLines();
     if (
+      next === undefined ||
       session !== this.#operatorSession ||
       this.activeTabId !== next ||
       this.#draftSync?.billId === next

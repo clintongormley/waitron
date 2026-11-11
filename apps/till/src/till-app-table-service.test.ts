@@ -3899,7 +3899,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
     reads.splice(0, reads.length, []);
     await nameParty(el, "Ana");
     expect(tableOrder(el)!.orderId).toBeUndefined();
-    expect(tableOrder(el)!.billGone).not.toBeNull();
+    expect(tableOrder(el)!.billGone).toBeNull();
 
     reads.splice(0, reads.length, [partyBill("wo-9", "v-2", 3)]);
     await nameParty(el, "Eva");

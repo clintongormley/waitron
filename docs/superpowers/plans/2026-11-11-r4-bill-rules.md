@@ -14,3 +14,5 @@
 4. **Guides and gate (80min):** update `guide/{en,es}/table-service.md` (merge direction, held sentence, “when one is left”). Add dated supersession pointers beside A803 §3.8 and the old 2026-09-25 held refusal. Run each changed suite with the package's `pnpm exec vitest run <named files>`; server guide-content and root guide-links checks cover prose links. Then finish-branch reviews, normal hook and current-head CI; no whole-workspace local run. Target PR within2h45; maximum3h excluding recorded external waits.
 
 **Expected size:** production +35–65/−80–140, tests +100–170/−160–240, prose +20–35/−10–20, excluding this plan. No new test framework or invented-state acceptance suite. The remaining producer trace is established before its failing test; it authorises no broader cleanup.
+
+**CI correction (watcher20:58, 11 November).** Remove the unasked return to Floor on an empty bills read and its new test. Keep generic missing-bill/read-recovery handling and remove the obsolete no-bill explanatory strings. The server replacement invariant and till replacement case remain the finish line.
