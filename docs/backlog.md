@@ -472,7 +472,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a-fresh-demo-venue-opens-its-dashboard-on-a-red-tax-filing-alert)
 
 - **A Demo venue shows Bills closed 0 · €0.00 beside its takings**: the demo seed's sales
-  (`apps/server/scripts/demo-seed/seed-sales.ts`) have no bill behind them. Found by A275 Task 5.
+  (`apps/server/scripts/demo-seed/seed-sales.ts`) have no bill behind them. Fix: seed each sale
+  under a settled bill, as the till does. Found by A275 Task 5.
 
 ### Menus and the catalogue
 

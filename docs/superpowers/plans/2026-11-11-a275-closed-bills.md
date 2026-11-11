@@ -83,11 +83,12 @@ The rest of the table is read, not run.
 ## Changes (one PR, two commits)
 
 **5a, reporting.** New `packages/reporting/src/closed-bills.ts`:
-`computeClosedBills(tx, input: DailyCloseInput): Promise<{ count: number; total: Decimal }>`. One
+`computeClosedBills(tx, input: DailyCloseInput): Promise<ClosedBills>`. One
 query: `working_orders wo join sales s on s.working_order_id = wo.id`, `businessDayWindow(input)` on
 `wo.settled_at`, `nodeScopeClause(input.nodeIds, sql\`wo.node_id\`)`, `count(*)` and
 `cast(coalesce(sum(s.total), 0) as text)` through `rawCentsToDecimal`. The total is the invoices'
-totals as issued, tips not included. Export it from `index.ts`.
+totals as issued, tips not included. Export it, and its `ClosedBills` result type from
+`types.ts`, from `index.ts`.
 
 **5b, report API and dashboard.**
 
@@ -118,6 +119,8 @@ totals as issued, tips not included. Export it from `index.ts`.
    `getSalesOverview` (`:183`) lists them, so both lists gain both tables. Both names are already
    known sources (`live-queries.ts:135–136`), so `scripts/live-subscriptions.test.ts` (which checks
    only that a name is known, `:10–33`) passes as it is.
+   `getDailyClose` also gains `devices`: the Sales report names each device through
+   `namedCashUp` (`report-api.ts`), so renaming a device did not refresh it.
 7. Docs: the A275 lines in `docs/backlog.md` and `docs/backlog/fiscal.md` say Task 5 is built; a
    dated note under the master plan's Task 5 points here.
 
@@ -158,9 +161,10 @@ rebase after #2797 lands and extend its wording.
 - `dashboard-sales-screen.test.ts`: a device with cash €10 and transfer €220 shows no
   `tender-row-device-1-transfer`, `tender-total` €110.00, `transfer-total` €220.00, and `bills-closed`
   "2 · €320.00"; one check in Spanish reads "A pagar por transferencia" and "Cuentas cerradas".
-- `apps/dashboard/src/api/live-queries.test.ts`: five new rows in the existing "refreshes %s when its
+- `apps/dashboard/src/api/live-queries.test.ts`: six new rows in the existing "refreshes %s when its
   contributing %s query changes" table (`:95–218`): `getDailyClose` through `working_orders`,
-  `bill_payments` and `bill_payment_refunds`; `getSalesOverview` through the last two.
+  `bill_payments`, `bill_payment_refunds` and `devices`; `getSalesOverview` through
+  `bill_payments` and `bill_payment_refunds`.
 - About 14 dashboard test stubs gain `closureSummary` (setup only; each stub's `received` equals its
   `tenderTotal`, so every existing assertion holds unedited). The a11y suites rerun on the same
   `renderMetric` primitive; no new a11y case.
@@ -183,9 +187,9 @@ test; (iii) 5b items 2–7 and the dashboard tests.
 ## Size
 
 One PR, about 105 production lines (reader ~30 with its export, API ~25, dashboard types, screens,
-words and five live-refresh entries ~50) and about 235 test lines (reporting ~85 with fixtures,
+words and six live-refresh entries ~50) and about 235 test lines (reporting ~85 with fixtures,
 server ~75 with the cash and card bills, dashboard ~40 plus ~30 of stub setup, live-refresh rows
-~5). Under 150 production lines, so 5a and 5b are two commits, not
+~6). Under 150 production lines, so 5a and 5b are two commits, not
 two PRs. Review weight: the API response and its dashboard twin are a contract between packages, so
 the full `/finish-branch` wave.
 
@@ -201,7 +205,8 @@ the full `/finish-branch` wave.
   (`apps/server/scripts/demo-seed/seed-sales.ts:283–300`, no `workingOrderId`), so a demo stack shows
   "Bills closed 0 · €0.00" beside hundreds of euros in Tender total. The till's sale path always runs
   under a bill, minting one when the request names none (`till-sale.ts:2412–2415`; read, not run),
-  so this is not a real-venue event; the seed is not changed, and the PR says so.
+  so this is not a real-venue event; the seed is not changed, and the PR says so; it is listed in
+  `docs/backlog.md`'s Setup section.
 - **New frozen-close race tests**: already tested in Tasks 0–3 (table above).
 - **Top sellers, categories, VAT and period reports**: they count invoices on the day they were
   issued (`business-day.ts:229–233`) and say nothing about money received; nothing to change.

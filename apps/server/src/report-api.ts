@@ -476,10 +476,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   );
 }
 
-/**
- * The bills closed in the day, and the cash-up split into the amount closed as to be paid by
- * transfer and the money received. A transfer line is a final classification, never money received.
- */
+/** A transfer line is a final classification, never money received, so it stays out of `received`. */
 async function summariseClosures(tx: Transaction, input: DailyCloseInput, cash: CashUp) {
   const billsClosed = await computeClosedBills(tx, input);
   let toBePaidByTransfer = decimal("0.00");

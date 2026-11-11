@@ -4,7 +4,6 @@ import { rawCentsToDecimal } from "@waitron/shared";
 import { businessDayWindow, nodeScopeClause } from "./business-day.js";
 import type { ClosedBills, DailyCloseInput } from "./types.js";
 
-/** Bills whose order was settled in the business day, at their invoices' totals as issued. */
 export async function computeClosedBills(
   tx: Transaction,
   input: DailyCloseInput,

@@ -107,7 +107,7 @@ export class SalesScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-4);
       }
-      table + .counts {
+      table + .metric {
         margin-top: var(--wt-space-2);
       }
       .metric {
@@ -770,13 +770,11 @@ export class SalesScreen extends LitElement {
           </tr>
         </tfoot>
       </table>
-      <div class="counts">
-        ${renderMetric(
-          t("sales.to_be_paid_by_transfer"),
-          money(summary.toBePaidByTransfer),
-          "transfer-total",
-        )}
-      </div>
+      ${renderMetric(
+        t("sales.to_be_paid_by_transfer"),
+        money(summary.toBePaidByTransfer),
+        "transfer-total",
+      )}
     `;
   }
 
