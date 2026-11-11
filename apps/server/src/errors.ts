@@ -649,7 +649,6 @@ declare module "@waitron/shared" {
      */
     "submission.id_reused": { submissionId: string };
     "invoice_correction.not_settled": { saleId: string };
-    /** A cash correction gives cash back; an invoice paid by anything else, even in part, waits. */
     "invoice_correction.not_cash": { saleId: string };
     "invoice_correction.cash_short": { saleId: string; cashLeft: string; gross: string };
     /** The split the till showed is no longer what this correction would file; the fresh one. */
