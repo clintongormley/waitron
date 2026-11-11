@@ -17,7 +17,12 @@ import {
   press,
   inDialog,
 } from "../test/bill-pay-app.js";
-import { cleanupWidgets, mountWidget, cancelThroughDialog } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  cancelThroughDialog,
+  cancellationStubs,
+} from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillProduct } from "./api/client.js";
@@ -191,10 +196,10 @@ it.each(["en-GB", "es-ES"])("keeps a refused line edit on its table in %s", asyn
 
 it.each(["en-GB", "es-ES"])("keeps a refused cancellation in its dialog in %s", async (locale) => {
   const write = vi.fn().mockRejectedValue(refusal);
-  const { el } = await mount(locale, { applyAdjustment: write });
+  const { el } = await mount(locale, { ...cancellationStubs(), cancelItem: write });
   const screen = await openTable(el);
   await cancelThroughDialog(el, screen, "line-1", () => flush(el));
-  const editor = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+  const editor = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
   await editor.updateComplete;
   expect(editor.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
     codeMessage(refusal.code),

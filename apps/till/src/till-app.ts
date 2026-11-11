@@ -1181,7 +1181,7 @@ interface CancellingItem {
   refusal: string;
   reasons?: AdjustmentReason[];
   reasonsLoading?: boolean;
-  refusalField?: "reason" | "note" | null;
+  refusalField?: "quantity" | "reason" | "note" | null;
   approval?: {
     choice: CancelItemChoice;
     authorizers: StaffMember[];
@@ -14805,17 +14805,17 @@ export class TillApp extends LitElement {
         )
           this.errorKey = read === "read" ? "adjust.unconfirmed" : "adjust.unconfirmed_unread";
       } else {
+        this.errorKey = "adjust.unconfirmed";
         await this.#rereadAmounts(open.billId, open.visit);
-        if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
       }
     } else {
-      const field = refusalField(code, "cancel", false);
+      const field = refusalField(code, "cancel", open.unitPrecision === 0);
       const refused: CancellingItem = {
         ...open,
         busy: false,
         approval: undefined,
         refusal: codeMessage(code),
-        refusalField: field === "reason" || field === "note" ? field : null,
+        refusalField: field === "quantity" || field === "reason" || field === "note" ? field : null,
         reasons:
           code === "adjustment.note_required"
             ? open.reasons?.map((reason) =>
@@ -14825,6 +14825,13 @@ export class TillApp extends LitElement {
       };
       if (REASON_REFUSALS.has(code)) await this.#rereadCancelReasons(refused);
       else this.cancellingItem = refused;
+      if (
+        (isBillMoneyRefusal(error) || code === "product.unavailable") &&
+        this.#cancellationCurrent(open)
+      ) {
+        if (open.counter !== undefined) await this.#reloadCounterOrder(open.billId, open.session);
+        else await this.#rereadAmounts(open.billId, open.visit);
+      }
       if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
     }
   }

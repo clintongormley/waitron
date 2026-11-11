@@ -135,7 +135,7 @@ export class TillCancelItemDialog extends LitElement {
   @property({ type: Boolean }) reasonsLoading = false;
   @property({ type: Boolean }) busy = false;
   @property() refusal = "";
-  @property({ attribute: false }) refusalField: "reason" | "note" | null = null;
+  @property({ attribute: false }) refusalField: "quantity" | "reason" | "note" | null = null;
   @state() private draft: Draft = {
     quantity: "",
     outcome: null,
@@ -147,7 +147,7 @@ export class TillCancelItemDialog extends LitElement {
   @state() private active = true;
   @state() private sending = false;
   @state() private shownRefusal = "";
-  @state() private shownRefusalField: "reason" | "note" | null = null;
+  @state() private shownRefusalField: "quantity" | "reason" | "note" | null = null;
   #key?: string;
   #baseline?: Draft;
   #scope?: DraftScope<Draft>;
@@ -317,6 +317,7 @@ export class TillCancelItemDialog extends LitElement {
     if (!this.isConnected || !this.active || this.#busy()) return;
     this.draft = { ...this.draft, ...change };
     if (
+      (change.quantity !== undefined && this.shownRefusalField === "quantity") ||
       (change.reasonId !== undefined && this.shownRefusalField === "reason") ||
       (change.note !== undefined && this.shownRefusalField === "note")
     ) {
@@ -495,7 +496,7 @@ export class TillCancelItemDialog extends LitElement {
                 .max=${Number(this.#remaining())}
                 .value=${live(this.draft.quantity)}
                 .disabled=${this.#busy()}
-                .error=${invalid ? t("table.split_quantity_whole_error") : ""}
+                .error=${invalid ? t("table.split_quantity_whole_error") : this.shownRefusalField === "quantity" ? this.shownRefusal : ""}
                 .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", () => label)}
                 .increaseLabel=${(label: string) => t("action.increase").replace("{label}", () => label)}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {

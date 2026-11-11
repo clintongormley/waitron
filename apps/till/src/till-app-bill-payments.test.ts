@@ -49,6 +49,7 @@ import {
   adjustmentStubs,
   cancelReason,
   cancelThroughDialog,
+  cancellationStubs,
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
@@ -3794,14 +3795,15 @@ describe("till-app: a change refused on a bill that holds money", () => {
   it("shows a Cancel refused because issuing the invoice finds a sold-out dish above the Cancel, and reads the bill again", async () => {
     const { el, order, reads } = await openHolding({
       ...adjustmentStubs(),
-      applyAdjustment: vi
+      ...cancellationStubs(),
+      cancelItem: vi
         .fn()
         .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "p" }),
     });
 
     await cancelThroughDialog(el, order, "line-5", () => flush(el));
 
-    const adjust = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+    const adjust = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
     expect(
       adjust.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
     ).toBe(codeMessage("product.unavailable"));

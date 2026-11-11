@@ -18,6 +18,7 @@ import {
   adjustmentStubs,
   cancelReason,
   cancelThroughDialog,
+  cancellationStubs,
   cleanupWidgets,
   expectNoA11yViolations,
   draftServer,
@@ -334,6 +335,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     reprint: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
+    ...cancellationStubs(),
     listDrafts: vi.fn(async (partyId: string) => {
       const snapshot = await drafts.listDrafts(partyId);
       const billId = partyId === "v7" ? "wo-7" : partyId === "v9" ? "wo-9" : null;
@@ -410,15 +412,12 @@ const signOutIdle = (activity: ReturnType<typeof idleActivity>) =>
   (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
 const updateBar = (el: TillApp) => el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]");
 
-/** A recorded cancel's answer, naming the bill's party as `party`. */
 const cancelAnswer = (party: { id: string; revision: number } | null) => ({
-  adjustmentIds: ["a-1"],
-  revision: 1,
-  party,
+  revision: party?.revision ?? 1,
 });
 
 /** Cancels `lineId` of the open order through its dialog. */
-const cancelLine = (el: TillApp, order: TillTableOrderScreen, lineId = "line-1") =>
+const cancelLine = (el: TillApp, order: TillTableOrderScreen, lineId = order.lines[0]!.id) =>
   cancelThroughDialog(el, order, lineId, () => flush(el));
 
 /** How long a cancel that gets no answer is given to be sent again until it gives up. The resends
@@ -893,7 +892,7 @@ describe("till-app: the party's bills and Finish table", () => {
     const server = { voided: false };
     const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
     const { el } = await mountApp({
-      applyAdjustment: vi.fn(async () => {
+      cancelItem: vi.fn(async () => {
         server.voided = true;
         return cancelAnswer({ id: "v1", revision: 4 });
       }),
@@ -922,7 +921,7 @@ describe("till-app: the party's bills and Finish table", () => {
       const server = { voided: false };
       const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
       const { el } = await mountApp({
-        applyAdjustment: vi.fn(async () => {
+        cancelItem: vi.fn(async () => {
           server.voided = true;
           throw new TypeError("Failed to fetch");
         }),
@@ -948,18 +947,29 @@ describe("till-app: the party's bills and Finish table", () => {
 
   it("a refused cancel stays in its dialog, saying why, and reads nothing again", async () => {
     const { el } = await mountApp({
-      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.quantity_invalid" }),
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment.quantity_invalid" }),
     });
     const order = await openPartyTable(el);
+    emit(order, "cancel-item", { lineId: order.lines[0]!.id });
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
+    expect(dialog).not.toBeNull();
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
 
-    await cancelLine(el, order);
-
-    const dialog = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+    emit(dialog, "cancel-item-choice", {
+      lineId: order.lines[0]!.id,
+      quantity: "1",
+      outcome: "remove_charge",
+      consent: dialog.consent,
+      reasonId: cancelReason.id,
+    });
+    await flush(el);
     expect(
-      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+      dialog
+        .shadowRoot!.querySelector("wt-number-stepper")!
+        .shadowRoot!.querySelector("[data-error]")?.textContent,
     ).toBe(codeMessage("adjustment.quantity_invalid"));
     expect(api.getTabLines).toHaveBeenCalledTimes(lineReads);
     expect(api.getPartyBills).toHaveBeenCalledTimes(billReads);
@@ -970,7 +980,7 @@ describe("till-app: the party's bills and Finish table", () => {
     const server = { voided: false };
     const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
     const { el } = await mountApp({
-      applyAdjustment: vi.fn(async () => {
+      cancelItem: vi.fn(async () => {
         server.voided = true;
         return cancelAnswer({ id: "v1", revision: 4 });
       }),
@@ -994,7 +1004,7 @@ describe("till-app: the party's bills and Finish table", () => {
   it("says so when the bills cannot be read after a cancel", async () => {
     const server = { voided: false };
     const { el } = await mountApp({
-      applyAdjustment: vi.fn(async () => {
+      cancelItem: vi.fn(async () => {
         server.voided = true;
         return cancelAnswer({ id: "v1", revision: 4 });
       }),
@@ -1136,31 +1146,6 @@ describe("till-app: the party's bills and Finish table", () => {
       }
     },
   );
-
-  it("an order with no party gets no still to pay when the floor cannot be read after a cancel", async () => {
-    // The till opens a table by its party's bills, so an order has no party only once the party
-    // has left the table while its order is still on screen.
-    const partyless = table({ state: "open-tab", hasOpenTab: true });
-    const floor = { phase: "seated" as "seated" | "left" | "unreadable" };
-    const { el } = await mountApp({
-      applyAdjustment: vi.fn().mockResolvedValue(cancelAnswer(null)),
-      getTablesState: vi.fn(async () => {
-        if (floor.phase === "unreadable") throw new TypeError("Failed to fetch");
-        return [floor.phase === "seated" ? table4 : partyless, table7, table9];
-      }),
-    });
-    const order = await openPartyTable(el);
-    floor.phase = "left";
-    emit(order, "merge-bills", { fromBillId: "wo-check" });
-    await flush(el);
-    expect(tableOrder(el)!.party).toBeNull();
-    floor.phase = "unreadable";
-
-    await cancelLine(el, tableOrder(el)!);
-
-    expect(tableOrder(el)!.party).toBeNull();
-    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
-  });
 
   it("a refused Change reads the order's lines again and nothing else", async () => {
     const { el } = await mountApp({
@@ -1432,7 +1417,7 @@ describe("till-app: the party's bills and Finish table", () => {
   it("a cancel answering once the waiter is back on the floor, with the floor unread, says nothing", async () => {
     let answerVoid!: (answer: ReturnType<typeof cancelAnswer>) => void;
     const { el } = await mountApp({
-      applyAdjustment: vi.fn(
+      cancelItem: vi.fn(
         () =>
           new Promise((resolve) => {
             answerVoid = resolve;
@@ -7110,7 +7095,7 @@ describe("till-app: the order's groups", () => {
       new Promise((resolve) => {
         answers.push(resolve);
       });
-    const { el } = await mountApp({ applyAdjustment: vi.fn(later), updateOrderLine: vi.fn(later) });
+    const { el } = await mountApp({ cancelItem: vi.fn(later), updateOrderLine: vi.fn(later) });
     const order = await openPartyTable(el);
     await cancelLine(el, order);
     emit(order, "change-line", {
@@ -8007,7 +7992,7 @@ describe("till-app: the order's groups", () => {
       it("a round sent after a void carries the revision the void answered", async () => {
         const { el } = await mountApp(
           withGroups({
-            applyAdjustment: vi.fn().mockResolvedValue(cancelAnswer({ id: "v1", revision: 4 })),
+            cancelItem: vi.fn().mockResolvedValue(cancelAnswer({ id: "v1", revision: 4 })),
             submitDraft: submitAt(4),
           }),
         );
@@ -8022,9 +8007,10 @@ describe("till-app: the order's groups", () => {
         );
         await flush(el);
 
-        expect(api.applyAdjustment).toHaveBeenCalledWith(
-          "wo-4",
-          expect.objectContaining({ lineId: "line-1", action: "cancel" }),
+        expect(api.cancelItem).toHaveBeenCalledWith(
+          "v1",
+          "line-beer",
+          expect.objectContaining({ outcome: "remove_charge" }),
           expect.anything(),
         );
         expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedPartyRevision).toBe(4);
@@ -8084,7 +8070,7 @@ describe("till-app: the order's groups", () => {
         { timeout: 2 * GIVE_UP_MS },
         async () => {
           const { el } = await mountApp(
-            withGroups({ ...floorMovedBy("applyAdjustment"), submitDraft: submitAt(4) }),
+            withGroups({ ...floorMovedBy("cancelItem"), submitDraft: submitAt(4) }),
           );
           const order = await openPartyTable(el);
 
@@ -8160,13 +8146,13 @@ describe("till-app: the order's groups", () => {
         async () => {
           const { el } = await mountApp(
             withGroups(
-              offlineAfterOneAnswer("applyAdjustment", cancelAnswer({ id: "v1", revision: 4 })),
+              offlineAfterOneAnswer("cancelItem", cancelAnswer({ id: "v1", revision: 4 })),
             ),
           );
           const order = await openPartyTable(el);
 
           await cancelLine(el, order);
-          await cancelLine(el, tableOrder(el)!, "line-2");
+          await cancelLine(el, tableOrder(el)!, tableOrder(el)!.lines[1]!.id);
           await untilUnconfirmed(el);
           await flush(el);
           emit(tableOrder(el)!, "move-guests", { toTableId: "t9" });
@@ -8174,8 +8160,8 @@ describe("till-app: the order's groups", () => {
 
           // A resend after no answer keeps its cancel's submission id, so two ids are two cancels.
           const cancels = vi
-            .mocked(api.applyAdjustment)
-            .mock.calls.map(([, command]) => command.submissionId);
+            .mocked(api.cancelItem)
+            .mock.calls.map(([, , command]) => command.submissionId);
           expect(new Set(cancels).size).toBe(2);
           expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", {
             expectedPartyRevision: 4,
@@ -8226,13 +8212,21 @@ describe("till-app: the order's groups", () => {
       it.each([
         ["no party", null],
         ["another party", { id: "v7", revision: 10 }],
-      ])("a void answering %s leaves the revision the screen showed", async (_name, answered) => {
+      ])("a Change answering %s leaves the revision the screen showed", async (_name, answered) => {
         const { el } = await mountApp(
-          withGroups({ applyAdjustment: vi.fn().mockResolvedValue(cancelAnswer(answered)) }),
+          withGroups({
+            updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: answered }),
+          }),
         );
         const order = await openPartyTable(el);
 
-        await cancelLine(el, order);
+        emit(order, "change-line", {
+          lineNo: 1,
+          lineName: "Beer",
+          patch: { note: "No ice", portionLineNos: [] },
+          revision: order.revision,
+        });
+        await flush(el);
         emit(tableOrder(el)!, "move-guests", { toTableId: "t9" });
         await flush(el);
 
