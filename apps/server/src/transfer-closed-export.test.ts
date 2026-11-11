@@ -1,5 +1,10 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+import { activityLog, withTransaction } from "@waitron/db";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { decimal } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readOrderRevision } from "./working-order.js";
@@ -12,10 +17,18 @@ import {
   transferCloseVenue,
   type TransferCloseKit,
 } from "./testing/transfer-close-fixture.js";
-import { listTransferClosedInvoices } from "./transfer-closed-export.js";
+import { TRANSFER_EXPORT_WORDS } from "./i18n/transfer-export.js";
+import { mountReportApi } from "./report-api.js";
+import {
+  listTransferClosedInvoices,
+  renderTransferClosedCsv,
+  type TransferClosedInvoice,
+} from "./transfer-closed-export.js";
 import "./errors.js";
 
 let t: TransferCloseKit;
+let manager = { id: "", cookie: "" };
+let supervisorCookie = "";
 
 useVenueDb({
   resetPerTest: false,
@@ -23,6 +36,19 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     t = await transferCloseVenue(db);
+    const sessions = await withTransaction(db, async (tx) => {
+      const sessionFor = async (role: "manager" | "supervisor") => {
+        const [person] = await tx
+          .insert(persons)
+          .values({ displayName: `The ${role}`, pinHash: hashPin("1234"), role })
+          .returning({ id: persons.id });
+        const session = await startManagementSession(tx, { personId: person!.id });
+        return { id: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+      };
+      return { manager: await sessionFor("manager"), supervisor: await sessionFor("supervisor") };
+    });
+    manager = sessions.manager;
+    supervisorCookie = sessions.supervisor.cookie;
   },
 });
 
@@ -87,8 +113,8 @@ describe("listTransferClosedInvoices", () => {
     expect(await list(days.closedNow, days.closedNow)).toEqual([
       expect.objectContaining({
         invoiceType: "F1",
-        recipientName: "Cliente SL",
-        recipientTaxId: "B12345674",
+        recipientName: RECIPIENT.legalName,
+        recipientTaxId: RECIPIENT.taxId,
         total: "12.00",
       }),
     ]);
@@ -116,5 +142,129 @@ describe("listTransferClosedInvoices", () => {
       ["F1", days.closedNow],
       ["F2", days.closedLater],
     ]);
+  });
+});
+
+const F2_ROW: TransferClosedInvoice = {
+  invoiceNumber: "A/41",
+  invoiceType: "F2",
+  issueDate: "2026-11-03",
+  closedOn: "2026-11-04",
+  recipientName: null,
+  recipientTaxId: null,
+  base: decimal("14.88"),
+  vat: decimal("3.12"),
+  total: decimal("18.00"),
+  correctedBy: ["R/1", "R/2"],
+  correctionsTotal: decimal("-1.21"),
+};
+const F1_ROW: TransferClosedInvoice = {
+  invoiceNumber: "F/7",
+  invoiceType: "F1",
+  issueDate: "2026-11-05",
+  closedOn: "2026-11-05",
+  recipientName: '=HYPERLINK("x")',
+  recipientTaxId: "B12345674",
+  base: decimal("80.00"),
+  vat: decimal("16.80"),
+  total: decimal("96.80"),
+  correctedBy: [],
+  correctionsTotal: decimal("0.00"),
+};
+const HEADER_KEYS = [
+  "invoiceNumber",
+  "invoiceType",
+  "issueDate",
+  "closedOn",
+  "recipientName",
+  "recipientTaxId",
+  "base",
+  "vat",
+  "total",
+  "correctedBy",
+  "correctionsTotal",
+] as const;
+const EN_HEADER =
+  '"Invoice number","Type","Issue date","Closed on","Customer","Customer tax number","Base (EUR)","VAT (EUR)","Total (EUR)","Corrected by","Corrections total (EUR)"';
+const ES_HEADER = HEADER_KEYS.map((key) => `"${TRANSFER_EXPORT_WORDS.es[key]}"`).join(",");
+
+function text(bytes: Uint8Array): string {
+  return new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
+}
+
+describe("renderTransferClosedCsv", () => {
+  it("writes a header and one quoted line per invoice, guarded against formulas", () => {
+    expect(text(renderTransferClosedCsv([F2_ROW, F1_ROW], "en"))).toBe(
+      `\uFEFF${EN_HEADER}\r\n` +
+        '"A/41","F2","03/11/2026","04/11/2026","","","14.88","3.12","18.00","R/1 R/2","-1.21"\r\n' +
+        '"F/7","F1","05/11/2026","05/11/2026","\'=HYPERLINK(""x"")","B12345674","80.00","16.80","96.80","","0.00"\r\n',
+    );
+    expect(text(renderTransferClosedCsv([], "en"))).toBe(`\uFEFF${EN_HEADER}\r\n`);
+  });
+
+  it("writes Spanish words and decimal commas for a Spanish venue", () => {
+    expect(text(renderTransferClosedCsv([F2_ROW], "es"))).toBe(
+      `\uFEFF${ES_HEADER}\r\n` +
+        '"A/41","F2","03/11/2026","04/11/2026","","","14,88","3,12","18,00","R/1 R/2","-1,21"\r\n',
+    );
+  });
+});
+
+describe("GET /management-api/reports/closed-by-transfer", () => {
+  const app = new Hono();
+  const mounted = () => {
+    if (app.routes.length === 0)
+      mountReportApi(
+        app,
+        { db: t.venue.db, cfg: { nodeId: t.venue.cfg.nodeId }, venueLocale: "es-ES" },
+        () => {},
+      );
+    return app;
+  };
+  const get = (cookie: string, day: string) =>
+    mounted().request(`/management-api/reports/closed-by-transfer?from=${day}&to=${day}`, {
+      headers: { cookie },
+    });
+  const downloads = () =>
+    t.venue.db
+      .select({
+        personId: activityLog.personId,
+        subjectKind: activityLog.subjectKind,
+        data: activityLog.data,
+      })
+      .from(activityLog)
+      .where(eq(activityLog.kind, "transfer_export.downloaded"));
+
+  it("answers a manager with the venue-language file and records the download", async () => {
+    const day = days.closedLater!;
+    const res = await get(manager.cookie, day);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    expect(res.headers.get("content-disposition")).toBe(
+      `attachment; filename="closed-by-transfer-${day}-${day}.csv"`,
+    );
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    const body = new Uint8Array(await res.arrayBuffer());
+    expect(body).toEqual(renderTransferClosedCsv(await list(day, day), "es"));
+    const lines = text(body).split("\r\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[1]).toMatch(/^"A\/1",.*"R\/1","-1,21"$/);
+    expect(await downloads()).toEqual([
+      {
+        personId: manager.id,
+        subjectKind: "report",
+        data: { from: day, to: day, rows: 1 },
+      },
+    ]);
+  });
+
+  it("refuses a supervisor, who may view reports but not export them", async () => {
+    const res = await get(supervisorCookie, days.closedLater!);
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await downloads()).toHaveLength(1);
   });
 });

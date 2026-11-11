@@ -3,6 +3,9 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { invoiceSeries, sales, transferClosures, type Transaction } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
 import { centsToDecimal, decimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
+import { csvCell } from "./attendance-export-csv.js";
+import { TRANSFER_EXPORT_WORDS } from "./i18n/transfer-export.js";
+import { amountCell } from "./misdated-sales-csv.js";
 
 export interface TransferClosedInvoice {
   invoiceNumber: string;
@@ -92,4 +95,51 @@ export async function listTransferClosedInvoices(
       correctionsTotal: moneySum(corrected?.totals ?? []),
     };
   });
+}
+
+function dayCell(isoDay: string): string {
+  const [year, month, day] = isoDay.split("-");
+  return csvCell(`${day}/${month}/${year}`);
+}
+
+export function renderTransferClosedCsv(
+  rows: readonly TransferClosedInvoice[],
+  language: "en" | "es",
+): Uint8Array<ArrayBuffer> {
+  const w = TRANSFER_EXPORT_WORDS[language];
+  const lines = [
+    [
+      w.invoiceNumber,
+      w.invoiceType,
+      w.issueDate,
+      w.closedOn,
+      w.recipientName,
+      w.recipientTaxId,
+      w.base,
+      w.vat,
+      w.total,
+      w.correctedBy,
+      w.correctionsTotal,
+    ]
+      .map(csvCell)
+      .join(","),
+  ];
+  for (const row of rows) {
+    lines.push(
+      [
+        csvCell(row.invoiceNumber),
+        csvCell(row.invoiceType),
+        dayCell(row.issueDate),
+        dayCell(row.closedOn),
+        csvCell(row.recipientName ?? ""),
+        csvCell(row.recipientTaxId ?? ""),
+        amountCell(row.base, language),
+        amountCell(row.vat, language),
+        amountCell(row.total, language),
+        csvCell(row.correctedBy.join(" ")),
+        amountCell(row.correctionsTotal, language),
+      ].join(","),
+    );
+  }
+  return new TextEncoder().encode(`\uFEFF${lines.join("\r\n")}\r\n`);
 }

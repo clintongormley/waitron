@@ -16,6 +16,7 @@ import {
   printers,
   readHistoryNodes,
   readTenant,
+  recordActivity,
   withTransaction,
   type Database,
   type Transaction,
@@ -46,6 +47,8 @@ import { readJsonBody, requireBodyUuid, requireEnum } from "@waitron/server-kit"
 import { requireManagementSession } from "@waitron/server-kit";
 import { requirePeriod, requireRange } from "@waitron/server-kit";
 import { formatCategorySalesPage } from "./category-sales-page.js";
+import { toLanguage } from "./personal-data-export-api.js";
+import { listTransferClosedInvoices, renderTransferClosedCsv } from "./transfer-closed-export.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import type { Logger } from "./logger.js";
 
@@ -162,7 +165,7 @@ async function countOpenTables(tx: Transaction): Promise<{ open: number; total: 
 
 /**
  * Mount reporting routes through the shared authorization gate. report.view
- * permits operational reports; report.export permits the modelo 303 export.
+ * permits operational reports; report.export permits the modelo 303 export and the transfer file.
  * The overview aggregates all tenant nodes; per-node reports read cfg.nodeId and the boxes it took
  * over from.
  * The modelo 303 file remains a candidate requiring uploader validation and asesor
@@ -345,6 +348,35 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         return { from, to, vat, topSellers };
       });
       return c.json(result);
+    }),
+  );
+
+  // The accountant's file of invoices whose bills were closed by transfer on a business day in an
+  // inclusive range, venue-wide; each download is recorded.
+  app.get("/management-api/reports/closed-by-transfer", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
+      const rows = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: REPORT_EXPORT_PERMISSION,
+        });
+        const invoices = await listTransferClosedInvoices(tx, { from, to });
+        await recordActivity(tx, {
+          kind: "transfer_export.downloaded",
+          subjectId: "closed-by-transfer",
+          personId: authorizedBy,
+          data: { from, to, rows: invoices.length },
+        });
+        return invoices;
+      });
+      return c.body(renderTransferClosedCsv(rows, toLanguage(deps.venueLocale)), 200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="closed-by-transfer-${from}-${to}.csv"`,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
     }),
   );
 
