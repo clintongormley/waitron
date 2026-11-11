@@ -33,12 +33,11 @@ useVenueDb({
       fullSeriesId = series!.id;
       const [agent] = await tx
         .insert(printAgents)
-        .values({ locationId: venue.cfg.locationId, name: "Back office agent", tokenHash: "x" })
+        .values({ name: "Back office agent", tokenHash: "x" })
         .returning({ id: printAgents.id });
       const [office] = await tx
         .insert(pagePrinters)
         .values({
-          locationId: venue.cfg.locationId,
           name: "Oficina",
           host: "192.0.2.20",
           port: 631,

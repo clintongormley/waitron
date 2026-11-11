@@ -2096,7 +2096,6 @@ describe("the device's invoice printer", () => {
     const [row] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: cfg.locationId,
         name: active ? "Back office" : "Old office",
         host: `192.0.2.${active ? 40 : 41}`,
         port: 631,
@@ -3173,7 +3172,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
       await withTransaction(suite.db, async (tx) => {
         await tx.insert(pagePrinters).values({
           id: pagePrinterId,
-          locationId: cfg.locationId,
           name: "Invoice A4",
           host: "127.0.0.1",
           port: 631,
@@ -3297,7 +3295,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(pagePrinters).values({
         id: pagePrinterId,
-        locationId: cfg.locationId,
         name: "Invoice A4",
         host: "127.0.0.1",
         port: 631,

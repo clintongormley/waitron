@@ -125,7 +125,7 @@ beforeEach(async () => {
   let locationId: string;
   ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
-  const till = (await seedDevice(suite.db, { locationId })).deviceId;
+  const till = (await seedDevice(suite.db, {})).deviceId;
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Supervisor", pinHash: hashPin("1234"), role: "supervisor" })

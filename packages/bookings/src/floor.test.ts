@@ -43,7 +43,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
 async function makeTable(v: Venue, label: string): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: v.locationId, name: label })
+    .values({ name: label })
     .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (id, created_at, location_id, zone_id, label)

@@ -663,10 +663,7 @@ describe("routing cells in a staged import", () => {
           name: "Terrace",
           departmentId: department.id,
         });
-        const [station] = await tx
-          .insert(kitchenStations)
-          .values({ locationId: cfg.locationId, name: "Bar" })
-          .returning();
+        const [station] = await tx.insert(kitchenStations).values({ name: "Bar" }).returning();
         const category = await createCategory(tx, { name: "Drinks" });
         const menu = await createCatalogue(tx, {
           name: `Configuration import menu ${cfg.locationId}`,

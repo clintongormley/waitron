@@ -56,7 +56,6 @@ describe("working_orders state machine (enforce_transition)", () => {
       .insert(workingOrders)
       .values({
         ...origin,
-        locationId: LOCATION_A,
         nodeId: nodeA,
         orderNumber,
         status: "open",
@@ -502,7 +501,6 @@ describe("working_orders state machine (enforce_transition)", () => {
             source: "device",
             deviceId: deviceA,
             nodeId: nodeA,
-            locationId: LOCATION_A,
             orderNumber: nextOrderNumber++,
             status: "open",
             openedAt: AT,

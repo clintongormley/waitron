@@ -2871,9 +2871,7 @@ describe("startServer, against a migrated venue directory", () => {
       deviceId: null,
       orderNumber: 990_002,
     });
-    const { deviceId } = await seedDevice(sharedDb, {
-      locationId: TILL_LOCATION_ID,
-    });
+    const { deviceId } = await seedDevice(sharedDb, {});
     const [payment] = await sharedDb
       .insert(billPayments)
       .values({
@@ -3274,7 +3272,6 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     const [printer] = await sharedDb
       .insert(printers)
       .values({
-        locationId: cfg.locationId,
         name: "Probe kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
@@ -3282,7 +3279,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       .returning({ id: printers.id });
     const [station] = await sharedDb
       .insert(kitchenStations)
-      .values({ locationId: cfg.locationId, name: "Probe kitchen", isDefault: false })
+      .values({ name: "Probe kitchen", isDefault: false })
       .returning({ id: kitchenStations.id });
     await sharedDb
       .insert(stationPrinters)
@@ -3290,7 +3287,6 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     const [job] = await sharedDb
       .insert(printJobs)
       .values({
-        locationId: cfg.locationId,
         printerId: printer!.id,
         payload: Uint8Array.from([1]),
         kind: "document",

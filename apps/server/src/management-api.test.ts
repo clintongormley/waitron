@@ -876,7 +876,6 @@ describe("/management-api/tables", () => {
         tx
           .insert(floorZones)
           .values({
-            locationId: venueId,
             name: unique("Unassigned disabled"),
             active: false,
           })
@@ -2261,7 +2260,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       const [row] = await suite.db
         .insert(printers)
         .values({
-          locationId: venueId,
           name: unique("Ticket printer"),
           transport: "network_tcp",
           host: "10.0.0.20",

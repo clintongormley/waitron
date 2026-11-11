@@ -189,7 +189,6 @@ async function prior(
         source: "device",
         deviceId: cfg.origin.deviceId,
         nodeId: cfg.nodeId,
-        locationId: cfg.locationId,
         method: target.capture === undefined ? "cash" : "card",
         provider: target.capture?.provider,
         providerPaymentRef: target.capture?.paymentRef,

@@ -115,7 +115,6 @@ async function seedPrinter(
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: venue.cfg.locationId,
       name,
       transport: "network_tcp",
       host: "10.0.0.9",

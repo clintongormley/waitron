@@ -151,7 +151,6 @@ async function refund(state: "completed" | "pending" | "failed", refundNode = no
     source: "device",
     deviceId: returnedOn,
     nodeId: refundNode,
-    locationId,
     method: "card",
     provider: "fake",
     providerPaymentRef: saleId,

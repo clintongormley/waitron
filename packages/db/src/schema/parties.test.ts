@@ -42,11 +42,11 @@ describe("parties, party_tables and service_commands", () => {
     return inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION, name: label })
+        .values({ name: label })
         .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
-        .values({ locationId: LOCATION, label, zoneId: zone!.id })
+        .values({ label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
       return row!.id;
     });

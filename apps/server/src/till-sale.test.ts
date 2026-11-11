@@ -1996,7 +1996,6 @@ describe("ordering extras and options — parent + child lines", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
       });
@@ -2056,7 +2055,6 @@ describe("ordering extras and options — parent + child lines", () => {
     const tabId = await withTransaction(suite.db, async (tx) => {
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
       });
@@ -2089,7 +2087,6 @@ describe("ordering extras and options — parent + child lines", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa NC",
       });
@@ -2349,7 +2346,6 @@ describe("ordering extras and options — parent + child lines", () => {
       const tableId = randomUUID();
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: `Mesa ${tableId.slice(0, 4)}`,
       });
@@ -2837,7 +2833,6 @@ describe("ordering extras and options — parent + child lines", () => {
       const tableId = randomUUID();
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa V",
       });

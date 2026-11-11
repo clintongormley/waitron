@@ -136,7 +136,7 @@ export async function seedKitchenStation(
   const { locationId, name = "Cocina", isDefault = true } = opts;
   const [row] = await db
     .insert(kitchenStations)
-    .values({ locationId, name, isDefault })
+    .values({ name, isDefault })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
@@ -173,7 +173,6 @@ export async function seedDevice(
   const [row] = await db
     .insert(devices)
     .values({
-      locationId,
       deviceProfileId: profileId,
       label,
       tokenHash: "seeded",
@@ -194,7 +193,6 @@ export async function seedWorkingOrder(
       source: "dashboard",
       orderNumber: 1,
       ...values,
-      locationId: await venueLocationId(db),
     })
     .returning();
   return row!;

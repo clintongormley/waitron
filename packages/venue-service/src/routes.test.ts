@@ -79,11 +79,11 @@ async function fixture(
   const scopedLocationId = location!.id;
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: scopedLocationId, name: "Terrace" })
+    .values({ name: "Terrace" })
     .returning({ id: floorZones.id });
   const [station] = await db
     .insert(kitchenStations)
-    .values({ locationId: scopedLocationId, name: "Terrace bar", isDefault: true })
+    .values({ name: "Terrace bar", isDefault: true })
     .returning({ id: kitchenStations.id });
 
   const { menuId, categoryId, managerSessionId, staffSessionId, supervisorSessionId } =
@@ -770,7 +770,7 @@ describe("whole service settings saves", () => {
   async function seedCourse(fx: { locationId: string }, name: string, active = true) {
     const [row] = await db
       .insert(kitchenCourses)
-      .values({ locationId: fx.locationId, name, displayOrder: 1, active })
+      .values({ name, displayOrder: 1, active })
       .returning({ id: kitchenCourses.id });
     return row!.id;
   }
@@ -1465,7 +1465,6 @@ describe("venue service management routes", () => {
     const [secondZone] = await db
       .insert(floorZones)
       .values({
-        locationId: fx.locationId,
         name: "Dining room",
       })
       .returning({ id: floorZones.id });
@@ -1481,10 +1480,10 @@ describe("venue service management routes", () => {
       const tables = await tx
         .insert(diningTables)
         .values([
-          { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
-          { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId },
-          { locationId: fx.locationId, label: "D1", zoneId: secondZone!.id },
-          { locationId: fx.locationId, label: "D2", zoneId: secondZone!.id },
+          { label: "T1", zoneId: fx.zoneId },
+          { label: "T2", zoneId: fx.zoneId },
+          { label: "D1", zoneId: secondZone!.id },
+          { label: "D2", zoneId: secondZone!.id },
         ])
         .returning();
       await tx
@@ -1537,8 +1536,8 @@ describe("venue service management routes", () => {
     const tables = await db
       .insert(diningTables)
       .values([
-        { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
-        { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId },
+        { label: "T1", zoneId: fx.zoneId },
+        { label: "T2", zoneId: fx.zoneId },
       ])
       .returning();
     await db
@@ -1862,7 +1861,7 @@ describe("venue service management routes", () => {
     const path = `/management-api/venue-service/stations/${fx.stationId}/fallback`;
     const [another] = await db
       .insert(kitchenStations)
-      .values({ locationId: fx.locationId, name: "Second bar" })
+      .values({ name: "Second bar" })
       .returning({ id: kitchenStations.id });
     const readRouting = async () => {
       const response = await send(
@@ -2599,7 +2598,7 @@ describe("routing cell route", () => {
     });
     const [offStation] = await db
       .insert(kitchenStations)
-      .values({ locationId: fx.locationId, name: "Off", active: false })
+      .values({ name: "Off", active: false })
       .returning({ id: kitchenStations.id });
     for (const [address, target, status, error] of [
       [
@@ -2674,7 +2673,7 @@ describe("routing cell route", () => {
     const unknown = crypto.randomUUID();
     const [offStation] = await db
       .insert(kitchenStations)
-      .values({ locationId: fx.locationId, name: "Off", active: false })
+      .values({ name: "Off", active: false })
       .returning({ id: kitchenStations.id });
     for (const [address, target, error] of [
       [
@@ -2748,7 +2747,7 @@ describe("routing cell route", () => {
     await lager(fx);
     const [upstairs] = await db
       .insert(kitchenStations)
-      .values({ locationId: fx.locationId, name: "Upstairs" })
+      .values({ name: "Upstairs" })
       .returning({ id: kitchenStations.id });
     const change = {
       address: categoryCell(fx.categoryId),
@@ -3003,7 +3002,7 @@ describe("a routing cell's period choices on the routes", () => {
       });
       const [station] = await tx
         .insert(kitchenStations)
-        .values({ locationId: fx.locationId, name: "Downstairs bar" })
+        .values({ name: "Downstairs bar" })
         .returning({ id: kitchenStations.id });
       return {
         lunch: period.id,
@@ -3571,7 +3570,7 @@ describe("atomic zone editor save", () => {
 
   it("a duplicate name refuses without changing name or policy", async () => {
     const fx = await settingsFixture();
-    await db.insert(floorZones).values({ locationId: fx.locationId, name: "Garden" });
+    await db.insert(floorZones).values({ name: "Garden" });
     const before = await rawSettingsSnapshot();
     const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
     expect(response.status).toBe(409);
@@ -3613,7 +3612,7 @@ describe("atomic zone editor save", () => {
       if (kind === "unassigned") {
         const [zone] = await db
           .insert(floorZones)
-          .values({ locationId: fx.locationId, name: "Unassigned" })
+          .values({ name: "Unassigned" })
           .returning({ id: floorZones.id });
         id = zone!.id;
       }

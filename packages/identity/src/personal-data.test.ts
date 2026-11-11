@@ -144,11 +144,9 @@ async function seedFull(
   );
 
   const { deviceId } = await seedDevice(db, {
-    locationId,
     label: s("Bar tablet"),
   });
   const { deviceId: secondDeviceId } = await seedDevice(db, {
-    locationId,
     label: s("Kitchen phone"),
   });
   // Later-first, as for every list below.

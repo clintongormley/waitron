@@ -35,11 +35,11 @@ describe("receipt reprint record", () => {
       .returning({ id: invoiceSeries.id });
     const [printer] = await db
       .insert(printers)
-      .values({ locationId: LOCATION, name: "Printer", transport: "network_tcp", host: "10.0.0.5" })
+      .values({ name: "Printer", transport: "network_tcp", host: "10.0.0.5" })
       .returning({ id: printers.id });
     const [job] = await db
       .insert(printJobs)
-      .values({ locationId: LOCATION, printerId: printer!.id, payload: new Uint8Array([1]) })
+      .values({ printerId: printer!.id, payload: new Uint8Array([1]) })
       .returning({ id: printJobs.id });
     const [sale] = await db
       .insert(sales)

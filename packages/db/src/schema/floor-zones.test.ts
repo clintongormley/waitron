@@ -41,10 +41,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
   // the row is refused `NOT NULL constraint failed: floor_zones.id`.
   async function seedZone(location: string, name: string): Promise<string> {
     return inTx(async (tx) => {
-      const [row] = await tx
-        .insert(floorZones)
-        .values({ locationId: location, name })
-        .returning({ id: floorZones.id });
+      const [row] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
       return row!.id;
     });
   }
@@ -62,7 +59,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
     const [table] = await inTx((tx) =>
       tx
         .insert(diningTables)
-        .values({ locationId: LOCATION_A, label: "T-zone", zoneId: initialZoneId })
+        .values({ label: "T-zone", zoneId: initialZoneId })
         .returning({ id: diningTables.id }),
     );
     const tableId = table!.id;

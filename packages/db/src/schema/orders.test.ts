@@ -311,7 +311,7 @@ describe("working_orders", () => {
       .set({ status: "settled", settledAt: AT })
       .where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.update(workingOrders).set({ locationId: LOCATION_A }).where(eq(workingOrders.id, id)),
+      db.update(workingOrders).set({}).where(eq(workingOrders.id, id)),
     );
     expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
@@ -320,7 +320,7 @@ describe("working_orders", () => {
     const id = await openOrder(db);
     await db.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.update(workingOrders).set({ locationId: LOCATION_A }).where(eq(workingOrders.id, id)),
+      db.update(workingOrders).set({}).where(eq(workingOrders.id, id)),
     );
     expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
@@ -411,7 +411,6 @@ describe("working_orders", () => {
       .values({
         source: "device",
         deviceId,
-        locationId: LOCATION_A,
         orderNumber: ++orderNumberSeq,
         openedAt: AT,
       })
@@ -439,7 +438,6 @@ describe("working_orders", () => {
       db.insert(workingOrders).values({
         source: "kitchen_timer",
         deviceId,
-        locationId: LOCATION_A,
         orderNumber: ++orderNumberSeq,
         openedAt: AT,
       }),
@@ -494,7 +492,6 @@ describe("working_orders", () => {
       db.insert(workingOrders).values({
         source: "device",
         deviceId: ghost,
-        locationId: LOCATION_A,
         orderNumber: ++orderNumberSeq,
         openedAt: AT,
       }),
@@ -503,7 +500,6 @@ describe("working_orders", () => {
     const noLocation = await captureError(() =>
       db.insert(workingOrders).values({
         ...DASHBOARD_ORDER,
-        locationId: ghost,
         orderNumber: ++orderNumberSeq,
         openedAt: AT,
       }),

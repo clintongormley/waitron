@@ -72,7 +72,7 @@ async function setup() {
   });
   const venueId = await venueLocationId(db);
   const locationId = venueId;
-  const stationId = await seedKitchenStation(db, { locationId });
+  const stationId = await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg: WithVenueRowId = {
     nodeId: brandNodeId(nodeId),

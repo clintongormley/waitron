@@ -43,7 +43,7 @@ async function routeCategory(_locationId: string, categoryId: string, zoneId?: s
 async function seedZone(locationId: string): Promise<string> {
   const [zone] = await suite.db
     .insert(floorZones)
-    .values({ locationId, name: "Terrace" })
+    .values({ name: "Terrace" })
     .returning({ id: floorZones.id });
   return zone!.id;
 }

@@ -1192,7 +1192,6 @@ it("selects a pending refund and preserves its completed outcome on return", asy
       source: "device",
       deviceId: device.deviceId,
       nodeId: source.nodeId,
-      locationId: location!.location_id,
       method: "card",
       provider: "recorded-provider",
       providerPaymentRef: "recorded-charge",
@@ -1336,7 +1335,6 @@ it.each([
       tipAmount: 200,
       deviceId: currentNode.deviceId,
       nodeId: currentNode.nodeId,
-      locationId: currentLocation!.location_id,
     });
     expect(
       await withTransaction(receiver.db, (tx) =>

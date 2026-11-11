@@ -215,7 +215,7 @@ async function kitchenStation(config: WithVenueRowId<OriginConfig>): Promise<str
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, config.locationId));
-  return existing?.id ?? seedKitchenStation(suite.db, { locationId: config.locationId });
+  return existing?.id ?? seedKitchenStation(suite.db, {});
 }
 
 /** The merge the till sends when a waiter leaves an unpaid split-off check without paying it. */

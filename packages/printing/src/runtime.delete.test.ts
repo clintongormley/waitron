@@ -50,7 +50,7 @@ async function setup(): Promise<PrintConfig> {
 async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId: cfg.locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -258,7 +258,7 @@ describe("a deleted printer's late work", () => {
     await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
     const [seeded] = await suite.db
       .insert(printJobs)
-      .values({ locationId: cfg.locationId, printerId, payload: new Uint8Array([0x41]) })
+      .values({ printerId, payload: new Uint8Array([0x41]) })
       .returning({ id: printJobs.id });
 
     expect(
@@ -278,14 +278,13 @@ describe("a deleted printer's late work", () => {
     const [seeded] = await suite.db
       .insert(printJobs)
       .values({
-        locationId: cfg.locationId,
         printerId: oldPrinter,
         payload: new Uint8Array([0x41]),
       })
       .returning({ id: printJobs.id });
     const [live] = await suite.db
       .insert(printers)
-      .values({ locationId: cfg.locationId, name: "Live", transport: "bluetooth", localKey: MAC })
+      .values({ name: "Live", transport: "bluetooth", localKey: MAC })
       .returning({ id: printers.id });
     const before = await rows([seeded!.id]);
 

@@ -69,10 +69,9 @@ async function routed() {
   const venueId = await venueLocationId(db);
   const locationId = venueId;
   const cfg = { locationId };
-  await db.insert(kitchenStations).values({ locationId, name: "Kitchen", isDefault: true });
+  await db.insert(kitchenStations).values({ name: "Kitchen", isDefault: true });
   const zone = async (name: string) =>
-    (await db.insert(floorZones).values({ locationId, name }).returning({ id: floorZones.id }))[0]!
-      .id;
+    (await db.insert(floorZones).values({ name }).returning({ id: floorZones.id }))[0]!.id;
   const barZone = await zone("Bar");
   const counterZone = await zone("Deli counter");
   const made = await scoped(async (tx) => {
@@ -1356,10 +1355,7 @@ describe("a period's Floor plan field", () => {
     const r = await routed();
     const set = (departmentId: string, name: string) =>
       scoped(async (tx) => {
-        const [row] = await tx
-          .insert(floorPlanSets)
-          .values({ locationId: r.cfg.locationId })
-          .returning({ id: floorPlanSets.id });
+        const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
         await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
         return row!.id;
       });

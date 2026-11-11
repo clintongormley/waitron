@@ -34,10 +34,7 @@ describe("ticket_item_moves schema", () => {
     LOCATION = await venueLocationId(db);
     const [station, other] = await db
       .insert(kitchenStations)
-      .values([
-        { locationId: LOCATION, name: "Grill" },
-        { locationId: LOCATION, name: "Fryer" },
-      ])
+      .values([{ name: "Grill" }, { name: "Fryer" }])
       .returning({ id: kitchenStations.id });
     grill = station!.id;
     fryer = other!.id;
@@ -82,7 +79,6 @@ describe("ticket_item_moves schema", () => {
     await db.insert(deviceProfiles).values({ id: "till", name: "Till", formFactor: "till" });
     await db.insert(devices).values({
       id: "device-a",
-      locationId: LOCATION,
       deviceProfileId: "till",
       label: "device-a",
       tokenHash: "hash",

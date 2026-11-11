@@ -75,7 +75,6 @@ export async function configureDemoPrinter(
         await tx
           .insert(printAgents)
           .values({
-            locationId: venueId,
             name: "Demo printer",
             tokenHash: DEMO_AGENT_TOKEN_HASH,
             active: false,

@@ -29,14 +29,14 @@ describe("table in service", () => {
     });
     LOCATION = await venueLocationId(suite.db);
     await suite.db.insert(floorZones).values([
-      { id: ZONE, locationId: LOCATION, name: "On" },
-      { id: OTHER_ZONE, locationId: LOCATION, name: "Off", active: false },
+      { id: ZONE, name: "On" },
+      { id: OTHER_ZONE, name: "Off", active: false },
     ]);
     await suite.db.insert(diningTables).values([
-      { id: PRESENT, locationId: LOCATION, zoneId: ZONE, label: "Present" },
-      { id: TAKEN_OFF, locationId: LOCATION, zoneId: ZONE, label: "Taken off" },
-      { id: ABSENT, locationId: LOCATION, zoneId: ZONE, label: "Absent" },
-      { id: DISABLED_ZONE, locationId: LOCATION, zoneId: OTHER_ZONE, label: "Disabled zone" },
+      { id: PRESENT, zoneId: ZONE, label: "Present" },
+      { id: TAKEN_OFF, zoneId: ZONE, label: "Taken off" },
+      { id: ABSENT, zoneId: ZONE, label: "Absent" },
+      { id: DISABLED_ZONE, zoneId: OTHER_ZONE, label: "Disabled zone" },
     ]);
     await suite.db
       .insert(floorTodayTables)

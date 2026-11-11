@@ -61,10 +61,7 @@ async function department() {
       ["standard", "Standard"],
       ["dinner", "Dinner"],
     ] as const) {
-      const [row] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
-        .returning({ id: floorPlanSets.id });
+      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       await linkFloorPlanSet(tx, { setId: row!.id, departmentId: dept.id, name });
       sets[key] = row!.id;
     }

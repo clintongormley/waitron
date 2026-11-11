@@ -353,7 +353,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
     await seedBusinessDay(tx, {});
     const [zone] = await tx
       .insert(floorZones)
-      .values({ locationId: location!.id, name: "Probe tables" })
+      .values({ name: "Probe tables" })
       .returning({ id: floorZones.id });
     return { location: location!, zone: zone! };
   });
@@ -366,9 +366,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   try {
     await reader.read();
     await suite.db.insert(locations).values({});
-    await suite.db
-      .insert(diningTables)
-      .values({ locationId: location!.id, zoneId: zone!.id, label: "T9" });
+    await suite.db.insert(diningTables).values({ zoneId: zone!.id, label: "T9" });
     const waiting = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from change_log`,
     );

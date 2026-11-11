@@ -127,7 +127,7 @@ export async function seedNode(db: Database, label = "A"): Promise<SeededNode> {
     return addNode(tx, nif, label);
   });
   const { locationId, ...ids } = seeded;
-  const { deviceId } = await seedDevice(db, { locationId });
+  const { deviceId } = await seedDevice(db, {});
   return { ...ids, deviceId };
 }
 
@@ -149,7 +149,7 @@ export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<S
     };
   });
   const { locationId, ...ids } = added;
-  const { deviceId } = await seedDevice(db, { locationId });
+  const { deviceId } = await seedDevice(db, {});
   return { ...ids, deviceId };
 }
 

@@ -115,7 +115,6 @@ describe("authenticateAgent", () => {
     const [row] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: cfg.locationId,
         name: "Auth agent",
         tokenHash: hashDeviceToken(secret),
         active: true,

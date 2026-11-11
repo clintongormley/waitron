@@ -1439,13 +1439,11 @@ describe("a deleted device comes back as the same device", () => {
       .insert(printers)
       .values([
         {
-          locationId: venue.cfg.locationId,
           name: "Old",
           transport: "network_tcp",
           host: "10.0.0.1",
         },
         {
-          locationId: venue.cfg.locationId,
           name: "New",
           transport: "network_tcp",
           host: "10.0.0.2",

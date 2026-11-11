@@ -29,7 +29,7 @@ async function setup() {
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
-    .values({ locationId: venueId, name: "Agent", tokenHash: "fixture" })
+    .values({ name: "Agent", tokenHash: "fixture" })
     .returning();
   return withTransaction(suite.db, async (tx) => {
     const [series] = await tx

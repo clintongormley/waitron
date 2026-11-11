@@ -69,7 +69,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(kitchenCourses)
-        .values({ locationId: location, name, displayOrder })
+        .values({ name, displayOrder })
         .returning({ id: kitchenCourses.id });
       return row!.id;
     });

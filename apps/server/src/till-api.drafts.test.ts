@@ -554,7 +554,6 @@ describe("PUT /api/parties/:id/drafts", () => {
       tx
         .insert(kitchenStations)
         .values({
-          locationId: venue.cfg.locationId,
           name: `Upstairs bar ${randomUUID()}`,
         })
         .returning({ id: kitchenStations.id }),
@@ -583,7 +582,6 @@ describe("PUT /api/parties/:id/drafts", () => {
       tx
         .insert(kitchenStations)
         .values({
-          locationId: venue.cfg.locationId,
           name: `Closing bar ${randomUUID()}`,
         })
         .returning({ id: kitchenStations.id }),
@@ -788,7 +786,6 @@ describe("POST /api/dead-ends/draft", () => {
       tx
         .insert(kitchenStations)
         .values({
-          locationId: venue.cfg.locationId,
           name: `Upstairs bar ${randomUUID()}`,
         })
         .returning({ id: kitchenStations.id, name: kitchenStations.name }),
@@ -862,7 +859,6 @@ describe("a draft's chosen station at submission", () => {
       tx
         .insert(kitchenStations)
         .values({
-          locationId: venue.cfg.locationId,
           name: `Draft bar ${randomUUID()}`,
         })
         .returning({ id: kitchenStations.id }),
@@ -947,7 +943,6 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
       tx
         .insert(kitchenStations)
         .values({
-          locationId: venue.cfg.locationId,
           name: `Taken bar ${randomUUID()}`,
         })
         .returning({ id: kitchenStations.id }),

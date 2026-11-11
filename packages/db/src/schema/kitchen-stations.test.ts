@@ -68,7 +68,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(kitchenStations)
-        .values({ locationId: location, name, isDefault })
+        .values({ name, isDefault })
         .returning({ id: kitchenStations.id });
       return row!.id;
     });

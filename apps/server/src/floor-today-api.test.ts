@@ -1340,10 +1340,7 @@ describe("resetting a zone onto a layout", () => {
         name: `Inside ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      const [set] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
-        .returning({ id: floorPlanSets.id });
+      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       await linkFloorPlanSet(tx, {
         setId: set!.id,
         departmentId: department.id,
@@ -1351,7 +1348,7 @@ describe("resetting a zone onto a layout", () => {
       });
       const [unlinked] = await tx
         .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
+        .values({})
         .returning({ id: floorPlanSets.id });
       await tx
         .insert(floorPlans)
@@ -1379,7 +1376,7 @@ describe("resetting a zone onto a layout", () => {
       });
       const [unlinked] = await tx
         .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
+        .values({})
         .returning({ id: floorPlanSets.id });
       await tx
         .insert(floorPlans)
@@ -1477,10 +1474,7 @@ describe("Reset to … plan", () => {
         orderStart: "table",
       });
       if (withSet) {
-        const [set] = await tx
-          .insert(floorPlanSets)
-          .values({ locationId: v.cfg.locationId })
-          .returning({ id: floorPlanSets.id });
+        const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
         await linkFloorPlanSet(tx, {
           setId: set!.id,
           departmentId: department.id,

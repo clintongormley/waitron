@@ -213,7 +213,6 @@ describe("unpaid departure stops kitchen work", () => {
         const [agent] = await tx
           .insert(printAgents)
           .values({
-            locationId: venue.cfg.locationId,
             name: "Departure worker",
             tokenHash: "unused-for-local-runtime",
           })

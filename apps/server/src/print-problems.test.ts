@@ -108,7 +108,6 @@ async function setupVenue(): Promise<Venue> {
   });
   const locationId = await venueLocationId(db);
   const kitchenStationId = await seedKitchenStation(db, {
-    locationId: locationId,
     name: "Kitchen",
   });
   const nodeId = await seedNode(db);

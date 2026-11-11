@@ -11,7 +11,6 @@ import {
 import { withTransaction } from "./tenancy.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { venueLocationId } from "./venue.js";
 
 describe("shortNameColumns", () => {
   it("writes the folded key beside the short name, and nulls for none", () => {
@@ -30,16 +29,15 @@ describe("storeTableShortNameKeys", () => {
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       });
-      const LOCATION = await venueLocationId(tx);
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION, name: "Zone" })
+        .values({ name: "Zone" })
         .returning({ id: floorZones.id });
       const ids: string[] = [];
       for (const { label, shortName } of rows) {
         const [row] = await tx
           .insert(diningTables)
-          .values({ locationId: LOCATION, label, zoneId: zone!.id, shortName })
+          .values({ label, zoneId: zone!.id, shortName })
           .returning({ id: diningTables.id });
         ids.push(row!.id);
       }

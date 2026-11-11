@@ -35,7 +35,6 @@ import {
   UNIQUE_VIOLATION,
   kitchenStations,
   readVenue,
-  venueLocationId,
   workingLineContexts,
   workingOrderLines,
   zoneSalePolicies,
@@ -454,7 +453,6 @@ export async function createServiceZone(
     const [zone] = await tx
       .insert(floorZones)
       .values({
-        locationId: await venueLocationId(tx),
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
       })

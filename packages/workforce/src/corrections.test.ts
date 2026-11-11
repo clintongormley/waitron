@@ -174,7 +174,7 @@ describe("approveCorrection", () => {
   it("records the request where it was captured and the approval as the dashboard's", async () => {
     const { personId, outEntryId } = await nineToFive("appr-origin");
     const sup = await supervisor("appr-origin-sup");
-    const { deviceId } = await seedDevice(suite.db, { locationId: locationId });
+    const { deviceId } = await seedDevice(suite.db, {});
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
         nodeId,

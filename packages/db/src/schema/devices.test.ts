@@ -92,7 +92,6 @@ describe("devices schema (columns, FKs, unique)", () => {
       const [row] = await tx
         .insert(devices)
         .values({
-          locationId: location,
           deviceProfileId: profile,
           label,
           tokenHash: TOKEN_HASH,
@@ -168,14 +167,12 @@ describe("devices schema (columns, FKs, unique)", () => {
     beforeEach(async () => {
       await suite.db.insert(printers).values({
         id: RECEIPT_PRINTER,
-        locationId: LOCATION_A,
         name: "Receipt printer",
         transport: "cloud_poll",
         pollId: "poll-a",
       });
       await suite.db.insert(pagePrinters).values({
         id: PAGE_PRINTER,
-        locationId: LOCATION_A,
         name: "Office printer",
         host: "10.0.0.9",
         port: 631,

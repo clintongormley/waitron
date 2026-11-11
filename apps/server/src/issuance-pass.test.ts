@@ -289,7 +289,6 @@ async function openTableTab(v: Venue, lines: { menuItemId: string; quantity: str
   return withTransaction(suite.db, async (tx) => {
     await tx.insert(diningTables).values({
       id: tableId,
-      locationId: v.cfg.locationId,
       zoneId: v.tables.zoneId,
       label: `Mesa ${tableId.slice(0, 4)}`,
     });

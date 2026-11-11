@@ -68,7 +68,6 @@ async function seedPrinter(
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId,
       name,
       transport: "network_tcp",
       host: "10.0.0.1",
@@ -87,7 +86,6 @@ async function seedPagePrinter(
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId,
       name,
       host,
       port: 631,

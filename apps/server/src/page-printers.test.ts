@@ -90,7 +90,7 @@ async function venue() {
 async function agent(locationId: string, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -362,7 +362,6 @@ describe("listing and renaming page printers", () => {
     const unattached = randomUUID();
     await suite.db.insert(pagePrinters).values({
       id: unattached,
-      locationId: v.locationId,
       name: "Imported",
       host: "192.0.2.43",
       port: 631,
@@ -406,7 +405,6 @@ describe("deleting a page printer", () => {
       .values({ name: "Counter", formFactor: "till" })
       .returning();
     const { deviceId } = await seedDevice(suite.db, {
-      locationId: v.locationId,
       label: "Counter till",
       profileId: profile!.id,
     });

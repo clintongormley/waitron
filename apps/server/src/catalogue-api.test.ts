@@ -1732,20 +1732,14 @@ describe("mountCatalogueApi — products", () => {
       const cfg = venueCfg();
       const [bar, cocktailBar] = await tx
         .insert(kitchenStations)
-        .values([
-          { locationId: cfg.locationId, name: "Bar", isDefault: true },
-          { locationId: cfg.locationId, name: "Cocktail bar" },
-        ])
+        .values([{ name: "Bar", isDefault: true }, { name: "Cocktail bar" }])
         .returning();
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId: drinks }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
-      const [terrace] = await tx
-        .insert(floorZones)
-        .values({ locationId: cfg.locationId, name: "Terrace" })
-        .returning();
+      const [terrace] = await tx.insert(floorZones).values({ name: "Terrace" }).returning();
       const department = await createDepartment(tx, {
         name: "Dining",
         orderStart: "table",

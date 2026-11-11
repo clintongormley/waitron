@@ -644,11 +644,10 @@ describe("configuration transfer database path", () => {
     const sourceVenueId = await venueLocationId(suite.db);
     const [agent] = await suite.db
       .insert(printAgents)
-      .values({ locationId: sourceVenueId, name: "Back office", tokenHash: "hash" })
+      .values({ name: "Back office", tokenHash: "hash" })
       .returning({ id: printAgents.id });
     await suite.db.insert(pagePrinters).values({
       id: "55555555-aaaa-aaaa-aaaa-555555555555",
-      locationId: sourceVenueId,
       name: "Invoice office",
       host: "192.0.2.20",
       port: 8631,
@@ -701,7 +700,6 @@ describe("configuration transfer database path", () => {
     const [localAgent] = await targetSuite.db
       .insert(printAgents)
       .values({
-        locationId: targetVenueId,
         name: "New office agent",
         tokenHash: "hash",
       })
@@ -756,7 +754,6 @@ describe("configuration transfer database path", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(pagePrinters).values({
         id: sourcePagePrinterId,
-        locationId: venueId,
         name: "Office A4",
         host: "192.0.2.40",
         port: 631,
@@ -928,7 +925,6 @@ describe("configuration transfer database path", () => {
       await tx.insert(diningTables).values({
         zoneId: practiceZone.id,
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        locationId: venueId,
         label: "T1",
       });
       await tx.insert(floorTodayTables).values({ tableId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" });
@@ -953,7 +949,6 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(printAgents).values({
         id: "44444444-aaaa-aaaa-aaaa-444444444444",
-        locationId: venueId,
         name: "Kitchen agent",
         tokenHash: "source-agent-token",
         active: true,
@@ -961,7 +956,6 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(printers).values({
         id: "55555555-aaaa-aaaa-aaaa-555555555555",
-        locationId: venueId,
         name: "Kitchen printer",
         transport: "usb",
         localKey: "B120300001",
@@ -2142,7 +2136,7 @@ it("transfers a station's painted season day and a special day's painted date un
     const department = await createDepartment(tx, { name: "Terrace" });
     const [station] = await tx
       .insert(kitchenStations)
-      .values({ locationId: scope.locationId, name: "Staffed grill" })
+      .values({ name: "Staffed grill" })
       .returning({ id: kitchenStations.id });
     const [season] = await tx
       .select({ id: seasons.id })
@@ -2357,7 +2351,6 @@ it("transfers a station's rest of the order switch", async () => {
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
-      locationId: venueId,
       name: "Pass",
       showsRestOfOrder: true,
     }),
@@ -2393,9 +2386,9 @@ it("transfers each station's MOVED slips choice, print, don't print, or never se
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: venueId, name: "Moved print", printMovedSlips: true },
-      { locationId: venueId, name: "Moved quiet", printMovedSlips: false },
-      { locationId: venueId, name: "Moved unset", printMovedSlips: null },
+      { name: "Moved print", printMovedSlips: true },
+      { name: "Moved quiet", printMovedSlips: false },
+      { name: "Moved unset", printMovedSlips: null },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2431,7 +2424,6 @@ it("transfers a station's colour", async () => {
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
-      locationId: venueId,
       name: "Cocktail bar",
       colour: "teal",
     }),
@@ -2468,13 +2460,11 @@ it("transfers each station's ticket grouping and held printing", async () => {
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       {
-        locationId: venueId,
         name: "Grill",
         ticketGrouping: "separate",
         printHeldWork: true,
       },
       {
-        locationId: venueId,
         name: "Cold",
         ticketGrouping: "combined",
         printHeldWork: false,
@@ -2562,8 +2552,8 @@ it("transfers each station's bump mode", async () => {
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: venueId, name: "Grill", bumpMode: "ticket" },
-      { locationId: venueId, name: "Cold", bumpMode: "line" },
+      { name: "Grill", bumpMode: "ticket" },
+      { name: "Cold", bumpMode: "line" },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2603,10 +2593,9 @@ it("transfers each station's ready warning time", async () => {
   });
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
-    tx.insert(kitchenStations).values([
-      { locationId: venueId, name: "Grill", readyWarningAfterMinutes: 6 },
-      { locationId: venueId, name: "Cold" },
-    ]),
+    tx
+      .insert(kitchenStations)
+      .values([{ name: "Grill", readyWarningAfterMinutes: 6 }, { name: "Cold" }]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -2732,8 +2721,8 @@ it("transfers each station's changes after sending", async () => {
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: venueId, name: "Grill", changesAfterSending: "never" },
-      { locationId: venueId, name: "Cold", changesAfterSending: "held" },
+      { name: "Grill", changesAfterSending: "never" },
+      { name: "Cold", changesAfterSending: "held" },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2816,8 +2805,8 @@ it("A773 station policy: transfers each station's pass waiting", async () => {
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: venueId, name: "Grill", waitsForPass: true },
-      { locationId: venueId, name: "Cold", waitsForPass: false },
+      { name: "Grill", waitsForPass: true },
+      { name: "Cold", waitsForPass: false },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2858,8 +2847,8 @@ it("A773 station policy: a copy without waits_for_pass imports every station not
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
-      { locationId: venueId, name: "Grill", waitsForPass: true },
-      { locationId: venueId, name: "Cold", waitsForPass: false },
+      { name: "Grill", waitsForPass: true },
+      { name: "Cold", waitsForPass: false },
     ]),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -2927,9 +2916,9 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(kitchenStations).values([
-      { locationId: venueId, name: "Desserts", colour: "orange", warmAfterMinutes: 7 },
-      { locationId: venueId, name: "Pastry", colour: "amber" },
-      { locationId: venueId, name: "Bar", colour: "blue" },
+      { name: "Desserts", colour: "orange", warmAfterMinutes: 7 },
+      { name: "Pastry", colour: "amber" },
+      { name: "Bar", colour: "blue" },
     ]);
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -3313,15 +3302,11 @@ it("transfers a printer on two stations in configuration export", async () => {
   await withTransaction(suite.db, async (tx) => {
     const stations = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: venueId, name: "Grill" },
-        { locationId: venueId, name: "Fryer" },
-      ])
+      .values([{ name: "Grill" }, { name: "Fryer" }])
       .returning({ id: kitchenStations.id });
     const [printer] = await tx
       .insert(printers)
       .values({
-        locationId: venueId,
         name: "Pass printer",
         transport: "network_tcp",
         host: "10.0.0.8",
@@ -3376,7 +3361,6 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(printers).values({
-      locationId: venueId,
       name: "Slip pickup",
       transport: "network_tcp",
       host: "10.0.0.90",
@@ -3498,11 +3482,10 @@ it("leaves a table's clearing state behind", async () => {
       zoneId: (
         await tx
           .insert(floorZones)
-          .values({ locationId: venueId, name: "Clearing tables" })
+          .values({ name: "Clearing tables" })
           .returning({ id: floorZones.id })
       )[0]!.id,
       id: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee",
-      locationId: venueId,
       label: "T9",
     });
     await tx.insert(floorTodayTables).values({ tableId: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee" });
@@ -3703,7 +3686,6 @@ it("leaves out a print agent's setup page address and port, so the import links 
   const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(printAgents).values({
-      locationId: venueId,
       name: "Bar agent",
       tokenHash: "source-agent-token",
       setupUrl: "http://192.168.10.40:9310",
@@ -4449,7 +4431,7 @@ it("leaves behind every row a chain of keys leads to a left-behind row, matching
 /** Hold `profileId` by a disabled device only, then delete it through the real path, which retires
  * the row rather than removing it. */
 async function retireProfile(locationId: string, profileId: string): Promise<void> {
-  await seedDevice(suite.db, { locationId, profileId });
+  await seedDevice(suite.db, { profileId });
   await suite.db
     .update(devices)
     .set({ active: false })
@@ -4508,7 +4490,6 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
     const [printer] = await tx
       .insert(printers)
       .values({
-        locationId: venueId,
         name: "Bar printer",
         transport: "network_tcp",
         host: "10.0.2.1",
@@ -4672,7 +4653,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     });
     const [grill] = await tx
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const [till, wall, retired] = await tx
       .insert(deviceProfiles)
@@ -5114,7 +5095,6 @@ it("carries each station's own late flags to the importing venue", async () => {
   const [station] = await suite.db
     .insert(kitchenStations)
     .values({
-      locationId: venueId,
       name: "Timing export",
       warmAfterMinutes: 6,
       overdueAfterMinutes: 12,
@@ -5163,7 +5143,6 @@ it.each([
   });
   const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({
-    locationId: venueId,
     name: "Invalid imported timing",
     warmAfterMinutes: 3,
   });
@@ -5210,9 +5189,7 @@ it("refuses an imported ready warning of 0 before writing anything", async () =>
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(suite.db);
-  await suite.db
-    .insert(kitchenStations)
-    .values({ locationId: venueId, name: "Invalid imported ready warning" });
+  await suite.db.insert(kitchenStations).values({ name: "Invalid imported ready warning" });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -5257,7 +5234,6 @@ it("imports a station row with no ready warning as 3", async () => {
   });
   const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({
-    locationId: venueId,
     name: "Older file station",
     readyWarningAfterMinutes: 8,
   });
@@ -5306,9 +5282,7 @@ it("refuses an imported minute that is not a whole number", async () => {
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(suite.db);
-  await suite.db
-    .insert(kitchenStations)
-    .values({ locationId: venueId, name: "Fractional imported timing" });
+  await suite.db.insert(kitchenStations).values({ name: "Fractional imported timing" });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -5709,10 +5683,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     });
     const [bar, griddle] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: scope.locationId, name: "Routes bar" },
-        { locationId: scope.locationId, name: "Routes griddle" },
-      ])
+      .values([{ name: "Routes bar" }, { name: "Routes griddle" }])
       .returning();
     const category = await createCategory(tx, { name: "Routes drinks" });
     const menu = await createCatalogue(tx, { name: "Routes menu" });
@@ -5833,10 +5804,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     });
     const [bar, griddle] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: scope.locationId, name: "Periods bar" },
-        { locationId: scope.locationId, name: "Periods griddle" },
-      ])
+      .values([{ name: "Periods bar" }, { name: "Periods griddle" }])
       .returning();
     const category = await createCategory(tx, { name: "Periods drinks" });
     const menu = await createCatalogue(tx, { name: "Periods menu" });
@@ -6032,11 +6000,9 @@ describe("special days in a configuration transfer", () => {
         .values({ name: "Deli", tradingName: "Deli" })
         .returning({ id: departments.id });
       await tx.insert(departmentSalePolicies).values({ departmentId: department!.id });
-      await tx.insert(kitchenStations).values([
-        { locationId: venueId, name: "Bar" },
-        { locationId: venueId, name: "Pass" },
-        { locationId: venueId, name: "Grill" },
-      ]);
+      await tx
+        .insert(kitchenStations)
+        .values([{ name: "Bar" }, { name: "Pass" }, { name: "Grill" }]);
     });
     const { cfg, stations } = await named(suite.db, {
       locationId: await venueLocationId(suite.db),
@@ -6132,9 +6098,7 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     const venueId = await venueLocationId(suite.db);
-    await withTransaction(suite.db, (tx) =>
-      tx.insert(kitchenStations).values({ locationId: venueId, name: "Pass" }),
-    );
+    await withTransaction(suite.db, (tx) => tx.insert(kitchenStations).values({ name: "Pass" }));
     const { cfg, stations } = await named(suite.db, {
       locationId: await venueLocationId(suite.db),
     });
@@ -6871,21 +6835,18 @@ describe("a deleted printer in a configuration transfer", () => {
         .insert(printers)
         .values([
           {
-            locationId: venueId,
             name: "Live bar",
             transport: "cloud_poll" as const,
             pollId: "poll-live",
             pollTokenHash: "live-poll-hash",
           },
           {
-            locationId: venueId,
             name: "Disabled bar",
             transport: "network_tcp" as const,
             host: "10.0.3.2",
             active: false,
           },
           {
-            locationId: venueId,
             name: "Old kitchen",
             transport: "cloud_poll" as const,
             pollId: "poll-old",
@@ -6896,7 +6857,7 @@ describe("a deleted printer in a configuration transfer", () => {
         .returning({ id: printers.id });
       const [station] = await tx
         .insert(kitchenStations)
-        .values({ locationId: venueId, name: "Grill" })
+        .values({ name: "Grill" })
         .returning({ id: kitchenStations.id });
       const [profile] = await tx
         .insert(deviceProfiles)
@@ -6918,12 +6879,11 @@ describe("a deleted printer in a configuration transfer", () => {
         profile: profile!.id,
       };
     });
-    const { deviceId } = await seedDevice(suite.db, { locationId: venueId });
+    const { deviceId } = await seedDevice(suite.db, {});
     await suite.db.insert(printerHolders).values({ printerId: ids.old, deviceId });
     await suite.db.insert(printJobs).values([
-      { locationId: venueId, printerId: ids.old, payload: new Uint8Array([1]) },
+      { printerId: ids.old, payload: new Uint8Array([1]) },
       {
-        locationId: venueId,
         printerId: ids.live,
         payload: new Uint8Array([2]),
         status: "done",
@@ -8149,7 +8109,6 @@ describe("A773 pass display policy", () => {
         pass_monitor: { stationIds: null, zoneIds: null },
       });
       const { deviceId } = await seedDevice(tx, {
-        locationId: venueId,
         profileId: profile!.id,
       });
       await VENUE_SERVICE.setDeviceKitchenScreens(tx, {

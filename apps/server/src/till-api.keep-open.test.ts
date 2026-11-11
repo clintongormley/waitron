@@ -187,7 +187,7 @@ describe("the till keeps a zone open today", () => {
     await suite.db.delete(deviceProfileServiceAccess);
     const [plain] = await suite.db
       .insert(floorZones)
-      .values({ locationId: v.cfg.locationId, name: "Unassigned" })
+      .values({ name: "Unassigned" })
       .returning({ id: floorZones.id });
     const answer = await call("GET", "/api/zones");
     expect(answer.status).toBe(200);

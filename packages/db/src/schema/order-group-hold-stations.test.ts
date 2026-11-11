@@ -29,9 +29,7 @@ describe("order group hold stations schema", () => {
       operationDescription: "Hostelería",
     });
     LOCATION = await venueLocationId(suite.db);
-    await suite.db
-      .insert(kitchenStations)
-      .values({ id: STATION, locationId: LOCATION, name: "Kitchen A" });
+    await suite.db.insert(kitchenStations).values({ id: STATION, name: "Kitchen A" });
     await suite.db.insert(parties).values({ id: PARTY, openedBy: OPERATOR });
     await suite.db
       .insert(orderGroups)

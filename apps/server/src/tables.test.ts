@@ -390,7 +390,7 @@ async function setupTabVenue(): Promise<{
   });
   await seedLegacySellingUnits(db);
   const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId: locationId, name: "Kitchen" });
+  await seedKitchenStation(db, { name: "Kitchen" });
   const nodeId = await seedNode(db);
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),

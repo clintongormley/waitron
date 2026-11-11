@@ -49,12 +49,9 @@ describe("leaveForClearing", () => {
     const zoneId = randomUUID();
     const tableId = randomUUID();
     await inTx(v, async (tx) => {
-      await tx
-        .insert(floorZones)
-        .values({ id: zoneId, locationId: v.cfg.locationId, name: `No department ${zoneId}` });
+      await tx.insert(floorZones).values({ id: zoneId, name: `No department ${zoneId}` });
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         label: "Table without department",
         zoneId,
       });

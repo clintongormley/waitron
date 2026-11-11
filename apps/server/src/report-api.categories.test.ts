@@ -154,7 +154,6 @@ const suite = useVenueDb({
       const [row] = await db
         .insert(printers)
         .values({
-          locationId,
           name: values.name,
           transport: "network_tcp",
           host: `10.0.0.${Math.floor(Math.random() * 200) + 2}`,
@@ -588,7 +587,7 @@ describe("a deleted printer and report printing", () => {
     const deleted = await withTransaction(suite.db, async (tx) => {
       const [row] = await tx
         .insert(printers)
-        .values({ locationId, name: "Old reports", transport: "network_tcp", host: "10.0.9.9" })
+        .values({ name: "Old reports", transport: "network_tcp", host: "10.0.9.9" })
         .returning({ id: printers.id });
       await deletePrinter(tx, row!.id);
       return row!.id;

@@ -456,7 +456,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
     const terrace = await inTx(t.venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: t.venue.cfg.locationId, name: `Terrace ${randomUUID().slice(0, 8)}` })
+        .values({ name: `Terrace ${randomUUID().slice(0, 8)}` })
         .returning({ id: floorZones.id });
       const zoneId = (
         await offerProducts(tx, t.venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" })

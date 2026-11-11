@@ -779,7 +779,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const [row] = await suite.db
       .insert(printers)
       .values({
-        locationId: location.rows[0]!.id,
         name,
         transport: "network_tcp",
         host: "10.0.0.9",
@@ -888,8 +887,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const [drawer] = await suite.db
       .insert(printers)
       .values({
-        locationId: (await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`))
-          .rows[0]!.id,
         name: uniqueName("Drawer"),
         transport: "network_tcp",
         host: "10.0.0.9",
@@ -1026,7 +1023,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const [office] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: venueCfg.locationId,
         name: uniqueName("Office"),
         host: `office-${randomUUID()}.local`,
         port: 631,
@@ -1081,7 +1077,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const [office] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: venueCfg.locationId,
         name,
         host: `office-${randomUUID()}.local`,
         port: 631,
@@ -1725,7 +1720,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const { grill } = await kitchenChoices();
       const [zone] = await suite.db
         .insert(floorZones)
-        .values({ locationId: venueCfg.locationId, name: uniqueName("Deleted profile zone") })
+        .values({ name: uniqueName("Deleted profile zone") })
         .returning({ id: floorZones.id });
       const name = uniqueName("Stale pass");
       const kitchenScreens = { pass: { stationIds: [grill], zoneIds: [zone!.id] } };
@@ -1769,7 +1764,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const { grill } = await kitchenChoices();
       const [zone] = await suite.db
         .insert(floorZones)
-        .values({ locationId: venueCfg.locationId, name: uniqueName("Emptied zone") })
+        .values({ name: uniqueName("Emptied zone") })
         .returning({ id: floorZones.id });
       const name = uniqueName("Empty pass");
       const created = await app.request("/management-api/device-profiles", {

@@ -1325,7 +1325,7 @@ describe("made-here route wiring", () => {
       const { zoneId, menuItemId } = await inTx(venue, async (tx) => {
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: venue.cfg.locationId, name: `${serviceMode} ${randomUUID()}` })
+          .values({ name: `${serviceMode} ${randomUUID()}` })
           .returning();
         const [lager] = await tx
           .select({ id: products.id })

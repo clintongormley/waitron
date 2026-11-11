@@ -292,8 +292,8 @@ async function setup(
     noopLog,
   );
   const devices = [
-    await seedDevice(suite.db, { locationId: venueId, label: "Barra 1" }),
-    await seedDevice(suite.db, { locationId: venueId, label: "Barra 2" }),
+    await seedDevice(suite.db, { label: "Barra 1" }),
+    await seedDevice(suite.db, { label: "Barra 2" }),
   ];
   return {
     cfg,

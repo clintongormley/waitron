@@ -82,7 +82,7 @@ useVenueDb({
     ticketThenPayZone = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Invoice counter" })
+        .values({ name: "Invoice counter" })
         .returning({ id: floorZones.id });
       return (
         await offerProducts(tx, v.cfg, {

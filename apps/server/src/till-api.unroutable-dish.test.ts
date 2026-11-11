@@ -131,7 +131,7 @@ async function station(name: string): Promise<string> {
   const [row] = await inTx(v, (tx) =>
     tx
       .insert(kitchenStations)
-      .values({ locationId: v.cfg.locationId, name: `${name} ${randomUUID()}` })
+      .values({ name: `${name} ${randomUUID()}` })
       .returning({ id: kitchenStations.id }),
   );
   return row!.id;
@@ -451,7 +451,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const zoneId = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: `Barra ticket ${randomUUID()}` })
+        .values({ name: `Barra ticket ${randomUUID()}` })
         .returning({ id: floorZones.id });
       return (
         await offerProducts(tx, v.cfg, {

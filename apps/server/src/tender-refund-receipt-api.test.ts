@@ -65,7 +65,6 @@ async function target(values: Partial<typeof tenderRefunds.$inferInsert> = {}, s
         source: "device",
         deviceId: venue.deviceId,
         nodeId: venue.cfg.nodeId,
-        locationId: venue.cfg.locationId,
         method: "cash",
         state: "completed",
         createdAt: "2026-10-15T11:00:00.000Z",

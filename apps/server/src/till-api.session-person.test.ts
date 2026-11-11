@@ -303,7 +303,7 @@ beforeAll(async () => {
   ben = await person("Ben", "admin");
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: v.cfg.locationId, name: `Grill ${randomUUID()}` })
+    .values({ name: `Grill ${randomUUID()}` })
     .returning({ id: kitchenStations.id });
   tills = [await kitchenTill(station!.id, "pass"), await kitchenTill(station!.id, "pass_monitor")];
 }, 120_000);

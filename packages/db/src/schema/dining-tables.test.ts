@@ -73,12 +73,11 @@ describe("dining_tables columns", () => {
     return inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: location, name: label })
+        .values({ name: label })
         .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
         .values({
-          locationId: location,
           label,
           zoneId: zone!.id,
           ...(shortName === undefined ? {} : shortNameColumns(shortName)),
@@ -144,12 +143,11 @@ describe("dining_tables columns", () => {
     const id = await inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION_A, name: "Tower" })
+        .values({ name: "Tower" })
         .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
         .values({
-          locationId: LOCATION_A,
           label: "Tower 1",
           zoneId: zone!.id,
           shortName: "T1",

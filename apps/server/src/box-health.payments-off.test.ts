@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { invoiceSeries, printers, venueLocationId } from "@waitron/db";
+import { invoiceSeries, printers } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -59,7 +59,6 @@ async function seedVenueWithPrinter(): Promise<string> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Retail",
   });
-  const venueId = await venueLocationId(suite.db);
   const node = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -70,7 +69,7 @@ async function seedVenueWithPrinter(): Promise<string> {
   );
   const [printer] = await suite.db
     .insert(printers)
-    .values({ locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+    .values({ name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
     .returning({ id: printers.id });
   return printer!.id;
 }

@@ -63,9 +63,9 @@ describe("Calendar without a station-hours page model", () => {
       const [bar, prep, kitchen] = await tx
         .insert(kitchenStations)
         .values([
-          { locationId: f.cfg.locationId, name: "Bar" },
-          { locationId: f.cfg.locationId, name: "Prep", active: false },
-          { locationId: f.cfg.locationId, name: "Kitchen", isDefault: true },
+          { name: "Bar" },
+          { name: "Prep", active: false },
+          { name: "Kitchen", isDefault: true },
         ])
         .returning();
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };

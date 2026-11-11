@@ -42,10 +42,8 @@ async function seed() {
     .from(devices)
     .where(eq(devices.id, s.deviceId));
   const profileId = a!.profileId;
-  const { deviceId: deviceB } = await seedDevice(suite.db, { locationId: s.locationId, profileId });
-  const { deviceId: deviceC, profileId: otherProfileId } = await seedDevice(suite.db, {
-    locationId: s.locationId,
-  });
+  const { deviceId: deviceB } = await seedDevice(suite.db, { profileId });
+  const { deviceId: deviceC, profileId: otherProfileId } = await seedDevice(suite.db, {});
   const tag = randomUUID();
   const readers = await suite.db
     .insert(cardReaders)

@@ -168,7 +168,7 @@ async function profile(name: string, formFactor: "till" | "kds" = "till"): Promi
 async function station(venue: Venue, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: venue.cfg.locationId, name })
+    .values({ name })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
@@ -177,7 +177,6 @@ async function printer(venue: Venue, name: string, portable = false): Promise<st
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: venue.cfg.locationId,
       name,
       transport: "network_tcp",
       host: `${name.toLowerCase().replaceAll(" ", "-")}.test`,
@@ -349,7 +348,6 @@ async function seed() {
   await suite.db.insert(joinRequests).values({
     id: barTill,
     nodeId: cfg.nodeId,
-    locationId: cfg.locationId,
     kind: "device",
     label: "Bar till",
     tokenHash: "returning",

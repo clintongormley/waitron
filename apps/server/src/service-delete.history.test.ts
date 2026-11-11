@@ -88,7 +88,6 @@ it("deleted department reprints its original receipt configuration and frozen he
         await tx
           .insert(printers)
           .values({
-            locationId: venue.cfg.locationId,
             name: "History",
             transport: "network_tcp",
             host: "192.0.2.1",

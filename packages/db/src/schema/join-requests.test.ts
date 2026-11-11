@@ -30,7 +30,6 @@ describe("join_requests", () => {
       await tx.insert(joinRequests).values([
         {
           nodeId: NODE,
-          locationId: LOCATION_A,
           kind: "device",
           label: "Bar till",
           tokenHash: "h1",
@@ -39,7 +38,6 @@ describe("join_requests", () => {
         },
         {
           nodeId: NODE,
-          locationId: LOCATION_A,
           kind: "print_agent",
           label: "Kitchen box",
           tokenHash: "h2",

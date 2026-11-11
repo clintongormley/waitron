@@ -775,7 +775,7 @@ describe("the reminder follows the party's department", () => {
       await setReleaseReminderInEveryDepartment(tx, 10);
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: `Bare ${randomUUID()}` })
+        .values({ name: `Bare ${randomUUID()}` })
         .returning({ id: floorZones.id });
       await tx.update(diningTables).set({ zoneId: zone!.id }).where(eq(diningTables.id, s.tableId));
     });

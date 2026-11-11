@@ -46,10 +46,7 @@ async function newSet(
   departmentId: string,
   name: string,
 ) {
-  const [row] = await tx
-    .insert(floorPlanSets)
-    .values({ locationId: cfg.locationId })
-    .returning({ id: floorPlanSets.id });
+  const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
   await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
   return row!.id;
 }
@@ -283,10 +280,7 @@ describe("which floor layout is due", () => {
     const f = await fixture();
     const [barSet, gone] = await run(async (tx) => {
       const barSet = await newSet(tx, f.cfg, f.bar, "Bar standard");
-      const [row] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: f.cfg.locationId })
-        .returning({ id: floorPlanSets.id });
+      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       return [barSet, row!.id];
     });
     const layouts = await run((tx) =>

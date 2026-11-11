@@ -941,7 +941,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       });
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Test tables" })
+        .values({ name: "Test tables" })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: zone!.id, departmentId: department.id });
     });

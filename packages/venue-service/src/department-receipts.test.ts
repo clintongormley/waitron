@@ -502,10 +502,7 @@ describe("receipt department lookups", () => {
       orderNumber: 1,
     });
     expect(await scoped((tx) => receipts.receiptDepartmentForOrder(tx, order.id))).toBeNull();
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ locationId: f.cfg.locationId, name: "Bar" })
-      .returning();
+    const [zone] = await suite.db.insert(floorZones).values({ name: "Bar" }).returning();
     await suite.db.insert(orderServiceContexts).values({
       workingOrderId: order.id,
       zoneId: zone!.id,

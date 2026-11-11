@@ -466,7 +466,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const locationId = location!.id;
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId, name: "Terrace" })
+      .values({ name: "Terrace" })
       .returning({ id: floorZones.id });
     const [department] = await db
       .insert(departments)
@@ -699,10 +699,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await venue();
     const [station, destination] = await db
       .insert(kitchenStations)
-      .values([
-        { locationId: v.locationId, name: "Grill" },
-        { locationId: v.locationId, name: "Bar" },
-      ])
+      .values([{ name: "Grill" }, { name: "Bar" }])
       .returning({ id: kitchenStations.id });
     const state = (day: string, sendsTo: string | null) =>
       sql`insert into station_day_states (id, station_id, business_day, open, sends_to_station_id)
@@ -730,7 +727,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await venue();
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: v.locationId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const cellId = randomUUID();
     await db.execute(sql`insert into routing_cells (id, zone_id, station_id)
@@ -1040,7 +1037,7 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
     const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
@@ -1091,7 +1088,7 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
     const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
@@ -1138,7 +1135,7 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
     const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
@@ -1184,11 +1181,11 @@ describe("the kitchen screen tables refuse what their rules forbid", () => {
     const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: venueId, name: "Terrace" })
+      .values({ name: "Terrace" })
       .returning({ id: floorZones.id });
     const [profile] = await db
       .insert(deviceProfiles)
@@ -1380,7 +1377,7 @@ describe("single-venue defaults", () => {
       .values({ name: "Main", tradingName: "Main" })
       .returning();
     async function add(name: string, isCounterDefault: boolean) {
-      const [zone] = await single.db.insert(floorZones).values({ locationId, name }).returning();
+      const [zone] = await single.db.insert(floorZones).values({ name }).returning();
       return single.db
         .insert(zoneServicePolicies)
         .values({ zoneId: zone!.id, departmentId: department!.id, isCounterDefault });

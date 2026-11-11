@@ -15,7 +15,6 @@ describe("test live tables", () => {
       const [zone] = await tx
         .insert(floorZones)
         .values({
-          locationId: v.cfg.locationId,
           name: "Fixture zone",
         })
         .returning({ id: floorZones.id });

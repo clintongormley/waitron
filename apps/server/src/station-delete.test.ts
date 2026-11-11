@@ -330,7 +330,6 @@ describe("permanent station deletion", () => {
       tx
         .insert(printers)
         .values({
-          locationId: v.cfg.locationId,
           name: "Kitchen",
           transport: "cloud_poll",
           pollId: randomUUID(),
@@ -553,7 +552,6 @@ describe("permanent station deletion", () => {
       const [printer] = await tx
         .insert(printers)
         .values({
-          locationId: v.cfg.locationId,
           name: "Historical kitchen",
           transport: "cloud_poll",
           pollId: randomUUID(),
@@ -564,7 +562,6 @@ describe("permanent station deletion", () => {
         const [job] = await tx
           .insert(printJobs)
           .values({
-            locationId: v.cfg.locationId,
             printerId: printer!.id,
             payload: new Uint8Array([1, 2, 3]),
             status,

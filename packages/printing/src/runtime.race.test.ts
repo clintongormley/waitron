@@ -40,7 +40,7 @@ async function setup(): Promise<PrintConfig> {
 async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId: cfg.locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }

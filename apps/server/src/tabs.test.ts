@@ -117,7 +117,7 @@ async function setupVenue(): Promise<Seeded> {
   });
   await seedLegacySellingUnits(db);
   const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId: locationId });
+  await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),

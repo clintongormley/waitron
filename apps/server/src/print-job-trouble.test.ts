@@ -36,7 +36,6 @@ async function seedPrinter(t: {
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: t.locationId,
       name: t.name,
       transport: "network_tcp",
       host: "10.0.0.1",
@@ -58,7 +57,6 @@ async function seedJob(t: {
   const [row] = await suite.db
     .insert(printJobs)
     .values({
-      locationId: t.locationId,
       printerId: t.printerId,
       payload: Uint8Array.from([0x01]),
       kind: t.kind ?? "document",
@@ -78,7 +76,7 @@ async function seedStation(t: {
 }): Promise<void> {
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: t.locationId, name: "Kitchen", isDefault: false, active: t.active })
+    .values({ name: "Kitchen", isDefault: false, active: t.active })
     .returning({ id: kitchenStations.id });
   await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId: t.printerId });
 }

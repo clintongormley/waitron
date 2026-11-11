@@ -19,10 +19,7 @@ export async function defaultLayout(
   const sets = await readFloorPlanSets(tx, { departmentId: policy.departmentId });
   const held = sets.find((set) => set.isDefault);
   if (held !== undefined) return { setId: held.setId, zoneId };
-  const [row] = await tx
-    .insert(floorPlanSets)
-    .values({ locationId: cfg.locationId })
-    .returning({ id: floorPlanSets.id });
+  const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
   await linkFloorPlanSet(tx, { setId: row!.id, departmentId: policy.departmentId, name });
   return { setId: row!.id, zoneId };
 }

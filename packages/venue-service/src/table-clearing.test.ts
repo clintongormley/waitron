@@ -34,7 +34,7 @@ async function seedLocation(name: string): Promise<string> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
   const locationId = venueId;
-  await db.insert(kitchenStations).values({ locationId, name: "Default prep", isDefault: true });
+  await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
   return locationId;
 }
 
@@ -48,7 +48,7 @@ async function departmentWithTable(cfg: { locationId: string }, name: string) {
     const zone = await createServiceZone(tx, { name, departmentId: department.id });
     const [table] = await tx
       .insert(diningTables)
-      .values({ locationId: cfg.locationId, zoneId: zone.id, label: randomUUID() })
+      .values({ zoneId: zone.id, label: randomUUID() })
       .returning({ id: diningTables.id });
     return { departmentId: department.id, tableId: table!.id };
   });
@@ -70,11 +70,11 @@ describe("readTablesNeedingClearing", () => {
     const a = await departmentWithTable(cfg, "A");
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "No department" })
+      .values({ name: "No department" })
       .returning({ id: floorZones.id });
     const [table] = await db
       .insert(diningTables)
-      .values({ locationId: cfg.locationId, zoneId: zone!.id, label: randomUUID() })
+      .values({ zoneId: zone!.id, label: randomUUID() })
       .returning({ id: diningTables.id });
     await db.update(departments).set({ needsClearing: true });
     const found = await scoped((tx) => readTablesNeedingClearing(tx, [a.tableId, table!.id]));

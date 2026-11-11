@@ -916,7 +916,6 @@ async function insertReceiptAttempt(tx: Transaction, sourceId: string): Promise<
   const [attempt] = await tx
     .insert(printJobs)
     .values({
-      locationId: source!.locationId,
       printerId: source!.printerId,
       payload: source!.payload,
       kind: "document",
@@ -2630,7 +2629,6 @@ describe("the invoice at full payment", () => {
         await inTx(async (tx) => {
           await tx.insert(pagePrinters).values({
             id: pagePrinterId,
-            locationId: venue.cfg.locationId,
             name: "Office",
             host: pagePrinterId,
             port: 631,
@@ -2685,7 +2683,6 @@ describe("the invoice at full payment", () => {
     await inTx(async (tx) => {
       await tx.insert(pagePrinters).values({
         id: pagePrinterId,
-        locationId: venue.cfg.locationId,
         name: "Office",
         host: pagePrinterId,
         port: 631,
@@ -2745,7 +2742,6 @@ describe("the invoice at full payment", () => {
         await inTx(async (tx) => {
           await tx.insert(pagePrinters).values({
             id: pagePrinterId,
-            locationId: venue.cfg.locationId,
             name: "Invoice",
             host: pagePrinterId,
             port: 631,

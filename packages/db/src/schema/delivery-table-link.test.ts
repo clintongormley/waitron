@@ -60,11 +60,11 @@ describe("an order's delivery table", () => {
     return inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION_A, name: label })
+        .values({ name: label })
         .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
-        .values({ locationId: LOCATION_A, label, zoneId: zone!.id })
+        .values({ label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
       return row!.id;
     });

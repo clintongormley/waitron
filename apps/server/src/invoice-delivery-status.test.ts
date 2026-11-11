@@ -82,7 +82,7 @@ async function venue() {
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name: "Back office agent", tokenHash: "scrypt$fixture" })
+    .values({ name: "Back office agent", tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return { locationId, nodeId, agentId: agent!.id };
 }
@@ -105,7 +105,6 @@ async function pagePrinter(
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId,
       name: "Back office",
       host: `192.0.2.${hostCounter++}`,
       port: 631,

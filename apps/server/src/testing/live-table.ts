@@ -20,7 +20,6 @@ export async function createTable(
     .insert(diningTables)
     .values({
       id: newId(),
-      locationId: cfg.locationId,
       label: input.label,
       zoneId: input.zoneId,
       ...shortNameColumns(input.shortName ?? null),

@@ -287,7 +287,6 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
     .insert(devices)
     .values({
       id: DEVICE_ID,
-      locationId: MIRROR_LOCATION_ID,
       deviceProfileId: DEVICE_PROFILE_ID,
       label: "Counter till",
       tokenHash: hashDeviceToken(DEVICE_TOKEN),
@@ -296,7 +295,6 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
   await admin
     .insert(kitchenStations)
     .values({
-      locationId: MIRROR_LOCATION_ID,
       name: "Kitchen",
       isDefault: true,
       active: true,

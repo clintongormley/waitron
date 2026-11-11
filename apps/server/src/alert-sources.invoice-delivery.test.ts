@@ -52,12 +52,11 @@ async function venue() {
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name: "Back office agent", tokenHash: "scrypt$fixture" })
+    .values({ name: "Back office agent", tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   const [office] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId,
       name: "Back office",
       host: "192.0.2.20",
       port: 631,
@@ -189,7 +188,6 @@ async function secondPrinter(v: Venue): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: v.locationId,
       name: "Upstairs office",
       host: "192.0.2.21",
       port: 631,

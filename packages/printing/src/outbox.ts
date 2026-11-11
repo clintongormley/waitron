@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printJobs, printers, venueLocationId } from "@waitron/db";
+import { printJobs, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
@@ -59,7 +59,6 @@ async function insertPrintJob(
   const [job] = await tx
     .insert(printJobs)
     .values({
-      locationId: venueId ?? (await venueLocationId(tx)),
       printerId,
       payload,
       kind,

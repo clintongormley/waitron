@@ -731,7 +731,6 @@ async function seedStuckPrintJob(): Promise<void> {
   const [printer] = await db
     .insert(printers)
     .values({
-      locationId: loc!.id,
       name: "Bar",
       transport: "network_tcp",
       host: "10.0.0.1",
@@ -739,7 +738,6 @@ async function seedStuckPrintJob(): Promise<void> {
     })
     .returning({ id: printers.id });
   await db.insert(printJobs).values({
-    locationId: loc!.id,
     printerId: printer!.id,
     payload: Uint8Array.from([0x01]),
     kind: "document",

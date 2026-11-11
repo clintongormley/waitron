@@ -67,7 +67,7 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
   await db
     .insert(invoiceSeries)
     .values({ id: TENANT_A.seriesId, nodeId: TENANT_A.nodeId, code: "A" });
-  const { deviceId } = await seedDevice(db, { locationId: venueId });
+  const { deviceId } = await seedDevice(db, {});
   await db.insert(sales).values({
     id: TENANT_A.saleId,
     source: "device",
@@ -176,7 +176,7 @@ export async function seedSoldRegistro(
   },
 ): Promise<void> {
   const entorno = params.entorno === undefined ? "production" : params.entorno;
-  const { deviceId } = await seedDevice(db, { locationId: params.locationId });
+  const { deviceId } = await seedDevice(db, {});
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
@@ -327,6 +327,6 @@ export async function seedTenantWithSif(
     // record walk-up sales that omit it.
     return { locationId, nodeId, seriesId };
   });
-  const { deviceId } = await seedDevice(db, { locationId: seeded.locationId });
+  const { deviceId } = await seedDevice(db, {});
   return { ...seeded, deviceId };
 }

@@ -698,7 +698,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "Table 5", zoneId: offers.zoneId })
+        .values({ label: "Table 5", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
       await tx.insert(floorTodayTables).values({ tableId: table!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
@@ -758,7 +758,6 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
       const [table] = await tx
         .insert(diningTables)
         .values({
-          locationId: cfg.locationId,
           label: "Bar 3",
           zoneId: (await offerProducts(tx, cfg)).zoneId,
         })
@@ -1103,7 +1102,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "T1", zoneId: offers.zoneId })
+        .values({ label: "T1", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
       await tx.insert(floorTodayTables).values({ tableId: table!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
@@ -2856,8 +2855,8 @@ it("A725 shared kitchen paper lists stations in Spanish alphabetical order", asy
     const late = { id: "00000000-0000-4000-8000-000000000001" };
     const early = { id: "00000000-0000-4000-8000-000000000002" };
     await tx.insert(kitchenStations).values([
-      { ...late, locationId: cfg.locationId, name: "Ñandú", isDefault: true, colour: "red" },
-      { ...early, locationId: cfg.locationId, name: "Naranja", colour: "red" },
+      { ...late, name: "Ñandú", isDefault: true, colour: "red" },
+      { ...early, name: "Naranja", colour: "red" },
     ]);
     const printerId = await makeSharedPrinter(tx, "Shared paper", [late.id, early.id]);
     const lateDish = await makeProduct(tx, catalogueId, "LateDish", { stationId: late.id });
@@ -2909,7 +2908,7 @@ describe("A803 portion grouping", () => {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [table] = await tx
       .insert(diningTables)
-      .values({ locationId: cfg.locationId, label: "P1", zoneId: offers.zoneId })
+      .values({ label: "P1", zoneId: offers.zoneId })
       .returning({ id: diningTables.id });
     await tx.insert(floorTodayTables).values({ tableId: table!.id });
     const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });

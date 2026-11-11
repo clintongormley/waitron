@@ -305,7 +305,7 @@ async function seedLocation(name: string): Promise<string> {
 async function seedStation(locationId: string, name: string): Promise<string> {
   const [row] = await db
     .insert(kitchenStations)
-    .values({ locationId, name })
+    .values({ name })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }

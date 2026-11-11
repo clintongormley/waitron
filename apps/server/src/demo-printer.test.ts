@@ -50,7 +50,7 @@ async function venue(): Promise<{ locationId: string; deviceId: string; profileI
 async function realPrinter(locationId: string, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
-    .values({ locationId, name, transport: "usb", localKey: name.toUpperCase() })
+    .values({ name, transport: "usb", localKey: name.toUpperCase() })
     .returning({ id: printers.id });
   return row!.id;
 }
@@ -67,7 +67,6 @@ async function pagePrinter(locationId: string, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId,
       name,
       host: "10.0.0.9",
       port: 631,
@@ -107,7 +106,7 @@ describe("the Demo printer", () => {
     const otherId = await withTransaction(suite.db, async (tx) => {
       const [other] = await tx
         .insert(printers)
-        .values({ locationId, name: "Other", transport: "usb", localKey: "OTHER" })
+        .values({ name: "Other", transport: "usb", localKey: "OTHER" })
         .returning({ id: printers.id });
       await enqueuePrintJob(
         tx,
@@ -140,7 +139,7 @@ describe("the Demo printer", () => {
     const { locationId, deviceId, profileId } = await venue();
     const [station] = await suite.db
       .insert(kitchenStations)
-      .values({ locationId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const demo = await configureDemoPrinter(suite.db, true);
     await withTransaction(suite.db, (tx) =>
@@ -256,7 +255,7 @@ describe("the Demo printer", () => {
 
   it("a deleted printer's route writes no list, default or station link", async () => {
     const { locationId, profileId } = await venue();
-    await suite.db.insert(kitchenStations).values({ locationId, name: "Grill" });
+    await suite.db.insert(kitchenStations).values({ name: "Grill" });
     const gone = await realPrinter(locationId, "Gone");
     await withTransaction(suite.db, (tx) => deletePrinter(tx, gone));
     const lists = await profileLists(profileId);
@@ -504,7 +503,7 @@ describe("the Demo printer", () => {
     const { locationId } = await venue();
     const [realAgent] = await suite.db
       .insert(printAgents)
-      .values({ locationId, name: "Demo printer", tokenHash: "real-agent-hash" })
+      .values({ name: "Demo printer", tokenHash: "real-agent-hash" })
       .returning({ id: printAgents.id });
     const demo = await configureDemoPrinter(suite.db, true);
     expect(demo?.agentId).not.toBe(realAgent!.id);

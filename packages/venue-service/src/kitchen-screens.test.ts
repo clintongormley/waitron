@@ -89,7 +89,7 @@ async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promi
 async function seedStation(locationId: string, name: string) {
   const [row] = await db
     .insert(kitchenStations)
-    .values({ locationId, name })
+    .values({ name })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }

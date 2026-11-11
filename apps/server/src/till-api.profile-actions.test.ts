@@ -393,7 +393,7 @@ beforeAll(async () => {
   );
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: v.cfg.locationId, name: `Grill ${randomUUID()}` })
+    .values({ name: `Grill ${randomUUID()}` })
     .returning({ id: kitchenStations.id });
   stationId = station!.id;
   for (const [, path, lacking] of ROUTES) {

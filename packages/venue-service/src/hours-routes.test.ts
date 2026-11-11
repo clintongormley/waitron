@@ -103,10 +103,7 @@ async function fixture(): Promise<Fixture> {
       .returning();
     const [bar, kitchen] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: location!.id, name: "Bar" },
-        { locationId: location!.id, name: "Kitchen", isDefault: true },
-      ])
+      .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }])
       .returning();
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
@@ -117,10 +114,7 @@ async function fixture(): Promise<Fixture> {
     };
     const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: location!.id, name: "Pass" },
-        { locationId: location!.id, name: "Grill" },
-      ])
+      .values([{ name: "Pass" }, { name: "Grill" }])
       .returning();
     const [calendarMenu] = await tx
       .insert(catalogues)

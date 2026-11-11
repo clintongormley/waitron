@@ -485,7 +485,6 @@ it("an F1 duplicate remains enrolled in receipt delivery through the shared prin
   });
   await inTx(venue, (tx) =>
     tx.insert(printJobs).values({
-      locationId: venue.cfg.locationId,
       printerId: venue.printerId,
       payload: new Uint8Array(),
       kind: "document",

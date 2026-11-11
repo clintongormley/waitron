@@ -439,7 +439,7 @@ describe("clearProvisionFixture", () => {
     const venueId = await venueLocationId(db);
     const zoneId = randomUUID();
     await withTransaction(db, async (tx) => {
-      await tx.insert(floorZones).values({ id: zoneId, locationId: venueId, name: "Terrace" });
+      await tx.insert(floorZones).values({ id: zoneId, name: "Terrace" });
       await tx.execute(sql`insert into zone_service_policies (zone_id, department_id)
         select ${zoneId}, id from departments
          limit 1`);
@@ -496,9 +496,9 @@ describe("clearProvisionFixture", () => {
     await withTransaction(db, async (tx) => {
       await tx
         .insert(kitchenStations)
-        .values({ locationId: venueId, name: "Restaurant pass" })
+        .values({ name: "Restaurant pass" })
         .returning({ id: kitchenStations.id });
-      await tx.insert(kitchenStations).values({ locationId: venueId, name: "Bar" });
+      await tx.insert(kitchenStations).values({ name: "Bar" });
       const day = randomUUID();
       await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
         values (${day}, 'Christmas Eve', 0)`);
@@ -596,7 +596,7 @@ describe("clearProvisionFixture", () => {
     await withTransaction(db, async (tx) => {
       const [bar] = await tx
         .insert(kitchenStations)
-        .values({ locationId: venueId, name: "Bar" })
+        .values({ name: "Bar" })
         .returning({ id: kitchenStations.id });
       const folder = await createCategory(tx, { name: "Drinks" });
       await setRoutingCell(

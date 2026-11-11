@@ -94,10 +94,7 @@ async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
       name: `Inside-${randomUUID().slice(0, 6)}`,
       departmentId: dept.id,
     });
-    const [set] = await tx
-      .insert(floorPlanSets)
-      .values({ locationId: cfg.locationId })
-      .returning({ id: floorPlanSets.id });
+    const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
     await linkFloorPlanSet(tx, { setId: set!.id, departmentId: dept.id, name: "Dinner" });
     return { setId: set!.id, zoneId: zone.id };
   });

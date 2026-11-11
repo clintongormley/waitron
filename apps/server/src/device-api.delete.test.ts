@@ -522,7 +522,6 @@ describe("a deleted device", () => {
     await suite.db.insert(joinRequests).values({
       id: deviceId,
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
       kind: "device",
       label: "Bar",
       tokenHash: hashDeviceToken("a token"),

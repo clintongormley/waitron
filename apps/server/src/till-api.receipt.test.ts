@@ -985,7 +985,6 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       .set({ status: "failed", attempts: 5 })
       .where(eq(printJobs.receiptCopy, true));
     await suite.db.insert(printJobs).values({
-      locationId: original!.locationId,
       printerId: original!.printerId,
       saleId: original!.saleId,
       payload: original!.payload,
@@ -1174,7 +1173,6 @@ describe("an original receipt whose printer was deleted", () => {
     const [original] = await suite.db.select().from(printJobs);
     await suite.db.update(printJobs).set({ status: "done" });
     await suite.db.insert(printJobs).values({
-      locationId: original!.locationId,
       printerId,
       saleId: original!.saleId,
       payload: original!.payload,

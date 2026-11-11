@@ -8,7 +8,6 @@ import {
   pagePrinters,
   printAgents,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { OfficePrinterReport } from "@waitron/print-agent";
 import { AppError, type DeleteImpact } from "@waitron/shared";
@@ -86,7 +85,6 @@ export async function registerPagePrinter(
   const [created] = await tx
     .insert(pagePrinters)
     .values({
-      locationId: await venueLocationId(tx),
       name: input.name,
       host: entry.host,
       port: report.port,

@@ -599,12 +599,12 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
   const cfg = { locationId };
   await db
     .insert(kitchenStations)
-    .values({ locationId, name: `Cocina${suffix}`, isDefault: existing === undefined });
+    .values({ name: `Cocina${suffix}`, isDefault: existing === undefined });
   const zone = async (name: string, displayOrder: number) =>
     (
       await db
         .insert(floorZones)
-        .values({ locationId, name: `${name}${suffix}`, displayOrder })
+        .values({ name: `${name}${suffix}`, displayOrder })
         .returning({ id: floorZones.id })
     )[0]!.id;
   const barra = await zone("Barra", 0);

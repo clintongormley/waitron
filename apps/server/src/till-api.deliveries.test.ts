@@ -191,7 +191,7 @@ async function venue(): Promise<Venue> {
       .returning({ id: persons.id });
     const [agent] = await tx
       .insert(printAgents)
-      .values({ locationId: cfg.locationId, name: "Back office agent", tokenHash: "scrypt$x" })
+      .values({ name: "Back office agent", tokenHash: "scrypt$x" })
       .returning({ id: printAgents.id });
     const receiptPrinter = await createPrinter(tx, {
       name: "Recibos",
@@ -201,7 +201,6 @@ async function venue(): Promise<Venue> {
     const [office] = await tx
       .insert(pagePrinters)
       .values({
-        locationId: cfg.locationId,
         name: "Back office",
         host: "192.0.2.20",
         port: 631,
@@ -388,7 +387,6 @@ async function upstairsOffice(v: Venue): Promise<string> {
     const [upstairs] = await tx
       .insert(pagePrinters)
       .values({
-        locationId: v.cfg.locationId,
         name: "Upstairs office",
         host: "192.0.2.21",
         port: 631,

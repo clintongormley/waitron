@@ -143,7 +143,7 @@ async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents
 async function agent(locationId: string, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name, tokenHash: hashDeviceToken(SECRET) })
+    .values({ name, tokenHash: hashDeviceToken(SECRET) })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -158,7 +158,6 @@ async function printer(
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: v.locationId,
       name: "Back office",
       host: `192.0.2.${hostCounter++}`,
       port: 631,
@@ -334,7 +333,6 @@ describe("agent authentication", () => {
     const [revoked] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: v.locationId,
         name: "Revoked",
         tokenHash: hashDeviceToken(SECRET),
         active: false,

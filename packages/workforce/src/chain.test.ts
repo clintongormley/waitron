@@ -64,7 +64,7 @@ function clockEvent(): TimeEntryAppend {
 }
 
 async function seedDeviceAt(location: string): Promise<string> {
-  const { deviceId } = await seedDevice(suite.db, { locationId: location });
+  const { deviceId } = await seedDevice(suite.db, {});
   return deviceId;
 }
 

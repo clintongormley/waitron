@@ -49,10 +49,7 @@ async function fixture(nullHeader = false) {
     source: "readiness_test",
     orderNumber: 1,
   });
-  const [zone] = await suite.db
-    .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Dining zone" })
-    .returning();
+  const [zone] = await suite.db.insert(floorZones).values({ name: "Dining zone" }).returning();
   await suite.db.insert(orderServiceContexts).values({
     workingOrderId: order!.id,
     zoneId: zone!.id,

@@ -86,7 +86,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(db, {});
-  await seedDevice(db, { locationId: F.locationId });
+  await seedDevice(db, {});
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db
     .insert(invoiceSeries)

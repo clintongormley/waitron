@@ -9,7 +9,6 @@ import {
   pagePrinters,
   printers,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -87,7 +86,6 @@ async function seedBoundDevice(profileId: string, active = true): Promise<string
   const [device] = await suite.db
     .insert(devices)
     .values({
-      locationId: location!.id,
       label: "Bound device",
       tokenHash: "scrypt$00$00",
       deviceProfileId: profileId,
@@ -548,10 +546,9 @@ describe("device-profile store against a real migrated database", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(suite.db);
     const [printer] = await suite.db
       .insert(printers)
-      .values({ locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+      .values({ name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
       .returning({ id: printers.id });
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -649,12 +646,11 @@ describe("device-profile store against a real migrated database", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(suite.db);
     const [p1, p2] = await suite.db
       .insert(printers)
       .values([
-        { locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" },
-        { locationId: venueId, name: "Counter", transport: "network_tcp", host: "10.0.0.2" },
+        { name: "Bar", transport: "network_tcp", host: "10.0.0.1" },
+        { name: "Counter", transport: "network_tcp", host: "10.0.0.2" },
       ])
       .returning({ id: printers.id });
     const base = {
@@ -717,15 +713,13 @@ describe("device-profile store against a real migrated database", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(suite.db);
     const [bar] = await suite.db
       .insert(printers)
-      .values({ locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+      .values({ name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
       .returning({ id: printers.id });
     const [office] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: venueId,
         name: "Office",
         host: "10.0.0.9",
         port: 631,

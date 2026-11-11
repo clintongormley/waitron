@@ -81,7 +81,7 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
     await seedBusinessDay(db, { dayCutover: venue.dayCutover });
     locationId = location!.id;
   }
-  const { deviceId } = await seedDevice(db, { locationId });
+  const { deviceId } = await seedDevice(db, {});
   const nodeId = await seedNode(db, locationId);
   const [series] = await db
     .insert(invoiceSeries)
@@ -109,7 +109,7 @@ export async function seedNodeAndSeries(
 
 /** Another device at `locationId`, for a test that needs money taken on two. */
 export async function seedVenueDevice(db: Database, locationId: string): Promise<DeviceId> {
-  return (await seedDevice(db, { locationId: locationId })).deviceId;
+  return (await seedDevice(db, {})).deviceId;
 }
 
 /**
@@ -494,7 +494,6 @@ export async function seedOpenOrder(
     .values({
       source: "device",
       deviceId: seed.deviceId,
-      locationId: seed.locationId,
       nodeId: seed.nodeId,
       orderNumber,
       status: "open",
@@ -532,11 +531,11 @@ export async function seedFiredOrder(
   if (opts.tableLabel !== undefined) {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: seed.locationId, name: randomUUID() })
+      .values({ name: randomUUID() })
       .returning({ id: floorZones.id });
     const [table] = await db
       .insert(diningTables)
-      .values({ locationId: seed.locationId, label: opts.tableLabel, zoneId: zone!.id })
+      .values({ label: opts.tableLabel, zoneId: zone!.id })
       .returning({ id: diningTables.id });
     await db
       .update(workingOrders)
@@ -581,11 +580,11 @@ export async function seedPartyAt(
   for (const table of tables) {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: seed.locationId, name: randomUUID() })
+      .values({ name: randomUUID() })
       .returning({ id: floorZones.id });
     const [row] = await db
       .insert(diningTables)
-      .values({ id: table.id, locationId: seed.locationId, label: table.label, zoneId: zone!.id })
+      .values({ id: table.id, label: table.label, zoneId: zone!.id })
       .returning({ id: diningTables.id });
     await db.insert(partyTables).values({
       partyId: party!.id,

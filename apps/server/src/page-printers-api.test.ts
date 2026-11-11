@@ -455,7 +455,6 @@ describe("page-printer management routes", () => {
     const [orphan] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: cfg.locationId,
         name: "Unassigned printer",
         host: "10.61.7.2",
         port: 631,

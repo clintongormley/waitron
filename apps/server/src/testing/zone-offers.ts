@@ -128,10 +128,7 @@ async function floorZone(tx: Transaction, cfg: Cfg, name: string): Promise<strin
   const where = and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.name, name));
   const [existing] = await tx.select({ id: floorZones.id }).from(floorZones).where(where);
   if (existing !== undefined) return existing.id;
-  const [created] = await tx
-    .insert(floorZones)
-    .values({ locationId: cfg.locationId, name })
-    .returning({ id: floorZones.id });
+  const [created] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
   return created!.id;
 }
 

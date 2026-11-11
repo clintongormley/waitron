@@ -71,17 +71,11 @@ async function fixture(): Promise<Fixture> {
       .returning();
     const [bar, kitchen] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: venueId, name: "Bar" },
-        { locationId: venueId, name: "Kitchen", isDefault: true },
-      ])
+      .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }])
       .returning();
     const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: venueId, name: "Pass" },
-        { locationId: venueId, name: "Grill" },
-      ])
+      .values([{ name: "Pass" }, { name: "Grill" }])
       .returning();
     const [calendarMenu] = await tx
       .insert(catalogues)
@@ -203,10 +197,7 @@ async function addSubjects(f: Fixture) {
       .returning();
     const [terraceStation, grill] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: f.cfg.locationId, name: "Terrace pass" },
-        { locationId: f.cfg.locationId, name: `Grill ${randomUUID()}` },
-      ])
+      .values([{ name: "Terrace pass" }, { name: `Grill ${randomUUID()}` }])
       .returning();
     return {
       terraceDepartment: { kind: "department" as const, id: terrace!.id },

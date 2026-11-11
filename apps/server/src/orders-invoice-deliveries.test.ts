@@ -60,12 +60,11 @@ useVenueDb({
       fullSeriesId = series!.id;
       const [agent] = await tx
         .insert(printAgents)
-        .values({ locationId: venue.cfg.locationId, name: "Back office agent", tokenHash: "x" })
+        .values({ name: "Back office agent", tokenHash: "x" })
         .returning({ id: printAgents.id });
       const [office] = await tx
         .insert(pagePrinters)
         .values({
-          locationId: venue.cfg.locationId,
           name: "Oficina",
           host: "192.0.2.20",
           port: 631,
@@ -166,7 +165,6 @@ async function extraOffice(name: string, locationId: string = venue.cfg.location
     tx
       .insert(pagePrinters)
       .values({
-        locationId,
         name,
         host: `192.0.2.${hostCounter++}`,
         port: 631,
@@ -1006,10 +1004,7 @@ describe("dashboard print on a receipt printer", () => {
     const { billId, saleId } = await fullInvoice();
     await venue.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await venue.db
-        .update(printers)
-        .set({ locationId: randomUUID() })
-        .where(eq(printers.id, venue.printerId));
+      await venue.db.update(printers).set({}).where(eq(printers.id, venue.printerId));
       const response = await printInvoice(
         venue.adminDashboard,
         billId,
@@ -1024,10 +1019,7 @@ describe("dashboard print on a receipt printer", () => {
         }),
       ]);
     } finally {
-      await venue.db
-        .update(printers)
-        .set({ locationId: venue.cfg.locationId })
-        .where(eq(printers.id, venue.printerId));
+      await venue.db.update(printers).set({}).where(eq(printers.id, venue.printerId));
       await venue.db.execute(sql`pragma foreign_keys = on`);
     }
   });

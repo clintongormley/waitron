@@ -2080,7 +2080,6 @@ describe("printer cash-drawer calibration", () => {
     const otherId = await createNetworkPrinter(app, "10.0.0.86", 9100, "Other delivery history");
     await suite.db.insert(printJobs).values([
       {
-        locationId,
         printerId: otherId,
         payload: new Uint8Array([1]),
         status: "done",
@@ -2088,7 +2087,6 @@ describe("printer cash-drawer calibration", () => {
         deliveredAt: "2026-09-26T09:00:00.000Z",
       },
       {
-        locationId,
         printerId: id,
         payload: new Uint8Array([1]),
         status: "done",
@@ -2096,7 +2094,6 @@ describe("printer cash-drawer calibration", () => {
         deliveredAt: "2026-09-26T10:00:00.000Z",
       },
       {
-        locationId,
         printerId: id,
         payload: new Uint8Array([2]),
         status: "done",
@@ -2104,7 +2101,6 @@ describe("printer cash-drawer calibration", () => {
         deliveredAt: "2026-09-26T11:00:00.000Z",
       },
       {
-        locationId,
         printerId: id,
         payload: new Uint8Array([3]),
         status: "failed",
@@ -2802,7 +2798,6 @@ describe("mountPrintApi — management: recent jobs", () => {
     const printerId = await createPrinterVia(app, "unused", "Timestamp printer");
     // A stored value with a +02:00 offset must still answer the canonical UTC ISO spelling.
     await suite.db.insert(printJobs).values({
-      locationId,
       printerId,
       payload: new Uint8Array([0x01]),
       status: "done",
@@ -2825,7 +2820,6 @@ describe("mountPrintApi — management: recent jobs", () => {
     const stamped = nowIso();
     await suite.db.insert(printJobs).values([
       {
-        locationId,
         printerId,
         payload,
         status: "done",
@@ -2833,9 +2827,9 @@ describe("mountPrintApi — management: recent jobs", () => {
         createdAt: "2020-01-01T00:00:00.000Z",
         deliveredAt: "2020-01-02T00:00:00.000Z",
       },
-      { locationId, printerId, payload, status: "failed", attempts: 4, createdAt: stamped },
-      { locationId, printerId, payload, status: "failed", attempts: 5, createdAt: stamped },
-      { locationId, printerId, payload, status: "printing", attempts: 0, createdAt: stamped },
+      { printerId, payload, status: "failed", attempts: 4, createdAt: stamped },
+      { printerId, payload, status: "failed", attempts: 5, createdAt: stamped },
+      { printerId, payload, status: "printing", attempts: 0, createdAt: stamped },
     ]);
     const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
     const printers = (await result.json()) as {
@@ -3031,7 +3025,6 @@ describe("mountPrintApi — management: recent jobs", () => {
       const completed = await suite.db
         .insert(printJobs)
         .values({
-          locationId,
           printerId,
           payload,
           status: "done",
@@ -5958,7 +5951,6 @@ describe("drawer expiry and printer visibility in the queue", () => {
     const printerId = await createPrinterVia(app, "unused");
     await suite.db.insert(printJobs).values([
       {
-        locationId,
         printerId,
         payload: Buffer.from([1]),
         kind: "drawer",
@@ -5967,7 +5959,6 @@ describe("drawer expiry and printer visibility in the queue", () => {
         lastError: "print_job.drawer_expired",
       },
       {
-        locationId,
         printerId,
         payload: Buffer.from([2]),
         kind: "drawer",
@@ -5976,7 +5967,6 @@ describe("drawer expiry and printer visibility in the queue", () => {
         lastError: "uncertain send",
       },
       {
-        locationId,
         printerId,
         payload: Buffer.from([3]),
         kind: "document",

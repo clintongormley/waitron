@@ -81,7 +81,7 @@ async function routed() {
   const cfg = { locationId };
   const [station] = await db
     .insert(kitchenStations)
-    .values({ locationId, name: "Kitchen", isDefault: true })
+    .values({ name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
   const made = await scoped(async (tx) => {
     const seasons = await ensureDefaultSeasons(tx);

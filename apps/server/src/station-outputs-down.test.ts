@@ -48,7 +48,6 @@ async function setup() {
     const [p] = await suite.db
       .insert(printers)
       .values({
-        locationId: venue.cfg.locationId,
         name,
         transport: "cloud_poll",
         pollId: randomUUID(),
@@ -90,7 +89,6 @@ async function job(
   values: Partial<typeof printJobs.$inferInsert> = {},
 ) {
   await suite.db.insert(printJobs).values({
-    locationId,
     printerId,
     payload: Uint8Array.of(1),
     createdAt: "2026-10-02T18:00:00.000Z",

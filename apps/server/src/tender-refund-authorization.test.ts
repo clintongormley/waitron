@@ -117,10 +117,7 @@ beforeEach(async () => {
   zones = (
     await db
       .insert(floorZones)
-      .values([
-        { locationId: placeId, name: "Inside" },
-        { locationId: placeId, name: "Outside" },
-      ])
+      .values([{ name: "Inside" }, { name: "Outside" }])
       .returning()
   ).map((row) => row.id);
   await db

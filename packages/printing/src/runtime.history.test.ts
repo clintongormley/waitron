@@ -30,7 +30,7 @@ async function fixture() {
   return withTransaction(suite.db, async (tx) => {
     const [agent] = await tx
       .insert(printAgents)
-      .values({ locationId: venueId, name: "Agent", tokenHash: "fixture" })
+      .values({ name: "Agent", tokenHash: "fixture" })
       .returning();
     const printer = await createPrinter(tx, {
       name: "Kitchen",
@@ -151,7 +151,6 @@ describe("print claims with delivered history", () => {
         if (specific)
           await tx.insert(printJobs).values({
             id: otherJobId,
-            locationId: venueId,
             printerId: other.id,
             payload: Buffer.from([1]),
             status: "queued",

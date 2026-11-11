@@ -75,7 +75,7 @@ async function venue() {
       .returning({ id: staffRoles.id });
     const [pass] = await tx
       .insert(kitchenStations)
-      .values({ locationId: v.cfg.locationId, name: "Pass" })
+      .values({ name: "Pass" })
       .returning({ id: kitchenStations.id });
     const [special] = await tx
       .insert(specialDays)
@@ -877,10 +877,7 @@ it("A724 keeps the sending department identity of every station range", async ()
       .insert(departments)
       .values({ name: "Takeaway", tradingName: "Takeaway" })
       .returning();
-    const [zone] = await tx
-      .insert(floorZones)
-      .values({ locationId: v.cfg.locationId, name: "Counter" })
-      .returning();
+    const [zone] = await tx.insert(floorZones).values({ name: "Counter" }).returning();
     await configureZone(tx, { zoneId: zone!.id, departmentId: department!.id });
     const [period] = await tx
       .insert(menuPeriods)

@@ -74,7 +74,7 @@ async function location(name: string): Promise<string> {
 async function agent(locationId: string, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -89,7 +89,6 @@ async function printer(
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId,
       name: "Back office",
       host: `192.0.2.${hostCounter++}`,
       port: 631,
@@ -259,19 +258,13 @@ describe("claiming an A4 delivery", () => {
     const id = await queueA4(await fullInvoice(v.nodeId), office);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await suite.db
-        .update(pagePrinters)
-        .set({ locationId: randomUUID() })
-        .where(eq(pagePrinters.id, office));
+      await suite.db.update(pagePrinters).set({}).where(eq(pagePrinters.id, office));
       const { job } = await withTransaction(suite.db, (tx) =>
         claimInvoicePagePrint(tx, v.agentOne, {}, at(1_000)),
       );
       expect(job?.claim.deliveryId).toBe(id);
     } finally {
-      await suite.db
-        .update(pagePrinters)
-        .set({ locationId: v.locationId })
-        .where(eq(pagePrinters.id, office));
+      await suite.db.update(pagePrinters).set({}).where(eq(pagePrinters.id, office));
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }
   });

@@ -125,7 +125,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
     async (script) => {
       const s = await seedTenant();
 
-      const { deviceId: other } = await seedDevice(suite.db, { locationId: s.locationId });
+      const { deviceId: other } = await seedDevice(suite.db, {});
       const readerId = await seedHeldReader(suite.db, other);
       const provider = new FakePaymentProvider(suite.db);
       arm(provider, script);
@@ -152,7 +152,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
     async (script) => {
       const s = await seedTenant();
 
-      const { deviceId: other } = await seedDevice(suite.db, { locationId: s.locationId });
+      const { deviceId: other } = await seedDevice(suite.db, {});
       const readerId = await seedHeldReader(suite.db, other);
       await suite.db.transaction((tx) =>
         insertAttempting(tx, {

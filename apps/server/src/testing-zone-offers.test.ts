@@ -65,7 +65,7 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
   });
   await seedLegacySellingUnits(db);
   const locationId = await venueLocationId(db);
-  const kitchen = await seedKitchenStation(db, { locationId });
+  const kitchen = await seedKitchenStation(db, {});
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),

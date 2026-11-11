@@ -66,7 +66,7 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     operationDescription: "Retail",
   });
   const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId });
+  await seedKitchenStation(db, {});
   const [person] = await db
     .insert(persons)
     .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
@@ -125,7 +125,7 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     await writeProductModifiers(tx, water.id, [{ kind: "extras", id: list.id }]);
     const [zone] = await tx
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Tables" })
+      .values({ name: "Tables" })
       .returning({ id: floorZones.id });
     const table = await createTable(tx, cfg, { label: "T1", zoneId: zone!.id });
     return { water: water.id, coffee: coffee.id, extrasListId: list.id, tableId: table.id };

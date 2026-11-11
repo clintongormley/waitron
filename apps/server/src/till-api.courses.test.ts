@@ -75,7 +75,7 @@ const suite = useVenueDb({
       operationDescription: "Retail",
     });
     const locationId = await venueLocationId(db);
-    await seedKitchenStation(db, { locationId });
+    await seedKitchenStation(db, {});
     const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)

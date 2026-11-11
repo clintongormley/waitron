@@ -3024,7 +3024,7 @@ async function addTable(
   // `NOT NULL constraint failed: dining_tables.id`.
   const rows = await tx
     .insert(diningTables)
-    .values({ locationId: cfg.locationId, zoneId, label: `T-${randomUUID().slice(0, 8)}` })
+    .values({ zoneId, label: `T-${randomUUID().slice(0, 8)}` })
     .returning({ id: diningTables.id });
   await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
   return rows[0]!.id;

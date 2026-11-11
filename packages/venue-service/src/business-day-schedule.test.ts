@@ -170,9 +170,7 @@ async function fixture(
     let zoneId: string | undefined;
     if (options.zone) {
       zoneId = randomUUID();
-      await tx
-        .insert(floorZones)
-        .values({ id: zoneId, locationId: loc, name: "Zone", active: !options.disabled });
+      await tx.insert(floorZones).values({ id: zoneId, name: "Zone", active: !options.disabled });
       await tx.insert(zoneServicePolicies).values({ zoneId, departmentId });
       if (ranges.length && specialDayId) {
         const dayId = randomUUID();

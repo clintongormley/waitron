@@ -72,8 +72,8 @@ async function venue(options: { oneSeason?: boolean } = {}) {
   const zones = await db
     .insert(floorZones)
     .values([
-      { locationId: cfg.locationId, name: "Dining room", displayOrder: 0 },
-      { locationId: cfg.locationId, name: "Terrace", displayOrder: 1 },
+      { name: "Dining room", displayOrder: 0 },
+      { name: "Terrace", displayOrder: 1 },
     ])
     .returning({ id: floorZones.id });
   if (options.oneSeason === true)
@@ -708,7 +708,7 @@ describe("special-day paint over the season", () => {
     const third = await scoped(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Bar", displayOrder: 2 })
+        .values({ name: "Bar", displayOrder: 2 })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: zone!.id, departmentId: v.departmentId });
       return zone!.id;

@@ -139,7 +139,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
+  const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const voidSession = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
   );

@@ -236,9 +236,7 @@ describe("staffing backup evidence", () => {
   it("preserves station and special-day staffing and overnight blocks", async () => {
     for (const suite of [original, restored]) {
       const db = suite.db;
-      await db
-        .insert(kitchenStations)
-        .values({ id: "station", locationId: "venue", name: "Grill" });
+      await db.insert(kitchenStations).values({ id: "station", name: "Grill" });
       await db.insert(specialDays).values({ id: "special", name: "Holiday" });
       await db
         .insert(specialDayDates)

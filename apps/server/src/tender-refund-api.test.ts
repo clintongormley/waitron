@@ -347,7 +347,6 @@ it.each(["cash", "manual", "connected"] as const)(
       source: "device",
       deviceId: venue.deviceId,
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
       method: kind === "cash" ? "cash" : "card",
       manual,
       state: "completed",

@@ -6,7 +6,6 @@ import {
   nowIso,
   ticketItems,
   withTransaction,
-  venueLocationId,
   workingOrderLines,
   type Database,
 } from "@waitron/db";
@@ -28,14 +27,10 @@ beforeAll(() => {
 describe("rest of the order read", () => {
   it("returns other-station kitchen records in station and line order, excluding hidden and served work", async () => {
     await seedVenue(db, { name: "Venue", invoiceLocales: ["en"], operationDescription: "Service" });
-    const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     const stations = await db
       .insert(kitchenStations)
-      .values([
-        { locationId, name: "Fryer", isDefault: true },
-        { locationId, name: "Grill" },
-      ])
+      .values([{ name: "Fryer", isDefault: true }, { name: "Grill" }])
       .returning({ id: kitchenStations.id, name: kitchenStations.name });
     const station = (name: string) => stations.find((s) => s.name === name)!.id;
     const orderId = randomUUID();

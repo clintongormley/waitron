@@ -287,7 +287,7 @@ describe("the card reader on a bill whose every line was given away", () => {
     const ticketZone = await inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra ticket" })
+        .values({ name: "Barra ticket" })
         .returning({ id: floorZones.id });
       const offered = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },

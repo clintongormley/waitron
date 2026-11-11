@@ -38,7 +38,7 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(kitchenStations)
-        .values({ locationId: LOCATION_A, name })
+        .values({ name })
         .returning({ id: kitchenStations.id });
       return row!.id;
     });
@@ -49,7 +49,7 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(printers)
-        .values({ locationId: LOCATION_A, name, transport: "cloud_poll", pollId })
+        .values({ name, transport: "cloud_poll", pollId })
         .returning({ id: printers.id });
       return row!.id;
     });

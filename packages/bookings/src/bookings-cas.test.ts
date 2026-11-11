@@ -48,11 +48,11 @@ async function seedTable(
 ): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: label })
+    .values({ name: label })
     .returning({ id: floorZones.id });
   const [row] = await db
     .insert(diningTables)
-    .values({ locationId: cfg.locationId, label, zoneId: zone!.id })
+    .values({ label, zoneId: zone!.id })
     .returning({ id: diningTables.id });
   await db.insert(floorTodayTables).values({ tableId: row!.id });
   return row!.id;

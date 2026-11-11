@@ -183,7 +183,7 @@ describe("seedKitchenStation", () => {
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
     const { location } = await seedTenantAndLocation();
-    const id = await seedKitchenStation(db, { locationId: location });
+    const id = await seedKitchenStation(db, {});
     // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
     // column's own mapping turns it back into a boolean.
     const rows = await db
@@ -196,7 +196,6 @@ describe("seedKitchenStation", () => {
   it("honours an overridden name and is_default", async () => {
     const { location } = await seedTenantAndLocation();
     const id = await seedKitchenStation(db, {
-      locationId: location,
       name: "Barra",
       isDefault: false,
     });
@@ -225,7 +224,7 @@ describe("seedDevice", () => {
   it("seedDevice pairs an active device on a new till profile at the location", async () => {
     await seedTenant(db);
     const location = await seedLocation(db);
-    const { deviceId, profileId } = await seedDevice(db, { locationId: location, label: "Barra" });
+    const { deviceId, profileId } = await seedDevice(db, { label: "Barra" });
     const [row] = await db
       .select({
         label: devices.label,
@@ -251,11 +250,10 @@ describe("seedDevice", () => {
     await seedTenant(db);
     const location = await seedLocation(db);
     const first = await seedDevice(db, {
-      locationId: location,
       formFactor: "phone-portrait",
       capabilities: ["take-cash"],
     });
-    const second = await seedDevice(db, { locationId: location, profileId: first.profileId });
+    const second = await seedDevice(db, { profileId: first.profileId });
     expect(second.profileId).toBe(first.profileId);
     expect(second.deviceId).not.toBe(first.deviceId);
     const profiles = await db
@@ -272,7 +270,7 @@ describe("seedDevice", () => {
     const [second] = await db.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(db, { operationDescription: "Restaurant" });
     await seedBusinessDay(db, {});
-    const { deviceId } = await seedDevice(db, { locationId: second!.id });
+    const { deviceId } = await seedDevice(db, {});
     const [row] = await db
       .select({ locationId: devices.locationId })
       .from(devices)
@@ -328,7 +326,7 @@ describe("the helpers inside a transaction", () => {
       await seedVenue(tx, { name: "In a transaction" });
       const node = await seedNode(tx);
       await seedDevice(tx);
-      await seedKitchenStation(tx, { locationId: await venueLocationId(tx) });
+      await seedKitchenStation(tx, {});
       return seedWorkingOrder(tx, { nodeId: node });
     });
     expect((await readVenue(suite.db)).name).toBe("In a transaction");

@@ -203,7 +203,7 @@ async function seedStation(tenant: Tenant, name: string): Promise<string> {
   // never reaches.
   const [row] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: tenant.locationId, name, isDefault: false, active: true })
+    .values({ name, isDefault: false, active: true })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
@@ -224,7 +224,6 @@ async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({
-      locationId: tenant.locationId,
       name: "Self-enrolled",
       nodeId,
       tokenHash: "x",
@@ -726,7 +725,6 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const [office] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: tenantA.locationId,
         name: "Office",
         host: `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`,
         port: 631,
@@ -784,7 +782,7 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       .returning({ id: departments.id });
     const [zone] = await suite.db
       .insert(floorZones)
-      .values({ locationId: tenantA.locationId, name: `Terrace zone ${randomUUID()}` })
+      .values({ name: `Terrace zone ${randomUUID()}` })
       .returning({ id: floorZones.id });
     const [till, display] = await suite.db
       .insert(deviceProfiles)

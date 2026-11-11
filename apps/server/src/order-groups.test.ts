@@ -168,7 +168,7 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
     operationDescription: "Restaurante",
   });
   const locationId = await venueLocationId(db);
-  const stationId = await seedKitchenStation(db, { locationId: locationId });
+  const stationId = await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
@@ -5095,7 +5095,6 @@ describe("advance HOLD tickets (Task 6)", () => {
     async function twoStations({ kitchenOn, barOn }: { kitchenOn: boolean; barOn: boolean }) {
       const v = await setupVenue();
       const barId = await seedKitchenStation(db, {
-        locationId: v.cfg.locationId,
         name: "Bar",
         isDefault: false,
       });
@@ -5238,12 +5237,10 @@ describe("advance HOLD tickets (Task 6)", () => {
       async function threeStations(dishes: Dish[] = ["steak", "fish", "flan"]) {
         const v = await setupVenue();
         const barId = await seedKitchenStation(db, {
-          locationId: v.cfg.locationId,
           name: "Bar",
           isDefault: false,
         });
         const screenId = await seedKitchenStation(db, {
-          locationId: v.cfg.locationId,
           name: "Screen",
           isDefault: false,
         });
@@ -5773,7 +5770,6 @@ describe("Fire now on one held dish", () => {
   async function fixture(printHeld: boolean, shape?: "grouped") {
     const v = await setupVenue();
     const extraStation = await seedKitchenStation(db, {
-      locationId: v.cfg.locationId,
       name: "Sauce kitchen",
       isDefault: false,
     });

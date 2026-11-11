@@ -48,7 +48,7 @@ const suite = useVenueDb({
     });
     const locationId = await venueLocationId(db);
     // The default station serves an item no routing cell covers.
-    stationId = await seedKitchenStation(db, { locationId });
+    stationId = await seedKitchenStation(db, {});
     const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)

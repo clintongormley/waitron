@@ -397,25 +397,20 @@ async function seedLocation(name: string, withDefault = true): Promise<string> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
   if (withDefault) {
-    await db
-      .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Default prep", isDefault: true });
+    await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
   }
   return venueId;
 }
 
 async function seedZone(locationId: string, name: string): Promise<string> {
-  const [row] = await db
-    .insert(floorZones)
-    .values({ locationId, name })
-    .returning({ id: floorZones.id });
+  const [row] = await db.insert(floorZones).values({ name }).returning({ id: floorZones.id });
   return row!.id;
 }
 
 async function seedStation(locationId: string, name: string, active = true): Promise<string> {
   const [row] = await db
     .insert(kitchenStations)
-    .values({ locationId, name, active })
+    .values({ name, active })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
@@ -478,7 +473,6 @@ describe("venue service routing", () => {
   it("reports an inactive default station before missing departments", async () => {
     const locationId = await seedLocation("No departments", false);
     await db.insert(kitchenStations).values({
-      locationId,
       name: "Default prep",
       isDefault: true,
       active: false,
@@ -1072,7 +1066,7 @@ async function seedRoutingVenue() {
 async function insertStation(tx: Transaction, locationId: string, name: string): Promise<string> {
   const [row] = await tx
     .insert(kitchenStations)
-    .values({ locationId: locationId, name })
+    .values({ name })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
@@ -1660,7 +1654,7 @@ describe("departments", () => {
       await configureZone(tx, { zoneId: dining, departmentId: bar.id });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "T12", zoneId: terrace })
+        .values({ label: "T12", zoneId: terrace })
         .returning({ id: diningTables.id });
       await tx.insert(floorTodayTables).values({ tableId: table!.id });
       return { restaurant, bar, tableId: table!.id };
@@ -1960,7 +1954,6 @@ describe("retired and moved zones", () => {
     const [table] = await db
       .insert(diningTables)
       .values({
-        locationId: venue.cfg.locationId,
         label: "B3",
         zoneId: venue.barZone,
       })
@@ -2661,7 +2654,7 @@ describe("zone offers from the published menus", () => {
       expect((await listZoneOffers(tx, venue.diningZone)).liveFields).toBe(before.liveFields);
       const [course] = await tx
         .insert(kitchenCourses)
-        .values({ locationId: venue.cfg.locationId, name: "Starters" })
+        .values({ name: "Starters" })
         .returning({ id: kitchenCourses.id });
       await tx
         .update(products)
@@ -3482,7 +3475,6 @@ it("keeps a switched-off zone's table rows and today's rows unchanged", async ()
     const [table] = await tx
       .insert(diningTables)
       .values({
-        locationId: cfg.locationId,
         zoneId: zone.id,
         label: "Present",
       })

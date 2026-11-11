@@ -38,7 +38,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
       .insert(printers)
       .values({
         id: PRINTER_A,
-        locationId: LOCATION_A,
         name: "Printer A",
         transport: "cloud_poll",
         pollId: "poll-a",
@@ -59,7 +58,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const bound = await admin
       .insert(devices)
       .values({
-        locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
         label: "Bound till",
         tokenHash: TOKEN_HASH,
@@ -71,7 +69,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const [row] = await admin
       .insert(devices)
       .values({
-        locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
         label: "Unbound printer",
         tokenHash: TOKEN_HASH,
@@ -84,13 +81,11 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const slipPrinter = "11111111-0000-4000-8000-0000000000b3";
     await admin.insert(printers).values({
       id: slipPrinter,
-      locationId: LOCATION_A,
       name: "Slip printer",
       transport: "cloud_poll",
       pollId: "poll-slip",
     });
     await admin.insert(devices).values({
-      locationId: LOCATION_A,
       deviceProfileId: PROFILE_A,
       label: "Slip device",
       tokenHash: TOKEN_HASH,
@@ -115,7 +110,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const bound = await admin
       .insert(devices)
       .values({
-        locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
         label: "Profile-bound",
         tokenHash: TOKEN_HASH,
@@ -130,7 +124,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
       .insert(deviceProfiles)
       .values({ id: profileC, name: "Profile C", formFactor: "till" });
     await admin.insert(devices).values({
-      locationId: LOCATION_A,
       deviceProfileId: profileC,
       label: "Restrict device",
       tokenHash: TOKEN_HASH,

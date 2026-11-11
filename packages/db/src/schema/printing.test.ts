@@ -46,7 +46,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(printAgents)
-        .values({ locationId: LOCATION_A, name, tokenHash: TOKEN_HASH })
+        .values({ name, tokenHash: TOKEN_HASH })
         .returning({ id: printAgents.id });
       return row!.id;
     });
@@ -56,7 +56,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(printers)
-        .values({ locationId: LOCATION_A, name, transport: "network_tcp", host: "10.0.0.5" })
+        .values({ name, transport: "network_tcp", host: "10.0.0.5" })
         .returning({ id: printers.id });
       return row!.id;
     });
@@ -66,7 +66,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(printJobs)
-        .values({ locationId: LOCATION_A, printerId: printer, payload: HELLO })
+        .values({ printerId: printer, payload: HELLO })
         .returning({ id: printJobs.id });
       return row!.id;
     });
@@ -83,7 +83,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       tx
         .insert(printers)
         .values({
-          locationId: LOCATION_A,
           name: opts.name ?? "Probe printer",
           transport: opts.transport,
           localKey: opts.localKey ?? null,
@@ -114,9 +113,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   it("print_agents: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
     const e = await captureError(() =>
       inTx((tx) =>
-        tx
-          .insert(printAgents)
-          .values({ locationId: GHOST_LOCATION, name: "Ghost location", tokenHash: TOKEN_HASH }),
+        tx.insert(printAgents).values({ name: "Ghost location", tokenHash: TOKEN_HASH }),
       ),
     );
     expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
@@ -142,14 +139,11 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
 
     const node = "cccccccc-0000-4000-8000-000000000001";
     await inTx((tx) =>
-      tx
-        .insert(printAgents)
-        .values({ locationId: LOCATION_A, name: "box", tokenHash: TOKEN_HASH, nodeId: node }),
+      tx.insert(printAgents).values({ name: "box", tokenHash: TOKEN_HASH, nodeId: node }),
     );
     const err = await captureError(() =>
       inTx((tx) =>
         tx.insert(printAgents).values({
-          locationId: LOCATION_A,
           name: "box dup",
           tokenHash: TOKEN_HASH,
           nodeId: node,
@@ -214,7 +208,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       tx
         .insert(printJobs)
         .values({
-          locationId: LOCATION_A,
           printerId: printer,
           payload: new Uint8Array([27, 112, 0, 25, 250]),
           kind: "drawer",
@@ -295,7 +288,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
         inTx((tx) =>
           tx
             .insert(printers)
-            .values({ locationId: LOCATION_A, name, transport, localKey, active: false })
+            .values({ name, transport, localKey, active: false })
             .returning({ id: printers.id }),
         );
       const [first] = await insertDisabled();
@@ -358,7 +351,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       tx
         .insert(printJobs)
         .values({
-          locationId: LOCATION_A,
           printerId: printerA,
           payload: new Uint8Array([0]),
           claimedBy: agentA,

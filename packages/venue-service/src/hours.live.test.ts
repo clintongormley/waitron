@@ -71,11 +71,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
       .returning();
     const [barRow, kitchenRow] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: venueId, name: "Bar" },
-        { locationId: venueId, name: "Kitchen", isDefault: true },
-        { locationId: venueId, name: "Deli pass" },
-      ])
+      .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }, { name: "Deli pass" }])
       .returning();
     return {
       cfg: { locationId: venueId },
@@ -209,10 +205,7 @@ it("daily station status refreshes routing and special days refresh Opening hour
     const cfg = { locationId: venueId };
     const [bar] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: cfg.locationId, name: "Bar" },
-        { locationId: cfg.locationId, name: "Kitchen", isDefault: true },
-      ])
+      .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }])
       .returning();
     const date = await saveSpecialDay(
       tx,

@@ -544,7 +544,6 @@ describe("completed post-invoice refund Transactions", () => {
           source: "device",
           deviceId: venue.deviceId,
           nodeId: venue.cfg.nodeId,
-          locationId: venue.cfg.locationId,
           method: "cash",
           state: "completed",
           createdAt: AT,

@@ -313,7 +313,6 @@ export async function applyVenue(
           // A line with no more specific route fires to the default station; with no active
           // default, firing fails with `station.no_default`. So a fresh venue ships one.
           await tx.insert(kitchenStations).values({
-            locationId,
             name: action.stationName,
             colour: await nextStationColour(tx),
             isDefault: true,

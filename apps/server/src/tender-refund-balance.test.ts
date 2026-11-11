@@ -131,7 +131,6 @@ async function refund(
       source: "device",
       deviceId,
       nodeId: cfg.nodeId,
-      locationId: cfg.locationId,
       method: "cash",
       state: "completed",
       completedAt: AT,

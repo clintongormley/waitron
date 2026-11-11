@@ -79,10 +79,7 @@ async function zoneNamed(
   name: string,
   serviceMode: "ticket_then_pay" | "table_tab",
 ): Promise<string> {
-  const [zone] = await tx
-    .insert(floorZones)
-    .values({ locationId: v.cfg.locationId, name })
-    .returning({ id: floorZones.id });
+  const [zone] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
   return (
     await offerProducts(tx, v.cfg, {
       zone: { zoneId: zone!.id },

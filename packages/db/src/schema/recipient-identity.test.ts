@@ -46,13 +46,10 @@ beforeEach(async () => {
     .values({ nodeId: node, code: "A" })
     .returning();
   series = seriesRow!.id;
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ locationId: LOCATION, name: "Room" })
-    .returning();
+  const [zone] = await db.insert(floorZones).values({ name: "Room" }).returning();
   const [table] = await db
     .insert(diningTables)
-    .values({ locationId: LOCATION, zoneId: zone!.id, label: "1" })
+    .values({ zoneId: zone!.id, label: "1" })
     .returning();
   tableId = table!.id;
   const [party] = await db.insert(parties).values({ openedBy: "operator" }).returning();

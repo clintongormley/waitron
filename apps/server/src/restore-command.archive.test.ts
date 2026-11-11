@@ -210,7 +210,7 @@ afterAll(async () => {
 
 /** One filed sale and a chain head pointing at it, as `restore-fiscal-e2e.test.ts` seeds them. */
 async function seedFiscalRecord(db: Database): Promise<void> {
-  await seedDevice(db, { locationId: ids.location });
+  await seedDevice(db, {});
   const device = sql`(select id from devices where location_id = ${ids.location})`;
   await db.insert(sales).values({
     id: ids.sale,

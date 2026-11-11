@@ -46,7 +46,7 @@ beforeAll(async () => {
   departmentId = department!.id;
   const [course] = await db
     .insert(kitchenCourses)
-    .values({ locationId: cfg.locationId, name: "Mains", displayOrder: 0 })
+    .values({ name: "Mains", displayOrder: 0 })
     .returning({ id: kitchenCourses.id });
   courseId = course!.id;
 });

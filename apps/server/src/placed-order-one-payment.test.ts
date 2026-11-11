@@ -41,7 +41,7 @@ useVenueDb({
     zoneOf.uninvoiced = await inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra ticket" })
+        .values({ name: "Barra ticket" })
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
     });

@@ -2075,10 +2075,7 @@ describe("recordSale — saved full-invoice service date", () => {
     await suite.db.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street" });
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await suite.db
-        .update(workingOrders)
-        .set({ locationId: randomUUID() })
-        .where(eq(workingOrders.id, bill.id));
+      await suite.db.update(workingOrders).set({}).where(eq(workingOrders.id, bill.id));
       const { saleId } = await run(new FakeFiscalBackend(suite.db), {
         seriesId: brandSeriesId(full!.id),
         workingOrderId: brandWorkingOrderId(bill.id),

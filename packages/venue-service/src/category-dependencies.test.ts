@@ -42,10 +42,7 @@ it("deleting a category removes its own and its subtree's category cells and kee
     const [kitchen, bar] = (
       await tx
         .insert(kitchenStations)
-        .values([
-          { locationId, name: "Kitchen" },
-          { locationId, name: "Bar" },
-        ])
+        .values([{ name: "Kitchen" }, { name: "Bar" }])
         .returning({ id: kitchenStations.id })
     ).map((row) => row.id);
     const catalogue = await createCatalogue(tx, { name: "Menu" });

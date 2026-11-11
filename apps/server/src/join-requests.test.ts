@@ -287,7 +287,6 @@ describe("createJoinRequest", () => {
     // this pass for the wrong reason.
     await suite.db.insert(joinRequests).values({
       nodeId: venue.cfg.nodeId,
-      locationId: venue.cfg.locationId,
       kind: "device",
       label: "seeded",
       tokenHash: "x",
@@ -677,7 +676,6 @@ describe("acceptDeviceJoinRequest", () => {
     // its device INSERT collides on the primary key after the request has been consumed.
     await suite.db.insert(devices).values({
       id: made.joinId,
-      locationId: venue.cfg.locationId,
       deviceProfileId: profileId,
       label: "blocker",
       tokenHash: "x",
@@ -1022,7 +1020,6 @@ describe("a returning disabled device", () => {
     const [printer] = await suite.db
       .insert(printers)
       .values({
-        locationId: venue.cfg.locationId,
         name: "Bar",
         transport: "network_tcp" as const,
         host: "10.0.0.5",
@@ -1069,7 +1066,6 @@ describe("a returning disabled device", () => {
     );
     await suite.db.insert(devices).values({
       id: made.joinId,
-      locationId: venue.cfg.locationId,
       deviceProfileId: profileId,
       label: "Same id",
       tokenHash: "x",
@@ -1271,7 +1267,6 @@ describe("a returning disabled device", () => {
       .insert(joinRequests)
       .values({
         nodeId: otherNode,
-        locationId: cfg.locationId,
         kind: "device",
         label: "Elsewhere",
         tokenHash: "x",
@@ -1358,7 +1353,6 @@ describe("a returning disabled device", () => {
     await suite.db.insert(joinRequests).values({
       id: deviceId,
       nodeId: cfg.nodeId,
-      locationId: cfg.locationId,
       kind: "print_agent",
       label: "Agent",
       tokenHash: "x",
@@ -1728,7 +1722,7 @@ describe("deleted zone joins", () => {
     const profileId = await seedProfile("kds");
     const [zone] = await suite.db
       .insert(floorZones)
-      .values({ locationId: venue.cfg.locationId, name: "Pending pass zone" })
+      .values({ name: "Pending pass zone" })
       .returning({ id: floorZones.id });
     const screen: DeviceKitchenScreen = {
       kind: "pass",

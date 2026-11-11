@@ -22,7 +22,7 @@ it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact 
   const personId = newId();
   await suite.db.execute(sql`insert into persons (id, created_at, display_name, pin_hash, role)
     values (${personId}, ${nowIso()}, 'Manager', ${hashPin("1234")}, 'manager')`);
-  const { deviceId } = await seedDevice(suite.db, { locationId });
+  const { deviceId } = await seedDevice(suite.db, {});
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );

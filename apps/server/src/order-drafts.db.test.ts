@@ -125,7 +125,7 @@ async function setupVenue(): Promise<Venue> {
     operationDescription: "Restaurante",
   });
   const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId: locationId });
+  await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),

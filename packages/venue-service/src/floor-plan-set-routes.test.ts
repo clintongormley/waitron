@@ -56,10 +56,7 @@ function fakeCore(locationId: string) {
   const asked: string[][] = [];
   const floorPlanSetsPort: CoreServices["floorPlanSets"] = {
     async create(tx) {
-      const [row] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId })
-        .returning({ id: floorPlanSets.id });
+      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       return row!.id;
     },
     async copyLayouts(_tx, fromSetId, toSetId) {

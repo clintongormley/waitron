@@ -80,14 +80,12 @@ beforeEach(async () => {
     .insert(printers)
     .values([
       {
-        locationId: placeId,
         name: "Drawer",
         transport: "cloud_poll",
         pollId: randomUUID(),
         hasCashDrawer: true,
       },
       {
-        locationId: placeId,
         name: "Receipt",
         transport: "cloud_poll",
         pollId: randomUUID(),
@@ -130,7 +128,6 @@ async function refund(patch: Partial<typeof tenderRefunds.$inferInsert> = {}) {
       source: "device",
       deviceId: cfg.origin.deviceId,
       nodeId: cfg.nodeId,
-      locationId: cfg.locationId,
       method: "cash",
       manual: false,
       state: "completed",

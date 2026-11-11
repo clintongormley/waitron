@@ -54,13 +54,13 @@ async function seedJoinedToday(db: Db): Promise<void> {
     operationDescription: "Hostelería",
   });
   LOCATION = await venueLocationId(db);
-  await db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
+  await db.insert(floorZones).values({ id: ZONE, name: "Bar" });
   await db.insert(diningTables).values([
-    { id: LONG, locationId: LOCATION, zoneId: ZONE, label: "Long table" },
-    { id: COUNTER_3, locationId: LOCATION, zoneId: ZONE, label: "Counter 3" },
-    { id: COUNTER_4, locationId: LOCATION, zoneId: ZONE, label: "Counter 4" },
-    { id: COUNTER_5, locationId: LOCATION, zoneId: ZONE, label: "Counter 5" },
-    { id: PLAIN, locationId: LOCATION, zoneId: ZONE, label: "Plain" },
+    { id: LONG, zoneId: ZONE, label: "Long table" },
+    { id: COUNTER_3, zoneId: ZONE, label: "Counter 3" },
+    { id: COUNTER_4, zoneId: ZONE, label: "Counter 4" },
+    { id: COUNTER_5, zoneId: ZONE, label: "Counter 5" },
+    { id: PLAIN, zoneId: ZONE, label: "Plain" },
   ]);
   await db.insert(floorResetTables).values([
     { id: LONG_ROW, zoneId: ZONE, tableId: LONG, label: "Long table", seats: 10 },
@@ -303,8 +303,8 @@ describe("saved part", () => {
       operationDescription: "Hostelería",
     });
     LOCATION = await venueLocationId(suite.db);
-    await suite.db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
-    await suite.db.insert(floorPlanSets).values({ id: PLAN_SET, locationId: LOCATION });
+    await suite.db.insert(floorZones).values({ id: ZONE, name: "Bar" });
+    await suite.db.insert(floorPlanSets).values({ id: PLAN_SET });
     await suite.db
       .insert(floorPlans)
       .values({ id: PLAN, zoneId: ZONE, setId: PLAN_SET, savedAt: "2026-10-10T12:00:00.000Z" });
@@ -322,33 +322,29 @@ describe("saved part", () => {
     await suite.db.insert(diningTables).values([
       {
         id: LONG,
-        locationId: LOCATION,
         zoneId: ZONE,
         label: "Long table",
         planTableId: LONG_MASTER,
       },
       {
         id: COUNTER_3,
-        locationId: LOCATION,
         zoneId: ZONE,
         label: "Counter 3",
         planTableId: COUNTER_3_MASTER,
       },
       {
         id: COUNTER_4,
-        locationId: LOCATION,
         zoneId: ZONE,
         label: "Counter 4",
         planTableId: COUNTER_4_MASTER,
       },
       {
         id: COUNTER_5,
-        locationId: LOCATION,
         zoneId: ZONE,
         label: "Counter 5",
         planTableId: COUNTER_5_MASTER,
       },
-      { id: NO_MASTER, locationId: LOCATION, zoneId: ZONE, label: "Loose" },
+      { id: NO_MASTER, zoneId: ZONE, label: "Loose" },
     ]);
   });
 
@@ -397,7 +393,7 @@ describe("a layout that stands a joined table's tables", () => {
       operationDescription: "Hostelería",
     });
     LOCATION = await venueLocationId(suite.db);
-    await suite.db.insert(floorZones).values({ id: INSIDE, locationId: LOCATION, name: "Inside" });
+    await suite.db.insert(floorZones).values({ id: INSIDE, name: "Inside" });
     await suite.db
       .insert(floorPlanSets)
       .values([STANDARD, DINNER, ALL_OFF].map((id) => ({ id, locationId: LOCATION })));
@@ -425,9 +421,9 @@ describe("a layout that stands a joined table's tables", () => {
       { planId: plan(DINNER), planTableId: M45, x: 0, y: 0, ...AT },
     ]);
     await suite.db.insert(diningTables).values([
-      { id: T4, locationId: LOCATION, zoneId: INSIDE, label: "4", planTableId: M4 },
-      { id: T5, locationId: LOCATION, zoneId: INSIDE, label: "5", planTableId: M5 },
-      { id: T45, locationId: LOCATION, zoneId: INSIDE, label: "4+5", planTableId: M45 },
+      { id: T4, zoneId: INSIDE, label: "4", planTableId: M4 },
+      { id: T5, zoneId: INSIDE, label: "5", planTableId: M5 },
+      { id: T45, zoneId: INSIDE, label: "4+5", planTableId: M45 },
     ]);
     await suite.db.insert(floorResetTables).values([
       { id: R4, zoneId: INSIDE, tableId: T4, label: "4", seats: 4, planTableId: M4 },

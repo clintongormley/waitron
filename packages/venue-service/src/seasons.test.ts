@@ -221,7 +221,7 @@ async function autumnVenue() {
   const cfg: { locationId: string } = { locationId: venueId };
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 0 })
+    .values({ name: "Terrace", displayOrder: 0 })
     .returning({ id: floorZones.id });
   const stored = await db
     .insert(seasons)

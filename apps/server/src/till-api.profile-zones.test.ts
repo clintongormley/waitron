@@ -1836,7 +1836,6 @@ describe("a Restaurant profile in its own zones", () => {
     ] as const) {
       await suite.db.insert(pagePrinters).values({
         id,
-        locationId: v.cfg.locationId,
         name: `Invoices ${profile}`,
         host: id,
         port: 631,

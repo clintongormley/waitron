@@ -71,7 +71,7 @@ async function seedCourse(
 ): Promise<string> {
   const [row] = await db
     .insert(kitchenCourses)
-    .values({ locationId: cfg.locationId, name, displayOrder, active })
+    .values({ name, displayOrder, active })
     .returning({ id: kitchenCourses.id });
   return row!.id;
 }

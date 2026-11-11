@@ -30,7 +30,7 @@ export async function seedVenueWithStaff(db: Database) {
       .returning({ id: departments.id });
     const [station] = await tx
       .insert(kitchenStations)
-      .values({ locationId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const [season] = await tx
       .insert(seasons)

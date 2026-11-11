@@ -74,7 +74,7 @@ describe("seedCatalogues", () => {
       expect(demoted.rows).toHaveLength(1);
       await tx
         .insert(kitchenStations)
-        .values({ locationId, name: "Galley", colour: "blue", isDefault: true, active: true });
+        .values({ name: "Galley", colour: "blue", isDefault: true, active: true });
       await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
       return (
         await tx.execute<{ name: string; is_default: number }>(sql`

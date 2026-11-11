@@ -429,11 +429,11 @@ describe("readTableSteps", () => {
     const outside = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Loose" })
+        .values({ name: "Loose" })
         .returning({ id: floorZones.id });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: v.cfg.locationId, label: "L1", zoneId: zone!.id })
+        .values({ label: "L1", zoneId: zone!.id })
         .returning({ id: diningTables.id });
       return table!.id;
     });

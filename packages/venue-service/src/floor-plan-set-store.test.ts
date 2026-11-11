@@ -34,10 +34,7 @@ async function venue(tx: Transaction) {
 }
 
 async function newSet(tx: Transaction, cfg: { locationId: string }): Promise<string> {
-  const [row] = await tx
-    .insert(floorPlanSets)
-    .values({ locationId: cfg.locationId })
-    .returning({ id: floorPlanSets.id });
+  const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
   return row!.id;
 }
 

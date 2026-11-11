@@ -177,7 +177,7 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
     });
     const [course] = await tx
       .insert(kitchenCourses)
-      .values({ locationId, name: "Starters" })
+      .values({ name: "Starters" })
       .returning({ id: kitchenCourses.id });
     return {
       locationId,

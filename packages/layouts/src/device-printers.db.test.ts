@@ -52,7 +52,7 @@ async function seedLocation(name: string): Promise<string> {
 async function seedPrinter(location: string, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
-    .values({ locationId: location, name, transport: "network_tcp", host: "10.0.0.1" })
+    .values({ name, transport: "network_tcp", host: "10.0.0.1" })
     .returning({ id: printers.id });
   return row!.id;
 }
@@ -61,7 +61,6 @@ async function seedPagePrinter(location: string, name: string): Promise<string> 
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: location,
       name,
       host: "10.0.0.9",
       port: 631,
@@ -581,7 +580,6 @@ describe("a deleted printer on a profile's lists", () => {
     const [row] = await suite.db
       .insert(printers)
       .values({
-        locationId: loc,
         name: "Gone",
         transport: "network_tcp",
         host: "10.0.0.2",

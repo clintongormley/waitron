@@ -103,7 +103,7 @@ useVenueDb({
     prepayZone = await inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra prepago" })
+        .values({ name: "Barra prepago" })
         .returning({ id: floorZones.id });
       return (
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" })

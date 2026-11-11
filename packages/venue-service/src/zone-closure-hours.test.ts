@@ -44,12 +44,10 @@ async function venue() {
   });
   const venueId = await venueLocationId(db);
   const cfg = { locationId: venueId };
-  await db
-    .insert(kitchenStations)
-    .values({ locationId: cfg.locationId, name: "Kitchen", isDefault: true });
+  await db.insert(kitchenStations).values({ name: "Kitchen", isDefault: true });
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Bar" })
+    .values({ name: "Bar" })
     .returning({ id: floorZones.id });
   const barZone = zone!.id;
   return withTransaction(db, async (tx) => {

@@ -92,11 +92,11 @@ async function seedTable(label = "12"): Promise<string> {
   const locationId = await venueLocationId(suite.db);
   const [zone] = await suite.db
     .insert(floorZones)
-    .values({ locationId, name: label })
+    .values({ name: label })
     .returning({ id: floorZones.id });
   const [row] = await suite.db
     .insert(diningTables)
-    .values({ locationId, label, zoneId: zone!.id })
+    .values({ label, zoneId: zone!.id })
     .returning({ id: diningTables.id });
   await suite.db.insert(floorTodayTables).values({ tableId: row!.id });
   return row!.id;

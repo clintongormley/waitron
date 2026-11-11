@@ -53,7 +53,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     productA = prodA!.id;
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: LOCATION_A, name: "Kitchen", isDefault: true })
+      .values({ name: "Kitchen", isDefault: true })
       .returning({ id: kitchenStations.id });
     stationA = station!.id;
   });

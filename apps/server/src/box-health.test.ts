@@ -88,7 +88,7 @@ async function seedSales(issued: { id: string; at: string; corrects?: string }[]
 async function seedPrinter(locationId: string, name: string, over: object = {}): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
-    .values({ locationId, name, transport: "network_tcp", host: "10.0.0.1", ...over })
+    .values({ name, transport: "network_tcp", host: "10.0.0.1", ...over })
     .returning({ id: printers.id });
   return row!.id;
 }
@@ -252,9 +252,7 @@ describe("collectBoxHealth", () => {
         owner: "writer",
         source: {
           read: async ({ tx }) => {
-            await tx
-              .insert(printers)
-              .values({ locationId: location, name: "Sneaky", transport: "network_tcp" });
+            await tx.insert(printers).values({ name: "Sneaky", transport: "network_tcp" });
             return [];
           },
         },

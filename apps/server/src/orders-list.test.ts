@@ -681,7 +681,6 @@ describe("rows written within one millisecond, read in the order they were writt
         const [job] = await tx
           .insert(printJobs)
           .values({
-            locationId: venue.cfg.locationId,
             printerId: venue.printerId,
             payload: Uint8Array.from([0x01]),
             saleId,

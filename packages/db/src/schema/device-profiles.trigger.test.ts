@@ -44,7 +44,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
 
   async function insertKdsDevice(profileId: string, active: boolean, label: string): Promise<void> {
     await db.insert(devices).values({
-      locationId,
       deviceProfileId: profileId,
       label,
       tokenHash: TOKEN_HASH,

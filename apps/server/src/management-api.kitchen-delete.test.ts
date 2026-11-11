@@ -86,7 +86,6 @@ it.each(["courses", "stations"] as const)(
         .insert(printers)
         .values({
           name: "Kitchen",
-          locationId: v.cfg.locationId,
           transport: "network_tcp",
           host: "192.0.2.1",
           port: 9100,

@@ -73,7 +73,6 @@ export async function seedTenderRefund(
       source: input.source ?? "device",
       deviceId: input.source === "demo_seed" ? null : origin.deviceId,
       nodeId: origin.nodeId,
-      locationId: origin.locationId,
       state: input.state,
       createdAt: input.createdAt,
       completedAt: input.state === "completed" ? input.at : null,

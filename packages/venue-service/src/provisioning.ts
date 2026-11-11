@@ -112,13 +112,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         const zone = await tx
           .insert(floorZones)
           .values({
-            locationId: await venueRowId(),
             name: starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage),
             displayOrder: 0,
             active: true,
           })
           .onConflictDoUpdate({
-            target: [floorZones.locationId, floorZones.name],
+            target: [floorZones.name],
             targetWhere: sql`${floorZones.active} = 1`,
             set: { name: sql`excluded.name` },
           })

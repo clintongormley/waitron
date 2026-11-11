@@ -116,7 +116,7 @@ describe("departmental tab transfers", () => {
       await withTransaction(suite.db, async (tx) => {
         const [table] = await tx
           .insert(diningTables)
-          .values({ locationId: v.cfg.locationId, zoneId: v.az, label: "Saved patio" })
+          .values({ zoneId: v.az, label: "Saved patio" })
           .returning();
         await tx.insert(floorTodayTables).values({ tableId: table!.id, name: tableName });
         await tx
@@ -901,7 +901,7 @@ describe("departmental tab transfers", () => {
     const before = await withTransaction(suite.db, async (tx) => {
       const [station] = await tx
         .insert(kitchenStations)
-        .values({ locationId: v.cfg.locationId, name: "Source kitchen" })
+        .values({ name: "Source kitchen" })
         .returning();
       const [unit] = await tx
         .insert(units)
@@ -1138,7 +1138,6 @@ describe("departmental tab transfers", () => {
     const [table] = await suite.db
       .insert(diningTables)
       .values({
-        locationId: v.cfg.locationId,
         zoneId: v.bz,
         label: randomUUID(),
       })
@@ -1243,10 +1242,7 @@ describe("departmental tab transfers", () => {
   it("assigns an explicitly chosen active destination table without moving a party", async () => {
     const v = await pending();
     const [table] = await withTransaction(suite.db, (tx) =>
-      tx
-        .insert(diningTables)
-        .values({ locationId: v.cfg.locationId, zoneId: v.bz, label: randomUUID() })
-        .returning(),
+      tx.insert(diningTables).values({ zoneId: v.bz, label: randomUUID() }).returning(),
     );
     await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
     await accept(v, 0, v.bz, table!.id);
@@ -1256,10 +1252,7 @@ describe("departmental tab transfers", () => {
   it("refuses a table in another zone", async () => {
     const v = await pending();
     const [table] = await withTransaction(suite.db, (tx) =>
-      tx
-        .insert(diningTables)
-        .values({ locationId: v.cfg.locationId, zoneId: v.az, label: randomUUID() })
-        .returning(),
+      tx.insert(diningTables).values({ zoneId: v.az, label: randomUUID() }).returning(),
     );
     await expect(accept(v, 0, v.bz, table!.id)).rejects.toMatchObject({
       code: "department_transfer.destination_invalid",
@@ -1397,7 +1390,6 @@ describe("departmental tab transfers", () => {
           tx
             .insert(diningTables)
             .values({
-              locationId: v.cfg.locationId,
               zoneId: v.bz,
               label: randomUUID(),
             })

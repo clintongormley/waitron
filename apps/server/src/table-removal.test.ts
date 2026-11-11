@@ -73,9 +73,7 @@ async function zone(): Promise<string> {
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    await tx
-      .insert(floorZones)
-      .values({ id, locationId: v.cfg.locationId, name: `Zone ${id.slice(0, 8)}` });
+    await tx.insert(floorZones).values({ id, name: `Zone ${id.slice(0, 8)}` });
     await tx.insert(zoneServicePolicies).values({
       zoneId: id,
       departmentId: tables!.departmentId,

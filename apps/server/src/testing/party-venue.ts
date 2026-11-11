@@ -191,9 +191,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
 /** A dining table in the tables zone at a chosen id, for a test whose answer must not follow id order. */
 export async function tableAt(v: PartyVenue, id: string, label: string): Promise<string> {
   await inTx(v, async (tx) => {
-    await tx
-      .insert(diningTables)
-      .values({ id, locationId: v.cfg.locationId, label, zoneId: v.tables.zoneId });
+    await tx.insert(diningTables).values({ id, label, zoneId: v.tables.zoneId });
     await tx.insert(floorTodayTables).values({ tableId: id });
   });
   return id;

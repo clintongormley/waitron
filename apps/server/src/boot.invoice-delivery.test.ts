@@ -776,7 +776,6 @@ describe("invoice-choice email context at trading boot", () => {
         .values({ displayName: "Invoice operator", pinHash: hashPin("5555"), role: "staff" })
         .returning();
       const device = await seedDevice(suite.db, {
-        locationId: ctx.location,
         capabilities: ["take-orders"],
       });
       const session = await withTransaction(suite.db, (tx) =>

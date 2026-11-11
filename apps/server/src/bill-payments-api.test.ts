@@ -2071,7 +2071,6 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         await inTx((tx) =>
           tx.insert(pagePrinters).values({
             id: pagePrinterId,
-            locationId: venue.cfg.locationId,
             name: "Office",
             host: pagePrinterId,
             port: 631,
@@ -2126,7 +2125,6 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       await inTx((tx) =>
         tx.insert(pagePrinters).values({
           id,
-          locationId: venue.cfg.locationId,
           name: values.name,
           host: id,
           port: 631,

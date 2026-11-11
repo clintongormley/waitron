@@ -73,7 +73,6 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
         id: tabId,
         source: "dashboard",
         deviceId: null,
-        locationId: cfg.locationId,
         nodeId: cfg.nodeId,
         orderNumber: nextOrderNumber,
         partyId: party!.id,

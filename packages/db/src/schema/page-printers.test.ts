@@ -63,7 +63,6 @@ describe("the agent that reaches a page printer", () => {
     const [row] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId,
         name: `Office ${host}`,
         host,
         port: 631,
@@ -88,7 +87,7 @@ describe("the agent that reaches a page printer", () => {
     const location = await seedLocation("Bar");
     const [agent] = await suite.db
       .insert(printAgents)
-      .values({ locationId: location, name: "Back office", tokenHash: "hash" })
+      .values({ name: "Back office", tokenHash: "hash" })
       .returning({ id: printAgents.id });
     const reached = await insertPrinter(location, "192.0.2.35", { agentId: agent!.id });
     expect(reached.agentId).toBe(agent!.id);

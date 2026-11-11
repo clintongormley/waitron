@@ -65,7 +65,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
-  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
+  const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );

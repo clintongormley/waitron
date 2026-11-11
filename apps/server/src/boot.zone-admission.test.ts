@@ -637,7 +637,7 @@ describe("startup zone admission", () => {
     await rawZone("Invalid/Zone");
     const reference = `cs_${randomUUID()}`;
     const secret = "whsec_synthetic_boot_zone";
-    const { deviceId } = await seedDevice(suite.db, { locationId: LOCATION });
+    const { deviceId } = await seedDevice(suite.db, {});
     await withTransaction(suite.db, async (tx) => {
       const order = await seedWorkingOrder(tx, { source: "device", deviceId, orderNumber: 1 });
       await insertInitiated(tx, {

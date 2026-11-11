@@ -365,14 +365,13 @@ describe("the pass screen's device routes", () => {
     const foreignNode = await seedNode(suite.db, foreignLocation!.id);
     const [foreignStation] = await suite.db
       .insert(kitchenStations)
-      .values({ locationId: foreignLocation!.id, name: "Other kitchen" })
+      .values({ name: "Other kitchen" })
       .returning({ id: kitchenStations.id });
     const [foreignOrder] = await suite.db
       .insert(workingOrders)
       .values({
         source: "dashboard",
         deviceId: null,
-        locationId: foreignLocation!.id,
         nodeId: foreignNode,
         orderNumber: 1,
         status: "open",

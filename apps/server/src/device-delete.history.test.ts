@@ -283,7 +283,6 @@ describe("a deleted device's history", () => {
         await suite.db
           .insert(printers)
           .values({
-            locationId: venue.cfg.locationId,
             name,
             transport: "network_tcp",
             host: `${name.toLowerCase().replaceAll(" ", "-")}.test`,

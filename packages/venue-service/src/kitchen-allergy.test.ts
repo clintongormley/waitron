@@ -10,7 +10,6 @@ import {
   ticketItems,
   workingOrderLines,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -49,12 +48,10 @@ beforeEach(async () => {
     invoiceLocales: ["en"],
     operationDescription: "Restaurant",
   });
-  const venueId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const [station] = await suite.db
     .insert(kitchenStations)
     .values({
-      locationId: venueId,
       name: "Grill",
     })
     .returning();

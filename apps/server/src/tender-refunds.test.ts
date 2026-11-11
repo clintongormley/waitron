@@ -122,7 +122,6 @@ beforeEach(async () => {
   const [printer] = await db
     .insert(printers)
     .values({
-      locationId: placeId,
       name: "Drawer",
       transport: "cloud_poll",
       pollId: randomUUID(),

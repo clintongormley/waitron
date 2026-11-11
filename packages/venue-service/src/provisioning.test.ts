@@ -583,11 +583,11 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const { locationId, profiles, runSeed } = await venue();
       const [grill] = await db
         .insert(kitchenStations)
-        .values({ locationId, name: `Grill ${randomUUID()}`, active: false })
+        .values({ name: `Grill ${randomUUID()}`, active: false })
         .returning({ id: kitchenStations.id });
       const [bar] = await db
         .insert(kitchenStations)
-        .values({ locationId, name: `Bar ${randomUUID()}` })
+        .values({ name: `Bar ${randomUUID()}` })
         .returning({ id: kitchenStations.id });
       await db
         .insert(deviceProfileKitchenScreens)
@@ -651,10 +651,7 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
   const venueId = await venueLocationId(db);
   const locationId = venueId;
   const node = { nodeId: await seedNode(db) };
-  const [old] = await db
-    .insert(floorZones)
-    .values({ locationId, name: "Counter", active: false })
-    .returning();
+  const [old] = await db.insert(floorZones).values({ name: "Counter", active: false }).returning();
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
   const rows = await db.select().from(floorZones).where(eq(floorZones.locationId, locationId));
   expect(rows).toHaveLength(2);

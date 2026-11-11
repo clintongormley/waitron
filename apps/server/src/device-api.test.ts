@@ -156,7 +156,6 @@ async function seedPrinter(cfg: WithVenueRowId): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: cfg.locationId,
       name: "Receipts",
       transport: "cloud_poll",
       pollId: "poll-abc",
@@ -209,7 +208,6 @@ async function seedPagePrinter(cfg: WithVenueRowId): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: cfg.locationId,
       name: "Office",
       host: "10.0.0.8",
       port: 631,
@@ -1059,7 +1057,6 @@ describe("Device API — the device-guarded routes", () => {
     ]);
     for (const printerId of [ownPrinter, foreignPrinter]) {
       await suite.db.insert(printJobs).values({
-        locationId: venue.cfg.locationId,
         printerId,
         payload: Uint8Array.of(1),
         status: "failed",
@@ -1371,7 +1368,6 @@ describe("Device API — the device-guarded routes", () => {
       const printerId = await seedPrinter(venue.cfg);
       await suite.db.insert(stationPrinters).values({ stationId: cold, printerId });
       await suite.db.insert(printJobs).values({
-        locationId: venue.cfg.locationId,
         printerId,
         payload: Uint8Array.of(1),
         status: "failed",
@@ -1442,7 +1438,6 @@ describe("Device API — the device-guarded routes", () => {
       const [table] = await suite.db
         .insert(diningTables)
         .values({
-          locationId: venue.cfg.locationId,
           label: "Garden 4",
           zoneId: zone!.id,
           ...shortNameColumns("G4"),
@@ -1593,7 +1588,6 @@ describe("Device API — the device-guarded routes", () => {
       printerAt.set(stationId, printerId);
       await suite.db.insert(stationPrinters).values({ stationId, printerId });
       await suite.db.insert(printJobs).values({
-        locationId: venue.cfg.locationId,
         printerId,
         payload: Uint8Array.of(1),
         status: "failed",
@@ -2593,10 +2587,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       const app = mountApp(venue.cfg);
       const [offered, other] = await suite.db
         .insert(floorZones)
-        .values([
-          { locationId: venue.cfg.locationId, name: "Terrace" },
-          { locationId: venue.cfg.locationId, name: "Bar" },
-        ])
+        .values([{ name: "Terrace" }, { name: "Bar" }])
         .returning({ id: floorZones.id });
       const profileId = await seedProfile("kds");
       await withTransaction(suite.db, (tx) =>
@@ -2625,7 +2616,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       const app = mountApp(venue.cfg);
       const [zone] = await suite.db
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Deleted pass zone" })
+        .values({ name: "Deleted pass zone" })
         .returning({ id: floorZones.id });
       const profileId = await seedProfile("kds");
       const screen: DeviceKitchenScreen = {
@@ -3396,7 +3387,6 @@ describe("a device's current printers", () => {
     const [drawer] = await suite.db
       .insert(printers)
       .values({
-        locationId: venue.cfg.locationId,
         name: "Separate drawer",
         transport: "network_tcp",
         host: "10.0.0.99",

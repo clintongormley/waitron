@@ -70,7 +70,7 @@ const suite = useVenueDb({
       operationDescription: "Retail",
     });
     const locationId = await venueLocationId(db);
-    await seedKitchenStation(db, { locationId: locationId });
+    await seedKitchenStation(db, {});
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db);
     const [person] = await db
@@ -501,12 +501,10 @@ describe("table + tab routes", () => {
 
   it("each tab line carries its own station's changes after sending, and a line with no kitchen work carries none", async () => {
     const grill = await seedKitchenStation(suite.db, {
-      locationId: cfg.locationId,
       name: `Grill ${randomUUID().slice(0, 6)}`,
       isDefault: false,
     });
     const bar = await seedKitchenStation(suite.db, {
-      locationId: cfg.locationId,
       name: `Bar ${randomUUID().slice(0, 6)}`,
       isDefault: false,
     });

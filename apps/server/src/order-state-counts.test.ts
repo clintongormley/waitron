@@ -70,7 +70,7 @@ useVenueDb({
       zones[mode] = await inTx(venue, async (tx) => {
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: venue.cfg.locationId, name: `Bar ${mode}` })
+          .values({ name: `Bar ${mode}` })
           .returning({ id: floorZones.id });
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
         if (mode === "ticket_then_pay") {

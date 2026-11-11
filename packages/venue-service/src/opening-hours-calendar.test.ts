@@ -321,7 +321,7 @@ async function monthVenue() {
     const zone = async (name: string, displayOrder: number, departmentId: string) => {
       const [row] = await tx
         .insert(floorZones)
-        .values({ locationId: cfg.locationId, name, displayOrder })
+        .values({ name, displayOrder })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: row!.id, departmentId });
       return row!.id;
@@ -925,7 +925,7 @@ describe("a past day's range around a start change", () => {
       );
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 1 })
+        .values({ name: "Terrace", displayOrder: 1 })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: zone!.id, departmentId: diningDepartment });
       await replaceZoneClosedWeek(

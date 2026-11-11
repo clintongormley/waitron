@@ -308,7 +308,7 @@ describe("splitBill", () => {
 
 /** A default kitchen station, with each product's route re-pointed at it, so a round fires there. */
 async function withKitchen(cfg: WithVenueRowId<OriginConfig>): Promise<string> {
-  const stationId = await seedKitchenStation(db, { locationId: cfg.locationId });
+  const stationId = await seedKitchenStation(db, {});
   const offers = await asApp(cfg, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
   offersByCfg.set(cfg, offers);
   return stationId;

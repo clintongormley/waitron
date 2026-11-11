@@ -85,7 +85,6 @@ describe("order_amendments append helper", () => {
       .values({
         source: "dashboard",
         deviceId: null,
-        locationId: LOCATION_A,
         nodeId: node,
         orderNumber: orderNumberSeq,
         status: "open",

@@ -66,7 +66,7 @@ async function insertDiningTable(
 ): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId, name: label })
+    .values({ name: label })
     .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (id, created_at, location_id, zone_id, label)
@@ -729,12 +729,9 @@ describe("a part of a joined table on a layout", () => {
   ): Promise<Record<"long" | "c3" | "c4" | "c5", string>> {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId, name: "Counter" })
+      .values({ name: "Counter" })
       .returning({ id: floorZones.id });
-    const [set] = await db
-      .insert(floorPlanSets)
-      .values({ locationId })
-      .returning({ id: floorPlanSets.id });
+    const [set] = await db.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
     await db.insert(floorPlans).values({ zoneId: zone!.id, setId: set!.id, savedAt: nowIso() });
     const seats = { long: 10, c3: 2, c4: 6, c5: 4 } as const;
     const labels = { long: "Long table", c3: "Counter 3", c4: "Counter 4", c5: "Counter 5" };
@@ -820,11 +817,11 @@ describe("books table 4 while today's recorded layout stands it", () => {
   async function inside(locationId: string) {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId, name: "Inside" })
+      .values({ name: "Inside" })
       .returning({ id: floorZones.id });
     const [standard, dinner] = await db
       .insert(floorPlanSets)
-      .values([{ locationId }, { locationId }])
+      .values([{}, {}])
       .returning({ id: floorPlanSets.id });
     const [standardPlan, dinnerPlan] = await db
       .insert(floorPlans)

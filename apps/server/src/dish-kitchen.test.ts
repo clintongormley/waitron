@@ -5,7 +5,6 @@ import {
   kitchenStations,
   products,
   ticketItems,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   type Database,
@@ -27,14 +26,10 @@ beforeAll(() => {
 
 async function seed() {
   await seedVenue(db, { name: "Venue", invoiceLocales: ["en"], operationDescription: "Service" });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const stations = await db
     .insert(kitchenStations)
-    .values([
-      { locationId, name: "Grill" },
-      { locationId, name: "Fryer" },
-    ])
+    .values([{ name: "Grill" }, { name: "Fryer" }])
     .returning({ id: kitchenStations.id, name: kitchenStations.name });
   const station = (name: string) => stations.find((s) => s.name === name)!.id;
   const orderId = randomUUID();

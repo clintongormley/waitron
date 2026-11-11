@@ -113,14 +113,14 @@ async function seedTodaySale(db: Database): Promise<void> {
 async function seedDiningTables(db: Database): Promise<void> {
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId, name: "Tables" })
+    .values({ name: "Tables" })
     .returning({ id: floorZones.id });
   const [held, left, inactive] = await db
     .insert(diningTables)
     .values([
-      { locationId, zoneId: zone!.id, label: "Table 1" },
-      { locationId, zoneId: zone!.id, label: "Table 2" },
-      { locationId, zoneId: zone!.id, label: "Table 3 (retired)" },
+      { zoneId: zone!.id, label: "Table 1" },
+      { zoneId: zone!.id, label: "Table 2" },
+      { zoneId: zone!.id, label: "Table 3 (retired)" },
     ])
     .returning({ id: diningTables.id });
   await db.insert(floorTodayTables).values([{ tableId: held!.id }, { tableId: left!.id }]);
@@ -219,13 +219,13 @@ describe("mountReportApi — /reports/overview", () => {
   it("counts only tables on today's plan in enabled zones", async () => {
     const [zone] = await suite.db
       .insert(floorZones)
-      .values({ locationId, name: "Closed", active: false })
+      .values({ name: "Closed", active: false })
       .returning();
     const [absent, closed] = await suite.db
       .insert(diningTables)
       .values([
-        { locationId, zoneId: zone!.id, label: "Not on today" },
-        { locationId, zoneId: zone!.id, label: "Closed today" },
+        { zoneId: zone!.id, label: "Not on today" },
+        { zoneId: zone!.id, label: "Closed today" },
       ])
       .returning();
     await suite.db.insert(floorTodayTables).values({ tableId: closed!.id });
@@ -241,10 +241,7 @@ describe("mountReportApi — /reports/overview", () => {
   });
 
   it("does not count a part still joined", async () => {
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ locationId, name: "Counter" })
-      .returning();
+    const [zone] = await suite.db.insert(floorZones).values({ name: "Counter" }).returning();
     const tables = await suite.db
       .insert(diningTables)
       .values(
@@ -289,10 +286,7 @@ describe("mountReportApi — /reports/overview", () => {
   });
 
   it("does not count a joined table that has come apart", async () => {
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ locationId, name: "Counter" })
-      .returning();
+    const [zone] = await suite.db.insert(floorZones).values({ name: "Counter" }).returning();
     const tables = await suite.db
       .insert(diningTables)
       .values(

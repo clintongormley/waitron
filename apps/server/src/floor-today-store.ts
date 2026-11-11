@@ -702,7 +702,6 @@ async function catchUpPass(
     const [created] = await tx
       .insert(diningTables)
       .values({
-        locationId: venueId!,
         zoneId,
         label: target.label,
         ...shortNameColumns(target.shortName),

@@ -31,7 +31,6 @@ import {
   openVenueDatabase,
   printAgents,
   sales,
-  venueLocationId,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -1203,7 +1202,6 @@ describe("a start on a real full disk", () => {
         const [row] = await db
           .insert(printAgents)
           .values({
-            locationId: await venueLocationId(db),
             name: "Agent",
             tokenHash: hashDeviceToken(secret),
             active: true,

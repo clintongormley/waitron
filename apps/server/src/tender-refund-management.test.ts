@@ -193,7 +193,6 @@ async function unsent(locationId = venue.cfg.locationId as string) {
     source: "device",
     deviceId: venue.deviceId,
     nodeId: venue.cfg.nodeId,
-    locationId,
     method: "card",
     provider: "fake",
     providerPaymentRef: capture!.paymentRef,

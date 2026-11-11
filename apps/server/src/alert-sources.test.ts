@@ -728,7 +728,6 @@ async function seedPrinter(t: {
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: t.locationId,
       name: t.name,
       transport: "network_tcp",
       host: "10.0.0.1",
@@ -747,7 +746,6 @@ async function seedAgent(t: {
   const [row] = await suite.db
     .insert(printAgents)
     .values({
-      locationId: t.locationId,
       name: t.name,
       tokenHash: "hash",
       active: t.active ?? true,
@@ -769,7 +767,6 @@ async function seedJob(t: {
   const [row] = await suite.db
     .insert(printJobs)
     .values({
-      locationId: t.locationId,
       printerId: t.printerId,
       payload: Uint8Array.from([0x01]),
       kind: t.kind ?? "document",
@@ -865,7 +862,6 @@ describe("stationOutputAlertSource", () => {
     const [station] = await suite.db
       .insert(kitchenStations)
       .values({
-        locationId,
         name: "Kitchen",
         isDefault: true,
       })

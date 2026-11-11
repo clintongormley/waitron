@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers, venueLocationId } from "@waitron/db";
+import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { PaperWidth, Resolution } from "./layout.js";
@@ -93,7 +93,6 @@ export async function createPrinter(
     const [row] = await tx
       .insert(printers)
       .values({
-        locationId: await venueLocationId(tx),
         name: input.name,
         transport: input.transport,
         // drizzle omits an undefined field, so it takes its column default.

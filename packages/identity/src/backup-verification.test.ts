@@ -83,7 +83,6 @@ beforeEach(async () => {
       .values({ id: profile, name: "Till", formFactor: "till", capabilities: [] });
     await suite.db.insert(devices).values({
       id: device,
-      locationId: location,
       deviceProfileId: profile,
       label: "Till",
       tokenHash: "fixture",
