@@ -157,7 +157,7 @@ async function setupVenue(): Promise<{
         seriesCode: "FA",
         rectificativeSeriesCode: "RF",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword(ADMIN_PASSWORD),
           email: "owner@example.test",
@@ -188,7 +188,7 @@ async function seedStaff(): Promise<string> {
     const [row] = await tx
       .insert(persons)
       .values({
-        displayName: "Cajera",
+        displayName: "Cashier",
         pinHash: hashPin("4321"),
         passwordHash: hashPassword(STAFF_PASSWORD),
         role: "staff",
@@ -753,7 +753,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const [row] = await tx
         .insert(persons)
         .values({
-          displayName: "Administradora suspendida",
+          displayName: "Suspended administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword(ADMIN_PASSWORD),
           role: "admin",
