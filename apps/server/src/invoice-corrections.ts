@@ -64,7 +64,7 @@ export interface InvoiceCorrectionResult {
 
 export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
 
-const MONEY = /^\d{1,12}(\.\d{1,2})?$/;
+const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
 
 /** What correcting `selection.gross` off the invoice would file, and the cash still refundable on it. */
 export async function previewInvoiceCorrection(
@@ -139,6 +139,9 @@ export async function acceptInvoiceCorrection(
       replayed: true,
     };
   }
+  const reason = await findAdjustmentReason(tx, ask.reasonId);
+  if (reason.kind !== "void") throw new AppError("adjustment.action_not_allowed", {});
+  if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
 
   const [settled] = await tx
     .select({ id: saleSettlements.id })
@@ -183,7 +186,6 @@ export async function acceptInvoiceCorrection(
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
-  const reason = await findAdjustmentReason(tx, ask.reasonId);
   const reasonText = (ask.note === null ? reason.name : `${reason.name}: ${ask.note}`).slice(
     0,
     500,

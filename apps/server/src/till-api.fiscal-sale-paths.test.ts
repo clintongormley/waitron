@@ -1020,7 +1020,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   );
 
   it.each(
-    [null, "-5.00", "-0.50", "0.001", 1, [], {}, "", "1000000000000.00"].flatMap((tip) => [
+    [null, "-5.00", "-0.50", "0.001", "05.50", 1, [], {}, "", "1000000000000.00"].flatMap((tip) => [
       { tip, tipsEnabled: true },
       { tip, tipsEnabled: false },
     ]),

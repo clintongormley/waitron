@@ -31,7 +31,7 @@ import { assertRequestDevice, isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
 import { gateZones } from "./zone-access.js";
 
-const MONEY = /^\d{1,12}(\.\d{1,2})?$/;
+const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
 
 function moneyField(value: unknown, field: string): string {
   if (typeof value !== "string" || !MONEY.test(value)) throw invalid(field);

@@ -2,9 +2,16 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { drawerOpens, invoiceCorrections, saleLines, sales, tenderRefunds } from "@waitron/db";
+import {
+  adjustmentReasons,
+  drawerOpens,
+  invoiceCorrections,
+  saleLines,
+  sales,
+  tenderRefunds,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listAdjustmentReasons } from "@waitron/adjustments";
+import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { createProduct } from "@waitron/catalogue";
 import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -147,7 +154,8 @@ async function correct(
   ask: {
     submissionId: string;
     gross: string;
-    note?: string;
+    note?: string | null;
+    reasonId?: string;
     lineIds?: string[];
     split?: { rate: string; base: string; tax: string }[];
     backend?: typeof venue.backend;
@@ -167,8 +175,8 @@ async function correct(
         submissionId: ask.submissionId,
         gross: ask.gross,
         ...scope,
-        reasonId,
-        note: ask.note ?? "Overcooked",
+        reasonId: ask.reasonId ?? reasonId,
+        note: ask.note === undefined ? "Overcooked" : ask.note,
         expectedSplit:
           ask.split ?? preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
       },
@@ -459,6 +467,68 @@ describe("acceptInvoiceCorrection refuses", () => {
     await expect(
       correct(saleId, { submissionId: randomUUID(), gross: "6.05" }),
     ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
+  });
+
+  it("a reason that is not a Void reason, and corrects with a Void reason", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const reasons = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const comp = reasons.find((reason) => reason.kind === "comp")!;
+    await refusedWithNothingWritten(
+      () => correct(saleId, { submissionId: randomUUID(), gross: "6.05", reasonId: comp.id }),
+      { code: "adjustment.action_not_allowed" },
+    );
+    const voidReason = reasons.find((reason) => reason.kind === "void" && !reason.noteRequired)!;
+    await expect(
+      correct(saleId, { submissionId: randomUUID(), gross: "6.05", reasonId: voidReason.id }),
+    ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
+  });
+
+  it("a reason that asks for a note when none is given, and corrects with the note", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const other = (await inTx(venue, (tx) => listAdjustmentReasons(tx))).find(
+      (reason) => reason.kind === "void" && reason.noteRequired,
+    )!;
+    for (const note of [null, "   "])
+      await refusedWithNothingWritten(
+        () =>
+          correct(saleId, { submissionId: randomUUID(), gross: "6.05", reasonId: other.id, note }),
+        { code: "adjustment.note_required" },
+      );
+    await expect(
+      correct(saleId, {
+        submissionId: randomUUID(),
+        gross: "6.05",
+        reasonId: other.id,
+        note: "Wrong table",
+      }),
+    ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
+  });
+
+  it("nothing on a repeat whose reason has since come to ask for a note, answering the first result", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const reason = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, {
+        name: `Spilt ${randomUUID()}`,
+        names: {},
+        kind: "void",
+        actions: ["cancel"],
+        maxPercentBp: null,
+        maxAmount: null,
+        applyRoles: [],
+        approverRoles: [],
+        noteRequired: false,
+      }),
+    );
+    const ask = { submissionId: randomUUID(), gross: "6.05", reasonId: reason.id, note: null };
+    const first = await correct(saleId, ask);
+    await venue.db
+      .update(adjustmentReasons)
+      .set({ noteRequired: true })
+      .where(eq(adjustmentReasons.id, reason.id));
+    const after = counts();
+
+    await expect(correct(saleId, ask)).resolves.toEqual({ ...first, replayed: true });
+    expect(counts()).toEqual(after);
   });
 
   it.each([[[{ card: "40.00" }]], [["20.00", { card: "20.00" }]]])(

@@ -10,9 +10,20 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listAdjustmentReasons } from "@waitron/adjustments";
+import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
+import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { saleId as brandSaleId } from "@waitron/shared";
+import {
+  createDepartment,
+  createServiceZone,
+  setProfileServiceAccess,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { SESSION_COOKIE } from "./till-session.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
@@ -32,6 +43,11 @@ vi.mock("node:crypto", async (importOriginal) =>
 
 let venue: BillVenue;
 let reasonId: string;
+let reasons: AdjustmentReason[];
+/** A till of its own, signed in, whose profile `serveOnly` limits to one zone. */
+let zonedTill: { cookie: string; profileId: string };
+/** A zone in a department of its own, where no test sells. */
+let otherZone: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -39,9 +55,46 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    reasonId = (await inTx(venue, (tx) => listAdjustmentReasons(tx)))[0]!.id;
+    reasons = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    reasonId = reasons[0]!.id;
+    const profileId = await inTx(venue, async (tx) => {
+      const department = await createDepartment(tx, { name: "Interior", orderStart: "table" });
+      otherZone = (await createServiceZone(tx, { name: "Interior", departmentId: department.id }))
+        .id;
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({
+          name: "Zoned till",
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+        })
+        .returning({ id: deviceProfiles.id });
+      return profile!.id;
+    });
+    const device = await enrolDeviceForTest(db, venue.cfg, { name: "Zoned till", profileId });
+    const session = await withTransaction(db, (tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: venue.operatorId, pin: "5555" }),
+    );
+    zonedTill = {
+      cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+      profileId,
+    };
   },
 });
+
+async function serveOnly(zoneId: string) {
+  await inTx(venue, async (tx) => {
+    const [policy] = await tx
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    await setProfileServiceAccess(tx, zonedTill.profileId, {
+      departmentId: policy!.departmentId,
+      allowedZoneIds: [zoneId],
+      startingZoneId: zoneId,
+    });
+  });
+}
 
 /** A €10.00 croquettes order paid through the till in `parts`; issued unpaid when `parts` is empty. */
 async function sold(parts: readonly (string | { card: string })[]) {
@@ -89,17 +142,28 @@ const body = (patch: Record<string, unknown> = {}) => ({
   override: supervisor(),
   ...patch,
 });
-const preview = (saleId: string, payload: unknown) =>
-  send(venue.app, venue.cookie, "POST", `/api/transactions/${saleId}/corrections/preview`, payload);
-const correct = (saleId: string, payload: unknown) =>
-  send(venue.app, venue.cookie, "POST", `/api/transactions/${saleId}/corrections`, payload);
+const preview = (saleId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/transactions/${saleId}/corrections/preview`, payload);
+const correct = (saleId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/transactions/${saleId}/corrections`, payload);
 
 function counts() {
-  return venue.db.all<{ invoices: number; refunds: number; drawers: number }>(sql`
+  return venue.db.all<{
+    invoices: number;
+    refunds: number;
+    drawers: number;
+    corrections: number;
+  }>(sql`
     select (select count(*) from sales) as invoices,
            (select count(*) from tender_refunds) as refunds,
-           (select count(*) from print_jobs where kind = 'drawer') as drawers`)[0]!;
+           (select count(*) from print_jobs where kind = 'drawer') as drawers,
+           (select count(*) from invoice_corrections) as corrections`)[0]!;
 }
+
+const ZONE_REFUSED = () => ({
+  status: 403,
+  json: { code: "service_zone.not_allowed", params: { zoneId: venue.zoneId } },
+});
 
 describe("POST /api/transactions/:saleId/corrections/preview", () => {
   it("answers the split and the cash still refundable, and refuses malformed line ids", async () => {
@@ -113,9 +177,25 @@ describe("POST /api/transactions/:saleId/corrections/preview", () => {
         status: 400,
         json: { code: "management.request_invalid", params: { field: "lineIds" } },
       });
-    expect(await preview(saleId, { gross: 5 })).toEqual({
-      status: 400,
-      json: { code: "management.request_invalid", params: { field: "gross" } },
+    for (const gross of [5, "06.05", "00.50"])
+      expect(await preview(saleId, { gross })).toEqual({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "gross" } },
+      });
+    expect(await preview(saleId, { gross: "0.50" })).toMatchObject({
+      status: 200,
+      json: { gross: "0.50" },
+    });
+  });
+
+  it("refuses a till outside the invoice's zone, and answers it once the zone is its own", async () => {
+    const saleId = await sold(["10.00"]);
+    await serveOnly(otherZone);
+    expect(await preview(saleId, { gross: "5.00" }, zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    await serveOnly(venue.zoneId);
+    expect(await preview(saleId, { gross: "5.00" }, zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { gross: "5.00", vatBreakdown: SPLIT, cashRefundable: "10.00" },
     });
   });
 });
@@ -124,10 +204,12 @@ describe("POST /api/transactions/:saleId/corrections", () => {
   it.each([
     ["submissionId", { submissionId: 1 }],
     ["gross", { gross: "five" }],
+    ["gross", { gross: "06.05" }],
     ["reasonId", { reasonId: undefined }],
     ["lineIds", { lineIds: null }],
     ["note", { note: 3 }],
     ["expectedSplit", { expectedSplit: [{ rate: "21.00", base: 4.13, tax: "0.87" }] }],
+    ["expectedSplit", { expectedSplit: [{ rate: "021.00", base: "4.13", tax: "0.87" }] }],
     ["override", { override: null }],
   ])("refuses a malformed %s, naming it and writing nothing", async (field, patch) => {
     const saleId = await sold(["10.00"]);
@@ -165,6 +247,7 @@ describe("POST /api/transactions/:saleId/corrections", () => {
       invoices: before.invoices + 1,
       refunds: before.refunds + 1,
       drawers: before.drawers + 1,
+      corrections: before.corrections + 1,
     });
 
     expect(await correct(saleId, ask)).toEqual({
@@ -227,6 +310,55 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     expect(await correct(randomUUID(), body())).toMatchObject({
       status: 404,
       json: { code: "sale.not_found" },
+    });
+  });
+
+  it("refuses a till outside a cash invoice's zone, writing nothing, and corrects once the zone is its own", async () => {
+    const saleId = await sold(["10.00"]);
+    await serveOnly(otherZone);
+    const before = counts();
+    expect(await correct(saleId, body(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(counts()).toEqual(before);
+    await serveOnly(venue.zoneId);
+    expect(await correct(saleId, body(), zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { replayed: false, refunds: [{ state: "completed", appliedAmount: "5.00" }] },
+    });
+  });
+
+  it.each([[[{ card: "10.00" }]], [["4.00", { card: "6.00" }]]])(
+    "refuses a till outside the zone of an invoice paid by card (%j) before saying how it was paid",
+    async (parts) => {
+      const saleId = await sold(parts);
+      await serveOnly(otherZone);
+      const before = counts();
+      expect(await correct(saleId, body(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
+      expect(counts()).toEqual(before);
+      await serveOnly(venue.zoneId);
+      expect(await correct(saleId, body(), zonedTill.cookie)).toEqual({
+        status: 409,
+        json: { code: "invoice_correction.not_cash", params: { saleId } },
+      });
+    },
+  );
+
+  it("refuses a reason that is not a Void reason, and one asking for a note without it, writing nothing", async () => {
+    const saleId = await sold(["10.00"]);
+    const comp = reasons.find((reason) => reason.kind === "comp")!;
+    const other = reasons.find((reason) => reason.kind === "void" && reason.noteRequired)!;
+    const before = counts();
+    expect(await correct(saleId, body({ reasonId: comp.id }))).toEqual({
+      status: 409,
+      json: { code: "adjustment.action_not_allowed", params: {} },
+    });
+    expect(await correct(saleId, body({ reasonId: other.id, note: null }))).toEqual({
+      status: 400,
+      json: { code: "adjustment.note_required", params: {} },
+    });
+    expect(counts()).toEqual(before);
+    expect(await correct(saleId, body({ reasonId: other.id, note: "Wrong table" }))).toMatchObject({
+      status: 200,
+      json: { replayed: false, refunds: [{ appliedAmount: "5.00" }] },
     });
   });
 
