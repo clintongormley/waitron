@@ -2484,7 +2484,7 @@ export class PaymentsScreen extends LitElement {
                 </ul>`
         }
       </section>
-      <section data-test="readers-section" aria-labelledby="card-readers-heading">
+      <section data-test="readers-section">
         <h2 id="card-readers-heading">${t("payments.readers_heading")}</h2>
         <div class="reader-tools">
           <wt-button
