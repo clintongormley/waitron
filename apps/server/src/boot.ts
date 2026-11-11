@@ -3334,6 +3334,7 @@ async function bootServer(
           clockStop: readClockStop,
           clockCheckWaiting: readClockCheckWaiting,
         }),
+      restart,
       freeSpace: createSpaceFreer({
         ...leftoverDeps,
         venueDir: config.venueDir,

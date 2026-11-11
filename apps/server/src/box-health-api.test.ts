@@ -1,3 +1,5 @@
+import { IncomingMessage, ServerResponse } from "node:http";
+import { Socket } from "node:net";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -67,6 +69,7 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     db,
     readHealth: vi.fn(readHealth),
     freeSpace: vi.fn<(personId: string) => Promise<FreedSpace>>(async () => FREED),
+    restart: vi.fn<() => void>(),
     venue: { language: "en" as const },
     clockConfirm: {
       backend: new FakeFiscalBackend(db),
@@ -85,8 +88,9 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
       await withPassiveManagementRead(next);
     } else await next();
   });
-  mountBoxHealthApi(app, deps, () => {});
-  return { app, deps };
+  const logs: unknown[][] = [];
+  mountBoxHealthApi(app, deps, (...fields) => logs.push(fields));
+  return { app, deps, logs };
 }
 
 function get(app: Hono, cookie?: string, passive = false) {
@@ -103,6 +107,14 @@ function post(app: Hono, cookie?: string) {
     method: "POST",
     headers: cookie === undefined ? {} : { cookie },
   });
+}
+
+function restartRequest(app: Hono, outgoing: ServerResponse, cookie?: string) {
+  return app.request(
+    "/api/box/restart",
+    { method: "POST", headers: cookie === undefined ? {} : { cookie } },
+    { outgoing },
+  );
 }
 
 /** Not through `withTransaction`, whose drain would deliver a change a case left waiting. */
@@ -206,6 +218,46 @@ describe.each([
       tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id)),
     );
     await expectRefused(manager.cookie, 403, "person.suspended");
+  });
+});
+
+describe.each([
+  ["with room", () => suite.db],
+  ["on a full disk", () => lockRefusingDb(DISK_FULL())],
+])("restarting the server %s", (_label, db) => {
+  const responseOutgoing = () => new ServerResponse(new IncomingMessage(new Socket()));
+
+  it("an administrator's restart answers first and restarts once the answer is sent", async () => {
+    const { app, deps, logs } = mount(db());
+    const outgoing = responseOutgoing();
+    const response = await restartRequest(app, outgoing, admin.cookie);
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({});
+    expect(logs).toContainEqual(["info", "box.restart_requested", { personId: admin.id }]);
+    expect(deps.restart).not.toHaveBeenCalled();
+    outgoing.emit("finish");
+    outgoing.emit("close");
+    expect(deps.restart).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      "a manager, who is not an administrator",
+      () => manager.cookie,
+      403,
+      { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+    ],
+    ["a request with no session", () => undefined, 401, { code: "management_session.required" }],
+  ])("refuses %s and does not restart", async (_who, cookie, status, error) => {
+    const { app, deps, logs } = mount(db());
+    const outgoing = responseOutgoing();
+    const response = await restartRequest(app, outgoing, cookie());
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ error });
+    outgoing.emit("finish");
+    outgoing.emit("close");
+    expect(deps.restart).not.toHaveBeenCalled();
+    expect(logs.map(([, event]) => event)).not.toContain("box.restart_requested");
   });
 });
 

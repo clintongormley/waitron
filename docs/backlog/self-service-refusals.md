@@ -170,6 +170,8 @@ Route: Missing: expose a non-secret cause and an action to retry after fixing it
 
 _2026-11-11, A1089 B2: the words no longer say to contact support. The alert now ends with words chosen by the failure's cause (`ALERT_WORDS.sealed_state`, `apps/dashboard/src/i18n/alert-messages.ts:523`, read by the `errorCode` param that `apps/server/src/alert-sources.ts:249` sends): for a full disk, free space on the Box status page, then switch the box off and on, since each start updates the copy again; for missing own files, that some of the box's own files are missing, with no next step; for any other cause, that each start tries again, so switch the box off and on. “Sales continue” is said for the last two only: a full disk can refuse sales (`apps/server/src/till-api.disk-full-gate.test.ts`). The alert clears once a refresh seals. Still open: missing own files and an unrecognised cause have no correction beyond a restart. The rest of this entry records the earlier tree._
 
+_2026-11-11, A1498: for a full disk and for any other cause the words now say to press Restart the box on the Box status page instead of switching the box off and on._
+
 ### `restore.first_start_failed`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [restore-start](#restore-start).
@@ -186,6 +188,8 @@ State: The restored box failed its first-start completion. That completion reads
 Route: Existing: restart attempts completion again. Missing: tell the administrator what to correct if restart repeats the failure, using the actual completion refusal rather than a support escalation.
 
 _2026-11-11, A1089 slice 1: the words no longer say to contact support. They say each start tries again, so switch the box off and on, and if the message stays and a bucket copy is set up, check the box's internet connection and the bucket on the Backups page (the first start reads the bucket's pointer), then switch it off and on again. Still open: the dashboard has no restart button, and a failure that is not the bucket (the certificate or the list of machines) still has no specific remedy. The rest of this entry records the earlier tree._
+
+_2026-11-11, A1498: the dashboard now has Restart the box on the Box status page (administrators; it restarts Waitron on the box, not the machine), and this alert tells the person to press it. A person who is not an administrator is offered the administrator sign-in there._
 
 ### `chain.verification_failed`
 
@@ -883,6 +887,8 @@ The effective-key diagnosis and correction workflow remains open.
 **A repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
 
 _2026-11-11, A1089 slice 1: the alert now says to switch the box off and on, and to check the internet connection and the bucket if it stays, instead of contacting support; a box restart button and a persistent non-bucket failure are still open._
+
+_2026-11-11, A1498: the alert now says to press Restart the box on the Box status page instead of switching the box off and on._
 
 ### fiscal-integrity
 

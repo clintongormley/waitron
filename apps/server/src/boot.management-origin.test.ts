@@ -73,6 +73,8 @@ interface Started {
   venue: Venue;
   host: ReturnType<typeof fakeHost>;
   app: Hono;
+  /** Stands in for the SIGTERM, so no route can stop the test process. */
+  restart: ReturnType<typeof vi.fn<() => void>>;
 }
 
 /** Starts the whole server over the suite's venue; the venue is written before the start only. */
@@ -83,9 +85,11 @@ async function withServer(
   served.listeners = [];
   const venue = await setupVenue(suite.db);
   const host = fakeHost();
+  const restart = vi.fn<() => void>();
   let seen: Hono | undefined;
   const seams: StartServerSeams = {
     boxHostRequests: host,
+    stepdown: { mount: () => {}, restart },
     requestFromBox: () => false,
     observeApp: (app) => {
       seen = app;
@@ -132,7 +136,7 @@ async function withServer(
       expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
     });
     if (seen === undefined) throw new Error("boot did not hand the test its app");
-    await body({ venue, host, app: seen });
+    await body({ venue, host, app: seen, restart });
   } finally {
     if (server !== undefined) await server.close();
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
@@ -157,10 +161,11 @@ function catalogueNamed(name: string) {
 
 describe("a management change in the running server", () => {
   it("refuses a change from another port of the box's own address, for a signed-in manager", async () => {
-    await withServer({}, async ({ venue, host }) => {
+    await withServer({}, async ({ venue, host, restart }) => {
       const sends: [string, string | undefined][] = [
         ["/api/box/free-space", undefined],
         ["/api/box/retire", undefined],
+        ["/api/box/restart", undefined],
         ["/management-api/session/me/fresh-sign-in", "{}"],
         ["/management-api/session/me/fresh-sign-in/passkey-options", "{}"],
         ["/api/box/clock-challenge", undefined],
@@ -190,6 +195,7 @@ describe("a management change in the running server", () => {
       );
       expect(catalogueNamed("From another page")).toEqual([]);
       expect(host.screenSet).toHaveBeenCalledTimes(0);
+      expect(restart).not.toHaveBeenCalled();
     });
   });
 

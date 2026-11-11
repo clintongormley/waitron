@@ -32,6 +32,10 @@ import { boxStatusRows, type PartRow } from "./box-status-rows.js";
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
 const LEAST_TO_FREE = 500_000;
 
+/** After a restart, a read this long after it was accepted counts as the box being back, even
+ * when no read caught the box away: the whole outage can fall between two health reads. */
+const RESTART_AWAY_MS = 30_000;
+
 const MISDATED = "clock.records_misdated";
 
 /** The server's margin for an administrator's device agreeing with the box. */
@@ -202,6 +206,7 @@ export class BoxStatusScreen extends LitElement {
         }
       }
       .free,
+      .restart-action,
       .retry,
       .clock-check-action {
         position: relative;
@@ -224,10 +229,15 @@ export class BoxStatusScreen extends LitElement {
         color: var(--wt-color-danger);
         margin: 0 0 var(--wt-space-4);
       }
-      .misdated {
+      .misdated,
+      .box-restart {
         margin: 0 0 var(--wt-space-4);
       }
-      .misdated h2 {
+      .box-restart > p {
+        margin: 0 0 var(--wt-space-2);
+      }
+      .misdated h2,
+      .box-restart h2 {
         margin: 0 0 var(--wt-space-2);
         font-size: var(--wt-font-size-md);
       }
@@ -254,6 +264,8 @@ export class BoxStatusScreen extends LitElement {
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
   /** Whether the session may confirm the box's clock from its own device (`person.admin`). */
   @property({ attribute: false }) canConfirmClock = false;
+  /** Whether the session may restart the box's server (`person.admin`). */
+  @property({ attribute: false }) canRestart = false;
 
   @state() private health: BoxHealth | null = null;
   /** The bell's own list, as last read; null until it has been read once. */
@@ -296,6 +308,12 @@ export class BoxStatusScreen extends LitElement {
   @state() private clockSetDone: { signInAgain: boolean } | null = null;
   /** The check's refusal, shown above the dialog's buttons. */
   @state() private clockCheckError = "";
+  @state() private restartOpen = false;
+  @state() private restarting = false;
+  @state() private restartAsked = false;
+  @state() private restartError = "";
+  /** When the box accepted the restart, and whether a health read has failed since. */
+  #restartAccepted: { at: number; outageSeen: boolean } | null = null;
   /** Bumped at every opening, so an answer for a closed check is dropped. */
   #clockCheckRun = 0;
   /** Whether a health read has finished, answered or failed: any read after it is automatic. */
@@ -307,6 +325,7 @@ export class BoxStatusScreen extends LitElement {
     () => this.api,
     () => {
       this.#healthAnswered = true;
+      if (this.#restartAccepted !== null) this.#restartAccepted.outageSeen = true;
       this.#readFailed("getBoxHealth");
     },
   );
@@ -336,6 +355,7 @@ export class BoxStatusScreen extends LitElement {
         this.#nothingLeftToRetry = this.#nothingToRetry(health);
         this.#followMisdated(health, this.#healthAnswered);
         this.#healthAnswered = true;
+        this.#restartAnswered();
         if ((this.retryAnswer?.waiting ?? 0) > 0 && this.#nothingLeftToRetry)
           this.retryAnswer = null;
         this.#readSucceeded("getBoxHealth");
@@ -1192,11 +1212,114 @@ export class BoxStatusScreen extends LitElement {
     return nothing;
   }
 
+  /** Ends the restarting note at a successful read after one that failed since the box accepted
+   * the restart, or at one `RESTART_AWAY_MS` after it. */
+  #restartAnswered(): void {
+    const accepted = this.#restartAccepted;
+    if (accepted === null) return;
+    // Shutdown is bounded by the server's SHUTDOWN_DEADLINE_MS (8 s), well inside this wait.
+    if (!accepted.outageSeen && Date.now() - accepted.at < RESTART_AWAY_MS) return;
+    this.#restartAccepted = null;
+    this.restartAsked = false;
+  }
+
+  async #restart(): Promise<void> {
+    if (this.restarting) return;
+    this.restarting = true;
+    this.restartError = "";
+    try {
+      await this.api.restartBox();
+      this.restartOpen = false;
+      this.restartAsked = true;
+      this.#restartAccepted = { at: Date.now(), outageSeen: false };
+    } catch (error) {
+      const code = codeOf(error);
+      this.restartError =
+        code === "node.read_only" ? t("box_status.restart.read_only") : codeMessage(code);
+    } finally {
+      this.restarting = false;
+    }
+  }
+
+  #renderRestart(): TemplateResult {
+    const action = this.canRestart
+      ? html`<span class="restart-action">
+          <wt-button
+            variant="secondary"
+            data-test="box-restart"
+            @click=${() => {
+              this.restartError = "";
+              this.restartOpen = true;
+            }}
+            >${t("box_status.restart.title")}</wt-button
+          ><wt-help-tooltip
+            mode="help-mode"
+            aria-label=${t("box_status.restart_help_label")}
+            guide-href=${guideHref("box-status.restart")}
+            guide-label=${t("box_status.restart_help_guide")}
+            >${t("box_status.restart_help")}</wt-help-tooltip
+          >
+        </span>`
+      : html`<p data-test="box-restart-hint">${t("box_status.restart.sign_in_hint")}</p>
+          <wt-button
+            variant="secondary"
+            data-test="box-restart-sign-in"
+            @click=${() =>
+              this.dispatchEvent(
+                new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+              )}
+            >${t("staff.sign_in_as_admin")}</wt-button
+          >`;
+    return html`<section class="box-restart" data-test="box-restart-section">
+      <h2>${t("box_status.restart.title")}</h2>
+      ${
+        this.restartAsked
+          ? html`<p role="status" data-test="box-restart-done">${t("box_status.restart.done")}</p>`
+          : nothing
+      }
+      ${action}
+    </section>`;
+  }
+
+  #renderRestartDialog(): TemplateResult | typeof nothing {
+    if (!this.canRestart) return nothing;
+    return html`<wt-dialog
+      data-test="box-restart-dialog"
+      .open=${this.restartOpen}
+      .dismissible=${!this.restarting}
+      heading=${t("box_status.restart.question")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.restartOpen = false;
+      }}
+    >
+      <p data-test="box-restart-what">${t("box_status.restart.what")}</p>
+      <wt-form-actions slot="footer" .error=${this.restartError}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="box-restart-stop"
+          ?disabled=${this.restarting}
+          @click=${() => (this.restartOpen = false)}
+          >${t("box_status.restart.stop")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-test="box-restart-confirm"
+          ?disabled=${this.restarting}
+          ?loading=${this.restarting}
+          @click=${() => void this.#restart()}
+          >${t("box_status.restart.confirm")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
+  }
+
   override render(): TemplateResult {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
-      ${this.#renderError()} ${this.#renderBody()} ${this.#renderClockCheckDialog()}
-      ${this.#renderNoteDialog()}
+      ${this.#renderError()} ${this.#renderBody()} ${this.#renderRestart()}
+      ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()} ${this.#renderNoteDialog()}
     `;
   }
 }

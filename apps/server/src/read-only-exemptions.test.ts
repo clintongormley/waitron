@@ -69,6 +69,7 @@ describe("the read-only exemption list", () => {
   it("the exempt set is exactly this list", () => {
     expect(READ_ONLY_EXEMPTIONS.map(({ method, path, boxes }) => [method, path, boxes])).toEqual([
       ["POST", "/api/box/retire", ["fenced"]],
+      ["POST", "/api/box/restart", ["fenced"]],
       ["POST", "/management-api/session/me/fresh-sign-in", ["fenced"]],
       ["POST", "/management-api/session/me/fresh-sign-in/passkey-options", ["fenced"]],
       ["POST", "/management-api/promote", ["mirror", "fenced"]],
@@ -465,6 +466,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         offer: await post(base, "/api/node/handover/offer"),
         // Listed for a fenced box only.
         retire: await post(base, "/api/box/retire"),
+        restart: await post(base, "/api/box/restart"),
         unlisted: await post(base, "/management-api/catalogues"),
         startHandover: await post(base, "/management-api/handover"),
         // A GET: the gate never refuses it, and this box's own id finds this box's row.
@@ -478,6 +480,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         membership: { status: 200, body: { accepted: false } },
         offer: { status: 400, code: "handover.request_invalid" },
         retire: GATED,
+        restart: GATED,
         unlisted: GATED,
         startHandover: GATED,
         statusRead: { status: 200, signerNodeId: mirror.nodeId, state: "prepared" },
@@ -622,6 +625,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
       await waitForFirstPass(server);
       expect({
         retire: await post(base, "/api/box/retire"),
+        restart: await post(base, "/api/box/restart"),
         promote: await post(base, "/management-api/promote"),
         preparation: await post(base, "/management-api/promote/preparation"),
         peerStatus: await post(base, "/api/node/peer-status"),
@@ -637,6 +641,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         startHandover: await post(base, "/management-api/handover"),
       }).toEqual({
         retire: { status: 401, code: "management_session.required" },
+        restart: { status: 401, code: "management_session.required" },
         promote: { status: 401, code: "password.invalid" },
         preparation: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },

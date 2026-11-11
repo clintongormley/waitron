@@ -3035,7 +3035,8 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .canOpen=${this.#canOpenScreen}
           .canConfirmClock=${this.#sessionPermissions.includes("person.admin")}
-          @admin-sign-in=${() => void this.#onLogout()}
+          .canRestart=${this.#sessionPermissions.includes("person.admin")}
+          @admin-sign-in=${() => void this.#onLogout("box-status")}
           @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
             e.stopPropagation();
             this.#selectScreen(e.detail.screen);

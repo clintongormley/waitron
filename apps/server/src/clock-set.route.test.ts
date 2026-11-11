@@ -212,6 +212,7 @@ async function stoppedBox(
       db: venue.db,
       readHealth: () => Promise.reject(new Error("not read here")),
       freeSpace: () => Promise.reject(new Error("not freed here")),
+      restart: () => {},
       venue: { language: "en" },
       clockConfirm: {
         backend,

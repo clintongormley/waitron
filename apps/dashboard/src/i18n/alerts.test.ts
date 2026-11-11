@@ -410,10 +410,10 @@ describe("a box that could not update the locked copy of its own keys and settin
 
   it("says a full disk stopped it, and to free space on Box status and restart, never that sales continue", () => {
     expect(say("storage.disk_full", "en")).toBe(
-      `${LEAD_EN} The box's disk is full. Free space on the Box status page, then switch the box off and on: each start updates the copy again.`,
+      `${LEAD_EN} The box's disk is full. Free space on the Box status page, then press Restart the box there: each start updates the copy again.`,
     );
     expect(say("storage.disk_full", "es")).toBe(
-      `${LEAD_ES} El disco del equipo está lleno. Libera espacio en Estado del equipo y después apaga y enciende el equipo: cada arranque vuelve a actualizar la copia.`,
+      `${LEAD_ES} El disco del equipo está lleno. Libera espacio en Estado del equipo y después pulsa allí Reiniciar el equipo: cada arranque vuelve a actualizar la copia.`,
     );
     expect(say("storage.disk_full", "en")).toContain(t("nav.box_status", "en-GB"));
     expect(say("storage.disk_full", "es")).toContain(t("nav.box_status", "es-ES"));
@@ -430,10 +430,10 @@ describe("a box that could not update the locked copy of its own keys and settin
 
   it("says each start tries again for any other cause, never showing the raw code", () => {
     expect(say("unknown", "en")).toBe(
-      `${LEAD_EN} Sales continue. Each start tries again, so switch the box off and on.`,
+      `${LEAD_EN} Sales continue. Each start tries again, so open Box status and press Restart the box.`,
     );
     expect(say("unknown", "es")).toBe(
-      `${LEAD_ES} Las ventas continúan. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.`,
+      `${LEAD_ES} Las ventas continúan. Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo.`,
     );
   });
 });
@@ -888,8 +888,8 @@ describe("refusals that name a way out the product already has", () => {
       const text = alertMessage("restore.first_start_failed", {}, lang);
       expect(text).toContain(
         lang === "en"
-          ? "Each start tries again, so switch the box off and on."
-          : "Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.",
+          ? "Each start tries again, so open Box status and press Restart the box."
+          : "Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
       );
       expect(text).toContain(
         lang === "en" ? "and a bucket copy is set up" : "y hay una copia en el bucket configurada",

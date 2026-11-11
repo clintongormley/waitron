@@ -27,6 +27,12 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
   },
   {
     method: "POST",
+    path: "/api/box/restart",
+    boxes: ["fenced"],
+    authenticates: "a management session whose person holds `person.admin`",
+  },
+  {
+    method: "POST",
     path: "/management-api/session/me/fresh-sign-in",
     boxes: ["fenced"],
     authenticates:

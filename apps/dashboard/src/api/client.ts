@@ -4579,6 +4579,10 @@ export class DashboardApi {
     return this.#request<ClockSetView>("/api/box/clock-set", "POST", input);
   }
 
+  async restartBox(): Promise<void> {
+    await this.#request<Record<string, never>>("/api/box/restart", "POST", {});
+  }
+
   freeBoxSpace(): Promise<FreedSpaceView> {
     return this.#request<FreedSpaceView>("/api/box/free-space", "POST", {});
   }

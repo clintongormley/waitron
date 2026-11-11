@@ -480,6 +480,48 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     });
   });
 
+  describe("the restart of the box", () => {
+    async function mountRestart(canRestart: boolean, restartBox: ReturnType<typeof vi.fn>) {
+      const api = Object.assign(stubApi(health()), { restartBox });
+      const mounted = await mountWidget<BoxStatusScreen>(
+        "dashboard-box-status-screen",
+        { api, canOpen: () => true, canRestart },
+        theme,
+      );
+      await flush(mounted.el);
+      return mounted;
+    }
+    const press = async (el: BoxStatusScreen, test: string) => {
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!);
+      await flush(el);
+    };
+
+    it("renders the administrator sign-in for anyone else accessibly", async () => {
+      const { el, host } = await mountRestart(false, vi.fn());
+      expect(el.shadowRoot!.querySelector("[data-test=box-restart-sign-in]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+
+    it("renders the button, the open dialog and the restarting note accessibly", async () => {
+      const { el, host } = await mountRestart(true, vi.fn().mockResolvedValue(undefined));
+      await expectNoA11yViolations(host);
+      await press(el, "box-restart");
+      await expectNoA11yViolations(host);
+      await press(el, "box-restart-confirm");
+      expect(el.shadowRoot!.querySelector("[data-test=box-restart-done]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+
+    it("renders a refused restart accessibly", async () => {
+      const refused = vi.fn().mockRejectedValue({ code: "management_session.required" });
+      const { el, host } = await mountRestart(true, refused);
+      await press(el, "box-restart");
+      await press(el, "box-restart-confirm");
+      expect(refused).toHaveBeenCalledOnce();
+      await expectNoA11yViolations(host);
+    });
+  });
+
   it("renders accessibly with a stop whose proof is found", async () => {
     const { el, host } = await mountWidget<BoxStatusScreen>(
       "dashboard-box-status-screen",

@@ -7504,7 +7504,27 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     },
   );
 
-  it("signs out when the Box status screen asks for an administrator", async () => {
+  it.each([false, true])(
+    "lets Box status restart the box only for an administrator (%s)",
+    async (admin) => {
+      history.replaceState(null, "", "/manage/box-status");
+      const api = Object.assign(faceApi(), {
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          permissions: ["system.manage", ...(admin ? ["person.admin"] : [])],
+        }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      const face = el.shadowRoot!.querySelector("dashboard-box-status-screen")!;
+      expect(face.canRestart).toBe(admin);
+    },
+  );
+
+  it("signs out to come back to Box status when the Box status screen asks for an administrator", async () => {
     history.replaceState(null, "", "/manage/box-status");
     const api = Object.assign(faceApi(), {
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["system.manage"] }),
@@ -7522,6 +7542,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
     await expect.poll(() => login(el)).toBeTruthy();
     expect(boxStatus()).toBeNull();
+    expect(location.pathname).toBe("/manage/box-status");
   });
 
   it("follows a Go to from the Box status page, keeping the event inside the shell", async () => {

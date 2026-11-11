@@ -2,7 +2,8 @@
 
 **Box status** shows, on one page, whether each part of the box is working: sales, the tax agency,
 the bucket copy, printers, card readers, the clock and disk space. It is also where you free space
-on the box when its disk fills up. To read the box's log, use **Diagnostics** instead.
+on the box when its disk fills up, and where an administrator restarts Waitron on the box when
+an alert says to. To read the box's log, use **Diagnostics** instead.
 
 ## Open the page {#open}
 
@@ -180,6 +181,16 @@ straight away. A bell open on another computer catches up within about a minute.
 If **Free** does not free enough, follow the line at the bottom of the page about freeing more
 space.
 
+## Restart the box {#restart}
+
+**Restart the box** restarts Waitron on the box without switching the box off. Every till stops selling
+until Waitron has started again, so the page asks first: choose **Restart** to go ahead or
+**Stop** to leave it. Use it when an alert says to. The page catches up by itself once the box is
+back.
+
+Only an administrator can press it. Anyone else sees **Sign in as an administrator** instead,
+which signs them out and comes back to this page after the administrator signs in.
+
 ## When payments stop because of the clock {#clock-behind}
 
 When the box's clock reads more than a minute earlier than the latest sale recorded on the box, the
@@ -255,7 +266,7 @@ the stop. The row then lists each clock that disagrees, for example **Tax agency
 by its latest answer. Nothing can confirm
 the clock, not even an administrator; it can only be set. The tax agency's answer counts first: when it agrees with the
 box, disagreeing devices do not hold payments back. The box keeps the tax agency's disagreement
-only in its memory, so it forgets it if the box itself restarts during the stop; while the tax
+only in its memory, so it forgets it if Waitron restarts during the stop; while the tax
 agency still disagrees, it comes back with the next answer.
 
 When the tax agency's time disagrees with the box's during the stop, the box sets its own clock
@@ -333,7 +344,7 @@ recorded**, and says **Download each list for your tax adviser and go through it
 mark it handled here with a note of what was done.** [Sales dated
 wrongly](box-status.md#sales-dated-wrongly) explains the download and the note. The bell has an
 alert with how many sales there are and the first and last times, and the box emails the people who
-manage the system. If the box itself restarted during the stop, it cannot be sure when the stop
+manage the system. If Waitron restarted during the stop, it cannot be sure when the stop
 began, so the list may be short, and the alert says so. When no sale was dated wrongly, there is no
 list and no alert.
 
@@ -391,8 +402,8 @@ it can, that change has no alert and no email.
 
 When the box starts with one of these clock problems and cannot reach the tax agency's time, a
 staff member can set or confirm the clock from a till, so that the venue does not wait for an
-administrator. A restart of the box counts as a start, whether after a power cut, an update or by
-hand.
+administrator. A restart of the box counts as a start, whether after a power cut, an update,
+**Restart the box** or by hand.
 
 The time from the start until the clock no longer stops payments is called start-up here. Within about
 half a minute of the start, once the box has asked the tax agency and had no answer, every till
