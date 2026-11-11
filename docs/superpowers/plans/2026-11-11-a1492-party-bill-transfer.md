@@ -22,3 +22,7 @@ No server changes, new reads/mechanisms/support, duplicate server/monitor suites
 - [ ] Run the whole changed test file: `pnpm --filter @waitron/till exec vitest run src/till-app-boot-and-counter.test.ts`; require passing counts. Inspect table Transfers and saved Counter sender in EN/ES, light/dark, at 390/1280 widths; screenshots stay uncommitted. Keep this full visual matrix under RUNNER §4 despite finding4; the public copy is unchanged.
 
 Forecast (uncertain): production about +6/−4, tests about +55/−5, guides0, support0; plus this plan. No guide tests are needed because guides do not change. Later run `finish-branch`, the normal push hook and current-head CI; The owner authorises both finish-branch and land-branch in the current campaign invocation; watcher plan clearance is still required before build.
+
+## Clearance, 2026-11-11
+
+The watcher cleared this corrected plan at04:35 in Lane D questions.md, including both party-bill sources, the disposable guard control and the full visual grid. This is watcher clearance inside the queued ask, not owner approval of the plan.
