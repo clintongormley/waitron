@@ -1,3 +1,4 @@
+import { liveConnectionFixture } from "../../test/live-connection.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { allergenName } from "../i18n/allergen-names.js";
@@ -2719,3 +2720,51 @@ describe("D95 the pass on a 1024 px tablet", () => {
     });
   });
 });
+
+it.each(["ticket_items", "ticket_item_moves", "locations", "categories", "category_details"])(
+  "live pass %s changes coalesce behind one read while the fifteen-second timer keeps reading",
+  async (type) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const live = liveConnectionFixture();
+    const api = fakeApi();
+    try {
+      const el = await mount({ api, live: live.connection });
+      await flush(el);
+      live.ready();
+      await flush(el);
+      const read = vi.mocked(api.getExpoBoard);
+      const before = read.mock.calls.length;
+      live.change(type);
+      await flush(el);
+      expect(read).toHaveBeenCalledTimes(before + 1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flush(el);
+      expect(read).toHaveBeenCalledTimes(before + 2);
+      let release!: (value: Awaited<ReturnType<typeof api.getExpoBoard>>) => void;
+      const answer = await read.mock.results.at(-1)!.value;
+      read.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      live.change("ticket_items");
+      await flush(el);
+      live.change("ticket_items");
+      await flush(el);
+      live.change("ticket_items");
+      await flush(el);
+      expect(read).toHaveBeenCalledTimes(before + 3);
+      release(answer);
+      await flush(el);
+      expect(read).toHaveBeenCalledTimes(before + 4);
+      el.remove();
+      live.change("ticket_items");
+      await flush(el);
+      expect(read).toHaveBeenCalledTimes(before + 4);
+    } finally {
+      live.connection.stop();
+      vi.useRealTimers();
+    }
+  },
+);

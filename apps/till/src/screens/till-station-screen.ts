@@ -1,3 +1,5 @@
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { liveRefresh } from "../state/live-gate.js";
 import {
   LitElement,
   type PropertyValues,
@@ -270,6 +272,8 @@ export class TillStationScreen extends LitElement {
   readonly #collecting = new Set<string>();
   #lastGoodAt = new Date();
   #initialConsumed = false;
+  @property({ attribute: false }) live?: TillLiveConnection;
+  #liveRefresh?: { stop(): void };
   #refreshTimer?: ReturnType<typeof setInterval>;
   readonly #refreshReads = new Set<AbortController>();
   /**
@@ -430,6 +434,26 @@ export class TillStationScreen extends LitElement {
       void this.#load();
     }
     this.#refreshTimer = setInterval(() => void this.#refresh(), REFRESH_MS);
+    let reading = false,
+      queued = false;
+    this.#liveRefresh = liveRefresh(this.live, {
+      types: TILL_LIVE_TYPES.station!,
+      run: () => {
+        queued = true;
+        if (reading) return;
+        reading = true;
+        void (async () => {
+          try {
+            while (queued && this.isConnected) {
+              queued = false;
+              await this.#refresh();
+            }
+          } finally {
+            reading = false;
+          }
+        })();
+      },
+    });
   }
 
   override disconnectedCallback(): void {
@@ -440,6 +464,7 @@ export class TillStationScreen extends LitElement {
     this.moving = null;
     this.#collecting.clear();
     clearInterval(this.#refreshTimer);
+    this.#liveRefresh?.stop();
     for (const read of this.#refreshReads) read.abort();
     this.#refreshReads.clear();
   }

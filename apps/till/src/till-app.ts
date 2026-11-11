@@ -2251,6 +2251,8 @@ export class TillApp extends LitElement {
 
   #live?: TillLiveConnection;
   #liveApi?: TillApi;
+  #billDraftLive?: { stop(): void };
+  #deliveryLive?: { stop(): void };
   readonly #routerLive = () => this.router?.setLive(this.#live?.up ?? false);
   readonly #pauseLive = () => {
     this.#live?.stop();
@@ -2617,6 +2619,8 @@ export class TillApp extends LitElement {
     window.removeEventListener("pageshow", this.#resumeLive);
     this.#pauseLive();
     this.#live = undefined;
+    this.#billDraftLive?.stop();
+    this.#deliveryLive?.stop();
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
     super.disconnectedCallback();
@@ -4766,12 +4770,60 @@ export class TillApp extends LitElement {
           this.#live.addInterests(
             "device",
             Object.entries(TILL_LIVE_TYPES)
-              .filter(([name]) => name !== "transfers")
+              .filter(([name]) => name !== "transfers" && name !== "clocking")
               .flatMap(([, types]) => types),
           );
           this.#live.addEventListener("up", this.#routerLive);
           this.#live.addEventListener("down", this.#routerLive);
           this.#live.addEventListener("unauthorized", () => void this.#onDeviceUnauthorized());
+          this.#billDraftLive?.stop();
+          this.#deliveryLive?.stop();
+          const live = this.#live;
+          let billReading = false,
+            billQueued = false;
+          let deliveryReading = false,
+            deliveryQueued = false;
+          this.#billDraftLive = liveRefresh(live, {
+            types: TILL_LIVE_TYPES.billDraft!,
+            run: () => {
+              billQueued = true;
+              if (billReading) return;
+              billReading = true;
+              void (async () => {
+                try {
+                  while (billQueued && this.isConnected && this.#live === live) {
+                    billQueued = false;
+                    await Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+                  }
+                } finally {
+                  billReading = false;
+                }
+              })();
+            },
+          });
+          this.#deliveryLive = liveRefresh(live, {
+            types: TILL_LIVE_TYPES.deliveries!,
+            run: () => {
+              deliveryQueued = true;
+              if (deliveryReading) return;
+              deliveryReading = true;
+              void (async () => {
+                try {
+                  while (deliveryQueued && this.isConnected && this.#live === live) {
+                    deliveryQueued = false;
+                    const id = this.ticketWorkingOrderId;
+                    if (
+                      id !== undefined &&
+                      this.#ticketIsCurrent(id, this.#operatorSession, this.#receiptPrintVisit)
+                    )
+                      await this.#refreshReceiptPrint();
+                  }
+                } finally {
+                  deliveryReading = false;
+                }
+              })();
+            },
+          });
           this.#live.start();
         }
       } else {
@@ -4921,6 +4973,7 @@ export class TillApp extends LitElement {
       (action, state) => {
         if (current()) this.#settleClockAction(action, state);
       },
+      this.#live,
     );
     this.#clocking = controller;
     void controller.start(personId);
@@ -12231,16 +12284,16 @@ export class TillApp extends LitElement {
   #scheduleBillDraftRefresh(): void {
     clearTimeout(this.#billDraftTimer);
     this.#billDraftTimer = setTimeout(() => {
-      void Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]).finally(() => {
+      const refresh = this.#live?.up
+        ? Promise.resolve()
+        : Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+      void refresh.finally(() => {
         if (this.isConnected && (this.#draftSync !== undefined || this.#splitPanel !== undefined))
           this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
   }
 
-  /** The till has no push from the server, so another till merging or moving the bill on screen away
-   * (D11 rule 3) is seen only by a bills read; the draft's timer makes one. So does Split a table's
-   * panel on a party with no sync, or a bill started elsewhere would never reach it. */
   async #rereadBillsOnTimer(): Promise<void> {
     const partyId = this.#draftSync?.partyId ?? this.#splitPanel?.partyId;
     if (
@@ -20890,6 +20943,7 @@ export class TillApp extends LitElement {
         .operatorSession=${this.#operatorSession}
         embedded
         monitor
+        .live=${this.#live}
         .api=${this.api}
         .deviceMode=${this.deviceMode}
         .deviceName=${this.deviceName}
@@ -20901,6 +20955,7 @@ export class TillApp extends LitElement {
       ? html`<till-pass-screen
           .operatorSession=${this.#operatorSession}
           embedded
+          .live=${this.#live}
           .api=${this.api}
           .runsPass=${this.capabilities.includes("run-the-pass")}
           .deviceMode=${this.deviceMode}
@@ -20912,6 +20967,7 @@ export class TillApp extends LitElement {
       : html`<till-station-screen
           .operatorSession=${this.#operatorSession}
           embedded
+          .live=${this.#live}
           .api=${this.api}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
@@ -21149,6 +21205,7 @@ export class TillApp extends LitElement {
         return html`<till-station-screen
           .operatorSession=${this.#operatorSession}
           slot="drill"
+          .live=${this.#live}
           .api=${this.api}
           .backKey=${this.#homeScreen() === "counter" ? "station.back" : "action.back"}
           .canMoveStation=${this.capabilities.includes("take-orders")}
@@ -21162,6 +21219,7 @@ export class TillApp extends LitElement {
         return html`<till-pass-screen
           .operatorSession=${this.#operatorSession}
           slot="drill"
+          .live=${this.#live}
           .api=${this.api}
           .backKey=${this.#homeScreen() === "counter" ? "expo.back" : "action.back"}
           .runsPass=${this.capabilities.includes("run-the-pass")}

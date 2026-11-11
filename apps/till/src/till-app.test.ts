@@ -1,3 +1,4 @@
+import { liveReadFixture } from "../test/live-connection.js";
 import { balanceOf } from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
@@ -5236,6 +5237,54 @@ describe("till-app", () => {
       await vi.advanceTimersByTimeAsync(ms);
       await el.updateComplete;
     }
+
+    it("live delivery changes reread receipt and invoice status and keep the five-second chain", async () => {
+      const stream = liveReadFixture();
+      const getInvoiceDeliveries = vi.fn().mockResolvedValue(statusOf(attempt()));
+      const { el } = await soldF1(
+        { readLiveEvents: vi.fn(stream.read), getInvoiceDeliveries },
+        true,
+      );
+      try {
+        await pass(el, 0);
+        stream.event("ready");
+        await pass(el, 0);
+        const reads = getInvoiceDeliveries.mock.calls.length;
+        const receiptReads = vi.mocked(currentApi.getReceiptPrintStatus).mock.calls.length;
+        getInvoiceDeliveries.mockResolvedValue(statusOf(attempt({ status: "sending" })));
+        stream.event("change", '[{"type":"outgoing_mail"}]');
+        await pass(el, 0);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(reads + 1);
+        expect(currentApi.getReceiptPrintStatus).toHaveBeenCalledTimes(receiptReads + 1);
+        expect(ticket(el)!.deliveries?.current?.status).toBe("sending");
+        await pass(el, 5_000);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(reads + 2);
+        let release!: (answer: InvoiceDeliveryStatus) => void;
+        getInvoiceDeliveries.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        );
+        stream.event("change", '[{"type":"print_jobs"}]');
+        await pass(el, 0);
+        stream.event("change", '[{"type":"invoice_deliveries"}]');
+        await pass(el, 0);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(reads + 3);
+        getInvoiceDeliveries.mockResolvedValue(statusOf(attempt({ status: "sent" })));
+        release(statusOf(attempt({ status: "sending" })));
+        await pass(el, 0);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(reads + 4);
+        expect(deliveryLine(el)).toBe("Impresa en A4.");
+        closeTicket(el);
+        await pass(el, 0);
+        stream.event("change", '[{"type":"invoice_deliveries"}]');
+        await pass(el, 5_000);
+        expect(getInvoiceDeliveries).toHaveBeenCalledTimes(reads + 4);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
     it("reads the status on opening, and every 5 s while an attempt waits or sends, until it ends", async () => {
       try {

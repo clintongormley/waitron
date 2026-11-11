@@ -1,3 +1,5 @@
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { liveRefresh } from "../state/live-gate.js";
 import { ContentLanguageController, TickingClock, baseStyles } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -207,6 +209,8 @@ export class TillPassScreen extends LitElement {
   #appliedChoice = 0;
   @state() private stale = false;
   #lastGoodAt = new Date();
+  @property({ attribute: false }) live?: TillLiveConnection;
+  #liveRefresh?: { stop(): void };
   #refreshTimer?: ReturnType<typeof setInterval>;
   readonly #refreshReads = new Set<AbortController>();
   #request = 0;
@@ -245,11 +249,32 @@ export class TillPassScreen extends LitElement {
     } else if (this.embedded) void this.#reload();
     else void this.#loadChoice();
     this.#refreshTimer = setInterval(() => void this.#refresh(), REFRESH_MS);
+    let reading = false,
+      queued = false;
+    this.#liveRefresh = liveRefresh(this.live, {
+      types: TILL_LIVE_TYPES.pass!,
+      run: () => {
+        queued = true;
+        if (reading) return;
+        reading = true;
+        void (async () => {
+          try {
+            while (queued && this.isConnected) {
+              queued = false;
+              await this.#refresh();
+            }
+          } finally {
+            reading = false;
+          }
+        })();
+      },
+    });
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearInterval(this.#refreshTimer);
+    this.#liveRefresh?.stop();
     for (const read of this.#refreshReads) read.abort();
     this.#refreshReads.clear();
   }

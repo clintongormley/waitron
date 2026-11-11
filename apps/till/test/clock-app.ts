@@ -64,6 +64,7 @@ export interface ClockAppFixture {
 export async function clockApp(
   options: {
     state?: TillClockState;
+    api?: Partial<TillApi>;
     enabled?: boolean;
     action?: boolean;
     timeoutSeconds?: number;
@@ -197,6 +198,7 @@ export async function clockApp(
     endBreak: vi.fn().mockImplementation(async () => write("working")),
     switchDeviceProfile: vi.fn().mockResolvedValue({ profileId: "other", sessionEnded: false }),
   };
+  Object.assign(api, options.api);
   const mounted = await mountWidget<TillApp>(
     "till-app",
     { api: api as unknown as TillApi, ...options.props },

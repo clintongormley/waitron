@@ -22,7 +22,9 @@ it.each([
   const allowed = new Set(liveResourceTypesForModules(modules));
   expect(
     Object.entries(TILL_LIVE_TYPES).flatMap(([reader, types]) =>
-      types.filter((type) => !allowed.has(type)).map((type) => `${reader}:${type}`),
+      (reader === "clocking" && !modules.some((module) => module.name === "workforce") ? [] : types)
+        .filter((type) => !allowed.has(type))
+        .map((type) => `${reader}:${type}`),
     ),
   ).toEqual([]);
 });

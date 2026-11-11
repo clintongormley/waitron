@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TillClockState } from "../api/client.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
+import type { TillLiveConnection } from "../api/live-connection.js";
 import { SessionActivity } from "../session-activity.js";
 import { ClockingController, type ClockingSnapshot } from "./clocking.js";
 
@@ -26,7 +28,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const controllers: ClockingController[] = [];
-function fixture() {
+function fixture(connection?: TillLiveConnection) {
   const api = {
     getClockState: vi.fn().mockResolvedValue(clock()),
     clockIn: vi.fn().mockResolvedValue(clock("working", "in")),
@@ -36,7 +38,7 @@ function fixture() {
   };
   const changed = vi.fn<(snapshot: ClockingSnapshot) => void>();
   const settled = vi.fn();
-  const controller = new ClockingController(api, changed, settled);
+  const controller = new ClockingController(api, changed, settled, connection);
   controllers.push(controller);
   return { api, changed, settled, controller, snapshot: () => changed.mock.calls.at(-1)![0] };
 }
@@ -302,4 +304,35 @@ describe("ClockingController", () => {
     expect(idle).toHaveBeenCalledTimes(1);
     await activity.stop();
   });
+});
+
+it("clock changes refresh immediately, retain the clock timer and do not read over a clock-in", async () => {
+  const live = liveConnectionFixture();
+  const f = fixture(live.connection);
+  try {
+    await f.controller.start("ana");
+    live.ready();
+    await flush();
+    f.api.getClockState.mockResolvedValue(clock("working", "elsewhere"));
+    live.change("time_entries");
+    await flush();
+    expect(f.snapshot().state).toEqual(clock("working", "elsewhere"));
+    const reads = f.api.getClockState.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(f.api.getClockState).toHaveBeenCalledTimes(reads + 1);
+    const write = deferred<TillClockState>();
+    f.api.clockIn.mockReturnValueOnce(write.promise);
+    const action = f.controller.act("in");
+    live.change("time_entries");
+    await flush();
+    expect(f.api.getClockState).toHaveBeenCalledTimes(reads + 1);
+    write.resolve(clock("working", "saved"));
+    await action;
+    f.controller.stop();
+    live.change("time_entries");
+    await flush();
+    expect(f.api.getClockState).toHaveBeenCalledTimes(reads + 1);
+  } finally {
+    live.connection.stop();
+  }
 });
