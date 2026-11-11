@@ -62,7 +62,6 @@ import {
 } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { parseEnvFile } from "./env-file.js";
-import { writeFileDurable } from "./fs-atomic.js";
 import { isUnset } from "./env-value.js";
 import { errnoOf } from "./errno.js";
 import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
@@ -76,7 +75,8 @@ import type { Logger } from "./logger.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
 import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { StateSecretFiles } from "./state-secrets.js";
-import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
+import type { RebuildSource } from "./rebuild-first-start.js";
+import { endRestoreFlow, publishRestoreFlow } from "./restore-flow.js";
 import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
@@ -130,6 +130,8 @@ export interface RestoreDeps extends ValidationDeps {
   readonly lockVenue?: (directory: string) => Promise<VenueLock>;
   /** Recorded in the first-start marker. Default `"archive"`. */
   readonly rebuildSource?: RebuildSource;
+  readonly recordFirstStart?: (source: RebuildSource) => Promise<void>;
+  readonly clearFirstStart?: () => Promise<void>;
   /** Runs after validation and before the restore changes the venue folder, the box's identity or
    * its secrets; not run with `skipSecrets`. Refusing stops the restore. */
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
@@ -534,21 +536,24 @@ export async function writeValidated(
         await opened.close();
       }
     }
-    // A restored identity finishes on its first trading start (rebuild-first-start.ts). Written
-    // before anything is placed, so a box that trades after this restore finds it; a restore that
-    // throws removes it while the lock is still held.
-    const marker = join(deps.stateDir, REBUILD_MARKER);
+    const recordFirstStart =
+      deps.recordFirstStart ??
+      ((source: RebuildSource) =>
+        publishRestoreFlow(
+          deps.stateDir,
+          {
+            version: 1,
+            phase: "first-start",
+            firstStart: { source },
+          },
+          async () => {},
+        ));
+    const clearFirstStart = deps.clearFirstStart ?? (() => endRestoreFlow(deps.stateDir));
     try {
-      if (!deps.skipSecrets) {
-        await writeFileDurable(
-          marker,
-          JSON.stringify({ version: 1, source: deps.rebuildSource ?? "archive" }),
-          0o600,
-        );
-      }
+      if (!deps.skipSecrets) await recordFirstStart(deps.rebuildSource ?? "archive");
       await placeValidated(admitted, deps);
     } catch (error) {
-      if (!deps.skipSecrets) await rm(marker, { force: true });
+      if (!deps.skipSecrets) await clearFirstStart();
       throw error;
     }
   } finally {

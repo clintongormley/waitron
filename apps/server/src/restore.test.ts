@@ -46,7 +46,6 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { readModuleConfig } from "./module-config.js";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { ALL_MODULES } from "./modules.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -68,6 +67,7 @@ import {
   writeValidated,
 } from "./restore.js";
 
+const RESTORE_RECORD = "flows/restore/record.json";
 const ownedValidations: ValidatedArtifact[] = [];
 afterEach(async () => {
   for (const validated of ownedValidations.splice(0)) await validated.discard();
@@ -543,7 +543,7 @@ setInterval(() => db, 1000);`;
       expect.objectContaining({ databasePath: expect.any(String) }),
     );
     await expectVenueUntouched();
-    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -570,22 +570,24 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
     throw new AppError("restore.unexpected_entry", { name: "boom" });
   };
   const noMarker = () =>
-    expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({ code: "ENOENT" });
 
   it("leaves the marker, naming the archive as its source", async () => {
     await restoreFromArtifact(makeRestoreDeps());
-    expect(JSON.parse(await readFile(join(stateDir, REBUILD_MARKER), "utf8"))).toEqual({
+    expect(JSON.parse(await readFile(join(stateDir, RESTORE_RECORD), "utf8"))).toEqual({
       version: 1,
-      source: "archive",
+      phase: "first-start",
+      firstStart: { source: "archive" },
     });
-    expect((await stat(join(stateDir, REBUILD_MARKER))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(stateDir, RESTORE_RECORD))).mode & 0o777).toBe(0o600);
   });
 
   it("names the stream as the source when a stream restore passes it", async () => {
     await restoreFromArtifact(makeRestoreDeps({ rebuildSource: "stream" }));
-    expect(JSON.parse(await readFile(join(stateDir, REBUILD_MARKER), "utf8"))).toEqual({
+    expect(JSON.parse(await readFile(join(stateDir, RESTORE_RECORD), "utf8"))).toEqual({
       version: 1,
-      source: "stream",
+      phase: "first-start",
+      firstStart: { source: "stream" },
     });
   });
 
@@ -598,7 +600,7 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
     const failure = Object.assign(new Error("folder sync failed"), { code: "EIO" });
     const thrown = await failingOn(
       "open",
-      (path) => path === stateDir && existsSync(join(stateDir, REBUILD_MARKER)),
+      (path) => path === join(stateDir, "flows") && existsSync(join(stateDir, RESTORE_RECORD)),
       failure,
       () => restoreFromArtifact(makeRestoreDeps()),
     );
@@ -628,7 +630,7 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
     const seen: boolean[] = [];
     const lockVenue = async () => ({
       release: () => {
-        seen.push(existsSync(join(stateDir, REBUILD_MARKER)));
+        seen.push(existsSync(join(stateDir, RESTORE_RECORD)));
       },
     });
     await expect(
@@ -642,7 +644,7 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
   it("holds the marker while it places the restore", async () => {
     let seenDuringMigrate: boolean | undefined;
     const migrate = vi.fn(async () => {
-      seenDuringMigrate = existsSync(join(stateDir, REBUILD_MARKER));
+      seenDuringMigrate = existsSync(join(stateDir, RESTORE_RECORD));
     });
     await restoreFromArtifact(makeRestoreDeps({ migrate }));
     expect(seenDuringMigrate).toBe(true);
@@ -1104,7 +1106,7 @@ describe("restore hooks (identity phase)", () => {
       await expectOldBox();
       expect(await readFile(join(stateDir, "real-tls/server.pem"), "utf8")).toBe(OLD_KEY);
       expect(await readdir(join(stateDir, "real-tls"))).toEqual(["server.pem"]);
-      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
+      expect(existsSync(join(stateDir, RESTORE_RECORD))).toBe(false);
     });
 
     it("are both restored when they name two separate folders", async () => {
@@ -1159,7 +1161,7 @@ describe("restore hooks (identity phase)", () => {
       expect(thrown).toMatchObject({ code: "restore.unsafe_entry_path", params: { name } });
       expect(migrate).not.toHaveBeenCalled();
       await expectOldBox();
-      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
+      expect(existsSync(join(stateDir, RESTORE_RECORD))).toBe(false);
       expect(onDatabasePlaced).not.toHaveBeenCalled();
     },
   );
@@ -1178,7 +1180,7 @@ describe("restore hooks (identity phase)", () => {
     expect(thrown).toBe(failure);
     expect(migrate).not.toHaveBeenCalled();
     await expectOldBox();
-    expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
+    expect(existsSync(join(stateDir, RESTORE_RECORD))).toBe(false);
     expect(onDatabasePlaced).not.toHaveBeenCalled();
   });
 
