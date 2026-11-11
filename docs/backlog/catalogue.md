@@ -1139,20 +1139,14 @@ What the design has to settle:
 
 ## A1516. Mark a dish sold out from the till
 
-**Go-live (owner, 2026-11-11). [Proposal awaiting owner answers](../superpowers/plans/2026-11-11-a1516-till-sold-out.md); not built.** The "sold out for now" switch (the
-product's `available` flag, separate from archiving) is set only in the dashboard's product editor,
-by someone with `catalogue.manage`. When it is set, every till greys the dish out within about 15
-seconds and the server refuses to sell it. Floor staff cannot set it during service. The design
-decides:
+**Go-live (owner, 2026-11-11). [Delivery plan](../superpowers/plans/2026-11-11-a1516-till-sold-out.md); not built.** Owner choices, recorded by the watcher at 21:58:
+anyone signed in on a device that takes orders may change availability, with no new permission.
+Restore availability by hand, never automatically the next day.
 
-- who may press it on the till (a permission for the person, and whether the device's profile
-  must allow it too);
-- whether it covers variants and choices in an options list, as the dashboard switch does;
-- whether "sold out" switches back by itself at the start of the next day. Today nothing switches it
-  back, so someone has to remember.
-
-A count that runs down ("only 5 left") can follow later (owner, 2026-11-11); it is on the parked
-list.
+Delivery 1 adds dishes and variants on Counter/table ordering, and fixes a dashboard save of
+unrelated fields overwriting a later availability change. Delivery 2 adds extras and option
+choices. Reuse the existing available flag, menu refresh and server refusals; do not archive.
+A running-down quantity (“only 5 left”) stays parked.
 
 ## A1517. Allergen points to revisit before go-live
 
