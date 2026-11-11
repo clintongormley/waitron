@@ -16,6 +16,7 @@ export const RESET_REQUEST_FILE = "reset-request.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
 export const FLOWS_DIR = "flows";
+export const RESTORE_FLOW_DIR = "flows/restore";
 export const SCRATCH_DIR = "scratch";
 export const RESTORE_STAGING_DIR = "scratch/restore";
 export const BACKUP_STAGING_DIR = "scratch/backup";
