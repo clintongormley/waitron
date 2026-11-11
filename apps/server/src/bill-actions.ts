@@ -205,7 +205,7 @@ export async function splitBill(
 
 /**
  * Move every line of `fromBillId` onto `intoBillId` and abandon it, which files nothing. Both must be
- * untouched bills of one party.
+ * open bills of one party; the bill merged away must hold no payment.
  */
 export async function mergeBills(
   tx: Transaction,
@@ -217,7 +217,10 @@ export async function mergeBills(
 ): Promise<void> {
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
-  await requireUntouchedPair(tx, intoBillId, path, fromBillId);
+  if (path.partyId === null) throw new AppError("bill.other_party", { workingOrderId: fromBillId });
+  await requireBillOfParty(tx, path.partyId, fromBillId);
+  await refuseBillWithPayments(tx, fromBillId);
+  refuseClosedBill(intoBillId, path.status);
   await assertServiceModesMatch(tx, fromBillId, intoBillId);
   await mergeCheckedBills(tx, cfg, intoBillId, fromBillId, {
     operatorId: command.operatorId,
@@ -235,7 +238,8 @@ export async function mergeBills(
 
 /**
  * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
- * untouched bills of one party, in one service mode. `known.kitchenTold` is set by a caller that
+ * open bills of one party, in one service mode, with no payment on the bill merged away.
+ * `known.kitchenTold` is set by a caller that
  * tells the kitchen of `fromBillId`'s sent dishes itself, from what it read before `fromBillId`
  * joined the party.
  */
