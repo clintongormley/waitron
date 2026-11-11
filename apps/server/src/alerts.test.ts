@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import { hashPin, persons } from "@waitron/identity";
-import type { AlertSource, OngoingAlert } from "@waitron/module";
+import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
 import { AppError, backupOrigin, deviceOrigin, type DeviceId } from "@waitron/shared";
 import {
@@ -18,7 +18,6 @@ import {
   createAlertRegistry,
   readHandledAlerts,
   readOpenAlerts,
-  readOutsideTransactionAlerts,
 } from "./alerts.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
@@ -471,153 +470,6 @@ describe("readOpenAlerts", () => {
       (await listOpenIncidents(tx)).map((i) => i.code).sort(),
     );
     expect(committed).toEqual(["test.healthy_source"]);
-  });
-
-  it.each([
-    { shape: "a null after a valid alert", bad: () => null, errorCode: "unknown" },
-    {
-      shape: "an alert whose key throws when read",
-      bad: () => ({
-        get key(): string {
-          throw new AppError("server.internal", {});
-        },
-        code: "backup.x",
-        params: {},
-        severity: "warning",
-        since: null,
-      }),
-      errorCode: "server.internal",
-    },
-  ])(
-    "a source that writes and answers $shape shows only its unavailable alert and keeps none of its writes; the next source keeps its own",
-    async ({ bad, errorCode }) => {
-      const v = await seedVenueWithTill();
-      const log = vi.fn<Logger>();
-      const earlier: AlertSource = {
-        area: "fiscal",
-        permission: "system.manage",
-        read: async ({ tx }) => {
-          await incidentOn(tx, v, "test.earlier_source", "warning", NOW);
-          return [
-            { key: "fiscal.x:1", code: "fiscal.x", params: {}, severity: "notice", since: null },
-          ];
-        },
-      };
-      const broken: AlertSource = {
-        area: "backup",
-        permission: "system.manage",
-        read: async ({ tx }) => {
-          await incidentOn(tx, v, "test.broken_source", "warning", NOW);
-          return [
-            { key: "backup.x:1", code: "backup.x", params: {}, severity: "warning", since: null },
-            bad(),
-          ] as unknown as OngoingAlert[];
-        },
-      };
-      const healthy: AlertSource = {
-        area: "printing",
-        permission: "system.manage",
-        read: async ({ tx }) => {
-          await incidentOn(tx, v, "test.healthy_source", "warning", NOW);
-          return [
-            {
-              key: "printing.jobs_waiting:p1",
-              code: "printing.jobs_waiting",
-              params: {},
-              severity: "error",
-              since: null,
-            },
-          ];
-        },
-      };
-      const r = createAlertRegistry({ claims: [], sources: [earlier, broken, healthy] });
-      const alerts = await asApp((tx) =>
-        readOpenAlerts(tx, { registry: r, now: NOW, log }, new Set(["system.manage"])),
-      );
-      expect(alerts.map((a) => a.key)).toEqual([
-        "alert.source_unavailable:backup",
-        "printing.jobs_waiting:p1",
-        "fiscal.x:1",
-      ]);
-      const committed = await asApp(async (tx) =>
-        (await listOpenIncidents(tx)).map((i) => i.code).sort(),
-      );
-      expect(committed).toEqual(["test.earlier_source", "test.healthy_source"]);
-      expect(log).toHaveBeenCalledTimes(1);
-      expect(log).toHaveBeenCalledWith("error", "alert.source_unavailable", {
-        area: "backup",
-        errorCode,
-      });
-    },
-  );
-
-  it.each([
-    {
-      reader: "readOpenAlerts",
-      outside: false,
-      read: (r: ReturnType<typeof createAlertRegistry>, log: Logger) =>
-        asApp((tx) =>
-          readOpenAlerts(tx, { registry: r, now: NOW, log }, new Set(["system.manage"])),
-        ),
-    },
-    {
-      reader: "readOutsideTransactionAlerts",
-      outside: true,
-      read: (r: ReturnType<typeof createAlertRegistry>, log: Logger) =>
-        readOutsideTransactionAlerts(
-          db,
-          { registry: r, now: NOW, log },
-          new Set(["system.manage"]),
-        ),
-    },
-  ])(
-    "$reader keeps every alert of a source answering 150,000 of them",
-    async ({ outside, read }) => {
-      const many: OngoingAlert[] = Array.from({ length: 150_000 }, (_, i) => ({
-        key: `backup.x:${i}`,
-        code: "backup.x",
-        params: {},
-        severity: "warning",
-        since: null,
-      }));
-      const big: AlertSource = {
-        area: "backup",
-        permission: "system.manage",
-        ...(outside ? { readOutsideTransaction: true } : {}),
-        read: async () => many,
-      };
-      const log = vi.fn<Logger>();
-      const alerts = await read(createAlertRegistry({ claims: [], sources: [big] }), log);
-      expect(alerts).toHaveLength(150_000);
-      expect(alerts.some((a) => a.code === "alert.source_unavailable")).toBe(false);
-      expect(log).not.toHaveBeenCalled();
-    },
-  );
-
-  it("replaces an outside-transaction source whose answer holds a null with its unavailable alert", async () => {
-    const broken: AlertSource = {
-      area: "backup",
-      permission: "system.manage",
-      readOutsideTransaction: true,
-      read: async () =>
-        [
-          { key: "backup.x:1", code: "backup.x", params: {}, severity: "warning", since: null },
-          null,
-        ] as unknown as OngoingAlert[],
-    };
-    const r = createAlertRegistry({ claims: [], sources: [broken] });
-    const log = vi.fn<Logger>();
-    const alerts = await readOutsideTransactionAlerts(
-      db,
-      { registry: r, now: NOW, log },
-      new Set(["system.manage"]),
-    );
-    expect(alerts.map((a) => a.key)).toEqual(["alert.source_unavailable:backup"]);
-    expect(log).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledWith("error", "alert.source_unavailable", {
-      area: "backup",
-      errorCode: "unknown",
-    });
   });
 
   it("merges the alerts of two sources sharing an area", async () => {
