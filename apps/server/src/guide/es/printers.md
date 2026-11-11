@@ -46,6 +46,9 @@ Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perf
 
 Después de importar una configuración, busca sus impresoras A4 con **Añadir impresora** y vuelve a añadirlas.
 
+Una impresora Bluetooth que desvinculaste queda deshabilitada. Para volver a usarla, ponla en modo
+de emparejamiento, abre sus detalles y elige **Emparejar de nuevo**.
+
 ## Cola de impresión {#print-queue}
 
 Abre **Cola de impresión** para ver por qué espera un trabajo. Para añadir o eliminar un ordenador que imprime, consulta [Agentes de impresión](printers.md#print-agents). Si ningún agente ve una impresora
@@ -55,6 +58,11 @@ conexión puede aparecer junto al último error de impresión comunicado.
 Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no se abrió**, comprueba
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
+
+**Reimprimir** vuelve a enviar una impresión, a su impresora o a otra: un ticket o una factura, a
+cualquier impresora de tickets; una comanda de cocina o un justificante de devolución, a una al menos
+igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
+ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora.
 
 ## Agentes de impresión {#print-agents}
 

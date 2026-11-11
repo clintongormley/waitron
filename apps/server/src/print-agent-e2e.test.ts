@@ -164,6 +164,7 @@ describe("print-agent end to end", () => {
         readMembership: async () => null,
         venueLocale: "es-ES",
         readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       },
       noopLog,
     );
@@ -260,6 +261,7 @@ describe("print-agent end to end", () => {
         readMembership: async () => null,
         venueLocale: "es-ES",
         readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       },
       noopLog,
     );
@@ -407,6 +409,7 @@ describe("print-agent end to end", () => {
         readMembership: async () => null,
         venueLocale: "es-ES",
         readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       },
       noopLog,
     );
@@ -507,6 +510,7 @@ describe("print-agent end to end", () => {
         readMembership: async () => null,
         venueLocale: "es-ES",
         readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       },
       noopLog,
     );
@@ -647,6 +651,7 @@ describe("a printer deleted while its agent is sending", () => {
           readMembership: async () => null,
           venueLocale: "es-ES",
           readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+          layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
         },
         noopLog,
       );
@@ -909,6 +914,7 @@ describe("a printer deleted over real HTTP", () => {
         readMembership: async () => null,
         venueLocale: "es-ES",
         readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       },
       noopLog,
     );

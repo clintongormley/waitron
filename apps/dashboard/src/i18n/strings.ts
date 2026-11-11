@@ -777,8 +777,7 @@ export const en = {
   "printers.connection": "Connection",
   "printers.connected_through": "Connected through",
   "printers.details_paper": "Paper and drawer",
-  "printers.details_help":
-    "Active switches the printer on or off at once. Edit changes its name and, for a network printer, its address.",
+  "printers.details_help": "Edit changes its name and, for a network printer, its address.",
   "printers.connection_network": "Any venue agent",
   "printers.connection_direct": "Direct (no agent)",
   "printers.jobs_limit":
@@ -1819,6 +1818,23 @@ export const en = {
   "printers.bluetooth_pair_note": "A Bluetooth printer must be in pairing mode before you add it.",
   "printers.bluetooth_pair": "Pair and add",
   "printers.bluetooth_pair_only": "Pair",
+  "printers.pair_again": "Pair again",
+  "printers.pair_again_looking":
+    "Put {printer} in pairing mode near its print agent. Looking for it…",
+  "printers.pair_again_missing":
+    "{printer} was not found. Check it is on and in pairing mode, then look again.",
+  "printers.pair_again_look": "Look again",
+  "printers.pair_again_done": "{printer} is paired again and active.",
+  "printers.pair_again_switching_on": "{printer} is already paired. Enabling it…",
+  "printers.reprint_printer": "Print on",
+  "printers.reprint_wide_enough": "Only printers at least as wide as this printout are offered.",
+  "printers.reprint_own_only": "This printout reprints only on its own printer.",
+  "printers.reprint_original_off": "{printer} is disabled.",
+  "printers.reprint_none": "No other active printer can take this printout. {printer} is disabled.",
+  "printers.reprint_none_elsewhere": "No other active printer can take this printout.",
+  "printers.reprint_stuck":
+    "{printer} has not printed this. Reprinting it elsewhere cancels it there.",
+  "printers.reprint_sent": "Reprint sent to {printer}",
   "printers.bluetooth_forget": "Unpair",
   "printers.bluetooth_show_all": "Show all devices",
   "printers.bluetooth_hide_others": "Hide other devices",
@@ -4630,8 +4646,7 @@ export const es: Record<StringKey, string> = {
   "printers.connection": "Conexión",
   "printers.connected_through": "Conectada a través de",
   "printers.details_paper": "Papel y cajón",
-  "printers.details_help":
-    "Activa enciende o apaga la impresora al momento. Editar cambia su nombre y, si es de red, su dirección.",
+  "printers.details_help": "Editar cambia su nombre y, si es de red, su dirección.",
   "printers.connection_network": "Cualquier agente del local",
   "printers.connection_direct": "Directa (sin agente)",
   "printers.jobs_limit":
@@ -5690,6 +5705,25 @@ export const es: Record<StringKey, string> = {
     "Una impresora Bluetooth debe estar en modo de emparejamiento antes de añadirla.",
   "printers.bluetooth_pair": "Emparejar y añadir",
   "printers.bluetooth_pair_only": "Emparejar",
+  "printers.pair_again": "Emparejar de nuevo",
+  "printers.pair_again_looking":
+    "Pon {printer} en modo de emparejamiento cerca de su agente de impresión. Buscándola…",
+  "printers.pair_again_missing":
+    "No se ha encontrado {printer}. Comprueba que esté encendida y en modo de emparejamiento, y vuelve a buscar.",
+  "printers.pair_again_look": "Buscar de nuevo",
+  "printers.pair_again_done": "{printer} vuelve a estar emparejada y activa.",
+  "printers.pair_again_switching_on": "{printer} ya está emparejada. Habilitándola…",
+  "printers.reprint_printer": "Imprimir en",
+  "printers.reprint_wide_enough":
+    "Solo se ofrecen impresoras al menos tan anchas como esta impresión.",
+  "printers.reprint_own_only": "Esta impresión solo se reimprime en su propia impresora.",
+  "printers.reprint_original_off": "{printer} está deshabilitada.",
+  "printers.reprint_none":
+    "Ninguna otra impresora activa sirve para esta impresión. {printer} está deshabilitada.",
+  "printers.reprint_none_elsewhere": "Ninguna otra impresora activa sirve para esta impresión.",
+  "printers.reprint_stuck":
+    "{printer} aún no la ha impreso. Si la reimprimes en otra, se cancela allí.",
+  "printers.reprint_sent": "Reimpresión enviada a {printer}",
   "printers.bluetooth_forget": "Desvincular",
   "printers.bluetooth_show_all": "Mostrar todos los dispositivos",
   "printers.bluetooth_hide_others": "Ocultar otros dispositivos",

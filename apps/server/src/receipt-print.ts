@@ -12,6 +12,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting } from "@waitron/printing";
 import { profileAllows, readPrinterEquipment, readPrinterRoles } from "@waitron/layouts";
@@ -37,6 +38,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptAddress } from "./venue-address.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { TillSaleResult } from "./till-sale.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 
 /** Drawer commands are separate from documents, so printing and resending never open the drawer. */
 export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
@@ -332,6 +334,41 @@ export async function enqueueReceiptCopy(
   return job;
 }
 
+async function requireReceiptBytes(
+  tx: Transaction,
+  cfg: Pick<TradingContext, "practiceMode">,
+  ticket: TillSaleResult,
+  saleId: string,
+  duplicate: boolean,
+  printer: EscSetting,
+): Promise<Uint8Array> {
+  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+  /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes) */
+  if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
+  /* v8 ignore stop */
+  return bytes;
+}
+
+export type LayOutSaleReceipt = (
+  tx: Transaction,
+  saleId: string,
+  duplicate: boolean,
+  printer: EscSetting,
+) => Promise<Uint8Array>;
+
+/** A filed sale's receipt laid out for `printer`, with today's trim, logo and address. */
+export async function layOutSaleReceipt(
+  backend: FiscalBackend,
+  tx: Transaction,
+  cfg: TradingContext,
+  saleId: string,
+  duplicate: boolean,
+  printer: EscSetting,
+): Promise<Uint8Array> {
+  const ticket = await readTransactionReceipt(backend, tx, cfg, saleId);
+  return requireReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+}
+
 /**
  * A full invoice printed on a receipt printer: an original or a duplicate as `designation` says,
  * as a document job, so it never opens the drawer, linked to a receipt delivery for `request`.
@@ -346,10 +383,7 @@ export async function enqueueInvoiceReceipt(
   request: { requestKey: string; personId: string },
 ): Promise<InvoiceDelivery> {
   const duplicate = designation === "duplicate";
-  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
-  /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes) */
-  if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
-  /* v8 ignore stop */
+  const bytes = await requireReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
   const job = await enqueuePrintJob(tx, printer.id, bytes, "document", {
     saleId,
     receiptCopy: duplicate,

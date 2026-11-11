@@ -26,6 +26,7 @@ export async function resendInvoicePrintJob(
   personId: string,
   now = new Date(),
   requestKey?: string,
+  to?: { printerId: string; payload: Uint8Array },
 ): Promise<{ jobId: string }> {
   const [invoice] = await tx
     .select({
@@ -37,7 +38,7 @@ export async function resendInvoicePrintJob(
     .innerJoin(sales, eq(sales.id, printJobs.saleId))
     .where(eq(printJobs.id, jobId));
   if (invoice === undefined || (invoice.recipient === null && invoice.receiptCopy !== false))
-    return resendPrintJob(tx, jobId);
+    return resendPrintJob(tx, jobId, to);
   await expireInvoiceDeliveryClaims(tx, now);
   if (invoice.recipient === null) {
     const emails = await tx
@@ -55,9 +56,9 @@ export async function resendInvoicePrintJob(
       )
     )
       throw new AppError("print_job.not_resendable", { id: jobId });
-    return resendPrintJob(tx, jobId);
+    return resendPrintJob(tx, jobId, to);
   }
-  const retry = await resendPrintJob(tx, jobId);
+  const retry = await resendPrintJob(tx, jobId, to);
   try {
     await reserveInvoiceDelivery(tx, invoice.saleId, {
       requestKey: requestKey ?? retry.jobId,

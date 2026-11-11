@@ -126,6 +126,7 @@ function mountApp(now?: () => Date): Hono {
       pairingMode,
       readMembership: async () => null,
       readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       venueLocale: "es-ES",
       ...(now === undefined ? {} : { now }),
     },
@@ -1071,6 +1072,36 @@ describe("print job resend", () => {
         })
       ).status,
     ).toBe(404);
+  });
+
+  it("requires hardware.manage and a well-formed printer when the resend names one", async () => {
+    const app = mountApp();
+    const printerId = await createUsbPrinter(app, randomUUID(), "Resend elsewhere");
+    const originalId = await enqueue(printerId, new Uint8Array([27, 64]));
+    await suite.db
+      .update(printJobs)
+      .set({ status: "done", deliveredAt: nowIso() })
+      .where(eq(printJobs.id, originalId));
+    const path = `/management-api/print-jobs/${originalId}/resend`;
+    const body = { printerId: randomUUID() };
+    const unauthenticated = await send(app, "POST", path, { body });
+    expect(unauthenticated.status).toBe(401);
+    expect(await unauthenticated.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const denied = await send(app, "POST", path, { body, cookie: staffCookie });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "hardware.manage" } },
+    });
+    const malformed = await send(app, "POST", path, {
+      body: { printerId: "not-a-uuid" },
+      cookie: managerCookie,
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "printerId" } },
+    });
   });
 });
 

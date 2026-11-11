@@ -37,6 +37,7 @@ import "../widgets/page-printer-add.js";
 import { PageTestPages } from "../widgets/page-test-pages.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import "../widgets/equipment-label.js";
+import "../widgets/print-job-reprint-dialog.js";
 import { holderText } from "../i18n/equipment.js";
 import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
@@ -147,10 +148,8 @@ interface PrinterDraft {
   pollId?: string;
 }
 
-/** The `last_error` codes of a job the server ended itself, setting its attempts to the cap
- * (`PRINTER_UNPAIRED`, packages/printing/src/runtime.ts;
- * `PRINTER_DELETED`, packages/printing/src/printer-delete-jobs.ts). */
-const ENDED_BY_SERVER = new Set(["printer.unpaired", "printer.deleted"]);
+/** The `last_error` codes of a job the server ended itself, setting its attempts to the cap. */
+const ENDED_BY_SERVER = new Set(["printer.unpaired", "printer.deleted", "print_job.moved"]);
 
 const LOCALIZED_JOB_REASONS = new Set([
   ...ENDED_BY_SERVER,
@@ -903,7 +902,25 @@ export class PrintersScreen extends LitElement {
   @state() private preview: PrintJobPreview | null = null;
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
-  @state() private resendingJobId: string | null = null;
+  /** The job the Reprint dialog is open on: its row in `jobs`, or the last one it had there. */
+  @state() private reprintJob: PrintJobRow | null = null;
+  /** Jobs whose reprint has been sent and not answered, even after the dialog closed. */
+  @state() private reprintsSending: ReadonlySet<string> = new Set();
+  readonly #reprintApi: Pick<DashboardApi, "resendPrintJob"> = {
+    resendPrintJob: async (id, printerId) => {
+      this.reprintsSending = new Set([...this.reprintsSending, id]);
+      try {
+        return await this.api.resendPrintJob(id, printerId);
+      } catch (error) {
+        if (this.reprintJob?.id !== id) this.errorKey = codeOf(error);
+        throw error;
+      } finally {
+        this.reprintsSending = new Set([...this.reprintsSending].filter((job) => job !== id));
+      }
+    },
+  };
+  /** The printer a reprint was last sent to, while its notice shows. */
+  @state() private reprintSentTo: string | null = null;
   /** The last print the edit or calibration dialog sent. */
   @state() private calibrationJobId: string | null = null;
 
@@ -934,6 +951,22 @@ export class PrintersScreen extends LitElement {
   @state() private pairSubmitting = false;
   #pairEpoch = 0;
   #pairScope?: DraftScope<string>;
+  /** The switched-off Bluetooth printer Pair again looks for, and the scan's entry for it once
+   * found. */
+  @state() private pairAgain: { printer: Printer; found: DiscoveredPrinter | null } | null = null;
+  @state() private pairedAgainName: string | null = null;
+  @state() private pairAgainSwitching = false;
+  #pairAgainOpening = 0;
+  /** Holds no value: the parent of the Pair dialog's PIN, so closing Pair again asks about it. */
+  #pairAgainScope?: DraftScope<null>;
+  #pairAgainLeave?: LeaveCoordinator;
+  readonly #beforePairAgainClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#pairAgainLeave ||
+    (await this.#pairAgainLeave.request({
+      scopes: [this.#pairAgainScope!.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
   #pairLeave?: LeaveCoordinator;
   readonly #beforePairClose = async (reason: LeaveReason): Promise<boolean> =>
     this.pairSubmitting ||
@@ -944,7 +977,7 @@ export class PrintersScreen extends LitElement {
       proceed() {},
     })) === "proceeded";
   @state() private commands: Record<string, TrackedCommand> = {};
-  /** Command key to answerBy for each pairing that succeeded while Add a printer is open. */
+  /** Command key to answerBy for each pairing that succeeded while Add a printer or Pair again is open. */
   @state() private pairedDevices: Record<string, number> = {};
   @state() private forgetting = false;
   #commandTimer?: ReturnType<typeof setInterval>;
@@ -1043,6 +1076,14 @@ export class PrintersScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues): void {
     // A new A4 list supersedes a failed test-page read's message, as a fresh read of the rows.
     if (changed.has("pagePrinters")) this.#testPages.readError = null;
+    if (changed.has("jobs") && this.reprintJob !== null) {
+      const id = this.reprintJob.id;
+      const fresh = this.jobs.find((job) => job.id === id);
+      // A job that left the list (newer printouts push older ones out) keeps its last row.
+      if (fresh !== undefined && !fresh.canResend && !fresh.stuck && !this.reprintsSending.has(id))
+        this.reprintJob = null;
+      else this.reprintJob = fresh ?? this.reprintJob;
+    }
     if (
       changed.has("canManage") &&
       !this.canManage &&
@@ -1082,6 +1123,7 @@ export class PrintersScreen extends LitElement {
     this.#disposeAgentDraft();
     this.#disposePrinterNameDraft();
     this.#disposeAddressDraft();
+    this.#disposePairAgainDraft();
     this.editingAgent = null;
     this.#endScan();
     this.#stopRenewing();
@@ -1313,11 +1355,15 @@ export class PrintersScreen extends LitElement {
 
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
 
+  #scanWanted(): boolean {
+    return this.addingPrinter || this.pairAgain !== null;
+  }
+
   async #loadDiscovered(epoch = this.#scanEpoch, passive = false): Promise<void> {
     const api = passive ? (this.api.background ?? this.api) : this.api;
     const started = ++this.#readCount;
     const devices = await api.listDiscoveredPrinters();
-    if (epoch !== this.#scanEpoch || !this.addingPrinter || !this.isConnected) return;
+    if (epoch !== this.#scanEpoch || !this.#scanWanted() || !this.isConnected) return;
     // A live answer that arrived after this read started is kept: it may be the newer one.
     if (this.#liveReadFloor > started) return;
     this.#setDiscovered(devices, started);
@@ -1333,6 +1379,7 @@ export class PrintersScreen extends LitElement {
     }));
     this.#absorbCommands(devices);
     this.#noteUnpaired(devices, started);
+    this.#findPairAgain();
     const target = this.#probeTarget;
     if (target && this.probeStatus === "pending") {
       const match = this.discovered.find(
@@ -1394,11 +1441,11 @@ export class PrintersScreen extends LitElement {
       if (!address) await this.api.startPrinterDiscovery();
       if (epoch !== this.#scanEpoch) return;
       this.#probeTarget = target;
-      if (!this.isConnected || !this.addingPrinter) return this.#endScan();
+      if (!this.isConnected || !this.#scanWanted()) return this.#endScan();
       if (!address) this.#renewTimer ??= setInterval(() => void this.#renew(), DISCOVERY_RENEW_MS);
       await this.#loadDiscovered(epoch);
       if (epoch !== this.#scanEpoch) return;
-      if (!this.isConnected || !this.addingPrinter) return this.#endScan();
+      if (!this.isConnected || !this.#scanWanted()) return this.#endScan();
       this.#scanUntil =
         Date.now() + (target ? target.expiresAt - target.requestedAt : SCAN_LISTEN_MS);
       this.#scanTimer = setInterval(() => void this.#scanTick(), SCAN_POLL_MS);
@@ -1781,10 +1828,14 @@ export class PrintersScreen extends LitElement {
 
   /** Carries a successful pairing straight on into the form to add the device, unless another dialog
    * is in the way (its row then offers Add) or the device can no longer be added — which includes a
-   * pair-only device (`#canPairOnly`), so its pairing never opens the form. Returns whether the form
-   * opened. */
+   * pair-only device (`#canPairOnly`), so its pairing never opens the form. Returns whether the
+   * pairing was taken: the form opened, or Pair again brought its printer back. */
   #addPaired(key: string, tracked: TrackedCommand): boolean {
     const device = this.#listedDevice(key) ?? tracked.device!;
+    if (this.pairAgain !== null && device.printerId === this.pairAgain.printer.id) {
+      void this.#pairedAgain(this.pairAgain.printer, device);
+      return true;
+    }
     if (this.namingPrinter !== null || this.pairingDevice !== null || !this.#canAdd(device))
       return false;
     this.formAttempted = false;
@@ -1874,14 +1925,14 @@ export class PrintersScreen extends LitElement {
     this.pairSubmitting = false;
   }
 
-  #openPair(device: DiscoveredPrinter): void {
+  #openPair(device: DiscoveredPrinter, parent: object | undefined): void {
     this.#resetPair();
     this.pairingDevice = device;
     const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-printer-modal]");
     if (modal) modal.open = true;
     ({ coordinator: this.#pairLeave, scope: this.#pairScope } = draftScopeFor<string>(this, {
       id: {},
-      parent: this.#addressScope?.id,
+      parent,
       current: () => this.pairPin,
       snapshot: (value) => value,
       equal: (a, b) => a === b,
@@ -1901,12 +1952,20 @@ export class PrintersScreen extends LitElement {
       return;
     }
     const epoch = this.#pairEpoch;
+    const addOpening = this.#addPrinterOpening;
+    const againOpening = this.#pairAgainOpening;
     const scope = this.#pairScope;
     const pin = this.pairPin;
     this.pairSubmitting = true;
     try {
       const { command } = await this.api.pairBluetooth(device.agentId, device.localKey!, pin);
-      if (this.addingPrinter) this.#trackCommand(device.agentId, command, device);
+      // Tracked for the dialog that asked, even after its Pair dialog closed; never for a later one.
+      if (
+        this.#scanWanted() &&
+        addOpening === this.#addPrinterOpening &&
+        againOpening === this.#pairAgainOpening
+      )
+        this.#trackCommand(device.agentId, command, device);
       if (epoch === this.#pairEpoch && this.isConnected) {
         scope!.commit(pin);
         if (scope!.isDirty()) return;
@@ -1926,6 +1985,165 @@ export class PrintersScreen extends LitElement {
     } finally {
       if (epoch === this.#pairEpoch) this.pairSubmitting = false;
     }
+  }
+
+  /** For a switched-off Bluetooth printer no agent reports paired, such as one a succeeded Unpair
+   * switched off. Paired reports come only from the last discovery read, so a printer still
+   * switched on never offers it. */
+  #pairAgainAction(p: Printer): TemplateResult | typeof nothing {
+    if (p.transport !== "bluetooth" || p.active || this.#pairedReport(p) !== undefined)
+      return nothing;
+    return html`<wt-button data-test=${`pair-again-${p.id}`} @click=${() => this.#openPairAgain(p)}
+      >${t("printers.pair_again")}</wt-button
+    >`;
+  }
+
+  #openPairAgain(printer: Printer): void {
+    this.#pairAgainOpening++;
+    this.#resetPair();
+    this.errorKey = null;
+    this.pairedAgainName = null;
+    this.pairAgainSwitching = false;
+    this.pairAgain = { printer, found: null };
+    ({ coordinator: this.#pairAgainLeave, scope: this.#pairAgainScope } = draftScopeFor<null>(
+      this,
+      { id: {}, current: () => null, snapshot: (value) => value, equal: () => true, restore() {} },
+    ));
+    void this.#scan();
+  }
+
+  #lookAgain(): void {
+    if (this.pairAgainSwitching) return;
+    this.pairAgain = { ...this.pairAgain!, found: null };
+    this.#endScan();
+    void this.#scan();
+  }
+
+  /** Once a scan lists the printer Pair again looks for, opens the Pair dialog, or brings the
+   * printer back if an agent already reports it paired. */
+  #findPairAgain(): void {
+    const pairAgain = this.pairAgain;
+    if (pairAgain === null || pairAgain.found !== null) return;
+    const found = this.discovered.find(
+      (d) => d.transport === "bluetooth" && d.printerId === pairAgain.printer.id,
+    );
+    if (found === undefined) return;
+    this.pairAgain = { ...pairAgain, found };
+    if (found.paired === true) void this.#pairedAgain(pairAgain.printer, found);
+    else this.#openPair(found, this.#pairAgainScope?.id);
+  }
+
+  /** Never the name form or calibration: adding the same Bluetooth key brings the disabled record
+   * back under its id, with its name and settings. */
+  async #pairedAgain(printer: Printer, device: DiscoveredPrinter): Promise<void> {
+    const opening = this.#pairAgainOpening;
+    this.pairAgainSwitching = true;
+    try {
+      if (this.printers.find(({ id }) => id === printer.id)?.active === false)
+        await this.api.createPrinter({
+          name: printer.name,
+          transport: "bluetooth",
+          localKey: device.localKey,
+        });
+    } catch (error) {
+      if (opening === this.#pairAgainOpening) this.errorKey = codeOf(error);
+      return;
+    } finally {
+      if (opening === this.#pairAgainOpening) this.pairAgainSwitching = false;
+    }
+    if (opening !== this.#pairAgainOpening || !this.isConnected) return;
+    this.pairedAgainName = printer.name;
+    this.renderRoot.querySelector<WtModal>("[data-test=pair-again-modal]")?.closeAfter("saved");
+    void this.#load();
+  }
+
+  #finishPairAgain(opening: number): void {
+    if (opening !== this.#pairAgainOpening) return;
+    this.#disposePairAgainDraft();
+    if (!this.pairSubmitting) this.#resetPair();
+    this.#endScan();
+    this.#stopRenewing();
+    this.#dropDialogCommands();
+  }
+
+  /** Also invalidates the opening, so a late answer for it does nothing. */
+  #disposePairAgainDraft(): void {
+    this.#pairAgainOpening++;
+    this.pairAgain = null;
+    this.#pairAgainScope?.dispose();
+    this.#pairAgainScope = undefined;
+    this.#pairAgainLeave = undefined;
+  }
+
+  #renderPairAgain(): TemplateResult | typeof nothing {
+    const pairAgain = this.pairAgain;
+    if (pairAgain === null) return nothing;
+    const opening = this.#pairAgainOpening;
+    const { printer, found } = pairAgain;
+    const key = found === null ? undefined : this.#commandKeyOf(found);
+    const command = key === undefined ? undefined : this.commands[key];
+    let status: TemplateResult | typeof nothing = nothing;
+    if (this.pairAgainSwitching)
+      status = html`<p data-test="pair-again-status">
+        <wt-spinner decorative size="sm"></wt-spinner>
+        ${fill("printers.pair_again_switching_on", { printer: printer.name })}
+      </p>`;
+    else if (key !== undefined) status = this.#renderCommand(key, command, "pair-again-command");
+    else if (this.scanning)
+      status = html`<p data-test="pair-again-status">
+        <wt-spinner decorative size="sm"></wt-spinner>
+        ${fill("printers.pair_again_looking", { printer: printer.name })}
+      </p>`;
+    else if (this.errorKey === null)
+      status = html`<p data-test="pair-again-status">
+        ${fill("printers.pair_again_missing", { printer: printer.name })}
+      </p>`;
+    return html`<wt-modal
+      size="compact"
+      data-test="pair-again-modal"
+      heading=${t("printers.pair_again")}
+      .open=${true}
+      .beforeClose=${this.#pairAgainLeave ? this.#beforePairAgainClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#finishPairAgain(opening);
+      }}
+    >
+      ${this.#renderRefreshError()}${status}
+      <wt-form-actions slot="footer" .error=${bottomMessage(refusal(this.errorKey))}>
+        <wt-button
+          slot="cancel"
+          data-test="cancel-pair-again"
+          @click=${() => void this.#closeModal("pair-again-modal")}
+          >${t("action.cancel")}</wt-button
+        >
+        ${
+          found === null && this.scanning
+            ? nothing
+            : html`<wt-button
+                variant="primary"
+                data-test="pair-again-look"
+                ?disabled=${command?.state === "pending"}
+                ?loading=${this.pairAgainSwitching}
+                @click=${() => this.#lookAgain()}
+                >${t("printers.pair_again_look")}</wt-button
+              >`
+        }
+      </wt-form-actions>
+    </wt-modal>`;
+  }
+
+  #renderPairedAgain(): TemplateResult | typeof nothing {
+    if (this.pairedAgainName === null) return nothing;
+    return html`<wt-notice
+      class="sent"
+      data-test="pair-again-done"
+      .duration=${NOTICE_MS}
+      @wt-notice-gone=${() => {
+        this.pairedAgainName = null;
+      }}
+      >${fill("printers.pair_again_done", { printer: this.pairedAgainName })}</wt-notice
+    >`;
   }
 
   /** The agent's current pairing report for a Bluetooth printer, which Unpair needs. */
@@ -2593,7 +2811,7 @@ export class PrintersScreen extends LitElement {
         @click=${() => void this.#printTestPage(p)}
         >${t("printers.print_test_page")}</wt-button
       >
-      ${unpair}
+      ${unpair} ${this.#pairAgainAction(p)}
       <wt-button
         variant="danger"
         data-test=${`delete-printer-${p.id}`}
@@ -3200,6 +3418,7 @@ export class PrintersScreen extends LitElement {
           heading: t("printers.connection"),
           dataTest: "printer-section-connection",
           rows: connection,
+          after: html`${this.#pairAgainAction(p)}${this.#renderPairedAgain()}`,
         })}
         ${detailsSection({
           id: "printer-details-paper",
@@ -3611,8 +3830,10 @@ export class PrintersScreen extends LitElement {
               j.canResend
                 ? html`<wt-button
                     data-test=${`resend-job-${j.id}`}
-                    ?disabled=${this.resendingJobId !== null}
-                    @click=${() => void this.#resendJob(j.id)}
+                    ?disabled=${this.reprintsSending.has(j.id)}
+                    @click=${() => {
+                      if (!this.reprintsSending.has(j.id)) this.reprintJob = j;
+                    }}
                     >${t("printers.resend_job")}</wt-button
                   >`
                 : nothing
@@ -3651,14 +3872,36 @@ export class PrintersScreen extends LitElement {
     </section>`;
   }
 
-  async #resendJob(id: string): Promise<void> {
-    if (this.resendingJobId !== null) return;
-    this.resendingJobId = id;
-    try {
-      await this.#mutate(() => this.api.resendPrintJob(id));
-    } finally {
-      this.resendingJobId = null;
-    }
+  #renderReprint(): TemplateResult | typeof nothing {
+    if (this.reprintJob === null) return nothing;
+    const id = this.reprintJob.id;
+    return html`<dashboard-print-job-reprint-dialog
+      .api=${this.#reprintApi}
+      .job=${this.reprintJob}
+      .printers=${this.printers}
+      @reprint-close=${() => {
+        this.reprintJob = null;
+      }}
+      @reprinted=${(event: CustomEvent<{ printerName: string }>) => {
+        // Also sent by a dialog already closed, whose request was still being answered.
+        if (this.reprintJob?.id === id) this.reprintJob = null;
+        this.reprintSentTo = event.detail.printerName;
+        if (this.isConnected) void this.#load();
+      }}
+    ></dashboard-print-job-reprint-dialog>`;
+  }
+
+  #renderReprintSent(): TemplateResult | typeof nothing {
+    if (this.reprintSentTo === null) return nothing;
+    return html`<wt-notice
+      class="sent"
+      data-test="reprint-sent"
+      .duration=${NOTICE_MS}
+      @wt-notice-gone=${() => {
+        this.reprintSentTo = null;
+      }}
+      >${fill("printers.reprint_sent", { printer: this.reprintSentTo })}</wt-notice
+    >`;
   }
 
   async #viewJob(id: string): Promise<void> {
@@ -3714,7 +3957,10 @@ export class PrintersScreen extends LitElement {
         return;
       }
     }
-    if (id === "pair-printer-modal" && this.#pairLeave) {
+    if (
+      (id === "pair-printer-modal" && this.#pairLeave) ||
+      (id === "pair-again-modal" && this.#pairAgainLeave)
+    ) {
       await modal.requestClose("cancel");
       return;
     }
@@ -4174,7 +4420,7 @@ export class PrintersScreen extends LitElement {
           ?loading=${this.pairSubmitting}
           ?disabled=${s.unchanged || pinInvalid}
           @click=${() => void this.#pair(d)}
-          >${this.#canPairOnly(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
+          >${this.#canPairOnly(d) || this.pairAgain !== null ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
         >
       </wt-form-actions>
     </wt-modal>`;
@@ -4207,6 +4453,10 @@ export class PrintersScreen extends LitElement {
     this.#disposeAddressDraft();
     this.#endScan();
     this.#stopRenewing();
+    this.#dropDialogCommands();
+  }
+
+  #dropDialogCommands(): void {
     // An unpairing's failure goes unless a printer row shows it; a success stays, to keep Unpair
     // hidden while the agent's report lags.
     const onPrinterRow = new Set([...this.#printerCommands.values()].map(([key]) => key));
@@ -4384,7 +4634,7 @@ export class PrintersScreen extends LitElement {
                     variant="primary"
                     data-test=${`pair-${this.#deviceKey(d)}`}
                     ?disabled=${command?.state === "pending"}
-                    @click=${() => this.#openPair(d)}
+                    @click=${() => this.#openPair(d, this.#addressScope?.id)}
                     >${pairOnly.has(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
                   >`
             }
@@ -4721,6 +4971,7 @@ export class PrintersScreen extends LitElement {
       this.addingAgent ||
       this.deletingAgent !== null ||
       this.addingPrinter ||
+      this.pairAgain !== null ||
       this.editingAgent !== null ||
       this.editingPrinter !== null ||
       this.namingPrinter !== null
@@ -4752,10 +5003,10 @@ export class PrintersScreen extends LitElement {
       ${
         dialogOpen
           ? nothing
-          : html`${this.#renderTestPageSent()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
+          : html`${this.#renderTestPageSent()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}${this.#renderReprint()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

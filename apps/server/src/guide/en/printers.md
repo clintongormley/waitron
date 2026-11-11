@@ -43,6 +43,9 @@ name and settings. Assign its devices and device profiles again.
 
 After importing a configuration, find its A4 printers with **Add a printer** and add them again.
 
+A Bluetooth printer you unpaired is disabled. To use it again, put it in pairing mode, open its
+details and choose **Pair again**.
+
 ## Print Queue {#print-queue}
 
 Open **Print Queue** to see why a job is waiting. To add or remove a computer that prints, see [Print agents](printers.md#print-agents). If no print agent sees a USB or Bluetooth
@@ -52,6 +55,12 @@ alongside the last reported printing error.
 Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, check the printer’s
 power and connection, then use **Open drawer** if you still need it open. If no result was
 reported, check whether the drawer opened before opening it again.
+
+**Reprint** sends a printout again, on its own printer or another: a receipt or invoice on any
+receipt printer, a kitchen ticket or refund receipt on one at least as wide. A printout waiting on a
+printer that is disabled, or on a USB or Bluetooth printer no print agent sees, can be moved the
+same way, and is cancelled there. Other
+printouts reprint only on their own printer.
 
 ## Print agents {#print-agents}
 

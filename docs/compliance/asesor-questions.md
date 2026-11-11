@@ -2265,6 +2265,15 @@ so there is nothing on the document that says who each *duplicado* belongs to.
 **Source update, 2026-10-10 (A435-2):** for (d), a job whose printer was deleted cannot be resent;
 `resendPrintJob` answers `printer.not_found`.
 
+**Source update, 2026-11-09 (A405):** for (d), a resend can also go to another printer. On another
+printer a receipt or full invoice is laid out again from the sale rather than sent as the same
+bytes: the invoice data is the same, while the trim, logo and address are today's and the words
+are in the sale's receipt language. It keeps its own marking: an original that failed still comes
+out as an original, and a copy carries the duplicate marking (`reprintJobOn`,
+`apps/server/src/print-job-reprint.ts`). An original still
+waiting on a disabled printer, or on a USB or Bluetooth printer no print agent sees, can be moved the same way; it is ended on
+its own printer when it is moved.
+
 > **(a)** En un establecimiento de hostelería que expide **facturas simplificadas**, cuando varios
 > clientes comparten mesa y desean cada uno su propio justificante, ¿es conforme a derecho expedir una
 > **factura simplificada independiente por cada cliente**, documentando cada una los consumos que se le

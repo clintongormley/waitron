@@ -128,7 +128,7 @@ it has completed, open **Print/Reprint**, choose a printer for **Receipt**, then
 
 Kitchen tickets and collection-number slips also use your default content language for their
 headings. Spanish prints Spanish; other defaults use English. New paper and kitchen reprints
-follow a default change immediately, while a resend keeps the original bytes. Recorded dish names,
+follow a default change immediately, while a resend keeps its original headings. Recorded dish names,
 notes and allergy instructions keep their own text. See [kitchen paper](kitchen-service.md#paper-language).
 
 ## Add a photograph once {#upload}

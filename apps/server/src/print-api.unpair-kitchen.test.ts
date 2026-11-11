@@ -7,11 +7,12 @@ import { kitchenPrintJobs, kitchenStations, parties, printJobs } from "@waitron/
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
-import { PRINTER_UNPAIRED, createPrinter } from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED, createPrinter } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
+import { reprintJobOn } from "./print-job-reprint.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./testing/live-table.js";
 import {
@@ -43,7 +44,7 @@ useVenueDb({
         .from(kitchenStations)
         .where(eq(kitchenStations.isDefault, true));
       const { id: printerId } = await createPrinter(tx, {
-        name: "Cocina",
+        name: "Kitchen",
         transport: "bluetooth",
         localKey: MAC,
       });
@@ -68,6 +69,7 @@ useVenueDb({
         pairingMode,
         readMembership: async () => null,
         readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
         venueLocale: "es-ES",
       },
       () => {},
@@ -148,6 +150,41 @@ async function tableWithWaitingTicket() {
   );
   return { partyId, tabId, jobId: link!.jobId };
 }
+
+describe("a kitchen ticket reprinted on another printer", () => {
+  it("clears a table's printing problem once its failed ticket is reprinted and printed on another printer", async () => {
+    const table = await tableWithWaitingTicket();
+    await inTx(venue, (tx) =>
+      tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+        .where(eq(printJobs.id, table.jobId)),
+    );
+    const problems = async () =>
+      (
+        (await send(venue.app, venue.cookie, "GET", `/api/parties/${table.partyId}/groups`))
+          .json as { printProblems?: unknown[] }
+      ).printProblems;
+    expect(await problems()).toHaveLength(1);
+
+    const moved = await inTx(venue, async (tx) => {
+      const { id: printerId } = await createPrinter(tx, {
+        name: "Bar",
+        transport: "network_tcp",
+        host: "bar.test",
+      });
+      const layOut = () => Promise.reject(new Error("No receipt is laid out here"));
+      return reprintJobOn(tx, layOut, table.jobId, printerId, venue.adminId, undefined, {
+        seen: () => true,
+      });
+    });
+    expect(await problems()).toHaveLength(1);
+    await inTx(venue, (tx) =>
+      tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, moved.jobId)),
+    );
+    expect(await problems()).toEqual([]);
+  });
+});
 
 describe("a kitchen ticket ended by a Bluetooth unpairing", () => {
   it("shows as the table's printing problem", async () => {

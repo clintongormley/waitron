@@ -18,8 +18,9 @@ points of the owner's A405 list, as far as they go without a schema change.
 details already use (`GET /management-api/printer-profiles`, `apps/server/src/print-api.ts:1597-1614`)
 gains roles, departments and A4 printers, through one new read on the venue-service seat
 (`VenueServiceContribution`, `packages/module/src/module.ts:740`); a new venue-wide station-names
-read; and the resend route (`print-api.ts:1503-1514`) takes an optional target printer, checked in
-`resendPrintJob` (`packages/printing/src/outbox.ts:95-131`). One new shared date helper in the
+read; and the resend route (`print-api.ts:1538-1549` on `b58e87c79f`) takes an optional target printer: a
+receipt or full invoice is laid out again for it from the sale, a kitchen ticket or refund receipt
+is copied and centred (point 4). One new shared date helper in the
 dashboard. The `printers` guide page (landed with A404) gains sections in English and Spanish.
 
 **Tech stack:** Lit web components, Vitest 4 (browser mode, real headless Chromium, for
@@ -29,7 +30,8 @@ Hono, Drizzle over SQLite.
 **Spec:** `docs/backlog/printers.md`, section "A405 — printer details and the print queue"
 (points 1–6). Plan shape follows `docs/superpowers/plans/2026-11-05-a404-add-calibrate-printer.md`.
 
-Line numbers below were measured on `c3a4f8a56a`.
+Line numbers below were measured on `c3a4f8a56a`; PR 4's (points 3 and 4, Tasks 15–20 and the
+sections they rely on) were remeasured on `b58e87c79f`.
 
 ## Global constraints
 
@@ -123,90 +125,187 @@ Line numbers below were measured on `c3a4f8a56a`.
 
 ### Point 3 — Pair again
 
-- A succeeded Unpair switches the printer off (C109, #960; the comment at `:2514`). The Add a
-  printer dialog can already bring a switched-off registration back **under its existing id**:
-  `#disabledPrinter` (`:1380-1384`) and the `disabled` branch of `#registerDiscovered`
-  (`:1513-1520`) call `updatePrinter(id, { active: true, … })`. So the spec's "the only way back is
-  adding it again as a new printer" is how it looks, not what happens — but it means scanning,
-  Pair and add, the name form and calibration again, from a dialog that does not say it is the
-  same printer.
+Line numbers in this point are measured on `b58e87c79f`.
+
+- A succeeded Unpair switches the printer off (C109, #960; the comment in the row menu,
+  `printers-screen.ts:2630`). The Add a printer dialog can already bring a switched-off
+  registration back **under its existing id**: `#disabledPrinter` (`:1501-1505`) and the disabled
+  branch of `#registerDiscovered` (`:1634-1640`) call `updatePrinter(id, { active: true, … })`. So
+  the spec's "the only way back is adding it again as a new printer" is how it looks, not what
+  happens — but it means scanning, Pair and add, the name form and calibration again, from a dialog
+  that does not say it is the same printer.
 - **No new server route is needed.** Pairing is `POST /management-api/print-agents/:id/bluetooth/pair`
-  (`print-api.ts:869-888`), which refuses `printer.bluetooth_not_discovered` unless that agent
-  reported the address from a scan recently (`:881-883`). So the dashboard must run a discovery scan
-  first (`startPrinterDiscovery` / renew / `listDiscoveredPrinters`, as `#scan` does, `:1294-1333`),
+  (`print-api.ts:872-891`), which refuses `printer.bluetooth_not_discovered` unless that agent
+  reported the address from a scan recently (`:884-886`). So the dashboard must run a discovery scan
+  first (`startPrinterDiscovery` / renew / `listDiscoveredPrinters`, as `#scan` does, `:1415-1455`),
   find the agent that reports the printer, then pair through it, then switch the printer on with
   the existing PATCH.
 - The scan and the command tracking only run while the Add dialog is open: `#loadDiscovered`
-  (`:1231`), `#scan` (`:1309`, `:1313`) and `#pair` (`if (this.addingPrinter) this.#trackCommand(…)`
-  inside `:1815-1851`) all test `this.addingPrinter`. A succeeded pair goes to `#addPaired`
-  (`:1707-1715`, called from `#absorbCommands` at `:1683`), which opens the name form. Task 15
-  loosens the first; Task 16 adds the Pair again branch.
+  (`:1352`), `#scan` (`:1429`, `:1433`) and `#pair` (`if (this.addingPrinter) this.#trackCommand(…)`
+  at `:1949`, inside `:1934-1965`) all test `this.addingPrinter`. A succeeded pair goes to
+  `#addPaired` (`:1826-1834`, called from `#absorbCommands` at `:1799`), which opens the name form.
+  Task 15 loosens the first; Task 16 adds the Pair again branch.
 
 ### Point 4 — Reprint to another printer
 
-- Reprint today: the queue's `Reprint` (`:3289-3305`) calls `resendPrintJob(id)` → route
-  `print-api.ts:1503-1514` (permission `print.resend`) → `resendInvoicePrintJob`
-  (`apps/server/src/invoice-print.ts:24-57`) → `resendPrintJob` (`outbox.ts:95-131`), which copies
-  the stored bytes to the **same** printer. `canResendPrintJob` (`outbox.ts:75-89`) refuses drawer
-  jobs; the job list computes `canResend` (`print-api.ts:1493-1497`). Two other callers pass no
-  target and stay as they are: the till (`apps/server/src/till-api.ts:2442`) and invoice delivery
-  actions (`apps/server/src/invoice-delivery-actions.ts:246`).
-- **"Same paper width" is not enough: the bytes are built for a paper width AND a resolution.** Every
-  text line is a raster band `textGrid(...).widthDots` wide (`packages/printing/src/escpos.ts:53-56`,
-  `:70-78`); the four settings draw 360, 384, 512 and 576 dots (`packages/printing/src/layout.ts:30-39`,
-  `:57-62`); a receipt sets its print area to that width (`apps/server/src/receipt-ticket.ts:82-83`)
-  and sizes its QR code in dots from the resolution (`:156-163`). A404's measured experiment
-  (A404 plan, "The QR question") printed a QR code stored for 203 dpi on a 180 dpi head at 41.5 mm,
-  over the 40 mm legal limit (`docs/compliance/verifactu-findings.md:1000`). **This plan offers only
-  printers with the paper width and resolution the job was laid out for**, and asks the owner to
-  confirm (open question 1).
-- **The setting a job was laid out for is read from its stored bytes, not from its printer.**
-  Comparing with the original printer's current settings would be wrong after a recalibration (A404's
-  calibration changes both). Receipts, kitchen tickets and refund receipts all begin with `ESC @`
-  then the print area: `init()` pushes `1B 40` (`escpos.ts:63-67`) and `printArea(w)` pushes
-  `1D 4C 00 00` then `1D 57`, `w & 0xff`, `w >> 8` (`escpos.ts:140-143`), called first by
-  `formatReceipt` (`receipt-ticket.ts:55-57`, drawing in `drawReceipt` at `:81-83`), `formatKitchenTicket` (`kitchen-ticket.ts:388-390`)
-  and the refund receipt (`tender-refund-receipt.ts:86-88`); `esc()`'s constructor pushes nothing
-  (`escpos.ts:53-56`). So bytes 0–9 are `1B 40 1D 4C 00 00 1D 57 nL nH` and the width is
-  `nL + 256 × nH`. The four settings' widths, 360, 384, 512 and 576, are all different
-  (`layout.ts:34-39`), so a width names exactly one (paper width, resolution) pair, resolution
-  included. A job whose first ten bytes do not have that shape, or whose width is not one of the
-  four, reprints only on its own printer. Every `sale_id` job is queued at `receipt-print.ts:338`, `:364` or `:533`, all through
-  `buildReceiptBytes` → `formatReceipt`; real payloads for receipts (with logo and duplicate flag),
-  roll invoices, kitchen tickets (single and joined) and refund receipts at all four settings were
-  built by the plan's narrow check and every one began with this header. A job that does not still
-  falls back to its own printer.
-- Paper width and resolution are stored only for receipt printers (`printers.paper_width`,
-  `printers.resolution`, `packages/db/src/schema/printers.ts:55-56`). **A4 printers have no print
-  jobs today:** `print_jobs.printer_id` references `printers` alone
-  (`packages/db/src/schema/print-jobs.ts:38-42`), and the queue joins `printers`
-  (`print-api.ts:1456`). A4 printers are never offered for a reprint.
-- **Test and calibration pages cannot be told apart from other printouts without a schema change.**
-  Nothing records a job's kind beyond `document` / `drawer` (`print-jobs.ts:52`). Three things can
-  be told from existing rows, each read on the chain's first job (`resend_of ?? id`), because a
-  resend copies `sale_id` (`outbox.ts:125`) but neither link table:
-  - `sale_id` set: a receipt, receipt copy or full invoice on a receipt printer (every
-    `enqueuePrintJob(…, { saleId })` call in `receipt-print.ts`, e.g. `:338-341`, `:364-367`, `:533-537`);
-  - a `kitchen_print_jobs` row: a kitchen ticket (`linkKitchenJob`,
-    `apps/server/src/kitchen-print.ts:831-834`, `:870-880`);
-  - a `receipt_reprints` row: a receipt copy, which also carries `sale_id`
-    (`orders-reprint.ts:40`, `orders-api.ts:332`, `transaction-receipt-api.ts:79`), or a refund
-    receipt, which does not (`tender-refund-api.ts:218-221`). So this test adds only refund
-    receipts to the first two; `receipt_reprints.print_job_id` is unique
-    (`packages/db/src/schema/receipt-reprints.ts`), and a resend writes no row, hence the chain's
-    first job.
-  **The rule: a job may go to another printer only when one of those three holds AND its stored
-  bytes name a setting (above); every other job reprints only on its own printer.** That covers
-  test pages, calibration samples, equipment labels, report pages, payment slips, the
-  collection-number slip (`receipt-print.ts:302`, no `sale_id`) and the kitchen slips enqueued
-  without links (`kitchen-print.ts:1383`, `:1452`, `:1843`), and it keeps the spec's rule for test
-  and calibration pages.
-- A reprint that prints on another printer still clears the original's trouble: the resend clause
-  of `printJobInTrouble` names no printer (`apps/server/src/print-job-trouble.ts:56-60`). Task 17
-  pins this with a test rather than relying on reading.
+Line numbers in this point are measured on `b58e87c79f`. **The owner's rule (2026-11-09, open
+questions 1 and 2):** receipts and full invoices on a receipt printer are laid out again for
+whichever active receipt printer is chosen, any width and resolution; kitchen tickets and refund
+receipts are copied byte for byte to any active receipt printer whose line holds at least as many
+dots as the job, centred; everything else reprints only on its own printer. Every Reprint opens a
+small dialog with the original printer chosen.
+
+- **Reprint today.** The queue's Reprint (`printers-screen.ts:3797-3804`) calls `#resendJob`
+  (`:3840-3848`) → `resendPrintJob(id)` (`apps/dashboard/src/api/client.ts:4087-4089`) → route
+  `POST /management-api/print-jobs/:id/resend` (`print-api.ts:1538-1549`), gated by
+  `hardware.manage` (`PRINTER_MANAGE_PERMISSION`, `:118`; the old `print.resend` was folded into it
+  by A1002 cut 1, #2578) → `resendInvoicePrintJob` (`apps/server/src/invoice-print.ts:24-57`) →
+  `resendPrintJob` (`packages/printing/src/outbox.ts:95-128`), which copies the stored bytes to the
+  **same** printer, keeping `sale_id` and `receipt_copy` and naming the chain's first job in
+  `resend_of` (`:123-127`). `canResendPrintJob` (`:75-88`) refuses drawer jobs and a completed
+  original receipt, which needs a marked copy (`:85`); the job list computes `canResend`
+  (`print-api.ts:1527-1530`). Two other callers pass no target and stay as they are: the till
+  (`apps/server/src/till-api.ts:2496`) and invoice delivery actions
+  (`apps/server/src/invoice-delivery-actions.ts:246`). The route reads no body today;
+  `readJsonBody` turns an empty body into `{}` (`packages/server-kit/src/read-json-body.ts:9-15`),
+  so a body with no `printerId` stays today's request.
+- **Which job is which, with no schema change.** Read on the job and on its chain's first job
+  (`resend_of ?? id`), because a resend copies `sale_id` and `receipt_copy` (`outbox.ts:125-126`)
+  but neither link table:
+  - `sale_id` set → a receipt, a receipt copy or a full invoice on a receipt printer. Only three
+    calls queue a job with a sale, all with bytes from `buildReceiptBytes` → `formatReceipt`
+    (`apps/server/src/receipt-print.ts:178-237`): the copy (`:336-341`, built as a duplicate,
+    `receiptCopy: true`), the full invoice (`:359-367`, `receiptCopy` equal to its duplicate flag)
+    and the original (`:531-537`, built as an original, `receiptCopy: false`). Every other
+    `enqueuePrintJob(` call in `apps/server/src` passes no `saleId` (grep on `b58e87c79f`: the
+    drawer jobs `:415`, `:560`, `:652`, `:678`, the collection slip `:302`, and the kitchen, payment
+    slip, report, test, label and sample pages). So `receipt_copy === true` says the bytes were
+    marked a duplicate; whether it is a full invoice is the sale's `counterparty_tax_id`, as
+    `resendInvoicePrintJob` reads it (`invoice-print.ts:31-36`), and the ticket itself says F1 or
+    F2, so laying out again needs no other distinction.
+  - a `kitchen_print_jobs` row on the first job → a kitchen ticket (`linkKitchenJob`,
+    `apps/server/src/kitchen-print.ts:843-846`, `:881-891`), joined tickets included (`:2515`). The
+    slips at `:1052`, `:1220`, `:1635` and `:2078` are queued with no link.
+  - a `receipt_reprints` row on the first job, and no `sale_id` → a refund receipt
+    (`apps/server/src/tender-refund-api.ts:218-221`). The other three writers are receipt copies,
+    which carry `sale_id` (`orders-reprint.ts:40`, `orders-api.ts:332`,
+    `transaction-receipt-api.ts:79`). `receipt_reprints.print_job_id` is unique
+    (`packages/db/src/schema/receipt-reprints.ts:28`) and a resend writes no row, hence the first
+    job.
+- **Receipts and full invoices are laid out again — a small change.** Both pieces exist.
+  `readTransactionReceipt(backend, tx, cfg, saleId)` (`apps/server/src/transaction-receipt.ts:70`)
+  reads a filed sale's ticket from its sale id alone; the till's Reprint receipt uses it
+  (`transaction-receipt-api.ts:59`) before `enqueueReceiptCopy` (`:68`). `buildReceiptBytes`
+  (`receipt-print.ts:178`) lays a ticket out for any paper width and resolution, its QR code sized
+  for that printer. Task 17b-1 exports `buildReceiptBytes`, adds `layOutSaleReceipt` over the two,
+  and hands its bytes to the existing resend in place of the stored ones. The route gets it as a
+  closure in `PrintApiDeps`, as `readInvoiceDocument` is passed today (`print-api.ts:111-112`,
+  wired at `apps/server/src/boot.ts:2603-2604`). Against the byte copy below, this adds about 25
+  production lines and three tests.
+  The laid-out job keeps the job's own original-or-copy marking and goes through the same resend
+  (same chain, same `receipt_copy`, same invoice-delivery reservation); like today's queue resend it
+  writes no `receipt_reprints` row. That departs from the ruling's words for one case: see
+  "Why a reprint keeps its own marking" below.
+  Two limits, said in the PR: the layout uses today's receipt trim, logo and address (as Orders →
+  Reprint does; `buildReceiptBytes`'s comment, `:177`), and the sale's own receipt language, so a
+  copy the till printed in another receipt language (`enqueueReceiptReprint`'s `language`,
+  `:313-324`) comes out in the sale's language: the job does not record which it used.
+- **Kitchen tickets and refund receipts are copied and centred.** Their bytes start
+  `1B 40 1D 4C 00 00 1D 57 nL nH`: `init()` (`packages/printing/src/escpos.ts:63-67`) then
+  `printArea(w)` (`:140-144`, `GS L 0 0` then `GS W w`), called first by `formatKitchenTicket`
+  (`apps/server/src/kitchen-ticket.ts:412-413`) and the refund receipt
+  (`apps/server/src/tender-refund-receipt.ts:86-88`). `GS L` is the left margin and `GS W` the
+  print area's width, both in the printer's horizontal unit, which the builder already treats as one
+  dot. A job `w` dots wide moves to a printer of `P` dots by setting **every** `GS L` to
+  `(P − w) ÷ 2`, rounded down; `GS W` and the images stay as they are. Every one, not the first: a
+  joined kitchen ticket (fired and held parts on one paper, `joinKitchenTickets`,
+  `kitchen-ticket.ts:486-497`) keeps the second ticket's `printArea` and drops only its `ESC @`
+  (`TICKET_START`, `:475`). A search for the byte pattern could also hit image data, so the helper
+  walks the commands, stepping over `GS v 0` image data and `GS ( k` data, as the test oracle
+  `escPosCommands` does (`packages/printing/src/testing/escpos-commands.ts:39`) and the preview's
+  parser does (`apps/server/src/print-job-preview.ts:52-288`). The preview cannot be reused: it
+  lives in `apps/server`, which `@waitron/printing` cannot import, and it steps over `GS L` and
+  `GS W` without reporting their values or offsets (`:217-221`).
+  **Measured** (2026-11-09, `b58e87c79f`): a throwaway script (`/tmp/a405-measure/centre.mts`, not
+  committed) built a single kitchen ticket, a joined kitchen ticket and a Spanish refund receipt at
+  58 mm / 180 dpi with the real builders, walked them with `escPosCommands`, and set every `GS L`
+  for an 80 mm / 180 dpi (512-dot) target. Run as
+  `cd apps/server && ./node_modules/.bin/tsx /tmp/a405-measure/centre.mts`; output:
+
+  ```text
+  kitchen: 7624 bytes; first ten: 1b 40 1d 4c 00 00 1d 57 68 01
+    GS L at 2; GS W at 6:1d 57 68 01
+    centred for 512 dots: changed byte offsets 4; first ten now 1b 40 1d 4c 4c 00 1d 57 68 01; same length true; commands same true
+    centred for a narrower 320-dot line: refused (null)
+  joinedKitchen: 16508 bytes; first ten: 1b 40 1d 4c 00 00 1d 57 68 01
+    GS L at 2,7618; GS W at 6:1d 57 68 01,7622:1d 57 68 01
+    centred for 512 dots: changed byte offsets 4,7620; first ten now 1b 40 1d 4c 4c 00 1d 57 68 01; same length true; commands same true
+    centred for a narrower 320-dot line: refused (null)
+  refund: 13964 bytes; first ten: 1b 40 1d 4c 00 00 1d 57 68 01
+    GS L at 2; GS W at 6:1d 57 68 01
+    centred for 512 dots: changed byte offsets 4; first ten now 1b 40 1d 4c 4c 00 1d 57 68 01; same length true; commands same true
+    centred for a narrower 320-dot line: refused (null)
+  ```
+
+  So the header holds (`68 01` is 360 dots), the margin (512 − 360) ÷ 2 = 76 = `4c` lands in the
+  `GS L` bytes only, the joined ticket's second `GS L` (offset 7618) is found and set too, and the
+  rewritten payload parses to the same commands. What it does not show: that a printer honours
+  `GS L` for `GS v 0` images. Task 20 prints it on the owner's TM-T88III.
+  A printer's dots come from its current `paper_width` and `resolution` through `textGrid(…)
+  .widthDots` (`packages/printing/src/layout.ts:57-62`, over `SETTING_WIDTHS` `:30-39`: 360, 384,
+  512, 576); both columns are `NOT NULL` (`packages/db/src/schema/printers.ts:55-56`). The job's
+  width is read from its own `GS W`, never from its printer, which may have been recalibrated since
+  (A404's calibration changes both settings). At another resolution the same dots print at another
+  size: a 360-dot job laid out at 180 dpi is about 45 mm wide on a 203 dpi head instead of 51 mm.
+  The owner accepts a QR code slightly outside 30–40 mm on such a copy (Orden HAC/1177/2024 art.
+  21.1 was put to him), but no job this PR copies draws one: `grep -ci qr` on
+  `kitchen-ticket.ts` and `tender-refund-receipt.ts` finds none, and receipts are laid out again.
+- **Stuck printouts (approved 2026-11-09 22:14; Task 17c).** Reprint is offered today only for a
+  job that printed, or failed with its delivery attempts used up (`canResendPrintJob`,
+  `outbox.ts:85-86`; five attempts, `runtime.ts:8`). A print agent collects jobs only for an
+  active, not-deleted printer, and for USB or Bluetooth only one it can see
+  (`packages/printing/src/runtime.ts:107-110`, `:135-136`). So without Task 17c:
+  - a USB or Bluetooth printer that is unplugged, off or out of range: its jobs stay **Queued**, no
+    attempt is used, no Reprint (the queue shows "not visible", `print-api.ts:1515-1525`);
+  - a printer disabled in Waitron: its jobs stay **Queued**, no Reprint — except full invoices on a
+    receipt printer, which disabling ends as failed with attempts used
+    (`endDeactivatedInvoicePrintDeliveries`, `apps/server/src/invoice-print.ts:151-172`, called at
+    `print-api.ts:1216`, `:1229`);
+  - a network printer that is off: the agent keeps trying; after the fifth failed attempt the job
+    is **Failed** and Reprint can move it;
+  - a Bluetooth printer unpaired by Unpair: its jobs end failed with attempts used
+    (`endUnpairedPrinterJobs`, `runtime.ts:176-194`), so Reprint can move them.
+  Task 17c covers the first two: a Queued job (or Failed with attempts left) on a disabled or
+  unseen printer can be reprinted on another printer, and the same transaction ends it where it was
+  stuck — `failed`, attempts at the cap, `last_error` `print_job.moved` — so it never prints there
+  when the printer comes back: an agent collects only a job that is Queued, Failed with attempts
+  left, or Printing past its lease (`due`, `runtime.ts:60-66`, used at `:141`). A full invoice's
+  queued delivery ends with it (`endInvoicePrintDeliveries`, `invoice-print.ts:128-149`) and the
+  reprint reserves a new one; an original receipt, once ended, passes the one-live-original check
+  (`outbox.ts:104-121`) and is reprinted as the original. A **Printing** job is never moved: an
+  agent holds it and may be sending it. **Still not covered** (said in the PR): a deleted printer's
+  jobs end with `printer.deleted` (`packages/printing/src/printer-delete-jobs.ts`), which Reprint
+  refuses (`outbox.ts:84`, `:102`; `print-api.ts:1528`), as today; and a network printer whose
+  print agent is offline leaves its jobs Queued with no Reprint, since nothing marks that printer
+  unseen.
+- **Everything else reprints only on its own printer**: test pages, calibration samples, equipment
+  labels, report pages, payment slips, the collection-number slip, the unlinked kitchen slips, and a
+  kitchen ticket or refund receipt whose bytes the walk does not recognise. That keeps the spec's
+  rule for test and calibration pages.
+- **A4 printers are never offered**: `print_jobs.printer_id` references `printers` alone
+  (`packages/db/src/schema/print-jobs.ts:38-41`).
+- A reprint on another printer still clears the original's trouble: the resend clause of
+  `printJobInTrouble` names no printer (`print-job-trouble.ts:57-61`). Task 17b-1 pins it with tests
+  rather than relying on reading.
 - Inserting a job for a disabled printer throws `printer.not_found` ("That printer no longer
-  exists", `outbox.ts:52-57`, `codes.ts:782-785`), which is wrong for a switched-off printer. The
-  new target check refuses a disabled or mismatched target with its own code before the insert.
+  exists", `outbox.ts:52-57`, `apps/dashboard/src/i18n/codes.ts:838-841`), which is wrong for a
+  switched-off printer. The new target check refuses a disabled, deleted or too-narrow target with
+  its own code before the insert.
+- **Permission.** The route keeps `hardware.manage`. Laying a receipt out again shows nothing that
+  permission cannot already read: View printout returns the same job's text under the same gate
+  (`print-api.ts:1551`, `gated` at `:1555`). The Orders route's own checks (`visibleOrderPerson` and
+  the device's `print-receipt` capability, `orders-api.ts:281-294`) belong to that screen and are
+  not added here.
 
 ### Point 5 — Used by
 
@@ -259,14 +358,17 @@ Line numbers below were measured on `c3a4f8a56a`.
 
 Said plainly here, in the backlog (Task 20) and in each PR description.
 
-- **Held until after A760 (A1308 hold):** point 4's "every job keeps the input it was built from"
-  — a stored, versioned, printer-independent document on each print job, and Reprint laying the job
-  out again for the chosen printer with the same builder (`formatReceipt`, `formatKitchenTicket`,
-  `formatCorrectionSlip`, `formatPaymentSlip`, `formatCategorySalesPage`). It needs a new column on
-  `print_jobs`. With it go: reprinting onto a printer of another paper width or resolution;
-  reprinting onto another printer any job outside the rule above (no `sale_id`, kitchen link or
-  `receipt_reprints` row, or bytes that name no setting); and the spec's open question about A4
-  pages for kitchen tickets, payment slips and reports.
+- **Not in PR 4, because it needs a column** (the A1308 hold was lifted on 2026-11-09, but PR 4
+  still adds no table, column or migration): laying out again every printout that is not a receipt
+  or full invoice — kitchen tickets, refund receipts, correction slips, payment slips, report pages.
+  Receipts and full invoices need no stored input, because the filed sale is their input (point 4).
+  The rest would need each job to keep the printer-independent document it was built from, with a
+  version number, in a new `print_jobs` column, and Reprint to rebuild it with the same builder
+  (`formatKitchenTicket`, `formatCorrectionSlip`, `formatPaymentSlip`, `formatCategorySalesPage`,
+  `formatTenderRefundAcknowledgment`). Until then kitchen tickets and refund receipts are copied,
+  centred, to a printer at least as wide, and every other printout reprints only on its own
+  printer. With it goes the spec's open question about A4 pages for kitchen tickets, payment slips
+  and reports.
 - **Held until after A760 (A1308 hold): deleting an A4 printer.** `page_printers` has no deletion
   column (`packages/db/src/schema/page-printers.ts:10-35`), and three tables reference it with
   `onDelete: "restrict"`: `invoice_deliveries.page_printer_id`
@@ -288,14 +390,59 @@ Said plainly here, in the backlog (Task 20) and in each PR description.
 - **Not a cut:** the details' A4 "Used by" shows profiles listing it for full invoices; no station
   prints to an A4 printer (`station_printers.printer_id` references `printers`).
 
+## Why a reprint keeps its own marking
+
+For the owner. The ruling said a receipt reprinted on another printer goes "through the route
+Orders → Reprint receipt already uses … marked as a duplicate as that route marks it". PR 4 lays it
+out again for the chosen printer as that route does (the same `buildReceiptBytes`), but keeps the
+job's own marking: a copy stays marked as a copy, and an original that failed prints as the
+original, as today's Reprint on the same printer does. Calling that route's functions
+(`reprintOrderReceipt`, `enqueueReceiptCopy`) would queue a fresh job, not linked to the one it
+replaces (no `resend_of`, `outbox.ts:27-32`), and always marked as a copy
+(`receipt-print.ts:336-341`). Three things would go wrong:
+
+1. **The printer's alert would stay on.** A failed job stops counting only once a printed job names
+   it as the one it replaces (`apps/server/src/print-job-trouble.ts:57-61`) or another receipt of
+   the sale prints on the **same** printer (`:78-84`). A fresh job on another printer does neither.
+2. **The till would still show the receipt as not printed.** The only receipt a queue Reprint can
+   move that is not already a copy is an original that failed (`outbox.ts:85` refuses a printed
+   one). The till reads a sale's original receipt from jobs not marked as copies only
+   (`receipt-print.ts:458`), so a copy-marked reprint leaves it showing the original as failed.
+3. **A full invoice whose original never printed would be refused.** `enqueueReceiptCopy` records a
+   full invoice's copy as an invoice delivery (`receipt-print.ts:342`, `:376-392`), and that is
+   refused while the invoice's original has never printed: the delivery is then an original, and a
+   copy-marked job does not match it (`apps/server/src/invoice-delivery.ts:140-147`). The
+   full-invoice path itself, `enqueueInvoiceReceipt`, takes whichever marking it is given
+   (`receipt-print.ts:347-374`) and would not be refused, but it too queues a fresh, unlinked job, so
+   points 1 and 2 still apply.
+
+So the only difference from the ruling's words: an original that failed and is reprinted elsewhere
+prints as the original, not marked as a copy. A copy stays a copy.
+
+**Answered by the owner, 2026-11-09 22:22: "original"** (`questions.md`, "## WATCHER 2026-11-09
+22:22") — a receipt reprinted on another printer keeps its own marking, as above.
+
 ## Open questions for the owner (each with the default this plan builds)
 
-1. **Reprint elsewhere: same paper width only, or same paper width and resolution?** The spec says
-   paper width; the bytes also depend on resolution, and a 203 dpi QR code on a 180 dpi head prints
-   over the 40 mm legal limit (above). **Default: same width and resolution.**
+1. **Reprint elsewhere: same paper width only, or same paper width and resolution?** The plan's
+   default was same width and resolution. **Answered by the owner, 2026-11-09, changing the
+   default:** "sometimes the important bit will just be getting the receipt printed". Receipts and
+   full invoices on a receipt printer are laid out again for any active receipt printer, any width
+   and resolution; kitchen tickets and refund receipts are copied byte for byte, centred, to any
+   active receipt printer at least as wide, any resolution; a QR code slightly outside 30–40 mm on
+   such a copy is accepted ("Any dpi, QR limit or not … nobody will care"). Point 4 has what PR 4
+   builds, including where it departs from the ruling's words: a failed original reprinted
+   elsewhere stays an original, not a duplicate.
 2. **Every reprint now opens a small dialog** (choose the printer, original preselected), one more
-   press than today's one-press Reprint. **Default: the dialog for every job**, so a job whose own
-   printer is switched off says so instead of "That printer no longer exists".
+   press than today's one-press Reprint. **Answered by the owner, 2026-11-09: the default stands**
+   — the dialog for every job, so a job whose own printer is switched off says so instead of "That
+   printer no longer exists".
+3. **A printout stuck waiting: "end the stuck printout, then reprint it elsewhere"?** **Approved by
+   the watcher, 2026-11-09 22:14** (`questions.md`, "## WATCHER 2026-11-09 22:14"): built in this PR
+   as Task 17c, about 120 production and 250 test lines, tested at one layer. Point 4's "Stuck
+   printouts" bullet says what it does and what it still leaves out.
+4. **Marking of a receipt reprinted elsewhere** — answered by the owner, 2026-11-09 22:22:
+   "original" (see "Why a reprint keeps its own marking").
 
 ## What goes beyond the spec
 
@@ -312,7 +459,7 @@ Said plainly here, in the backlog (Task 20) and in each PR description.
 
 ## PR split and review weight
 
-Twenty-two tasks, four PRs, in order; each later PR is branched from `main` after the earlier one lands
+Twenty-five tasks, four PRs, in order; each later PR is branched from `main` after the earlier one lands
 (`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`, after syncing `main`),
 because all four change `printers-screen.ts` and `strings.ts`.
 
@@ -334,13 +481,25 @@ because all four change `printers-screen.ts` and `strings.ts`.
   **No risk trigger: light path**; it deletes a widget and moves its tests, so the simplify seat
   runs. Its description flags the gap against point 6: A4 details have no Delete (held for A1308)
   and cannot be switched back on or re-addressed there (refused by design).
-- **PR 4 — "Pair again, and reprint to another printer"** (`feat/a405-pair-again-reprint`):
-  Tasks 15–20, points 3 and 4 (schema-free part). **Risk triggers: cross-package contract**
-  (`resendPrintJob` in `@waitron/printing` gains a target; `resendInvoicePrintJob`, the route body
-  and `PrintJobRow` change), **permissions** (the resend route keeps `print.resend` and must refuse a
-  drawer job, an unmovable kind, a disabled, deleted or mismatched target server-side, each with its
-  domain code), and **fiscal-adjacent output** (a receipt or full invoice printed on another
-  printer must keep its QR code within 30–40 mm). Full path; two Codex run-it reviews.
+- **PR 4 — "Pair again, and reprint to another printer"** (`feat/a405-pair-again-reprint`,
+  `/Users/clintongormley/workspace/worktrees/waitron-feat-a405-pair-again-reprint`): Tasks 15–20
+  (Task 17 in four parts: 17a, 17b-1, 17b-2, 17c), points 3 and 4. No table, column or migration.
+  **Risk triggers:
+  cross-package contract** (`resendPrintJob` in `@waitron/printing` takes a target printer and
+  payload, and the package exports two new helpers; `resendInvoicePrintJob`, `PrintApiDeps`, the
+  route's body and `PrintJobRow` change), **permissions** (the resend route keeps `hardware.manage`
+  and refuses server-side, each with its domain code, a drawer job, a printout that reprints only
+  on its own printer, and a disabled, deleted or too-narrow target), and **fiscal output** (a
+  receipt or full invoice laid out again for another printer must be the same receipt — invoice
+  number, lines, QR text — keep its original or duplicate marking, and reserve the full invoice's
+  delivery as a same-printer reprint does). Full path; two Codex run-it reviews. Size, estimated:
+  about 720 production lines (about a quarter the Pair again window, a quarter the Reprint dialog,
+  about 120 the stuck-printout move) and about 1,150 test lines, plus one line in each of the eleven
+  test files that mount the print API.
+  The PR description says the centring was proven on paper by the owner, or that it was not
+  (Task 20 Step 3); says a printout stuck on a disabled or unseen printer can now be moved and is
+  ended there, and what is still not covered (Point 4's "Stuck printouts"); and gives "Why a
+  reprint keeps its own marking" with the owner's answer.
 
 ## Overlap with open branches (none is a reason to wait)
 
@@ -351,7 +510,7 @@ because all four change `printers-screen.ts` and `strings.ts`.
   rule must be revisited, and its device invoice choices may change what "Used by → Full invoices"
   means. Rebase the backlog text if both land.
 - `feat/a739-payment-window` (last commit 2026-10-22): changes `insertPrintJob` in
-  `packages/printing/src/outbox.ts` (a `jobId` option), which Task 17 also edits — a textual
+  `packages/printing/src/outbox.ts` (a `jobId` option), which Task 17a also edits — a textual
   conflict for whichever lands second.
 - `feat/a803-4c-split-table-picker`: changes `VenueServiceContribution` in `module.ts`, where Task 7
   adds a method — textual proximity only.
@@ -370,11 +529,16 @@ The inputs most likely to bite that no step would otherwise test; each has its t
 3. "Today" just after local midnight, "Yesterday" across a month end, and Spanish (Task 1).
 4. A profile listing the printer for two roles shows once with both; a kitchen-display profile has
    no department; a link to a screen the person may not open is plain text (Tasks 8 and 10).
-5. A reprint target with the same paper width but another resolution, a disabled target, a drawer
-   job with a target, a test page with another target, a resend of a resend of a kitchen ticket,
-   a refund receipt, and a job whose original printer was recalibrated after it printed (a target
-   with the old setting accepted, one with the new setting refused) — each refused or accepted
-   server-side, whatever the dashboard offered (Task 17).
+5. A reprint target that is disabled or deleted; a kitchen ticket to a narrower printer; a test
+   page or a drawer job with another target; a resend of a resend of a kitchen ticket; a joined
+   kitchen ticket (both parts centred); a refund receipt; a failed original receipt reprinted
+   elsewhere (still the original, its printer's alert cleared once it prints, the till seeing the new
+   job); a receipt copy reprinted elsewhere (still marked a copy); a full invoice whose original
+   failed, reprinted elsewhere (its delivery reserved for the new job); a kitchen ticket whose
+   printer was recalibrated after it printed (its width read from the job) — each refused or
+   accepted server-side, whatever the dashboard offered (Task 17b-1); and a Queued job on a disabled
+   printer, a Queued full invoice on an unseen USB printer, a Printing job, and a stuck kitchen ticket
+   refused for a narrower printer (left Queued) (Task 17c).
 
 ## Words for the owner
 
@@ -483,58 +647,61 @@ lista. Sus detalles no tienen calibración; **Imprimir página de prueba** la co
 | `printers.pair_again_look` | new | Look again | Buscar de nuevo |
 | `printers.pair_again_done` | new | {printer} is paired again and active. | {printer} vuelve a estar emparejada y activa. |
 | `printers.reprint_printer` | new | Print on | Imprimir en |
-| `printers.reprint_same_setting` | new | Only printers with the paper width and resolution this printout was made for are offered. | Solo se ofrecen impresoras con el ancho de papel y la resolución para los que se preparó esta impresión. |
+| `printers.reprint_wide_enough` | new (replaces `printers.reprint_same_setting`, 2026-11-09) | Only printers at least as wide as this printout are offered. | Solo se ofrecen impresoras al menos tan anchas como esta impresión. |
 | `printers.reprint_own_only` | new | This printout reprints only on its own printer. | Esta impresión solo se reimprime en su propia impresora. |
-| `printers.reprint_original_off` | new | {printer} is disabled. Switch it on in its details, then reprint. | {printer} está deshabilitada. Actívala en sus detalles y vuelve a reimprimir. |
-| `printers.reprint_none` | new | No other active printer has the paper width and resolution this printout was made for. Switch {printer} on in its details, then reprint. | Ninguna otra impresora activa tiene el ancho de papel y la resolución para los que se preparó esta impresión. Activa {printer} en sus detalles y vuelve a reimprimir. |
+| `printers.reprint_original_off` | new (Spanish reworded 2026-11-09) | {printer} is disabled. Switch it on in its details, then reprint. | {printer} está deshabilitada. Actívala en sus detalles y reimprime. |
+| `printers.reprint_none` | new (reworded 2026-11-09) | No other active printer can take this printout. Switch {printer} on in its details, then reprint. | Ninguna otra impresora activa sirve para esta impresión. Activa {printer} en sus detalles y reimprime. |
+| `printers.reprint_stuck` | new (2026-11-09, Task 17c) | {printer} has not printed this. Reprinting it elsewhere cancels it there. | {printer} aún no la ha impreso. Si la reimprimes en otra, se cancela allí. |
 | `printers.reprint_sent` | new | Reprint sent to {printer} | Reimpresión enviada a {printer} |
 
-Reused: `printers.resend_job` (Reprint / Reimprimir) as the dialog's heading and button,
-`action.cancel`, the Pair dialog's existing words.
+A receipt or full invoice, which any receipt printer can take, shows no hint: every active receipt
+printer is offered. Reused: `printers.resend_job` (Reprint / Reimprimir) as the dialog's heading
+and button, `action.cancel`, the Pair dialog's existing words.
 
-### PR 4 — error codes (`apps/dashboard/src/i18n/codes.ts`; declared in `packages/printing/src/errors.ts`)
+### PR 4 — error codes (`apps/dashboard/src/i18n/codes.ts`; declared in `apps/server/src/errors.ts`, the throwing file's registry)
 
 | Code | English | Spanish |
 | --- | --- | --- |
 | `print_job.own_printer_only` | This printout can only be reprinted on its own printer. Choose that printer. | Esta impresión solo se puede reimprimir en su propia impresora. Elige esa impresora. |
-| `print_job.printer_unsuitable` | That printer is disabled or uses a different paper width or resolution. Choose another printer. | Esa impresora está deshabilitada o usa otro ancho de papel u otra resolución. Elige otra impresora. |
+| `print_job.moved` (new, Task 17c: a `last_error`, shown as the job's reason) | Reprinted on another printer, so this job will not be retried. | Se reimprimió en otra impresora, así que este trabajo no se volverá a intentar. |
+| `print_job.printer_unsuitable` (reworded 2026-11-09) | That printer is disabled, deleted or narrower than this printout. Choose another printer. | Esa impresora está deshabilitada, eliminada o es más estrecha que esta impresión. Elige otra impresora. |
 
-The till never sends a target (`till-api.ts:2442`), so neither code reaches it and the till's
-`codes.ts` needs no entry.
+The till reprints through its own routes (`till-api.ts:2496` calls `resendInvoicePrintJob` with no
+target), so neither code reaches it and the till's `codes.ts` needs no entry. Neither is a recorded
+incident code, so `scripts/alert-codes.test.ts` is not concerned; `scripts/errors-reachable.test.ts`
+reads only packages with a public barrel, and `apps/server` has none (its `errors.ts` header says
+every throwing file imports `./errors.js` directly), so the new file imports it.
 
 ### PR 4 — guide
 
-English, a new section after Printer details, and a sentence appended to Printer details:
+Appended to the existing **Print Queue** section (`{#print-queue}`,
+`apps/server/src/guide/en/printers.md:37`), English:
 
 ```markdown
-## Reprint from the print queue {#print-queue}
-
-In the **Print Queue**, **Reprint** sends a printout again. A receipt, a refund receipt or a
-kitchen ticket can go to another active printer with the paper width and resolution it was made
-for, for when the first one is out of service. Other printouts reprint only on their own printer.
+**Reprint** sends a printout again, on its own printer or another: a receipt or invoice on any
+receipt printer, a kitchen ticket or refund receipt on one at least as wide. A printout waiting on a
+printer that is disabled or out of reach can be moved the same way, and is cancelled there. Other
+printouts reprint only on their own printer.
 ```
 
 Appended to Printer details: "A Bluetooth printer you unpaired is disabled. To use it again, put it
 in pairing mode, open its details and choose **Pair again**."
 
-Spanish:
+Spanish, appended to **Cola de impresión** (`apps/server/src/guide/es/printers.md:39`):
 
 ```markdown
-## Reimprimir desde la cola de impresión {#print-queue}
-
-En la **Cola de impresión**, **Reimprimir** vuelve a enviar una impresión. Un ticket, un ticket de
-devolución o una comanda de cocina puede ir a otra impresora activa con el ancho de papel y la
-resolución para los que se preparó, por si la primera no funciona. Las demás impresiones solo se
-reimprimen en su propia impresora.
+**Reimprimir** vuelve a enviar una impresión, a su impresora o a otra: un ticket o una factura, a
+cualquier impresora de tickets; una comanda de cocina o un ticket de devolución, a una al menos
+igual de ancha. Una impresión que espera en una impresora deshabilitada o fuera de alcance se puede
+mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora.
 ```
 
-Appended: "Una impresora Bluetooth que desvinculaste queda deshabilitada. Para volver a usarla,
-ponla en modo de emparejamiento, abre sus detalles y elige **Emparejar de nuevo**."
+Appended to Detalles de la impresora: "Una impresora Bluetooth que desvinculaste queda
+deshabilitada. Para volver a usarla, ponla en modo de emparejamiento, abre sus detalles y elige
+**Emparejar de nuevo**."
 
-Check every bold word against the screen's words in that language (`printers.list_title`,
-`printers.jobs_title`, `printers.status_active`, `action.edit`, `printers.calibrate`,
-`printers.resend_job`, `printers.pair_again`, `printers.print_test_page`) and fix the guide, not the
-screen, where they differ.
+Check every bold word against the screen's words in that language (`printers.resend_job`,
+`printers.pair_again`) and fix the guide, not the screen, where they differ.
 
 ## Existing tests whose assertions change
 
@@ -662,12 +829,23 @@ PR 3:
   actions column" (`:191`) applies to the one table.
 
 PR 4:
-- `print-api.printer-wiring.test.ts` "requires print.resend and copies the original bytes without
-  changing its history" (`:836`) — unchanged with no body; its target twins are new.
+- `print-api.printer-wiring.test.ts` "requires hardware.manage and copies the original bytes without
+  changing its history" (`:1014`) — unchanged, with no body; its target cases are new.
+- `apps/dashboard/src/api/client.test.ts` "resendPrintJob POSTs the selected job with management
+  credentials" (`:2534`) → also expects the JSON body `{ printerId }`: the call now names a printer.
 - `printers-screen.test.ts` "offers resend for eligible jobs and enqueues the selected document only
-  once while pending" (`:4908`) and "shows a localized resend failure and permits another attempt"
-  (`:4937`) press Reprint, then the dialog's Reprint; "labels Reprint and separates it visibly from
-  View printout" (`:4894`) is unchanged.
+  once while pending" (`:5318`) → Reprint opens the dialog with the job's printer chosen; pressing
+  the dialog's Reprint twice while pending sends `resendPrintJob("j2", <its printer>)` once, and
+  the queue reloads after. "shows a localized resend failure and permits another attempt" (`:5347`)
+  → the refusal shows at the dialog's bottom and its Reprint is usable again. "labels Reprint and
+  separates it visibly from View printout" (`:5304`) is unchanged.
+- Any existing case asserting `canResend: false` for a Queued job on a disabled or unseen printer
+  (Task 17c Step 4 finds them) → `canResend: true` when another printer can take it: the
+  approved stuck-printout move changes what it checks.
+- The `PrintJobRow` fixtures in `printers-screen.test.ts` gain `reprintRule`, `stuck` and
+  `reprintPrinterIds`, and the eleven test files that mount the print API
+  (`grep -rln "mountPrintApi(" apps/server/src`, `b58e87c79f`) gain `layOutSaleReceipt` in their
+  deps — data, not assertions.
 
 ---
 
@@ -1200,14 +1378,16 @@ as plain text. Departments are the distinct departments of the listed profiles, 
 
 ## PR 4 — Pair again, and reprint to another printer
 
+Line numbers in PR 4's tasks are measured on `b58e87c79f`; recheck each before editing.
+
 ### Task 15: Scanning and pair tracking work outside the Add dialog
 
 A refactor; no behaviour changes for the Add dialog.
 
 **Files:**
 - Modify: `printers-screen.ts` — a `#scanWanted()` true while `addingPrinter` or a Pair again is
-  open, used in place of `this.addingPrinter` in `#loadDiscovered` (`:1231`), `#scan` (`:1309`,
-  `:1313`) and `#pair`'s tracking (`:1815-1851`); `#addPaired` (`:1707-1715`) unchanged for now
+  open, used in place of `this.addingPrinter` in `#loadDiscovered` (`:1352`), `#scan` (`:1429`,
+  `:1433`) and `#pair`'s tracking (`:1949`); `#addPaired` (`:1826-1834`) unchanged for now
 - Test: `printers-screen.test.ts`, `printer-pair.unsaved.test.ts`, `printer-address.unsaved.test.ts`
 
 - [ ] **Step 1:** Run the three files and note the `Tests` counts (baseline green).
@@ -1219,26 +1399,32 @@ A refactor; no behaviour changes for the Add dialog.
 
 **Files:**
 - Modify: `printers-screen.ts` — a Pair again button (`pair-again-<id>`) in the details'
-  Connection group and in the row menu, for a Bluetooth printer that no agent reports paired
-  (`#pairedReport(p) === undefined`, `:1853-1855`); it opens `pair-again-modal` (compact) which
-  starts a scan and shows `printers.pair_again_looking` with a spinner; when a discovered Bluetooth
-  entry with `printerId === p.id` arrives it opens the existing Pair dialog for it (`#openPair`,
-  `:1798-1813`); when the scan window ends unfound it shows `printers.pair_again_missing` and
-  `printers.pair_again_look`. The Pair dialog's draft scope takes its `parent` from the Add dialog's
-  address scope (`parent: this.#addressScope?.id`, `:1804`), which does not exist during Pair again:
-  `#openPair` gains a `parent` argument, and Pair again passes the id of a scope the Pair again
-  window registers when it opens (a scope holding no value of its own, never dirty by itself;
-  check in `packages/ui`'s `draftScopeFor` that a parent may be value-less, and if it may not,
-  stop and report), so closing the Pair again window asks about a typed PIN once and discards it with
-  the window. In `#addPaired`, a succeeded pair for the printer being paired again
-  switches it on (`updatePrinter(id, { active: true })`, only if inactive), closes both dialogs and
-  shows `printers.pair_again_done` as a `wt-notice` — it never opens the name form or calibration;
-  closing the Pair again window ends its scan
+  Connection group (`detailsSection` `printer-details-connection`, `:3348-3353`) and in the row
+  menu (`#printerActions`, `:2611-2650`, beside Unpair / Disable at `:2630-2640`), for a Bluetooth
+  printer that is switched off (`!p.active`) and that no agent reports paired
+  (`#pairedReport(p) === undefined`, `:1972-1974`). Both, because the paired reports come only from
+  the last discovery read (`:1083-1093`): a working printer whose agent has not reported it lately
+  must not offer Pair again. It opens
+  `pair-again-modal` (compact) which starts a scan and shows `printers.pair_again_looking` with a
+  spinner; when a discovered Bluetooth entry with `printerId === p.id` arrives it opens the existing
+  Pair dialog for it (`#openPair`, `:1917-1932`); when the scan window ends unfound it shows
+  `printers.pair_again_missing` and `printers.pair_again_look`. The Pair dialog's draft scope takes
+  its `parent` from the Add dialog's address scope (`parent: this.#addressScope?.id`, `:1924`),
+  which does not exist during Pair again: `#openPair` gains a `parent` argument, and Pair again
+  passes the id of a scope the Pair again window registers when it opens (a scope holding no value
+  of its own, never dirty by itself; check in `packages/ui`'s `draftScopeFor` that a parent may be
+  value-less, and if it may not, stop and report), so closing the Pair again window asks about a
+  typed PIN once and discards it with the window. In `#addPaired`, a succeeded pair for the printer
+  being paired again switches it on (`updatePrinter(id, { active: true })`, only if inactive),
+  closes both dialogs and shows `printers.pair_again_done` as a `wt-notice` — it never opens the
+  name form or calibration; closing the Pair again window ends its scan. `#dialogShowsRefreshError`
+  (`:4896-4904`) counts the Pair again window, which shows a failed read itself.
 - Modify: `strings.ts` — the Pair again keys
 - Test: `printers-screen.test.ts`, `printer-pair.unsaved.test.ts`, `printers-screen.a11y.test.ts`
 
-- [ ] **Step 1: Write the failing tests.**
-  `it("offers Pair again on a Bluetooth printer no agent reports paired, and not on a paired one")`;
+- [ ] **Step 1: Write the failing tests**, the five `printers-screen.test.ts` cases inside one
+  `describe("Pair again", …)` so Step 2's filter runs them all.
+  `it("offers Pair again on a disabled Bluetooth printer no agent reports paired, and not on a paired or an active one")`;
   `it("pairs a disabled Bluetooth printer again on the same record and switches it on")` — no
   `createPrinter` call; `pairBluetooth(agentId, localKey, pin)` once; after the command succeeds,
   `updatePrinter(id, { active: true })` once; no name dialog, no calibration;
@@ -1251,104 +1437,307 @@ A refactor; no behaviour changes for the Add dialog.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.test.ts src/screens/printer-pair.unsaved.test.ts -t "Pair again"`
   — FAIL.
 - [ ] **Step 3: Implement.** The pair route's refusals (`printer.bluetooth_not_discovered`,
-  `print-api.ts:881-883`) show in the Pair dialog as today.
+  `print-api.ts:884-886`) show in the Pair dialog as today.
 - [ ] **Step 4: Run** the three files whole — pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "Pair again brings an unpaired Bluetooth printer back on the same record (A405 point 3)"`.
 
-### Task 17: The server reprints to another suitable printer
+### Task 17a: Find a printout's width, centre it on a wider printer, resend to another printer
+
+`@waitron/printing` only. Point 4 has the byte shapes and the measurement.
 
 **Files:**
-- Modify: `packages/printing/src/outbox.ts` — `resendPrintJob(tx, jobId, { printerId }: { printerId?: string } = {})`.
-  The existing checks run first and keep their order (`:95-122`). When `printerId` is given and
-  differs from the job's printer: refuse `print_job.own_printer_only` unless the job is movable —
-  the chain's first job (`resend_of ?? id`) has a `sale_id`, a `kitchen_print_jobs` row or a
-  `receipt_reprints` row, AND `jobSetting(payload)` names a setting; refuse
-  `print_job.printer_unsuitable` unless the target is active, not deleted, and its current
-  `paper_width` and `resolution` equal the setting the job's bytes name (never the original
-  printer's current settings); then insert for the target. A target equal to the job's own printer
-  takes today's path unchanged.
-- Modify: `packages/printing/src/layout.ts` (or a new `job-setting.ts` beside it, exported from the
-  package) — `jobSetting(payload: Uint8Array): { paperWidth; resolution } | null`: `null` unless
-  bytes 0–9 are `1B 40 1D 4C 00 00 1D 57 nL nH` and `nL + 256 × nH` is one of `SETTING_WIDTHS`'
-  widths, else that entry's pair
-- Modify: `packages/printing/src/errors.ts` — declare both codes with their params
-  (`{ id: string }`; `{ id: string; printerId: string }`)
-- Modify: `apps/server/src/invoice-print.ts:24-57` — `resendInvoicePrintJob` passes an optional
-  `printerId` through to both `resendPrintJob` calls
-- Modify: `apps/server/src/print-api.ts` — the resend route (`:1503-1514`) reads an optional body
-  `{ printerId?: string }` (`requireUuidParam` when present; an empty or missing body is today's
-  request). The job list (`:1418-1501`) adds, per row, `setting: { paperWidth, resolution } | null`
-  (from `jobSetting` over the first ten bytes only, selected as `substr(payload, 1, 10)`) and
-  `reprintElsewhere: boolean`. **No query per row:** the three movable tests are `exists`
-  subqueries correlated to `coalesce(print_jobs.resend_of, print_jobs.id)` in the list's one select.
-  `print_jobs` is that select's `.from()` base, which CLAUDE.md §3 warns can break a correlated `sql`
-  subquery silently — read the emitted SQL with `.toSQL()` and keep a test that tells a movable
-  row from an unmovable one in the same list
-- Modify: `apps/dashboard/src/api/client.ts` — `resendPrintJob(id, printerId?)` (`:4090-4092`) sends
-  the body only with a target; `PrintJobRow.setting` and `PrintJobRow.reprintElsewhere`
-  (`:1441-1452`)
-- Modify: `apps/dashboard/src/i18n/codes.ts` — the two codes' words
-- Test: `packages/printing/src/outbox.test.ts`, a `jobSetting` case file beside it,
-  `apps/server/src/print-api.printer-wiring.test.ts` (`describe("print job resend")`, `:835`),
-  `apps/server/src/alert-sources.test.ts` (beside `:980`), `apps/server/src/kitchen-print.test.ts` or
-  `print-api.unpair-kitchen.test.ts` (whichever seeds a table's printing problem)
+- Create: `packages/printing/src/job-width.ts`, exported from `src/index.ts`:
+  - `jobWidthDots(payload: Uint8Array): number | null` — walks the payload command by command:
+    `ESC @` (2 bytes), `ESC a n` (3), `ESC d n` (3), `ESC p m t1 t2` (5), `GS V 0` (3), `GS L nL nH`
+    (4), `GS W nL nH` (4), `GS v 0 m xL xH yL yH` plus `xL…xH × yL…yH` data bytes, `GS ( k pL pH`
+    plus `pL + 256 × pH` bytes — the commands `EscBuilder` sends (`escpos.ts:63-200`). Returns the
+    `GS W` width when the payload has at least one `GS W` and every `GS W` names the same width;
+    `null` for any other byte or command, a command cut short by the end, no `GS W`, or two widths.
+    It works on a whole payload and on the first ten bytes alone (`ESC @`, `GS L`, `GS W`), which
+    is what the job list reads.
+  - `centredForPrinter(payload: Uint8Array, printerDots: number): Uint8Array` — a copy with every
+    `GS L` set to `⌊(printerDots − width) ÷ 2⌋`, nothing else changed; throws `RangeError` when
+    `jobWidthDots(payload)` is `null` or wider than `printerDots` (callers check first).
+  - A printer's dots are `textGrid(paperWidth, resolution).widthDots` (`layout.ts:57-62`); no new
+    helper for that.
+  Not shared with the test oracle `escPosCommands`, on purpose (its header says why,
+  `testing/escpos-commands.ts:31-38`). The preview's parser (`apps/server/src/print-job-preview.ts:52-288`)
+  walks the same commands, but `@waitron/printing` cannot import `apps/server`, and it steps over
+  `GS L`/`GS W` without reporting them (`:217-221`), so this is a separate walk.
+- Modify: `packages/printing/src/outbox.ts` — `resendPrintJob(tx, jobId, to?: { printerId: string;
+  payload: Uint8Array })`. The existing checks run first and keep their order (`:96-122`); the
+  insert (`:123-127`) uses `to.printerId` and `to.payload` when given, with the same `resendOf`,
+  `saleId` and `receiptCopy`. Without `to`, today's behaviour, byte for byte. The insert's own
+  `printer.not_found` guard (`:52-57`) stays as the backstop; the server checks the target first.
+- Test: `packages/printing/src/job-width.test.ts` (new), `packages/printing/src/outbox.test.ts`
+
+- [ ] **Step 1: Write the failing tests.** Payloads are built with `esc(setting)` (`init`,
+  `printArea`, `line`, `align`, `qr`, `bitmap`, `feedAndCut`); the expected commands are read back
+  with `escPosCommands` (`src/testing/escpos-commands.ts`), never with the code under test. No new
+  test helper: search `src/testing/` first.
+  - `jobWidthDots`: each of the four settings' payloads gives its width (360, 384, 512, 576); the
+    same payload's first ten bytes give the same; `null` for a payload cut inside a command, one
+    with an unknown command (`ESC t n`, which the oracle knows and the builder never sends), one
+    with no `GS W`, and one with two different `GS W`s.
+  - `centredForPrinter`: 360 → 512 sets `GS L` to 76, 384 → 576 to 96, 512 → 512 to 0; a payload
+    with two `printArea`s, as a joined kitchen ticket has, gets both set (the one place joined
+    tickets' centring is checked); a payload whose image data
+    contains the bytes `1D 4C 00 00` (a `bitmap` whose bits hold them) keeps them, and only real
+    `GS L` commands change (compare every other byte with the input); wider than the printer, and an
+    unrecognised payload, throw `RangeError`.
+  - `outbox.test.ts`: a resend `to` another printer inserts a job on that printer with the given
+    payload, `resendOf` the chain's first job, `saleId` and `receiptCopy` kept; a drawer job with
+    `to` → `print_job.not_resendable`, as without.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/printing exec vitest run src/job-width.test.ts src/outbox.test.ts`
+  — the new cases FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the two files whole and `tsc --noEmit` for `@waitron/printing` — pass.
+  `@waitron/printing` is mutation-tested with a floor of 90: every branch of the walk needs a case
+  that fails when it is deleted.
+- [ ] **Step 5: Commit** — `git commit -s -m "Printing can read a printout's width, centre it on a wider printer and resend it to another printer (A405 point 4)"`.
+
+### Task 17b-1: The server decides how a printout reprints on another printer
+
+The decision and its tests, called directly; no route change yet.
+
+**Files:**
+- Modify: `apps/server/src/receipt-print.ts` — export `buildReceiptBytes` (`:178`), unchanged.
+- Create: `apps/server/src/print-job-reprint.ts`, importing `./errors.js`:
+  - `layOutSaleReceipt(backend, tx, cfg: TradingContext, saleId, duplicate, printer: EscSetting)`
+    → `buildReceiptBytes(tx, cfg, await readTransactionReceipt(backend, tx, cfg, saleId), saleId,
+    duplicate, printer)`, throwing as `enqueueInvoiceReceipt` does when it gives `undefined`
+    (`receipt-print.ts:360-363`).
+  - `reprintJobOn(tx, layOut, jobId, printerId, personId, now)`:
+    1. read the job; none → `print_job.not_found`;
+    2. `printerId` is the job's own printer → `resendInvoicePrintJob(tx, jobId, personId, now)`,
+       today's path;
+    3. `!canResendPrintJob(job)` → `print_job.not_resendable` (as `outbox.ts:103`, so a drawer job
+       keeps that code);
+    4. the target: active and not deleted in `printers`, else `print_job.printer_unsuitable`
+       (`{ id, printerId }`); its dots from `textGrid(…).widthDots`;
+    5. `job.saleId` set → `payload = await layOut(tx, job.saleId, job.receiptCopy === true,
+       target)`;
+    6. otherwise, a `kitchen_print_jobs` or `receipt_reprints` row on `job.resendOf ?? job.id` →
+       `jobWidthDots(job.payload)`: `null` → `print_job.own_printer_only` (`{ id }`); wider than
+       the target → `print_job.printer_unsuitable`; else `payload = centredForPrinter(job.payload,
+       dots)`;
+    7. otherwise → `print_job.own_printer_only`;
+    8. `resendInvoicePrintJob(tx, jobId, personId, now, undefined, { printerId, payload })`.
+- Modify: `apps/server/src/invoice-print.ts:24-57` — `resendInvoicePrintJob` takes an optional
+  `to` and passes it to both `resendPrintJob` calls (`:36`, `:38`); the delivery reservation
+  (`:40-45`) is unchanged and so covers the new job.
+- Modify: `apps/server/src/errors.ts` — declare `print_job.own_printer_only: { id: string }` and
+  `print_job.printer_unsuitable: { id: string; printerId: string }`.
+- Modify: `apps/dashboard/src/i18n/codes.ts` — the two codes' words.
+- Test: `apps/server/src/print-job-reprint.test.ts` (new), `apps/server/src/invoice-print-api.test.ts`
+  (`describe("management invoice receipt resends")`, `:666`), `apps/server/src/alert-sources.test.ts`
+  (beside `:978`), and `apps/server/src/kitchen-print.test.ts` or
+  `apps/server/src/print-api.unpair-kitchen.test.ts`, whichever seeds a table's printing problem
+  (Step 1 names the one chosen). Before writing a seed, reuse what `invoice-print-api.test.ts` and
+  the printer-wiring suite already build (a sale with its receipt job, `recordSale`, the seeded
+  printers).
 
 - [ ] **Step 1: Write the failing tests** (each refusal asserts the domain code, not just a status).
-  - `jobSetting`: the bytes `formatReceipt` / `formatKitchenTicket` produce for each of the four
-    settings give back that setting; a payload shorter than ten bytes, one with another prefix, and
-    one with a width of 500 give `null`.
-  - `outbox.test.ts`: a receipt job (with `saleId`) to an active printer of the job's setting → a new
-    job on the target, `resendOf` the original, `saleId` kept; a kitchen job (link row) likewise; a
-    resend of a resend of a kitchen job (links only on the first) likewise;
-    `it("moves a refund receipt, recorded only in receipt_reprints, to another printer")`; a
-    test-page-shaped job (no sale, no link, no `receipt_reprints` row) to another printer →
-    `print_job.own_printer_only`; a receipt whose bytes name no setting → `print_job.own_printer_only`;
-    the same job to its own printer id → accepted as today; a target of the same width and other
-    resolution → `print_job.printer_unsuitable`; a disabled target and a deleted target → same code;
-    a drawer job with a target → `print_job.not_resendable` (unchanged order); no target → today's
-    behaviour, byte for byte.
-    `it("judges a target by the setting the job was printed at, not its printer's setting now")` — a
-    receipt printed on an 80 mm / 203 dpi printer; that printer is then recalibrated to 80 mm /
-    180 dpi; a target at 80 mm / 203 dpi is accepted, a target at 80 mm / 180 dpi is refused
-    `print_job.printer_unsuitable`.
-  - `print-api.printer-wiring.test.ts`: the route with `{ printerId }` still requires `print.resend`
-    (401 unauth, 403 for a session without it, asserting codes); a malformed `printerId` →
-    `management.request_invalid`; one list holding a receipt job, a refund receipt and a test page
-    marks the first two `reprintElsewhere: true` with their `setting`, and the test page `false`; an
-    invoice receipt reprinted elsewhere reserves its invoice delivery for the new job (as
-    `invoice-print-api.test.ts` asserts for a same-printer resend).
+  - `print-job-reprint.test.ts`, through `reprintJobOn` with the real `layOutSaleReceipt`:
+    - `it("lays a receipt out again for a printer of the same setting as the bytes it first printed")`
+      — an original receipt at 80 mm / 180 dpi, failed with its attempts used up, reprinted on
+      another 80 mm / 180 dpi printer: the new job's payload equals the original's, byte for byte.
+      This is the check that `readTransactionReceipt` gives the ticket the original was printed
+      from. If it fails, use `readSettledTicket(backend, tx, cfg, sale.workingOrderId)` for a sale
+      with a working order (as `orders-reprint.ts:28` does) and say so in the PR; if neither gives
+      the same bytes, stop and report.
+    - `it("lays a failed original receipt out again for a printer of another width, still as the original")`
+      — the original at 58 mm / 180 dpi, the target 80 mm / 203 dpi: the new job is on the target,
+      `resendOf` the original, `receiptCopy` false, its payload `layOutSaleReceipt(…, false,
+      target)`'s and not the stored bytes; `readOriginalReceiptPrint` for the sale names the new
+      job, queued.
+    - `it("keeps a receipt copy marked as a copy when it is laid out again")` — `receiptCopy` true,
+      payload `layOutSaleReceipt(…, true, target)`'s.
+    - `it("centres a kitchen ticket on a wider printer")` — payload equals
+      `centredForPrinter(stored, printerDots)`; and a resend of a resend of it (links only on the
+      first) likewise. How the bytes are centred, joined tickets included, is checked once, in
+      `job-width.test.ts` (Task 17a).
+    - `it("centres a refund receipt, recorded only in receipt_reprints, on a wider printer")` —
+      payload equals `centredForPrinter(stored, printerDots)`.
+    - `it("refuses a kitchen ticket on a narrower printer")` → `print_job.printer_unsuitable`.
+    - `it("reads a kitchen ticket's width from the job, not from its printer's setting now")` — a
+      ticket printed at 80 mm / 203 dpi (576 dots); its printer is then recalibrated to 80 mm /
+      180 dpi; a 512-dot target is refused `print_job.printer_unsuitable`, a 576-dot one accepted.
+    - a test page to another printer → `print_job.own_printer_only`; a disabled target and a
+      deleted target → `print_job.printer_unsuitable`; a drawer job with a target →
+      `print_job.not_resendable`; the job's own printer as the target → today's resend, the same
+      bytes.
+  - `invoice-print-api.test.ts`: `it("reserves a full invoice's delivery for its receipt laid out on another printer")`
+    — a full invoice whose original failed, reprinted elsewhere: a receipt delivery for the new job,
+    designation `original`, as the same-printer cases there assert.
   - `alert-sources.test.ts`: `it("stops counting a job once a resend of it has printed on another printer")`.
   - kitchen: `it("clears a table's printing problem once its failed ticket is reprinted and printed on another printer")`.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/printing exec vitest run src/outbox.test.ts` (and the
-  `jobSetting` file), `pnpm --filter @waitron/server exec vitest run src/print-api.printer-wiring.test.ts src/alert-sources.test.ts -t "resend|reprint|another printer"`
-  — the target and `jobSetting` cases FAIL; the two trouble cases may pass at once — if so they pin
-  `print-job-trouble.ts:56-60`'s printer-free resend clause, and a deletion control (add
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/print-job-reprint.test.ts`
+  (whole), then `pnpm --filter @waitron/server exec vitest run src/invoice-print-api.test.ts src/alert-sources.test.ts <the kitchen file> -t "another printer"`
+  — the new cases FAIL; the two trouble cases may pass at once — if so they pin
+  `print-job-trouble.ts:57-61`'s printer-free resend clause, and a deletion control (add
   `and copy.printer_id = print_jobs.printer_id` in a throwaway edit) must make them fail.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the files whole, `src/invoice-print-api.test.ts`, `src/till-api.receipt.test.ts`,
-  `src/till-api.deliveries.test.ts` (the other callers, unchanged), `pnpm exec vitest run scripts/errors-reachable.test.ts`,
-  and `tsc --noEmit` for `@waitron/printing`, `@waitron/server`, `@waitron/dashboard` — pass.
-- [ ] **Step 5: Commit** — `git commit -s -m "A print queue reprint can go to another active printer of the setting it was printed at, for receipts, refund receipts and kitchen tickets only (A405 point 4)"`.
+- [ ] **Step 4: Run** the four files whole, `src/till-api.receipt.test.ts`,
+  `src/till-api.deliveries.test.ts` (the other callers, unchanged) and
+  `src/transaction-receipt-api.test.ts` (the `buildReceiptBytes` export), and `tsc --noEmit` for
+  `@waitron/server` — pass.
+- [ ] **Step 5: Commit** — `git commit -s -m "The server can reprint a printout on another printer: receipts and invoices laid out again for it, kitchen tickets and refund receipts centred on one at least as wide (A405 point 4)"`.
+
+
+_As built (2026-11-11, review fixes): `layOutSaleReceipt` and its type live in `receipt-print.ts`,
+and `buildReceiptBytes` stays private; `reprintJobOn` takes a required `{ seen }` check in place of
+`ownPrinterUnseen`, and shares `isStuckJob`, `reprintRule` and `linkedPrintoutSql` with the list
+route; Pair again brings a printer back with `createPrinter({ name, transport: 'bluetooth',
+localKey })` (after A1484, #2772), not `updatePrinter`._
+
+### Task 17b-2: The resend route takes a printer, and the queue says where each printout may go
+
+**Files:**
+- Modify: `apps/server/src/print-api.ts`:
+  - `PrintApiDeps` (`:96-116`) gains `layOutSaleReceipt: (tx, saleId, duplicate, printer) =>
+    Promise<Uint8Array>`, beside `readInvoiceDocument`; `STATUS` (`:126`) gives both new codes 409.
+  - The resend route (`:1538-1549`) reads `readJsonBody`; with no `printerId` it is today's request;
+    otherwise `requireBodyUuid(body.printerId, "printerId")` (as `orders-api.ts:287`) and
+    `reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.())`.
+  - The job list (`:1422-1535`) adds per row `reprintRule: "any" | "wide_enough" | "own"` and
+    `reprintPrinterIds: string[]` — the other active, not-deleted receipt printers the server would
+    accept: `any` (a `sale_id`) offers them all; `wide_enough` (a kitchen or refund-receipt link and
+    a head `jobWidthDots` reads) those whose dots are at least the job's; `own` none. **No query per
+    row:** the select adds the head as `substr(payload, 1, 10)` and the two links as `exists`
+    subqueries correlated to `coalesce(print_jobs.resend_of, print_jobs.id)`; one more select reads
+    the active printers. **The list's existing join to `printers` (`:1462`) is what keeps those
+    columns qualified.** Measured (2026-11-09, `/tmp/a405-measure/qualify.mts`, drizzle's
+    `.toSQL()` over the real schema): without a join, drizzle writes
+    `where "print_job_id" = coalesce("resend_of", "id")`, and inside the subquery an unqualified
+    `"id"` names the inner table's own column, silently; with the join it writes
+    `"kitchen_print_jobs"."print_job_id" = coalesce("print_jobs"."resend_of", "print_jobs"."id")`.
+    Read the emitted SQL with `.toSQL()` after the change, and keep the list test below, which
+    tells a movable row from an unmovable one in one list.
+- Modify: `apps/server/src/boot.ts:2603-2604` — wire `layOutSaleReceipt` over `nodeBackend` and
+  `tradingContext`, as `readInvoiceDocument` is.
+- Modify: the eleven test files that mount the print API (`grep -rln "mountPrintApi(" apps/server/src`)
+  — `layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here"))`, as
+  `equipment-label-api.test.ts:84` does for `readInvoiceDocument`, except where a case reprints a
+  receipt elsewhere, which passes the real one.
+- Modify: `apps/dashboard/src/api/client.ts` — `resendPrintJob(id, printerId)` (`:4087-4089`) sends
+  `{ printerId }`; `PrintJobRow` (`:1438-1450`) gains `reprintRule` and `reprintPrinterIds`.
+- Test: `apps/server/src/print-api.printer-wiring.test.ts` (`describe("print job resend")`,
+  `:1013`), `apps/dashboard/src/api/client.test.ts` (`:2534`).
+
+- [ ] **Step 1: Write the failing tests.**
+  - `print-api.printer-wiring.test.ts`: a malformed `printerId` → `management.request_invalid`; the
+    route passes a target through (one receipt reprinted elsewhere, 202, the new job on the
+    target); one list holding a receipt, a kitchen ticket, a refund receipt and a test page, with
+    active printers at 58 mm / 180 dpi, 80 mm / 180 dpi and 80 mm / 203 dpi and one disabled, gives
+    `any` / `wide_enough` / `wide_enough` / `own` and the expected `reprintPrinterIds` (the job's
+    own printer and the disabled one never among them). The permission cases stay as they are: the
+    gate is the same `gated` call with or without a body.
+  - `client.test.ts`: the changed `:2534` case.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/print-api.printer-wiring.test.ts -t "resend|reprint"`
+  and `pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts -t resendPrintJob`
+  — the new cases FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** both files whole, the eleven print-API files, and `tsc --noEmit` for
+  `@waitron/server` and `@waitron/dashboard` — pass.
+- [ ] **Step 5: Commit** — `git commit -s -m "The print queue's resend takes a printer, and each printout says which printers it may go to (A405 point 4)"`.
+
+### Task 17c: A printout stuck on a disabled or unseen printer can be moved, and is ended there
+
+Approved by the watcher, 2026-11-09 22:14 (`questions.md`, "## WATCHER 2026-11-09 22:14"): build
+it in this PR, tested at one layer, with no repeated per-route cases. Point 4's "Stuck printouts"
+bullet has the code it rests on.
+
+**Stuck**, for this task: a document job **Queued**, or **Failed** with attempts left — never
+**Printing** (an agent holds it and may be sending it), never a drawer job — whose printer is not
+deleted and is either switched off in Waitron, or is an active USB or Bluetooth printer that no
+agent has reported seeing recently (the list's `printer.not_visible` test, `print-api.ts:1497-1502`
+and `:1515-1525`, minus Printing).
+
+**Files:**
+- Modify: `packages/printing/src/outbox.ts` (exported from `src/index.ts`) —
+  `PRINT_JOB_MOVED = "print_job.moved"` and `endMovedPrintJob(tx, jobId): Promise<boolean>`: one
+  `update print_jobs set status = 'failed', attempts = MAX_DELIVERY_ATTEMPTS, last_error =
+  PRINT_JOB_MOVED where id = ? and kind = 'document' and (status = 'queued' or (status = 'failed'
+  and attempts < MAX_DELIVERY_ATTEMPTS)) returning id`, as `endDeletedPrinterJobs` ends jobs
+  (`printer-delete-jobs.ts`); `true` when it ended the job. The state test sits in the update, so a
+  job an agent claimed meanwhile is left alone.
+- Modify: `apps/server/src/print-job-reprint.ts` — `reprintJobOn` takes
+  `{ ownPrinterUnseen: boolean }` from the route. At step 3, a job `canResendPrintJob` refuses goes
+  on only when it is stuck (its printer read in the same step: active, deleted, transport) and the
+  target is another printer; otherwise `print_job.not_resendable` as before. Steps 4–7 run as for
+  any job. Then, for a stuck job: `endMovedPrintJob` (`false` → `print_job.not_resendable`), and
+  `endInvoicePrintDeliveries(tx, [jobId])` (`invoice-print.ts:128-149`) so a full invoice's queued
+  delivery ends with it; then step 8 as for any job. Everything runs in the route's one
+  transaction, so a refusal after the end leaves the original as it was. What follows is today's
+  code: the ended job no longer counts as a live original (`outbox.ts:104-121`) or an active
+  delivery (`invoice-delivery.ts`), so the reprint keeps its marking and reserves a new delivery;
+  its `resend_of` clears the original's trouble once it prints (`print-job-trouble.ts:57-61`).
+- Modify: `apps/server/src/print-api.ts` — one local `seen(printer)` over `discovered` and
+  `isFresh`, used by the list (replacing the `visible` set's inline use, `:1497-1502`) and by the
+  route, which passes `ownPrinterUnseen` to `reprintJobOn`. The list's rows gain `stuck: boolean`,
+  and `canResend` is also true for a stuck job whose `reprintPrinterIds` is not empty (a stuck job
+  with nowhere else to go keeps no Reprint, as today).
+- Modify: `apps/dashboard/src/api/client.ts` — `PrintJobRow.stuck`.
+- Modify: `apps/dashboard/src/i18n/codes.ts` — `print_job.moved`'s words (a `last_error`, shown in
+  the queue's reason line).
+- Test: `packages/printing/src/outbox.test.ts`, `packages/printing/src/runtime.eligibility.test.ts`, `apps/server/src/print-job-reprint.test.ts`,
+  `apps/server/src/print-api.printer-wiring.test.ts`.
+
+- [ ] **Step 1: Write the failing tests**, each property once, at its owner.
+  - `outbox.test.ts`: `endMovedPrintJob` ends a Queued job and a Failed one with attempts left
+    (`failed`, attempts at the cap, `print_job.moved`, `true`); it leaves a Printing job, a Done
+    job, a job with its attempts used and a drawer job as they were and returns `false`.
+  - `runtime.eligibility.test.ts`: `it("never hands out a moved job when its printer is back")` — a moved
+    job on an active, visible printer is not claimed.
+  - `print-job-reprint.test.ts`: a Queued original receipt on a disabled printer, reprinted
+    elsewhere: the original is `print_job.moved`, the new job is on the target, still the original
+    (`receiptCopy` false), and `readOriginalReceiptPrint` names it; a Queued full invoice on an
+    active USB printer with `ownPrinterUnseen: true`: its old delivery `failed`, a new delivery
+    reserved for the new job; the same job with `ownPrinterUnseen: false` →
+    `print_job.not_resendable` and nothing changed; a Printing job on a disabled printer →
+    `print_job.not_resendable`; a stuck kitchen ticket to a narrower printer →
+    `print_job.printer_unsuitable` with the original still Queued.
+  - `print-api.printer-wiring.test.ts`, extending 17b-2's list case: a Queued job on a disabled
+    printer and one on an unseen Bluetooth printer list `stuck: true` and `canResend: true`; a
+    Queued job on an active, seen printer lists `stuck: false`, `canResend: false`; one route case
+    moves the unseen Bluetooth printer's job (202), which is the only test of the route's
+    `ownPrinterUnseen` wiring.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/printing exec vitest run src/outbox.test.ts src/runtime.eligibility.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run src/print-job-reprint.test.ts src/print-api.printer-wiring.test.ts -t "moved|stuck|unseen|disabled printer"`
+  — the new cases FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the four files whole, `src/alert-sources.test.ts`, and `tsc --noEmit` for
+  `@waitron/printing`, `@waitron/server` and `@waitron/dashboard` — pass. An existing case that
+  asserts `canResend: false` for a Queued job on a disabled or unseen printer changes, because the
+  owner's approval changes what it checks: list it in the PR as a changed assertion.
+- [ ] **Step 5: Commit** — `git commit -s -m "A printout stuck on a disabled or unseen printer can be reprinted elsewhere, and is ended where it was stuck (A405 point 4)"`.
 
 ### Task 18: The Reprint dialog
 
 **Files:**
 - Create: `apps/dashboard/src/widgets/print-job-reprint-dialog.ts` — modelled on
   `order-reprint-dialog.ts` (`wt-dialog`, a `wt-combobox name="printerId"` labelled
-  `printers.reprint_printer`); given the job, the printers and the original printer
-- Modify: `printers-screen.ts` — Reprint (`:3296-3302`) opens the dialog; `#resendJob`
-  (`:3331-3339`) takes the chosen printer
+  `printers.reprint_printer`); given the job, the screen's receipt printers and the original printer
+- Modify: `printers-screen.ts` — Reprint (`:3797-3804`) opens the dialog; `#resendJob`
+  (`:3840-3848`) takes the chosen printer
 - Create: `apps/dashboard/src/widgets/print-job-reprint-dialog.test.ts`
 - Modify: `strings.ts` — the reprint keys
 
-Offered printers: for a `reprintElsewhere` job, the original first (chosen when active, whatever its
-setting now — that is today's same-printer reprint) and then the other active printers whose
-current paper width and resolution equal the job's `setting`, with `printers.reprint_same_setting`
-as the hint; for any other job, the original alone with `printers.reprint_own_only`. An original that is
-disabled: not offered, nothing chosen; with no other offer the combobox is replaced by
-`printers.reprint_original_off` (own-only jobs) or `printers.reprint_none` (others), and Reprint is
-quiet and disabled. A refusal shows at the bottom through `codeMessage`, Reprint usable again. A
-success closes the dialog and shows `printers.reprint_sent` as the screen's `wt-notice`.
+Offered printers: the original first, chosen, when active (whatever its setting now — that is
+today's same-printer reprint), then the job's `reprintPrinterIds` that the screen's printer list
+holds, by name. The hint follows `reprintRule`: `any` (a receipt or full invoice) none;
+`wide_enough` (a kitchen ticket or refund receipt) `printers.reprint_wide_enough`; `own` (anything
+else) `printers.reprint_own_only`. A disabled original is not offered and nothing is chosen;
+Reprint stays quiet and disabled until a printer is. With no other offer the combobox is replaced
+by `printers.reprint_original_off` (`own`) or `printers.reprint_none` (`any`, `wide_enough`), and
+Reprint stays disabled. A **stuck** job (`row.stuck`, Task 17c; the list offers Reprint for one only when another printer
+can take it) does not offer its own printer, chooses nothing, and shows
+`printers.reprint_stuck` above the combobox; Reprint stays quiet and disabled until a printer is
+chosen. The queue's reason line words `print_job.moved` through `codeMessage`: add it to
+`ENDED_BY_SERVER` (`printers-screen.ts:154`), which also shows "—" for its attempts.
+A refusal shows at the bottom through `codeMessage`, Reprint usable again.
+A success closes the dialog and shows `printers.reprint_sent` as the screen's `wt-notice`.
 
 **No draft scope, deliberately:** the dialog's only input is a preselected printer, as in the
 Orders screen's reprint dialog (`order-reprint-dialog.ts`, which has neither a scope nor an
@@ -1356,55 +1745,93 @@ Orders screen's reprint dialog (`order-reprint-dialog.ts`, which has neither a s
 description asks `/finish-branch`'s convention reviewer to judge this against the CLAUDE.md §3
 staged-input rule.
 
-- [ ] **Step 1: Write the failing tests** (dialog suite): the original preselected among same-setting
-  printers, a different-resolution printer absent, A4 printers absent; with the original
-  recalibrated since the job (job `setting` 80 mm / 203 dpi, original now 180 dpi), a printer at
-  80 mm / 203 dpi is offered and one at 80 mm / 180 dpi is not; an own-only job offers only
-  its printer with the own-only line; a disabled original with no alternative explains and keeps
-  Reprint disabled; Reprint sends `resendPrintJob(id, chosen)` once while pending; a refusal shows
-  `codeMessage("print_job.printer_unsuitable")` at the bottom; in `printers-screen.test.ts`, the
-  changed `:4908` and `:4937` cases.
+- [ ] **Step 1: Write the failing tests** (dialog suite): an `any` job offers the original chosen,
+  then every id in `reprintPrinterIds` including a printer of another width and resolution, no A4
+  printer, and no hint; a `wide_enough` job offers the original and its ids with the
+  `printers.reprint_wide_enough` hint; an `own` job offers only its printer with the own-only
+  line; a disabled original with other offers chooses nothing and keeps Reprint disabled until one
+  is chosen; a disabled original with none shows `printers.reprint_original_off` (`own`) or
+  `printers.reprint_none` (`wide_enough`) with Reprint disabled; Reprint sends
+  `resendPrintJob(id, chosen)` once while pending; a refusal shows
+  `codeMessage("print_job.printer_unsuitable")` at the bottom; a stuck job offers only the other
+  printers, chooses nothing and shows `printers.reprint_stuck`; in `printers-screen.test.ts`, a
+  moved job's reason reads `codeMessage("print_job.moved")` with "—" for attempts, and the changed
+  `:5318` and `:5347` cases.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/widgets/print-job-reprint-dialog.test.ts`
   and `src/screens/printers-screen.test.ts -t "resend|Reprint"` — FAIL.
 - [ ] **Step 3: Implement.** The a11y suite gains the dialog in both themes
   (`printers-screen.a11y.test.ts`).
 - [ ] **Step 4: Run** the files and `pnpm exec vitest run scripts/native-form-fields.test.ts` — pass.
-- [ ] **Step 5: Commit** — `git commit -s -m "Reprint asks which printer, the original chosen, offering only printers the printout fits (A405 point 4)"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "Reprint asks which printer, the original chosen, offering only printers that can take the printout (A405 point 4)"`.
 
 ### Task 19: PR 4's guide
 
-- [ ] **Step 1:** Add `{#print-queue}` and the Pair again sentence (both languages); the guide case
-  expects `["add-printer", "calibrate", "printer-details", "print-queue"]`; a help link
-  `"printers.print-queue"` in `help-guide.ts` only if a bubble uses it (none is planned).
+- [ ] **Step 1:** Append the Reprint paragraph to the existing **Print Queue** / **Cola de
+  impresión** section and the Pair again sentence to Printer details, both languages, as "Words for
+  the owner" → PR 4 — guide gives them. The section list is unchanged: the guide case
+  (`apps/server/src/guide-content.test.ts:108-118`) already expects `["add-printer", "calibrate",
+  "printer-details", "print-queue"]`. A help link `"printers.print-queue"` in `help-guide.ts` only
+  if a bubble uses it (none is planned).
 - [ ] **Step 2: Run** the guide checks (Task 5 Step 4) — pass.
-- [ ] **Step 3: Commit** — `git commit -s -m "Guide sections for Pair again and reprinting from the print queue (A405)"`.
+- [ ] **Step 3: Commit** — `git commit -s -m "Guide words for Pair again and reprinting on another printer (A405)"`.
 
-### Task 20: Backlog, the held remainder, and a look
+### Task 20: Backlog, the held remainder, a look, and a test print
 
-**Files:** `docs/backlog.md` (the A405 entry, about `:3885`), `docs/backlog/printers.md`
+**Files:** `docs/backlog.md` (the A405 entry, `:1285-1287`; the leftovers bundle line, `:1275`),
+`docs/backlog/printers.md` (the A405 section, `:336-373`; the bundle heading, `:722`)
 
 - [ ] **Step 1: Backlog.** Delete the A405 entry from `docs/backlog.md` and its section from
-  `docs/backlog/printers.md`. Add, in the Printers area of both files:
-  "**Reprint any printout on any printer, laid out again (left for after A760 — A1308 hold; from
-  A405 point 4).** Every print job would keep the printer-independent document it was built from,
-  with a version number, and Reprint would lay it out again for the chosen printer with the same
-  builder (`formatReceipt`, `formatKitchenTicket`, `formatCorrectionSlip`, `formatPaymentSlip`,
-  `formatCategorySalesPage`); a job whose version the running code cannot read falls back to its own
-  printer or one of the same setting. Needs a column on `print_jobs`. Until then a job may go to
-  another printer only when its chain's first job has a `sale_id`, a `kitchen_print_jobs` row or a
-  `receipt_reprints` row and its stored bytes name the setting it was laid out for, and only to a
-  printer of that setting; every other job reprints on its own printer. Also open: whether kitchen
-  tickets, payment slips and reports need an A4 page, or A4 printers stay out for them." And:
-  "**Deleting an A4 printer (left for after A760 — A1308 hold; from A405 point 6).**
-  `page_printers` has no deletion column and is referenced with `restrict` by
-  `invoice_deliveries`, `devices` and `device_profile_printers`, so a delete must be a soft delete,
-  which needs a column. Until then A4 details have no Delete. Switching an A4 printer back on and
-  changing its address stay in Add a printer by design: both need a fresh discovery entry
-  (`apps/server/src/page-printers-api.ts:164-165`)." Keep the station-link entry from Task 11.
+  `docs/backlog/printers.md`. Retitle the bundle "Printers screen leftovers, inside A405's
+  remaining pull requests" to "Printers screen leftovers" in both files (A405 has no pull requests
+  left), fixing its anchor link. Add, in the Printers area of both files:
+  "**Reprint kitchen tickets and other printouts laid out again for any printer (left by A405
+  point 4).** Receipts and full invoices are laid out again from the sale. Every other job keeps
+  only its finished bytes, so Reprint copies them: kitchen tickets and refund receipts to an
+  active receipt printer at least as wide, centred; everything else to its own printer only.
+  Laying them out again needs each job to keep the printer-independent document it was built from,
+  with a version number, in a new `print_jobs` column, and each builder (`formatKitchenTicket`,
+  `formatCorrectionSlip`, `formatPaymentSlip`, `formatCategorySalesPage`,
+  `formatTenderRefundAcknowledgment`) to draw from it; a job whose version the running code cannot
+  read falls back to today's rule. Also open: whether kitchen tickets, payment slips and reports
+  need an A4 page, or A4 printers stay out for them." And:
+  "**Deleting an A4 printer (left by A405 point 6).** `page_printers` has no deletion column and is
+  referenced with `restrict` by `invoice_deliveries`, `devices` and `device_profile_printers`, so a
+  delete must be a soft delete, which needs a column. Until then A4 details have no Delete.
+  Switching an A4 printer back on and changing its address stay in Add a printer by design: both
+  need a fresh discovery entry (`apps/server/src/page-printers-api.ts:165-166`)." Keep the
+  station-link entry from Task 11.
 - [ ] **Step 2: Look** as in Task 6 Step 2: the Pair again window in its looking, not-found and
-  found states, the Reprint dialog with alternatives, own-only, and disabled-original states, both
-  themes, desktop and phone, both languages; render the guide page.
-- [ ] **Step 3: Commit** — `git commit -s -m "Backlog: A405 done, with reprinting any printout anywhere left for after A760"`.
+  found states, the Reprint dialog for a receipt (every printer, no hint), a kitchen ticket (wide
+  enough, with its hint), an own-only printout, a disabled original and a stuck printout, both themes, desktop and
+  phone, both languages; render the guide page.
+- [ ] **Step 3: A test print on the owner's 80 mm printer** (Epson TM-T88III, raw ESC/POS at
+  `192.168.10.81`, port 9100). The runner cannot see paper; this step sends and records, and the
+  owner looks.
+  1. Check the Mac reaches it: `nc -z -G 3 192.168.10.81 9100; echo $?` (`0` reachable). From the
+     plan-writing session on 2026-11-09 this printed `1`; check again. If it is not `0`, skip to
+     item 5.
+  2. In a `mktemp -d` folder (nothing committed), a `.mts` script run from `apps/server` with
+     `./node_modules/.bin/tsx` (a `.ts` file fails: top-level `await` needs the module form, as
+     measured for point 4) builds one **joined** kitchen ticket at 58 mm / 180 dpi with
+     `formatKitchenTicket` and `joinKitchenTickets` — fired item "1 x CONTROL" / "1 x CENTRED" and
+     held item "1 x HOLD PART" — and writes two files: `control.bin`, the bytes as built (the
+     CONTROL ticket), and `centred.bin`, the CENTRED ticket through
+     `centredForPrinter(bytes, 512)`.
+  3. Record each file's length, first ten bytes (`xxd -l 10`) and `shasum -a 256`, and that every
+     `GS L` in `centred.bin` reads `4c 00` (with `escPosCommands`).
+  4. Send `control.bin`, then `centred.bin`: `nc -G 3 -w 5 192.168.10.81 9100 < control.bin`, and
+     the same for `centred.bin`; record each exit status.
+  5. The PR description says what was sent, or that the printer was not reachable and the centring
+     is **not proven on paper**, and asks the owner to look before landing. What each print should
+     look like: both are 360 dots, about 51 mm, of text on 80 mm paper, whose printable line is 512
+     dots, about 72 mm. **CONTROL**: the text starts at the left edge of the printable line, with
+     about 21 mm blank on its right, in both parts. **CENTRED**: about 11 mm blank (76 dots) on each
+     side, in both the CENTRED part and the HOLD PART. If CENTRED looks like CONTROL, the printer
+     ignores `GS L` for images: the PR says so, and the owner decides before it lands.
+- [ ] **Step 4: Commit** — `git commit -s -m "Backlog: A405 done, with laying out kitchen tickets and other printouts again left for later"`.
   Then `/finish-branch` with PR 4's worktree, naming this plan (full path: two Codex run-it
-  reviews). The PR description lists the changed assertions, the words, the held remainder, and
-  the owner's answers to open questions 1 and 2 (or asks them again if unanswered).
+  reviews). The PR description lists the changed assertions, the words, the held remainder, the
+  owner's answers to open questions 1 and 2, "Why a reprint keeps its own marking" (a failed
+  original reprinted elsewhere stays an original), the stuck-printout move (Task 17c) and what it still
+  leaves out (a deleted printer's jobs; a network printer whose agent is offline), the two layout limits (today's trim and logo;
+  the sale's own language), and the test print's outcome.

@@ -849,10 +849,13 @@ yet, so the screen should add an open-only filter or paging when it calls them.
 
 ## Uncertain receipt delivery
 
-Automatic receipt transport retries and manual retries of exhausted original jobs retain their
-payload. If a printer printed before its reply was lost, sending those bytes again can produce
-another unmarked sheet. A991 contains repeated original requests and refuses resending a job
-recorded as completed; it does not establish that an uncertain transport attempt printed nothing.
+Automatic receipt transport retries and manual retries of exhausted original jobs on their own
+printer retain their payload. If a printer printed before its reply was lost, sending those bytes again can produce
+another unmarked sheet. Moving an original still waiting on a disabled or unseen
+printer ends it there and queues it on another printer, laid out again and still unmarked; a waiting job
+whose earlier attempt failed may have printed before its reply was lost, so the move carries the
+same uncertainty. A991 contains repeated original requests and refuses resending a job recorded as
+completed; it does not establish that an uncertain transport attempt printed nothing.
 
 Next action: design recovery for uncertain physical delivery across automatic retries and explicit
 retry actions, retaining the customer's route to a legible invoice. Do not describe the outbox's

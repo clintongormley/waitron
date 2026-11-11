@@ -647,6 +647,9 @@ export function createAgent(opts: AgentOptions): Agent {
       }
     }
 
+    // Taken before the paired listing starts, so every outcome this pull sends finished before its
+    // paired list was read: the server clears an unpaired device before recording that list.
+    const sentOutcomes = bluetoothOutcomes;
     // Started before `visibleDevices`, and awaited after it, so the host's paired-device listing is
     // already running when the visible-device read wants one and can be shared.
     const pairedListing = listPairedBluetooth();
@@ -716,7 +719,6 @@ export function createAgent(opts: AgentOptions): Agent {
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
-    const sentOutcomes = bluetoothOutcomes;
     const pulled = await client.pullJobs(current, token, {
       visible,
       scanned,

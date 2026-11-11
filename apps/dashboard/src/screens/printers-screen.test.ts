@@ -1,12 +1,18 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
-import { LeaveController, UrlStateController, type WtFormActions } from "@waitron/ui";
+import {
+  LeaveController,
+  UrlStateController,
+  type WtButton,
+  type WtFormActions,
+} from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
   dialogClosed,
+  dialogMessageOf,
   mountWidget,
   openDetailsEdit,
   saveDetailsEdit,
@@ -46,6 +52,7 @@ import {
 import { LiveData } from "@waitron/dashboard-kit";
 import { formatEquipmentCode, type DeleteImpact } from "@waitron/shared";
 import { decodeQrImage } from "../testing/decode-qr.js";
+import type { PrintJobReprintDialog } from "../widgets/print-job-reprint-dialog.js";
 
 useLocale("es-ES");
 
@@ -249,6 +256,9 @@ const jobs: PrintJobRow[] = [
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
+    stuck: false,
   },
   {
     id: "j2",
@@ -260,6 +270,9 @@ const jobs: PrintJobRow[] = [
     lastError: null,
     createdAt: "2026-08-25T13:00:00.000Z",
     deliveredAt: "2026-08-25T13:00:05.000Z",
+    reprintRule: "own",
+    reprintPrinterIds: [],
+    stuck: false,
   },
 ];
 
@@ -5070,21 +5083,234 @@ it("offers resend for eligible jobs and enqueues the selected document only once
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   expect(q(el, "[data-test=resend-job-j1]")).toBeNull();
-  const button = q(el, "[data-test=resend-job-j2]")!;
-  expect(button).not.toBeNull();
-  button.click();
-  button.click();
+  q(el, "[data-test=resend-job-j2]")!.click();
   await flush(el);
-  expect(api.resendPrintJob).toHaveBeenCalledExactlyOnceWith("j2");
-  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
-    true,
+  expect((q(el, "wt-combobox[name=printerId]") as import("@waitron/ui").WtCombobox).value).toBe(
+    "p1",
   );
+  const send = q(el, "[data-test=reprint-send]")!;
+  send.click();
+  send.click();
+  await flush(el);
+  expect(api.resendPrintJob).toHaveBeenCalledExactlyOnceWith("j2", "p1");
   resolve({ jobId: "resent" });
   await flush(el);
   expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
-  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
-    false,
+  expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+  expect(text(el, "[data-test=reprint-sent]")).toBe(
+    fill("printers.reprint_sent", { printer: printers[0]!.name }),
   );
+});
+
+it("a reprint still being sent cannot be sent again by closing and reopening its dialog", async () => {
+  let resolve!: (value: { jobId: string }) => void;
+  const api = stubApi({
+    resendPrintJob: vi.fn().mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=resend-job-j2]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-cancel]")!.click();
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  const row = q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton;
+  expect(row.disabled).toBe(true);
+  row.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")?.click();
+  await flush(el);
+  expect(api.resendPrintJob).toHaveBeenCalledOnce();
+  resolve({ jobId: "resent" });
+  await flush(el);
+  expect(row.disabled).toBe(false);
+  expect(text(el, "[data-test=reprint-sent]")).toBe(
+    fill("printers.reprint_sent", { printer: printers[0]!.name }),
+  );
+});
+
+it("shows a reprint's refusal on the screen when it arrives after the dialog closed", async () => {
+  let refuse!: (reason: unknown) => void;
+  const api = stubApi({
+    resendPrintJob: vi.fn().mockReturnValue(
+      new Promise((_, fail) => {
+        refuse = fail;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=resend-job-j2]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-cancel]")!.click();
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  refuse({ code: "print_job.not_resendable" });
+  await flush(el);
+  expect(text(el, "p.error[role=alert]")).toBe(codeMessage("print_job.not_resendable"));
+});
+
+it("a closed dialog's late reprint answer leaves another job's open Reprint dialog open", async () => {
+  let resolve!: (value: { jobId: string }) => void;
+  const api = stubApi({
+    listRecentJobs: vi.fn().mockResolvedValue([...jobs, { ...jobs[1]!, id: "j3" }]),
+    resendPrintJob: vi.fn().mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=resend-job-j2]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-cancel]")!.click();
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  q(el, "[data-test=resend-job-j3]")!.click();
+  await flush(el);
+  resolve({ jobId: "resent" });
+  await flush(el);
+  expect(
+    (q(el, "dashboard-print-job-reprint-dialog") as PrintJobReprintDialog | null)?.job?.id,
+  ).toBe("j3");
+});
+
+describe("the open Reprint dialog follows the job's live row", () => {
+  const active = printers.map((printer) => ({ ...printer, active: true }));
+  const row: PrintJobRow = {
+    ...jobs[1]!,
+    reprintRule: "wide_enough",
+    reprintPrinterIds: ["p2", "p3"],
+  };
+  const choice = (el: PrintersScreen) =>
+    q(el, "wt-combobox[name=printerId]") as import("@waitron/ui").WtCombobox;
+  const offered = (el: PrintersScreen) => choice(el).options.map((option) => option.value);
+  async function openOn(rows: PrintJobRow[]) {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        listPrinters: vi.fn().mockResolvedValue(active),
+        listRecentJobs: vi.fn().mockResolvedValue(rows),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=resend-job-j2]")!.click();
+    await flush(el);
+    return { el, api, liveData };
+  }
+  async function deliver(
+    el: PrintersScreen,
+    api: DashboardApi,
+    liveData: LiveData,
+    rows: PrintJobRow[],
+  ) {
+    vi.mocked(api.listRecentJobs).mockResolvedValue(rows);
+    liveData.invalidate([{ type: "print_jobs", id: "j2" }]);
+    await vi.waitFor(() => expect(api.listRecentJobs).toHaveBeenCalledTimes(2));
+    await flush(el);
+  }
+
+  it("drops a printer the server no longer offers, keeping a choice still offered", async () => {
+    const { el, api, liveData } = await openOn([row]);
+    expect(offered(el)).toEqual(["p1", "p3", "p2"]);
+    choice(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value: "p3" } }));
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, reprintPrinterIds: ["p3"] }]);
+    expect(offered(el)).toEqual(["p1", "p3"]);
+    expect(choice(el).value).toBe("p3");
+  });
+
+  it("falls back to the job's own printer when the chosen one is no longer offered", async () => {
+    const { el, api, liveData } = await openOn([row]);
+    choice(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value: "p2" } }));
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, reprintPrinterIds: ["p3"] }]);
+    expect(offered(el)).toEqual(["p1", "p3"]);
+    expect(choice(el).value).toBe("p1");
+  });
+
+  it("keeps a send in flight when the row refreshes", async () => {
+    let resolve!: (value: { jobId: string }) => void;
+    const { el, api, liveData } = await openOn([row]);
+    vi.mocked(api.resendPrintJob).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    q(el, "[data-test=reprint-send]")!.click();
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, attempts: 2 }]);
+    const send = q(el, "[data-test=reprint-send]") as import("@waitron/ui").WtButton;
+    expect(send.loading).toBe(true);
+    send.click();
+    await flush(el);
+    expect(api.resendPrintJob).toHaveBeenCalledOnce();
+    resolve({ jobId: "resent" });
+    await flush(el);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+  });
+
+  it("keeps the last row it had when the job leaves the list", async () => {
+    const { el, api, liveData } = await openOn([row]);
+    await deliver(el, api, liveData, []);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).not.toBeNull();
+    expect(offered(el)).toEqual(["p1", "p3", "p2"]);
+  });
+
+  it("closes the Reprint dialog when its printout's printer is deleted while it is open", async () => {
+    const ownOnly = { ...row, reprintRule: "own" as const, reprintPrinterIds: [] };
+    const { el, api, liveData } = await openOn([ownOnly]);
+    vi.mocked(api.listPrinters).mockResolvedValue(active.filter(({ id }) => id !== "p1"));
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await deliver(el, api, liveData, [{ ...ownOnly, canResend: false }]);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+  });
+
+  it("keeps the Reprint dialog open on a printout left stuck on its switched-off printer", async () => {
+    const ownOnly = { ...row, reprintRule: "own" as const, reprintPrinterIds: [] };
+    const { el, api, liveData } = await openOn([ownOnly]);
+    vi.mocked(api.listPrinters).mockResolvedValue(
+      active.map((printer) => (printer.id === "p1" ? { ...printer, active: false } : printer)),
+    );
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await deliver(el, api, liveData, [{ ...ownOnly, canResend: false, stuck: true }]);
+    const dialog = q(el, "dashboard-print-job-reprint-dialog");
+    expect(
+      dialog?.shadowRoot?.querySelector("[data-test=reprint-nowhere]")?.textContent?.trim(),
+    ).toBe(fill("printers.reprint_original_off", { printer: row.printerName }));
+  });
+
+  it("keeps a dialog whose send is still awaiting its answer open when the row stops offering Reprint", async () => {
+    let resolve!: (value: { jobId: string }) => void;
+    const { el, api, liveData } = await openOn([row]);
+    vi.mocked(api.resendPrintJob).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    q(el, "[data-test=reprint-send]")!.click();
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, canResend: false }]);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).not.toBeNull();
+    resolve({ jobId: "resent" });
+    await flush(el);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+    expect(text(el, "[data-test=reprint-sent]")).toBe(
+      fill("printers.reprint_sent", { printer: printers[0]!.name }),
+    );
+  });
 });
 
 it("shows a localized resend failure and permits another attempt", async () => {
@@ -5095,11 +5321,31 @@ it("shows a localized resend failure and permits another attempt", async () => {
   await flush(el);
   q(el, "[data-test=resend-job-j2]")!.click();
   await flush(el);
-  expect(text(el, "[role=alert]")).toContain(codeMessage("print_job.not_resendable", "es-ES"));
-  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  const dialog = q(el, "dashboard-print-job-reprint-dialog")!.shadowRoot!.querySelector(
+    "wt-dialog",
+  )!;
+  expect(await dialogMessageOf(dialog)).toBe(codeMessage("print_job.not_resendable", "es-ES"));
+  expect((q(el, "[data-test=reprint-send]") as import("@waitron/ui").WtButton).disabled).toBe(
     false,
   );
   expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
+});
+
+it("words a job moved to another printer and shows no attempts for it", async () => {
+  const moved: PrintJobRow = {
+    ...jobs[0]!,
+    id: "j40",
+    attempts: 5,
+    lastError: "print_job.moved",
+  };
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listRecentJobs: vi.fn().mockResolvedValue([moved]) }),
+  });
+  await flush(el);
+  expect(text(el, "[data-test=job-error-j40]")).toBe(codeMessage("print_job.moved", "es-ES"));
+  expect(text(el, "[data-test=job-attempts-j40]")).toBe("—");
 });
 
 it("keeps pairing open, polls passively, and makes Scan usable again after listening", async () => {
@@ -8203,6 +8449,30 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(q(el, sel("name-printer-modal"))).toBeNull();
     });
 
+    it("opens no form in a reopened Add printer dialog when an earlier opening's pairing answers late", async () => {
+      let answer!: (value: { command: ReturnType<typeof pendingCommand> }) => void;
+      const { el, passive } = await mountQuiet([barPrinter], {
+        pairBluetooth: vi.fn(
+          () =>
+            new Promise<{ command: ReturnType<typeof pendingCommand> }>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      passive.mockResolvedValue([succeeded(true)]);
+      await submitPair(el);
+      await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
+      q(el, "[data-test=open-add-printer]")!.click();
+      await flush(el);
+      answer({ command: pendingCommand("pair") });
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      expect(q(el, sel("new-printer-modal"))).not.toBeNull();
+      expect(q(el, sel("name-printer-modal"))).toBeNull();
+    });
+
     it("leaves an open form to add another printer alone when a pairing finishes, offering Add in the paired row", async () => {
       const paired: DiscoveredPrinter = { ...second, paired: true };
       const { el, passive } = await mountQuiet([barPrinter, paired]);
@@ -9216,6 +9486,266 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(passive).toHaveBeenCalledOnce();
     });
   });
+
+  describe("Pair again", () => {
+    const off = btPrinter("p9", ADDRESS, false);
+    const found: DiscoveredPrinter = { ...barPrinter, alreadyRegistered: true, printerId: "p9" };
+    const looking = () => fill("printers.pair_again_looking", { printer: off.name });
+    const missing = () => fill("printers.pair_again_missing", { printer: off.name });
+    const restore = { name: off.name, transport: "bluetooth", localKey: ADDRESS };
+
+    /** Mounts with `off` listed; the scan's own reads answer `scan`, the status poll's `passive`. */
+    async function mountOff(scan: DiscoveredPrinter[]) {
+      const passive = vi.fn<() => Promise<DiscoveredPrinter[]>>().mockResolvedValue(scan);
+      const mounted = await mountPairing(scan, {
+        listPrinters: vi.fn().mockResolvedValue([...printers, off]),
+        background: stubApi({ listDiscoveredPrinters: passive }),
+      });
+      vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      await selectTab(mounted.el, "printers");
+      return { ...mounted, passive };
+    }
+
+    async function pairAgain(el: PrintersScreen, from = "") {
+      q(el, `${from} ${sel("pair-again-p9")}`)!.click();
+      await flush(el);
+    }
+
+    async function typePin(el: PrintersScreen): Promise<void> {
+      typeField(el, sel("bluetooth-pin"), PIN);
+      await flush(el);
+      q(el, sel("confirm-pair"))!.click();
+      await flush(el);
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("offers Pair again on a disabled Bluetooth printer no agent reports paired, and not on a paired or an active one", async () => {
+      const { el } = await mountPairing([{ ...found, paired: true, printerId: "p8" }], {
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue([
+            ...printers,
+            off,
+            btPrinter("p8", ADDRESS, false),
+            btPrinter("p5", OTHER, true),
+          ]),
+      });
+      await selectTab(el, "printers");
+      expect(text(el, sel("pair-again-p9"))).toBe(t("printers.pair_again"));
+      expect(q(el, sel("pair-again-p8"))).toBeNull();
+      expect(q(el, sel("pair-again-p5"))).toBeNull();
+      await openPrinterDetails(el, "p9");
+      expect(text(el, `${sel("printer-section-connection")} ${sel("pair-again-p9")}`)).toBe(
+        t("printers.pair_again"),
+      );
+      await openPrinterDetails(el, "p5");
+      expect(q(el, `${sel("printer-section-connection")} ${sel("pair-again-p5")}`)).toBeNull();
+    });
+
+    it.each(["the row menu", "the details"] as const)(
+      "pairs a disabled Bluetooth printer again on the same record and switches it on, from %s",
+      async (place) => {
+        const { el, api, passive } = await mountOff([found]);
+        if (place === "the details") await openPrinterDetails(el, "p9");
+        await pairAgain(el, place === "the details" ? sel("printer-section-connection") : "");
+        expect(q(el, sel("pair-again-modal"))).not.toBeNull();
+        expect(text(el, sel("confirm-pair"))).toBe(t("printers.bluetooth_pair_only"));
+        passive.mockResolvedValue([
+          { ...found, paired: true, bluetoothCommand: finishedCommand("pair", "succeeded") },
+        ]);
+        await typePin(el);
+        expect(api.pairBluetooth).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS, PIN);
+        expect(api.createPrinter).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+        await flush(el);
+        await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
+        expect(api.createPrinter).toHaveBeenCalledExactlyOnceWith(restore);
+        expect(api.updatePrinter).not.toHaveBeenCalled();
+        expect(text(el, sel("pair-again-done"))).toBe(
+          fill("printers.pair_again_done", { printer: off.name }),
+        );
+        expect(q(el, sel("pair-printer-modal"))).toBeNull();
+        expect(q(el, sel("name-printer-modal"))).toBeNull();
+        expect(q(el, sel("edit-printer-modal"))).toBeNull();
+      },
+    );
+
+    it("says the printer was not found when the scan ends, and looks again on request", async () => {
+      const { el, api, passive } = await mountOff([]);
+      await pairAgain(el);
+      expect(text(el, sel("pair-again-status"))).toBe(looking());
+      expect(q(el, `${sel("pair-again-status")} wt-spinner`)).not.toBeNull();
+      expect(q(el, sel("pair-again-look"))).toBeNull();
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("pair-again-status"))).toBe(missing());
+      expect(text(el, sel("pair-again-look"))).toBe(t("printers.pair_again_look"));
+      expect(q(el, sel("pair-printer-modal"))).toBeNull();
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([found]);
+      passive.mockResolvedValue([found]);
+      q(el, sel("pair-again-look"))!.click();
+      await flush(el);
+      expect(api.startPrinterDiscovery).toHaveBeenCalledTimes(2);
+      expect(q(el, sel("pair-printer-modal"))).not.toBeNull();
+    });
+
+    it("leaves a gap between the looking spinner and its words", async () => {
+      const { el } = await mountOff([]);
+      await pairAgain(el);
+      const status = q(el, sel("pair-again-status"))!;
+      const spinner = status.querySelector("wt-spinner")!.getBoundingClientRect();
+      const words = [...status.childNodes].find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+      )!;
+      const range = document.createRange();
+      range.selectNodeContents(words);
+      const first = [...range.getClientRects()].find((rect) => rect.width > 0)!;
+      const glyph = document.createRange();
+      const offset = words.textContent!.search(/\S/);
+      glyph.setStart(words, offset);
+      glyph.setEnd(words, offset + 1);
+      expect(glyph.getBoundingClientRect().left - spinner.right).toBeGreaterThan(first.height / 8);
+    });
+
+    it("stops looking when the Pair again window closes", async () => {
+      const { el, api, passive } = await mountOff([found]);
+      await pairAgain(el);
+      passive.mockResolvedValue([{ ...found, bluetoothCommand: pendingCommand("pair") }]);
+      await typePin(el);
+      expect(q(el, sel("pair-printer-modal"))).toBeNull();
+      await clickAndAwaitClose(el, "pair-again-modal", "cancel-pair-again");
+      await flush(el);
+      const reads = () =>
+        vi.mocked(api.listDiscoveredPrinters).mock.calls.length + passive.mock.calls.length;
+      const before = reads();
+      // Past the scan's window and the pending command's own deadline, so every read either
+      // would have made has had its turn.
+      await vi.advanceTimersByTimeAsync(EXPIRES_MS + SCAN_POLL_MS);
+      await flush(el);
+      expect(reads()).toBe(before);
+      expect(api.createPrinter).not.toHaveBeenCalled();
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+    });
+
+    it("shows a failed pair's reason and lets the person try again", async () => {
+      const { el, api, passive } = await mountOff([found]);
+      await pairAgain(el);
+      passive.mockResolvedValue([
+        {
+          ...found,
+          bluetoothCommand: finishedCommand("pair", "failed", { error: "Authentication Failed" }),
+        },
+      ]);
+      await typePin(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("pair-again-command"))).toBe(
+        `${t("printers.bluetooth_pair_failed")}: Authentication Failed`,
+      );
+      expect(q(el, sel("pair-printer-modal"))).toBeNull();
+      q(el, sel("pair-again-look"))!.click();
+      await flush(el);
+      expect(pinField(el).value).toBe("");
+      await typePin(el);
+      expect(api.pairBluetooth).toHaveBeenCalledTimes(2);
+      expect(api.createPrinter).not.toHaveBeenCalled();
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+    });
+
+    it("leaves a reopened Pair again window and its PIN alone when an earlier opening's pairing answers late", async () => {
+      const { el, api, passive } = await mountOff([found]);
+      let answer!: (value: { command: ReturnType<typeof pendingCommand> }) => void;
+      vi.mocked(api.pairBluetooth).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      await pairAgain(el);
+      await typePin(el);
+      await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
+      await clickAndAwaitClose(el, "pair-again-modal", "cancel-pair-again");
+      await pairAgain(el);
+      typeField(el, sel("bluetooth-pin"), "1234");
+      await flush(el);
+      passive.mockResolvedValue([
+        { ...found, bluetoothCommand: finishedCommand("pair", "succeeded") },
+      ]);
+      answer({ command: pendingCommand("pair") });
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      expect(api.createPrinter).not.toHaveBeenCalled();
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+      expect(q(el, sel("pair-again-modal"))).not.toBeNull();
+      expect(pinField(el).value).toBe("1234");
+      expect(q(el, sel("pair-again-done"))).toBeNull();
+    });
+
+    it("switches on a printer the scan finds already paired, so Look again after a failed switch-on asks for no PIN", async () => {
+      const { el, api, passive } = await mountOff([found]);
+      vi.mocked(api.createPrinter).mockRejectedValueOnce({ code: "storage.disk_full" });
+      await pairAgain(el);
+      passive.mockResolvedValue([
+        { ...found, paired: true, bluetoothCommand: finishedCommand("pair", "succeeded") },
+      ]);
+      await typePin(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(q(el, sel("pair-again-modal"))).not.toBeNull();
+      expect(await bottomOf(el, `${sel("pair-again-modal")} wt-form-actions`)).toBe(
+        codeMessage("storage.disk_full"),
+      );
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([{ ...found, paired: true }]);
+      q(el, sel("pair-again-look"))!.click();
+      await flush(el);
+      expect(q(el, sel("pair-printer-modal"))).toBeNull();
+      await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
+      expect(api.createPrinter).toHaveBeenCalledTimes(2);
+      expect(api.createPrinter).toHaveBeenLastCalledWith(restore);
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+      expect(api.pairBluetooth).toHaveBeenCalledOnce();
+      expect(text(el, sel("pair-again-done"))).toBe(
+        fill("printers.pair_again_done", { printer: off.name }),
+      );
+      expect(text(el, "p.error[role=alert]")).toBeUndefined();
+    });
+
+    it("says it is switching on a printer the scan finds already paired, and sends no second switch-on while it does", async () => {
+      const { el, api } = await mountOff([found]);
+      let answer!: (created: { id: string }) => void;
+      vi.mocked(api.createPrinter).mockImplementationOnce(
+        () =>
+          new Promise<{ id: string }>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([{ ...found, paired: true }]);
+      await pairAgain(el);
+      expect(api.createPrinter).toHaveBeenCalledExactlyOnceWith(restore);
+      expect(text(el, sel("pair-again-status"))).toBe(
+        fill("printers.pair_again_switching_on", { printer: off.name }),
+      );
+      expect(q(el, `${sel("pair-again-status")} wt-spinner`)).not.toBeNull();
+      const look = q(el, sel("pair-again-look")) as WtButton;
+      expect(look.loading).toBe(true);
+      look.shadowRoot!.querySelector("button")!.click();
+      look.click();
+      await flush(el);
+      expect(api.createPrinter).toHaveBeenCalledOnce();
+      expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
+      answer({ id: "p9" });
+      await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
+      expect(api.createPrinter).toHaveBeenCalledOnce();
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+      expect(text(el, sel("pair-again-done"))).toBe(
+        fill("printers.pair_again_done", { printer: off.name }),
+      );
+    });
+  });
 });
 
 describe("Bluetooth calibration transport outcomes", () => {
@@ -9239,6 +9769,9 @@ describe("Bluetooth calibration transport outcomes", () => {
     lastError: null,
     createdAt: "2026-09-29T17:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
+    stuck: false,
     ...over,
   });
   const ended = job({
@@ -9583,6 +10116,9 @@ describe("A job ended because its printer was unpaired", () => {
     lastError: "printer.unpaired",
     createdAt: "2026-09-29T17:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
+    stuck: false,
   };
 
   async function mountWithUnpaired() {
@@ -10802,6 +11338,9 @@ describe("Deleting a printer", () => {
           lastError: "printer.deleted",
           createdAt: "2026-10-09T17:00:00.000Z",
           deliveredAt: null,
+          reprintRule: "own",
+          reprintPrinterIds: [],
+          stuck: false,
         };
         const { el } = await mounted({ listRecentJobs: vi.fn().mockResolvedValue([ended]) });
         await selectTab(el, "queue");
@@ -10858,6 +11397,9 @@ describe("Deleting a printer", () => {
           lastError: "printer.deleted",
           createdAt: "2026-10-09T17:00:00.000Z",
           deliveredAt: null,
+          reprintRule: "own",
+          reprintPrinterIds: [],
+          stuck: false,
         };
         const { el } = await mounted({ listRecentJobs: vi.fn().mockResolvedValue([ended]) });
         await selectTab(el, "queue");

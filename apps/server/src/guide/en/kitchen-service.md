@@ -420,7 +420,7 @@ defaults use English until their kitchen wording is available. With no saved con
 kitchen paper uses English. Your dashboard language and receipt language have their own choices.
 
 The next new ticket, correction or kitchen reprint uses the saved default immediately. Changing
-the default prints nothing by itself. Resending a failed job sends its original paper unchanged.
+the default prints nothing by itself. Resending a failed job keeps its original words.
 Dish names, table names and your notes stay as recorded. A reprint keeps the original allergy
 instructions and selects their recorded English or Spanish wording to match its headings.
 

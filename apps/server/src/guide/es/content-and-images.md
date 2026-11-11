@@ -128,7 +128,7 @@ hoja cuando haya terminado, abre **Imprimir/Reimprimir**, elige una impresora pa
 Los tickets de cocina y los comprobantes del número de recogida también usan tu idioma del
 contenido predeterminado en sus cabeceras. Con español salen en español; con otros idiomas, en
 inglés. El papel nuevo y las reimpresiones de cocina siguen el cambio al momento; un reenvío
-conserva los bytes originales. Los nombres de platos, las notas y las instrucciones sobre alergias
+conserva sus cabeceras originales. Los nombres de platos, las notas y las instrucciones sobre alergias
 conservan su texto registrado. Consulta [el papel de cocina](kitchen-service.md#paper-language).
 
 ## Sube una fotografía una sola vez {#upload}

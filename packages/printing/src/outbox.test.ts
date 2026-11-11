@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import net from "node:net";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -15,7 +15,14 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, updatePrinter } from "./printers.js";
-import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
+import {
+  PRINT_JOB_MOVED,
+  canResendPrintJob,
+  endMovedPrintJob,
+  enqueuePrintJob,
+  resendPrintJob,
+} from "./outbox.js";
+import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 type PrintConfig = { locationId: string };
 import "./errors.js";
@@ -344,6 +351,98 @@ describe("resendPrintJob", () => {
     });
   });
 
+  it("resends to another printer with the bytes it is given, in the same chain, sale and marking", async () => {
+    await setup();
+    const nodeId = await seedNode(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const [series] = await tx.insert(invoiceSeries).values({ nodeId, code: "A" }).returning();
+      const [sale] = await tx
+        .insert(sales)
+        .values({
+          source: "operator_script",
+          nodeId,
+          seriesId: series!.id,
+          invoiceNumber: 1,
+          issuedAt: "2026-10-22T12:00:00.000Z",
+          issuedOffsetMinutes: 0,
+          total: 100,
+          vatBreakdown: [],
+          locale: "en-GB",
+          invoiceLocales: ["en-GB"],
+          fiscalBackend: "fake",
+          fiscalState: "not_applicable",
+        })
+        .returning();
+      const narrow = await createPrinter(tx, {
+        name: "Narrow",
+        transport: "network_tcp",
+        host: "narrow.local",
+      });
+      const wide = await createPrinter(tx, {
+        name: "Wide",
+        transport: "network_tcp",
+        host: "wide.local",
+      });
+      const original = await enqueuePrintJob(tx, narrow.id, new Uint8Array([1]), "document", {
+        saleId: sale!.id,
+        receiptCopy: true,
+      });
+      const exhausted = { status: "failed", attempts: 5 } as const;
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, original.jobId));
+      const first = await resendPrintJob(tx, original.jobId);
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, first.jobId));
+
+      const moved = await resendPrintJob(tx, first.jobId, {
+        printerId: wide.id,
+        payload: new Uint8Array([2, 3]),
+      });
+
+      const [row] = await tx.select().from(printJobs).where(eq(printJobs.id, moved.jobId));
+      expect(row).toMatchObject({
+        printerId: wide.id,
+        payload: new Uint8Array([2, 3]),
+        kind: "document",
+        status: "queued",
+        resendOf: original.jobId,
+        saleId: sale!.id,
+        receiptCopy: true,
+      });
+    });
+  });
+
+  it("refuses a drawer command sent to another printer, as it does on its own", async () => {
+    await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const drawer = await createPrinter(tx, {
+        name: "Drawer",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const other = await createPrinter(tx, {
+        name: "Other",
+        transport: "network_tcp",
+        host: "other.local",
+      });
+      const original = await enqueuePrintJob(
+        tx,
+        drawer.id,
+        new Uint8Array([27, 112, 0, 25, 250]),
+        "drawer",
+      );
+      await tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: 5 })
+        .where(eq(printJobs.id, original.jobId));
+      await expect(
+        resendPrintJob(tx, original.jobId, {
+          printerId: other.id,
+          payload: new Uint8Array([27, 112, 0, 25, 250]),
+        }),
+      ).rejects.toMatchObject({ code: "print_job.not_resendable" });
+      expect(await tx.select().from(printJobs)).toHaveLength(1);
+    });
+  });
+
   it("refuses unknown jobs and disabled printers", async () => {
     await setup();
     await withTransaction(suite.db, async (tx) => {
@@ -589,3 +688,56 @@ it.each(["queued", "printing", "failed"] as const)(
     expect(await suite.db.select().from(printJobs)).toEqual(before);
   },
 );
+
+describe("endMovedPrintJob", () => {
+  it("ends a waiting document job where it was stuck, and leaves any other job as it was", async () => {
+    await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(tx, {
+        name: "Stuck",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const job = async (
+        values: Partial<typeof printJobs.$inferInsert>,
+        kind: "document" | "drawer" = "document",
+      ) => {
+        const { jobId } = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]), kind);
+        await tx.update(printJobs).set(values).where(eq(printJobs.id, jobId));
+        return jobId;
+      };
+      const ended = [
+        await job({ status: "queued" }),
+        await job({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS - 1, lastError: "paper" }),
+      ];
+      const kept = [
+        await job({ status: "printing" }),
+        await job({ status: "done" }),
+        await job({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: "paper" }),
+        await job({ status: "queued" }, "drawer"),
+      ];
+      const before = await tx.select().from(printJobs).where(inArray(printJobs.id, kept));
+
+      for (const id of ended) expect(await endMovedPrintJob(tx, id)).toBe(true);
+      for (const id of kept) expect(await endMovedPrintJob(tx, id)).toBe(false);
+
+      expect(
+        await tx
+          .select({
+            status: printJobs.status,
+            attempts: printJobs.attempts,
+            lastError: printJobs.lastError,
+          })
+          .from(printJobs)
+          .where(inArray(printJobs.id, ended)),
+      ).toEqual(
+        ended.map(() => ({
+          status: "failed",
+          attempts: MAX_DELIVERY_ATTEMPTS,
+          lastError: PRINT_JOB_MOVED,
+        })),
+      );
+      expect(await tx.select().from(printJobs).where(inArray(printJobs.id, kept))).toEqual(before);
+    });
+  });
+});

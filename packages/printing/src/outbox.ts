@@ -1,6 +1,6 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { printJobs, printers, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -71,7 +71,7 @@ async function insertPrintJob(
   return { jobId: job!.id };
 }
 
-/** Completed receipt originals need a marked copy; exhausted delivery attempts retain their bytes. */
+/** Completed receipt originals need a marked copy; a job out of delivery attempts may be resent. */
 export function canResendPrintJob(job: {
   kind: "document" | "drawer";
   status: string;
@@ -87,12 +87,34 @@ export function canResendPrintJob(job: {
   );
 }
 
+/** The `last_error` of a job {@link endMovedPrintJob} ended: a code the dashboard words. */
+export const PRINT_JOB_MOVED = "print_job.moved";
+
 /**
- * Resend the opaque document to its original printer, preserving delivery history. The
+ * Ends a document job still waiting on its printer, so it never prints there once it is reprinted
+ * elsewhere. A job an agent claimed meanwhile is left alone; `false` says nothing was ended.
+ */
+export async function endMovedPrintJob(tx: Transaction, jobId: string): Promise<boolean> {
+  const ended = await tx.execute<{ id: string }>(sql`
+    update print_jobs set status = 'failed', attempts = ${MAX_DELIVERY_ATTEMPTS},
+      last_error = ${PRINT_JOB_MOVED}
+    where id = ${jobId} and kind = 'document'
+      and (status = 'queued' or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))
+    returning id`);
+  return ended.rows.length > 0;
+}
+
+/**
+ * Resend the opaque document to its original printer, or `to` another with the bytes given,
+ * preserving delivery history. The
  * copy names the first job of its chain, which `printJobInTrouble` (apps/server/src/print-job-trouble.ts)
  * reads to clear a failed job once a later copy has printed, and carries the receipt's sale.
  */
-export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ jobId: string }> {
+export async function resendPrintJob(
+  tx: Transaction,
+  jobId: string,
+  to?: { printerId: string; payload: Uint8Array },
+): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
   if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
   const [target] = await tx
@@ -120,9 +142,15 @@ export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ 
       .limit(1);
     if (reserved !== undefined) throw new AppError("print_job.not_resendable", { id: jobId });
   }
-  return insertPrintJob(tx, job.printerId, job.payload, "document", {
-    resendOf: job.resendOf ?? job.id,
-    saleId: job.saleId,
-    receiptCopy: job.receiptCopy,
-  });
+  return insertPrintJob(
+    tx,
+    to?.printerId ?? job.printerId,
+    to?.payload ?? job.payload,
+    "document",
+    {
+      resendOf: job.resendOf ?? job.id,
+      saleId: job.saleId,
+      receiptCopy: job.receiptCopy,
+    },
+  );
 }

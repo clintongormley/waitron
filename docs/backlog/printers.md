@@ -163,15 +163,16 @@ chosen destination.
   the agent has joined and is not out of touch, `/status.json` answers only loopback callers
   (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
 
-## Unpair can come back for a short while after a successful unpairing
+## A device unpaired outside Waitron still reads as paired for a short while
 
-- **Unpair can come back for a short while after a successful unpairing** (found in C103's review,
-  read, not run). The server calls a Bluetooth device paired while the agent's last "paired" report
-  is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while a discovery
-  window is open, 15 otherwise), and a later report that the device is no longer paired keeps the
-  old `pairedAt`. So for up to that long after an Unpair a device can read as paired again. Clearing
-  `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end
-  it; the owner was asked (questions.md, C103).
+- **A device unpaired outside Waitron still reads as paired for a short while** (found in C103's
+  review, narrowed in A405's, read, not run). The server calls a Bluetooth device paired while the agent's last
+  "paired" report is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while
+  a discovery window is open, 15 otherwise). A successful Unpair sent from Waitron now clears that
+  report; a device unpaired some other way, such as on the printer itself, keeps it, so Pair again
+  can find it still paired and switch it on without pairing it. Clearing `pairedAt` when an
+  agent's paired list leaves the device out would end it, but the pull handler does not yet tell
+  an empty list from an absent one.
 
 ## An agent compares the server's discovery deadline with its own clock
 
@@ -319,43 +320,18 @@ checked on the box).
   Whether a future replication drain can carry the audit row to a node without its print job is
   unverified and needs a test when that drain is built.
 
-## A405 — printer details and the print queue
+## Reprint kitchen tickets and other printouts laid out again for any printer
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a window, landed #2492; PR 2, Used by, landed #2511; PR 3, one table, landed #2661; PR 4 to come).** A modal means the printer page is no longer a sub-page, so the owner
-  dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
-  3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
-     printer off (C109, #960). Add restores its existing registration and settings. Offer
-     "Pair again" (or similar) directly on the same printer record.
-  4. **Reprint on the print queue lets the person choose a different printer**, for when the
-     original is out of service. Offer active printers, the original chosen by default. Drawer jobs
-     stay unresendable (CLAUDE.md §5).
-     **Every job is laid out again for the printer chosen (owner, 2026-10-14)** — kitchen tickets
-     as much as receipts, since a jammed kitchen printer is when this matters most. Today a job
-     stores only its finished ESC/POS bytes, and Reprint copies them to the same printer
-     (`resendPrintJob`, `packages/printing/src/outbox.ts`); those bytes come out wrong on a printer
-     of another paper width. So every job also keeps the input it was built from, and Reprint
-     builds it again for the chosen printer with the same builder: `formatReceipt` for receipts
-     and full invoices, `formatKitchenTicket` and `formatCorrectionSlip` (`kitchen-print.ts`),
-     `formatPaymentSlip`, and `formatCategorySalesPage` (`report-api.ts`). Rebuilding a kitchen
-     ticket from the order instead is not the same thing: `kitchen_print_job_lines` records which
-     order lines a ticket carried, by id, not what they said when it printed, so a line changed or
-     split since could print differently. Test and calibration pages reprint only on their own
-     printer.
-     A job printed before the change has bytes alone and is offered only printers of the same
-     paper width (no migration: CLAUDE.md §3). Open: receipts and invoices already have an A4 page
-     (`apps/server/src/invoice-page.ts`); a kitchen ticket, payment slip or report sent to an A4
-     printer needs one too, or the A4 printers are left out for those kinds — settle which and say
-     so on the screen.
-     **Keeping the stored input cheap to support (owner, 2026-10-14).** A stored input is a format
-     that must stay readable for as long as the job is kept (one month: the retention entry under
-     "The virtual PDF printer"). Two rules keep that cost small. (a) Every builder produces one
-     shared, printer-independent document — a list of text lines, two-column rows, rules, QR codes
-     and logos — and only that is stored; receipts already work this way (`buildReceiptDocument`
-     in `apps/server/src/receipt-document.ts`, laid out by `formatReceipt`). One small format
-     changes far less often than five builders' inputs. (b) The stored document carries a version
-     number. A job whose version the running code cannot read falls back to today's behaviour
-     (its own printer, or one of the same paper width), so an upgrade never needs conversion code
-     and can only narrow the printers offered for older jobs.
+- **Reprint kitchen tickets and other printouts laid out again for any printer (left open by A405
+  point 4, #2678).** Receipts and full invoices are laid out again from the sale. Every other job keeps
+  only its finished bytes, so Reprint copies them: kitchen tickets and refund receipts to an
+  active receipt printer at least as wide, centred; everything else to its own printer only.
+  Laying them out again needs each job to keep the printer-independent document it was built from,
+  with a version number, in a new `print_jobs` column, and each builder (`formatKitchenTicket`,
+  `formatCorrectionSlip`, `formatPaymentSlip`, `formatCategorySalesPage`,
+  `formatTenderRefundAcknowledgment`) to draw from it; a job whose version the running code cannot
+  read falls back to today's rule. Also open: whether kitchen tickets, payment slips and reports
+  need an A4 page, or A4 printers stay out for them.
 
 ## A Used by link to a prep station opens the Stations tab, not the station
 
@@ -510,11 +486,14 @@ only the app keeps from deletion; no trigger protects it either.
 
 ## Loose ends left by A661 (#1745)
 
-- The print queue's Resend does not follow the till's rule for a full invoice's printer. A till
-  refuses to resend an original a print request sent, when that printer is not the till's invoice
-  printer (`receiptPrinterWithdrawn`, `apps/server/src/invoice-delivery-status.ts`). The
-  dashboard's `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does
-  not apply that rule. Decide whether a manager's resend should.
+- The print queue's Reprint, on its own printer or another (A405, #2678), does not follow the
+  till's rule for a full invoice's printer. A till refuses to resend an original a print request
+  sent, when that printer is not the till's invoice printer (`receiptPrinterWithdrawn`,
+  `apps/server/src/invoice-delivery-status.ts`). The dashboard's
+  `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does not apply that
+  rule, and since A405 it can send a full invoice's original that never printed (out of delivery
+  attempts, or still waiting on a disabled or unseen printer) to any other active receipt printer.
+  Decide whether a manager's reprint should.
 
 ## Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768)
 
@@ -672,7 +651,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 5 entries, size M.
 
-- **Unpair can come back for a short while after a successful unpairing** — found in C103's review, read, not run. Clearing `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end it; the owner was asked (questions.md, C103). [Detail](printers.md#unpair-can-come-back-for-a-short-while-after-a-successful-unpairing)
+- **A device unpaired outside Waitron still reads as paired for a short while** — found in C103's review, narrowed in A405's, read, not run. A successful Unpair from Waitron now clears the paired report; one done elsewhere keeps it for up to 45 seconds. [Detail](printers.md#a-device-unpaired-outside-waitron-still-reads-as-paired-for-a-short-while)
 - **A command queued behind a slow pair can run out of time.** A second command waiting behind that
   pair can therefore expire on the server before it runs; its outcome is then ignored and the screen
   says "No answer from the print agent — try again" whatever actually happened.
@@ -687,7 +666,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 - **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
   port is on another channel fails each job with the connection error.
 
-## Bundle: Printers screen leftovers, inside A405's remaining pull requests
+## Bundle: Printers screen leftovers
 
 6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 

@@ -12,7 +12,7 @@ import {
 } from "../widgets/test-helpers.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import type { WtRowActions } from "@waitron/ui";
-import "./printers-screen.js";
+import { SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
@@ -123,6 +123,9 @@ const jobs: PrintJobRow[] = [
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
+    stuck: false,
   },
 ];
 
@@ -1106,6 +1109,60 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     pair.click();
     await flush(el);
     expect(q(el, "[data-test=pair-printer-modal]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the Pair again window while it looks and once the printer was not found, accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: bluetoothApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue([]) }) },
+      theme,
+    );
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      q(el, "wt-tabs")!
+        .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+        .click();
+      await flush(el);
+      q(el, "[data-test=pair-again-p4]")!.click();
+      await flush(el);
+      expect(q(el, "[data-test=pair-again-status] wt-spinner")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await flush(el);
+      expect(q(el, "[data-test=pair-again-look]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders the Reprint dialog, with its hint and then a refusal, accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: stubApi(false, {
+          resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.printer_unsuitable" }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    q(el, "wt-tabs")!.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="queue"]')!.click();
+    await flush(el);
+    q(el, "[data-test=resend-job-j1]")!.click();
+    await flush(el);
+    expect(q(el, "wt-combobox[name=printerId]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=reprint-send]")!.click();
+    await flush(el);
+    await vi.waitFor(() =>
+      expect(
+        (q(el, "[data-test=reprint-send]") as HTMLElementTagNameMap["wt-button"]).loading,
+      ).toBe(false),
+    );
+    await flush(el);
     await expectNoA11yViolations(host);
   });
 

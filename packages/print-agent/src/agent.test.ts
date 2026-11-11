@@ -2251,6 +2251,45 @@ describe("createAgent — Bluetooth commands", () => {
     expect(outcomesOn(c, 2)).toStrictEqual([]);
   });
 
+  it("an unpairing that finishes after a pull's paired list was taken rides the next pull, not that one", async () => {
+    let finishForget: (() => void) | undefined;
+    let stillPaired = true;
+    let releaseDuringVisible = false;
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      forgetBluetooth: () =>
+        new Promise<{ ok: boolean }>((resolve) => {
+          finishForget = () => {
+            stillPaired = false;
+            resolve({ ok: true });
+          };
+        }),
+      pairedBluetooth: async () => (stillPaired ? [{ localKey: MAC2, name: "BT-58" }] : []),
+      visibleDevices: async () => {
+        if (releaseDuringVisible) {
+          finishForget!();
+          await settle();
+        }
+        return [];
+      },
+    });
+    const c = client({ pullJobs: scripted(reply({ bluetoothCommands: [forget("c1")] })) });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await settle();
+    releaseDuringVisible = true;
+    await agent.runOnce();
+    expect(sentOn(c, 1).pairedBluetooth).toStrictEqual([{ localKey: MAC2, name: "BT-58" }]);
+    expect(outcomesOn(c, 1)).toStrictEqual([]);
+    releaseDuringVisible = false;
+    await agent.runOnce();
+    expect(sentOn(c, 2).pairedBluetooth).toStrictEqual([]);
+    expect(outcomesOn(c, 2)).toStrictEqual([{ id: "c1", ok: true }]);
+    await agent.runOnce();
+    expect(outcomesOn(c, 3)).toStrictEqual([]);
+  });
+
   it("a refusal and a throw both become failed outcomes, and neither stops the jobs or the next command", async () => {
     const sink = new FakeSink();
     const pairFn = vi.fn(async () => ({ ok: false, error: "pairing timed out" }));

@@ -612,6 +612,7 @@ function mount(db: Database, cfg: WithVenueRowId, log: Logger): Hono {
       pairingMode: createPairingMode(),
       venueLocale: LOCALE,
       readInvoiceDocument: () => Promise.reject(new Error("bench: the venue has no page printer")),
+      layOutSaleReceipt: () => Promise.reject(new Error("bench: no receipt is laid out here")),
     },
     log,
   );

@@ -42,8 +42,9 @@ import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
 } from "./invoice-delivery.js";
-import { endInvoicePrintDeliveries } from "./invoice-print.js";
+import { endInvoicePrintDeliveries, resendInvoicePrintJob } from "./invoice-print.js";
 import { mountPrintApi } from "./print-api.js";
+import { reprintJobOn } from "./print-job-reprint.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
 
@@ -174,6 +175,7 @@ async function setup(bluetooth = false) {
       pairingMode: createPairingMode(),
       readMembership: async () => null,
       readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       venueLocale: "es-ES",
       now: () => now,
     },
@@ -794,6 +796,72 @@ describe("management invoice receipt resends", () => {
       ).toMatchObject({ status: "sent" });
     },
   );
+
+  it("reserves a full invoice's delivery for its receipt laid out on another printer", async () => {
+    const ctx = await setup();
+    await ctx.result({ status: "failed", error: "unsafe", invoiceClaim: await held(ctx) });
+    const other = await withTransaction(suite.db, (tx) =>
+      createPrinter(tx, { name: "Bar", transport: "network_tcp", host: "bar.test" }),
+    );
+    const payload = new Uint8Array([27, 64, 66]);
+    const { jobId } = await withTransaction(suite.db, (tx) =>
+      resendInvoicePrintJob(tx, ctx.job.jobId, "staff", ctx.now(), undefined, {
+        printerId: other.id,
+        payload,
+      }),
+    );
+    const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    expect(job).toMatchObject({
+      printerId: other.id,
+      payload,
+      saleId: ctx.sale.saleId,
+      receiptCopy: false,
+      resendOf: ctx.job.jobId,
+    });
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, jobId));
+    expect(delivery).toMatchObject({
+      saleId: ctx.sale.saleId,
+      medium: "receipt",
+      designation: "original",
+      status: "queued",
+      generation: 2,
+    });
+  });
+
+  it("moves a queued full invoice off an unseen Bluetooth printer only while it is unseen, its delivery with it", async () => {
+    const ctx = await setup(true);
+    const other = await withTransaction(suite.db, (tx) =>
+      createPrinter(tx, { name: "Bar", transport: "network_tcp", host: "bar.test" }),
+    );
+    const move = (ownPrinterUnseen: boolean) =>
+      withTransaction(suite.db, (tx) =>
+        reprintJobOn(
+          tx,
+          async () => new Uint8Array([27, 64, 66]),
+          ctx.job.jobId,
+          other.id,
+          "staff",
+          ctx.now(),
+          { seen: () => !ownPrinterUnseen },
+        ),
+      );
+    const jobs = await suite.db.select().from(printJobs);
+    const deliveries = await suite.db.select().from(invoiceDeliveries);
+    await expect(move(false)).rejects.toMatchObject({ code: "print_job.not_resendable" });
+    expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
+
+    const { jobId } = await move(true);
+    expect(await ctx.row()).toMatchObject({ status: "failed" });
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, jobId));
+    expect(delivery).toMatchObject({ saleId: ctx.sale.saleId, status: "queued" });
+  });
 
   it("refuses resending completed original bytes and leaves its history unchanged", async () => {
     const ctx = await setup();
