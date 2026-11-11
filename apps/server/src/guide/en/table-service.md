@@ -12,7 +12,7 @@ Choose **Pay** to take all or part of a Counter bill. **Whole bill** starts sele
 you can instead enter an amount, split equally or choose items. Choose **Cash** or **Card**
 for each payment. After a part payment, check **Still to pay** before taking the next payment.
 
-Add an item before paying or sending an order. An empty basket keeps those actions unavailable.
+Add an item before paying or sending an order.
 
 ## Choose documents after paying {#settlement-document}
 

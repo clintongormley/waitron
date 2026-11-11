@@ -254,7 +254,7 @@ import type {
 } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
-import type { PinAttempts } from "@waitron/identity";
+import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -315,6 +315,8 @@ import {
 } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
+import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
+import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
@@ -7455,19 +7457,32 @@ export async function markOrderPlaced(
   await captureOrderAmendment(tx, attendance, amendment.id, operatorId, now.instant);
 }
 
+/** Cancel a placed order, crediting an issued invoice only with `sale.rectify`. */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
+  override?: Override,
 ): Promise<void> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
   // is a request-shape error, not the state conflict `not_placed` names.
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
-  return cancelPlaced(deps, cfg, id, reason, operator);
+  const toCheck =
+    (await readOrderInvoice(deps.db, id)) === undefined
+      ? undefined
+      : await overrideToCheck(
+          deps.db,
+          { sessionId: operator.sessionId, permission: "sale.rectify" },
+          override,
+        );
+
+  return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
+    cancelPlaced(deps, cfg, id, reason, operator, withCheck(override, checked)),
+  );
 }
 
 async function cancelPlaced(
@@ -7476,7 +7491,9 @@ async function cancelPlaced(
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
+  override: Override | undefined,
 ): Promise<void> {
+  const authz = { sessionId: operator.sessionId, override };
   return withIssuanceTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, cfg, deps.admission);
     const [locked] = await tx
@@ -7487,12 +7504,18 @@ async function cancelPlaced(
       throw new AppError("working_order.not_placed", { workingOrderId: id });
     }
 
+    const invoice = await readOrderInvoice(tx, id);
+    if (invoice !== undefined) {
+      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
+    }
     await refuseBillWithPayments(tx, id);
     // A placed order's card collection writes no mark, and its provider may write no payment row
     // until the card resolves, so only this process's own record of the attempt shows it.
     if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
     }
+    if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+
     const kitchenWork = await tx
       .select({
         workingOrderLineId: ticketItems.workingOrderLineId,

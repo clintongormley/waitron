@@ -552,3 +552,26 @@ describe("GET /api/working-orders/:id/transfer-closure", () => {
     ).toEqual([{ last_seen_at: seen }]);
   });
 });
+
+it("a transfer-closed bill in an open party cannot reach whole-order cancellation", async () => {
+  const allowed = await till();
+  const party = await seatedWith(t.venue, "House salad");
+  const request = await t.requestFor(party.tabId, "12.00", party.partyId, { partyFinish: null });
+  await expectClosed(allowed.cookie, party.tabId, bodyOf(request));
+  expect(t.venue.db.all(sql`select state from parties where id = ${party.partyId}`)).toEqual([
+    { state: "open" },
+  ]);
+  expect(written(party.tabId).order).toEqual([{ status: "settled" }]);
+  const before = written(party.tabId);
+
+  const cancelled = await send(
+    t.venue.app,
+    allowed.cookie,
+    "POST",
+    `/api/working-orders/${party.tabId}/cancel`,
+    { reason: "Guest left" },
+  );
+
+  expect(cancelled).toMatchObject({ status: 409, json: { code: "working_order.not_placed" } });
+  expect(written(party.tabId)).toEqual(before);
+});

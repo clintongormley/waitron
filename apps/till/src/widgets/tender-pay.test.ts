@@ -240,7 +240,12 @@ describe("till-tender-pay", () => {
     old.click();
     await el.updateComplete;
     expect(old.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    expect((old as HTMLElementTagNameMap["wt-button"]).loading).toBe(true);
     expect(confirm).not.toHaveBeenCalled();
+    el.held = true;
+    await el.updateComplete;
+    expect((old as HTMLElementTagNameMap["wt-button"]).loading).toBe(false);
+    el.held = false;
     el.busy = false;
     el.confirmation = {
       tender: { method: "cash", amount: "25.00" },
@@ -1978,6 +1983,31 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
       await el.updateComplete;
       expect(active.loading).toBe(false);
       expect(variants(el)).toEqual(["secondary", "secondary"]);
+    },
+  );
+
+  it.each(["cash", "card", "pay"] as const)(
+    "does not spin %s during later work when its press sent nothing",
+    async (method) => {
+      const { el } = await mountPay(1, { paymentWindow: method === "pay" });
+      click(el, method === "pay" ? "[data-counter-pay]" : method === "cash" ? ".pay" : ".pay-card");
+      await el.updateComplete;
+      if (method !== "pay") {
+        if (method === "cash") await type(el, "2");
+        click(el, ".confirm");
+        await el.updateComplete;
+      }
+      await Promise.resolve();
+      el.busy = true;
+      await el.updateComplete;
+      const buttons = el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-button"]>(
+        ".pay, .pay-card, [data-counter-pay]",
+      );
+      expect(buttons.length).toBeGreaterThan(0);
+      for (const button of buttons) {
+        expect(button.loading).toBe(false);
+        expect(button.variant).toBe("secondary");
+      }
     },
   );
 

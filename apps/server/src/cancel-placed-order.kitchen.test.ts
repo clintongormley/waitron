@@ -45,7 +45,7 @@ useVenueDb({
 const deps = () => ({ db: venue.db, backend: venue.backend, clock: venue.clock });
 
 describe("cancelling a counter order the kitchen already has", () => {
-  it.each(["fired", "served", "unfired"] as const)(
+  it.each(["fired", "served", "unfired", "collected"] as const)(
     "cancelling %s work tells only a station still making it",
     async (stage) => {
       const id = randomUUID();
@@ -77,6 +77,10 @@ describe("cancelling a counter order the kitchen already has", () => {
         await inTx(venue, (tx) =>
           tx.update(ticketItems).set({ firedAt: null }).where(eq(ticketItems.id, item!.id)),
         );
+      if (stage === "collected")
+        expect(
+          (await send(venue.app, venue.cookie, "POST", `/api/orders/${id}/collect`, {})).status,
+        ).toBe(200);
       const printerId = await inTx(venue, async (tx) => {
         const printer = await createPrinter(tx, {
           name: `Kitchen ${randomUUID().slice(0, 8)}`,

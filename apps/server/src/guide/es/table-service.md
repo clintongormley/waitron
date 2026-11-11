@@ -14,7 +14,7 @@ seleccionada; también puedes indicar una cantidad, dividir a partes iguales o e
 Elige **Efectivo** o **Tarjeta** en cada pago. Después de un pago parcial, comprueba **Queda por pagar**
 antes de cobrar el siguiente.
 
-Añade un artículo antes de cobrar o enviar un pedido. Con la cesta vacía, esas acciones no están disponibles.
+Añade un artículo antes de cobrar o enviar un pedido.
 
 ## Elegir documentos después de cobrar {#settlement-document}
 

@@ -5,9 +5,11 @@ Codex plan. Request: `docs/backlog.md` A840/A842/A848 and Lane F queue, watcher
 “yes” at 17:50 to R3 proposal 3: a sent dish leaves only through Cancel item;
 whole-order cancellation is Cancel item per dish plus the order's reason.
 Claude's first plan read took 482s; its corrections are incorporated. The second
-Claude read took 461s. Watcher18:18 corrected its earlier18:32 refusal
-note to the smaller server VOID correction below. Watcher18:50/19:15 cleared the invoice-route retirement and test ownership
-correction in step1; no owner approval of this plan is claimed.
+Claude read took461s. Watcher18:18 corrected its earlier18:32 refusal to
+server VOID correction. Watcher18:45 cleared restoring the shared invoice-credit
+branch after both run-it reviews proved uncredited abandonment of an unpaid
+departure bill. Earlier18:50/19:15 retirement clearance is superseded. No owner
+approval of this plan is claimed.
 
 **Finish line:** remove obsolete Cancel and credit at Counter; show the pressed
 payment action coloured with a spinner; word empty-order refusals in EN/ES;
@@ -24,11 +26,11 @@ Reuse current widgets, refusal mappers, cancellation context/operation and
    branches/wording and tests. Keep table cancellation, the server route and
    `CounterWaitingOrder.invoiceNumber`, used when paying old issued bench orders.
    Add one absence assertion to an existing waiting-widget case, no new suite.
-   With the route proof passing, retire cancelPlaced's unreachable invoice-credit
-   branch and whole-route/PIN acceptance tests. Preserve financial values, line
-   links and own-operation refusal assertions directly on creditWholeInvoice;
-   preserve invoice/credit-note reads. Keep that fiscal writer unchanged even
-   though this removes its last production caller (watcher19:15; Lane L owns it).
+   Keep cancelPlaced's shared invoice-credit/PIN branch and original route,
+   financial and clock tests unchanged (watcher18:45). A departed table bill's
+   later cancellation still needs correction authority and a credit note.
+   The transfer-close control leaves its party open but settles its bill;
+   cancellation then refuses not_placed without writing.
 2. **A842:** fix retained Cash/Card in `tender-pay`, including the table's
    zero-total fallback (`till-table-order-screen.ts:#paysOnSheet`). Positive
    whole bills already use the shared payment sheet. Remember
@@ -57,12 +59,13 @@ Reuse current widgets, refusal mappers, cancellation context/operation and
 and their focused siblings; counter cancellation suite retires, duration entry
 goes, existing table/move tests remain. Server `working-order.ts`, `till-api.ts`, `errors.ts`, the one new
 route proof and any affected existing cancellation tests.
-Apply the watcher19:15 test-ownership correction; protected fiscal writers stay unchanged.
+Protected fiscal writers and original invoice-credit assertions stay unchanged.
 
 **Checks/delivery:** failing test before each fix; run every changed test file.
 Inspect EN/ES, light/dark, phone/desktop; use existing accessibility helpers.
 Update affected guide twins/backlog and C126's dated retirement pointer. A739
 physical checks stay in the real-box session. Hook, Claude run-it reviews, one
 fix-read, current-head CI, authorised landing. Forecast production +80/-150,
-tests +180/-850, support +0/-1, docs +40/-30. Watcher18:50 cleared
-additional deletions for the retired invoice route. Stop for other growth or new behaviour. Empty Send stays disabled; verify its visible empty-basket wording.
+tests +180/-850, support +0/-1, docs +40/-30. Watcher18:33 cleared measured
+test growth;18:45 restores the original credit tests and narrows the final diff.
+Stop for other growth or new behaviour. Empty Send stays disabled.

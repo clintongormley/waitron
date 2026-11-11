@@ -16,7 +16,6 @@ import {
   tenders,
   withTransaction,
   workingOrderLines,
-  workingOrders,
 } from "@waitron/db";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import { descendingIds } from "./testing/descending-ids.js";
@@ -104,7 +103,7 @@ describe("facts this list relies on", () => {
   });
 });
 
-describe("each recorded order status", () => {
+describe("each status, from the product's own write paths", () => {
   it("reads an open bill as Open, owing its lines, credited to who rang them", async () => {
     const party = await seatedWith(venue, "Caña");
     expect(await rowOf(party.tabId)).toMatchObject({
@@ -148,12 +147,14 @@ describe("each recorded order status", () => {
     });
   });
 
-  it("reads an abandoned invoiced bill as Cancelled and credited in full, with its credit note", async () => {
+  const cancel = (id: string) =>
+    send(venue.app, venue.supervisorTill, "POST", `/api/working-orders/${id}/cancel`, {
+      reason: "Error",
+    });
+
+  it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its credit note", async () => {
     const id = await placedIssuedBill(venue, "Caña");
-    await credit(venue, id, "2.48", "-3.00");
-    await inTx(venue, (tx) =>
-      tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id)),
-    );
+    expect((await cancel(id)).status).toBe(200);
     expect(await rowOf(id)).toMatchObject({
       status: "cancelled",
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
@@ -163,15 +164,21 @@ describe("each recorded order status", () => {
     });
   });
 
-  it("reads an abandoned credited debt as Cancelled and credited in full, not Left without paying", async () => {
+  it("refuses to cancel a bill whose credit notes already bring its invoice to nothing, leaving its row as it was", async () => {
+    const id = await placedIssuedBill(venue, "Caña");
+    await credit(venue, id, "2.48", "-3.00");
+    const before = await rowOf(id);
+    expect(before).toMatchObject({ credited: "in_full", creditNotes: [expect.any(String)] });
+    expect(await cancel(id)).toMatchObject({
+      status: 409,
+      json: { code: "sale.correction_exceeds_total" },
+    });
+    expect(await rowOf(id)).toEqual(before);
+  });
+
+  it("reads a debt cancelled at the till afterwards as Cancelled and credited in full, not Left without paying", async () => {
     const party = await departed(venue, "Caña");
-    await credit(venue, party.tabId, "2.48", "-3.00");
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ status: "abandoned" })
-        .where(eq(workingOrders.id, party.tabId)),
-    );
+    expect((await cancel(party.tabId)).status).toBe(200);
     expect(await rowOf(party.tabId)).toMatchObject({
       status: "cancelled",
       creditNotes: [expect.stringMatching(/^R\/\d+$/)],

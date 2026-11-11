@@ -785,6 +785,7 @@ export class TillTenderPay extends LitElement {
         composed: true,
       }),
     );
+    this.#discardUnsentAction();
     this.view = "idle";
     this.entry = "";
   }
@@ -810,6 +811,7 @@ export class TillTenderPay extends LitElement {
         composed: true,
       }),
     );
+    this.#discardUnsentAction();
   }
 
   @state() private modifierDraft?: { product: TillProduct; quantity: string };
@@ -896,6 +898,13 @@ export class TillTenderPay extends LitElement {
     return this.#renderIdlePay(disabled, this.mode !== "prepay");
   }
 
+  #discardUnsentAction(): void {
+    // The parent's render supplies busy after the event. A prompt or refusal reserves no tender.
+    void this.updateComplete.then(() => {
+      if (!this.busy || this.held) this.#sendingAction = null;
+    });
+  }
+
   #tenderVariant(action: "cash" | "card" | "pay"): "primary" | "secondary" {
     if (this.busy && this.#sendingAction !== action) return "secondary";
     return this.payQuiet || this.held || (!this.busy && this.store.lineCount === 0)
@@ -947,6 +956,7 @@ export class TillTenderPay extends LitElement {
             this.dispatchEvent(
               new CustomEvent("counter-bill-pay", { detail: {}, bubbles: true, composed: true }),
             );
+            this.#discardUnsentAction();
           })}
         >${t("action.pay")}</wt-button
       >`;
@@ -1296,7 +1306,7 @@ export class TillTenderPay extends LitElement {
           class="confirm"
           variant="primary"
           size="lg"
-          ?disabled=${this.busy}
+          .loading=${this.busy && !this.held}
           @click=${() => this.#retryConfirmation(confirmation)}
           >${t("action.confirm_payment")}</wt-button
         >

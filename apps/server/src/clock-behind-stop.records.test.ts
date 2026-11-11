@@ -5,11 +5,9 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withIssuanceTransaction } from "@waitron/core";
-import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { workingOrderLines } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { createPinThrottle, loginWithPin } from "@waitron/identity";
+import { createPinThrottle } from "@waitron/identity";
 import { deviceId as brandDeviceId, quoteLiteral } from "@waitron/shared";
 import type { Draft } from "./order-drafts.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -40,7 +38,6 @@ import "./errors.js";
 
 let venue: BillVenue;
 let counterZone: string;
-let creditSessionId: string;
 let counterOffer: (name: string) => string;
 
 const ADMIN_PIN = "1234";
@@ -54,15 +51,6 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    creditSessionId = (
-      await inTx(venue, (tx) =>
-        loginWithPin(tx, {
-          deviceId: venue.deviceId,
-          personId: venue.adminId,
-          pin: ADMIN_PIN,
-        }),
-      )
-    ).id;
     const offers = await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
@@ -671,7 +659,7 @@ describe("an unpaid departure", () => {
   });
 });
 
-describe("whole-invoice credit recording clocks", () => {
+describe("a cancel's credit", () => {
   /** A counter order parked and placed at `now`, its invoice filed at `now` when `issued`. */
   async function placed(now: number, issued: boolean): Promise<string> {
     const id = randomUUID();
@@ -699,23 +687,6 @@ describe("whole-invoice credit recording clocks", () => {
     return id;
   }
 
-  function credit(id: string, now: number) {
-    return withIssuanceTransaction(venue.db, async (tx) => {
-      const invoice = await readOrderInvoice(tx, id);
-      return creditWholeInvoice(
-        tx,
-        {
-          admission: testTradingAdmission(),
-          backend: venue.backend,
-          clock: clockAt(now),
-        },
-        { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
-        invoice!,
-        { sessionId: creditSessionId },
-      );
-    });
-  }
-
   function cancel(app: Hono, id: string) {
     return send(app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, {
       reason: "Wrong order",
@@ -723,13 +694,16 @@ describe("whole-invoice credit recording clocks", () => {
     });
   }
 
-  it("refuses whole-invoice credit behind the fiscal chain", async () => {
+  it("refuses a cancel's credit of an invoiced order", async () => {
     const now = nowMs();
     const id = await placed(now, true);
     const behind = now - 10 * MINUTE;
     const records = allRecords();
 
-    await expect(credit(id, behind)).rejects.toMatchObject(behindChain(behind));
+    const answer = await cancel(at(behind), id);
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toEqual(behindChain(behind));
     expect(allRecords()).toBe(records);
     expect(await statusOf(venue, id)).toBe("placed");
   });
@@ -739,10 +713,11 @@ describe("whole-invoice credit recording clocks", () => {
     const id = await placed(now, true);
     const records = allRecords();
 
-    await credit(id, now - INSIDE);
+    const answer = await cancel(at(now - INSIDE), id);
 
+    expect(answer.status).toBe(200);
     expect(allRecords()).toBe(records + 1);
-    expect(await statusOf(venue, id)).toBe("placed");
+    expect(await statusOf(venue, id)).toBe("abandoned");
   });
 
   it("cancels an order with no invoice", async () => {
@@ -761,9 +736,10 @@ describe("whole-invoice credit recording clocks", () => {
     const id = await placed(nowMs(), true);
     const records = allRecords();
 
-    await expect(credit(id, Date.parse("2001-06-01T12:00:00Z"))).rejects.toMatchObject({
-      code: "clock.unusable",
-    });
+    const answer = await cancel(at(Date.parse("2001-06-01T12:00:00Z")), id);
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code: "clock.unusable" });
     expect(allRecords()).toBe(records);
     expect(await statusOf(venue, id)).toBe("placed");
   });

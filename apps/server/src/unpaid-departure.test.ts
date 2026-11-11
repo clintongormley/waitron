@@ -1992,3 +1992,48 @@ describe("the guests its invoice's receipts print", () => {
 });
 
 const send = observedGroupSender(() => venue.db, rawGroupSend);
+
+it("a departed bill requires correction authority and gets a credit when cancelled", async () => {
+  const party = await seatedWith(venue, "Steak");
+  expect(
+    (
+      await depart(party.partyId, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        reason: "Guest left",
+      })
+    ).status,
+  ).toBe(200);
+  const staff = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${party.tabId}/cancel`,
+    { reason: "Wrong bill" },
+  );
+  const supervisor = await send(
+    venue.app,
+    supervisorCookie,
+    "POST",
+    `/api/working-orders/${party.tabId}/cancel`,
+    { reason: "Wrong bill" },
+  );
+  const [state] = venue.db.all<{ status: string }>(
+    sql`select status from working_orders where id = ${party.tabId}`,
+  );
+  const credits = venue.db.all(
+    sql`select c.id from sales c join sales s on c.corrects_sale_id = s.id where s.working_order_id = ${party.tabId}`,
+  );
+  expect({
+    staff: staff.status,
+    staffCode: staff.json.code,
+    supervisor: supervisor.status,
+    status: state!.status,
+    credits: credits.length,
+  }).toEqual({
+    staff: 403,
+    staffCode: "authorization.not_permitted",
+    supervisor: 200,
+    status: "abandoned",
+    credits: 1,
+  });
+});
