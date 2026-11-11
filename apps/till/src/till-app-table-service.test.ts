@@ -1473,7 +1473,6 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
     const text = banner(el)!.textContent!;
     expect(text).toContain(t("table.error"));
-    expect(text).not.toContain(t("table.split_held_error"));
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
     await flush(el);

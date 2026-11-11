@@ -214,15 +214,12 @@ describe("A803 bill numbers: created", () => {
   it("a split refused after its number was taken gives no number: the next split takes the number it would have", async () => {
     const { partyId, tabId } = await seat(v, await v.table("N6"));
     await order(v, tabId, "Burger");
-    await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Flan"), quantity: "1", hold: true }]),
-    );
     const before = await billNumberTables(v);
 
     const command = await commandFor(v, partyId);
     await expect(
-      inTx(v, (tx) => splitBill(tx, v.cfg, tabId, [{ lineNo: 2 }], command)),
-    ).rejects.toMatchObject({ code: "tab.split_held_line" });
+      inTx(v, (tx) => splitBill(tx, v.cfg, tabId, [{ lineNo: 99 }], command)),
+    ).rejects.toMatchObject({ code: "tab.line_not_found" });
     expect(await billNumberTables(v)).toEqual(before);
 
     const second = await split(v, partyId, tabId, [1]);

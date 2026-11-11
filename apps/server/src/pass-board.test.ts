@@ -196,9 +196,7 @@ describe("pass screen", () => {
         .set({ quantity: 2000 })
         .where(eq(workingOrderLines.id, item!.workingOrderLineId));
       await tx.update(ticketItems).set({ quantity: 2000 }).where(eq(ticketItems.id, item!.id));
-      await carveOffLines(tx, v.cfg, party.tabId, party.tabId, [{ lineNo: 1, quantity: "1" }], {
-        refuseHeld: false,
-      });
+      await carveOffLines(tx, v.cfg, party.tabId, party.tabId, [{ lineNo: 1, quantity: "1" }], {});
     });
     const itemIds = (
       await inTx(v, (tx) =>

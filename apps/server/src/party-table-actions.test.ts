@@ -3196,23 +3196,6 @@ describe("A803 split", () => {
       });
     });
 
-    it("a dish the kitchen holds outside a held group refuses tab.split_held_line", async () => {
-      const { ana, m5, b1 } = await tableFor("A803 No group loose", "Burger");
-      await act((tx) =>
-        addTabRound(tx, v.cfg, b1, [{ menuItemId: v.item("Tarta"), quantity: "1", hold: true }]),
-      );
-      const cake = await lineOn(b1, "Tarta");
-
-      const error = await refusedWithNoRowChanged(() =>
-        splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, cake.id)] }),
-      );
-
-      expect(error).toMatchObject({
-        code: "tab.split_held_line",
-        params: { tabId: b1, lineNo: cake.lineNo },
-      });
-    });
-
     describe("a pending payment", () => {
       const pending = (billId: string) =>
         v.db.run(

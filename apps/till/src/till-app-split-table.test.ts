@@ -2445,7 +2445,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       const longBill = Array.from({ length: 16 }, (_, index) => dish(`dish-${index}`, index + 1));
       const el = await refusedOn(
         "b2",
-        { code: "tab.split_held_line" },
+        { code: "tab.not_open", tabId: "b2" },
         {
           getSplitSources: vi.fn().mockResolvedValue({
             partyRevision: 3,
@@ -2527,19 +2527,6 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         await pressSplit(el);
 
         expect(api.getBillBalance!.mock.calls.length).toBeGreaterThan(balances);
-      });
-
-      it("tab.split_held_line says its own sentence and reads the sources alone", async () => {
-        const el = await panelWith(refused({ code: "tab.split_held_line", tabId: "b2" }));
-        await tick(el, "b2");
-        const before = reads();
-        await pressSplit(el);
-
-        expect(said(el)).toBe(t("table.split_held_error"));
-        expect(banner(el)).toBeNull();
-        const after = reads();
-        expect(after.sources).toBeGreaterThan(before.sources);
-        expect(after.bills).toBe(before.bills);
       });
 
       it("sale.total_exceeds_simplified_limit says its words and reads nothing", async () => {
@@ -3535,7 +3522,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
     describe("a failed re-read after a refusal", () => {
       it("reopens with the last rows and Split enabled", async () => {
-        const el = await panelWith(refused({ code: "tab.split_held_line", tabId: "b2" }));
+        const el = await panelWith(refused({ code: "tab.not_open", tabId: "b2" }));
         await tick(el, "b2");
         api.getSplitSources!.mockRejectedValue(new TypeError("Failed to fetch"));
         await pressSplit(el);
@@ -3543,7 +3530,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(picker(el)).not.toBeNull();
         expect(tickBox(el, "b2").checked).toBe(true);
         expect(splitButton(el).disabled).toBe(false);
-        expect(said(el)).toBe(t("table.split_held_error"));
+        expect(said(el)).toBe(changedWords("Bill 2"));
         expect(bottom(el).error).toBe("");
       });
     });

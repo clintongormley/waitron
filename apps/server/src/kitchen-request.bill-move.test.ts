@@ -322,28 +322,4 @@ describe("A773 requested lifecycle: bill move", () => {
       expect(await jobCount(tx)).toBe(jobs);
     });
   });
-
-  it("still refuses to split off a dish the kitchen holds outside a held group", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
-        { ...dish(venue, "burger"), hold: true },
-      ]);
-      const [held] = await linesOf(tx, venue.party.tabId);
-      expect(await itemOf(tx, held!.id)).toMatchObject({ requestedAt: null, firedAt: null });
-
-      await expect(
-        splitBill(
-          tx,
-          venue.cfg,
-          venue.party.tabId,
-          [{ lineNo: held!.lineNo }],
-          await command(tx, venue),
-        ),
-      ).rejects.toMatchObject({
-        code: "tab.split_held_line",
-        params: { tabId: venue.party.tabId, lineNo: held!.lineNo },
-      });
-    });
-  });
 });

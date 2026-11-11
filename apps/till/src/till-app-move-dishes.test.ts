@@ -396,17 +396,6 @@ describe("A803 move dishes app:", () => {
     },
   );
 
-  it("tab.split_held_line shows the held-dish sentence", async () => {
-    const { el, order } = await open({
-      moveDishes: vi.fn().mockRejectedValue({ code: "tab.split_held_line", status: 409 }),
-    });
-
-    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
-    await flush(el, 6);
-
-    expect(bannerText(el)).toContain(t("table.split_held_error"));
-  });
-
   it("service_zone.mode_incompatible says the two bills are served differently", async () => {
     const { el, order } = await open({
       moveDishes: vi.fn().mockRejectedValue({ code: "service_zone.mode_incompatible" }),

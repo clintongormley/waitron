@@ -135,10 +135,10 @@ describe("a refusal's own reads have a time limit", () => {
     await saysOnlyAtTheLimit(el, LIMIT, t("table.error"));
   });
 
-  it("tab.split_held_line with its rows' read never answering says its own words at the limit, and the old rows stay", async () => {
-    const el = await billTwoTicked(refusedWith({ code: "tab.split_held_line" }));
+  it("tab.not_open with its rows' read never answering says the changed bill at the limit, and the old rows stay", async () => {
+    const el = await billTwoTicked(refusedWith({ code: "tab.not_open", tabId: "b2" }));
     api.getSplitSources!.mockReset().mockImplementation(never);
-    await saysOnlyAtTheLimit(el, LIMIT, t("table.split_held_error"));
+    await saysOnlyAtTheLimit(el, LIMIT, fill(t("table.split_changed"), { bill: "Bill 2" }));
     expect(takes(el)).toContain("20.00");
     await expectPressCarriesTheRows(el, { "20.00": 3 });
   });
@@ -407,7 +407,7 @@ describe("a refusal's own reads have a time limit", () => {
   });
 
   it("a late rows answer writes nothing: the rows on screen stay, and a press carries them", async () => {
-    const el = await billTwoTicked(refusedWith({ code: "tab.split_held_line" }));
+    const el = await billTwoTicked(refusedWith({ code: "tab.not_open", tabId: "b2" }));
     const rowsRead = held<SplitSources>();
     api.getSplitSources!.mockReset().mockImplementationOnce(rowsRead.read);
     api.getSplitSources!.mockResolvedValue(rowsAt(3, "20.00"));

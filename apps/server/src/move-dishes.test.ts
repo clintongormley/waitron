@@ -1196,18 +1196,6 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     });
   });
 
-  it("A803 move dishes refuses: to a new bill, a dish the kitchen holds outside a held group is tab.split_held_line", async () => {
-    const p = await party([dish("Caña")]);
-    await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, p.bill1, [{ menuItemId: v.item("Tarta"), quantity: "1", hold: true }]),
-    );
-    const cakeLine = (await dishIds(p.bill1)).at(-1)!;
-    await refused(() => move(p.partyId, p.bill1, null, [cakeLine]), "tab.split_held_line", {
-      tabId: p.bill1,
-      lineNo: await lineNoOf(p.bill1, cakeLine),
-    });
-  });
-
   it("A803 move dishes refuses: another person's unsent dishes on the destination are draft.taken_over naming them", async () => {
     const p = await party([dish("Caña")]);
     const [beerLine] = await dishIds(p.bill1);

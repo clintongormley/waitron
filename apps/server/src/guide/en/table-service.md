@@ -343,9 +343,13 @@ request for …**), **Split a table** (when the party sits at more than one tabl
 with, opens beside the order, and **Back** closes it.
 
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
-receiving party's next numbers. To put two bills together, use **Merge bills**. If another till
-merges the bill on your screen into another bill, or moves it to another table, your screen
-switches to another of the table's bills, when one is left, and says so,
+receiving party's next numbers. To put two bills together, open the bill that should receive the
+other and choose **Merge bills**. The receiving bill can have taken a part payment; the bill you
+add must have no payments. If you move the table's last bill away, the till stays at the table
+with a fresh empty bill.
+
+If another till merges the bill on your screen into another bill, or moves it to another table,
+your screen switches to another of the table's bills and says so,
 such as **Bill 2 is no longer at this table. Now showing Bill 1.** Dishes you had added to the bill
 that went and not sent are not moved onto the bill now shown: they are listed under **Your changes
 have not been saved.**, with **Discard changes** and **Update the order**. A bill paid on another
@@ -410,10 +414,8 @@ Some ticks are grey, with the reason under the dish:
 Under **Move to**, choose where the dishes go: one of the table's other open bills, or **+ New
 bill**. A bill that has already taken a payment simply owes more afterwards. **Move** stays quiet until you have ticked a dish and chosen where it goes.
 After the move, a new bill is put on screen; moving onto another bill leaves this one on screen.
-Each dish keeps its course and stays sent, fired or served as it was. If the till says **Send held
-items to the kitchen before moving them to another bill**, send them first, or move them onto one of
-the table's other bills instead. Moving the last unpaid dishes off a part-paid bill leaves it paid
-in full, and its invoice is issued.
+Each dish keeps its course and stays sent, fired or served as it was. Moving the last unpaid
+dishes off a part-paid bill leaves it paid in full, and its invoice is issued.
 
 If someone pays a dish on another till while the panel is open, its row turns **Paid** when the
 till next reads the bill, and that dish drops out of what you picked. If you tap **Move** before

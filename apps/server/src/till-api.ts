@@ -608,7 +608,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_joined": 409,
   "table.not_shared": 409,
   "tab.transfer_modifier_line": 400,
-  "tab.split_held_line": 400,
   "tab.portions_too_many": 400,
   "party.not_open": 409,
   "party.not_found": 404,

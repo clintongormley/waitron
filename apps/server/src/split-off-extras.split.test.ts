@@ -148,28 +148,6 @@ describe("splitting a dish with split-off extras", () => {
     },
   );
 
-  it("refuses to split a whole water whose course holds its chips record", async () => {
-    const venue = await setupSplitExtrasVenue();
-    const courseId = await withTransaction(db, async (tx) => {
-      const course = await createCourse(tx, { name: "Later", displayOrder: 2 });
-      await setProductCourse(tx, venue.products.water, course.id);
-      return course.id;
-    });
-    await withTransaction(db, (tx) =>
-      addTabRound(tx, venue.cfg, venue.party.tabId, [
-        { ...picked(venue, "water", "1"), courseId, hold: true },
-      ]),
-    );
-    await expect(
-      withTransaction(db, (tx) =>
-        splitPartyBill(tx, venue.cfg, venue.party.tabId, [{ lineNo: 1 }]),
-      ),
-    ).rejects.toMatchObject({
-      code: "tab.split_held_line",
-      params: { tabId: venue.party.tabId, lineNo: 1 },
-    });
-  });
-
   it("a whole burger transferred between bills tells Grill and Fryer when the party moves to another table", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, (tx) =>

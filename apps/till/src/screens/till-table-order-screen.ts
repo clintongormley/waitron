@@ -6370,7 +6370,6 @@ export class TillTableOrderScreen extends LitElement {
       ...keeps.whole.map(({ bill }) => billLabel(bill)),
       ...keeps.rest.map(({ bill }) => fill(t("table.split_rest_of"), { bill: billLabel(bill) })),
     ];
-    // The server makes a staying party a bill only when one leaves it, so with none it has none.
     const keepsLine =
       sources.length === 0 || leftWithNothingToPay(sources, this.splitPicks, this.#anyBillPaid())
         ? fill(t("table.split_nothing_to_pay"), { table: kept })

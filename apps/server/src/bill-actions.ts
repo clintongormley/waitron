@@ -160,8 +160,6 @@ async function requireUntouchedPair(
 /**
  * Put the chosen items of an open bill on a new bill of the same party, or a new counter order when
  * the bill has none. A partly paid bill may be split; the items paid for stay (`bill.line_paid`).
- * A dish in a held group may be split off, keeping its group, and fires with it; a dish the kitchen
- * holds outside a held group is refused `tab.split_held_line`.
  */
 export async function splitBill(
   tx: Transaction,
@@ -194,7 +192,6 @@ export async function splitBill(
     );
   const before = await readSentWork(tx, billId);
   const { splitFrom } = await carveOffLines(tx, cfg, billId, newBillId, transfers, {
-    refuseHeld: true,
     actorId: command.operatorId,
   });
   await bumpRevision(tx, [billId, newBillId]);
@@ -311,7 +308,6 @@ export async function transferItems(
 
   const before = await readSentWork(tx, fromBillId);
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {
-    refuseHeld: false,
     actorId: command.operatorId,
   });
   await bumpRevision(tx, [fromBillId, toBillId]);
@@ -363,8 +359,7 @@ export async function resolveMoveLines(
  * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
  * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received. An
- * existing destination may hold payments and owes more afterwards. To a new bill, a dish the kitchen holds outside a held
- * group is refused `tab.split_held_line`, as `splitBill` refuses it.
+ * existing destination may hold payments and owes more afterwards.
  */
 export async function moveDishes(
   tx: Transaction,
@@ -418,7 +413,6 @@ export async function moveDishes(
   }
   const before = await readSentWork(tx, fromBillId);
   const splitFrom = await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
-    refuseHeld: toBillId === null,
     actorId: command.operatorId,
   });
   await assertBillInvariant(tx, [fromBillId]);
@@ -437,7 +431,7 @@ export async function moveCheckedDishes(
   fromBillId: string,
   toBillId: string,
   transfers: Transfers,
-  options: { refuseHeld: boolean; actorId: string },
+  options: { actorId: string },
 ): Promise<Map<string, string>> {
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
   await bumpRevision(tx, [fromBillId, toBillId]);

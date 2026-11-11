@@ -396,7 +396,6 @@ export async function splitTable(
     newBill = await insertPartyBill(tx, cfg, newParty);
     for (const { billId, transfers } of looseMoves) {
       const splitFrom = await moveCheckedDishes(tx, cfg, billId, newBill, transfers, {
-        refuseHeld: true,
         actorId: options.operatorId,
       });
       carved.push({ billId, splitFrom });

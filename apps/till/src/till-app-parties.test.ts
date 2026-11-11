@@ -3895,18 +3895,27 @@ describe("till-app: moving a bill", () => {
     ).toBe(t("refresh.held_after_move"));
   });
 
-  it("goes back to the floor when the moved bill was the party's last", async () => {
+  it("stays at the table with the fresh empty bill after moving its last bill", async () => {
     const bills = vi.fn().mockResolvedValue([tabBill]);
     const { el } = await mountApp({ getPartyBills: bills });
     const order = await openPartyTable(el);
-    bills.mockResolvedValue([]);
+    const replacement = {
+      ...checkBill,
+      workingOrderId: "wo-empty",
+      total: "0.00",
+      outstanding: "0.00",
+    };
+    bills.mockResolvedValue([replacement]);
+    vi.mocked(api.getTabLines).mockResolvedValue({ lines: [], revision: 0 });
 
     emit(order, "move-bill", { to: { counter: true } });
     await flush(el);
 
     expect(api.moveBill).toHaveBeenCalledOnce();
-    expect(tableOrder(el)).toBeNull();
-    expect(floor(el)).not.toBeNull();
+    expect(tableOrder(el)!.orderId).toBe("wo-empty");
+    expect(tableOrder(el)!.bills).toEqual([replacement]);
+    expect(tableOrder(el)!.lines).toEqual([]);
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-empty");
   });
 
   it("sends that it read a free table free, and stays with the party", async () => {
@@ -4225,7 +4234,7 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     expect(newOrderRefusesPaid(el)).toEqual({ billStatus: "settled", locked: true, lines: 0 });
   });
 
-  it("no bill survives: the screen says so, offers no New order and makes no bill", async () => {
+  it("a successful read with no bill returns to the floor and makes no bill", async () => {
     const createPartyBill = vi.fn();
     const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
     const el = await onBillTwo(bills, { createPartyBill });
@@ -4235,10 +4244,8 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     await flush(el);
 
-    expect(tableOrder(el)!.orderId).toBeUndefined();
-    expect(tableOrder(el)!.lines).toEqual([]);
-    expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
-    expect(tableOrder(el)!.draftStore).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
     expect(createPartyBill).not.toHaveBeenCalled();
   });
 
@@ -4977,60 +4984,6 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
           vi.useRealTimers();
         }
       });
-
-      it("I2: Send all whose save is still out when the 15-second re-read finds no bill left to show says the dish was not sent", async () => {
-        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-        try {
-          let holding = false;
-          let refuse: ((error: unknown) => void) | undefined;
-          const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
-          const el = await onBillTwo(bills, {
-            saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
-              if (holding && args[1].billId === "wo-check")
-                return new Promise((_, reject) => (refuse = reject));
-              return drafts.saveDraft(...args);
-            }),
-          });
-          const store = partyDraft(tableOrder(el)!);
-          holding = true;
-          store.addProduct(dish, "1");
-          await flush(el);
-          emit(tableOrder(el)!, "submit-draft", {
-            lines: [{ menuItemId: "flan", quantity: "1" }],
-            groups: [{ release: "fire", lineIndexes: [0] }],
-            store,
-            sent: store.lines.slice(0, 1),
-          });
-          await flush(el, 6);
-          expect(refuse).toBeDefined();
-          bills.mockResolvedValue([]);
-
-          await vi.advanceTimersByTimeAsync(15_000);
-          await flush(el, 6);
-          refuse!({ code: "tab.not_open", status: 409, tabId: "wo-check" });
-          await flush(el, 6);
-
-          expect(tableOrder(el)!.orderId).toBeUndefined();
-          expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
-          expect(api.submitDraft).not.toHaveBeenCalled();
-          expect(banner(el)!.textContent).toContain(t("table.error"));
-        } finally {
-          vi.useRealTimers();
-        }
-      });
-
-      it("I2: a dish refused on a bill another till merged away, with no bill left to show, says the save was refused", async () => {
-        const { el, merge } = await onBillTwoMergedLater(undefined, []);
-        merge();
-
-        partyDraft(tableOrder(el)!).addProduct(dish, "1");
-        await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
-        await flush(el, 6);
-
-        expect(tableOrder(el)!.orderId).toBeUndefined();
-        expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
-        expect(banner(el)!.textContent).toContain(t("table.error"));
-      });
     });
 
     describe("LOOK fix review 3: a dish refused during this till's own Move this bill", () => {
@@ -5056,20 +5009,6 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
         await flush(el, 6);
         return el;
       }
-
-      it("I1: with no bill left to show, the move's own read ends on no bill and the dish's refusal is said", async () => {
-        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-        try {
-          const el = await moveRefusedAfterMerge([]);
-
-          expect(tableOrder(el)!.orderId).toBeUndefined();
-          expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
-          expect(tableOrder(el)!.retainedDraft ?? null).toBeNull();
-          expect(banner(el)?.textContent ?? "").toContain(t("table.error"));
-        } finally {
-          vi.useRealTimers();
-        }
-      });
 
       it("I1: with a bill left to show, the move's own read keeps the dish for review and says nothing", async () => {
         vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });

@@ -4758,11 +4758,7 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * source's context onto a new order. Every transfer is validated before anything moves. A partial
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
- * the part split, and refused the same when an extra is not a whole count a dish. With
- * `refuseHeld`, a line whose own or split-off extra's ticket item is held (neither fired nor
- * requested) is refused
- * `tab.split_held_line` unless its group is held: firing a group fires its lines on whichever bills
- * they are on. Returns each
+ * the part split, and refused the same when an extra is not a whole count a dish. Returns each
  * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
  * by the row it came from, a dish before its extras.
  */
@@ -4772,7 +4768,7 @@ export async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { refuseHeld: boolean; splitExtras?: boolean; actorId?: string },
+  opts: { splitExtras?: boolean; actorId?: string },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
   return carveLines(tx, cfg, fromTabId, toTabId, transfers, opts);
 }
@@ -4783,7 +4779,7 @@ async function carveLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { refuseHeld: boolean; splitExtras?: boolean; splitIntoUnits?: boolean; actorId?: string },
+  opts: { splitExtras?: boolean; splitIntoUnits?: boolean; actorId?: string },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
@@ -4818,15 +4814,11 @@ async function carveLines(
       creditedTo: workingOrderLines.creditedTo,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       ticketItemId: ticketItems.id,
-      ticketFiredAt: ticketItems.firedAt,
-      ticketRequestedAt: ticketItems.requestedAt,
-      groupState: orderGroups.state,
       orderNumber: workingOrders.orderNumber,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
   const sourceLines = sourceRows.map((l) => ({
@@ -4868,17 +4860,6 @@ async function carveLines(
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
     const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
-    if (
-      opts.refuseHeld &&
-      line.groupState !== "held" &&
-      [line, ...childLineNos.map((lineNo) => byLineNo.get(lineNo)!)].some(
-        (row) =>
-          row.ticketItemId !== null &&
-          initiatedAt({ requestedAt: row.ticketRequestedAt, firedAt: row.ticketFiredAt }) === null,
-      )
-    ) {
-      throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });
-    }
     if (t.quantity === undefined) {
       wholeLineNos.push(t.lineNo, ...childLineNos);
       continue;
@@ -5167,7 +5148,6 @@ export async function splitLinesWithinOrder(
   opts: { splitExtras?: boolean } = {},
 ): Promise<Map<string, SplitRow>> {
   const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, splits, {
-    refuseHeld: false,
     ...opts,
   });
   for (const [sourceId, split] of splitLines) await copyRecalledSplit(tx, sourceId, split.id);
@@ -5181,7 +5161,6 @@ export async function splitUnitsWithinOrder(
   lineNo: number,
 ): Promise<void> {
   await carveLines(tx, cfg, orderId, orderId, [{ lineNo, quantity: "1" }], {
-    refuseHeld: false,
     splitIntoUnits: true,
   });
 }
