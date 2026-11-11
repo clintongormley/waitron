@@ -45,7 +45,7 @@ async function setupVenue(): Promise<Record<Role, Signed>> {
         country: "ES",
         taxId: `${nif}K`,
         legalName: "Certificate Test SL",
-        name: "Sala",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",

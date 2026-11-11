@@ -129,7 +129,7 @@ async function setupVenue(): Promise<Venue> {
         country: "ES",
         taxId: nifWithControlLetter(62_000_000 + taxIds),
         legalName: "Servido SL",
-        name: "Sala",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Restaurante",

@@ -183,7 +183,7 @@ async function setupTenant(): Promise<void> {
         country: "ES",
         taxId: "76000001K",
         legalName: "Deli Test SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
