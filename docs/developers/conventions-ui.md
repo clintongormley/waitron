@@ -1093,6 +1093,11 @@ same file, and "a returning disabled device" in
 `apps/server/src/join-requests.test.ts`. Built in W105b.
 
 
+Print-agent Delete/Add follows [the design-system contract](design-system.md#switching-off-versus-deleting). Guards: the agent
+Delete/Add cases in dashboard `printers-screen.test.ts`, the retained-token/queued-work case in
+`apps/server/src/print-api.test.ts`, Allow in `print-api.printer-wiring.test.ts` and revoked
+self-enrolment in `join-requests.test.ts`.
+
 ## Native centring starts inside the configured paper width
 
 Set the ESC/POS left margin to zero and the print area to the width the job's pictures are drawn to

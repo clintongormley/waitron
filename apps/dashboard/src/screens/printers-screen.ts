@@ -912,10 +912,8 @@ export class PrintersScreen extends LitElement {
   /** Which of the Used by reads have answered: until both have, no usage does not mean none. */
   @state() private usageRead: ReadonlySet<"profiles" | "stations"> = new Set();
 
-  @state() private armedRevokeId: string | null = null;
-
-  // Separate from `armedRevokeId`, so arming one agent's Enable does not disarm another's Disable.
-  @state() private armedAllowId: string | null = null;
+  @state() private deletingAgent: PrintAgentRow | null = null;
+  #agentDeleteOpener: HTMLElement | null = null;
 
   // Pairing is venue-wide; challenges stay cached because each request's numbers are fixed.
   @state() private pairing: PairingModeState | undefined;
@@ -1095,8 +1093,6 @@ export class PrintersScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.refreshErrorKey = null;
-    this.armedRevokeId = null;
-    this.armedAllowId = null;
     this.armedDenyId = null;
     await this.#watchLists();
   }
@@ -1176,8 +1172,6 @@ export class PrintersScreen extends LitElement {
   }
 
   async #reloadAgents(): Promise<void> {
-    this.armedRevokeId = null;
-    this.armedAllowId = null;
     this.agents = await this.api.listAgents();
   }
 
@@ -1193,6 +1187,7 @@ export class PrintersScreen extends LitElement {
 
   #stopAgentModal(): void {
     if (!this.addingAgent) return;
+    this.errorKey = null;
     this.addingAgent = false;
     this.#agentEpoch++;
     this.#agentReadInFlight = false;
@@ -1292,33 +1287,28 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  // ── Agents: disable ──────────────────────────────────────────────────────────────────────────────
-
-  #onRevokeAgent(id: string): void {
-    if (this.armedRevokeId === id) {
-      this.armedRevokeId = null;
-      void this.#revokeAgent(id);
-      return;
-    }
-    this.armedRevokeId = id;
-  }
-
   async #revokeAgent(id: string): Promise<void> {
-    await this.#mutate(() => this.api.revokeAgent(id));
-  }
-
-  /** Two clicks, so a single accidental one cannot turn a disabled agent back on. */
-  #onAllowAgent(id: string): void {
-    if (this.armedAllowId === id) {
-      this.armedAllowId = null;
-      void this.#allowAgent(id);
-      return;
+    this.submitting = true;
+    await this.#mutate(async () => {
+      await this.api.revokeAgent(id);
+      this.deletingAgent = null;
+      await this.updateComplete;
+      this.#tabAction("open-add-agent")?.focus();
+    });
+    this.submitting = false;
+    if (this.deletingAgent === null) {
+      await this.updateComplete;
+      this.#tabAction("open-add-agent")?.focus();
     }
-    this.armedAllowId = id;
   }
 
   async #allowAgent(id: string): Promise<void> {
-    await this.#mutate(() => this.api.allowAgent(id));
+    this.submitting = true;
+    await this.#mutate(async () => {
+      await this.api.allowAgent(id);
+      await this.#closeModal("new-agent-modal");
+    });
+    this.submitting = false;
   }
 
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
@@ -2133,8 +2123,6 @@ export class PrintersScreen extends LitElement {
   // ── Renderers ────────────────────────────────────────────────────────────────────────────────────
 
   #agentActions(agent: PrintAgentRow): TemplateResult {
-    const revokeArmed = this.armedRevokeId === agent.id;
-    const allowArmed = this.armedAllowId === agent.id;
     return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: agent.name })}>
       <wt-button
         data-test=${`edit-agent-${agent.id}`}
@@ -2146,26 +2134,16 @@ export class PrintersScreen extends LitElement {
         }}
         >${t("action.edit")}</wt-button
       >
-      ${
-        agent.active
-          ? html`<wt-button
-              variant="danger"
-              data-keep-open
-              data-test=${`revoke-agent-${agent.id}`}
-              data-armed=${revokeArmed ? "true" : nothing}
-              @click=${() => this.#onRevokeAgent(agent.id)}
-            >
-              ${revokeArmed ? t("printers.agent_disable_confirm") : t("printers.disable")}
-            </wt-button>`
-          : html`<wt-button
-              data-keep-open
-              data-test=${`allow-agent-${agent.id}`}
-              data-armed=${allowArmed ? "true" : nothing}
-              @click=${() => this.#onAllowAgent(agent.id)}
-            >
-              ${allowArmed ? t("printers.agent_enable_confirm") : t("printers.agent_enable")}
-            </wt-button>`
-      }
+      <wt-button
+        variant="danger"
+        data-test=${`revoke-agent-${agent.id}`}
+        @click=${(event: Event) => {
+          this.#agentDeleteOpener = this.#rowMenuButton(event.currentTarget as HTMLElement) ?? null;
+          this.errorKey = null;
+          this.deletingAgent = agent;
+        }}
+        >${t("action.delete")}</wt-button
+      >
     </dashboard-row-actions>`;
   }
 
@@ -2289,26 +2267,6 @@ export class PrintersScreen extends LitElement {
           ${a.nodeId !== null ? html` <span part="printer-provenance" data-test=${`agent-provenance-${a.id}`}>${t("printers.provenance_self")}</span>` : nothing}`,
       },
       {
-        key: "status",
-        choosable: "shown",
-        label: t("printers.status"),
-        cell: (a) =>
-          html`<span data-test=${`agent-status-${a.id}`}
-            >${a.active ? t("printers.agent_status_active") : t("printers.agent_status_disabled")}</span
-          >`,
-        filter: {
-          preserveOrder: true, // Active before disabled.
-          label: t("printers.status"),
-          allLabel: t("printers.filter_all"),
-          initial: "active",
-          value: (a) => (a.active ? "active" : "disabled"),
-          options: [
-            { value: "active", label: t("printers.agent_status_active") },
-            { value: "disabled", label: t("printers.agent_status_disabled") },
-          ],
-        },
-      },
-      {
         key: "lastSeen",
         choosable: "shown",
         label: t("printers.last_seen"),
@@ -2347,13 +2305,13 @@ export class PrintersScreen extends LitElement {
         filtersClearAllLabel=${t("table.filters_clear_all")}
         filtersCloseLabel=${t("table.filters_close")}
         aria-label=${t("printers.agents_title")}
-        .rows=${this.agents}
+        .rows=${this.agents.filter((agent) => agent.active)}
         .columns=${columns}
         .rowKey=${(a: PrintAgentRow) => a.id}
         .loading=${this.loading}
         .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_agents")}
-        >${this.agents.length === 0 ? this.#renderAddAgent("empty-action") : nothing}</wt-data-table
+        >${this.agents.every((agent) => !agent.active) ? this.#renderAddAgent("empty-action") : nothing}</wt-data-table
       >
     </section>`;
   }
@@ -2370,6 +2328,29 @@ export class PrintersScreen extends LitElement {
       @wt-close=${() => this.#stopAgentModal()}
     >
       ${this.#renderRefreshError()}
+      ${
+        this.agents.some((agent) => !agent.active)
+          ? html`<section data-test="retained-agents">
+              <h3>${t("printers.saved_agents")}</h3>
+              <p>${t("printers.add_agent_retained_hint")}</p>
+              ${this.agents
+                .filter((agent) => !agent.active)
+                .map(
+                  (agent) =>
+                    html`<p data-test=${`retained-agent-${agent.id}`}>
+                      ${agent.name}${agent.nodeId !== null ? html` · ${t("printers.provenance_self")}` : nothing}
+                      <wt-button
+                        variant="primary"
+                        data-test=${`allow-agent-${agent.id}`}
+                        ?disabled=${this.submitting}
+                        @click=${() => void this.#allowAgent(agent.id)}
+                        >${t("action.add")}</wt-button
+                      >
+                    </p>`,
+                )}
+            </section>`
+          : nothing
+      }
       <p class="hint">${t("printers.agent_setup_hint")}</p>
       <ol class="setup-steps">
         <li>${t("printers.agent_step_open")}</li>
@@ -2405,6 +2386,29 @@ export class PrintersScreen extends LitElement {
         ></wt-form-actions
       >
     </wt-modal>`;
+  }
+
+  #renderDeleteAgent(): TemplateResult | typeof nothing {
+    if (this.deletingAgent === null) return nothing;
+    const agent = this.deletingAgent;
+    return html`<wt-delete-dialog
+      data-test="delete-agent-modal"
+      .open=${true}
+      .impact=${{ target: { id: agent.id, name: agent.name }, refusals: [], ends: [], removes: [] }}
+      .submitting=${this.submitting}
+      .actionError=${this.errorKey ? codeMessage(this.errorKey) : ""}
+      .copy=${{ ...printerDeleteCopy(), heading: t("printers.delete_agent_heading"), irreversible: t("printers.delete_agent_hint") }}
+      .opener=${this.#agentDeleteOpener}
+      @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+        event.stopPropagation();
+        void this.#revokeAgent(event.detail.id);
+      }}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.deletingAgent = null;
+        this.errorKey = null;
+      }}
+    ></wt-delete-dialog>`;
   }
 
   #renderEditAgent(): TemplateResult | typeof nothing {
@@ -4715,6 +4719,7 @@ export class PrintersScreen extends LitElement {
   get #dialogShowsRefreshError(): boolean {
     return (
       this.addingAgent ||
+      this.deletingAgent !== null ||
       this.addingPrinter ||
       this.editingAgent !== null ||
       this.editingPrinter !== null ||
@@ -4750,7 +4755,7 @@ export class PrintersScreen extends LitElement {
           : html`${this.#renderTestPageSent()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

@@ -45,10 +45,18 @@ After importing a configuration, find its A4 printers with **Add a printer** and
 
 ## Print Queue {#print-queue}
 
-Open **Print Queue** to see why a job is waiting. If no print agent sees a USB or Bluetooth
+Open **Print Queue** to see why a job is waiting. To add or remove a computer that prints, see [Print agents](printers.md#print-agents). If no print agent sees a USB or Bluetooth
 printer, check the printer connection and its print agent. A connection message can appear
 alongside the last reported printing error.
 
 Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, check the printer’s
 power and connection, then use **Open drawer** if you still need it open. If no result was
 reported, check whether the drawer opened before opening it again.
+
+## Print agents {#print-agents}
+
+In **Printers**, open **Print Agents** and choose **Delete** in the agent's menu. Printers reached only through this agent cannot print until you add it again; they stay listed.
+
+To use an agent you still trust, choose **Add an agent** and **Add** beside its saved name, including the agent on this box. Jobs still queued for it may print when it returns.
+
+To add a different agent, follow the setup steps in **Add an agent** and match its number. After pairing a new agent, find and add its A4 printers again.

@@ -456,6 +456,19 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     },
   );
 
+  it("renders the agent Delete confirmation accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=revoke-agent-a1]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=delete-agent-modal]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the open pairing window accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",

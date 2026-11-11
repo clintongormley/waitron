@@ -5581,8 +5581,7 @@ removing a product from a menu removes that offer.
 
 ### Switching off versus deleting
 
-Something switched off but kept — an options or extras list, a user, a printer, a print
-agent or a card reader — is switched off with **Disable** (options and extras lists
+Something switched off but kept — an options or extras list, a user or a card reader — is switched off with **Disable** (options and extras lists
 are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** permanently removes a record from current use, and **Remove** for taking a row out of a list or a link off a record,
@@ -5591,7 +5590,7 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
 screen uses: **Activo** or **Deshabilitado** for a usuario,
-lector or agente; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
+lector; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
@@ -5659,6 +5658,13 @@ With only products selected, the bulk action reads Archive and is absent when ev
 product is already archived. With a category selected it reads Delete: the category is deleted,
 and its contents are moved or archived according to the dialog's answer. Products selected
 directly are archived in either case.
+
+Print agents offer **Delete** in the row menu and keep only active agents in the main list, with
+no lifecycle status column/filter. The shared Delete confirmation explains that printers reached only
+through this agent cannot print until it returns, and queued work may resume then. **Add an agent**
+offers retained trusted agents by saved name, including this box's agent, before the fresh-pairing
+steps. Fresh pairing creates a new identity and its A4 printers need rediscovery; self-enrolment
+does not reverse Delete.
 
 ### Products: Active and Available are two different words
 
@@ -6794,8 +6800,8 @@ refused. It becomes dangerous only when ready, or while its own write is pending
 After deletion, the target disappears from current choices and its open editors close. A stale id
 cannot open or save its configuration. Internal receipt printing keeps the deleted department's
 recorded receipt settings and media; image usage names that department without linking to its editor.
-Closed today and opening hours keep their own actions. Card readers and print agents keep
-Disable and Enable until their hardware Delete/Add slices land.
+Closed today and opening hours keep their own actions. Card readers keep Disable and Enable
+until their hardware Delete/Add slice lands.
 
 Individual tables follow the floor plan editor's contract: Delete, after a confirmation, has Undo
 until Save. Saving a layout preserves today's deferred removal rules. See the

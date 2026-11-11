@@ -15,7 +15,6 @@ import {
 } from "../widgets/test-helpers.js";
 import {
   chooseOption as pickOption,
-  expectFiltersFirst,
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
@@ -44,7 +43,7 @@ import {
   SCAN_LISTEN_MS,
   SCAN_POLL_MS,
 } from "./printers-screen.js";
-import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
+import { LiveData } from "@waitron/dashboard-kit";
 import { formatEquipmentCode, type DeleteImpact } from "@waitron/shared";
 import { decodeQrImage } from "../testing/decode-qr.js";
 
@@ -412,12 +411,6 @@ function timeSentence(sentence: Element | null): { text: string; at: string | nu
     text: copy.textContent!.replace(/\s+/g, " ").trim(),
     at: sentence!.querySelector("wt-relative-time")?.getAttribute("datetime") ?? null,
   };
-}
-async function filterAgents(el: PrintersScreen, value: string): Promise<void> {
-  const table = q(el, '[data-test="agents-table"]')!;
-  const select = table.shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
-  await pickOption(select, value === "all" ? "" : value);
-  await flush(el);
 }
 async function selectTab(el: PrintersScreen, key: string): Promise<void> {
   q(el, "wt-tabs")!.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
@@ -1067,23 +1060,6 @@ describe("printer configuration tabs", () => {
     expect(q(el, '[data-test="open-add-printer"]')!.checkVisibility()).toBe(false);
   });
 
-  it("says the dashboard's one no-matches sentence when the status filter hides every printer and agent", async () => {
-    const api = stubApi({
-      listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, active: false }]),
-      listAgents: vi.fn().mockResolvedValue([{ ...agents[0]!, active: false }]),
-    });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    for (const [tab, id] of [["agents", "agents-table"]] as const) {
-      await selectTab(el, tab);
-      const table = q(el, `[data-test="${id}"]`)!;
-      expect(table.shadowRoot!.querySelector("tbody"), id).toBeNull();
-      expect(table.shadowRoot!.querySelector(".empty .message")!.textContent, id).toBe(
-        tableNoMatches(),
-      );
-    }
-  });
-
   it("puts Add printer under the empty printer table's sentence, opening the same search", async () => {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -1458,7 +1434,7 @@ describe("the Agents tab at phone width", () => {
       name: "Kitchen print agent for the large kitchen",
       host: "kitchen-service.local",
     },
-    ...agents.slice(1),
+    ...agents.slice(1).map((agent) => ({ ...agent, active: true })),
   ];
   it.each(["en-GB", "es-ES"])(
     "keeps every agent row's menu on screen and uncovered while the other columns scroll sideways (390 px, %s)",
@@ -1475,7 +1451,7 @@ describe("the Agents tab at phone width", () => {
         });
         await flush(el);
         await selectTab(el, "agents");
-        await filterAgents(el, "all");
+
         expectRowMenusOnScreen(
           q(el, '[data-test="agents-table"]')!,
           phoneAgents.length,
@@ -1546,71 +1522,28 @@ describe("printers-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await filterAgents(el, "all");
 
     expect(api.listAgents).toHaveBeenCalledTimes(1);
     expect(api.listPrinters).toHaveBeenCalledTimes(1);
     expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=agent-row-a1]")).toBeTruthy();
-    expect(q(el, "[data-test=agent-row-a2]")).toBeTruthy();
+    expect(q(el, "[data-test=agent-row-a2]")).toBeNull();
     expect(q(el, "[data-test=printer-row-p1]")).toBeTruthy();
     expect(q(el, "[data-test=printer-row-p2]")).not.toBeNull();
     expect(q(el, "[data-test=job-row-j1]")).toBeTruthy();
     expect(q(el, "[data-test=job-row-j2]")).toBeTruthy();
   });
 
-  it("renders agent name, active status and formatted last-seen (and Never for a never-seen agent)", async () => {
-    const api = stubApi();
+  it("renders agent names and formatted last-seen (and Never for a never-seen agent)", async () => {
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue(agents.map((agent) => ({ ...agent, active: true }))),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await filterAgents(el, "all");
 
     expect(text(el, "[data-test=agent-name-a1]")).toBe("Kitchen agent");
-    expect(text(el, "[data-test=agent-status-a1]")).toBe(
-      t("printers.agent_status_active", "es-ES"),
-    );
     expect(text(el, "[data-test=agent-last-seen-a1]")).toBe("2026-08-25 14:30");
-    // A disabled, never-authenticated agent.
-    expect(text(el, "[data-test=agent-status-a2]")).toBe("Deshabilitado");
     expect(text(el, "[data-test=agent-last-seen-a2]")).toBe(t("printers.last_seen_never", "es-ES"));
-  });
-
-  it("words both tables' status filters' search in the dashboard's language", async () => {
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-    const wording = (testId: string) => {
-      const filter = q(el, `[data-test=${testId}]`)!.shadowRoot!.querySelector<
-        HTMLElementTagNameMap["wt-combobox"]
-      >('[name="status-filter"]')!;
-      return [filter.searchPlaceholder, filter.noResultsLabel];
-    };
-    expect(
-      q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector('[name="status-filter"]'),
-    ).toBeNull();
-    await selectTab(el, "agents");
-    expect(wording("agents-table")).toEqual(["Buscar", "Sin resultados"]);
-  });
-
-  it("filters print agents by status and remembers the choice independently", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-
-    await selectTab(el, "agents");
-    const table = q(el, "[data-test=agents-table]")!;
-    const filter = table.shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
-    expect(filter.value).toBe("active");
-    expect(q(el, "[data-test=agent-row-a1]")).not.toBeNull();
-    expect(q(el, "[data-test=agent-row-a2]")).toBeNull();
-
-    await filterAgents(el, "disabled");
-
-    expect(q(el, "[data-test=agent-row-a1]")).toBeNull();
-    expect(q(el, "[data-test=agent-row-a2]")).not.toBeNull();
-    expect(sessionStorage.getItem("waitron.printers.agents.table")).toContain("disabled");
-    expect(sessionStorage.getItem("waitron.printers.table")).toBeNull();
   });
 
   it.each([
@@ -1618,7 +1551,7 @@ describe("printers-screen", () => {
       tab: "agents",
       table: "agents-table",
       viewKey: "waitron.printers.agents.table",
-      choices: ["host", "status", "lastSeen"],
+      choices: ["host", "lastSeen"],
       hide: "host",
       label: () => t("printers.agent_host"),
     },
@@ -2031,109 +1964,132 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=copy-code]")).toBeNull();
   });
 
-  // ── Agents: disable ──────────────────────────────────────────────────────────────────────────────
-
-  it("does not show a Disable control for an already-disabled agent", async () => {
-    const api = stubApi();
+  it("Deletes an agent only after confirmation, then Adds its trusted identity with the saved name", async () => {
+    const retained = { ...agents[0]!, active: false };
+    let finishReload!: () => void;
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue(agents),
+      revokeAgent: vi.fn(async () => {
+        vi.mocked(api.listAgents).mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishReload = () => resolve([retained, agents[1]!]);
+            }),
+        );
+      }),
+      allowAgent: vi.fn(async () => {
+        vi.mocked(api.listAgents).mockResolvedValue(agents);
+      }),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-
-    expect(q(el, "[data-test=revoke-agent-a1]")).toBeTruthy();
-    expect(q(el, "[data-test=revoke-agent-a2]")).toBeNull();
-  });
-
-  it("words the status, disabling and enabling of a printer and a print agent in English and Spanish", async () => {
-    const before = currentLocale();
-    try {
-      for (const w of [
-        {
-          locale: "en",
-          disable: "Disable",
-          enable: "Enable",
-          printerActive: "Active",
-          printerDisabled: "Disabled",
-          agentActive: "Active",
-          agentDisabled: "Disabled",
-          agentDisableConfirm: "Disable this print agent?",
-          agentEnableConfirm: "Enable this print agent?",
-          hint: "Disabled printer. Enabling it restores its settings, and any jobs still waiting for it can print once it is on.",
-        },
-        {
-          locale: "es-ES",
-          disable: "Deshabilitar",
-          enable: "Habilitar",
-          printerActive: "Activa",
-          printerDisabled: "Deshabilitada",
-          agentActive: "Activo",
-          agentDisabled: "Deshabilitado",
-          agentDisableConfirm: "¿Deshabilitar este agente de impresión?",
-          agentEnableConfirm: "¿Habilitar este agente de impresión?",
-          hint: "Impresora deshabilitada. Al habilitarla se restauran sus ajustes, y los trabajos que sigan pendientes pueden imprimirse cuando esté activa.",
-        },
-      ] as const) {
-        setLocale(w.locale);
-        const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-          api: stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) }),
-        });
-        await flush(el);
-        await filterAgents(el, "all");
-        expect(text(el, "[data-test=agent-status-a1]")).toBe(w.agentActive);
-        expect(text(el, "[data-test=agent-status-a2]")).toBe(w.agentDisabled);
-        expect(text(el, "[data-test=revoke-agent-a1]")).toBe(w.disable);
-        q(el, "[data-test=revoke-agent-a1]")!.click();
-        await el.updateComplete;
-        expect(text(el, "[data-test=revoke-agent-a1]")).toBe(w.agentDisableConfirm);
-        expect(text(el, "[data-test=allow-agent-a2]")).toBe(w.enable);
-        q(el, "[data-test=allow-agent-a2]")!.click();
-        await el.updateComplete;
-        expect(text(el, "[data-test=allow-agent-a2]")).toBe(w.agentEnableConfirm);
-
-        await openDiscovery(el);
-        expect(text(el, "[data-test=register-SN-2]")).toBe(t("action.add"));
-        cleanupWidgets();
-      }
-    } finally {
-      setLocale(before);
-    }
-  });
-
-  it("disables an agent only on the confirming second click, then reloads", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-
+    await selectTab(el, "agents");
+    expect(q(el, "[data-test=agent-row-a2]")).toBeNull();
+    expect(
+      q(el, "[data-test=agents-table]")!.shadowRoot!.querySelector('[name="status-filter"]'),
+    ).toBeNull();
     q(el, "[data-test=revoke-agent-a1]")!.click();
-    await el.updateComplete;
+    await flush(el);
     expect(api.revokeAgent).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=revoke-agent-a1]")).toBe("¿Deshabilitar este agente de impresión?");
-
-    q(el, "[data-test=revoke-agent-a1]")!.click();
+    expect(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!.textContent).toContain(
+      "pendientes",
+    );
+    expect(q(el, "[data-test=delete-cancel]")).not.toBeNull();
+    q(el, "[data-test=delete-confirm]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=delete-agent-modal]")).toBeNull());
+    expect(api.revokeAgent).toHaveBeenCalledExactlyOnceWith("a1");
+    await vi.waitFor(() => expect(finishReload).toBeTypeOf("function"));
+    try {
+      expect(el.shadowRoot!.activeElement).toBe(
+        q(el, '[slot="actions"] [data-test="open-add-agent"]'),
+      );
+    } finally {
+      finishReload();
+    }
+    await vi.waitFor(() => expect(q(el, "[data-test=agent-row-a1]")).toBeNull());
+    await expect
+      .poll(() => el.shadowRoot!.activeElement)
+      .toBe(q(el, '[slot="actions"] [data-test="open-add-agent"]'));
+    q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
-    expect(api.revokeAgent).toHaveBeenCalledWith("a1");
-    expect(api.listAgents).toHaveBeenCalledTimes(2);
+    expect(text(el, "[data-test=retained-agent-a1]")).toContain("Kitchen agent");
+    expect(q(el, "[data-test=allow-agent-a2]")).not.toBeNull();
+    expect(q(el, "[data-test=allow-agent-a1]")!.getAttribute("variant")).toBe("primary");
+    const added = dialogClosed(q(el, "[data-test=new-agent-modal]")!);
+    q(el, "[data-test=allow-agent-a1]")!.click();
+    await vi.waitFor(() => expect(api.allowAgent).toHaveBeenCalledExactlyOnceWith("a1"));
+    await added;
+    await vi.waitFor(() => expect(q(el, "[data-test=retained-agent-a1]")).toBeNull());
+    await expect.poll(() => text(el, "[data-test=agent-name-a1]")).toBe("Kitchen agent");
   });
 
-  it("shows an error and keeps the list when an agent's disable is rejected", async () => {
-    const api = stubApi({ revokeAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
+  it.each([
+    { locale: "en", del: "Delete", title: "Delete print agent?", add: "Add" },
+    { locale: "es-ES", del: "Eliminar", title: "¿Eliminar agente de impresión?", add: "Añadir" },
+  ])("words agent Delete and Add in $locale", async ({ locale, del, title, add }) => {
+    setLocale(locale);
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    expect(text(el, "[data-test=revoke-agent-a1]")).toBe(del);
+    q(el, "[data-test=revoke-agent-a1]")!.click();
+    await flush(el);
+    expect(deepQuery(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!, "h2")!.textContent).toBe(
+      title,
+    );
+    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=allow-agent-a2]")).toBe(add);
+  });
+
+  it("cancels an agent Delete without changing it", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=revoke-agent-a1]")!.click();
+    await flush(el);
+    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
+    expect(api.revokeAgent).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=agent-row-a1]")).not.toBeNull();
+  });
+
+  it("shows an error and keeps the list when an agent's Delete is rejected", async () => {
+    const api = stubApi({
+      revokeAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }),
+      listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
     q(el, "[data-test=revoke-agent-a1]")!.click();
-    await el.updateComplete;
-    q(el, "[data-test=revoke-agent-a1]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=delete-confirm]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
+      false,
+    );
+    q(el, "[data-test=delete-confirm]")!.click();
     await flush(el);
 
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
+    expect(q(el, "[data-test=delete-agent-modal]")).not.toBeNull();
+    expect(q(el, "[data-test=agent-row-a1]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
+    const message = await formMessageOf(
+      q(el, "[data-test=delete-agent-modal]")!.shadowRoot!.querySelector<WtFormActions>(
+        "wt-form-actions",
+      )!,
+    );
+    expect(message?.textContent).toContain(codeMessage("agent.not_found", "es-ES"));
+    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
+    expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
   });
-
-  // ── Agents: provenance + enable ──────────────────────────────────────────────────────────────────
 
   it("marks a self-enrolled agent (node id present) and not a manually-enrolled one", async () => {
-    const api = stubApi();
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue(agents.map((agent) => ({ ...agent, active: true }))),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await filterAgents(el, "all");
 
     // a2 carries a node id → the "on this box" provenance marker shows.
     expect(q(el, "[data-test=agent-provenance-a2]")).toBeTruthy();
@@ -2147,11 +2103,13 @@ describe("printers-screen", () => {
   it("sizes the provenance marker from the small font token, inside the table's shadow root", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({
-        listAgents: vi.fn().mockResolvedValue([{ ...agents[1]!, host: "Kitchen box" }]),
+        listAgents: vi
+          .fn()
+          .mockResolvedValue([{ ...agents[1]!, active: true, host: "Kitchen box" }]),
       }),
     });
     await flush(el);
-    await filterAgents(el, "all");
+
     const marker = q(el, "[data-test=agent-provenance-a2]")!;
     const hostCell = marker.parentElement!;
     expect(hostCell.textContent).toContain("Kitchen box");
@@ -2165,39 +2123,53 @@ describe("printers-screen", () => {
     expect(getComputedStyle(hostCell).fontSize).not.toBe(small);
   });
 
-  it("enables a disabled agent only on the confirming second click, then reloads", async () => {
-    const api = stubApi();
+  it("Adds this box's retained agent and closes before its list reload finishes", async () => {
+    let finishReload!: (rows: PrintAgentRow[]) => void;
+    const reload = new Promise<PrintAgentRow[]>((resolve) => {
+      finishReload = resolve;
+    });
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValueOnce(agents).mockReturnValueOnce(reload),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await filterAgents(el, "disabled");
-
-    expect(q(el, "[data-test=allow-agent-a2]")).toBeTruthy();
-    expect(q(el, "[data-test=allow-agent-a1]")).toBeNull();
-
-    q(el, "[data-test=allow-agent-a2]")!.click();
-    await el.updateComplete;
-    expect(api.allowAgent).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=allow-agent-a2]")).toBe("¿Habilitar este agente de impresión?");
-
-    q(el, "[data-test=allow-agent-a2]")!.click();
+    q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
-    expect(api.allowAgent).toHaveBeenCalledWith("a2");
-    expect(api.listAgents).toHaveBeenCalledTimes(2);
+    expect(text(el, "[data-test=retained-agent-a2]")).toContain(t("printers.provenance_self"));
+    expect(q(el, "[data-test=allow-agent-a1]")).toBeNull();
+    try {
+      let didClose = false;
+      const closed = dialogClosed(q(el, "[data-test=new-agent-modal]")!).then(() => {
+        didClose = true;
+      });
+      q(el, "[data-test=allow-agent-a2]")!.click();
+      await vi.waitFor(() => expect(api.listAgents).toHaveBeenCalledTimes(2));
+      expect(didClose).toBe(true);
+      await closed;
+      expect(q(el, "[data-test=new-agent-modal]")).toBeNull();
+      expect(api.allowAgent).toHaveBeenCalledExactlyOnceWith("a2");
+    } finally {
+      finishReload(agents);
+    }
   });
 
-  it("shows an error and keeps the list when an agent's enable is rejected", async () => {
+  it("shows an error and keeps the list when an agent's Add is rejected", async () => {
     const api = stubApi({ allowAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await filterAgents(el, "disabled");
 
-    q(el, "[data-test=allow-agent-a2]")!.click();
-    await el.updateComplete;
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
     q(el, "[data-test=allow-agent-a2]")!.click();
     await flush(el);
-
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
+    expect(q(el, "[data-test=retained-agent-a2]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
+    const message = await formMessageOf(
+      q(el, "[data-test=new-agent-modal] wt-form-actions")! as WtFormActions,
+    );
+    expect(message?.textContent).toContain(codeMessage("agent.not_found", "es-ES"));
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
+    expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
   });
 
   // ── Printers: discovered-device registration ───────────────────────────────────────────────────────
@@ -5455,21 +5427,23 @@ describe("printer layout settings", () => {
 });
 
 describe("printer setup refinements", () => {
-  it("keeps an empty printer filter and hides redundant tab headings", async () => {
+  it("has no lifecycle filter and hides redundant tab headings", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    expect(q(el, '[name="status-filter"]')).not.toBeNull();
+    expect(q(el, '[name="status-filter"]')).toBeNull();
     expect(el.shadowRoot!.querySelectorAll("wt-tabs h2").length).toBe(0);
   });
 
   it("puts the local agent marker in Host and removes row test printing", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-      api: stubApi(),
+      api: stubApi({
+        listAgents: vi.fn().mockResolvedValue(agents.map((agent) => ({ ...agent, active: true }))),
+      }),
     });
     await flush(el);
-    await filterAgents(el, "all");
+
     const marker = q(el, '[data-test="agent-provenance-a2"]')!;
     const cell = marker.closest("td")!;
     expect(cell.cellIndex).toBe(1);
@@ -9900,20 +9874,6 @@ describe("portable printers and their equipment label", () => {
   });
 });
 
-it.each([["agents", "agents-table"]])(
-  "puts the %s table's Filters at the start of its toolbar, beside the rows on a wide screen",
-  async (tab, testId) => {
-    await expectFiltersFirst(async () => {
-      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-        api: stubApi(),
-      });
-      await flush(el);
-      await selectTab(el, tab);
-      return q(el, `[data-test="${testId}"]`)!;
-    }, cleanupWidgets);
-  },
-);
-
 describe.each(["en", "es-ES"] as const)("printer agent action layout (%s)", (locale) => {
   it("keeps the phone Add action inside the viewport and clear of every tab", async () => {
     const before = currentLocale();
@@ -10658,18 +10618,17 @@ describe("Deleting a printer", () => {
     );
   });
 
-  it("offers no Delete on a print agent's row", async () => {
+  it("offers Delete last on a print agent's row", async () => {
     const { el } = await mounted();
     await selectTab(el, "agents");
     const table = q(el, "[data-test=agents-table]")!;
     const menus = [...table.shadowRoot!.querySelectorAll("dashboard-row-actions")];
     expect(menus.length).toBeGreaterThan(0);
     for (const menu of menus) {
-      const tests = [...menu.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.dataset.test);
-      expect(tests.some((test) => test?.startsWith("delete"))).toBe(false);
-      expect(
-        [...menu.querySelectorAll("wt-button")].map((b) => b.textContent?.trim()),
-      ).not.toContain(t("action.delete"));
+      expect([...menu.querySelectorAll("wt-button")].map((b) => b.textContent?.trim())).toEqual([
+        t("action.edit"),
+        t("action.delete"),
+      ]);
     }
   });
 
