@@ -1392,13 +1392,36 @@ describe("A803 table actions (writers):", () => {
   }
 
   it("Move this bill to a free table", async () => {
-    const { second } = await twoBills("Table move free");
+    const { partyId: source, main, second } = await twoBills("Table move free");
     const free = await v.table("Table move free to");
 
     const { partyId } = await moveTo(second, { tableId: free });
 
     expect(partyId).not.toBeNull();
+    expect(await openingBillOfParty(v, source)).toBe(main);
+    expect(await numbersOf(v, source)).toEqual([[main, 1, null]]);
   });
+
+  it.each(["counter", "free", "seated"] as const)(
+    "moving the last bill to %s leaves a fresh empty bill at the seated party",
+    async (destination) => {
+      const { partyId, tabId } = await seat(v, await v.table(`Table last bill ${destination}`));
+      const target = await v.table(`Table last bill ${destination} to`);
+      if (destination === "seated") await seat(v, target);
+
+      await moveTo(
+        tabId,
+        destination === "counter" ? { counter: { zoneId: null } } : { tableId: target },
+      );
+
+      const replacement = await openingBillOfParty(v, partyId);
+      expect(replacement).not.toBeNull();
+      expect(replacement).not.toBe(tabId);
+      expect(await billRow(v, replacement!)).toMatchObject({ partyId, status: "open" });
+      expect(await lineRows(replacement!)).toEqual([]);
+      expect(await numbersOf(v, partyId)).toContainEqual([replacement, 2, null]);
+    },
+  );
 
   it("Move this bill onto a seated party", async () => {
     const { second } = await twoBills("Table move seated");
@@ -1425,15 +1448,17 @@ describe("A803 table actions (writers):", () => {
     expect(result.billIds).toContain(held.tabId);
   });
 
-  it("Join a free table, for a party with no bill, gives it one bill", async () => {
+  it("Join a free table reuses the replacement left when the last bill moved away", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Table join empty"));
     await moveTo(tabId, { counter: { zoneId: null } });
+    const replacement = await openingBillOfParty(v, partyId);
+    expect(replacement).not.toBeNull();
     const free = await v.table("Table join empty to");
     const joining = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, free, joining));
 
-    expect(result.billIds).toHaveLength(1);
+    expect(result.billIds).toEqual([replacement]);
   });
 
   it("Split a table taking an open bill leaves the staying party its own bill", async () => {

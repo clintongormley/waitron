@@ -40,6 +40,7 @@ import {
 } from "./party-allergy.js";
 import {
   checkAndBumpParty,
+  ensureFamilyBill,
   holderOf,
   openParty,
   partyZone,
@@ -300,6 +301,7 @@ async function moveBillOnce(
     result = { partyId, billId };
   }
 
+  if (source !== null) await ensureFamilyBill(tx, cfg, source.id);
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
 
   await printHoldTickets(tx, cfg, held);
