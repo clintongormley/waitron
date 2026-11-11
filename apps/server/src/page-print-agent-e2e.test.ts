@@ -383,7 +383,7 @@ async function tillSession(
   };
 }
 
-function request(v: Venue, method: "POST" | "PATCH", path: string, body: unknown) {
+function request(v: Venue, method: "POST" | "DELETE", path: string, body?: unknown) {
   return v.app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie: v.managerCookie },
@@ -775,7 +775,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
     ["through the manager's route", "route"],
     ["behind the route's back, so the claim itself refuses it", "row"],
   ] as const)(
-    "ends an A4 for a printer disabled %s failed, and the printer is sent nothing",
+    "ends an A4 for a printer deleted %s as failed, and sends nothing to the printer",
     async (_how, how) => {
       const v = await venue();
       const { running, agentId } = await joinedAgent(v);
@@ -783,10 +783,8 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       const saleId = await fullInvoice(v);
       const delivery = await printOnA4(saleId, office);
       if (how === "route") {
-        const disabled = await request(v, "PATCH", `/management-api/page-printers/${office}`, {
-          active: false,
-        });
-        expect(disabled.status).toBe(204);
+        const deleted = await request(v, "DELETE", `/management-api/page-printers/${office}`);
+        expect(deleted.status).toBe(200);
       } else {
         await suite.db
           .update(pagePrinters)
