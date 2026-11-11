@@ -43,6 +43,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
   provisionBillVenue,
+  placedCounterBillMovedTo,
   seatedWith,
   send,
   statusOf,
@@ -835,6 +836,41 @@ describe("cancelling a placed order whose invoice was issued", () => {
     },
   );
 
+  it("cancelling the last presented bill leaves its seated party a fresh empty bill", async () => {
+    const party = await seatedWith(venue);
+    const presented = await placedCounterBillMovedTo(venue, ticketThenPayZone, party);
+    const discarded = await send(
+      venue.app,
+      venue.cookie,
+      "DELETE",
+      `/api/working-orders/${party.tabId}`,
+      { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)) },
+    );
+    expect(discarded.status).toBe(200);
+    const [before] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+
+    const answer = await cancel(presented);
+
+    expect(answer.status).toBe(200);
+    const remaining = venue.db.all<{ id: string; status: string }>(sql`
+      select id, status from working_orders
+      where party_id = ${party.partyId} and status != 'abandoned'`);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]!.status).toBe("open");
+    expect(remaining[0]!.id).not.toBe(presented);
+    const [after] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+    expect(after!.revision).toBe(before!.revision + 1);
+    expect(
+      venue.db.all(
+        sql`select id from working_order_lines where working_order_id = ${remaining[0]!.id}`,
+      ),
+    ).toEqual([]);
+  });
+
   it("credits and abandons a bill its party left without paying, leaving the departure as recorded", async () => {
     const party = await seatedWith(venue, "Caña");
     const departed = await send(
@@ -875,6 +911,10 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(credits.map((credit) => credit.total)).toEqual([-original.total]);
     expect(await readDeparture()).toEqual(departure);
     expect(await listedBills()).not.toContain(party.tabId);
+    expect(
+      venue.db.all(sql`select id from working_orders
+        where party_id = ${party.partyId} and status != 'abandoned'`),
+    ).toEqual([]);
   });
 
   it("fails loudly when the node has two live rectificative series, writing nothing", async () => {

@@ -141,6 +141,7 @@ import type { Rerouted } from "./station-move.js";
 import {
   bumpPartyRevision,
   checkAndBumpParty,
+  ensureFamilyBill,
   readBillsOfParties,
   type FamilyBill,
   runServiceCommand,
@@ -7261,14 +7262,16 @@ export async function abandonHeldOrder(
   authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
-  void cfg;
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
       .select({
         status: workingOrders.status,
         revision: workingOrders.revision,
+        partyId: workingOrders.partyId,
+        partyState: parties.state,
       })
       .from(workingOrders)
+      .leftJoin(parties, eq(parties.id, workingOrders.partyId))
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
@@ -7279,6 +7282,10 @@ export async function abandonHeldOrder(
     await refuseBillHoldingMoney(tx, [id]);
     await assertBillHasNoUnsent(tx, id);
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+    if (locked.partyId !== null && locked.partyState === "open") {
+      await ensureFamilyBill(tx, cfg, locked.partyId);
+      await bumpPartyRevision(tx, locked.partyId);
+    }
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
     await captureOrderEdit(tx, attendance, id, attendance?.personId, locked.revision, "discard");
   });
@@ -7522,8 +7529,13 @@ async function cancelPlaced(
   return withIssuanceTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, cfg, deps.admission);
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({
+        status: workingOrders.status,
+        partyId: workingOrders.partyId,
+        partyState: parties.state,
+      })
       .from(workingOrders)
+      .leftJoin(parties, eq(parties.id, workingOrders.partyId))
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: id });
@@ -7572,6 +7584,10 @@ async function cancelPlaced(
     );
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+    if (locked.partyId !== null && locked.partyState === "open") {
+      await ensureFamilyBill(tx, cfg, locked.partyId);
+      await bumpPartyRevision(tx, locked.partyId);
+    }
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
 
     const now = deps.clock.now();
