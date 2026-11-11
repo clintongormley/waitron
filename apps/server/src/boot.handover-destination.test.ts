@@ -348,8 +348,8 @@ describe("the spare's handover duty in a full start", () => {
         });
       },
       async (stateDir) => {
-        const cert = join(stateDir, "server.crt");
-        const key = join(stateDir, "server.key");
+        const cert = join(stateDir, "operator-cert.pem");
+        const key = join(stateDir, "operator-key.pem");
         await writeFile(cert, tls.serverCertPem);
         await writeFile(key, tls.serverKeyPem);
         return { WAITRON_TLS_CERT_FILE: cert, WAITRON_TLS_KEY_FILE: key };

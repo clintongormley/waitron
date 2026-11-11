@@ -2061,11 +2061,10 @@ describe("recoveryTlsFiles", () => {
   it("is the box's own leaf when the state volume holds one", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-tls-"));
     await mkdir(join(stateDir, "tls"));
-    await writeFile(join(stateDir, "tls", "server.crt"), "x");
-    await writeFile(join(stateDir, "tls", "server.key"), "x");
+    await writeFile(join(stateDir, "tls", "server.pem"), "x");
     expect(recoveryTlsFiles(stateDir)).toEqual({
-      certFile: join(stateDir, "tls", "server.crt"),
-      keyFile: join(stateDir, "tls", "server.key"),
+      certFile: join(stateDir, "tls", "server.pem"),
+      keyFile: join(stateDir, "tls", "server.pem"),
     });
   });
 });
@@ -2432,4 +2431,90 @@ describe("the box's spare file", () => {
     await runEntry(deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 0 }));
     expect(existsSync(spareIn(stateDir))).toBe(false);
   });
+});
+
+async function finishedTlsRepair(stateDir: string) {
+  await ensureBoxSecrets({
+    stateDir,
+    hostnames: ["waitron.local", "localhost"],
+    now: () => new Date(),
+    listIpv4: () => [],
+  });
+  await mkdir(join(stateDir, "tls/repair"));
+  await writeFile(join(stateDir, "tls/repair/old-key"), "old private material");
+  await mkdir(join(stateDir, "flows/tls-repair"), { recursive: true });
+  await writeFile(
+    join(stateDir, "flows/tls-repair/record.json"),
+    JSON.stringify({
+      operation: "11111111-1111-4111-8111-111111111111",
+      complete: true,
+      trust: "retained",
+    }),
+  );
+}
+
+it("ends a finished TLS repair only after the running start stays up", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-tls-cleanup-"));
+  try {
+    await finishedTlsRepair(stateDir);
+    const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+    await runEntry(deps({ stateDir, scheduleStayedUp }));
+    expect(await readFile(join(stateDir, "tls/repair/old-key"), "utf8")).toBe(
+      "old private material",
+    );
+    scheduleStayedUp.mock.calls[0]![1]();
+    await vi.waitFor(() => expect(existsSync(join(stateDir, "flows/tls-repair"))).toBe(false));
+    expect(existsSync(join(stateDir, "tls/repair"))).toBe(false);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+it("a start that fails before staying up keeps its completed TLS repair", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-tls-failed-"));
+  try {
+    await finishedTlsRepair(stateDir);
+    const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+    const failure = new Error("server start failed");
+    await expect(
+      runEntry(
+        deps({
+          stateDir,
+          scheduleStayedUp,
+          startServer: async () => {
+            throw failure;
+          },
+        }),
+      ),
+    ).rejects.toBe(failure);
+    expect(scheduleStayedUp).not.toHaveBeenCalled();
+    expect(await readFile(join(stateDir, "tls/repair/old-key"), "utf8")).toBe(
+      "old private material",
+    );
+    expect(
+      JSON.parse(await readFile(join(stateDir, "flows/tls-repair/record.json"), "utf8")),
+    ).toHaveProperty("complete", true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+it("a refused repair cleanup is logged after staying up and leaves the flow", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-tls-cleanup-refused-"));
+  try {
+    await finishedTlsRepair(stateDir);
+    const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+    const log = vi.fn();
+    await runEntry(deps({ stateDir, scheduleStayedUp, log }));
+    await writeFile(join(stateDir, "scratch"), "blocks cleanup staging");
+    scheduleStayedUp.mock.calls[0]![1]();
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith("warn", "tls.repair_cleanup_failed", {
+        errorCode: expect.any(String),
+      }),
+    );
+    expect(existsSync(join(stateDir, "flows/tls-repair/record.json"))).toBe(true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
 });

@@ -29,8 +29,7 @@ async function fixture(healthy = false) {
   for (const [name, bytes] of Object.entries({
     "ca.crt": material.caCertPem,
     "ca.key": material.caKeyPem,
-    "server.crt": material.serverCertPem,
-    ...(healthy ? { "server.key": material.serverKeyPem } : {}),
+    ...(healthy ? { "server.pem": material.serverCertPem + material.serverKeyPem } : {}),
   }))
     await writeFile(join(stateDir, "tls", name), bytes);
   await writeFile(join(stateDir, "secrets.env"), "retained vault material");
@@ -95,7 +94,7 @@ it.each([
   const response = await f.app.request(target, { method: "POST", headers });
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: "connection.refused" });
-  await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+  await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
     code: "ENOENT",
   });
   expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
@@ -121,7 +120,7 @@ it.each(["password=private", '{"privateKey":"private"}', " "])(
     const response = await f.app.request(request);
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "connection.refused" });
-    await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   },
@@ -135,8 +134,7 @@ it("a healthy repeat preserves every PEM and never rotates trust", async () => {
   for (const [name, bytes] of Object.entries({
     "ca.crt": material.caCertPem,
     "ca.key": material.caKeyPem,
-    "server.crt": material.serverCertPem,
-    "server.key": material.serverKeyPem,
+    "server.pem": material.serverCertPem + material.serverKeyPem,
   }))
     expect(await readFile(join(f.stateDir, "tls", name), "utf8")).toBe(bytes);
 });
@@ -156,7 +154,7 @@ it("serves only public status and validated CA bytes", async () => {
   }
   await writeFile(join(f.stateDir, "tls/ca.crt"), "not a public certificate");
   expect((await f.app.request("/ca.crt")).status).toBe(404);
-  for (const path of ["/setup-api/first-setup/resolution", "/tls/ca.key", "/tls/repair-archive"]) {
+  for (const path of ["/setup-api/first-setup/resolution", "/tls/ca.key", "/tls/repair"]) {
     expect((await f.app.request(path)).status).toBe(404);
   }
   expect((await f.app.request(url)).status).toBe(404);
@@ -181,7 +179,7 @@ it("operator TLS refuses box repair without modifying the managed material", asy
   expect(await (await app.request("/setup/connection")).text()).not.toContain("BEGIN CERTIFICATE");
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: "connection.refused" });
-  await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+  await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
@@ -216,7 +214,7 @@ it("uses the explicit page language before browser preferences, without acceptin
   expect(await fallback.text()).toContain('<html lang="es">');
   const refused = await app.request(`${url}?lang=es`, { method: "POST", headers: allowed });
   expect(refused.status).toBe(403);
-  await expect(readFile(join(stateDir, "tls/server.key"))).rejects.toMatchObject({
+  await expect(readFile(join(stateDir, "tls/server.pem"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
@@ -314,7 +312,7 @@ it.each(["missing-origin", "foreign-origin", "query", "body", "cookie"])(
     });
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "connection.refused" });
-    await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(f.onRepaired).not.toHaveBeenCalled();

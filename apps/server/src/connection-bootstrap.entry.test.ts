@@ -62,16 +62,15 @@ async function fixture(
   for (const [name, value] of Object.entries({
     "ca.crt": material.caCertPem,
     "ca.key": material.caKeyPem,
-    "server.crt": material.serverCertPem,
-    "server.key": material.serverKeyPem,
+    "server.pem": material.serverCertPem + material.serverKeyPem,
   }))
     await writeFile(join(stateDir, "tls", name), value);
-  if (damage === "missing-key") await rm(join(stateDir, "tls/server.key"));
-  if (damage === "malformed") await writeFile(join(stateDir, "tls/server.crt"), "malformed");
-  if (damage === "mismatch") await writeFile(join(stateDir, "tls/server.key"), material.caKeyPem);
+  if (damage === "missing-key") await rm(join(stateDir, "tls/server.pem"));
+  if (damage === "malformed") await writeFile(join(stateDir, "tls/server.pem"), "malformed");
+  if (damage === "mismatch") await writeFile(join(stateDir, "tls/server.pem"), material.caKeyPem);
   if (damage === "expired")
     await writeFile(
-      join(stateDir, "tls/server.crt"),
+      join(stateDir, "tls/server.pem"),
       reissueServerLeaf({
         caCertPem: material.caCertPem,
         caKeyPem: material.caKeyPem,
@@ -317,7 +316,10 @@ it("a failed direct continuation keeps public retry available and the next retry
 
 it("healthy recovery keeps its protected Retry on verified HTTPS and flushes its answer", async () => {
   const f = await fixture();
-  await writeFile(join(f.stateDir, "tls/server.key"), material.serverKeyPem);
+  await writeFile(
+    join(f.stateDir, "tls/server.pem"),
+    material.serverCertPem + material.serverKeyPem,
+  );
   const [port] = (await freePorts(1)) as [number];
   const onRetry = vi.fn(async () => {});
   const server = await serveRecovery(recoveryApp({ state: FRESH, logDir: f.stateDir, onRetry }), {
@@ -397,7 +399,7 @@ it("real HTTP refuses forged origins and streamed private input while an empty a
   } as RequestInit);
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: "connection.refused" });
-  await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+  await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
     code: "ENOENT",
   });
   expect(await repair(port)).toMatchObject({ state: "healthy", trust: "retained" });
@@ -407,7 +409,7 @@ it("recovery respects operator TLS selected in the retained settings without exp
   const f = await fixture();
   await writeFile(
     join(f.stateDir, "trading.env"),
-    "WAITRON_TLS_CERT_FILE=/operator/server.crt\nWAITRON_TLS_KEY_FILE=/operator/server.key\n",
+    "WAITRON_TLS_CERT_FILE=/operator/server.pem\nWAITRON_TLS_KEY_FILE=/operator/server.pem\n",
   );
   const [port] = (await freePorts(1)) as [number];
   const forbidden = async () => {
@@ -441,7 +443,7 @@ it("recovery respects operator TLS selected in the retained settings without exp
   });
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: "connection.refused" });
-  await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+  await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
@@ -529,19 +531,19 @@ it("actual HTTP rejects forged/private requests and archive reads before a legit
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "connection.refused" });
     expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
-    await expect(readFile(join(f.stateDir, "tls/server.key"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   }
   for (const path of [
     "/setup-api/connection/repair",
-    "/tls/repair-archive",
+    "/tls/repair",
     "/tls/ca.key",
     "/setup-api/first-setup/resolution",
   ])
     expect((await get(port, path)).status).toBe(404);
   await repair(port);
-  expect((await get(port, "/tls/repair-archive")).status).toBe(404);
+  expect((await get(port, "/tls/repair")).status).toBe(404);
 });
 
 it("keeps public CA download and reload available after a discarded repair reply until explicit HTTPS continuation", async () => {
@@ -605,7 +607,10 @@ it("keeps public CA download and reload available after a discarded repair reply
 
 it("keeps a hostname-valid box on HTTPS after its network address changes", async () => {
   const f = await fixture();
-  await writeFile(join(f.stateDir, "tls/server.key"), material.serverKeyPem);
+  await writeFile(
+    join(f.stateDir, "tls/server.pem"),
+    material.serverCertPem + material.serverKeyPem,
+  );
   const opts = {
     stateDir: f.stateDir,
     port: 0,
@@ -632,13 +637,18 @@ it("keeps a hostname-valid box on HTTPS after its network address changes", asyn
     body: "protected",
   });
   expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
-  expect(await readFile(join(f.stateDir, "tls/server.crt"), "utf8")).toBe(material.serverCertPem);
+  expect(await readFile(join(f.stateDir, "tls/server.pem"), "utf8")).toBe(
+    material.serverCertPem + material.serverKeyPem,
+  );
 });
 
-/** A healthy box whose install of another authority stopped after `renamed` of its four moves. */
+/** A healthy box whose install of another authority stopped after `renamed` of its three moves. */
 async function halfInstalled(renamed: number) {
   const f = await fixture();
-  await writeFile(join(f.stateDir, "tls/server.key"), material.serverKeyPem);
+  await writeFile(
+    join(f.stateDir, "tls/server.pem"),
+    material.serverCertPem + material.serverKeyPem,
+  );
   const rename = renameMock.getMockImplementation()!;
   // The first rename puts the install's list in place; the next `renamed` move working files.
   for (let done = 0; done <= renamed; done++) renameMock.mockImplementationOnce(rename);
@@ -657,14 +667,14 @@ async function halfInstalled(renamed: number) {
   return f;
 }
 
-/** The four files on disk belong together and are the venue's authority's. */
+/** The three files on disk belong together and are the venue's authority's. */
 async function venueSetInstalled(stateDir: string): Promise<boolean> {
   return (
     (await tlsFile(stateDir, "ca.crt")) === venueSet.caCertPem && (await tlsSetMatches(stateDir))
   );
 }
 
-it.each([1, 2, 3])(
+it.each([0, 1, 2])(
   "the supervised entry finishes an authority install stopped after %i of its moves instead of asking for connection repair",
   async (renamed) => {
     const f = await halfInstalled(renamed);
@@ -703,7 +713,7 @@ it.each([1, 2, 3])(
   },
 );
 
-it.each([1, 2, 3])(
+it.each([0, 1, 2])(
   "the direct entry finishes an authority install stopped after %i of its moves instead of asking for connection repair",
   async (renamed) => {
     const f = await halfInstalled(renamed);

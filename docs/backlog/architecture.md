@@ -1072,7 +1072,8 @@ product failures.
   while connected and receives pairing, discovery, practice-inbox and backup state changes.
   Reads that depend on time, memory or external services keep their timers.
   Browser adoption of the device stream remains for jr13/jr14. 111 product
-  environment variables become 51. There is one state-folder layout. It keeps
+  environment variables become 51. There is one state-folder layout; the box certificate and key
+  share one PEM file, and a completed certificate repair ends after a start stays healthy. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity
   (`fiscal_reservations`). It removes recipes (owner, 2026-11-04). The owner chose that A760's squash

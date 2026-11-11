@@ -659,7 +659,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     running.delete(serverA);
     await serverA.close();
     const leafA = new X509Certificate(
-      await readFile(join(dirsA.state, "tls", "server.crt"), "utf8"),
+      await readFile(join(dirsA.state, "tls", "server.pem"), "utf8"),
     );
     await rm(dirsA.root, { recursive: true, force: true });
     if (!fixture.useRecoveryPack)
@@ -765,7 +765,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     // certificate is compared with both files: it must be B's re-issued one, not A's.
     const caB = await readFile(join(dirsB.state, "tls", "ca.crt"), "utf8");
     const leafB = new X509Certificate(
-      await readFile(join(dirsB.state, "tls", "server.crt"), "utf8"),
+      await readFile(join(dirsB.state, "tls", "server.pem"), "utf8"),
     );
     expect(leafB.serialNumber).not.toBe(leafA.serialNumber);
     const served = await new Promise<string>((resolve, reject) => {
@@ -790,7 +790,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         .from(nodeSealedState)
         .where(eq(nodeSealedState.nodeId, a.nodeId));
       const leafInRow = unsealNodeState(row!.sealed, recoveryKey).find(
-        (entry) => entry.name === "secrets/tls/server.crt",
+        (entry) => entry.name === "secrets/tls/server.pem",
       );
       expect(new X509Certificate(Buffer.from(leafInRow!.bytes)).serialNumber).toBe(
         leafB.serialNumber,

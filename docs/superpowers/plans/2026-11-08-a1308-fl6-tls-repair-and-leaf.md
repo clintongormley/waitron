@@ -20,6 +20,11 @@ which reads only the first PEM block; that check runs at every start (`inspectBo
 called from `needsConnectionBootstrap`, `recovery-listener.ts:81-103`, at `node-entry.ts:387`) and
 again right after a repair installs its files (`box-tls-repair.ts:374`).
 
+**Execution clearance:** the [build order](2026-11-08-a1308-build-order.md) records the owner's
+2026-11-09 instruction to "build all of it as planned". The watcher cleared the joined-box
+writer adaptation on 2026-11-11 at 11:13 and the joined-reset/layout fixes at 11:48; those
+adaptations have watcher clearance, with no separate owner approval claimed.
+
 **Tech Stack:** TypeScript 7, `node:tls`, Vitest 4.1.12.
 
 **Spec:** [`files.md`](../specs/2026-11-02-rationalisation/files.md) §1 (the TLS repair archive
@@ -39,8 +44,9 @@ connection repair page, because its certificate file has a new name and a fresh 
 refused while the old certificate authority is kept (`box-secrets.ts:202-210`); someone must press
 Repair there. The repair issues a new certificate from the kept certificate authority, so phones
 that trust the box keep trusting it, and deletes the old certificate files and every older repair
-copy. Backups made before this change cannot be restored (their archive carries the old
-certificate file names; pre-live, CLAUDE.md §3 last data rule)."
+copy. Older backups contain the retired certificate filenames. A restore placement probe at
+`52a4e65483`, with that suite's fake dump, migration and hooks, accepted those names; the restored
+box's first start was not checked (watcher, 2026-11-11 11:39)."
 
 ## T6 — run twice on 2026-11-08
 
@@ -128,7 +134,9 @@ Step 1 runs the box's own health check over the file the code writes, under CI's
 ## Files
 
 - Modify: `packages/store/src/state-layout.ts`, `apps/server/src/box-tls-repair.ts`,
-  `apps/server/src/box-secrets.ts`, `apps/server/src/node-entry.ts:689`, the readers in What it
+  `apps/server/src/box-tls-install.ts` (watcher, 2026-11-11 11:13),
+  `apps/server/src/box-secrets.ts`, `apps/server/src/reset-request.ts` (watcher, 2026-11-11 11:48),
+  `apps/server/src/node-entry.ts:689`, the readers in What it
   builds 5, `scripts/handover-manifest-complete.test.ts` if it pins the two names,
   `scripts/durable-writes.test.ts`, `apps/server/README.md:92`, `deploy/README.md:415-420` (the
   `tls/` paragraph), `apps/server/src/testing/box-authority.ts`,

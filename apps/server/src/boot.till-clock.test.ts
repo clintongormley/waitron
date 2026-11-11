@@ -100,8 +100,7 @@ it("the real recovery listener serves its recovery status and no clock routes", 
   for (const [name, value] of Object.entries({
     "ca.crt": tls.caCertPem,
     "ca.key": tls.caKeyPem,
-    "server.crt": tls.serverCertPem,
-    "server.key": tls.serverKeyPem,
+    "server.pem": tls.serverCertPem + tls.serverKeyPem,
   }))
     await writeFile(join(scratch, "tls", name), value);
   const requestedPort = await occupiedPort();

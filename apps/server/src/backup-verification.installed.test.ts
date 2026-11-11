@@ -126,8 +126,8 @@ it.each([
   "trading.env",
   "tls/ca.crt",
   "tls/ca.key",
-  "tls/server.crt",
-  "tls/server.key",
+  "tls/server.pem",
+  "tls/server.pem",
 ])("required secret check refuses damaged %s", async (name) => {
   const f = await suite.create();
   await f.seal(

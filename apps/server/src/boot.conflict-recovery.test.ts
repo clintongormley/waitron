@@ -69,8 +69,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
     JSON.stringify({ modules: { "fiscal-none": false } }),
   );
   const material = mintMtlsMaterial();
-  await writeFile(join(scratch, "server.crt"), material.serverCertPem);
-  await writeFile(join(scratch, "server.key"), material.serverKeyPem);
+  await writeFile(join(scratch, "server.pem"), material.serverCertPem + material.serverKeyPem);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const [port] = await freePorts(1);
   const server = await startServer({
@@ -84,8 +83,8 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
     WAITRON_ENV: "preproduction",
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_TLS_CERT_FILE: join(scratch, "server.crt"),
-    WAITRON_TLS_KEY_FILE: join(scratch, "server.key"),
+    WAITRON_TLS_CERT_FILE: join(scratch, "server.pem"),
+    WAITRON_TLS_KEY_FILE: join(scratch, "server.pem"),
     WAITRON_DASHBOARD_APP_DIR: join(scratch, "dashboard"),
   });
   cleanups.push(() => server.close());

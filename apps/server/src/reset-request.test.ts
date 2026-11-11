@@ -278,29 +278,46 @@ describe("runStagedReset", () => {
     }
   });
 
-  it("a staged reset of a box that joined leaves no authority, leaf, client certificate or key ring", async () => {
-    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
-    const tls = join(stateDir, "tls");
-    for (const name of ["ca.key", "server.crt", "server.key", "client.crt", "server.key.tmp"]) {
-      await writeFile(join(tls, name), name);
-    }
-    await stageResetRequest(stateDir, operationId);
+  it.each([false, true])(
+    "a staged reset of a box that joined leaves no authority, leaf, client certificate or key ring (repair complete=%s)",
+    async (complete) => {
+      const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+      const tls = join(stateDir, "tls");
+      for (const name of ["ca.key", "server.pem", "client.crt", "server.pem.tmp"]) {
+        await writeFile(join(tls, name), name);
+      }
+      await mkdir(join(stateDir, "flows/tls-repair"), { recursive: true });
+      await writeFile(
+        join(stateDir, "flows/tls-repair/record.json"),
+        JSON.stringify({
+          operation: "11111111-1111-4111-8111-111111111111",
+          complete,
+          trust: "retained",
+        }),
+      );
+      await writeFile(
+        join(stateDir, "flows/tls-repair/candidate.json"),
+        JSON.stringify({ caKeyPem: "other venue's private key" }),
+      );
+      await stageResetRequest(stateDir, operationId);
 
-    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+      expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
 
-    expect(await readdir(tls)).toEqual([]);
-    expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
-    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe("B=1\n");
-    // A setup start can mint a fresh set: nothing of the old one is left to refuse it.
-    await ensureBoxSecrets({
-      stateDir,
-      hostnames: ["waitron.local"],
-      now: () => new Date(),
-      listIpv4: () => [],
-    });
-    expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.crt", "server.key"]);
-    expect(await readFile(join(tls, "ca.crt"), "utf8")).not.toBe("ca");
-  });
+      expect(existsSync(join(stateDir, "flows/tls-repair"))).toBe(false);
+      expect(await readdir(tls)).toEqual([]);
+      expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
+      expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe("B=1\n");
+      // A setup start can mint a fresh set: nothing of the old one is left to refuse it.
+      await ensureBoxSecrets({
+        stateDir,
+        hostnames: ["waitron.local"],
+        now: () => new Date(),
+        listIpv4: () => [],
+      });
+      expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.pem"]);
+      expect(await readFile(join(tls, "ca.crt"), "utf8")).not.toBe("ca");
+    },
+  );
 
   it("a staged reset of a box that joined, cut short before the key ring went, leaves nothing of the other venue when it runs again", async () => {
     const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
@@ -322,7 +339,7 @@ describe("runStagedReset", () => {
   it("a staged reset of a box that joined removes its joined record after everything else in tls, and its request last", async () => {
     const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
     const tls = join(stateDir, "tls");
-    for (const name of ["ca.key", "server.crt", "server.key"]) {
+    for (const name of ["ca.key", "server.pem"]) {
       await writeFile(join(tls, name), name);
     }
     await stageResetRequest(stateDir, operationId);
@@ -331,9 +348,10 @@ describe("runStagedReset", () => {
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
 
     const joinedAt = removed.indexOf(join(tls, "joined.json"));
-    const others = ["ca.crt", "ca.key", "server.crt", "server.key"].map((name) =>
+    const others = ["ca.crt", "ca.key", "server.pem"].map((name) =>
       removed.indexOf(join(tls, name)),
     );
+    others.push(removed.indexOf(join(stateDir, "flows/tls-repair")));
     for (const at of [...others, removed.indexOf(join(stateDir, "secrets.env"))]) {
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(joinedAt);
@@ -619,7 +637,7 @@ describe("a start after a reset of a box that joined was cut short in tls/", () 
     });
     await markJoined(stateDir, PRIMARY_NODE_ID);
     await stageResetRequest(stateDir, operationId);
-    watchRemovals(join(stateDir, "tls", "server.key"));
+    watchRemovals(join(stateDir, "tls", "server.pem"));
     await expect(runStagedReset({ stateDir, venueDir, log: () => {} })).rejects.toThrow(
       "power lost",
     );

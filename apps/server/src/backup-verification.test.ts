@@ -60,8 +60,7 @@ const recoveryEntries = Object.entries({
   "trading.env": `WAITRON_NODE_ID=${sourceNodeId}\nWAITRON_ENV=preproduction\n`,
   "tls/ca.crt": forge.pki.certificateToPem(ca),
   "tls/ca.key": forge.pki.privateKeyToPem(pair.privateKey),
-  "tls/server.crt": forge.pki.certificateToPem(server),
-  "tls/server.key": forge.pki.privateKeyToPem(pair.privateKey),
+  "tls/server.pem": forge.pki.certificateToPem(server) + forge.pki.privateKeyToPem(pair.privateKey),
 }).map(([name, text]) => ({ name: "secrets/" + name, bytes: Buffer.from(text) }));
 async function seedSource(db: VenueDb["db"]) {
   db.run(
@@ -377,7 +376,7 @@ describe("complete backup verification", () => {
   it("checks declared recovery secrets rather than presence alone", async () => {
     const f = await fixture();
     f.entries = f.entries.map((e) =>
-      e.name === "secrets/tls/server.key"
+      e.name === "secrets/tls/server.pem"
         ? { ...e, bytes: Buffer.from("malformed-key-private-sentinel") }
         : e,
     );
@@ -691,7 +690,7 @@ describe("complete backup verification", () => {
     const sealed = await encryptArtifactAsync(
       packArchive(
         recoveryEntries.map((e) =>
-          e.name === "secrets/tls/server.key"
+          e.name === "secrets/tls/server.pem"
             ? { ...e, bytes: Buffer.from("malformed-private-sealed-key") }
             : e,
         ),

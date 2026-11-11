@@ -16,7 +16,7 @@ import { leafIpv4s, reissueServerLeaf } from "./self-signed-cert.js";
 import "./errors.js";
 
 /** Every file an install may list. */
-const TLS_SET = ["ca.key", "ca.crt", "server.key", "server.crt"] as const;
+const TLS_SET = ["ca.key", "ca.crt", "server.pem"] as const;
 type TlsSetFile = (typeof TLS_SET)[number];
 
 const LIST_LIMIT = 4096;
@@ -116,8 +116,7 @@ export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Pr
   const files = [
     { name: "ca.key", pem: keyPem },
     { name: "ca.crt", pem: certPem },
-    { name: "server.key", pem: leaf.serverKeyPem },
-    { name: "server.crt", pem: leaf.serverCertPem },
+    { name: "server.pem", pem: leaf.serverCertPem + leaf.serverKeyPem },
   ] as const;
   const tlsDir = join(deps.stateDir, TLS_DIR);
   await withRecoveryLock(deps.stateDir, async () => {

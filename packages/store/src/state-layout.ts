@@ -15,6 +15,7 @@ export const REBUILD_MARKER = "rebuild-first-start.json";
 export const RESET_REQUEST_FILE = "reset-request.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
+export const FLOWS_DIR = "flows";
 export const SCRATCH_DIR = "scratch";
 export const RESTORE_STAGING_DIR = "scratch/restore";
 export const BACKUP_STAGING_DIR = "scratch/backup";
@@ -47,6 +48,9 @@ export const RESTORE_REQUEST_NODE_KEY = "restore-request.node-key";
 export const STREAM_DIR = "stream";
 export const HANDOVER_DIR = "handover";
 export const TLS_DIR = "tls";
+export const TLS_REPAIR_FLOW_DIR = "flows/tls-repair";
+export const TLS_REPAIR_DIR = "tls/repair";
+export const SERVER_PEM_FILE = "tls/server.pem";
 export const TLS_JOINED_FILE = "tls/joined.json";
 export const TLS_INSTALL_FILE = "tls/install.json";
 export const VENUE_DIR_NAME = "venue";
@@ -64,6 +68,12 @@ export const START_AGAIN_SET_ASIDE_DIR = "records/set-aside";
 export const TRADING_ENV_REPLACED_SUFFIX = ".replaced";
 
 export const STATE_LAYOUT: readonly StateEntry[] = [
+  {
+    name: FLOWS_DIR,
+    kind: "folder",
+    reset: "deleted",
+    why: "Operations that continue across a restart keep their record and attachments together.",
+  },
   {
     name: SPARE_SPACE_FILE,
     kind: "file",

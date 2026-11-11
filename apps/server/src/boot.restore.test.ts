@@ -358,7 +358,7 @@ describe("startServer, against a migrated venue directory", () => {
         now: () => new Date(),
         listIpv4: () => ["192.168.1.10"],
       });
-      const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+      const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
       await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source }));
       try {
         await expect(
@@ -376,7 +376,7 @@ describe("startServer, against a migrated venue directory", () => {
           params: { reason: "bad_signature" },
         });
         expect(await readNodeMembership(db)).toEqual(tampered);
-        expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+        expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
         expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
       } finally {
         await venue.store.close();
@@ -471,7 +471,7 @@ describe("startServer, against a migrated venue directory", () => {
         now: () => new Date(),
         listIpv4: () => ["192.168.1.10"],
       });
-      const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+      const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
       await writeFile(
         join(stateDir, REBUILD_MARKER),
         JSON.stringify({ version: 1, source: "stream" }),
@@ -497,7 +497,7 @@ describe("startServer, against a migrated venue directory", () => {
           )
         ).rows;
         expect(row?.document).toBe(stored);
-        expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+        expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
         expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
       } finally {
         await venue.store.close();

@@ -283,14 +283,7 @@ it("the backup state collector carries neither the delivery binding nor a saved 
   const f = await documentFixture();
   await f.register();
   await mkdir(join(f.stateDir, "tls"), { recursive: true });
-  for (const name of [
-    "secrets.env",
-    "trading.env",
-    "tls/ca.crt",
-    "tls/ca.key",
-    "tls/server.crt",
-    "tls/server.key",
-  ])
+  for (const name of ["secrets.env", "trading.env", "tls/ca.crt", "tls/ca.key", "tls/server.pem"])
     await writeFile(join(f.stateDir, name), `synthetic ${name}`);
   await writeFile(join(f.stateDir, "saved-recovery.pdf"), `%PDF-1.7\n${f.staged.key.secret}`);
   const files = await collectStateSecrets(f.stateDir);
@@ -298,8 +291,7 @@ it("the backup state collector carries neither the delivery binding nor a saved 
     "secrets.env",
     "tls/ca.crt",
     "tls/ca.key",
-    "tls/server.crt",
-    "tls/server.key",
+    "tls/server.pem",
     "trading.env",
   ]);
   expect(JSON.stringify(files)).not.toContain(f.staged.key.secret);

@@ -26,9 +26,7 @@ export function devServerProxy(
   options: { stateDir?: string } = {},
 ): ProxyOptions & { target: string } {
   const stateDir = options.stateDir ?? resolvedStateDir();
-  const hasLeaf =
-    existsSync(join(stateDir, "tls", "server.crt")) &&
-    existsSync(join(stateDir, "tls", "server.key"));
+  const hasLeaf = existsSync(join(stateDir, "tls", "server.pem"));
   const port = devPort("WAITRON_HTTP_PORT", 8080);
   return hasLeaf
     ? { target: `https://127.0.0.1:${port}`, secure: false }

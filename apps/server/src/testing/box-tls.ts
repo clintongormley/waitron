@@ -16,17 +16,16 @@ export async function writeTlsSet(
   await mkdir(tls, { mode: 0o700 });
   await writeFile(join(tls, "ca.crt"), set.caCertPem, { mode: 0o600 });
   await writeFile(join(tls, "ca.key"), set.caKeyPem, { mode: 0o600 });
-  await writeFile(join(tls, "server.crt"), set.serverCertPem, { mode: 0o600 });
-  await writeFile(join(tls, "server.key"), set.serverKeyPem, { mode: 0o600 });
+  await writeFile(join(tls, "server.pem"), set.serverCertPem + set.serverKeyPem, { mode: 0o600 });
 }
 
-/** Whether `tls/`'s four files belong together: the authority's key is its certificate's, the
+/** Whether `tls/`'s files belong together: the authority's key is its certificate's, the
  * leaf is signed by the authority, and the leaf's key is the leaf's. */
 export async function tlsSetMatches(stateDir: string): Promise<boolean> {
   const ca = new X509Certificate(await tlsFile(stateDir, "ca.crt"));
   const caKey = createPrivateKey(await tlsFile(stateDir, "ca.key"));
-  const leaf = new X509Certificate(await tlsFile(stateDir, "server.crt"));
-  const leafKey = createPrivateKey(await tlsFile(stateDir, "server.key"));
+  const leaf = new X509Certificate(await tlsFile(stateDir, "server.pem"));
+  const leafKey = createPrivateKey(await tlsFile(stateDir, "server.pem"));
   return (
     ca.publicKey.equals(createPublicKey(caKey)) &&
     leaf.verify(ca.publicKey) &&
@@ -58,8 +57,8 @@ export async function handshake(
   servername: string,
 ): Promise<string> {
   const server = createServer({
-    cert: await tlsFile(stateDir, "server.crt"),
-    key: await tlsFile(stateDir, "server.key"),
+    cert: await tlsFile(stateDir, "server.pem"),
+    key: await tlsFile(stateDir, "server.pem"),
   });
   server.on("secureConnection", (socket) => socket.end());
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

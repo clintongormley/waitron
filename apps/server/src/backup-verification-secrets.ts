@@ -112,10 +112,10 @@ export async function verifyBackupStateSecrets(
   try {
     const read = (name: string) => Buffer.from(byName.get("secrets/tls/" + name)!.bytes);
     const ca = new X509Certificate(read("ca.crt"));
-    const server = new X509Certificate(read("server.crt"));
+    const server = new X509Certificate(read("server.pem"));
     if (
       !ca.checkPrivateKey(createPrivateKey(read("ca.key"))) ||
-      !server.checkPrivateKey(createPrivateKey(read("server.key"))) ||
+      !server.checkPrivateKey(createPrivateKey(read("server.pem"))) ||
       !ca.ca ||
       !ca.verify(ca.publicKey) ||
       !server.checkIssued(ca) ||

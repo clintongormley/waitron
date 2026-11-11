@@ -18,8 +18,7 @@ export const RECOVERY_FILES = [
   "trading.env",
   "tls/ca.crt",
   "tls/ca.key",
-  "tls/server.crt",
-  "tls/server.key",
+  "tls/server.pem",
 ] as const;
 
 /** A missing file is `recovery.state_incomplete`: a backup archive without the vault key is worthless. */

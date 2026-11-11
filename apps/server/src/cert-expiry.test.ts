@@ -10,7 +10,7 @@ describe("readCertExpiry", () => {
   let certPath: string;
   beforeAll(() => {
     const dir = mkdtempSync(join(tmpdir(), "cert-expiry-"));
-    certPath = join(dir, "server.crt");
+    certPath = join(dir, "server.pem");
     writeFileSync(certPath, FIXTURE_CERT_PEM);
   });
 

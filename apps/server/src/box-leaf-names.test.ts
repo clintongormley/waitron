@@ -64,7 +64,7 @@ describe("ensureLeaf", () => {
     expect(await ensure(stateDir)).toBe("reissued");
 
     expect(await handshake(stateDir, own.caCertPem, OWN_NAME)).toBe("verified");
-    const san = new X509Certificate(await tlsFile(stateDir, "server.crt")).subjectAltName ?? "";
+    const san = new X509Certificate(await tlsFile(stateDir, "server.pem")).subjectAltName ?? "";
     expect(san).toContain(`IP Address:${ADDRESS}`);
     expect(await tlsFile(stateDir, "ca.crt")).toBe(own.caCertPem);
   });
@@ -74,24 +74,24 @@ describe("ensureLeaf", () => {
 
     expect(await ensure(stateDir)).toBe("reissued");
 
-    const san = new X509Certificate(await tlsFile(stateDir, "server.crt")).subjectAltName ?? "";
+    const san = new X509Certificate(await tlsFile(stateDir, "server.pem")).subjectAltName ?? "";
     expect(san).toContain(`IP Address:${ADDRESS}`);
   });
 
   it("a leaf already naming every name and address under this authority is left alone", async () => {
     const stateDir = await box(leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]));
-    const cert = await tlsFile(stateDir, "server.crt");
-    const key = await tlsFile(stateDir, "server.key");
+    const cert = await tlsFile(stateDir, "server.pem");
+    const key = await tlsFile(stateDir, "server.pem");
 
     expect(await ensure(stateDir)).toBe("kept");
 
-    expect(await tlsFile(stateDir, "server.crt")).toBe(cert);
-    expect(await tlsFile(stateDir, "server.key")).toBe(key);
+    expect(await tlsFile(stateDir, "server.pem")).toBe(cert);
+    expect(await tlsFile(stateDir, "server.pem")).toBe(key);
   });
 
   it("an address outside the permitted ranges does not make it reissue", async () => {
     const stateDir = await box(leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]));
-    const cert = await tlsFile(stateDir, "server.crt");
+    const cert = await tlsFile(stateDir, "server.pem");
 
     const result = await ensureLeaf({
       stateDir,
@@ -101,7 +101,7 @@ describe("ensureLeaf", () => {
     });
 
     expect(result).toBe("kept");
-    expect(await tlsFile(stateDir, "server.crt")).toBe(cert);
+    expect(await tlsFile(stateDir, "server.pem")).toBe(cert);
   });
 
   it("a leaf with every name but another authority's signature is reissued", async () => {
@@ -128,8 +128,8 @@ describe("ensureLeaf", () => {
 
     expect(await ensure(stateDir)).toBe("reissued");
 
-    const cert = new X509Certificate(await tlsFile(stateDir, "server.crt"));
-    expect(cert.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "server.key")))).toBe(
+    const cert = new X509Certificate(await tlsFile(stateDir, "server.pem"));
+    expect(cert.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "server.pem")))).toBe(
       true,
     );
     expect(await handshake(stateDir, own.caCertPem, OWN_NAME)).toBe("verified");
@@ -137,14 +137,14 @@ describe("ensureLeaf", () => {
 
   it("a failed reissue rejects and keeps the old leaf", async () => {
     const stateDir = await box(leafFrom(own, ["localhost"], ["127.0.0.1"]));
-    const cert = await tlsFile(stateDir, "server.crt");
-    const key = await tlsFile(stateDir, "server.key");
+    const cert = await tlsFile(stateDir, "server.pem");
+    const key = await tlsFile(stateDir, "server.pem");
     await rm(join(stateDir, "tls", "ca.key"));
 
     await expect(ensure(stateDir)).rejects.toMatchObject({ code: "ENOENT" });
 
-    expect(await tlsFile(stateDir, "server.crt")).toBe(cert);
-    expect(await tlsFile(stateDir, "server.key")).toBe(key);
+    expect(await tlsFile(stateDir, "server.pem")).toBe(cert);
+    expect(await tlsFile(stateDir, "server.pem")).toBe(key);
   });
 
   it("does nothing on a box with no minted leaf", async () => {

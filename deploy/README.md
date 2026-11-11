@@ -432,7 +432,8 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
 `state` volume:
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
-  certificate signed by it. Because that folder survives, a device that has already been told to
+  certificate and private key together in `server.pem`. A certificate repair keeps its latest old
+  files in `tls/repair/` until the next start stays healthy for two minutes. Because that folder survives, a device that has already been told to
   trust this box does not need to trust it again after a plain `reset`. The exception is a box that
   joined another server as a spare (its `tls/` holds `joined.json`): joining replaced this box's
   certificate authority with that server's, so a plain `reset` empties `tls/` there, and the box

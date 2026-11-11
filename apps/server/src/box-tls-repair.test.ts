@@ -6,19 +6,22 @@ import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
+import { syncsAndRenames } from "./testing/durable-writes.js";
+import * as tlsRepair from "./box-tls-repair.js";
 import { inspectBoxTls, readBoxCaFingerprint, repairBoxTls } from "./box-tls-repair.js";
 import { ensureBoxSecrets, reissueBoxLeaf } from "./box-secrets.js";
 
-const faults = vi.hoisted(() => ({ rename: vi.fn(), open: vi.fn() }));
+const faults = vi.hoisted(() => ({ rename: vi.fn(), open: vi.fn(), mkdir: vi.fn() }));
 vi.mock("node:fs/promises", async (original) => {
   const real = await original<typeof import("node:fs/promises")>();
   faults.rename.mockImplementation(real.rename);
   faults.open.mockImplementation(real.open);
-  return { ...real, rename: faults.rename, open: faults.open };
+  faults.mkdir.mockImplementation(real.mkdir);
+  return { ...real, rename: faults.rename, open: faults.open, mkdir: faults.mkdir };
 });
 const now = new Date("2026-10-21T00:00:00Z");
 const names = ["waitron.local", "localhost"];
-const pemNames = ["ca.crt", "ca.key", "server.crt", "server.key"] as const;
+const pemNames = ["ca.crt", "ca.key", "server.pem"] as const;
 const dirs: string[] = [];
 let keys: forge.pki.rsa.KeyPair;
 let otherKeys: forge.pki.rsa.KeyPair;
@@ -45,8 +48,7 @@ async function fixture(initial: SelfSignedMaterial | null = material) {
     const values = [
       initial.caCertPem,
       initial.caKeyPem,
-      initial.serverCertPem,
-      initial.serverKeyPem,
+      initial.serverCertPem + initial.serverKeyPem,
     ];
     for (const [i, name] of pemNames.entries())
       await writeFile(join(stateDir, "tls", name), values[i]!);
@@ -68,15 +70,12 @@ async function contents(stateDir: string) {
   );
 }
 async function archive(stateDir: string) {
-  const root = join(stateDir, "tls", "repair-archive");
-  const entries = await readdir(root);
-  expect(entries).toHaveLength(1);
-  const folder = join(root, entries[0]!);
+  const folder = join(stateDir, "tls", "repair");
   return { folder, manifest: JSON.parse(await readFile(join(folder, "manifest.json"), "utf8")) };
 }
 async function validInstalled(stateDir: string, ca = material.caCertPem) {
-  const leafPem = await readFile(join(stateDir, "tls", "server.crt"));
-  const keyPem = await readFile(join(stateDir, "tls", "server.key"));
+  const leafPem = await readFile(join(stateDir, "tls", "server.pem"));
+  const keyPem = await readFile(join(stateDir, "tls", "server.pem"));
   const leaf = new X509Certificate(leafPem);
   expect(leaf.verify(new X509Certificate(ca).publicKey)).toBe(true);
   expect(leaf.checkPrivateKey(createPrivateKey(keyPem))).toBe(true);
@@ -101,10 +100,9 @@ it("reads the same authority fingerprint the connection page shows, and none wit
   expect(await readBoxCaFingerprint(f.stateDir, now)).toBeNull();
 });
 
-it("preserves a usable CA and every old byte when the server key is lost", async () => {
+it("preserves a usable CA when the leaf is lost", async () => {
   const f = await fixture();
-  await rm(join(f.stateDir, "tls", "server.key"));
-  await writeFile(join(f.stateDir, "tls", "server.crt.previous"), Buffer.from([0, 255, 1]));
+  await rm(join(f.stateDir, "tls", "server.pem"));
   expect(await inspectBoxTls(f)).toMatchObject({
     state: "repair-required",
     trust: "retained",
@@ -118,11 +116,8 @@ it("preserves a usable CA and every old byte when the server key is lost", async
   expect(await readFile(join(f.stateDir, "tls", "ca.crt"), "utf8")).toBe(material.caCertPem);
   expect(await readFile(join(f.stateDir, "tls", "ca.key"), "utf8")).toBe(material.caKeyPem);
   const saved = await archive(f.stateDir);
-  expect(await readFile(join(saved.folder, "server.crt"), "utf8")).toBe(material.serverCertPem);
-  expect(await readFile(join(saved.folder, "server.crt.previous"))).toEqual(
-    Buffer.from([0, 255, 1]),
-  );
-  expect(saved.manifest.absent).toContain("server.key");
+
+  expect(saved.manifest.absent).toContain("server.pem");
   await validInstalled(f.stateDir);
   expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe("retained-vault-key\n");
   expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe("retained-attempt\n");
@@ -132,13 +127,13 @@ it.each(["missing-cert", "malformed", "expired", "mismatched", "wrong-host", "wr
   "repairs a %s leaf under its retained CA",
   async (damage) => {
     const f = await fixture();
-    if (damage === "missing-cert") await rm(join(f.stateDir, "tls", "server.crt"));
+    if (damage === "missing-cert") await rm(join(f.stateDir, "tls", "server.pem"));
     if (damage === "malformed")
-      await writeFile(join(f.stateDir, "tls", "server.crt"), "broken leaf");
+      await writeFile(join(f.stateDir, "tls", "server.pem"), "broken leaf");
     if (damage === "mismatched")
       await writeFile(
-        join(f.stateDir, "tls", "server.key"),
-        forge.pki.privateKeyToPem(keys.privateKey),
+        join(f.stateDir, "tls", "server.pem"),
+        material.serverCertPem + forge.pki.privateKeyToPem(keys.privateKey),
       );
     if (["expired", "wrong-host", "wrong-ip"].includes(damage)) {
       const { reissueServerLeaf } = await import("./self-signed-cert.js");
@@ -149,7 +144,10 @@ it.each(["missing-cert", "malformed", "expired", "mismatched", "wrong-host", "wr
         now: damage === "expired" ? new Date("2010-01-01T00:00:00Z") : now,
         keypair: () => otherKeys,
       });
-      await writeFile(join(f.stateDir, "tls", "server.crt"), leaf.serverCertPem);
+      await writeFile(
+        join(f.stateDir, "tls", "server.pem"),
+        leaf.serverCertPem + leaf.serverKeyPem,
+      );
     }
     expect(await inspectBoxTls(f)).toMatchObject({ state: "repair-required", trust: "retained" });
     expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "retained" });
@@ -169,7 +167,7 @@ it.each([
   "bad-signature",
 ])("requires new trust when the retained authority is %s", async (damage) => {
   const f = await fixture();
-  await rm(join(f.stateDir, "tls", "server.key"));
+  await rm(join(f.stateDir, "tls", "server.pem"));
   if (damage === "missing-cert") await rm(join(f.stateDir, "tls", "ca.crt"));
   if (damage === "missing-key") await rm(join(f.stateDir, "tls", "ca.key"));
   if (damage === "malformed") await writeFile(join(f.stateDir, "tls", "ca.crt"), "broken CA");
@@ -213,12 +211,12 @@ it.each([
   const ca = await readFile(join(f.stateDir, "tls", "ca.crt"), "utf8");
   expect(ca).not.toBe(material.caCertPem);
   expect(
-    new X509Certificate(await readFile(join(f.stateDir, "tls", "server.crt"))).verify(
+    new X509Certificate(await readFile(join(f.stateDir, "tls", "server.pem"))).verify(
       new X509Certificate(material.caCertPem).publicKey,
     ),
   ).toBe(false);
   await validInstalled(f.stateDir, ca);
-  expect((await archive(f.stateDir)).manifest.absent).toContain("server.key");
+  expect((await archive(f.stateDir)).manifest.absent).toContain("server.pem");
 });
 
 it("keeps healthy TLS byte-identical even without the CA signing key", async () => {
@@ -230,9 +228,9 @@ it("keeps healthy TLS byte-identical even without the CA signing key", async () 
     trust: "retained",
     caAvailable: true,
   });
-  for (const name of ["ca.crt", "server.crt", "server.key"])
+  for (const name of ["ca.crt", "server.pem"])
     expect(await readFile(join(f.stateDir, "tls", name))).toEqual(before[name]);
-  await expect(stat(join(f.stateDir, "tls", "repair-archive"))).rejects.toMatchObject({
+  await expect(stat(join(f.stateDir, "tls", "repair"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
@@ -252,7 +250,7 @@ it("serializes two repairs and makes a healthy repeat a no-op", async () => {
   const { folder } = await archive(f.stateDir);
   expect((await stat(folder)).mode & 0o777).toBe(0o700);
   expect((await stat(join(folder, "manifest.json"))).mode & 0o777).toBe(0o600);
-  expect((await stat(join(f.stateDir, "tls", "server.key"))).mode & 0o777).toBe(0o600);
+  expect((await stat(join(f.stateDir, "tls", "server.pem"))).mode & 0o777).toBe(0o600);
 });
 
 it.each(pemNames)(
@@ -274,16 +272,18 @@ it.each(pemNames)(
       faults.rename.mockImplementation(original);
     }
     expect(rejected).toBe(true);
-    const { folder } = await archive(f.stateDir);
-    const candidate = JSON.parse(await readFile(join(folder, "candidate.json"), "utf8"));
+    await archive(f.stateDir);
+    const candidate = JSON.parse(
+      await readFile(join(f.stateDir, "flows/tls-repair/candidate.json"), "utf8"),
+    );
     expect(await inspectBoxTls(f)).toMatchObject({
       state: "repair-required",
       trust: "new-required",
     });
     expect(await repairBoxTls({ ...f })).toMatchObject({ state: "healthy", trust: "new-required" });
     expect(await readFile(join(f.stateDir, "tls", "ca.crt"), "utf8")).toBe(candidate.caCertPem);
-    expect(await readFile(join(f.stateDir, "tls", "server.crt"), "utf8")).toBe(
-      candidate.serverCertPem,
+    expect(await readFile(join(f.stateDir, "tls", "server.pem"), "utf8")).toBe(
+      candidate.serverCertPem + candidate.serverKeyPem,
     );
     await archive(f.stateDir);
   },
@@ -291,11 +291,11 @@ it.each(pemNames)(
 
 it("refuses an archive failure before changing any active bytes", async () => {
   const f = await fixture();
-  await writeFile(join(f.stateDir, "tls", "server.crt"), "damaged");
+  await writeFile(join(f.stateDir, "tls", "server.pem"), "damaged");
   const before = await contents(f.stateDir);
   const original = faults.open.getMockImplementation()!;
   faults.open.mockImplementation(async (path, ...args) => {
-    if (String(path).includes("repair-archive"))
+    if (String(path).includes("tls/repair"))
       throw Object.assign(new Error("archive refused"), { code: "EACCES" });
     return original(path, ...args);
   });
@@ -320,8 +320,10 @@ it("reuses a candidate saved just before an interruption, without minting anothe
   } finally {
     faults.rename.mockImplementation(original);
   }
-  const { folder } = await archive(f.stateDir);
-  const candidate = JSON.parse(await readFile(join(folder, "candidate.json"), "utf8"));
+  await archive(f.stateDir);
+  const candidate = JSON.parse(
+    await readFile(join(f.stateDir, "flows/tls-repair/candidate.json"), "utf8"),
+  );
   expect(await repairBoxTls({ ...f })).toMatchObject({ state: "healthy", trust: "new-required" });
   expect(await readFile(join(f.stateDir, "tls", "ca.crt"), "utf8")).toBe(candidate.caCertPem);
   await archive(f.stateDir);
@@ -332,7 +334,7 @@ it("a complete TLS pair waits for the interrupted completion marker before being
   const original = faults.rename.getMockImplementation()!;
   let markers = 0;
   faults.rename.mockImplementation(async (from, to) => {
-    if (to === join(f.stateDir, "tls", "repair-pending.json") && ++markers === 2)
+    if (to === join(f.stateDir, "flows/tls-repair/record.json") && ++markers === 2)
       throw Object.assign(new Error("completion marker interrupted"), { code: "EIO" });
     return original(from, to);
   });
@@ -351,8 +353,8 @@ it("refuses linked TLS material without reading or changing its target", async (
   const f = await fixture();
   const target = join(f.stateDir, "outside-key");
   await writeFile(target, material.serverKeyPem);
-  await rm(join(f.stateDir, "tls", "server.key"));
-  await symlink(target, join(f.stateDir, "tls", "server.key"));
+  await rm(join(f.stateDir, "tls", "server.pem"));
+  await symlink(target, join(f.stateDir, "tls", "server.pem"));
   expect(await inspectBoxTls(f)).toMatchObject({ state: "refused" });
   await expect(repairBoxTls(f)).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await readFile(target, "utf8")).toBe(material.serverKeyPem);
@@ -362,7 +364,7 @@ it.each(["nameConstraints", "keyUsage"])(
   "requires new trust when the authority lacks %s",
   async (extension) => {
     const f = await fixture();
-    await rm(join(f.stateDir, "tls", "server.key"));
+    await rm(join(f.stateDir, "tls", "server.pem"));
     const ca = forge.pki.certificateFromPem(material.caCertPem);
     ca.setExtensions(
       ca.extensions.filter(
@@ -384,7 +386,7 @@ it.each(["nameConstraints", "keyUsage"])(
 
 it("requires new trust when the retained CA cannot be the issuer used by the box signer", async () => {
   const f = await fixture();
-  await rm(join(f.stateDir, "tls", "server.key"));
+  await rm(join(f.stateDir, "tls", "server.pem"));
   const ca = forge.pki.certificateFromPem(material.caCertPem);
   ca.setSubject([{ name: "commonName", value: "different-authority" }]);
   ca.setIssuer([{ name: "commonName", value: "different-authority" }]);
@@ -393,31 +395,34 @@ it("requires new trust when the retained CA cannot be the issuer used by the box
   expect(await inspectBoxTls(f)).toMatchObject({ state: "repair-required", trust: "new-required" });
   expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "new-required" });
   const installedCa = new X509Certificate(await readFile(join(f.stateDir, "tls", "ca.crt")));
-  const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls", "server.crt")));
+  const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls", "server.pem")));
   expect(leaf.checkIssued(installedCa)).toBe(true);
   expect(leaf.verify(installedCa.publicKey)).toBe(true);
 });
 
-it.each(["ca.crt", "ca.key", "server.crt", "server.crt.previous", "secrets.env"])(
+it.each(["ca.crt", "ca.key", "secrets.env", "repair"])(
   "initialization preserves retained %s instead of treating a lost server key as a new box",
   async (retained) => {
     const f = await fixture(null);
     await rm(join(f.stateDir, "secrets.env"));
     const path =
       retained === "secrets.env" ? join(f.stateDir, retained) : join(f.stateDir, "tls", retained);
-    await writeFile(path, "original retained bytes");
+    if (retained === "repair") await mkdir(path);
+    const saved = retained === "repair" ? join(path, "ca.key") : path;
+    await writeFile(saved, "original retained bytes");
     await expect(ensureBoxSecrets(f)).rejects.toMatchObject({ code: "setup.not_ready" });
-    expect(await readFile(path, "utf8")).toBe("original retained bytes");
+    expect(await readFile(saved, "utf8")).toBe("original retained bytes");
     for (const name of pemNames.filter((name) => name !== retained))
       await expect(stat(join(f.stateDir, "tls", name))).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
 
 it("an ordinary leaf reissue refuses to overtake an interrupted guided replacement", async () => {
-  const f = await fixture(null);
+  const f = await fixture();
+  await writeFile(join(f.stateDir, "tls/server.pem"), "damaged leaf");
   const original = faults.rename.getMockImplementation()!;
   faults.rename.mockImplementation(async (from, to) => {
-    if (to === join(f.stateDir, "tls", "server.key"))
+    if (to === join(f.stateDir, "tls", "server.pem"))
       throw Object.assign(new Error("interrupted key rename"), { code: "EIO" });
     return original(from, to);
   });
@@ -426,9 +431,9 @@ it("an ordinary leaf reissue refuses to overtake an interrupted guided replaceme
   } finally {
     faults.rename.mockImplementation(original);
   }
-  const before = await readFile(join(f.stateDir, "tls", "server.crt"));
+  const before = await readFile(join(f.stateDir, "tls", "server.pem"));
   await expect(reissueBoxLeaf(f)).rejects.toMatchObject({ code: "setup.not_ready" });
-  expect(await readFile(join(f.stateDir, "tls", "server.crt"))).toEqual(before);
+  expect(await readFile(join(f.stateDir, "tls", "server.pem"))).toEqual(before);
   expect(await repairBoxTls(f)).toMatchObject({ state: "healthy" });
 });
 
@@ -454,7 +459,7 @@ it.each(["oversize", "directory", "unreadable"])(
   "refuses %s TLS material instead of treating it as missing",
   async (damage) => {
     const f = await fixture();
-    const path = join(f.stateDir, "tls", "server.key");
+    const path = join(f.stateDir, "tls", "server.pem");
     if (damage === "oversize") await writeFile(path, Buffer.alloc(131073, 65));
     if (damage === "directory") {
       await rm(path);
@@ -476,7 +481,7 @@ it.each(["oversize", "directory", "unreadable"])(
     } finally {
       faults.open.mockImplementation(original);
     }
-    await expect(stat(join(f.stateDir, "tls", "repair-archive"))).rejects.toMatchObject({
+    await expect(stat(join(f.stateDir, "tls", "repair"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   },
@@ -490,7 +495,8 @@ it.each([
 ])("refuses an invalid pending repair reference %#", async (record) => {
   const f = await fixture();
   const before = await contents(f.stateDir);
-  await writeFile(join(f.stateDir, "tls", "repair-pending.json"), JSON.stringify(record));
+  await mkdir(join(f.stateDir, "flows/tls-repair"), { recursive: true });
+  await writeFile(join(f.stateDir, "flows/tls-repair/record.json"), JSON.stringify(record));
   expect(await inspectBoxTls(f)).toEqual({
     state: "refused",
     trust: "new-required",
@@ -517,7 +523,7 @@ it.each(["address", "leaf-expiry"])(
     const original = faults.rename.getMockImplementation()!;
     let markers = 0;
     faults.rename.mockImplementation(async (from, to) => {
-      if (to === join(f.stateDir, "tls", "repair-pending.json") && ++markers === 2)
+      if (to === join(f.stateDir, "flows/tls-repair/record.json") && ++markers === 2)
         throw Object.assign(new Error("completion interrupted"), { code: "EIO" });
       return original(from, to);
     });
@@ -526,14 +532,16 @@ it.each(["address", "leaf-expiry"])(
     } finally {
       faults.rename.mockImplementation(original);
     }
-    const { folder } = await archive(f.stateDir);
-    const saved = JSON.parse(await readFile(join(folder, "candidate.json"), "utf8"));
+    await archive(f.stateDir);
+    const saved = JSON.parse(
+      await readFile(join(f.stateDir, "flows/tls-repair/candidate.json"), "utf8"),
+    );
     if (change === "leaf-expiry") {
       const leaf = forge.pki.certificateFromPem(saved.serverCertPem);
       leaf.validity.notAfter = new Date(now.getTime() + 86400000);
       leaf.sign(forge.pki.privateKeyFromPem(saved.caKeyPem), forge.md.sha256.create());
       saved.serverCertPem = forge.pki.certificateToPem(leaf);
-      await writeFile(join(folder, "candidate.json"), JSON.stringify(saved));
+      await writeFile(join(f.stateDir, "flows/tls-repair/candidate.json"), JSON.stringify(saved));
     }
     const resumed = {
       ...f,
@@ -543,15 +551,127 @@ it.each(["address", "leaf-expiry"])(
     expect(await repairBoxTls(resumed)).toMatchObject({ state: "healthy", trust: "new-required" });
     expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(saved.caCertPem);
     expect(await readFile(join(f.stateDir, "tls/ca.key"), "utf8")).toBe(saved.caKeyPem);
-    const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls/server.crt")));
+    const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls/server.pem")));
     expect(leaf.verify(new X509Certificate(saved.caCertPem).publicKey)).toBe(true);
     if (change === "address") expect(leaf.checkIP("192.168.1.99")).toBe("192.168.1.99");
     else expect(Date.parse(leaf.validTo)).toBeGreaterThan(resumed.now().getTime());
-    expect(await readdir(join(f.stateDir, "tls/repair-archive"))).toEqual([
-      folder.split("/").at(-1),
-    ]);
+    expect(await readdir(join(f.stateDir, "tls/repair"))).toEqual(["manifest.json"]);
     await expect(ensureBoxSecrets(resumed)).resolves.toMatchObject({
-      certFile: join(f.stateDir, "tls/server.crt"),
+      certFile: join(f.stateDir, "tls/server.pem"),
     });
   },
 );
+
+it("keeps its record and private candidate in the repair flow", async () => {
+  const f = await fixture(null);
+  await repairBoxTls(f);
+  const flow = join(f.stateDir, "flows/tls-repair");
+  const record = JSON.parse(await readFile(join(flow, "record.json"), "utf8"));
+  expect(record).toMatchObject({ complete: true, trust: "new-required" });
+  const candidate = JSON.parse(await readFile(join(flow, "candidate.json"), "utf8"));
+  expect(candidate.caCertPem).toBe(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8"));
+  expect((await stat(flow)).mode & 0o777).toBe(0o700);
+  expect((await stat(join(flow, "candidate.json"))).mode & 0o777).toBe(0o600);
+});
+
+it("a second repair keeps only its own old files in the fixed archive", async () => {
+  const f = await fixture(null);
+  await repairBoxTls(f);
+  const first = await contents(f.stateDir);
+  await writeFile(join(f.stateDir, "tls/server.pem"), "second repair's damaged leaf");
+  await rm(join(f.stateDir, "tls/ca.key"));
+  expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "new-required" });
+  expect(await readFile(join(f.stateDir, "tls/ca.crt"))).not.toEqual(first["ca.crt"]);
+  const saved = join(f.stateDir, "tls/repair");
+  expect(await readFile(join(saved, "ca.crt"))).toEqual(first["ca.crt"]);
+  expect(await readFile(join(saved, "server.pem"), "utf8")).toBe("second repair's damaged leaf");
+  expect(await readdir(saved)).not.toContain("candidate.json");
+  expect(await readdir(join(f.stateDir, "tls"))).toEqual([
+    "ca.crt",
+    "ca.key",
+    "repair",
+    "server.pem",
+  ]);
+});
+
+it("a repair after a reset replaces the kept archive without its old record", async () => {
+  const f = await fixture(null);
+  await repairBoxTls(f);
+  await rm(join(f.stateDir, "flows"), { recursive: true, force: true });
+  await writeFile(join(f.stateDir, "tls/server.pem"), "damaged after reset");
+  expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "retained" });
+  expect(await readFile(join(f.stateDir, "tls/repair/server.pem"), "utf8")).toBe(
+    "damaged after reset",
+  );
+});
+
+it("ends a finished healthy repair and keeps an unfinished or unhealthy repair", async () => {
+  const f = await fixture(null);
+  await repairBoxTls(f);
+  const path = join(f.stateDir, "flows/tls-repair/record.json");
+  const record = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(path, JSON.stringify({ ...record, complete: false }));
+  await tlsRepair.endFinishedTlsRepair(f.stateDir);
+  expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ ...record, complete: false });
+  await stat(join(f.stateDir, "tls/repair"));
+  await writeFile(path, JSON.stringify(record));
+  const leaf = join(f.stateDir, "tls/server.pem");
+  const saved = await readFile(leaf);
+  await writeFile(leaf, "unhealthy");
+  await tlsRepair.endFinishedTlsRepair(f.stateDir);
+  await stat(path);
+  await writeFile(leaf, saved);
+  await tlsRepair.endFinishedTlsRepair(f.stateDir);
+  await expect(stat(join(f.stateDir, "tls/repair"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(stat(join(f.stateDir, "flows/tls-repair"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await readdir(join(f.stateDir, "scratch"))).toEqual([]);
+});
+
+it("ends the kept archive after a reset removed a healthy repair's record", async () => {
+  const f = await fixture(null);
+  await repairBoxTls(f);
+  await rm(join(f.stateDir, "flows"), { recursive: true, force: true });
+  await tlsRepair.endFinishedTlsRepair(f.stateDir);
+  await expect(stat(join(f.stateDir, "tls/repair"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await inspectBoxTls(f)).toMatchObject({ state: "healthy" });
+});
+
+it("the first repair deletes every retired certificate file and older repair key", async () => {
+  const f = await fixture();
+  await rm(join(f.stateDir, "tls/server.pem"));
+  const retired = [
+    "server.crt",
+    "server.key",
+    "server.crt.previous",
+    "repair-pending.json",
+    "repair-archive",
+  ];
+  for (const name of retired.slice(0, 4))
+    await writeFile(join(f.stateDir, "tls", name), "old private material");
+  await mkdir(join(f.stateDir, "tls/repair-archive/old-operation"), { recursive: true });
+  await writeFile(
+    join(f.stateDir, "tls/repair-archive/old-operation/ca.key"),
+    "older authority key",
+  );
+  expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "retained" });
+  for (const name of retired)
+    await expect(stat(join(f.stateDir, "tls", name))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
+});
+
+it("flushes newly created flow parents before publishing its first record", async () => {
+  const f = await fixture(null);
+  const events = await syncsAndRenames(faults, () => repairBoxTls(f));
+  const created = events.indexOf(`mkdir ${join(f.stateDir, "flows/tls-repair")}`);
+  const published = events.findIndex(
+    (event) => event.startsWith("rename ") && event.endsWith("/record.json"),
+  );
+  expect(created).toBeGreaterThanOrEqual(0);
+  for (const parent of [f.stateDir, join(f.stateDir, "flows")]) {
+    const synced = events.indexOf(`sync ${parent}`, created);
+    expect(synced).toBeGreaterThan(created);
+    expect(synced).toBeLessThan(published);
+  }
+});
