@@ -18,7 +18,7 @@ import {
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer, StartServerSeams } from "./boot.js";
@@ -105,8 +105,13 @@ async function seedVenue(): Promise<void> {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222J", legalName: "Surface SL" });
-  await suite.db.insert(locations).values({ id: LOCATION, operationDescription: "Hospitality" });
-  await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["en"] });
+  await suite.db.insert(locations).values({ id: LOCATION });
+  await seedVenueSettings(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(suite.db, {});
 }
 
 /** Seeds the venue for `start` and boots it; `fromBox`, when given, decides who each request is
@@ -164,7 +169,7 @@ async function boot(
     }
     if (start.endsWith("zone-repair"))
       await suite.db.execute(
-        sql`update locations set time_zone = 'Invalid/Zone' where id = ${LOCATION}`,
+        sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
       );
   }
   return { ...(await startOn(stateDir, options)), stateDir };
@@ -263,6 +268,12 @@ const OPEN_READS: Record<string, Answer> = {
   "/health": { status: 200 },
   "/help/en/products": { status: 200 },
   "/help/x": { status: 404 },
+  "/legal": { status: 404 },
+  "/legal/about": { status: 200 },
+  "/legal/declaration": { status: 404 },
+  "/legal/declaration.pdf": { status: 404 },
+  "/legal/declaration.txt": { status: 404 },
+  "/legal/x": { status: 404 },
   "/public/availability": { status: 503 },
   "/api/node": { status: 200 },
   [`/api/node/handover/${MADE_UP}`]: { status: 404, code: "handover.operation_unknown" },
@@ -327,6 +338,7 @@ const LATCH_ANSWERS: Record<string, Answer> = {
   "POST /setup-api/connection/continue": { status: 403, code: "connection.refused" },
   "GET /help/en/products": { status: 200 },
   "GET /help/x": { status: 404 },
+  "GET /legal/about": { status: 200 },
   "GET /public/availability": { status: 503 },
   "GET /setup/trust": { status: 200 },
   "GET /setup/connection": { status: 200 },
