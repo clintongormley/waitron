@@ -4123,3 +4123,31 @@ These supporting fragments are from `CLAUDE.md` at
 
 > : that check's mutants change nothing, and on CI's runners some ran to Stryker's
 > per-mutant timeout.
+
+## Root receipts moved on 2026-11-11
+
+These excerpts are from `CLAUDE.md` at `62a38292d2cd628ec2bae8eff3fa6bfba47e95bb`; they are not new
+measurements. Each heading names a root entry that still names its guard and says the guard is
+weaker than its name or the rule; the excerpt is the original sentence, which says what the guard
+does not see.
+
+### One target
+
+> Guard: `scripts/venue-db-helper.test.ts`, weaker than its name — it holds only that nothing names
+> the retired helper `usePgliteDb`.
+
+### Synchronous `node:sqlite` tests need a real timer turn for the venue watchdog; `useVenueDb` yields after each test
+
+> Guards: `packages/db/src/testing/venue-db.test.ts` and
+> `packages/store/src/venue-liveness.test.ts`, weaker than the rule: only the helper/default options
+> and store loaded before fake clocks; manually opened folders get no helper turn.
+
+### A test's timeout must exceed the SUM of its waits plus untimed work
+
+> Guard: `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only,
+> checks only the largest single wait; packages/apps unguarded.
+
+### A package config names its own source tree in `coverage.include`
+
+> Guard: `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string;
+> include paths are not package-anchored.

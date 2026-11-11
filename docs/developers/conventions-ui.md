@@ -2378,3 +2378,15 @@ These supporting fragments are from `CLAUDE.md` at
 
 > , not every action
 > label or zone check. The zone map remains a comment.
+
+## Root receipts moved on 2026-11-11
+
+These excerpts are from `CLAUDE.md` at `62a38292d2cd628ec2bae8eff3fa6bfba47e95bb`; they are not new
+measurements. Each heading names a root entry that still names its guard and says the guard is
+weaker than its name or the rule; the excerpt is the original sentence, which says what the guard
+does not see.
+
+### A device's profile and the signed-in person must both allow a till action; profile zones bound service and its admission list bounds sign-in
+
+> The inventory guard is weaker than its name: only its till/device/schedule mounts, and
+> device-proof refusals.
