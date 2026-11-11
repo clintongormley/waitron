@@ -20,7 +20,7 @@ let sessionId: string;
 
 beforeEach(async () => {
   await seedVenue(suite.db, {
-    name: "Barra",
+    name: "Main room",
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });

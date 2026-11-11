@@ -31,7 +31,7 @@ describe("finishPromotedRole", () => {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
     await seedVenue(db, {
-      name: "Barra",
+      name: "Main room",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });

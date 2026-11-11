@@ -109,7 +109,7 @@ beforeAll(async () => {
   const aStore = await openStore(aDir);
   await stampDeployment(aStore.venue, "preproduction");
   await seedVenue(aStore.venue, {
-    name: "Barra",
+    name: "Main room",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
