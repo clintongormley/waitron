@@ -120,9 +120,7 @@ it("corrects stored invoice facts without changing the issued sale, original rec
     issuerName: "Corrected Issuer",
     invoiceType: "F1",
     recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
+    description: "Corrected restaurant service",
   });
   expect(res.status).toBe(200);
   const result = (await res.json()) as { registroId: string; eventId: string };
@@ -138,10 +136,10 @@ it("corrects stored invoice facts without changing the issued sale, original rec
     nombreRazonEmisor: "Corrected Issuer",
     tipoFactura: "F1",
     destinatarios: { IDDestinatario: [recipient] },
-    desglose: breakdown,
-    cuotaTotal: "20.00",
-    importeTotal: "220.00",
-    descripcionOperacion: before.records[0]!.descripcionOperacion,
+    desglose: before.records[0]!.desglose,
+    cuotaTotal: before.records[0]!.cuotaTotal,
+    importeTotal: before.records[0]!.importeTotal,
+    descripcionOperacion: "Corrected restaurant service",
     subsanacion: "S",
     rechazoPrevio: "X",
     anteriorHuella: before.records[0]!.huella,
@@ -157,9 +155,19 @@ it("corrects stored invoice facts without changing the issued sale, original rec
 });
 
 it.each([
+  { breakdown, taxTotal: "20.00", total: "220.00" },
+  { total: "123.46" },
+  { taxTotal: "21.44" },
+])("refuses a fix that changes the invoice's amounts, without a write: %j", async (facts) => {
+  const before = await snapshot();
+  const res = await send({ issuerName: "Corrected Issuer", ...facts });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_amount_changed" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each([
   { facts: { issuerName: "Corrected Issuer" }, row: { nombreRazonEmisor: "Corrected Issuer" } },
-  { facts: { total: "123.46" }, row: { importeTotal: "123.46" } },
-  { facts: { taxTotal: "21.44" }, row: { cuotaTotal: "21.44" } },
   {
     facts: {
       invoiceType: "F1",
@@ -295,9 +303,7 @@ it("replays complete facts in another key order after the clock and delivery cha
   const facts = {
     invoiceType: "F1",
     recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
+    description: "Corrected restaurant service",
   };
   const first = await send(facts);
   expect(first.status).toBe(200);
@@ -309,9 +315,7 @@ it("replays complete facts in another key order after the clock and delivery cha
     .where(eq(envios.registroId, body.registroId as string));
   const before = await snapshot();
   const replay = await send({
-    total: "220.00",
-    taxTotal: "20.00",
-    breakdown: breakdown.map((item) => Object.fromEntries(Object.entries(item).reverse())),
+    description: "Corrected restaurant service",
     recipients: [{ NIF: "B12345674", NombreRazon: "Corrected Customer" }],
     invoiceType: "F1",
   });
@@ -348,9 +352,7 @@ it("applies complete facts under an explicit accepted-with-errors decision while
   const res = await send({
     invoiceType: "F1",
     recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
+    description: "Corrected restaurant service",
   });
   expect(res.status).toBe(200);
   const after = await snapshot();
@@ -359,8 +361,7 @@ it("applies complete facts under an explicit accepted-with-errors decision while
     tipoFactura: "F1",
     subsanacion: "S",
     rechazoPrevio: "N",
-    cuotaTotal: "20.00",
-    importeTotal: "220.00",
+    descripcionOperacion: "Corrected restaurant service",
     destinatarios: { IDDestinatario: [recipient] },
   });
   expect(after.cases.find((item) => item.id !== body.caseId)).toEqual(
@@ -418,27 +419,40 @@ it.each(
   expect(await snapshot()).toEqual(before);
 });
 
+it.each([{ issuerName: "Another Issuer" }, { invoiceType: "F2" }, { recipients: null }])(
+  "refuses changed saved facts %j",
+  async (change) => {
+    const facts = {
+      issuerName: "Corrected Issuer",
+      invoiceType: "F1",
+      recipients: [recipient],
+      description: "Corrected restaurant service",
+    };
+    expect((await send(facts)).status).toBe(200);
+    const before = await snapshot();
+    const res = await send({ ...facts, ...change });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
 it.each([
-  { issuerName: "Another Issuer" },
-  { invoiceType: "F2" },
-  { recipients: null },
   { taxTotal: "20.01" },
   { total: "220.01" },
   { breakdown: [{ ...breakdown[0], BaseImponibleOimporteNoSujeto: "200.01" }] },
-])("refuses changed saved facts %j", async (change) => {
+])("refuses an amount change after a saved decision, without a write: %j", async (change) => {
   const facts = {
     issuerName: "Corrected Issuer",
     invoiceType: "F1",
     recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
+    description: "Corrected restaurant service",
   };
   expect((await send(facts)).status).toBe(200);
   const before = await snapshot();
   const res = await send({ ...facts, ...change });
-  expect(res.status).toBe(409);
-  expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_amount_changed" } });
   expect(await snapshot()).toEqual(before);
 });
 
@@ -494,9 +508,7 @@ it.each([false, true])(
     const facts = {
       invoiceType: "F1",
       recipients: [recipient],
-      breakdown,
-      taxTotal: "20.00",
-      total: "220.00",
+      description: "Corrected restaurant service",
     };
     if (replay) expect((await send(facts)).status).toBe(200);
     const before = await snapshot();
@@ -613,6 +625,22 @@ describe("a fix never changes the invoice's amounts", () => {
       }),
     ).rejects.toMatchObject({ code: "fiscal.remedy_amount_changed" });
     expect(await snapshot()).toEqual(before);
+  });
+
+  it("accepts a fix restating the stored 12.10 total as 12.1", async () => {
+    const target = await refusedTwelveTenInvoice();
+    const result = await fix(target, {
+      total: "12.1",
+      description: "Corrected restaurant service",
+    });
+    const [row] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, result.registroId));
+    expect(row).toMatchObject({
+      importeTotal: "12.10",
+      descripcionOperacion: "Corrected restaurant service",
+    });
   });
 
   it("accepts a fix of the same invoice that changes only its description", async () => {

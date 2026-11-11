@@ -1069,6 +1069,12 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Decisions and deliberate limits
 
+### A fix never changes an invoice's amounts (owner, 2026-11-11, option A)
+
+A fix re-sends the same invoice, so `applyCorrectedRecordFacts` refuses a changed rate, base, VAT or
+total with `fiscal.remedy_amount_changed` before writing anything. An amount error takes a corrective
+invoice, which still carries new amounts; a fix's own `ImporteRectificacion` is not checked.
+
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 
 A box the held membership chart does not name `serving-primary` refuses a sale before any money moves.
