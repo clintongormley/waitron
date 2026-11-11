@@ -42,8 +42,10 @@ recorded them, with the date and time of each in the venue's time zone.
 If the page offers **Progress**, use it to finish the handover on the spare.
 
 Keep this box running while it returns its invoice records to the main box. Refresh the page to
-check progress. Do not reset it until the page says **You can reset this box**. That confirmation
-means the main box holds the returned records; filing them with the tax agency continues there.
+check progress. A refund still in progress holds the return until it finishes. Once the main box
+confirms the returned invoice and payment records, filing with the tax agency continues there.
+Resetting the old box deletes its venue data, including sale lines and local backups. Those are
+not included in this return; keep the old box's data if you need them.
 
 If the return stops because invoice or payment facts differ, keep both boxes running with their
 data intact. Recovery from these differences is not available yet. Records after a clashing

@@ -93,3 +93,17 @@ real two-box fiscal test and its exact inventory gains that same path, as the wa
 Refund preservation and the archive/reset wording await the owner; no implementation is cleared
 for either by these notes. The known receiver-verdict and older-chain payment limits remain in the
 backlog under the watcher’s instruction.
+
+
+## Owner-directed refund and reset correction, 2026-11-11
+
+This supersedes the pending refund/reset wording above. Lane J questions.md WATCHER10:14 records
+owner10:14 choosing “Both, as recommended”: “send finished refunds with the payments (a refund
+still in progress on the old box holds the hand-back until it finishes), AND the page stops saying
+'You can reset this box' and instead says plainly what a reset would delete.” Watcher10:20 clears
+these fixes up to3,500 changed lines, retaining the completed whole-branch reviews and requiring
+one fresh read of only the new part. The existing payload, per-sale batches, signed inventory and
+comparison carry completed tender_refunds unchanged. Pending selected-sale refunds refuse the
+read; noncompleted incoming refunds refuse before import. No archive, recovery worker or provider
+operation is added. Reset wording names venue data, sale lines and local backups; it gives no
+blanket permission to discard them. The owner/watcher still lands this PR.

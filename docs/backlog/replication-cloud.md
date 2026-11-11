@@ -514,13 +514,16 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 ## A1342: return a stopped box's records before reset
 
 A differing original or payment fact stops the return and leaves reset unconfirmed. PR2 still
-needs exact-clash acceptance and the remaining hand-over refusals. The owner’s decision on
-acceptance alongside ordinary filing cases is pending (watcher 2026-11-10 19:45). Do not use a
+needs exact-clash acceptance and the remaining hand-over refusals. The owner chose its own
+signed acceptance record outside filing cases (watcher 2026-11-10 21:41). Do not use a
 return-clash filing case: a record has one case slot, which its later AEAT refusal needs. The
 real signed-return/outbox probe reproduced a rejected invoice whose only case was a resolved
 return clash and whose correction answered `fiscal.remedy_invalid`.
 
-Normal return preserves original identities and chains and uses the main box’s outbox. Correction
+Normal return preserves original identities and chains and uses the main box’s outbox.
+Completed tender refunds travel with their payments; a pending refund on a selected sale holds
+the return until it finishes. Reset deletes the old box's venue data, including the sale lines
+and local backups that this return does not carry. Correction
 is an internal authenticated API; it appends a corrective record on the main box’s own chain.
 Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain
 outside this cut. Reset-to-clean-setup is qualified; completed current-contract rejoin remains

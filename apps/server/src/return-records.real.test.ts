@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   tenders,
+  tenderRefunds,
   sales,
   saleSettlements,
   invoiceSeries,
@@ -404,4 +405,41 @@ it("counts returned VAT and settled payments without changing the new main's own
       manual: false,
     },
   ]);
+  const [location] = old.db.all<{ location_id: string }>(
+    sql`select location_id from nodes where id = ${source.nodeId}`,
+  );
+  await old.db.insert(tenderRefunds).values({
+    id: "returned-refund",
+    saleId: sale!.id,
+    tenderId: "returned-tender",
+    submissionId: "returned-refund-submission",
+    fingerprint: "returned-refund-fingerprint",
+    appliedAmount: 12345,
+    reason: "Service returned",
+    authorizedBy: "manager",
+    requestedBy: "operator",
+    source: "device",
+    deviceId: source.deviceId,
+    nodeId: source.nodeId,
+    locationId: location!.location_id,
+    method: "cash",
+    state: "completed",
+    createdAt: "2026-07-20T17:21:01.000Z",
+    completedAt: "2026-07-20T17:21:02.000Z",
+  });
+  expect(await withTransaction(old.db, (tx) => readRefundableTenders(tx, sale!.id))).toEqual([]);
+  const refunded = await withTransaction(old.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+  for (const batch of makeReturnedBatches(refunded)) {
+    expect(
+      await withTransaction(current.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, batch, now),
+      ),
+    ).toEqual({ complete: true });
+  }
+  expect(await withTransaction(current.db, (tx) => readRefundableTenders(tx, sale!.id))).toEqual(
+    [],
+  );
+  expect(current.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(
+    old.db.all<ReturnRow>(sql`select * from tender_refunds`),
+  );
 });

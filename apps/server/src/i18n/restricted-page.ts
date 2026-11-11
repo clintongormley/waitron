@@ -105,7 +105,7 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
     clash:
       "The main box found differing invoice or payment facts. This return has stopped. Keep both boxes running with their data intact. Do not reset this box. Clash recovery is not available yet.",
     confirmed:
-      "The main box has confirmed that every invoice record is accounted for. You can reset this box.",
+      "The main box has confirmed the returned invoice and payment records. Resetting this box deletes its venue data, including sale lines and local backups. Those are not included in this return.",
   },
   "es-ES": {
     waiting:
@@ -119,6 +119,6 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
     clash:
       "El equipo principal ha encontrado diferencias en los datos de facturación o de pago. La devolución se ha detenido. Mantén ambos equipos encendidos y conserva sus datos. No restablezcas este equipo. La resolución de estas diferencias aún no está disponible.",
     confirmed:
-      "El equipo principal ha confirmado que tiene todos los registros de facturación. Puedes restablecer este equipo.",
+      "El equipo principal ha confirmado los registros de facturación y de pago devueltos. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen en esta devolución.",
   },
 };

@@ -12,6 +12,7 @@ import {
   saleSubstitutions,
   saleVoids,
   tenders,
+  tenderRefunds,
   withTransaction,
 } from "@waitron/db";
 import { saleId } from "@waitron/shared";
@@ -1090,3 +1091,74 @@ it.each([60000, 60001])(
     expect(await clockBehindChain(receiver.db, { instant: now, offsetMinutes: 120 })).toBeNull();
   },
 );
+
+it("holds the return until a pending refund finishes, then returns it with its payment", async () => {
+  const source = await original("Source", 1, copyBase);
+  const device = await addDeviceToNode(suite.db, source);
+  const [location] = suite.db.all<{ location_id: string }>(
+    sql`select location_id from nodes where id = ${source.nodeId}`,
+  );
+  await suite.db.insert(tenders).values({
+    id: "refunded-tender",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 12345,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  const [refund] = await suite.db
+    .insert(tenderRefunds)
+    .values({
+      id: "finished-refund",
+      saleId: source.saleId,
+      tenderId: "refunded-tender",
+      submissionId: "refund-submission",
+      fingerprint: "refund-fingerprint",
+      appliedAmount: 12345,
+      reason: "Service returned",
+      authorizedBy: "manager",
+      requestedBy: "operator",
+      source: "device",
+      deviceId: device.deviceId,
+      nodeId: source.nodeId,
+      locationId: location!.location_id,
+      method: "cash",
+      state: "pending",
+      createdAt: "2026-07-20T17:21:01.000Z",
+    })
+    .returning();
+  await expect(
+    withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId)),
+  ).rejects.toMatchObject({ code: "fiscal.return_invalid", params: { reason: "refund pending" } });
+  await suite.db
+    .update(tenderRefunds)
+    .set({ state: "completed", completedAt: "2026-07-20T17:21:02.000Z" })
+    .where(eq(tenderRefunds.id, refund!.id));
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const batch = makeReturnedBatches(returned).find((row) => row.tenders.length > 0)!;
+  const stored = suite.db.all<ReturnRow>(sql`select * from tender_refunds`);
+  expect(batch.refunds).toEqual(stored);
+  expect(batch.devices.map((row) => row.id)).toContain(device.deviceId);
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  for (let pass = 0; pass < 2; pass++) {
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, batch, now),
+      ),
+    ).toEqual({ complete: true });
+    expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
+  }
+  const changed = structuredClone(batch);
+  changed.refunds[0]!.reason = "Different refund";
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, changed, now),
+    ),
+  ).toEqual({ complete: false });
+  expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
+  changed.refunds[0]!.state = "pending";
+  await expect(
+    withTransaction(receiver.db, (tx) => receiveReturnedOriginals(tx, source.nodeId, changed, now)),
+  ).rejects.toMatchObject({ code: "fiscal.return_invalid" });
+});

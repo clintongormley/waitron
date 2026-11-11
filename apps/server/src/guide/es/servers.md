@@ -47,9 +47,11 @@ los registró, con la fecha y la hora de cada uno en la zona horaria del local.
 Si la página ofrece **Progreso**, úsalo para terminar el traspaso en el equipo de reserva.
 
 Mantén este equipo encendido mientras devuelve sus registros de facturación al equipo principal.
-Actualiza la página para comprobar el progreso. No lo restablezcas hasta que la página diga
-**Puedes restablecer este equipo**. Esa confirmación indica que el principal tiene los registros
-devueltos; el envío a Hacienda continúa allí.
+Actualiza la página para comprobar el progreso. Un reembolso en curso retiene la devolución
+hasta que termina. Una vez que el principal confirma los registros de facturación y de pago
+devueltos, el envío a Hacienda continúa allí. Restablecer el equipo anterior borra sus datos del
+local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen
+en esta devolución; conserva los datos del equipo anterior si los necesitas.
 
 Si la devolución se detiene porque hay diferencias en los datos de facturación o de pago, mantén
 ambos equipos encendidos y conserva sus datos. La resolución de estas diferencias aún no está

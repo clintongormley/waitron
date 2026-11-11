@@ -23,6 +23,7 @@ export interface ReturnedOriginals {
   heads: ReturnRow[];
   deliveries: ReturnRow[];
   tenders: ReturnRow[];
+  refunds: ReturnRow[];
   settlements: ReturnRow[];
   voids: ReturnRow[];
   substitutions: ReturnRow[];
@@ -39,12 +40,20 @@ export async function readReturnedOriginals(
     union select s.substituted_sale_id from sale_substitutions s
       join parents p on p.id = s.substitution_sale_id
   ) select id from parents)`;
+  if (
+    tx.all(sql`select id from tender_refunds where sale_id in ${saleIds}
+      and state = 'pending' limit 1`).length > 0
+  )
+    throw new AppError("fiscal.return_invalid", { reason: "refund pending" });
+  const refunds = tx.all<ReturnRow>(sql`select * from tender_refunds
+    where sale_id in ${saleIds} and state = 'completed' order by id`);
   const records = tx.all<ReturnRow>(sql`
     select * from registros_facturacion where node_id = ${sourceNodeId} order by secuencia`);
   const sales = tx.all<ReturnRow>(sql`select * from sales where id in ${saleIds} order by id`);
   const devices = tx.all<ReturnRow>(sql`select * from devices where id in (
     select device_id from registros_facturacion where node_id = ${sourceNodeId}
     union select device_id from sales where id in ${saleIds}
+    union select device_id from tender_refunds where sale_id in ${saleIds} and state = 'completed'
   ) order by id`);
   const heads = tx.all<ReturnRow>(sql`select * from cadenas where node_id = ${sourceNodeId}`);
   const deliveries = tx.all<ReturnRow>(sql`select e.* from envios e
@@ -68,6 +77,7 @@ export async function readReturnedOriginals(
     heads,
     deliveries,
     tenders,
+    refunds,
     settlements,
     voids,
     substitutions,
@@ -100,6 +110,8 @@ export async function receiveReturnedOriginals(
 ): Promise<{ complete: boolean }> {
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
+  if (returned.refunds.some((row) => row.state !== "completed"))
+    throw new AppError("fiscal.return_invalid", { reason: "refund not completed" });
   for (const sale of returned.sales) {
     if (
       !held(tx, "nodes", sale.node_id) ||
@@ -191,11 +203,19 @@ export async function receiveReturnedOriginals(
           if (!held(paymentTx, "sale_settlements", settlement.id))
             await insertRow(paymentTx, "sale_settlements", settlement);
         }
+        for (const refund of returned.refunds.filter((row) => row.sale_id === sale.id)) {
+          if (!held(paymentTx, "tender_refunds", refund.id))
+            await insertRow(paymentTx, "tender_refunds", refund);
+        }
       });
     } catch (error) {
       if (
         !refusalOn(error, UNIQUE_VIOLATION, { table: "tenders", columns: ["bill_payment_id"] }) &&
         !refusalOn(error, UNIQUE_VIOLATION, { table: "sale_settlements", columns: ["sale_id"] }) &&
+        !refusalOn(error, UNIQUE_VIOLATION, {
+          table: "tender_refunds",
+          columns: ["sale_id", "submission_id"],
+        }) &&
         !triggerRaised(error, COVERAGE_REFUSAL) &&
         !triggerRaised(error, POST_SETTLEMENT_REFUSAL)
       )
@@ -280,6 +300,7 @@ export async function receiveReturnedOriginals(
     ["registros_facturacion", returned.records],
     ["sales", returned.sales],
     ["tenders", returned.tenders],
+    ["tender_refunds", returned.refunds],
     ["sale_settlements", returned.settlements],
     ["sale_voids", returned.voids],
     ["sale_substitutions", returned.substitutions],
@@ -348,6 +369,7 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     heads: [],
     deliveries: [],
     tenders: [],
+    refunds: [],
     settlements: [],
     voids: [],
     substitutions: [],
@@ -364,6 +386,7 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     return groups;
   }
   const tenders = indexed(snapshot.tenders, "sale_id");
+  const refunds = indexed(snapshot.refunds, "sale_id");
   const settlements = indexed(snapshot.settlements, "sale_id");
   const voids = indexed(snapshot.voids, "sale_id");
   const substitutions = indexed(snapshot.substitutions, "substitution_sale_id");
@@ -386,10 +409,15 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
       .map((id) => sales.get(id)!);
     const newIds = new Set(unit.sales.map((row) => row.id));
     unit.tenders = [...newIds].flatMap((id) => tenders.get(id) ?? []);
+    unit.refunds = [...newIds].flatMap((id) => refunds.get(id) ?? []);
     unit.settlements = [...newIds].flatMap((id) => settlements.get(id) ?? []);
     unit.voids = [...newIds].flatMap((id) => voids.get(id) ?? []);
     unit.substitutions = [...newIds].flatMap((id) => substitutions.get(id) ?? []);
-    const deviceIds = new Set([record.device_id, ...unit.sales.map((row) => row.device_id)]);
+    const deviceIds = new Set([
+      record.device_id,
+      ...unit.sales.map((row) => row.device_id),
+      ...unit.refunds.map((row) => row.device_id),
+    ]);
     unit.devices = [...deviceIds].filter((id) => devices.has(id)).map((id) => devices.get(id)!);
     unit.heads = snapshot.heads;
     unit.deliveries = deliveries.get(record.id) ?? [];
@@ -438,6 +466,7 @@ export function readReturnedBatch(raw: CanonicalValue): ReturnedOriginals {
     "heads",
     "deliveries",
     "tenders",
+    "refunds",
     "settlements",
     "voids",
     "substitutions",
