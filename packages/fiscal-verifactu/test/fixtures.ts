@@ -292,10 +292,13 @@ async function insertLocationNodeSeries(
  * hashed `IDEmisorFactura` is read from the SIF registration (`currentSif(tx, nodeId).nif`), not
  * from `tenants`. A test that needs `tenants.tax_id` itself to match must seed before anything
  * else does.
+ *
+ * A test comparing with `SOFTWARE_IDENTITY.code` passes `idSistemaInformatico: WAITRON_ID_SISTEMA`;
+ * the default is not the code a real setup registers.
  */
 export async function seedTenantWithSif(
   db: Database,
-  options: { nif?: string } = {},
+  options: { nif?: string; idSistemaInformatico?: string } = {},
 ): Promise<SeededNodeWithSif> {
   const nif = options.nif ?? freshNif();
   const seeded = await db.transaction(async (tx) => {
@@ -306,7 +309,11 @@ export async function seedTenantWithSif(
       .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
       .onConflictDoNothing({ target: tenants.id });
     const { locationId, nodeId, seriesId } = await insertLocationNodeSeries(tx);
-    await registerSif(tx, { nodeId, nif, idSistemaInformatico: "WT" });
+    await registerSif(tx, {
+      nodeId,
+      nif,
+      idSistemaInformatico: options.idSistemaInformatico ?? "WT",
+    });
     // No `working_orders` row and no `workingOrderId`: `recordSale` writes `input.workingOrderId`
     // to `sales.working_order_id`, a real FK onto `working_orders`, so the write-path suites here
     // record walk-up sales that omit it.

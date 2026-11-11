@@ -66,8 +66,8 @@ missing or carries a blocker (departure 3).
   `package.json` (`tsx`) and `tsconfig.json` (`include`), `pnpm-lock.yaml` (generated) and the two
   backlog files.
 - Pull request 2b creates `scripts/release/waitron-release.mjs` and its test, and
-  `docs/operations/release.md`. It modifies the root `package.json` (`"release"`), the two backlog
-  files and the design (one dated pointer).
+  `docs/operations/release.md`. It modifies the root `package.json` (`"release"`) and the two backlog
+  files.
 
 **The tests that matter.** Headings (Task 2), agree (Task 3), the slot refusals (Tasks 1–2), the
 blocker refusal in the package command (Task 5), and the root script's refusals before anything is
@@ -149,7 +149,8 @@ there; the root script holds none by construction (Spanish stays in the package,
   the renderer: `‹nombre y apellidos›`, `‹NIF›`, `‹dirección›` (design §5.3, 2026-11-06).
 - Error codes (in `packages/fiscal-verifactu/src/errors.ts`'s `ErrorParams`):
   `declaration.slot_unfilled: { slot: string }`, `declaration.release_blocked: { count: number }`,
-  `declaration.disagrees: { item: string }`, `declaration.functions_malformed: { line: number }`.
+  `declaration.disagrees: { item: string }`, `declaration.functions_malformed: { line: number }`,
+  `declaration.date_invalid: { date: string }`, `declaration.producer_invalid: { field: "name" | "taxId" | "address" }`.
   Params never carry a producer's value.
 - Test producer values (Task 8's): `PRODUCER PERSON`, `00000000T`,
   `1 Example Street, 00000 Nowhere (Province), Spain`. The real values never appear in a commit,
@@ -169,7 +170,7 @@ there; the root script holds none by construction (Spanish stays in the package,
 3. **Version order is numeric**: with `v1.9.0` released, `1.10.0` is accepted and `1.8.9` refused;
    tags that are not `v<major>.<minor>.<patch>` are ignored — Task 6.
 4. **A place with accents and an apostrophe** (`L'Alfàs del Pi`) passes whole; one with a line
-   break or a `‹` is refused before anything is written — Task 5.
+   break, a `‹` or a `**` is refused before anything is written — Task 5.
 5. **The PDF draws every character of the text.** The font has glyphs for «, », –, ñ and the
    accented vowels (measured 2026-11-11 with `fontkit`'s `hasGlyphForCodePoint` over
    `src/assets/register-noto-sans.ttf`: all `true`; the control `漢` printed `false`). The PDF
@@ -204,6 +205,7 @@ export function parseFunctions(markdown: string): string[];
 export function releaseBlockers(source: string): string[];
 export function declarationItems(source: string): ReadonlyMap<string, string>; // "1.a" → value
 export function spanishDate(isoDate: string): string; // "2026-10-22" → "22 de octubre de 2026"
+// spanishDate refuses anything but a real calendar date as YYYY-MM-DD: declaration.date_invalid { date }
 ```
 
 **The template.** Copy §4's text (design lines 449–540) with the `> ` prefixes removed and `\*`
@@ -275,7 +277,7 @@ export interface DeclarationBlock {
   lines: { bold: boolean; text: string }[][]; // a line (or list item) is a run of bold/plain parts
 }
 export function fillProducer(source: string, producer: DeclarationProducer): string;
-export function declarationBlocks(filled: string): DeclarationBlock[];
+export function declarationBlocks(source: string, producer: DeclarationProducer): DeclarationBlock[];
 export function renderDeclaration(
   source: string, producer: DeclarationProducer,
 ): { text: string; html: string };
@@ -285,7 +287,11 @@ The format is our own subset, nothing more: blank lines separate blocks; a block
 start `- ` (continuations indented two spaces) is a list; `<!-- … -->` lines are dropped; the
 first block is the title; `**` toggles bold; nothing else is markup, and a `\` is an ordinary
 character. `fillProducer` refuses (`declaration.slot_unfilled`) when any slot other than the three
-is present, then fills the three in one pass. Text: bold markers removed, a paragraph on one line,
+is present, then fills the three in one pass. (Changed in review, 2026-11-11: `declarationBlocks`
+takes the producer and reads the structure before writing the values into its runs as plain text,
+so a value holding `**` is never read as markup; `fillProducer`'s string serves `declarationItems`
+only. Both refuse a value holding a line break or control character with
+`declaration.producer_invalid { field }`.) Text: bold markers removed, a paragraph on one line,
 a list item on one line starting `- `, blocks separated by one blank line. HTML: a whole document,
 `lang="es"`, UTF-8, the title in `<h1>`, paragraphs in `<p>` with `<strong>`, lists in
 `<ul><li>`, every text run escaped (`&`, `<`, `>`, `"`, `'`); no styles, scripts or links outside
@@ -370,7 +376,7 @@ backlog files' A940 lines (part 2a landed; 2b next) and runs `/finish-branch`.
 
 **Produces:** `renderDeclarationPdf(source: string, producer: DeclarationProducer, loadFont?:
 () => Promise<Uint8Array>): Promise<Uint8Array>` — default `loadRecoveryFont`; it draws
-`declarationBlocks(fillProducer(source, producer))`. Plain A4, the title centred, one block per
+`declarationBlocks(source, producer)`. Plain A4, the title centred, one block per
 paragraph, no logo (design §12). **Disclosed:** the package has one font file, so the item
 headings are drawn in the same face as the text beside them and look like body text; only the
 title stands apart, by being centred. A bold face would need a second font file and its licence
@@ -422,8 +428,8 @@ entry is outside it, and Step 4 runs that. Files are `<root>/declarations/…`. 
 
 Checks run in this order, each stopping the command: the arguments, then the blockers (unless
 `--draft`), then the producer. All three refuse a version not matching
-`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, a place that is empty, holds a line break or a
-`‹`/`›`, and a date not `YYYY-MM-DD`. The library version is read from the `package.json` beside
+`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, a place that is empty, holds a line break, a
+`‹`/`›` or `**` (the place is written into the source before its markup is read), and a date not `YYYY-MM-DD`. The library version is read from the `package.json` beside
 the resolved `@waitron/verifactu` entry (its `exports` has no `./package.json`). An `AppError`
 prints its code and params to stderr and answers 1.
 
@@ -434,7 +440,7 @@ prints its code and params to stderr and answers 1.
   producer settings' own refusals (`sif.producer_unset` and the rest) are slice 1's and are not
   tested again here. `show --draft` prints the text and both blockers; `write` then `check` on the
   blocker-free variant → 0 and the file keeps `‹NIF›`; `check` after editing 1.a in the file →
-  `declaration.disagrees` `{ item: "1.a" }`; place `L'Alfàs del Pi` accepted, `A\nB` and `‹x›`
+  `declaration.disagrees` `{ item: "1.a" }`; place `L'Alfàs del Pi` accepted, `A\nB`, `‹x›` and `A**B`
   refused; the library version equals the `version` read from
   `node_modules/@waitron/verifactu/package.json` by path; `nodeIo()` names the package folder, and
   its `stdout` and `stderr` reach `process.stdout.write` and `process.stderr.write` (spied).
@@ -545,8 +551,8 @@ Size: production ~55; tests ~120.
 **Files:** create `docs/operations/release.md`; modify `docs/backlog.md` and
 `docs/backlog/fiscal.md` (A940's entries: slice 2 landed; both release commands refuse until the
 Q53 and slice-4 blocker lines are deleted; slices 3–6 remain, slice 4 with the tag-CI refusal of
-departure 3), and the design (one dated line under its banner notes pointing at this plan's
-"Departures from the design").
+departure 3). Pull request 1 already added the design's dated line pointing at this plan's
+"Departures from the design".
 
 **The runbook**, in plain English, in order: make the worktree (`python3
 ~/workspace/tools/worktree.py new waitron release/<version> --headless`); the checks before

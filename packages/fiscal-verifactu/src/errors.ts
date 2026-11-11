@@ -453,5 +453,18 @@ declare module "@waitron/shared" {
       partial: boolean;
       unconfirmed: boolean;
     };
+
+    /** A declaration's text holds a `‹…›` slot nothing fills; `slot` is the slot, brackets included. */
+    "declaration.slot_unfilled": { slot: string };
+    /** A declaration still carries `release-blocker` lines; `count` is how many. */
+    "declaration.release_blocked": { count: number };
+    /** A declaration's 1.a, 1.b, 1.e or 1.f differs from `SOFTWARE_IDENTITY`, or its 1.c from the version; `item` is e.g. `1.b`. */
+    "declaration.disagrees": { item: string };
+    /** A `- ` line of `declarations/functions.md` has no ` — ` route; `line` is 1-based. */
+    "declaration.functions_malformed": { line: number };
+    /** A declaration's signing date is not a calendar date written `YYYY-MM-DD`; `date` is as given. */
+    "declaration.date_invalid": { date: string };
+    /** A producer value given to the declaration holds a line break or control character; `field` names it, never its value. */
+    "declaration.producer_invalid": { field: "name" | "taxId" | "address" };
   }
 }

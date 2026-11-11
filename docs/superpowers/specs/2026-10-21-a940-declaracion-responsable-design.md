@@ -11,6 +11,8 @@
 
 # A940 — The software's declaración responsable, inside the app and outside it
 
+> **2026-11-11, A940 slice 2:** the [slice 2 plan](../plans/2026-11-11-a940-2-release-declaration.md)'s "Departures from the design" replace §5.3's month-name list (Node's `Intl`), §4's and §5.4's per-release hosting phrases (plain text in the template), and §10's one pull request for slice 2 (three).
+
 > **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](../plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
 
 > **A950 pointer, 29 October 2026:** the current update design is in the
