@@ -1,12 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import {
-  orderDrafts,
-  workingOrderLines,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { orderDrafts, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import {
@@ -116,18 +110,11 @@ export async function observedDraftCommandBody(
   const save = method === "PUT" && /^\/api\/parties\/[^/]+\/drafts$/.test(path);
   const ask = given as Record<string, unknown>;
   if (Object.hasOwn(ask, "expectedEdit")) return ask;
-  const recall = /^\/api\/parties\/[^/]+\/lines\/([^/]+)\/recall$/.exec(path);
   const draft = /^\/api\/parties\/[^/]+\/drafts\/([^/]+)\/(take-over|submit)$/.exec(path);
-  if (!save && recall === null && draft === null) return ask;
+  if (!save && draft === null) return ask;
   return withTransaction(db, async (tx) => {
     let billId = typeof ask.billId === "string" ? ask.billId : undefined;
-    if (recall !== null) {
-      const [row] = await tx
-        .select()
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.id, recall[1]!.toLowerCase()));
-      billId = row?.workingOrderId;
-    } else if (draft !== null) {
+    if (draft !== null) {
       const [row] = await tx
         .select()
         .from(orderDrafts)

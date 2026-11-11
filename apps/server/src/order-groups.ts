@@ -150,7 +150,6 @@ export interface OrderGroup {
    * Present while released dishes remain and every component is ready to serve.
    */
   ready?: true;
-  /** Dishes with active service, excluding recalled sources. */
   lineIds: string[];
   courseIds: string[];
   /** The dishes by staff name, e.g. "2 × Steak, 1 × Fish". */
@@ -965,10 +964,6 @@ async function pointDraftsAtCopies(
     );
 }
 
-/**
- * A group's dishes with a quantity left uncancelled, less any recalled dish, in the order
- * {@link releaseGroup} fires them.
- */
 async function activeGroupLines(tx: Transaction, groupId: string) {
   const lines = await tx
     .select({
@@ -1039,7 +1034,6 @@ export async function releaseHeldWorkOf(
       );
       continue;
     }
-    // Only these bills' lines: a recalled dish on another bill keeps the group held to rejoin it.
     const lines = await tx
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
@@ -1918,9 +1912,7 @@ export interface CurrentOrderKitchen {
   stationId: string;
   movable: boolean;
   phase: KitchenPhase;
-  /** Null while the item is held, or since it was recalled. */
   requestedAt: string | null;
-  /** Null while the item is held or Requested, or since it was recalled. */
   firedAt: string | null;
 }
 

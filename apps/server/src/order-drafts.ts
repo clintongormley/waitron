@@ -310,16 +310,15 @@ export async function saveDraft(
     if (!owned.has(line.id) || named.has(line.id)) throw invalid(`lines.${index}.id`);
     named.add(line.id);
   }
-  const freshLines = lines;
   await validateDraftPlaces(tx, partyId, lines);
-  await requireCourses(tx, freshLines, previous);
+  await requireCourses(tx, lines, previous);
   const offers = await offersFor(
     tx,
     cfg,
     partyId,
-    freshLines.map((line) => line.menuItemId),
+    lines.map((line) => line.menuItemId),
   );
-  for (const line of freshLines) {
+  for (const line of lines) {
     const offer = offers.get(line.menuItemId);
     if (offer?.ordering === "not_sold_separately") {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
@@ -356,7 +355,7 @@ export async function saveDraft(
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     priorChoices.set(key, (priorChoices.get(key) ?? 0) + 1);
   }
-  for (const line of freshLines) {
+  for (const line of lines) {
     if (line.makeAt == null) continue;
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     const held = priorChoices.get(key) ?? 0;

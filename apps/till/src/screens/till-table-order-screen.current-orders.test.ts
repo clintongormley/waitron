@@ -533,9 +533,6 @@ describe("Current orders and Sent service", () => {
     ).toEqual(["l-check", "l-paid", "l-unlisted"]);
     await openSentDish(el, "l-shown", "held");
     await openSentMore(el);
-    const recalls = capture(el, "recall-lines");
-    expect(q(el, "[data-sent-line-recall]")).toBeNull();
-    expect(recalls).toEqual([]);
   });
 
   it("says the sent orders could not be read, where Sent would be", async () => {

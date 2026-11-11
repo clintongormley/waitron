@@ -18,7 +18,13 @@ import { readDrafts, saveDraft } from "./order-drafts.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { fireAll } from "./testing/serve-line.js";
-import { inTx, provisionBillVenue, send, groupedTabWith, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  send,
+  groupedTabWith,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 let venue: BillVenue;
 useVenueDb({
@@ -33,8 +39,10 @@ useVenueDb({
 /** A party's bill with a sent Steak at line 1, its station printing to a printer of its own. */
 async function billWithSentDish(quantity = "1") {
   const billId = await groupedTabWith(venue, "Steak");
-  if (quantity !== "1") await inTx(venue, (tx) =>
-    updateOrderLine(tx, venue.cfg, billId, 1, { quantity }, 0, venue.operatorId));
+  if (quantity !== "1")
+    await inTx(venue, (tx) =>
+      updateOrderLine(tx, venue.cfg, billId, 1, { quantity }, 0, venue.operatorId),
+    );
   await inTx(venue, (tx) => fireAll(tx, venue.cfg, billId));
   const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   const dish = await kitchenItemOf(billId, 1);
@@ -85,8 +93,15 @@ async function revisionOf(billId: string) {
 }
 
 it("does not mount the retired Recall routes", async () => {
-  for (const path of [`/api/parties/${randomUUID()}/lines/${randomUUID()}/recall`, `/api/working-orders/${randomUUID()}/lines/recall`]) {
-    const response = await venue.app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  for (const path of [
+    `/api/parties/${randomUUID()}/lines/${randomUUID()}/recall`,
+    `/api/working-orders/${randomUUID()}/lines/recall`,
+  ]) {
+    const response = await venue.app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
     await response.text();
     expect(response.status).toBe(404);
   }
@@ -94,9 +109,25 @@ it("does not mount the retired Recall routes", async () => {
 
 it("requires the whole row observation before Change dish can lower a sent count", async () => {
   const bill = await billWithSentDish("2");
-  const answer = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${bill.billId}/lines/1`, { revision: await revisionOf(bill.billId), expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)), quantity: "1" });
-  expect(answer).toMatchObject({ status: 400, json: { code: "management.request_invalid", params: { field: "portionLineNos" } } });
-  const [line] = await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, bill.billId));
+  const answer = await send(
+    venue.app,
+    venue.cookie,
+    "PUT",
+    `/api/working-orders/${bill.billId}/lines/1`,
+    {
+      revision: await revisionOf(bill.billId),
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
+      quantity: "1",
+    },
+  );
+  expect(answer).toMatchObject({
+    status: 400,
+    json: { code: "management.request_invalid", params: { field: "portionLineNos" } },
+  });
+  const [line] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, bill.billId));
   expect(line!.quantity).toBe(2000);
 });
 

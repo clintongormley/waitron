@@ -144,17 +144,37 @@ function recordedOn(billId: string) {
   );
 }
 
-it("keeps Cancel item preview but refuses a public adjustment cancel save", async () => {
-  const { billId } = await billWith(venue, [{ name: "Burger" }]);
-  const ask = { action: "cancel", lineId: await lineIdOf(venue, billId, 1), quantity: "1" };
+it("keeps Cancel item preview but refuses a public dish adjustment cancel save", async () => {
+  const { billId } = await billWith(venue, [{ name: "Pizza", olives: 1 }]);
+  const [dish, extra] = await rowsOf(venue, billId);
+  const ask = { action: "cancel", lineId: dish!.id, quantity: "1" };
   expect((await post(billId, ask, { path: "/preview" })).status).toBe(200);
-  const save = await post(billId, ask);
-  expect(save.status).toBe(400);
-  expect(save.json).toMatchObject({
-    code: "management.request_invalid",
-    params: { field: "action" },
-  });
+  for (const target of [
+    { lineId: dish!.id },
+    { lineId: null },
+    { lineId: extra!.id, lineIds: [extra!.id, dish!.id] },
+  ]) {
+    const save = await post(billId, { action: "cancel", ...target });
+    expect(save.status).toBe(400);
+    expect(save.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "action" },
+    });
+  }
   expect(await recordedOn(billId)).toEqual([]);
+});
+
+it("keeps the public cancel preview and save for a sent extra", async () => {
+  const { billId } = await billWith(venue, [{ name: "Pizza", olives: 1 }]);
+  const [dish, extra] = await rowsOf(venue, billId);
+  const ask = { action: "cancel", lineId: extra!.id };
+  const preview = await post(billId, ask, { path: "/preview" });
+  expect(preview.status).toBe(200);
+  expect(preview.json).toMatchObject({ reduction: "1.50" });
+  const saved = await post(billId, ask);
+  expect(saved.status).toBe(200);
+  expect(await recordedOn(billId)).toMatchObject([{ action: "cancel", reduction: 150 }]);
+  expect((await rowsOf(venue, billId)).find((line) => line.id === dish!.id)).toEqual(dish);
 });
 
 describe("corrections through order actions on a station's printers", () => {

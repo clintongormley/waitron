@@ -1312,8 +1312,6 @@ against the Requested by names; on a phone the table scrolls sideways inside its
 the cut-off last column to say so. Owner to look at the pictures and say whether either wants
 changing.
 
-
-
 ## A785. A kitchen screen in device mode keeps the theme it started with until reload (left open by A768, 2026-10-17).
 
 Nobody signs in on it, so it runs no menu-state poll and never sees the

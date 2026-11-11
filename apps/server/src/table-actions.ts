@@ -303,7 +303,7 @@ export interface SplitSelection {
  * bill of the party; it takes its next number at the new party in its old number order, and keeps
  * its payments. A loose source must be an open bill of the party; its dishes move as
  * {@link moveCheckedDishes} moves them, and the new bill numbers last, at the new party, so the
- * staying table's numbers keep no gap. Held dishes not recalled into a draft move to one held copy
+ * staying table's numbers keep no gap. Held dishes move to one held copy
  * of each of their groups, however many of the bills share it ({@link copyHeldGroups}), and
  * dishes `waitingDishesOnHoldPaper` keeps in a fired group to a fired copy of theirs
  * ({@link copyWaitingGroups}); the rest of each bill's dishes group as that bill arrives

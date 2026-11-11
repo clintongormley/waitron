@@ -270,9 +270,7 @@ export async function transferItems(
 }
 
 /**
- * The line numbers of `lineIds`, each a dish of `billId`, in the order named, and whether any is
- * recalled into a draft. The ids travel as one JSON value, so they take one bound value however many
- * are named.
+ * The ids travel as one JSON value, so they take one bound value however many are named.
  */
 export async function resolveMoveLines(
   tx: Transaction,

@@ -630,7 +630,7 @@ declare module "@waitron/shared" {
     /**
      * Record unpaid departure found a bill it would invoice — open, or presented with no invoice
      * yet — holding a dish the kitchen is not making: never sent, held in its group or by its
-     * kitchen item, recalled from the kitchen, or waiting for the pass and not served whole. Staff
+     * kitchen item, or waiting for the pass and not served whole. Staff
      * cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };

@@ -515,10 +515,10 @@ export async function takeIntoParty(
 }
 
 /**
- * Take the bill's dishes out of their party's groups. A dish of a held group, not recalled into a
- * draft, is refused `group.held_leaves_party` under `held: "refuse"`; under `"keep"` it stays in
+ * Take the bill's dishes out of their party's groups. A dish of a held group
+ * is refused `group.held_leaves_party` under `held: "refuse"`; under `"keep"` it stays in
  * its group and its id is returned in `heldLineIds`, for the caller to give it a copy of the group
- * at the party it joins ({@link copyHeldGroups}). Recalled sources travel as unsent draft rows.
+ * at the party it joins ({@link copyHeldGroups}).
  * Sent dishes leave their groups, keeping their ticket and served state, except, under
  * `keepWaiting`, those waiting for the pass in a group where one of this bill's dishes, or an extra
  * of one, waits at a station with the group's HOLD paper ({@link waitingDishesOnHoldPaper}), which

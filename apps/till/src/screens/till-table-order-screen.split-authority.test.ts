@@ -46,9 +46,7 @@ async function opening(kind: "split" | "fold") {
     kind === "fold" ? "[data-fold-draft-family]" : "[data-split-draft-line]",
   )!;
   expect(control).not.toBeNull();
-  const writes = vi.fn();
-  el.addEventListener("split-draft-source", writes);
-  return { el, draft, control, writes };
+  return { el, draft, control };
 }
 
 for (const kind of ["split", "fold"] as const) {
@@ -68,7 +66,7 @@ for (const kind of ["split", "fold"] as const) {
   ] as const)(
     `a retained ${kind} control preserves the candidate after %s changes`,
     async (change) => {
-      const { el, draft, control, writes } = await opening(kind);
+      const { el, draft, control } = await opening(kind);
       if (change === "billId") el.billEdit = { ...observation, billId: "other" };
       if (change === "editorVersion") el.billEdit = { ...observation, editorVersion: 4 };
       if (change === "draftId") el.billEdit = { ...observation, draftId: "replacement" };
@@ -86,12 +84,11 @@ for (const kind of ["split", "fold"] as const) {
       control.click();
       expect(draft.lines).toEqual(before);
       expect(draft.lines.every((line, index) => line === identities[index])).toBe(true);
-      expect(writes).not.toHaveBeenCalled();
     },
   );
 
   it(`an equivalent ownership observation keeps ${kind} usable`, async () => {
-    const { el, draft, control, writes } = await opening(kind);
+    const { el, draft, control } = await opening(kind);
     el.billEdit = { draftRevision: 3, draftId: "draft", editorVersion: 2, billId: "wo-4" };
     control.click();
 
@@ -99,13 +96,12 @@ for (const kind of ["split", "fold"] as const) {
       kind === "split" ? ["1", "1", "1"] : ["3"],
     );
     expect(draft.total).toBe("9.00");
-    expect(writes).not.toHaveBeenCalled();
   });
 
   it.each(["busy", "ordering", "takeover"] as const)(
     `the ${kind} control is disabled while %s prevents editing`,
     async (change) => {
-      const { el, draft, control, writes } = await opening(kind);
+      const { el, draft, control } = await opening(kind);
       if (change === "busy") el.busy = true;
       if (change === "ordering") el.orderingAllowed = false;
       if (change === "takeover") await beginTakeover(el);
@@ -114,7 +110,6 @@ for (const kind of ["split", "fold"] as const) {
       const before = structuredClone(draft.lines);
       control.click();
       expect(draft.lines).toEqual(before);
-      expect(writes).not.toHaveBeenCalled();
     },
   );
 }

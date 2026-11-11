@@ -2,14 +2,14 @@ import { withIssuanceTransaction } from "@waitron/core";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   ADJUSTMENT_ACTIONS,
   isRoleList,
   listAdjustmentReasons,
   NOT_SERVED_REASON,
 } from "@waitron/adjustments";
-import { withTransaction, type Database } from "@waitron/db";
+import { workingOrderLines, withTransaction, type Database } from "@waitron/db";
 import {
   listActivePersonsWithRoles,
   persons,
@@ -199,8 +199,9 @@ export function mountAdjustmentsApi(
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBill(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
-      if (body.action === "cancel") throw invalid("action");
       const ask = parseAsk(id, personId, body);
+      if (ask.action === "cancel" && (ask.lineId === null || ask.lineIds !== undefined))
+        throw invalid("action");
       const submissionId = submissionIdOf(body);
       const parsedApprover = parseDrawerOverride(
         body.approver as { personId?: unknown; pin?: unknown } | undefined,
@@ -215,6 +216,18 @@ export function mountAdjustmentsApi(
           async (tx) => {
             await requireEconomicWrite(tx, deps.cfg, deps.admission);
             await checkZones(tx, session, [{ orderId: id }]);
+            if (ask.action === "cancel") {
+              const [line] = await tx
+                .select({ parentLineId: workingOrderLines.parentLineId })
+                .from(workingOrderLines)
+                .where(
+                  and(
+                    eq(workingOrderLines.workingOrderId, id),
+                    eq(workingOrderLines.id, ask.lineId!),
+                  ),
+                );
+              if (line?.parentLineId == null) throw invalid("action");
+            }
             const applied = await applyAdjustment(
               tx,
               cfg,

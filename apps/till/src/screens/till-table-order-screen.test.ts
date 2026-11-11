@@ -2031,13 +2031,11 @@ describe("till-table-order-screen", () => {
       });
       expect(el.shadowRoot!.querySelectorAll("[data-split-group-line]")).toHaveLength(0);
       const fresh = await mountFreshGroups([steak]);
-      const splits = capture(fresh.el, "split-draft-source");
       const offered = [
         ...fresh.el.shadowRoot!.querySelectorAll<HTMLElement>("[data-split-draft-line]"),
       ];
       expect(offered.map((button) => button.dataset.splitDraftLine)).toEqual(["0"]);
       await userEvent.click(offered[0]!);
-      expect(splits).toEqual([]);
       expect(fresh.draft.lines.map((line) => line.quantity)).toEqual(["1", "1"]);
       expect(fresh.draft.total).toBe(grossOf(steak.unitPriceGross, steak.quantity));
     });
