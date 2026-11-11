@@ -638,12 +638,17 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const now = Date.now();
       // A visible or scanned report replaces the description, never another kind of report's stamp;
       // a visible report carries no printer mark, so it keeps the one already held.
-      let discoveryChanged = false;
+      const descriptionsBefore = new Map<string, ReturnType<typeof description>>();
+      const rememberDescription = (key: string): void => {
+        if (!descriptionsBefore.has(key))
+          descriptionsBefore.set(key, description(discovered.get(key)));
+      };
       const describedThisPull = new Set<string>();
       const remember = (d: DiscoveredDeviceWire, stamp: "scannedAt" | "visibleAt"): void => {
         const locator = d.ippOnly ? queueKeyOf(d) : undefined;
         const key = keyOf(agentId, d.transport, locator ?? d.localKey ?? `${d.host}:${d.port}`);
         const prior = discovered.get(key);
+        rememberDescription(key);
         discovered.set(key, {
           agentId,
           ...d,
@@ -658,8 +663,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           visibleAt: prior?.visibleAt,
           [stamp]: now,
         });
-        if (!isDeepStrictEqual(description(prior), description(discovered.get(key))))
-          discoveryChanged = true;
         describedThisPull.add(key);
       };
       for (const v of visible) remember(v, "visibleAt");
@@ -667,6 +670,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       for (const { printerLike: pairedPrinterLike, ...p } of pairedBluetooth) {
         const key = keyOf(agentId, "bluetooth", p.localKey);
         const prior = discovered.get(key);
+        rememberDescription(key);
         const stamps = { lastSeenAt: now, pairedAt: now, pairedPrinterLike };
         discovered.set(
           key,
@@ -674,10 +678,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ? { agentId, transport: "bluetooth", ...p, ...stamps }
             : { ...prior, name: prior.name ?? p.name, ...stamps },
         );
-        if (!isDeepStrictEqual(description(prior), description(discovered.get(key))))
-          discoveryChanged = true;
       }
-      if (discoveryChanged && deps.bus) publishState(deps.bus, "printer_discovery", log);
+      if (
+        deps.bus &&
+        [...descriptionsBefore].some(
+          ([key, before]) => !isDeepStrictEqual(before, description(discovered.get(key))),
+        )
+      )
+        publishState(deps.bus, "printer_discovery", log);
 
       const visibleKeys = visible
         .filter((v) => v.transport === "usb" || v.transport === "bluetooth")

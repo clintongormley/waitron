@@ -6078,29 +6078,40 @@ describe("drawer expiry and printer visibility in the queue", () => {
   });
 });
 
-it("publishes discovery descriptions, but not unchanged pull timestamps", async () => {
-  const bus = new LiveEvents();
-  const changes: unknown[] = [];
-  bus.subscribe((event) => {
-    changes.push(event);
-  });
-  const app = mountApp({ bus });
-  const { token } = await joinAndAccept(app);
-  vi.useFakeTimers({ toFake: ["Date"] });
-  onTestFinished(() => {
-    vi.useRealTimers();
-  });
-  const device = { transport: "usb", localKey: "usb:1", name: "Kitchen" };
-  const event = { kind: "change", change: { resources: [{ type: "printer_discovery" }] } };
-  await pull(app, token, { scanned: [device] });
-  expect(changes).toEqual([event]);
-  vi.setSystemTime(Date.now() + 2000);
-  await pull(app, token, { scanned: [device] });
-  expect(changes).toEqual([event]);
-  await pull(app, token, { scanned: [{ ...device, name: "Pass" }] });
-  expect(changes).toEqual([event, event]);
-  await pull(app, token, { pairedBluetooth: [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Receipt" }] });
-  expect(changes).toEqual([event, event, event]);
-  await pull(app, token, { pairedBluetooth: [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Receipt" }] });
-  expect(changes).toEqual([event, event, event]);
-});
+it.each([false, true])(
+  "publishes discovery descriptions, but not unchanged pull timestamps (combined: %s)",
+  async (combined) => {
+    const bus = new LiveEvents();
+    const changes: unknown[] = [];
+    bus.subscribe((event) => {
+      changes.push(event);
+    });
+    const app = mountApp({ bus });
+    const { token } = await joinAndAccept(app);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const device = { transport: "usb", localKey: "usb:1", name: "Kitchen" };
+    const inventory = (name: string) => ({
+      scanned: [{ ...device, name }],
+      ...(combined ? { visible: [{ transport: "usb", localKey: "usb:1" }] } : {}),
+    });
+    const event = { kind: "change", change: { resources: [{ type: "printer_discovery" }] } };
+    await pull(app, token, inventory("Kitchen"));
+    expect(changes).toEqual([event]);
+    vi.setSystemTime(Date.now() + 2000);
+    await pull(app, token, inventory("Kitchen"));
+    expect(changes).toEqual([event]);
+    await pull(app, token, inventory("Pass"));
+    expect(changes).toEqual([event, event]);
+    await pull(app, token, {
+      pairedBluetooth: [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Receipt" }],
+    });
+    expect(changes).toEqual([event, event, event]);
+    await pull(app, token, {
+      pairedBluetooth: [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Receipt" }],
+    });
+    expect(changes).toEqual([event, event, event]);
+  },
+);
