@@ -149,7 +149,7 @@ they are generic workforce data. Other rules depend on the country, such as Spai
 year's hours that may be moved (below): those come with the country pack, as ready-made rule sets
 the person's contract takes, holding limits such as the most hours a week and a day, rest between
 shifts, weekly rest, breaks and the yearly overtime cap. Today these are
-one `convenio_config` row per location (`packages/workforce-es/src/schema/convenio-config.ts`);
+one `convenio_config` row (`packages/workforce-es/src/schema/convenio-config.ts`);
 moving them per person reaches every reader, so start from `packages/workforce/src/ruleset.ts` and
 grep `convenio`. Still to decide: whether the owner can change a ready-made set or only pick one,
 and which sets ship first.

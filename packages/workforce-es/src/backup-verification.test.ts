@@ -1,7 +1,7 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
@@ -15,11 +15,6 @@ const restored = useVenueDb({ migrations });
 const absent = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 beforeEach(async () => {
   for (const suite of [original, restored]) {
-    await suite.db.insert(locations).values({
-      id: "venue",
-
-      operationDescription: "Hospitality",
-    });
     await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["en"] });
     await suite.db.insert(convenioConfig).values({
       id: 1,
@@ -88,14 +83,6 @@ async function corrupt(db: Database, statement: string) {
     db.run(sql`pragma foreign_keys=on`);
     for (const row of triggers) db.run(sql.raw(row.sql));
   }
-}
-function hideTable(table: string) {
-  return (q: BackupQuery): BackupQuery => ({
-    async *rows(statement, values) {
-      if (statement.includes("sqlite_schema") && values?.[0] === table) return;
-      yield* q.rows(statement, values);
-    },
-  });
 }
 
 describe("agreement backup evidence", () => {
@@ -197,7 +184,7 @@ describe("agreement backup evidence", () => {
   });
   it("accepts an empty configuration table", async () => {
     for (const db of [original.db, restored.db]) db.run(sql`delete from convenio_config`);
-    expect(await run({ wrap: hideTable("locations") })).toEqual(passed);
+    expect(await run()).toEqual(passed);
   });
   it("keeps unexpected query errors unavailable", async () => {
     const failure = new Error("private query unavailable");

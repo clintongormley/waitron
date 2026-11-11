@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, captureError, nowIso, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, nowIso } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
@@ -55,17 +55,13 @@ const DEFAULT_RULESET: WorkTimeRuleset = {
 
 describe("resolveWorkTimeRuleset", () => {
   it("resolves the venue's rules without being told a location", async () => {
-    await seedConvenioConfig(suite.db, {
-      locationId: await venueLocationId(suite.db),
-      workingDaysPerWeek: 6,
-    });
+    await seedConvenioConfig(suite.db, { workingDaysPerWeek: 6 });
     const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset.workingDaysPerWeek).toBe(6);
   });
 
   it("resolves a default row to the ET/default ruleset", async () => {
-    const locationId = await venueLocationId(suite.db);
-    await seedConvenioConfig(suite.db, { locationId });
+    await seedConvenioConfig(suite.db);
     const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset).toEqual(DEFAULT_RULESET);
   });
@@ -135,7 +131,7 @@ const splitColumns = [
 it("stores new policies as null until the agreement row configures them", async () => {
   const columns = suite.db.all<{ name: string }>(sql`pragma table_info(convenio_config)`);
   expect(columns.map((c) => c.name)).toEqual(expect.arrayContaining(splitColumns));
-  await seedConvenioConfig(suite.db, { locationId: await venueLocationId(suite.db) });
+  await seedConvenioConfig(suite.db);
   const row = suite.db.all<Record<string, unknown>>(sql`select * from convenio_config`)[0]!;
   for (const name of splitColumns) expect(row[name]).toBeNull();
   expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
@@ -143,7 +139,7 @@ it("stores new policies as null until the agreement row configures them", async 
 it("resolves the configured continuous policy independently of the split flag", async () => {
   expect(convenio).toHaveProperty("resolvePaidBreakPolicy", expect.any(Function));
   expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
-  await seedConvenioConfig(suite.db, { locationId: await venueLocationId(suite.db) });
+  await seedConvenioConfig(suite.db);
   await suite.db.execute(sql`update convenio_config set breaks_count_as_worked=true`);
   expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
   await suite.db.execute(
@@ -171,7 +167,7 @@ it.each([
   [0, 300, 90],
   [180.5, 300, 90],
 ])("ignores invalid split limits on an ordinary read: %j", async (min, max, gap) => {
-  await seedConvenioConfig(suite.db, { locationId: await venueLocationId(suite.db) });
+  await seedConvenioConfig(suite.db);
   await suite.db.execute(sql`update convenio_config set
     split_min_segment_minutes=${min}, split_max_segment_minutes=${max}, split_min_gap_minutes=${gap}`);
   expect(await resolveWorkTimeRuleset(suite.db)).toEqual(DEFAULT_RULESET);

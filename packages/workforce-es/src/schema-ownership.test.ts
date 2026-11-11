@@ -9,8 +9,7 @@ import * as schema from "./schema/index.js";
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = ["convenio_config"];
 
-/** Every core table this package's schema files import to declare foreign keys. None of these may
- * ever appear in this package's generated SQL. */
+/** Core tables that must never appear in this package's generated SQL. */
 const CORE = ["tenants", "locations"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
