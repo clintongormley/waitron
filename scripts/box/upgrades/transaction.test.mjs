@@ -165,7 +165,7 @@ it("records a manual keep before reopening without replacing failed checks with 
   });
 });
 
-it("an interrupted restore beats Keep and resumes using the intact saved copy", async () => {
+it("an interrupted restore starts again from the intact saved copy before Keep", async () => {
   const f = await fixture();
   f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
   await applyUpgrade({ ...f.input, mode: "manual" });
@@ -179,9 +179,13 @@ it("an interrupted restore beats Keep and resumes using the intact saved copy", 
   expect(await fs.readFile(join(f.directory, "copies", "0", "venue.db"), "utf8")).toBe("old venue");
   await fs.rm(f.config, { recursive: true });
   await fs.writeFile(join(f.state, "venue.db"), "half restored");
+  await fs.writeFile(join(f.state, "partial-restored-entry"), "discard on restart");
 
   await recoverUpgrade({ ...f.input, choice: "keep" });
 
+  await expect(fs.stat(join(f.state, "partial-restored-entry"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
   expect(f.events.find((event) => event.resume)).toMatchObject({
     resume: { app: "sha256:old" },
     venue: "old venue",
