@@ -297,7 +297,11 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
   it("A773 station policy: a station's pass waiting is carried", () => {
     expect(
       CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "kitchen_stations"),
-    ).toEqual({ name: "kitchen_stations", leaveBehindWhenFalse: "active" });
+    ).toEqual({
+      name: "kitchen_stations",
+      omit: ["closed_on_day", "closed_sends_to_station_id"],
+      leaveBehindWhenFalse: "active",
+    });
   });
 
   it("leaves a deleted printer behind and never carries its poll credential", () => {

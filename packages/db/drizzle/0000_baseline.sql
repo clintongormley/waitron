@@ -607,7 +607,12 @@ CREATE TABLE `floor_zones` (
 	`order_start` text,
 	`paid_when` text,
 	`collection_number` text,
+	`kept_open_day` text,
+	`kept_open_from` text,
+	`kept_open_until` text,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "floor_zones_kept_open_ck" CHECK(("floor_zones"."kept_open_day" is null and "floor_zones"."kept_open_from" is null and "floor_zones"."kept_open_until" is null) or ("floor_zones"."kept_open_day" is not null and "floor_zones"."kept_open_from" is not null and "floor_zones"."kept_open_until" is not null)),
+	CONSTRAINT "floor_zones_kept_open_step_ck" CHECK(substr("floor_zones"."kept_open_from", 4, 2) in ('00', '15', '30', '45') and substr("floor_zones"."kept_open_until", 4, 2) in ('00', '15', '30', '45')),
 	CONSTRAINT "floor_zones_order_start_ck" CHECK("floor_zones"."order_start" in ('table', 'counter')),
 	CONSTRAINT "floor_zones_paid_when_ck" CHECK("floor_zones"."paid_when" in ('prepay', 'ticket_then_pay')),
 	CONSTRAINT "floor_zones_collection_number_ck" CHECK("floor_zones"."collection_number" in ('none', 'numbered'))
@@ -633,6 +638,17 @@ CREATE TABLE `kitchen_stations` (
 	`changes_after_sending` text DEFAULT 'held-or-waiting' NOT NULL,
 	`waits_for_pass` integer DEFAULT false NOT NULL,
 	`created_at` text NOT NULL,
+	`closed_on_day` text,
+	`closed_sends_to_station_id` text,
+	FOREIGN KEY (`closed_sends_to_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "kitchen_stations_closed_sends_to_ck" CHECK("kitchen_stations"."closed_sends_to_station_id" is null or "kitchen_stations"."closed_on_day" is not null),
+	CONSTRAINT "kitchen_stations_closed_sends_to_not_self_ck" CHECK("kitchen_stations"."closed_sends_to_station_id" <> "kitchen_stations"."id"),
+	CONSTRAINT "kitchen_stations_warm_after_ck" CHECK("kitchen_stations"."warm_after_minutes" >= 1),
+	CONSTRAINT "kitchen_stations_ready_warning_after_ck" CHECK("kitchen_stations"."ready_warning_after_minutes" >= 1),
+	CONSTRAINT "kitchen_stations_colour_ck" CHECK("kitchen_stations"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')),
+	CONSTRAINT "kitchen_stations_ticket_grouping_ck" CHECK("kitchen_stations"."ticket_grouping" in ('combined', 'separate')),
+	CONSTRAINT "kitchen_stations_bump_mode_ck" CHECK("kitchen_stations"."bump_mode" in ('line', 'ticket')),
+	CONSTRAINT "kitchen_stations_changes_after_sending_ck" CHECK("kitchen_stations"."changes_after_sending" in ('never', 'held', 'held-or-waiting')),
 	CONSTRAINT "kitchen_stations_thresholds_ordered" CHECK("kitchen_stations"."warm_after_minutes" < "kitchen_stations"."overdue_after_minutes" and "kitchen_stations"."overdue_after_minutes" < "kitchen_stations"."forgotten_after_minutes")
 );
 --> statement-breakpoint
@@ -2402,18 +2418,6 @@ CREATE UNIQUE INDEX `routing_cells_product_zone_key` ON `routing_cells` (`produc
 CREATE UNIQUE INDEX `routing_cells_all_zone_key` ON `routing_cells` (`zone_id`) WHERE "routing_cells"."category_id" is null and "routing_cells"."product_id" is null and "routing_cells"."no_category" = 0 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `routing_cells_no_category_every_zone_key` ON `routing_cells` (`no_category`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX `routing_cells_no_category_zone_key` ON `routing_cells` (`no_category`,`zone_id`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
-CREATE TABLE `station_day_states` (
-	`id` text PRIMARY KEY NOT NULL,
-	`station_id` text NOT NULL,
-	`business_day` text NOT NULL,
-	`open` integer NOT NULL,
-	`sends_to_station_id` text,
-	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`sends_to_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "station_day_states_sends_to_not_self_ck" CHECK("station_day_states"."sends_to_station_id" <> "station_day_states"."station_id")
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `station_day_states_day_key` ON `station_day_states` (`station_id`,`business_day`);--> statement-breakpoint
 CREATE TABLE `menu_period_staff_menus` (
 	`period_id` text NOT NULL,
 	`department_id` text NOT NULL,
@@ -2480,18 +2484,6 @@ CREATE TABLE `department_transfer_requests` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `department_transfer_requests_one_pending_key` ON `department_transfer_requests` (`tab_id`) WHERE "department_transfer_requests"."status" = 'pending';--> statement-breakpoint
-CREATE TABLE `zone_extensions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`zone_id` text NOT NULL,
-	`business_day` text NOT NULL,
-	`starts_at` text NOT NULL,
-	`ends_at` text NOT NULL,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "zone_extensions_step_ck" CHECK(substr("zone_extensions"."starts_at", 4, 2) in ('00', '15', '30', '45')
-      and substr("zone_extensions"."ends_at", 4, 2) in ('00', '15', '30', '45'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `zone_extensions_day_key` ON `zone_extensions` (`zone_id`,`business_day`);--> statement-breakpoint
 CREATE TABLE `device_kitchen_screen_removals` (
 	`id` text PRIMARY KEY NOT NULL,
 	`device_id` text NOT NULL,

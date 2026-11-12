@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { sql } from "drizzle-orm";
+import { sql, and, isNotNull } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  activityLog,
   kitchenStations,
   ticketItems,
   ticketItemMoves,
@@ -19,7 +20,7 @@ import {
   parties,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
@@ -28,12 +29,7 @@ import {
   persons,
   registerModulePermissions,
 } from "@waitron/identity";
-import {
-  setRoutingCell,
-  setStationToday,
-  stationDayStates,
-  VENUE_SERVICE_PERMISSIONS,
-} from "@waitron/venue-service";
+import { setRoutingCell, setStationToday, VENUE_SERVICE_PERMISSIONS } from "@waitron/venue-service";
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -133,7 +129,17 @@ beforeEach(async () => {
 });
 const today = () => `/api/stations/${grill}/today`;
 const close = () => ({ state: "closed", sendsToStationId: bar });
-const rows = () => suite.db.select().from(stationDayStates);
+const rows = () =>
+  suite.db
+    .select({
+      id: kitchenStations.id,
+      stationId: kitchenStations.id,
+      businessDay: kitchenStations.closedOnDay,
+      open: sql<boolean>`0`.mapWith(Boolean),
+      sendsToStationId: kitchenStations.closedSendsToStationId,
+    })
+    .from(kitchenStations)
+    .where(and(isNotNull(kitchenStations.closedOnDay)));
 const call = (method: string, path: string, body?: unknown, cookie = managerCookie) =>
   send(app, cookie, method, path, body);
 
@@ -395,7 +401,9 @@ describe("the till's station day", () => {
 
   it("a rejected destination leaves dishes and closure unchanged", async () => {
     const item = await stationDish();
-    await inTx(v, (tx) => setStationToday(tx, pastry, "closed", new Date(), bar));
+    await inTx(v, async (tx) =>
+      setStationToday(tx, pastry, "closed", new Date(), await seedActivityActor(tx), bar),
+    );
     const before = await rows();
     const answer = await call("PUT", today(), {
       state: "closed",
@@ -418,6 +426,19 @@ describe("the till's station day", () => {
       staffCookie,
     );
     expect(answer.status).toBe(204);
+    expect(
+      await suite.db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.kind, "station.closed_for_day")),
+    ).toEqual([
+      expect.objectContaining({
+        personId: staff,
+        deviceId: staffDevice,
+        subjectId: grill,
+        data: expect.objectContaining({ authorizedBy: manager, sendsTo: bar }),
+      }),
+    ]);
     expect(await suite.db.select().from(ticketItemMoves)).toEqual([
       expect.objectContaining({
         workingOrderLineId: item.workingOrderLineId,
@@ -532,7 +553,9 @@ describe("the till's station day", () => {
     expect(await rows()).toEqual([]);
   });
   it("refuses a destination closed since the choices were read", async () => {
-    await inTx(v, (tx) => setStationToday(tx, pastry, "closed", new Date(), bar));
+    await inTx(v, async (tx) =>
+      setStationToday(tx, pastry, "closed", new Date(), await seedActivityActor(tx), bar),
+    );
     const before = await rows();
     const answer = await call("PUT", today(), { state: "closed", sendsToStationId: pastry });
     expect(answer.status).toBe(409);
@@ -540,7 +563,9 @@ describe("the till's station day", () => {
     expect(await rows()).toEqual(before);
   });
   it("opens a closed station and clears its manual destination", async () => {
-    await inTx(v, (tx) => setStationToday(tx, grill, "closed", new Date(), bar));
+    await inTx(v, async (tx) =>
+      setStationToday(tx, grill, "closed", new Date(), await seedActivityActor(tx), bar),
+    );
     expect((await call("PUT", today(), { state: "open" })).status).toBe(204);
     expect(await rows()).toEqual([]);
     const listed = await call("GET", "/api/stations");
@@ -774,6 +799,19 @@ describe("the kitchen display's station day", () => {
 
   it("closes its station with a manager PIN and reports the destination and reason", async () => {
     expect((await deviceCall("PUT", path(), authorizedClose())).status).toBe(204);
+    expect(
+      await suite.db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.kind, "station.closed_for_day")),
+    ).toEqual([
+      expect.objectContaining({
+        personId: manager,
+        deviceId,
+        subjectId: grill,
+        data: expect.objectContaining({ authorizedBy: manager, sendsTo: bar }),
+      }),
+    ]);
     expect(await rows()).toEqual([
       expect.objectContaining({ stationId: grill, open: false, sendsToStationId: bar }),
     ]);
@@ -792,7 +830,9 @@ describe("the kitchen display's station day", () => {
     });
   });
   it("reopens its station with a manager PIN and clears the destination", async () => {
-    await inTx(v, (tx) => setStationToday(tx, grill, "closed", new Date(), bar));
+    await inTx(v, async (tx) =>
+      setStationToday(tx, grill, "closed", new Date(), await seedActivityActor(tx), bar),
+    );
     expect(
       (
         await deviceCall("PUT", path(), {

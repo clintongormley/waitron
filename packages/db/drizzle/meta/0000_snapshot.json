@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2be26b98-8894-4651-bd42-8d851bfc396b",
+  "id": "093b4633-736f-44d9-9bdb-ebc64766e6c3",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4142,6 +4142,27 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "kept_open_day": {
+          "name": "kept_open_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kept_open_from": {
+          "name": "kept_open_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kept_open_until": {
+          "name": "kept_open_until",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -4180,6 +4201,14 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "floor_zones_kept_open_ck": {
+          "name": "floor_zones_kept_open_ck",
+          "value": "(\"floor_zones\".\"kept_open_day\" is null and \"floor_zones\".\"kept_open_from\" is null and \"floor_zones\".\"kept_open_until\" is null) or (\"floor_zones\".\"kept_open_day\" is not null and \"floor_zones\".\"kept_open_from\" is not null and \"floor_zones\".\"kept_open_until\" is not null)"
+        },
+        "floor_zones_kept_open_step_ck": {
+          "name": "floor_zones_kept_open_step_ck",
+          "value": "substr(\"floor_zones\".\"kept_open_from\", 4, 2) in ('00', '15', '30', '45') and substr(\"floor_zones\".\"kept_open_until\", 4, 2) in ('00', '15', '30', '45')"
+        },
         "floor_zones_order_start_ck": {
           "name": "floor_zones_order_start_ck",
           "value": "\"floor_zones\".\"order_start\" in ('table', 'counter')"
@@ -4328,6 +4357,20 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "closed_on_day": {
+          "name": "closed_on_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "closed_sends_to_station_id": {
+          "name": "closed_sends_to_station_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -4348,10 +4391,56 @@
           "where": "\"kitchen_stations\".\"is_default\""
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "kitchen_stations_closed_sends_to_station_id_kitchen_stations_id_fk": {
+          "name": "kitchen_stations_closed_sends_to_station_id_kitchen_stations_id_fk",
+          "tableFrom": "kitchen_stations",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "closed_sends_to_station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "kitchen_stations_closed_sends_to_ck": {
+          "name": "kitchen_stations_closed_sends_to_ck",
+          "value": "\"kitchen_stations\".\"closed_sends_to_station_id\" is null or \"kitchen_stations\".\"closed_on_day\" is not null"
+        },
+        "kitchen_stations_closed_sends_to_not_self_ck": {
+          "name": "kitchen_stations_closed_sends_to_not_self_ck",
+          "value": "\"kitchen_stations\".\"closed_sends_to_station_id\" <> \"kitchen_stations\".\"id\""
+        },
+        "kitchen_stations_warm_after_ck": {
+          "name": "kitchen_stations_warm_after_ck",
+          "value": "\"kitchen_stations\".\"warm_after_minutes\" >= 1"
+        },
+        "kitchen_stations_ready_warning_after_ck": {
+          "name": "kitchen_stations_ready_warning_after_ck",
+          "value": "\"kitchen_stations\".\"ready_warning_after_minutes\" >= 1"
+        },
+        "kitchen_stations_colour_ck": {
+          "name": "kitchen_stations_colour_ck",
+          "value": "\"kitchen_stations\".\"colour\" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')"
+        },
+        "kitchen_stations_ticket_grouping_ck": {
+          "name": "kitchen_stations_ticket_grouping_ck",
+          "value": "\"kitchen_stations\".\"ticket_grouping\" in ('combined', 'separate')"
+        },
+        "kitchen_stations_bump_mode_ck": {
+          "name": "kitchen_stations_bump_mode_ck",
+          "value": "\"kitchen_stations\".\"bump_mode\" in ('line', 'ticket')"
+        },
+        "kitchen_stations_changes_after_sending_ck": {
+          "name": "kitchen_stations_changes_after_sending_ck",
+          "value": "\"kitchen_stations\".\"changes_after_sending\" in ('never', 'held', 'held-or-waiting')"
+        },
         "kitchen_stations_thresholds_ordered": {
           "name": "kitchen_stations_thresholds_ordered",
           "value": "\"kitchen_stations\".\"warm_after_minutes\" < \"kitchen_stations\".\"overdue_after_minutes\" and \"kitchen_stations\".\"overdue_after_minutes\" < \"kitchen_stations\".\"forgotten_after_minutes\""
@@ -16102,92 +16191,6 @@
         }
       }
     },
-    "station_day_states": {
-      "name": "station_day_states",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "station_id": {
-          "name": "station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "business_day": {
-          "name": "business_day",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "open": {
-          "name": "open",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sends_to_station_id": {
-          "name": "sends_to_station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "station_day_states_day_key": {
-          "name": "station_day_states_day_key",
-          "columns": [
-            "station_id",
-            "business_day"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "station_day_states_station_fk": {
-          "name": "station_day_states_station_fk",
-          "tableFrom": "station_day_states",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "station_day_states_sends_to_fk": {
-          "name": "station_day_states_sends_to_fk",
-          "tableFrom": "station_day_states",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "sends_to_station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "station_day_states_sends_to_not_self_ck": {
-          "name": "station_day_states_sends_to_not_self_ck",
-          "value": "\"station_day_states\".\"sends_to_station_id\" <> \"station_day_states\".\"station_id\""
-        }
-      }
-    },
     "menu_period_staff_menus": {
       "name": "menu_period_staff_menus",
       "columns": {
@@ -16670,79 +16673,6 @@
         "department_transfer_requests_decline_reason_ck": {
           "name": "department_transfer_requests_decline_reason_ck",
           "value": "\"department_transfer_requests\".\"status\" <> 'declined' or (\"department_transfer_requests\".\"reason\" is not null and length(trim(\"department_transfer_requests\".\"reason\")) > 0)"
-        }
-      }
-    },
-    "zone_extensions": {
-      "name": "zone_extensions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "zone_id": {
-          "name": "zone_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "business_day": {
-          "name": "business_day",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "starts_at": {
-          "name": "starts_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "ends_at": {
-          "name": "ends_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "zone_extensions_day_key": {
-          "name": "zone_extensions_day_key",
-          "columns": [
-            "zone_id",
-            "business_day"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "zone_extensions_zone_fk": {
-          "name": "zone_extensions_zone_fk",
-          "tableFrom": "zone_extensions",
-          "tableTo": "floor_zones",
-          "columnsFrom": [
-            "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "zone_extensions_step_ck": {
-          "name": "zone_extensions_step_ck",
-          "value": "substr(\"zone_extensions\".\"starts_at\", 4, 2) in ('00', '15', '30', '45')\n      and substr(\"zone_extensions\".\"ends_at\", 4, 2) in ('00', '15', '30', '45')"
         }
       }
     },

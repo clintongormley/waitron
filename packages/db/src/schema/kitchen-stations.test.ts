@@ -1,3 +1,9 @@
+import {
+  STATION_COLOURS,
+  TICKET_GROUPINGS,
+  BUMP_MODES,
+  CHANGES_AFTER_SENDING,
+} from "@waitron/shared";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { and, eq, sql } from "drizzle-orm";
@@ -207,7 +213,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       readyWarningAfterMinutes: 3,
       forgottenAfterMinutes: 15,
     });
-    for (const minutes of [20, 0]) {
+    for (const minutes of [20]) {
       await inTx((tx) =>
         tx
           .update(kitchenStations)
@@ -248,6 +254,76 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       // The probe rows go first: recreating the index over their two defaults would fail.
       await suite.db.delete(kitchenStations).where(eq(kitchenStations.isDefault, true));
       suite.db.run(sql.raw(index!.sql));
+    }
+  });
+});
+
+describe("today's station closure and station value constraints", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const stationId = "station";
+  async function station() {
+    await suite.db.insert(kitchenStations).values({ id: stationId, name: "Kitchen" });
+  }
+  it.each([
+    ["warm_after_minutes", 0, "kitchen_stations_warm_after_ck"],
+    ["ready_warning_after_minutes", 0, "kitchen_stations_ready_warning_after_ck"],
+    ["colour", "mauve", "kitchen_stations_colour_ck"],
+    ["ticket_grouping", "stacked", "kitchen_stations_ticket_grouping_ck"],
+    ["bump_mode", "order", "kitchen_stations_bump_mode_ck"],
+    ["changes_after_sending", "always", "kitchen_stations_changes_after_sending_ck"],
+  ])("refuses invalid %s", async (column, value, constraint) => {
+    await station();
+    const error = await captureError(() =>
+      suite.db.execute(
+        sql`update kitchen_stations set ${sql.identifier(column)} = ${value} where id = ${stationId}`,
+      ),
+    );
+    expect(engineErrorMessage(error)).toContain(constraint);
+  });
+  it.each([
+    ["warm_after_minutes", [1]],
+    ["ready_warning_after_minutes", [1]],
+    ["colour", STATION_COLOURS],
+    ["ticket_grouping", TICKET_GROUPINGS],
+    ["bump_mode", BUMP_MODES],
+    ["changes_after_sending", CHANGES_AFTER_SENDING],
+  ])("stores legitimate %s", async (column, values) => {
+    await station();
+    for (const value of values) {
+      await suite.db.execute(
+        sql`update kitchen_stations set ${sql.identifier(column)} = ${value} where id = ${stationId}`,
+      );
+      expect(
+        suite.db.get(
+          sql`select ${sql.identifier(column)} as value from kitchen_stations where id = ${stationId}`,
+        ),
+      ).toEqual({ value });
+    }
+  });
+  it.each([
+    [null, "other", "kitchen_stations_closed_sends_to_ck"],
+    ["2026-11-12", stationId, "kitchen_stations_closed_sends_to_not_self_ck"],
+    ["2026-11-12", "absent", "FOREIGN KEY constraint failed"],
+  ])("refuses invalid closure %s / %s", async (day, destination, constraint) => {
+    await station();
+    await suite.db.insert(kitchenStations).values({ id: "other", name: "Other" });
+    const error = await captureError(() =>
+      suite.db.execute(sql`update kitchen_stations
+      set closed_on_day = ${day}, closed_sends_to_station_id = ${destination} where id = ${stationId}`),
+    );
+    expect(engineErrorMessage(error)).toContain(constraint);
+  });
+  it("stores a closure with no destination and an open station", async () => {
+    await station();
+    for (const day of ["2026-11-12", null]) {
+      await suite.db.execute(
+        sql`update kitchen_stations set closed_on_day = ${day} where id = ${stationId}`,
+      );
+      expect(
+        suite.db.get(
+          sql`select closed_on_day, closed_sends_to_station_id from kitchen_stations where id = ${stationId}`,
+        ),
+      ).toEqual({ closed_on_day: day, closed_sends_to_station_id: null });
     }
   });
 });

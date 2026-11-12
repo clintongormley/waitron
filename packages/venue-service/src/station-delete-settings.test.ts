@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, expect, it } from "vitest";
 import { createProduct } from "@waitron/catalogue";
 import {
@@ -16,14 +16,19 @@ import {
   menuPeriods,
   routingCellPeriods,
   routingCells,
-  stationDayStates,
   withTransaction,
   type Database,
   type Transaction,
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+  seedZone,
+  seedActivityActor,
+} from "@waitron/db/testing/seed.js";
 import * as module from "./index.js";
 import {
   readDeviceKitchenScreens,
@@ -205,26 +210,52 @@ it("clears owned daily dates and incoming destinations without reopening their o
       vatClass: "general",
     });
     await tx.insert(routingCells).values({ ...f.cfg, noCategory: true, stationId: f.other });
+    await tx
+      .update(kitchenStations)
+      .set({ closedOnDay: "2026-10-10" })
+      .where(eq(kitchenStations.id, f.gone));
+    await tx
+      .update(kitchenStations)
+      .set({ closedOnDay: "2026-10-10", closedSendsToStationId: f.gone })
+      .where(eq(kitchenStations.id, f.other));
     const rows = await tx
-      .insert(stationDayStates)
-      .values([
-        { stationId: f.gone, businessDay: "2026-10-09", open: false },
-        { stationId: f.gone, businessDay: "2026-10-10", open: false },
-        { stationId: f.other, businessDay: "2026-10-09", open: false, sendsToStationId: f.gone },
-        { stationId: f.other, businessDay: "2026-10-10", open: false, sendsToStationId: f.gone },
-      ])
-      .returning();
+      .select({
+        id: kitchenStations.id,
+        stationId: kitchenStations.id,
+        businessDay: kitchenStations.closedOnDay,
+        open: sql<boolean>`0`.mapWith(Boolean),
+        sendsToStationId: kitchenStations.closedSendsToStationId,
+      })
+      .from(kitchenStations)
+      .where(
+        and(isNotNull(kitchenStations.closedOnDay), inArray(kitchenStations.id, [f.gone, f.other])),
+      );
     expect((await module.readStationDeleteSettings(tx, f.gone)).removes).toEqual([
-      { key: "station_daily_states", count: 2, targets: [] },
+      { key: "station_daily_states", count: 1, targets: [] },
       { key: "station_daily_destinations", count: 1, targets: [{ id: f.other, name: "Survivor" }] },
     ]);
     await module.clearStationDeleteSettings(tx, f.gone);
     expect(
       await tx
-        .select()
-        .from(stationDayStates)
-        .where(inArray(stationDayStates.stationId, [f.gone, f.other])),
-    ).toEqual(rows.slice(2).map((row) => ({ ...row, sendsToStationId: null })));
+        .select({
+          id: kitchenStations.id,
+          stationId: kitchenStations.id,
+          businessDay: kitchenStations.closedOnDay,
+          open: sql<boolean>`0`.mapWith(Boolean),
+          sendsToStationId: kitchenStations.closedSendsToStationId,
+        })
+        .from(kitchenStations)
+        .where(
+          and(
+            isNotNull(kitchenStations.closedOnDay),
+            inArray(kitchenStations.id, [f.gone, f.other]),
+          ),
+        ),
+    ).toEqual(
+      rows
+        .filter((row) => row.stationId === f.other)
+        .map((row) => ({ ...row, sendsToStationId: null })),
+    );
 
     expect((await (await routingAt(tx, at)).makers(null, [product!.id])).get(product!.id)).toEqual({
       kind: "made",
@@ -421,7 +452,7 @@ it("omits deleted stations from public routing and screen offerings while retain
       profileId: pid,
       screens: [{ kind: "station", stationIds: [f.gone, f.other], zoneIds: null }],
     });
-    await setStationToday(tx, f.gone, "closed", at, f.home);
+    await setStationToday(tx, f.gone, "closed", at, await seedActivityActor(tx), f.home);
     await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.gone));
     expect((await routingModel(tx, at)).stations.map((row) => row.id)).toEqual([f.home, f.other]);
     expect((await routingModel(tx, at)).stationTimes.map((row) => row.stationId)).toEqual([
@@ -448,10 +479,11 @@ it.each(["set", "destinations", "open", "close", "service", "read settings", "cl
       return f;
     });
     const actions: Record<string, (tx: Transaction) => Promise<unknown>> = {
-      set: (tx) => setStationToday(tx, f.gone, null, at),
+      set: async (tx) => setStationToday(tx, f.gone, null, at, await seedActivityActor(tx)),
       destinations: (tx) => stationDestinations(tx, f.gone, at),
-      open: (tx) => openStationForToday(tx, f.gone, at),
-      close: (tx) => closeStationForToday(tx, f.gone, f.home, at),
+      open: async (tx) => openStationForToday(tx, f.gone, at, await seedActivityActor(tx)),
+      close: async (tx) =>
+        closeStationForToday(tx, f.gone, f.home, at, await seedActivityActor(tx)),
       service: (tx) => stationServiceTimes(tx, f.gone, "2026-10-10", "2026-10-10"),
       "read settings": (tx) => module.readStationDeleteSettings(tx, f.gone),
       "clear settings": (tx) => module.clearStationDeleteSettings(tx, f.gone),

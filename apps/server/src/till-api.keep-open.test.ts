@@ -1,12 +1,19 @@
 import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { sql } from "drizzle-orm";
+import { sql, and, isNotNull } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { departments, deviceProfiles, withTransaction, type Transaction } from "@waitron/db";
+import {
+  activityLog,
+  departments,
+  deviceProfiles,
+  withTransaction,
+  type Transaction,
+  floorZones,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCatalogue, addProductToMenu } from "@waitron/catalogue";
@@ -25,7 +32,6 @@ import {
   replaceMenuWeek,
   saveMenuPeriod,
   setProfileServiceAccess,
-  zoneExtensions,
   replaceZoneClosedWeek,
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
@@ -212,7 +218,16 @@ describe("the till keeps a zone open today", () => {
   });
   const writeZone = () => `/api/service-zones/${zone}/zone-extension`;
   const zoneRows = () =>
-    suite.db.select().from(zoneExtensions).where(eq(zoneExtensions.zoneId, zone));
+    suite.db
+      .select({
+        id: floorZones.id,
+        zoneId: floorZones.id,
+        businessDay: floorZones.keptOpenDay,
+        startsAt: floorZones.keptOpenFrom,
+        endsAt: floorZones.keptOpenUntil,
+      })
+      .from(floorZones)
+      .where(and(isNotNull(floorZones.keptOpenDay), eq(floorZones.id, zone)));
   const nextDay = (time: string) => vi.setSystemTime(new Date(`2026-10-06T${time}:00+02:00`));
   const zoneState = async () => {
     const answer = await call("GET", "/api/zones");
@@ -333,6 +348,16 @@ describe("the till keeps a zone open today", () => {
       ).status,
     ).toBe(204);
     expect(await zoneRows()).toHaveLength(1);
+    expect(
+      await suite.db.select().from(activityLog).where(eq(activityLog.kind, "zone.kept_open")),
+    ).toEqual([
+      expect.objectContaining({
+        subjectId: zone,
+        personId: staff,
+        deviceId: staffCookie.split(`${DEVICE_COOKIE}=`)[1]!.split(".")[0],
+        data: expect.objectContaining({ authorizedBy: manager }),
+      }),
+    ]);
   });
   it("refuses a correct staff PIN", async () => {
     const answer = await call(

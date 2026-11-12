@@ -15,7 +15,7 @@ import type { Transaction } from "@waitron/db";
 import { deviceOrigin } from "@waitron/shared";
 import { createPrinter } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { createCourse, createStation } from "./kitchen.js";
@@ -93,7 +93,14 @@ describe("device made-here stations", () => {
       await routeProductTo(tx, venue.coffeeId, bar.id);
       const downstairsPrinter = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, bar.id);
-      await setStationToday(tx, bar.id, "closed", new Date(), downstairs.id);
+      await setStationToday(
+        tx,
+        bar.id,
+        "closed",
+        new Date(),
+        await seedActivityActor(tx),
+        downstairs.id,
+      );
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const lager = await rawLine(tx, orderId, venue.coffeeId, 1);

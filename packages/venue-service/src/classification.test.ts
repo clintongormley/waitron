@@ -10,10 +10,11 @@ const VENUE_SERVICE_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
 describe("VENUE_SERVICE_CLASSIFICATION", () => {
   it("copies today's zone extensions as state", () => {
     expect(
-      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "zone_extensions").map(
-        (entry) => [entry.table, entry.class],
-      ),
-    ).toEqual([["zone_extensions", "state"]]);
+      CORE_CLASSIFICATION.filter((entry) => entry.table === "floor_zones").map((entry) => [
+        entry.table,
+        entry.class,
+      ]),
+    ).toEqual([["floor_zones", "state"]]);
   });
   it("does not copy the retired local-holiday table", () => {
     expect(CORE_CLASSIFICATION.map((entry) => entry.table)).not.toContain("local_holidays");
@@ -26,13 +27,13 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
     ).toEqual([["menu_period_staff_menus", "state"]]);
   });
   it("replicates opening hours, station fallbacks and today's state", () => {
-    const timing = ["station_hours", "department_hours", "station_day_states"];
+    const timing = ["station_hours", "department_hours", "kitchen_stations"];
     expect(
-      VENUE_SERVICE_CLASSIFICATION.filter((entry) => timing.includes(entry.table)).map((entry) => [
+      CORE_CLASSIFICATION.filter((entry) => timing.includes(entry.table)).map((entry) => [
         entry.table,
         entry.class,
       ]),
-    ).toEqual([["station_day_states", "state"]]);
+    ).toEqual([["kitchen_stations", "state"]]);
   });
   it("classifies routing_cells as replicated state", () => {
     expect(

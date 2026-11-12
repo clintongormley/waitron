@@ -1,15 +1,14 @@
-import { eq } from "drizzle-orm";
+import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
-  stationDayStates,
   withTransaction,
   type Transaction,
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { loadRoutingRules, routingAt, routingModel, stationStates } from "./routing-store.js";
 import { openStationForToday, setStationToday } from "./station-times.js";
 
@@ -43,8 +42,8 @@ describe("station reopening without hours", () => {
   it("removes the closure without loading routing or the station calendar", async () => {
     const f = await withTransaction(suite.db, async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.bar, "closed", at, f.kitchen);
-      await setStationToday(tx, f.grill, "closed", at, f.kitchen);
+      await setStationToday(tx, f.bar, "closed", at, await seedActivityActor(tx), f.kitchen);
+      await setStationToday(tx, f.grill, "closed", at, await seedActivityActor(tx), f.kitchen);
       return f;
     });
     await withTransaction(suite.db, async (tx) => {
@@ -54,7 +53,7 @@ describe("station reopening without hours", () => {
       const prepared = vi.spyOn(session, "prepareQuery");
       let queries: string[];
       try {
-        await openStationForToday(tx, f.bar, at);
+        await openStationForToday(tx, f.bar, at, await seedActivityActor(tx));
         queries = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       } finally {
         prepared.mockRestore();
@@ -63,16 +62,34 @@ describe("station reopening without hours", () => {
         queries.filter(
           (query) =>
             /^select\b/i.test(query) &&
-            /"(?:routing_cells|categories|category_details|station_day_states|hours_week_cells|hours_week_periods|special_date_hours|special_date_hours_periods|station_fallbacks)"/.test(
+            /"(?:routing_cells|categories|category_details|hours_week_cells|hours_week_periods|special_date_hours|special_date_hours_periods|station_fallbacks)"/.test(
               query,
             ),
         ),
       ).toEqual([]);
       expect(
-        await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.bar)),
+        await tx
+          .select({
+            id: kitchenStations.id,
+            stationId: kitchenStations.id,
+            businessDay: kitchenStations.closedOnDay,
+            open: sql<boolean>`0`.mapWith(Boolean),
+            sendsToStationId: kitchenStations.closedSendsToStationId,
+          })
+          .from(kitchenStations)
+          .where(and(isNotNull(kitchenStations.closedOnDay), eq(kitchenStations.id, f.bar))),
       ).toEqual([]);
       expect(
-        await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.grill)),
+        await tx
+          .select({
+            id: kitchenStations.id,
+            stationId: kitchenStations.id,
+            businessDay: kitchenStations.closedOnDay,
+            open: sql<boolean>`0`.mapWith(Boolean),
+            sendsToStationId: kitchenStations.closedSendsToStationId,
+          })
+          .from(kitchenStations)
+          .where(and(isNotNull(kitchenStations.closedOnDay), eq(kitchenStations.id, f.grill))),
       ).toEqual([
         {
           id: expect.any(String),
@@ -88,10 +105,19 @@ describe("station reopening without hours", () => {
   it("an explicit open clears the closure and its destination instead of storing an override", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await fixture(tx);
-      await setStationToday(tx, f.bar, "closed", at, f.kitchen);
-      await setStationToday(tx, f.bar, "open", at);
+      await setStationToday(tx, f.bar, "closed", at, await seedActivityActor(tx), f.kitchen);
+      await setStationToday(tx, f.bar, "open", at, await seedActivityActor(tx));
       expect(
-        await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.bar)),
+        await tx
+          .select({
+            id: kitchenStations.id,
+            stationId: kitchenStations.id,
+            businessDay: kitchenStations.closedOnDay,
+            open: sql<boolean>`0`.mapWith(Boolean),
+            sendsToStationId: kitchenStations.closedSendsToStationId,
+          })
+          .from(kitchenStations)
+          .where(and(isNotNull(kitchenStations.closedOnDay), eq(kitchenStations.id, f.bar))),
       ).toEqual([]);
       expect((await stationStates(tx, at)).get(f.bar)).toEqual({
         name: "Bar",
@@ -106,17 +132,15 @@ describe("station reopening without hours", () => {
   });
 
   it.each(["rules", "model", "states", "resolver"] as const)(
-    "%s treats a stored open row as no override, including a stray destination",
+    "%s ignores yesterday's closure and destination",
     async (read) => {
       await withTransaction(suite.db, async (tx) => {
         const f = await fixture(tx);
-        await tx.insert(stationDayStates).values({
-          stationId: f.bar,
-          businessDay: "2026-10-09",
-          open: true,
-          sendsToStationId: f.grill,
-        });
-        await setStationToday(tx, f.grill, "closed", at, f.kitchen);
+        await tx
+          .update(kitchenStations)
+          .set({ closedOnDay: "2026-10-08", closedSendsToStationId: f.grill })
+          .where(eq(kitchenStations.id, f.bar));
+        await setStationToday(tx, f.grill, "closed", at, await seedActivityActor(tx), f.kitchen);
         if (read === "rules") {
           const rules = await loadRoutingRules(tx, "2026-10-09");
           expect(rules.timing.get(f.bar)).toMatchObject({ today: null, todaySendsTo: null });

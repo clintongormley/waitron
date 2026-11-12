@@ -31,7 +31,6 @@ import {
   withTransaction,
   zoneDayRanges,
   zoneDays,
-  zoneExtensions,
   type Transaction,
   floorZones,
 } from "@waitron/db";
@@ -2290,12 +2289,10 @@ describe("a keep-open for the night before the change", () => {
   const keptOpen = async (endsAt: string, businessDay = "2026-11-03") => {
     const v = await fixture([], { zone: true });
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(zoneExtensions).values({
-        zoneId: v.zoneId!,
-        businessDay,
-        startsAt: "22:00:00",
-        endsAt: `${endsAt}:00`,
-      });
+      await tx
+        .update(floorZones)
+        .set({ keptOpenDay: businessDay, keptOpenFrom: "22:00:00", keptOpenUntil: `${endsAt}:00` })
+        .where(eq(floorZones.id, v.zoneId!));
     });
     return v;
   };

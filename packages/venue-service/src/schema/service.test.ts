@@ -11,7 +11,6 @@ import {
   routingCellPeriods,
   routingCells,
   saleReceiptHeaders,
-  stationDayStates,
   withTransaction,
   workingLineContexts,
   floorZones,
@@ -85,14 +84,6 @@ const EXPECTED: Record<
     indexes: [],
     uniqueConstraints: [],
     primaryKeys: ["device_profile_zones_pk"],
-  },
-  station_day_states: {
-    table: stationDayStates,
-    foreignKeys: ["station_day_states_station_fk", "station_day_states_sends_to_fk"],
-    checks: ["station_day_states_sends_to_not_self_ck"],
-    indexes: ["station_day_states_day_key"],
-    uniqueConstraints: [],
-    primaryKeys: [],
   },
   routing_cells: {
     table: routingCells,
@@ -184,7 +175,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(11);
+    expect(Object.keys(EXPECTED)).toHaveLength(10);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

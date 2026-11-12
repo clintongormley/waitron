@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, expect, it, onTestFinished } from "vitest";
@@ -121,9 +121,11 @@ it("refreshes Calendar and routing from special days, clock and daily station st
     tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, kitchen)),
   );
   expect(reaches(station, calendar)).toEqual([]);
-  const today = await announced((tx) => setStationToday(tx, bar, "closed", at));
+  const today = await announced(async (tx) =>
+    setStationToday(tx, bar, "closed", at, await seedActivityActor(tx)),
+  );
   expect(reaches(today, calendar)).toEqual([]);
-  expect(reaches(today, routing)).toEqual(["station_day_states"]);
+  expect(reaches(today, routing)).toEqual(["kitchen_stations"]);
   const order = await withTransaction(db, (tx) =>
     seedWorkingOrder(tx, { source: "dashboard", orderNumber: 1 }),
   );
@@ -215,8 +217,10 @@ it("daily station status refreshes routing and special days refresh Opening hour
     return { bar: bar!.id, dateId: date.id };
   });
   const sources = [QUERY_DEPENDENCIES.routing, QUERY_DEPENDENCIES["opening-hours"]];
-  const station = await announced((tx) => setStationToday(tx, bar, "closed", at));
-  expect(reaches(station, sources[0]!)).toEqual(["station_day_states"]);
+  const station = await announced(async (tx) =>
+    setStationToday(tx, bar, "closed", at, await seedActivityActor(tx)),
+  );
+  expect(reaches(station, sources[0]!)).toEqual(["kitchen_stations"]);
   const named = await announced((tx) =>
     saveSpecialDay(
       tx,

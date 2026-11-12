@@ -1191,8 +1191,7 @@ describe("a keep-open for tonight past the new changeover", () => {
         sql`update floor_zones set department_id = ${department.id} where id = ${zoneId}`,
       );
       await tx.execute(
-        sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
-            values (${randomUUID()}, ${zoneId}, '2026-10-20', '22:00:00', '04:30:00')`,
+        sql`update floor_zones set kept_open_day='2026-10-20', kept_open_from='22:00:00', kept_open_until='04:30:00' where id=${zoneId}`,
       );
     });
     at = new Date("2026-10-20T20:00:00Z");

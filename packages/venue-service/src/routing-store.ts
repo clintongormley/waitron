@@ -9,7 +9,6 @@ import {
   readVenueClock,
   routingCellPeriods,
   routingCells,
-  stationDayStates,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -393,34 +392,22 @@ async function snapshot(tx: Transaction, scope: SnapshotScope = UNTIMED) {
       active: kitchenStations.active,
       isDefault: kitchenStations.isDefault,
       colour: kitchenStations.colour,
+      closedOnDay: kitchenStations.closedOnDay,
+      closedSendsToStationId: kitchenStations.closedSendsToStationId,
     })
     .from(kitchenStations)
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
-  const stationIds = stations.map((row) => row.id);
-  const dayStates =
-    stationIds.length === 0 || businessDay === null
-      ? []
-      : await tx
-          .select()
-          .from(stationDayStates)
-          .where(
-            and(
-              inArray(stationDayStates.stationId, stationIds),
-              eq(stationDayStates.businessDay, businessDay),
-              eq(stationDayStates.open, false),
-            ),
-          );
-  const todayByStation = new Map(dayStates.map((row) => [row.stationId, "closed" as const]));
-  const destinationByStation = new Map(
-    dayStates.map((row) => [row.stationId, row.sendsToStationId]),
-  );
   const timing = new Map(
     stations.map((station) => [
       station.id,
       {
-        today: todayByStation.get(station.id) ?? null,
-        todaySendsTo: destinationByStation.get(station.id) ?? null,
+        today:
+          businessDay !== null && station.closedOnDay === businessDay ? ("closed" as const) : null,
+        todaySendsTo:
+          businessDay !== null && station.closedOnDay === businessDay
+            ? station.closedSendsToStationId
+            : null,
       },
     ]),
   );

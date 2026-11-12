@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { billPaymentRefunds, billPayments, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
@@ -243,7 +243,8 @@ describe("station movement checks bill editing authority", () => {
           grill,
           bar,
           "send",
-          (at) => VENUE_SERVICE.closeStationForToday(tx, grill, bar, at),
+          async (at) =>
+            VENUE_SERVICE.closeStationForToday(tx, grill, bar, at, await seedActivityActor(tx)),
           { deviceId: venue.deviceId, personId: venue.operatorId },
         ),
       );
@@ -259,7 +260,9 @@ describe("station movement checks bill editing authority", () => {
       const states = await inTx(venue, (tx) => VENUE_SERVICE.stationStates(tx, new Date()));
       expect(states.get(grill)!.open).toBe(false);
     } finally {
-      await inTx(venue, (tx) => VENUE_SERVICE.openStationForToday(tx, grill, new Date()));
+      await inTx(venue, async (tx) =>
+        VENUE_SERVICE.openStationForToday(tx, grill, new Date(), await seedActivityActor(tx)),
+      );
     }
   });
   it("replays a completed move after another person takes over", async () => {
@@ -500,7 +503,8 @@ describe("kitchen work that changes no amount carries on while the bill's card m
           grill,
           bar,
           "send",
-          (at) => VENUE_SERVICE.closeStationForToday(tx, grill, bar, at),
+          async (at) =>
+            VENUE_SERVICE.closeStationForToday(tx, grill, bar, at, await seedActivityActor(tx)),
           { deviceId: venue.deviceId, personId: venue.operatorId },
         ),
       ).then(() => "closed", codeOf);
@@ -516,7 +520,9 @@ describe("kitchen work that changes no amount carries on while the bill's card m
       expect(states.get(grill)!.open).toBe(false);
       expect(await refundStates(q.tabId)).toEqual(["pending"]);
     } finally {
-      await inTx(venue, (tx) => VENUE_SERVICE.openStationForToday(tx, grill, new Date()));
+      await inTx(venue, async (tx) =>
+        VENUE_SERVICE.openStationForToday(tx, grill, new Date(), await seedActivityActor(tx)),
+      );
     }
   });
 

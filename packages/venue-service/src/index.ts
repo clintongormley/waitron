@@ -43,13 +43,11 @@ export {
   serviceSteps,
   specialDayDates,
   specialDays,
-  stationDayStates,
   ticketItemAllergies,
   workingLineContexts,
   ZONE_PAINT_KINDS,
   zoneDayRanges,
   zoneDays,
-  zoneExtensions,
 } from "@waitron/db";
 export type { ServiceStepStart } from "@waitron/db";
 export * from "./operations.js";

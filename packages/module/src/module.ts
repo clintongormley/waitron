@@ -40,6 +40,12 @@ import type { ModuleAlerts } from "./alerts.js";
 import type { StaffNoticeSource } from "./staff-notices.js";
 import "./errors.js";
 
+export type ActivityActor = {
+  personId: string | null;
+  deviceId: string | null;
+  authorizedBy: string;
+};
+
 /**
  * The core verbs a module's routes need but cannot import — a module never depends on `apps/server`.
  * Boot implements it with the venue's config bound in, so a verb never takes the config.
@@ -860,6 +866,7 @@ export interface VenueServiceContribution {
     zoneId: string,
     input: { until: string | null },
     at: Date,
+    actor: ActivityActor,
   ): Promise<void>;
   resolveSalePolicy(tx: Transaction, zoneId: string): Promise<EffectiveSalePolicy>;
   recordSaleReceiptHeader(tx: Transaction, saleId: string, zoneId: string | null): Promise<void>;
@@ -940,8 +947,14 @@ export interface VenueServiceContribution {
     stationId: string,
     sendsToStationId: string,
     at: Date,
+    actor: ActivityActor,
   ): Promise<void>;
-  openStationForToday(tx: Transaction, stationId: string, at: Date): Promise<void>;
+  openStationForToday(
+    tx: Transaction,
+    stationId: string,
+    at: Date,
+    actor: ActivityActor,
+  ): Promise<void>;
   /** Base maker for active products and variants, plus whether any active zone's maker or no-replacement answer differs. */
   describeMakers(tx: Transaction): Promise<
     ReadonlyMap<

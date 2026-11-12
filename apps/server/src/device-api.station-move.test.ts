@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
@@ -444,7 +444,9 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 describe("GET /api/device/stations", () => {
   it("lists every active station with whether it is open today", async () => {
     const screen = await display(stationScreen(bar));
-    await inTx(venue, (tx) => setStationToday(tx, grill, "closed", new Date()));
+    await inTx(venue, async (tx) =>
+      setStationToday(tx, grill, "closed", new Date(), await seedActivityActor(tx)),
+    );
     try {
       const answer = await send(app, screen.cookie, "GET", "/api/device/stations");
       expect(answer.status).toBe(200);
@@ -457,7 +459,9 @@ describe("GET /api/device/stations", () => {
       );
       expect(listed.map((station) => station.id)).not.toContain(off);
     } finally {
-      await inTx(venue, (tx) => setStationToday(tx, grill, null, new Date()));
+      await inTx(venue, async (tx) =>
+        setStationToday(tx, grill, null, new Date(), await seedActivityActor(tx)),
+      );
     }
   });
 

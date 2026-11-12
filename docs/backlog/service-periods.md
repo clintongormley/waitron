@@ -29,15 +29,6 @@ readers listed in slice 6 decision 4. These are source pointers, not a runtime r
 an exhaustive future implementation plan. Preserve payment, money/VAT, hashes, drawer and
 login behaviour; decide the future schema/contract and test it separately.
 
-## Who authorised today's station or zone change
-
-The approved [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md)
-leaves the authorising person unstored (decision 14). The station-day and zone-extension rows
-hold the choice, but no person ID. (2026-10-24, A789 slice 2: the period extension this entry
-first named is gone; a zone's keep-open is the remaining change of this kind.) Decide whether to
-retain that identity before adding a history view; this is separate from checking the manager's
-permission and PIN before a write.
-
 ## Smaller notes from the Hours reviews
 
 Nothing pins which of two repeated midnights a clock change picks. The separate Hours client's

@@ -44,8 +44,16 @@ export function mountKeepOpenApi(
       const toCheck = await overrideToCheck(deps.db, authz, override);
       await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
-          await authorize(tx, { ...authz, override: withCheck(override, checked) }, attempts);
-          await VENUE_SERVICE.keepZoneOpen(tx, zoneId, input, new Date());
+          const { authorizedBy } = await authorize(
+            tx,
+            { ...authz, override: withCheck(override, checked) },
+            attempts,
+          );
+          await VENUE_SERVICE.keepZoneOpen(tx, zoneId, input, new Date(), {
+            personId: session.personId,
+            deviceId: session.deviceId,
+            authorizedBy,
+          });
         }),
       );
       return c.body(null, 204);

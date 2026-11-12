@@ -1,6 +1,11 @@
 import { seedPersons, builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
-import { seedBusinessDay, seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
+import {
+  seedBusinessDay,
+  seedDeviceProfiles,
+  seedZone,
+  seedActivityActor,
+} from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
@@ -394,7 +399,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 23,
+  version: 24,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -5515,7 +5520,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(23);
+  expect(exported.version).toBe(24);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5994,7 +5999,7 @@ describe("special days in a configuration transfer", () => {
         closedAllDay: true,
       });
       await insertSpecialDay(tx, cfg, { date: "2027-01-01", name: "New Year" });
-      await setStationToday(tx, bar.id, "closed", AT);
+      await setStationToday(tx, bar.id, "closed", AT, await seedActivityActor(tx));
     });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -6014,12 +6019,18 @@ describe("special days in a configuration transfer", () => {
     const { transferred } = await preparedWithSpecialDays("B44009911");
     expect(transferred.tables).not.toHaveProperty(table);
     expect(transferred.tables.special_days).toHaveLength(3);
-    expect(transferred.tables).not.toHaveProperty("station_day_states");
+    for (const row of transferred.tables.kitchen_stations ?? []) {
+      expect(row).not.toHaveProperty("closed_on_day");
+      expect(row).not.toHaveProperty("closed_sends_to_station_id");
+    }
   });
 
   it("carries special dates with fresh ids while leaving station schedules behind", async () => {
     const { versions, transferred } = await preparedWithSpecialDays("B44001122");
-    expect(transferred.tables).not.toHaveProperty("station_day_states");
+    for (const row of transferred.tables.kitchen_stations ?? []) {
+      expect(row).not.toHaveProperty("closed_on_day");
+      expect(row).not.toHaveProperty("closed_sends_to_station_id");
+    }
     for (const table of [
       "station_fallbacks",
       "hours_week_cells",
@@ -6054,7 +6065,7 @@ describe("special days in a configuration transfer", () => {
       );
     }
     const dayStates = await targetSuite.db.execute<{ n: number }>(sql`
-      select cast(count(*) as int) as n from station_day_states`);
+      select cast(count(*) as int) as n from kitchen_stations where closed_on_day is not null`);
     expect(dayStates.rows[0]!.n).toBe(0);
   });
 

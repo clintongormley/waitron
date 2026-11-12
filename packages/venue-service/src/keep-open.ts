@@ -1,11 +1,11 @@
-import { and, eq, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { KeepOpenSubject } from "@waitron/module";
+import type { ActivityActor, KeepOpenSubject } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { departmentDay } from "./menu-timetable.js";
 import { readServiceDayPlan } from "./day-resolver.js";
 import { resolveZoneContext, storedTime } from "./operations.js";
-import { floorZones, zoneExtensions } from "@waitron/db";
+import { floorZones, recordActivity } from "@waitron/db";
 import {
   zoneClosureDay,
   withoutZoneExtension,
@@ -118,6 +118,7 @@ export async function keepZoneOpen(
   zoneId: string,
   input: { until: string | null },
   at: Date,
+  actor: ActivityActor,
 ): Promise<void> {
   const c = await zoneContext(tx, zoneId, at);
   if (c.moment === null) throw new AppError("time_zone.unreadable", {});
@@ -136,38 +137,52 @@ export async function keepZoneOpen(
     if (!departmentCovers(c.openRanges, start, end, c.cutover))
       throw new AppError("zone_extension.not_allowed", { zoneId, reason: "department_closed" });
   }
-  await tx
-    .delete(zoneExtensions)
-    .where(
-      and(eq(zoneExtensions.zoneId, zoneId), ne(zoneExtensions.businessDay, c.moment.businessDay)),
-    );
+  const [previous] = await tx.select().from(floorZones).where(eq(floorZones.id, zoneId));
+  const old = previous!.keptOpenDay === c.moment.businessDay ? previous! : null;
   if (input.until === null) {
     await tx
-      .delete(zoneExtensions)
-      .where(
-        and(
-          eq(zoneExtensions.zoneId, zoneId),
-          eq(zoneExtensions.businessDay, c.moment.businessDay),
-        ),
-      );
+      .update(floorZones)
+      .set({ keptOpenDay: null, keptOpenFrom: null, keptOpenUntil: null })
+      .where(eq(floorZones.id, zoneId));
+    if (old !== null)
+      await recordActivity(tx, {
+        kind: "zone.keep_open_ended",
+        subjectId: zoneId,
+        personId: actor.personId,
+        deviceId: actor.deviceId,
+        at,
+        data: {
+          businessDay: c.moment.businessDay,
+          from: old.keptOpenFrom!,
+          until: old.keptOpenUntil!,
+          authorizedBy: actor.authorizedBy,
+        },
+      });
     return;
   }
   const values = {
-    zoneId,
-    businessDay: c.moment.businessDay,
-    startsAt: storedTime(
+    keptOpenDay: c.moment.businessDay,
+    keptOpenFrom: storedTime(
       c.extended !== null &&
         rangeSpan(c.extended, c.cutover).start < rangeSpan(c.closure!, c.cutover).start
         ? c.extended.startsAt
         : c.closure!.startsAt,
     ),
-    endsAt: storedTime(input.until),
+    keptOpenUntil: storedTime(input.until),
   };
-  await tx
-    .insert(zoneExtensions)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [zoneExtensions.zoneId, zoneExtensions.businessDay],
-      set: { startsAt: values.startsAt, endsAt: values.endsAt },
+  await tx.update(floorZones).set(values).where(eq(floorZones.id, zoneId));
+  if (old?.keptOpenFrom !== values.keptOpenFrom || old.keptOpenUntil !== values.keptOpenUntil)
+    await recordActivity(tx, {
+      kind: "zone.kept_open",
+      subjectId: zoneId,
+      personId: actor.personId,
+      deviceId: actor.deviceId,
+      at,
+      data: {
+        businessDay: c.moment.businessDay,
+        from: values.keptOpenFrom,
+        until: values.keptOpenUntil,
+        authorizedBy: actor.authorizedBy,
+      },
     });
 }

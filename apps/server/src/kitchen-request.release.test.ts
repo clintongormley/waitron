@@ -1,3 +1,4 @@
+import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -407,7 +408,14 @@ describe("A773 waiter request: release", () => {
       expect(await items(tx, venue.party.tabId)).toEqual([
         expect.objectContaining({ stationId: venue.stations.grill, firedAt: null }),
       ]);
-      await setStationToday(tx, venue.stations.grill, "closed", new Date(), venue.stations.kitchen);
+      await setStationToday(
+        tx,
+        venue.stations.grill,
+        "closed",
+        new Date(),
+        await seedActivityActor(tx),
+        venue.stations.kitchen,
+      );
       await setStationsWaitForPass(tx, true, [venue.stations.kitchen]);
       const before = await jobCounts(tx, venue);
       await fire(tx, venue, placed.groups[0]!.id);

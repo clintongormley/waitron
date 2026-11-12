@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { createCategory, createProduct, getExtraList, readCategory } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
@@ -677,10 +677,17 @@ describe("sending split-off extras", () => {
             extras: [{ listId, picks: [{ productId: chips!, quantity: 1 }] }],
           },
         ]);
-      await setStationToday(tx, fryer.id, "closed", new Date());
+      await setStationToday(tx, fryer.id, "closed", new Date(), await seedActivityActor(tx));
       const without = await order();
       expect((await recordsFor(tx, without)).map((row) => row.stationId)).toEqual([grill.id]);
-      await setStationToday(tx, fryer.id, "closed", new Date(), kitchen.id);
+      await setStationToday(
+        tx,
+        fryer.id,
+        "closed",
+        new Date(),
+        await seedActivityActor(tx),
+        kitchen.id,
+      );
       const withDestination = await order();
       expect((await recordsFor(tx, withDestination)).map((row) => row.stationId).sort()).toEqual(
         [grill.id, kitchen.id].sort(),
@@ -835,7 +842,7 @@ describe("sending split-off extras", () => {
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.isDefault, true));
-      await setStationToday(tx, grill.id, "closed", new Date());
+      await setStationToday(tx, grill.id, "closed", new Date(), await seedActivityActor(tx));
       await expect(
         fireLines(tx, cfg, orderId, await unsentDishLines(tx, orderId)),
       ).rejects.toMatchObject({ code: "station.no_replacement" });

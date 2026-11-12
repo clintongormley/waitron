@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
@@ -853,7 +853,7 @@ describe("resolveMakers", () => {
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
       );
       await setCategoryCell(tx, f.drinks, station(f.terraceBar));
-      await closeStationForToday(tx, f.terraceBar, f.bar, at);
+      await closeStationForToday(tx, f.terraceBar, f.bar, at, await seedActivityActor(tx));
       const expected = {
         open: false,
         active: true,
@@ -903,7 +903,7 @@ describe("resolveMakers", () => {
         byHand: null,
         sendsTo: null,
       });
-      await setStationToday(tx, f.terraceBar, "open", at);
+      await setStationToday(tx, f.terraceBar, "open", at, await seedActivityActor(tx));
       expect((await stationStates(tx, at)).get(f.terraceBar)).toMatchObject({
         open: true,
         why: "open",
@@ -941,7 +941,13 @@ describe("resolveMakers", () => {
         kind: "made",
         route: { kind: "station", stationId: f.terraceBar },
       });
-      await closeStationForToday(tx, f.terraceBar, f.bar, new Date("2026-10-02T20:00:00Z"));
+      await closeStationForToday(
+        tx,
+        f.terraceBar,
+        f.bar,
+        new Date("2026-10-02T20:00:00Z"),
+        await seedActivityActor(tx),
+      );
       expect(
         (await resolveMakers(tx, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(f.mojito),
       ).toEqual({
@@ -961,7 +967,13 @@ describe("resolveMakers", () => {
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
       );
       await setCategoryCell(tx, f.drinks, { kind: "station", stationId: f.terraceBar });
-      await setStationToday(tx, f.terraceBar, "closed", new Date("2026-10-02T18:00:00Z"));
+      await setStationToday(
+        tx,
+        f.terraceBar,
+        "closed",
+        new Date("2026-10-02T18:00:00Z"),
+        await seedActivityActor(tx),
+      );
       expect(
         (await resolveMakers(tx, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(f.mojito),
       ).toEqual({
@@ -2266,7 +2278,7 @@ describe("timed routing", () => {
       );
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
       const { at } = fridayLate;
-      await setStationToday(tx, f.terraceBar, "closed", at);
+      await setStationToday(tx, f.terraceBar, "closed", at, await seedActivityActor(tx));
       const mojito = factsOf(f.mojito, f.mojito, f.cocktails);
       expect(await storedChoice(tx, mojito, null, fridayLate)).toEqual({
         route: { kind: "station", stationId: f.bar },
@@ -2278,7 +2290,7 @@ describe("timed routing", () => {
         mojito: { kind: "made", route: station(f.bar) },
         terraceBar: { open: false, why: "closed_by_hand" },
       });
-      await setStationToday(tx, f.terraceBar, "open", at);
+      await setStationToday(tx, f.terraceBar, "open", at, await seedActivityActor(tx));
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.terraceBar) },
         terraceBar: { open: true, why: "open" },
@@ -2287,7 +2299,7 @@ describe("timed routing", () => {
         route: station(f.terraceBar),
         fallbacks: [],
       });
-      await setStationToday(tx, f.terraceBar, "closed", at);
+      await setStationToday(tx, f.terraceBar, "closed", at, await seedActivityActor(tx));
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.bar) },
         terraceBar: { open: false, why: "closed_by_hand" },
@@ -2317,7 +2329,7 @@ describe("timed routing", () => {
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
       );
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
-      await setStationToday(tx, f.terraceBar, "closed", at);
+      await setStationToday(tx, f.terraceBar, "closed", at, await seedActivityActor(tx));
       expect(await routedAt(tx, f, at)).toMatchObject({
         mojito: { kind: "made", route: station(f.bar) },
         terraceBar: { open: false, why: "closed_by_hand" },
@@ -2428,7 +2440,7 @@ describe("extra maker resolution", () => {
       const f = await extrasFixture(tx);
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.grill });
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
-      await setStationToday(tx, f.grill, "closed", fixedInstant);
+      await setStationToday(tx, f.grill, "closed", fixedInstant, await seedActivityActor(tx));
       expect((await resolveMakers(tx, null, [f.mojito], fixedInstant)).get(f.mojito)).toEqual({
         kind: "no_replacement",
         stationId: f.grill,
@@ -2516,7 +2528,7 @@ describe("extra maker resolution", () => {
         .update(kitchenStations)
         .set({ isDefault: false })
         .where(eq(kitchenStations.id, f.bar));
-      await setStationToday(tx, f.fryer, "closed", fixedInstant);
+      await setStationToday(tx, f.fryer, "closed", fixedInstant, await seedActivityActor(tx));
       expect(
         await resolveExtraMakers(
           tx,
@@ -2726,7 +2738,7 @@ describe("routing from cells", () => {
       const f = await extrasFixture(tx);
       const address: CellAddress = { row: categoryRow(f.sides), zoneId: null };
       await setRoutingCell(tx, address, station(f.terraceBar));
-      await setStationToday(tx, f.terraceBar, "closed", fixedInstant);
+      await setStationToday(tx, f.terraceBar, "closed", fixedInstant, await seedActivityActor(tx));
       expect((await resolveMakers(tx, null, [f.chips], fixedInstant)).get(f.chips)).toEqual({
         kind: "made",
         route: station(f.bar),
@@ -2762,7 +2774,7 @@ describe("routingAt", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       const resolver = await routingAt(tx, fixedInstant);
-      await setStationToday(tx, f.terraceBar, "closed", fixedInstant);
+      await setStationToday(tx, f.terraceBar, "closed", fixedInstant, await seedActivityActor(tx));
       await tx
         .update(kitchenStations)
         .set({ active: false })

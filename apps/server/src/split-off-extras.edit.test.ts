@@ -1,3 +1,4 @@
+import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -504,7 +505,14 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
-      await setStationToday(tx, venue.stations.fryer, "closed", new Date(), venue.stations.grill);
+      await setStationToday(
+        tx,
+        venue.stations.fryer,
+        "closed",
+        new Date(),
+        await seedActivityActor(tx),
+        venue.stations.grill,
+      );
       await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
       expect((await state(tx, id)).items.map((item) => item.stationId)).toEqual([
         venue.stations.grill,

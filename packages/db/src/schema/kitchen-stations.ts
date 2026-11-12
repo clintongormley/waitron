@@ -1,7 +1,14 @@
+import {
+  STATION_COLOURS,
+  TICKET_GROUPINGS,
+  BUMP_MODES,
+  CHANGES_AFTER_SENDING,
+  quoteLiteral,
+} from "@waitron/shared";
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
+import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { count, day, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
 
 /**
  * A kitchen station: the routing target a fired line resolves to. The `is_default` station is the
@@ -13,33 +20,57 @@ export const kitchenStations = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
-    // The CHECK orders the three; the station routes and the import refuse a minute below 1, because adding that to the CHECK would rebuild this table.
     warmAfterMinutes: count("warm_after_minutes").notNull().default(5),
     overdueAfterMinutes: count("overdue_after_minutes").notNull().default(10),
     forgottenAfterMinutes: count("forgotten_after_minutes").notNull().default(15),
-    // The station routes, `createStation`, `updateStation` and the import refuse a minute below 1, because a CHECK would rebuild this table.
     readyWarningAfterMinutes: count("ready_warning_after_minutes").notNull().default(3),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
     showsRestOfOrder: flag("shows_rest_of_order").notNull().default(false),
     // Null prints MOVED slips; the station routes write a boolean.
     printMovedSlips: flag("print_moved_slips"),
-    // A station's save and the import refuse a value outside `isStationColour`; a CHECK would rebuild this table.
     colour: label("colour").$type<StationColour>().notNull().default("red"),
-    // A station's save and the import refuse a value outside `isTicketGrouping`; a CHECK would rebuild this table.
     ticketGrouping: label("ticket_grouping").$type<TicketGrouping>().notNull().default("combined"),
     printHeldWork: flag("print_held_work").notNull().default(false),
-    // A station's save and the import refuse a value outside `isBumpMode`; a CHECK would rebuild this table.
     bumpMode: label("bump_mode").$type<BumpMode>().notNull().default("line"),
-    // A station's save and the import refuse a value outside `isChangesAfterSending`; a CHECK would rebuild this table.
     changesAfterSending: label("changes_after_sending")
       .$type<ChangesAfterSending>()
       .notNull()
       .default("held-or-waiting"),
     waitsForPass: flag("waits_for_pass").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    closedOnDay: day("closed_on_day"),
+    closedSendsToStationId: id("closed_sends_to_station_id").references(
+      (): AnySQLiteColumn => kitchenStations.id,
+    ),
   },
   (t) => [
+    check(
+      "kitchen_stations_closed_sends_to_ck",
+      sql`${t.closedSendsToStationId} is null or ${t.closedOnDay} is not null`,
+    ),
+    check(
+      "kitchen_stations_closed_sends_to_not_self_ck",
+      sql`${t.closedSendsToStationId} <> ${t.id}`,
+    ),
+    check("kitchen_stations_warm_after_ck", sql`${t.warmAfterMinutes} >= 1`),
+    check("kitchen_stations_ready_warning_after_ck", sql`${t.readyWarningAfterMinutes} >= 1`),
+    check(
+      "kitchen_stations_colour_ck",
+      sql`${t.colour} in (${sql.raw(STATION_COLOURS.map(quoteLiteral).join(", "))})`,
+    ),
+    check(
+      "kitchen_stations_ticket_grouping_ck",
+      sql`${t.ticketGrouping} in (${sql.raw(TICKET_GROUPINGS.map(quoteLiteral).join(", "))})`,
+    ),
+    check(
+      "kitchen_stations_bump_mode_ck",
+      sql`${t.bumpMode} in (${sql.raw(BUMP_MODES.map(quoteLiteral).join(", "))})`,
+    ),
+    check(
+      "kitchen_stations_changes_after_sending_ck",
+      sql`${t.changesAfterSending} in (${sql.raw(CHANGES_AFTER_SENDING.map(quoteLiteral).join(", "))})`,
+    ),
     uniqueIndex("kitchen_stations_name_key")
       .on(t.name)
       .where(sql`${t.active} = 1`),

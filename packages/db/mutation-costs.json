@@ -141,8 +141,6 @@
   "src/schema/venue-service/seasons.ts": 320.9,
   "src/schema/venue-service/service-steps.ts": 86.3,
   "src/schema/venue-service/service.ts": 550.5,
-  "src/schema/venue-service/station-times.ts": 35.7,
-  "src/schema/venue-service/zone-extensions.ts": 34.7,
   "src/schema/working-order-counters.ts": 19.8,
   "src/settings.ts": 25.7,
   "src/sql-state.ts": 0.1,

@@ -99,6 +99,7 @@ export function mountStationTodayApi(
             },
             attempts,
           );
+          const actor = { personId: authorizedBy, deviceId: device.deviceId, authorizedBy };
           if (state === "closed")
             await withStationDishes(
               tx,
@@ -106,10 +107,10 @@ export function mountStationTodayApi(
               id,
               destination,
               choice,
-              (at) => VENUE_SERVICE.closeStationForToday(tx, id, destination!, at),
+              (at) => VENUE_SERVICE.closeStationForToday(tx, id, destination!, at, actor),
               { deviceId: cfg.origin.deviceId, personId: authorizedBy },
             );
-          else await VENUE_SERVICE.openStationForToday(tx, id, new Date());
+          else await VENUE_SERVICE.openStationForToday(tx, id, new Date(), actor);
         }),
       );
       return c.body(null, 204);
@@ -164,6 +165,7 @@ export function mountStationTodayApi(
             { ...authz, override: withCheck(override, checked) },
             attempts,
           );
+          const actor = { personId: session.personId, deviceId: session.deviceId, authorizedBy };
           if (state === "closed")
             await withStationDishes(
               tx,
@@ -171,10 +173,10 @@ export function mountStationTodayApi(
               id,
               destination,
               choice,
-              (at) => VENUE_SERVICE.closeStationForToday(tx, id, destination!, at),
+              (at) => VENUE_SERVICE.closeStationForToday(tx, id, destination!, at, actor),
               { deviceId: cfg.origin.deviceId, personId: authorizedBy },
             );
-          else await VENUE_SERVICE.openStationForToday(tx, id, new Date());
+          else await VENUE_SERVICE.openStationForToday(tx, id, new Date(), actor);
         }),
       );
       return c.body(null, 204);

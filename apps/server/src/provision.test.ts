@@ -437,19 +437,21 @@ describe("clearProvisionFixture", () => {
     const zoneId = randomUUID();
     await withTransaction(db, async (tx) => {
       await seedZone(tx, { id: zoneId, name: "Terrace" });
-      await tx.execute(sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
-        values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`);
+      await tx.execute(
+        sql`update floor_zones set kept_open_day='2026-10-09', kept_open_from='23:30:00', kept_open_until='01:30:00' where id=${zoneId}`,
+      );
     });
-    expect((await db.execute(sql`select zone_id from zone_extensions`)).rows).toEqual([
-      { zone_id: zoneId },
-    ]);
+    expect(
+      (await db.execute(sql`select id as zone_id from floor_zones where kept_open_day is not null`))
+        .rows,
+    ).toEqual([{ zone_id: zoneId }]);
 
     await clearProvisionFixture(db);
 
     expect(
       (
         await db.execute(sql`select
-      (select count(*) from zone_extensions) as extensions,
+      (select count(*) from floor_zones where kept_open_day is not null) as extensions,
       (select count(*) from floor_zones) as zones,
       (select count(*) from locations) as locations`)
       ).rows,

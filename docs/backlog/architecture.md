@@ -1294,8 +1294,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
   product is created in; with two, the second becomes unreachable from the dashboard. **Next
   action:** decide whether more than one catalogue is a case Waitron supports.
-- **Who authorised today's station or zone change**
-  [Detail](service-periods.md#who-authorised-todays-station-or-zone-change)
 - **Backup settings the environment owns are not compared at a handover.** With `backup.env` absent
   on both boxes both digests are `null`, whatever the two environments hold. Left open by A1018
   Slice 5 (Ruling P15).

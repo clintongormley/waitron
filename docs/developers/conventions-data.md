@@ -2069,13 +2069,17 @@ A station's by-hand state and chosen destination belong to one business date. A 
 follows that destination, then the active venue default if the destination is missing or the walk
 cycles. A deleted station is not offered as a destination. With no active default, a failed walk
 has no replacement. Opening the station does not move already sent work back.
-Configuration exports omit `station_day_states` and `zone_extensions`; these are today's service
-choices, rather than a venue template.
+The station row holds `closed_on_day` and `closed_sends_to_station_id`; the zone row holds
+`kept_open_day`, `kept_open_from` and `kept_open_until`. A day other than today's business date
+reads as unset. Configuration exports omit all five columns, so a new venue starts without
+today's service choices.
 
 Focused receipts: `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
 `routing-store.test.ts`, `keep-open.test.ts`,
-and `configuration-transfer.test.ts`. The approved slice 3 decision 14 leaves the authorising
-person unstored; the open history decision is in `docs/backlog/service-periods.md`.
+and `configuration-transfer.floor-kitchen.test.ts`. Changes made through the keep-open and
+station-today controls are written to `activity_log` as `zone.kept_open`, `zone.keep_open_ended`,
+`station.closed_for_day` or `station.reopened`; the acting person and device are recorded separately
+from the authoriser.
 
 To keep a zone open through its next closed range, choose **Keep Terrace open later** beside
 the till's service line, in its closed-zone notice or on the floor's selected-zone bar. Choose
