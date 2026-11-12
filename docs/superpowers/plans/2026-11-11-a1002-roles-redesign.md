@@ -694,10 +694,12 @@ so the helper has its own test.
 ### Task 5.2–5.4: People codemod (three tasks)
 
 **5.2:** `apps/server/src/[a-l]*` tests. **5.3:** `apps/server/src/[m-z]*` tests and
-`apps/server/src/testing/` and `apps/server/test/`. **5.4:** packages that depend on `@waitron/identity` (core,
+`apps/server/src/testing/`. **5.4:** packages that depend on `@waitron/identity` (core,
 fiscal-verifactu, workforce, workforce-es, staffing, venue-service, layouts, media, bookings,
 adjustments, provisioning, identity). `db`, `fiscal`, `catalogue`, `country-es` do not depend on
 identity (`fiscal` cannot: identity → module → fiscal) and keep `role:` until PR 11.
+
+> 2026-11-12, watcher 10:34: also convert the missed ordinary seed in `apps/server/test/attendance-export-fixture.ts`; the original task file list omitted that test-support directory. The role-read rewrites remain within the selects clause below.
 
 The codemod is a throwaway script in the implementer's scratch folder, using the root
 `typescript` parser, run per task over that task's file set:
