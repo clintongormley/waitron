@@ -432,3 +432,132 @@ describe("station movement checks bill editing authority", () => {
     await assertMoved(p, owned.edit);
   });
 });
+
+describe("kitchen work that changes no amount carries on while the bill's card money is unresolved", () => {
+  async function payCard(billId: string, amount: string) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method: "card",
+      entry: "reader",
+      applied: amount,
+      tip: "0.00",
+    });
+  }
+  async function pendingRefundOn(billId: string) {
+    const card = await payCard(billId, "5.00");
+    expect(card.status).toBe(200);
+    const paymentId = (card.json.payment as { id: string }).id;
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "timeout" } });
+    const asked = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "2.00",
+        tipAmount: "0.00",
+        reason: "Customer overpaid",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(asked.json).toMatchObject({ refund: { state: "pending" } });
+  }
+  const codeOf = (error: unknown) => (error as { code?: string }).code ?? String(error);
+
+  it("moves a dish to another station while a card refund waits on its bill", async () => {
+    const control = await fixture();
+    const moved = await move(control, undefined, { kitchen: true }).then(
+      () => "moved",
+      (error) => codeOf(error),
+    );
+    const p = await fixture();
+    await pendingRefundOn(p.tabId);
+    const outcome = await move(p, undefined, { kitchen: true }).then(
+      () => "moved",
+      (error) => codeOf(error),
+    );
+    expect(moved).toBe("moved");
+    expect(outcome).toBe("moved");
+  });
+
+  it("closes a station and sends its dishes on while another bill has a card refund waiting", async () => {
+    const p = await fixture(),
+      q = await fixture();
+    await move(p, undefined, { kitchen: true });
+    await move(q, undefined, { kitchen: true });
+    await pendingRefundOn(q.tabId);
+    let outcome = "closed";
+    try {
+      await inTx(venue, (tx) =>
+        withStationDishes(
+          tx,
+          venue.cfg,
+          grill,
+          bar,
+          "send",
+          (at) => VENUE_SERVICE.closeStationForToday(tx, grill, bar, at),
+          { deviceId: venue.deviceId, personId: venue.operatorId },
+        ),
+      );
+    } catch (error) {
+      outcome = codeOf(error);
+    }
+    const states = await inTx(venue, (tx) => VENUE_SERVICE.stationStates(tx, new Date()));
+    const [item] = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, p.lineId));
+    const grillOpen = states.get(grill)!.open;
+    if (!grillOpen)
+      await inTx(venue, (tx) => VENUE_SERVICE.openStationForToday(tx, grill, new Date()));
+    expect(outcome).toBe("closed");
+    expect(grillOpen).toBe(false);
+    expect(item!.stationId).toBe(bar);
+  });
+
+  it("fires a held course while a card refund waits on its bill", async () => {
+    const p = await fixture();
+    const held = await send(venue.app, venue.cookie, "POST", `/api/parties/${p.partyId}/groups`, {
+      expectedEdit: await edit(p.tabId),
+      submissionId: randomUUID(),
+      expectedPartyRevision: p.revision,
+      groups: [
+        { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
+      ],
+    });
+    expect(held.status).toBe(200);
+    await pendingRefundOn(p.tabId);
+    const groups = await send(venue.app, venue.cookie, "GET", `/api/parties/${p.partyId}/groups`);
+    const group = (groups.json.groups as { id: string; state: string }[]).find(
+      (entry) => entry.state === "held",
+    )!;
+    const fired = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${p.partyId}/groups/${group.id}/fire`,
+      { submissionId: randomUUID(), expectedPartyRevision: groups.json.revision },
+    );
+    expect(fired.status).toBe(200);
+  });
+
+  it("moves a dish to another station while a card is at the reader for part of its bill", async () => {
+    const p = await fixture();
+    const release = venue.card.holdNextCollect();
+    const calls = venue.card.collectCalls.length;
+    const paying = payCard(p.tabId, "5.00");
+    for (let i = 0; i < 200 && venue.card.collectCalls.length === calls; i++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    const outcome = await move(p, undefined, { kitchen: true }).then(
+      () => "moved",
+      (error) => codeOf(error),
+    );
+    release();
+    const paid = await paying;
+    expect(outcome).toBe("moved");
+    expect(paid.status).toBe(200);
+  });
+});

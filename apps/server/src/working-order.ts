@@ -2495,7 +2495,7 @@ async function finishRelease(
         .map((row) => row.id),
     );
   }
-  if (released.length > 0) await bumpRevision(tx, [orderId]);
+  if (released.length > 0) await bumpRevisionKeepingPayment(tx, [orderId]);
 }
 
 /**
@@ -3368,7 +3368,7 @@ export async function setLineCourse(
     .update(ticketItems)
     .set({ courseId })
     .where(onDishesOrTheirExtras(tx, [line.id]));
-  await bumpRevision(tx, [tabId]);
+  await bumpRevisionKeepingPayment(tx, [tabId]);
   if (line.courseId !== courseId) await captureOrderService(tx, attendance, tabId, "course");
 }
 
@@ -5424,6 +5424,17 @@ export async function refuseOrderPaymentMarked(
  */
 export async function bumpRevision(tx: Transaction, orderIds: readonly string[]): Promise<void> {
   await refusePaymentInFlight(tx, orderIds);
+  await bumpRevisionKeepingPayment(tx, orderIds);
+}
+
+/**
+ * {@link bumpRevision} without the refusal, for a write that changes no amount: a card at the
+ * reader completes on the bill as before.
+ */
+export async function bumpRevisionKeepingPayment(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<void> {
   await tx
     .update(workingOrders)
     .set({ revision: sql`${workingOrders.revision} + 1` })

@@ -30,7 +30,7 @@ import {
 import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
-import { bumpRevision, readOrderRevision } from "./working-order.js";
+import { bumpRevisionKeepingPayment, readOrderRevision } from "./working-order.js";
 import type { RoutingOnce } from "./working-order.js";
 import "./errors.js";
 
@@ -521,7 +521,7 @@ export async function moveDishesToStation(
         cfg,
         changed.map((row) => row.id),
       );
-      await bumpRevision(tx, [orderId]);
+      await bumpRevisionKeepingPayment(tx, [orderId]);
       await captureKitchenActivity(
         tx,
         options.attendance,
