@@ -8,7 +8,7 @@ and [design §5](../specs/2026-10-23-a1018-simple-handover-design.md#5-point-3-f
 
 **Smallest usable finish.** With `report.view`, you can open Reports → Handover intervals and inspect committed emergency
 takeovers without the old box: current source/destination box names, latest dated activity (or “Unknown”), declaration/activation times,
-and the entered reason. Label each clock and render all dates in the venue's zone. The possible window spans `lastCopy.lastChangeAtMs`
+and the entered reason. Label the copy's latest activity, declaration on the new box and activation on the new box; render in the venue's zone. The possible window spans `lastCopy.lastChangeAtMs`
 to `declaredAtMs`, not proven copy/final-sale limits. Preserve backwards clock dates; invent neither duration nor zero money. Returned sales alone never close it.
 
 **Read basis, not runtime qualification.** `apps/server/src/handover-emergency-api.ts:58,344` defines/constructs/signs/stores
@@ -29,15 +29,15 @@ fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapsh
 
 - [ ] **Server projection/API (0–60 min).** Create `apps/server/src/handover-intervals.ts` with
   `readHandoverIntervals(tx: Transaction)` returning typed display rows; select venue emergency activations newest first, tie-break operation id.
-  Reuse `nodes.name` for box labels; read the declaration body stored with the activation, as the existing reader does.
+  Reuse `nodes.name` for box labels; follow `handover-emergency-api.ts:226–230` to read the stored body; export its existing `Declaration` type from that file.
   No evidence cross-check/fallback branch, node.db dependency, current-chart requirement or guessed recovered status.
   Modify `apps/server/src/report-api.ts`: GET `/management-api/reports/handover-intervals`, existing session +
   `report.view` gate, no-store, read only. Reuse its existing boot mount (`apps/server/src/boot.ts:3004`) after own-page
   and passive-read middleware (`:1348`); add no write or by-id endpoint.
   New `apps/server/src/report-api.handover-intervals.test.ts` owns real-DB projection and HTTP admission with
   `useVenueDb`: “committed emergency history shows both box names without local operations; controlled activations stay out”;
-  “null activity remains absent from the projected dates after sales return”; “signed-out and missing report.view cannot read the list”.
-  Reuse activation/session seeds from `report-api.reports.test.ts:496–507`, supplying a real declaration body.
+  “the row remains listed and its activity stays null after sales return”; “signed-out and missing report.view cannot read the list”.
+  Adapt `report-api.reports.test.ts:496–507`'s activation pattern for emergency/real evidence; reuse its session pattern at `:213–227`.
 - [ ] **Dashboard (60–120 min).** Create `apps/dashboard/src/screens/handover-intervals-screen.ts`; use `wt-data-table`
   loading/empty/error states. State unconfirmed completeness and amounts once above the table; no constant columns or evidence dialog. Modify `apps/dashboard/src/api/client.ts` (typed list GET,
   explicit passive:true), `dashboard-app.ts` (core screen, Reports entry and direct-route permission), `i18n/strings.ts`
@@ -49,7 +49,7 @@ fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapsh
   owns “report.view shows navigation/direct address; without it the list does not load”; existing
   `apps/dashboard/src/api/client.test.ts` owns “automatic interval GET carries x-waitron-live:1”. Restore locale per case.
 - [ ] **Docs/finish (120–180 min).** Update `apps/server/src/guide/en/servers.md` and `apps/server/src/guide/es/servers.md`
-  with shared `{#reconciliation}`; say what you can inspect, that this list stays unconfirmed after a return, and: if the old box returns, check its hand-back message before deciding whether to reset it. Update only A1018's
+  with shared `{#reconciliation}`; say what you can inspect, that this list stays unconfirmed after a return, and: if the old box returns, check the return status on its page before deciding whether to reset it. Update only A1018's
   scope in `docs/backlog.md`, `docs/backlog/replication-cloud.md` and this plan. Support: existing
   `apps/dashboard/src/widgets/test-helpers.ts` and suite-local server seeds; no new support file. Focused commands:
   `pnpm --filter @waitron/server exec vitest run src/report-api.handover-intervals.test.ts`;
