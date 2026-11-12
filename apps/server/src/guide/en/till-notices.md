@@ -3,7 +3,8 @@
 Some problems with the server stop staff from working, and the person at the till is often the first
 to notice. So once someone has signed in, every till and handheld shows a line under its top bar
 when the server needs attention. The line does not show on the sign-in, clock-in or attendance pages.
-It says what is wrong and what to do. It never covers your work, and you never have to dismiss it.
+While the server waits to confirm its time, the sign-in page shows that line too. It says what is
+wrong and what to do. It never covers your work, and you never have to dismiss it.
 
 If Waitron cannot verify this device for an action, reload or reopen Waitron on this device, then try again.
 
@@ -74,7 +75,8 @@ the clock.
 far) · Check the time** is red. When the server starts without the internet's time, payments wait.
 They start again by themselves once two tills or handhelds are switched on and connected, even at
 the sign-in screen, and agree with the server's time. Otherwise, use **Check the time**: keep the
-server's time if it is right, or use this device's time if that is.
+server's time if it is right, or use this device's time if that is. The sign-in page shows the same
+words, without **Check the time**: sign in to use it.
 
 **Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server
 started with its clock in doubt and could not confirm it by itself. It ends any of the three red

@@ -2094,7 +2094,7 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("en-GB");
   });
 
-  it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and starts the poll once for a signed-in till", async () => {
+  it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and for a till starts the PIN-screen poll, then a separate signed-in poll", async () => {
     const start = vi.spyOn(EquipmentPoll.prototype, "start");
     try {
       const { el: kds } = await mountApp({

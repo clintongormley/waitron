@@ -130,7 +130,7 @@ time service such as `systemd-timesyncd`; `install` carries on. It matters becau
 taking payments while the box's clock reads earlier than its last sale, and at every start a box
 that files invoices takes no payment until the system reports its clock in step with internet time
 (`timedatectl`'s `NTPSynchronized`, read through the box's clock service), two tills or handhelds
-with staff signed in agree with its clock, or someone confirms it. `install` switches
+that are switched on agree with its clock, or someone confirms it. `install` switches
 synchronisation back on even where someone switched it off, so a test box whose clock is set wrong
 on purpose needs it switched off again after each `install`. `reset` does not touch it.
 
@@ -148,7 +148,8 @@ service, because that group's members could then set the clock. Then it runs
 its file changed, and writes `WAITRON_BOX_SOCKET_DIR=/run/waitron-box` to `.env`, so the app's
 container mounts that folder. On a host without systemd, or when a step fails, it prints one line
 saying Waitron cannot set this machine's clock itself or see whether it keeps internet time, so at
-every start a box that files invoices takes no payment until two tills or handhelds with staff signed in agree with its clock or someone confirms it; it removes that `.env` line and carries on.
+every start a box that files invoices takes no payment until two tills or handhelds that are
+switched on agree with its clock or someone confirms it; it removes that `.env` line and carries on.
 `reset` leaves the service and the group alone.
 
 The service runs only when the app asks, and sets the clock only while the system says its clock is
@@ -241,7 +242,8 @@ docker compose logs -f app                    # the server's JSON lines
 `docker compose pull` alone installs no clock service and updates none, because only `install` does
 (see Setting up a box). A box set up before the service existed has none until `waitron.sh install`
 runs again, and until then Waitron cannot set its clock or see whether it keeps internet time, so at
-every start a box that files invoices takes no payment until two tills or handhelds with staff signed in agree with its clock or someone confirms it.
+every start a box that files invoices takes no payment until two tills or handhelds that are
+switched on agree with its clock or someone confirms it.
 
 The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
 after the app's own requested restart at the end of the setup wizard.

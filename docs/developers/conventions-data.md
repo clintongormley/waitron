@@ -4656,7 +4656,7 @@ production enables none of them (plan R7, run).
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
 staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
 devices to connect and agree with its time (… of 2 so far)", with “Check the time”, whatever the
-start-up window and AEAT say. The count shows at most 1, since two confirm at the next look. While
+start-up window and AEAT say. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
 the start waits, the challenge needs no stop and asks neither the start-up window nor AEAT; it
 answers `keepOffered: true` unless the clock-behind stop or the before-28-10-2024 stop holds. The
 till's profile and the person are still checked. The confirm then takes one of three paths:

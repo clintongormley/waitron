@@ -2093,7 +2093,10 @@ order's draft arrangement slots its own name into the basket's `lead-<n>`
 **Notices.** The till's staff notices (the strip under its top bar, see
 [design-system.md](design-system.md#the-notice-strip-till)) come with every read of `GET
 /api/device/equipment`: the equipment poll's, every 15 seconds from sign-in (`POLL_MS`,
-`apps/till/src/state/equipment-poll.ts`), and every other read of the device's equipment. Each goes
+`apps/till/src/state/equipment-poll.ts`), and every other read of the device's equipment. At the
+PIN screen a second `EquipmentPoll` (`#pinScreenPoll`) reads every 15 seconds with nobody signed
+in; it keeps only the box's `clock.unconfirmed`, drawn as one line without its action, and stops at
+sign-in. Each goes
 through `#readDeviceEquipment` (`apps/till/src/till-app.ts`), which numbers the read when it is sent
 and applies its notices only when no read sent after it has been applied and the person who was
 signed in when it was sent still is (`#operatorSession`). Its notices apply even when an equipment

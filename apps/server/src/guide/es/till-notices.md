@@ -4,7 +4,8 @@ Algunos problemas del servidor impiden trabajar al personal, y quien está en el
 el primero en notarlo. Por eso, cuando alguien ha iniciado sesión, cada caja registradora y cada
 terminal de camarero muestran una línea bajo su barra superior si el servidor necesita atención. La
 línea no aparece en las pantallas de inicio de sesión, de fichaje ni de preguntas de asistencia.
-Dice qué ocurre y qué hacer. Nunca tapa tu trabajo y nunca tienes que cerrarla.
+Mientras el servidor espera a confirmar su hora, la pantalla de inicio de sesión también muestra esa
+línea. Dice qué ocurre y qué hacer. Nunca tapa tu trabajo y nunca tienes que cerrarla.
 
 Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.
 
@@ -79,10 +80,11 @@ que la parada dure desde que arrancó el servidor. Nunca ponen la hora.
 
 **Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (0
 de 2 por ahora) · Comprobar la hora** es rojo. Cuando el servidor arranca sin la hora de internet,
-los cobros esperan. Vuelven a funcionar solos en cuanto dos terminales están encendidos y
+los cobros esperan. Vuelven a funcionar solos en cuanto dos cajas o terminales están encendidos y
 conectados, aunque estén en la pantalla de inicio de sesión, y coinciden con la hora del servidor.
 Si no, usa **Comprobar la hora**: mantén la hora del servidor si es correcta, o usa la de este
-dispositivo si lo es esa.
+dispositivo si lo es esa. La pantalla de inicio de sesión muestra las mismas palabras, sin
+**Comprobar la hora**: inicia sesión para usarlo.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
 significa que el servidor arrancó con su hora en duda y no ha podido confirmarla por sí
