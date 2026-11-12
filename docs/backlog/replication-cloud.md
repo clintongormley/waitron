@@ -37,7 +37,9 @@ owner's reading of 2026-11-03, see below).
 The signed declaration in `handover_activations.evidence` records the last dated activity
 the copy holds; Slice 12a will derive the unknown-interval list from these rows. The watcher
 deferred both gap tables and the preview, and accepted no declaration withdrawal for this
-simulated-only slice. Slice 8’s page and real-box qualification remain open.
+simulated-only slice. Slice 8’s page and real-box qualification remain open. The bounded
+[page plan](../superpowers/plans/2026-11-12-a1018-8-emergency-page.md) awaits watcher clearance;
+its landing depends on A947 3b-5a retaining the last checked address across restarts.
 
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
