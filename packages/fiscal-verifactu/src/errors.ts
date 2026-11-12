@@ -477,14 +477,14 @@ declare module "@waitron/shared" {
     "declaration.disagrees": { item: string };
     /** A `- ` line of `declarations/functions.md` has no ` — ` route; `line` is 1-based. */
     "declaration.functions_malformed": { line: number };
-    /** A declaration's signing date is not a calendar date written `YYYY-MM-DD`; `date` is as given. */
+    /** A declaration's signing date is not a calendar date written `YYYY-MM-DD`, in the year 1000 or later; `date` is as given. */
     "declaration.date_invalid": { date: string };
     /** A declaration's item 1.l) signing date is not words `spanishDate` writes; `line` is the words after its last `: ` (the whole bullet when it has none), without a closing full stop; `""` when there is no 1.l) bullet. */
     "declaration.date_unreadable": { line: string };
     /** The `declaration` command refused its arguments; `argument` is the subcommand as given (`""` for none), the option at fault (such as `--place` or `-x`), or a stray argument. */
     "declaration.argument_invalid": { argument: string };
     /** A release's declaration folder already holds files, so it was left as it was; `folder` is its path as given. */
-    "declaration.folder_exists": { folder: string };
+    "declaration.folder_not_empty": { folder: string };
     /** A producer value given to the declaration holds a line break or control character; `field` names it, never its value. */
     "declaration.producer_invalid": { field: "name" | "taxId" | "address" };
   }

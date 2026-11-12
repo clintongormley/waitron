@@ -91,7 +91,11 @@ const SPANISH_DATE = new Intl.DateTimeFormat("es-ES", {
 export function spanishDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00Z`);
   // `Date` moves an impossible day (2026-02-30) on into the next month rather than refusing it.
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== isoDate) {
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== isoDate ||
+    date.getUTCFullYear() < 1000
+  ) {
     throw new AppError("declaration.date_invalid", { date: isoDate });
   }
   return SPANISH_DATE.format(date);
@@ -110,11 +114,11 @@ export function declarationDate(source: string): string {
   const joined = bullet.replace(/\s+/g, " ").trim();
   const at = joined.lastIndexOf(": ");
   const line = (at < 0 ? joined : joined.slice(at + 2)).replace(/\.$/, "");
-  const words = /^(\d{1,2}) de (\p{L}+) de (\d{1,4})$/u.exec(line);
+  const words = /^(\d{1,2}) de (\p{L}+) de (\d{4})$/u.exec(line);
   const month = words ? SPANISH_MONTHS.indexOf(words[2]!) + 1 : 0;
   if (words && month > 0) {
     const [, day, , year] = words;
-    const date = `${year!.padStart(4, "0")}-${String(month).padStart(2, "0")}-${day!.padStart(2, "0")}`;
+    const date = `${year!}-${String(month).padStart(2, "0")}-${day!.padStart(2, "0")}`;
     try {
       if (spanishDate(date) === line) return date;
     } catch {

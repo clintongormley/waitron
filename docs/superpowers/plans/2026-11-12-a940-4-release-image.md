@@ -116,15 +116,16 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
 - English only outside `packages/fiscal-verifactu` (CLAUDE.md §3); the declaration's Spanish stays
   in that package. Error codes name the concept; `server.*` is for facts about the process.
 - New error codes: `server.unreleased_build` (apps/server, `Record<string, never>`),
-  `declaration.date_unreadable` (fiscal-verifactu, `{ line: string }`), `declaration.folder_exists`
+  `declaration.date_unreadable` (fiscal-verifactu, `{ line: string }`), `declaration.folder_not_empty`
   (fiscal-verifactu, `{ folder: string }`). Each throwing file imports
   its registry; `scripts/errors-reachable.test.ts` must pass.
 - The recovery page's title and action are fixed strings chosen by the code (CLAUDE.md §3):
   `server.unreleased_build` → EN title "This box is running a test build.", action "Install a
   release."; ES title «Este equipo ejecuta una versión de prueba.», action «Instala una versión
   publicada.» No word suggests removing anything.
-- The release version's form: `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$` (the package command's
-  `VERSION`, `src/declaration/command.ts`). Anything else refuses the bundle build.
+- The release version's form: `isReleaseVersion` (`packages/shared/src/built-release.ts`),
+  `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$` and at most 50 characters; `scripts/bundle-node.mjs`
+  holds a copy tied to it by a test. Anything else refuses the bundle build.
 - The four files and their names are slice 3's decision 1: `declaration.html` (exactly
   `renderDeclaration(source, producer).html`), `declaration.pdf`, `declaration.txt`, and
   `release.json` = `{"version":"1.2.3","releasedOn":"2026-12-03"}` plus a newline, all from one
@@ -234,8 +235,8 @@ mocking `builtRelease`.
   `date` defaults to today's value there; `releasable: true` drops the `release-blocker` lines, which
   the real template keeps for Q53 even after Task 9), `apps/server/src/testing/declaration-folder.ts`
   (render with `releasable: true` and the `releasedOn` it is given, call `writeReleaseFolder`, then
-  overwrite `release.json` only when its caller passes a release unlike the rendered one; its five
-  callers keep passing unchanged). The blocker refusal stays in `writeReleaseFolder`.
+  overwrite `release.json` only when its caller passes a release unlike the rendered one; its callers
+  in `apps/server/src/declaration-pages.test.ts` keep passing unchanged). The blocker refusal stays in `writeReleaseFolder`.
 
 **Interfaces:**
 - Produces: `declarationDate(source: string): string` — the `YYYY-MM-DD` of item 1.l)'s first
@@ -249,7 +250,7 @@ mocking `builtRelease`.
   in `folder.ts`: refuses blockers (`declaration.release_blocked`), takes `version` from item 1.c),
   writes the four files of the Global Constraints into a new folder beside `dir` and moves it to
   `dir` in one rename, so a failed write leaves `dir` as it was; refuses a `dir` that already holds
-  files (`declaration.folder_exists`); answers what it wrote to `release.json`.
+  files (`declaration.folder_not_empty`); answers what it wrote to `release.json`.
 - Produces: `declaration render --version <v> --out <dir>`: reads `declarations/v<v>.md`, runs the
   same agreement check as `check` (refactor `check`'s comparison into one function both call), takes
   the producer as `show` does (refusing in production terms when unset), calls `writeReleaseFolder`,

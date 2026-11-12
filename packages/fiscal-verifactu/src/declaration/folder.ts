@@ -28,16 +28,14 @@ export async function writeReleaseFolder(
   const working = join(dirname(dir), `.${basename(dir)}-${randomUUID()}`);
   await mkdir(working);
   try {
-    await Promise.all([
-      writeFile(join(working, "declaration.html"), rendered.html),
-      writeFile(join(working, "declaration.txt"), rendered.text),
-      writeFile(join(working, "declaration.pdf"), pdf),
-      writeFile(join(working, "release.json"), `${JSON.stringify(release)}\n`),
-    ]);
+    await writeFile(join(working, "declaration.html"), rendered.html);
+    await writeFile(join(working, "declaration.txt"), rendered.text);
+    await writeFile(join(working, "declaration.pdf"), pdf);
+    await writeFile(join(working, "release.json"), `${JSON.stringify(release)}\n`);
     await rename(working, dir).catch((error: unknown) => {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "ENOTEMPTY" || code === "EEXIST") {
-        throw new AppError("declaration.folder_exists", { folder: dir });
+        throw new AppError("declaration.folder_not_empty", { folder: dir });
       }
       throw error;
     });

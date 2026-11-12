@@ -177,9 +177,16 @@ describe("parseVersion", () => {
     expect(parseVersion("1.10.0")).toEqual([1, 10, 0]);
   });
 
-  it.each(["1.0", "v1.0.0", "01.0.0", "1.0.0-rc.1", "", "1.0.0 "])("refuses %j", (text) => {
-    expect(() => parseVersion(text)).toThrow(/is not a version/);
+  it("answers a version of 50 characters", () => {
+    expect(parseVersion(`1.0.${"9".repeat(46)}`)).toHaveLength(3);
   });
+
+  it.each(["1.0", "v1.0.0", "01.0.0", "1.0.0-rc.1", "", "1.0.0 ", `1.0.${"9".repeat(47)}`])(
+    "refuses %j",
+    (text) => {
+      expect(() => parseVersion(text)).toThrow(/is not a version/);
+    },
+  );
 });
 
 describe("releasedVersions", () => {

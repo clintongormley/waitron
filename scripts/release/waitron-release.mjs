@@ -13,7 +13,8 @@ const COMMAND_TIMEOUT_MS = 20 * 60_000;
 const SHOWN = { show: true };
 
 export function parseVersion(text) {
-  const match = VERSION.exec(text);
+  // 50: the most a record's `SistemaInformatico.Version` holds (`isReleaseVersion` in @waitron/shared).
+  const match = text.length <= 50 ? VERSION.exec(text) : null;
   if (!match) throw new Error(`${JSON.stringify(text)} is not a version like 1.2.3`);
   return match.slice(1).map(Number);
 }

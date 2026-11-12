@@ -126,6 +126,8 @@ describe("spanishDate", () => {
     "22/10/2026",
     "2026-10-22T00:00",
     " 2026-10-22",
+    "0999-02-28",
+    "0000-01-01",
   ])("refuses %j, which is not a calendar date written YYYY-MM-DD", (date) => {
     expect(() => spanishDate(date)).toThrow(
       expect.objectContaining({ code: "declaration.date_invalid", params: { date } }),
@@ -137,7 +139,6 @@ describe("declarationDate", () => {
   it.each([
     ["2026-12-03", "3 de diciembre de 2026"],
     ["2026-03-01", "1 de marzo de 2026"],
-    ["0999-02-28", "28 de febrero de 999"],
   ])("reads %s back from item 1.l)'s %j", (date, words) => {
     const source = declarationSourceFor("1.2.3", { date });
     expect(source).toContain(`responsable del mismo: ${words}.`);

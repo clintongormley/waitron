@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { declarationSourceFor, testProducer as producer } from "../../test/declaration.js";
+import { pdfPages } from "../../test/declaration-pdf.js";
 import { writeReleaseFolder } from "./folder.js";
 import { renderDeclaration } from "./render.js";
 
@@ -43,22 +43,7 @@ async function contents(dir: string): Promise<Record<string, string>> {
 }
 
 async function pdfText(bytes: Uint8Array): Promise<string> {
-  const task = getDocument({
-    data: new Uint8Array(bytes),
-    useSystemFonts: false,
-    disableFontFace: true,
-    useWorkerFetch: false,
-    useWasm: false,
-  });
-  const pdf = await task.promise;
-  const text: string[] = [];
-  for (let number = 1; number <= pdf.numPages; number++) {
-    for (const item of (await (await pdf.getPage(number)).getTextContent()).items) {
-      if ("str" in item) text.push(item.str);
-    }
-  }
-  await task.destroy();
-  return text.join(" ");
+  return (await pdfPages(bytes)).map((page) => page.text).join(" ");
 }
 
 describe("writeReleaseFolder", () => {
@@ -159,7 +144,7 @@ describe("writeReleaseFolder", () => {
         declarationSourceFor("1.2.3", { date: "2026-12-03", releasable: true }),
         producer,
       ),
-    ).rejects.toMatchObject({ code: "declaration.folder_exists", params: { folder: dir } });
+    ).rejects.toMatchObject({ code: "declaration.folder_not_empty", params: { folder: dir } });
 
     expect(await contents(dir)).toEqual(before);
     expect(await readdir(base)).toEqual(["declaration"]);
@@ -228,7 +213,7 @@ describe("writeReleaseFolder", () => {
     const lost = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
     expect(won).toHaveLength(1);
     expect(lost).toEqual([
-      expect.objectContaining({ code: "declaration.folder_exists", params: { folder: dir } }),
+      expect.objectContaining({ code: "declaration.folder_not_empty", params: { folder: dir } }),
     ]);
     const winner = won[0]!.version;
     const other = versions.find((version) => version !== winner)!;
