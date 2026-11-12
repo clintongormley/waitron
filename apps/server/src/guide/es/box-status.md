@@ -297,9 +297,7 @@ dispositivos no lo impiden.
 Dos cajas o terminales que coinciden con el servidor confirman su hora tras un arranque por sí solos.
 
 El arranque termina en cuanto el servidor ve que el reloj ya no para los cobros. Desde entonces, en cuanto
-internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja. Si el reloj vuelve a parar los cobros mientras
-el servidor está en marcha, las cajas no ofrecen nada: un administrador pone la hora desde esta
-página con su propio móvil u ordenador.
+internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja.
 
 ## El servicio de hora del servidor {#clock-service}
 

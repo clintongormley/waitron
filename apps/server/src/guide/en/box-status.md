@@ -275,9 +275,7 @@ staff member and the till. When the till's time is used, other devices' readings
 Two tills or handhelds that agree with the box confirm its time after a start by themselves.
 
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
-the internet has confirmed the box's time, a staff member can no longer set the clock from a till. If payments stop for the clock again while
-the box is running, the tills offer nothing: an administrator sets the clock from this page on
-their own phone or computer.
+the internet has confirmed the box's time, a staff member can no longer set the clock from a till.
 
 ## The box's time service {#clock-service}
 

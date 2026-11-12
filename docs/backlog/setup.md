@@ -557,9 +557,10 @@ seconds and is otherwise refused with those values. The owner then chose (2026-1
 «Se generará un código nuevo en 00:52», the figure as two-digit minutes and seconds ("00:52", "02:30")
 in both languages, and that a check the page makes by itself and loses on the network keeps the
 countdown going and checks again about every 15 seconds. (Those words were replaced on 2026-11-10 at the owner's
-request, A1466: "This invoice series code has already been used. Waitron creates a new one by itself when the countdown ends." and "New invoice series in 02:30", in Spanish «Este código de serie de facturas ya se ha usado. Waitron creará otro por sí solo cuando termine la cuenta atrás.» and «Nueva serie de facturas en 02:30».) After a restore of a backup whose invoices are more than a minute later than the box's time,
-payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
-more than a minute behind the last sale (Q5); a later name held only in a database a restore
+request, A1466: "This invoice series code has already been used. Waitron creates a new one by itself when the countdown ends." and "New invoice series in 02:30", in Spanish «Este código de serie de facturas ya se ha usado. Waitron creará otro por sí solo cuando termine la cuenta atrás.» and «Nueva serie de facturas en 02:30».) Since A1420 PR 5 (2026-11-12), after a restore of a backup whose invoices are later than the box's time, the next sale is taken,
+dated by the box's clock (Q5; `apps/server/src/hour-recovery-host.test.ts`, "a restore below the
+backup's newest invoice names its minute, and the sale after it is taken, dated by the box's
+clock", which runs the restore's hooks, not the restart after it); a later name held only in a database a restore
 replaces is not in the database the restore places (Q6); a box whose clock went back behind
 its own attempt's pick is still refused (Q7). What the owner accepts: later names and invoices no
 longer stop anything; a box and the machine confirming its clock, behind by the same amount, name a
@@ -567,10 +568,7 @@ minute in the past; and no alert names a later name with no invoices under it or
 (A1207 plan, review experiment #7, a promotion only). The owner on Q1 (2026-10-30): "A later series
 with no invoices is not a problem. It's only a problem when an invoice is issued. Also, if the box is
 running fast and tries to file an invoice 3 days ahead, aeat will return an error code so we will
-discover the problem quickly." (the owner's statement; not tested). Later invoices are listed
-by `clock.records_misdated` once a clock confirmation lifts the stop
-(`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest invoice names its
-minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale").
+discover the problem quickly." (the owner's statement; not tested).
 
 - **DECIDED (owner, 2026-10-28 ~15:25–15:40; A1131bc design revised 2026-10-29, not yet built):
   Recover from backup first wipes the failed setup, then restores.** (2026-10-29, A1206: the

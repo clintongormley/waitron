@@ -3985,6 +3985,8 @@ pre-discovery row check, weaker than the rule — they cover that one test. Rece
 
 ### A fiscal record in a test's database must not be dated more than a minute after the clock of a later write that records
 
+**Retired (2026-11-12, A1420 PR 5).** The chain no longer refuses a record dated before the latest one.
+
 **A fiscal record in a test's database must not be dated more than a minute after the clock of a
 later write that records**, or the chain refuses that write as `clock.behind_chain`: a fixture
 dated in the past recorded after a newer record, or a case that records ahead of the real clock

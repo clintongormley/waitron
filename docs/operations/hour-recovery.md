@@ -152,16 +152,10 @@ never saw, are invisible to it, and a later name held only in the database the r
 not in the database the restore places (`apps/server/src/hour-recovery-placement-3.test.ts`, "places an older
 selected hour over a newer surviving %s destination").
 
-If the backup holds sales dated after the box's time, the restore finishes (the test below runs the
-restore's hooks, not the restore route and the restart after it) and, when they are more than a
-minute later, the box then takes no payments until its clock catches up or is confirmed, as
-whenever the box's clock reads more than a minute earlier than its last sale. On a box that sends records to the tax agency, the box asks the agency for its time about
-once a minute, and an answer that agrees lifts the stop (`apps/server/src/guide/en/box-status.md`,
-"When payments stop because of the clock"; read, not run here). Once a confirmation lifts it, the alert
-`clock.records_misdated` lists how many sales are dated later than the real time and their first
-and last time (`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest
-invoice names its minute, a sale is then refused by the clock-behind stop, and a confirmation lists
-the later sale").
+If the backup holds sales dated after the box's time, the restore finishes
+(`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest invoice names
+its minute, and the sale after it is taken, dated by the box's clock"; the test runs the restore's
+hooks, not the restore route and the restart after it).
 
 After the clocks pass, the box waits 90 to 150 seconds before it takes the name, and the page
 counts down (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore waits until a minute

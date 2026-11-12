@@ -2872,10 +2872,12 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
 checks this rule before the clock-behind one, so each route check
 [the clock-behind section](#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves)
 lists, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
-clock; the refund loops' checks at the start of each pass and `clockStopsRefund` ask
-`clockBehindLatestRecord`, which has no date rule, so under such a clock they hold a refund only
-while the database holds a record; and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
-any record dated before it (`chain.clock-behind.test.ts`). Run 2026-10-23 on a 2001 clock, on
+clock; the refund loops' check at the start of each pass (`refundsPaused`) and `clockStopsRefund`
+(`apps/server/src/bill-refunds.ts`) ask `assertRecordableAt`, so under such a clock a pass asks the
+provider nothing and an outcome the provider answers is not written
+(`apps/server/src/tender-refund-recovery.test.ts`, "refund recovery under a clock before
+28-10-2024"); and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
+any record dated before it (`chain.earlier-time.test.ts`). Run 2026-10-23 on a 2001 clock, on
 `provisionBillVenue`'s venue: a tender refund, a bill payment's refund and a bill card payment each
 answered `409 clock.unusable`, and neither refund reached the provider.
 
@@ -2980,10 +2982,7 @@ decision 3).
 
 Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
 one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
-`apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain. The cases are
-"reads a waiting check and the wrongly dated sales on a full disk with a change waiting, and leaves
-the change waiting" and "downloads a list on a full disk with a change waiting, and leaves the
-change waiting" in `apps/server/src/clock-confirm.route.test.ts`.
+`apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain.
 
 Since A1127 slice 3, the full-disk bar's read (`GET /management-api/disk-stop`,
 `apps/server/src/disk-stop-api.ts`) resolves the session with `touch: false` and reads in one
@@ -4310,7 +4309,9 @@ opening the folder with `exclusive: false` never files.
 
 **Switched off (2026-11-12, A1420 PR 5).** `clockBehindChain` and `clockStopState` now answer
 nothing, so this stop never holds; a record dated before the latest one is written and chained after
-it (`packages/fiscal-verifactu/src/chain.earlier-time.test.ts`). The code below goes in A1420 PR 6.
+it (`packages/fiscal-verifactu/src/chain.earlier-time.test.ts`). The refund loops, `clockStopsRefund`
+and the AEAT drift alert's suppression ask the seat's `assertRecordableAt` instead
+(`apps/server/src/clock-unusable.ts`). The code below goes in A1420 PR 6.
 [Plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md).
 
 **The comparison.** `clockBehindChain` (`packages/fiscal-verifactu/src/clock-behind.ts`) reads the
@@ -4342,7 +4343,7 @@ sorted. The test also checks that the emitted text ends `limit ?`.
 **The append refuses on its own.** `attemptAppend` (`packages/fiscal-verifactu/src/chain.ts`)
 calls `refuseWhileClockBehind` with the record's own time as its first statement, so a sale, a
 correction or an anulación dated more than a minute before the latest record is refused and
-nothing is written (`chain.clock-behind.test.ts`).
+nothing is written (`chain.clock-behind.test.ts`, deleted 2026-11-12, A1420 PR 5).
 
 **Where a route's named check goes** (plan decision 3). After the route's replay answer and before
 any card reader, refund send or drawer job, in the request's first transaction; some routes refuse
@@ -4390,8 +4391,8 @@ completion that would file is refused by the append, and the pass then raises
 and a loop's top check come before provider calls that can end after the clock has stepped back.
 So the transaction that stamps a send (`send` in `apps/server/src/tender-refund-sends.ts`,
 `sendCardRefund` in `apps/server/src/bill-refunds.ts`) and the one that records a completed or
-failed outcome (`recordOutcomeIn`, `recordRefundOutcome`) ask `clockBehindLatestRecord` again
-through `clockStopsRefund` (`bill-refunds.ts`), and date the row from that same reading. During
+failed outcome (`recordOutcomeIn`, `recordRefundOutcome`) ask `clockStopsRefund`
+(`bill-refunds.ts`), and date the row from that same reading. During
 the stop nothing is sent, no outcome is recorded and the refund stays pending; a failed outcome is
 held as well, as the loops' top check holds it. A manager's confirmed outcome is refused by
 `refuseWhileClockBehind` instead. Cases in `clock-behind-stop.refunds.test.ts`, each with the clock
@@ -6136,6 +6137,8 @@ only, and only the tables the start migrated.
 
 ### While the box's clock reads more than a minute earlier than the latest fiscal record, no record is written and no route takes or gives back new money, unless a confirmation of the clock covers the reading (below).
 
+**Switched off (2026-11-12, A1420 PR 5).** This stop never holds; the code goes in A1420 PR 6.
+
 **While the box's clock reads more than a minute earlier than the latest fiscal record, no record
 is written and no route takes or gives back new money, unless a confirmation of the clock covers
 the reading (below).** The append refuses on its own
@@ -6145,7 +6148,7 @@ and both refund recovery loops pause. A card refund's send and outcome are judge
 transaction that dates them, after any provider wait. A payment whose money has already moved is
 still stored. Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
 `apps/server/src/payments-api.clock-behind.test.ts` and
-`chain.clock-behind.test.ts` (deleted 2026-11-12, A1420 PR 5), weaker than the rule — they cover the
+`chain.clock-behind.test.ts`, weaker than the rule — they cover the
 routes they name; a new money route is seen by none. Receipt:
 [conventions-data.md](conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
 **A confirmation of the clock (`clock_confirmations`: AEAT's time, two agreeing devices from two
@@ -6203,12 +6206,9 @@ against the database being written (`packages/fiscal-verifactu/src/allocation.ts
 refuses reuse after the original SIF and every original series are retired").
 
 What this accepts. A restore of a backup whose invoices are dated after the box's time completes
-(the case below runs the restore's hooks, not the restore route and the restart after it), and, when those
-invoices are more than a minute later, the box then takes no money until its clock catches up or a clock confirmation covers it, as for any clock more than a minute behind the
-latest record; once a confirmation covers it, `clock.records_misdated` lists how many sales are dated later than the
-real time and their first and last time (`apps/server/src/hour-recovery-host.test.ts`, "a restore
-below the backup's newest invoice names its minute, a sale is then refused by the clock-behind stop,
-and a confirmation lists the later sale"). A later name held only in a database a restore replaces
+(`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest invoice names
+its minute, and the sale after it is taken, dated by the box's clock"; the case runs the restore's
+hooks, not the restore route and the restart after it). A later name held only in a database a restore replaces
 is not in the database the restore places (the placement case above reads only that database's series). A box and the machine
 confirming its clock, both behind by the same amount, can name a minute in the past (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "W: the box and another
 device wrong together, behind the true time"); only that exact minute being in use refuses
@@ -6565,7 +6565,8 @@ name spelt out as a string is missed.
 ## Root receipts moved on 2026-11-06
 
 These excerpts retain the root instruction receipts from `CLAUDE.md` at
-`59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. They are not new measurements.
+`59be31e3b72b2db0bc5e26f47a1ef305ea052d4c`. They are not new measurements, except that on
+2026-11-12 (A1420 PR 5) the clock entry's first rule was replaced by the one that took its place in `CLAUDE.md`.
 
 ### Who may confirm or set the clock
 
@@ -6578,16 +6579,10 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `refuseWhileClockBehind` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
   work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
   dating transaction after provider waits, against the same check. Still store money already
-  moved. Sources: the box's
-  time service; during the stop, AEAT and two agreeing devices at different addresses (not while the
-  stop found at start-up lasts); while a start waits, two devices at different addresses within 5
-  seconds, at the PIN screen or signed in, which confirm and set nothing; a Box administration holder's own device; or a till's time
-  confirmed on it by a holder of Box administration at any time or, by a staff member signed in on it, while the
-  start waits for its time, during a stop before the internet confirms that start, or during a stop
-  found at start-up once AEAT has not answered or cannot be asked (owner, 2026-10-31; 2026-11-10); never a box device outside development. Guards:
+  moved. Guards:
   `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and
-  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the money routes
-  `clock-unconfirmed-gate.test.ts` lists. **The box's internet time service keeps its clock; Waitron sets it only through the host
+  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the chain case covers sales
+  only, and the gate covers the money routes `clock-unconfirmed-gate.test.ts` lists. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
   until the internet confirms that start or during start-up; a Box administration holder's at any time), a
   Box administration holder's own device, the device showing the clock step of the setup page (under its

@@ -954,8 +954,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
   dating transaction after provider waits, against the same check. Still store money already
   moved. Guards: `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and
-  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the money routes
-  `clock-unconfirmed-gate.test.ts` lists. **The box's
+  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the chain case covers sales
+  only, and the gate covers the money routes `clock-unconfirmed-gate.test.ts` lists. **The box's
   internet time service keeps its clock; Waitron sets it only through the host service, from a till's
   time (a staff member's while the start waits for its time, or during a stop until the internet
   confirms that start or during start-up; a Box administration holder's at any time), a Box
