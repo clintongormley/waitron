@@ -192,42 +192,6 @@ describe("till-ticket-view", () => {
   });
 
   it.each([
-    ["es-ES", "Fecha de operación", "28 feb 2026"],
-    ["ca-ES", "Data de l'operació", "28 de febr. 2026"],
-    ["gl-ES", "Data da operación", "28 feb 2026"],
-    ["eu-ES", "Eragiketaren data", "28 feb 2026"],
-    ["en-GB", "Operation date", "28 Feb 2026"],
-  ])("shows the saved operation day in the filed language %s", async (locale, label, date) => {
-    setLocale(locale === "es-ES" ? "en-GB" : "es-ES");
-    const { el } = await mount({
-      invoiceType: "F1",
-      locale,
-      issuedAt: "2026-03-01T00:05:00.000+01:00",
-      operationDate: "2026-02-28",
-    });
-    const row = el.shadowRoot!.querySelector("[data-test=operation-date]");
-    expect(row).not.toBeNull();
-    expect(row!.textContent).toContain(label);
-    expect(row!.textContent).toContain(date);
-    expect(el.shadowRoot!.querySelector(".invoice-number")!.textContent).toBe("A/1");
-  });
-
-  it.each([undefined, "F1", "F2"] as const)(
-    "omits the operation-date row for %s without a distinct saved day",
-    async (invoiceType) => {
-      const { el } = await mount({ invoiceType });
-      expect(el.shadowRoot!.querySelector("[data-test=operation-date]")).toBeNull();
-      expect(text(el)).toContain("Fecha");
-    },
-  );
-
-  it("does not show a saved operation day on an F2", async () => {
-    const { el } = await mount({ invoiceType: "F2", operationDate: "2026-02-28" });
-    expect(el.shadowRoot!.querySelector("[data-test=operation-date]")).toBeNull();
-    expect(text(el)).not.toContain("28 feb 2026");
-  });
-
-  it.each([
     [undefined, "Checking the original print status…", null],
     [{ status: "not_queued" }, "The original has not been sent to a printer.", "print-receipt"],
     [

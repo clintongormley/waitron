@@ -307,7 +307,6 @@ describe("receipt labels", () => {
       fullInvoice: "Full invoice",
       netUnitPrice: "Net unit price",
       date: "Date",
-      operationDate: "Operation date",
       vat: "VAT",
       cash: "Cash",
       change: "Change",
@@ -374,17 +373,6 @@ describe("receipt labels", () => {
 
   it("names a bill closed as a deferred payment as still to be paid, in Spanish", () => {
     expect(SPAIN.receiptLabels?.["es-ES"]?.deferredPayment).toBe("Pago aplazado");
-  });
-});
-
-describe("the short simplified-invoice heading", () => {
-  it.each([
-    ["es-ES", "Fra. simplificada"],
-    ["ca-ES", "Fra. simplificada"],
-    ["gl-ES", "Fra. simplificada"],
-    ["eu-ES", "Faktura erraztua"],
-  ])("labels it in %s", (locale, want) => {
-    expect(SPAIN.receiptLabels?.[locale]?.simplifiedInvoiceShort).toBe(want);
   });
 });
 

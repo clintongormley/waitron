@@ -107,55 +107,51 @@ async function voidClock(tx: Transaction, id: SaleId) {
 }
 
 describe("core-only callers prepare the saved writing zone", () => {
-  it.each(["deferred", "immediate"] as const)(
-    "dates an F1 %s invoice without changing operation-date selection",
-    async (kind) => {
-      const full = await addSeries("full");
-      const issued = await withTransaction(v.db, async (tx) =>
-        recordSale(
-          tx,
-          v.backend,
-          input(await issuingClock(tx), {
-            seriesId: full,
-            counterparty: recipient,
-            recipientAddress: "1 Customer Street",
-            settlement:
-              kind === "deferred"
-                ? { kind }
-                : {
-                    kind,
-                    tenders: [
-                      {
-                        method: "cash",
-                        amount: "12.10",
-                        tipAmount: "0.00",
-                        settledAt: new Date(AT),
-                      },
-                    ],
-                  },
-          }),
-        ),
-      );
-      const [row] = await v.db.select().from(sales).where(eq(sales.id, issued.saleId));
-      expect(row).toMatchObject({
-        issuedAt: AT,
-        issuedOffsetMinutes: 120,
-        total: 1210,
-        operationDate: "2026-10-15",
-        counterpartyAddress: "1 Customer Street",
-      });
-      expect(records(issued.saleId)[0]).toMatchObject({
-        TipoFactura: "F1",
-        IDFactura: { FechaExpedicionFactura: "15-10-2026" },
-        FechaHoraHusoGenRegistro: "2026-10-15T01:30:00+02:00",
-      });
-      expect(records(issued.saleId)[0]).not.toHaveProperty("FechaOperacion");
-      expect(
-        v.db.all(sql`select * from sale_settlements where sale_id = ${issued.saleId}`),
-      ).toHaveLength(kind === "deferred" ? 0 : 1);
-    },
-  );
-  it("keeps F1's earlier bill-opening operation date out of the filed issue record", async () => {
+  it.each(["deferred", "immediate"] as const)("dates an F1 %s invoice", async (kind) => {
+    const full = await addSeries("full");
+    const issued = await withTransaction(v.db, async (tx) =>
+      recordSale(
+        tx,
+        v.backend,
+        input(await issuingClock(tx), {
+          seriesId: full,
+          counterparty: recipient,
+          recipientAddress: "1 Customer Street",
+          settlement:
+            kind === "deferred"
+              ? { kind }
+              : {
+                  kind,
+                  tenders: [
+                    {
+                      method: "cash",
+                      amount: "12.10",
+                      tipAmount: "0.00",
+                      settledAt: new Date(AT),
+                    },
+                  ],
+                },
+        }),
+      ),
+    );
+    const [row] = await v.db.select().from(sales).where(eq(sales.id, issued.saleId));
+    expect(row).toMatchObject({
+      issuedAt: AT,
+      issuedOffsetMinutes: 120,
+      total: 1210,
+      counterpartyAddress: "1 Customer Street",
+    });
+    expect(records(issued.saleId)[0]).toMatchObject({
+      TipoFactura: "F1",
+      IDFactura: { FechaExpedicionFactura: "15-10-2026" },
+      FechaHoraHusoGenRegistro: "2026-10-15T01:30:00+02:00",
+    });
+    expect(records(issued.saleId)[0]).not.toHaveProperty("FechaOperacion");
+    expect(
+      v.db.all(sql`select * from sale_settlements where sale_id = ${issued.saleId}`),
+    ).toHaveLength(kind === "deferred" ? 0 : 1);
+  });
+  it("an F1 for a bill opened the day before saves and files only its issue date", async () => {
     const full = await addSeries("full");
     const order = await seedWorkingOrder(v.db, {
       ...v.cfg.origin,
@@ -176,11 +172,8 @@ describe("core-only callers prepare the saved writing zone", () => {
       ),
     );
     const [saved] = await v.db.select().from(sales).where(eq(sales.id, issued.saleId));
-    expect(saved).toMatchObject({
-      operationDate: "2026-10-14",
-      issuedAt: AT,
-      issuedOffsetMinutes: 120,
-    });
+    expect(saved).toMatchObject({ issuedAt: AT, issuedOffsetMinutes: 120 });
+    expect(saved).not.toHaveProperty("operationDate");
     expect(records(issued.saleId)[0]).toMatchObject({
       IDFactura: { FechaExpedicionFactura: "15-10-2026" },
       FechaHoraHusoGenRegistro: "2026-10-15T01:30:00+02:00",

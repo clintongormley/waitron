@@ -3,14 +3,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
 import { eq } from "drizzle-orm";
-import {
-  allocateInvoiceNumber,
-  invoiceSeries,
-  readVenue,
-  saleLines,
-  tenants,
-  workingOrders,
-} from "@waitron/db";
+import { allocateInvoiceNumber, invoiceSeries, saleLines, tenants } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -272,26 +265,6 @@ export async function recordSale(
   // One clock reading for the whole transaction, so the sale and its fiscal record carry the
   // same timestamp for one event.
   const now = input.clock.now();
-  const [bill] =
-    counterparty !== null && input.workingOrderId !== undefined
-      ? await tx
-          .select({ openedAt: workingOrders.openedAt })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, input.workingOrderId))
-      : [];
-  const operationDate =
-    counterparty === null
-      ? null
-      : bill === undefined
-        ? new Date(now.instant.getTime() + now.offsetMinutes * 60_000).toISOString().slice(0, 10)
-        : new Intl.DateTimeFormat("en-CA", {
-            timeZone: (await readVenue(tx)).timeZone,
-            calendar: "iso8601",
-            numberingSystem: "latn",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          }).format(new Date(bill.openedAt));
 
   // A degraded clock warns; it never blocks the sale.
   if (now.warning) {
@@ -310,7 +283,6 @@ export async function recordSale(
     invoiceNumber,
     issuedAt: now.instant.toISOString(),
     issuedOffsetMinutes: now.offsetMinutes,
-    operationDate,
     total: totalCents,
     locale: input.locale,
     invoiceLocales: input.invoiceLocales,

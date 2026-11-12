@@ -44,7 +44,6 @@ const SALES_COLUMNS = [
   "authorized_by",
   "operator_id",
   "working_order_id",
-  "operation_date",
   "counterparty_address",
   "taxpayer_domicile",
 ];

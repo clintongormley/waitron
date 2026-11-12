@@ -46,6 +46,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   department_sale_policies: ["receipt_print_mode"],
   zone_sale_policies: ["receipt_print_mode"],
   departments: ["location_id"],
+  sales: ["operation_date"],
   order_service_contexts: ["location_id"],
   zone_service_policies: ["location_id"],
   routing_cells: ["location_id"],
@@ -184,7 +185,6 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
   ],
   sale_lines: [["classification", "list_gross", "list_unit_price_gross"]],
   sales: [
-    ["total", "operation_date"],
     [
       "authorized_by",
       "counterparty_identifier_type",

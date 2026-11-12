@@ -14,14 +14,6 @@ import {
 import { printedLines } from "./testing/decode-ticket.js";
 import { receiptDateTime, receiptDateTimeNumeric } from "./receipt-dates.js";
 
-// A simplified sale never carries an operation date today (`record-sale.ts` writes it only with a
-// customer tax identity), so the simplified fixtures drop the full invoice's.
-function withoutOperationDate(): ReceiptDocumentInput["result"] {
-  const result = { ...FULL_INVOICE_DOCUMENT_FIXTURE.result };
-  delete result.operationDate;
-  return result;
-}
-
 describe("format-neutral invoice content", () => {
   it.each([false, true])(
     "prints no invented order for an orderless invoice, duplicate=%s",
@@ -147,7 +139,6 @@ describe("format-neutral invoice content", () => {
       ["Mesa 6", "Pedido 41"],
       ["FACTURA", "FF/1"],
       ["Fecha", "18 ago 2026, 00:34"],
-      ["Fecha de operación", "17 ago 2026"],
       ["Base imponible 21%", "9,00 €"],
       ["IVA 21%", "1,89 €"],
       ["Base imponible 10%", "8,00 €"],
@@ -457,7 +448,7 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
 describe("the simplified receipt's own layout (A663)", () => {
   const SIMPLIFIED = {
     ...FULL_INVOICE_DOCUMENT_FIXTURE,
-    result: { ...withoutOperationDate(), invoiceType: "F2" as const },
+    result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, invoiceType: "F2" as const },
   };
   const rows = (input: Parameters<typeof buildReceiptDocument>[0]) =>
     buildReceiptDocument(input).elements.flatMap((e): unknown[] =>
@@ -1065,7 +1056,7 @@ describe("the header rows: order, number and date (A754)", () => {
   const ISSUED = FULL_INVOICE_DOCUMENT_FIXTURE.result.issuedAt;
   const SIMPLIFIED: ReceiptDocumentInput = {
     ...FULL_INVOICE_DOCUMENT_FIXTURE,
-    result: { ...withoutOperationDate(), invoiceType: "F2" },
+    result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, invoiceType: "F2" },
   };
   const header = (input: ReceiptDocumentInput): unknown[] => {
     const elements = buildReceiptDocument(input).elements;
@@ -1147,28 +1138,6 @@ describe("the header rows: order, number and date (A754)", () => {
     });
   });
 
-  it.each([
-    { paperWidth: undefined, heading: "Factura simplificada" },
-    { paperWidth: "80mm" as const, heading: "Factura simplificada" },
-    { paperWidth: "58mm" as const, heading: "Fra. simplificada" },
-  ])(
-    "captions every row when a simplified receipt carries an operation date, on paper $paperWidth",
-    ({ paperWidth, heading }) => {
-      expect(
-        header({
-          ...SIMPLIFIED,
-          ...(paperWidth ? { paperWidth } : {}),
-          result: { ...SIMPLIFIED.result, issuedOffsetMinutes: -480, operationDate: "2026-08-16" },
-        }),
-      ).toEqual([
-        amount("Mesa 6", "Pedido 41", { gap: 2 }),
-        amount(heading, "FF/1"),
-        amount("Fecha", receiptDateTime(ISSUED, "es-ES", -480)),
-        amount("Fecha de operación", "16 ago 2026"),
-      ]);
-    },
-  );
-
   it.each([undefined, "80mm" as const, "58mm" as const])(
     "keeps a full invoice's FACTURA and Fecha on rows of their own on paper %s",
     (paperWidth) => {
@@ -1178,7 +1147,6 @@ describe("the header rows: order, number and date (A754)", () => {
         amount("Mesa 6", "Pedido 41", { gap: 2 }),
         amount("FACTURA", "FF/1", { style: { bold: true } }),
         amount("Fecha", "18 ago 2026, 00:34"),
-        amount("Fecha de operación", "17 ago 2026"),
       ]);
     },
   );
@@ -1328,7 +1296,7 @@ describe("identical dishes on the receipt (A803)", () => {
   const simplified = (lines: ReceiptDocumentInput["result"]["lines"], vatBreakdown = oneRate) => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
     input.result = {
-      ...withoutOperationDate(),
+      ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
       invoiceType: "F2",
       lines,
       total: "9.00",
@@ -1447,7 +1415,7 @@ describe("recorded issue offsets on plain F2 receipts", () => {
       [0, "14", "23:30"],
     ] as const) {
       const result = {
-        ...withoutOperationDate(),
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
         invoiceType: "F2" as const,
         issuedAt: "2026-10-14T23:30:00.000Z",
         issuedOffsetMinutes: offset,
@@ -1469,22 +1437,5 @@ describe("recorded issue offsets on plain F2 receipts", () => {
         }),
       );
     }
-  });
-
-  it("uses the recorded offset in the separate date row too", () => {
-    const document = buildReceiptDocument({
-      ...FULL_INVOICE_DOCUMENT_FIXTURE,
-      invoiceLocale: "en-GB",
-      result: {
-        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
-        invoiceType: "F2",
-        issuedAt: "2026-10-14T23:30:00.000Z",
-        issuedOffsetMinutes: 120,
-        operationDate: "2026-10-13",
-      },
-    });
-    expect(document.elements).toContainEqual(
-      expect.objectContaining({ kind: "amount", amount: "15 Oct 2026, 01:30" }),
-    );
   });
 });

@@ -13,7 +13,6 @@ const languages = [
     name: "Pine nut and coffee menu",
     want: [
       "INVOICE FF/1",
-      "Operation date",
       "1 Pine nut and coffee menu 10.00 10.00 21%",
       "Prices exclude VAT",
       "Discount 10% -1.00 21%",
@@ -30,7 +29,6 @@ const languages = [
     name: "Menú de piñón y café",
     want: [
       "FACTURA FF/1",
-      "Fecha de operación",
       "1 Menú de piñón y café 10,00 10,00 21%",
       "Precios sin IVA",
       "Descuento 10% -1,00 21%",
@@ -47,7 +45,6 @@ const languages = [
     name: "Menú de pinyó amb cafè i il·lusió",
     want: [
       "FACTURA FF/1",
-      "Data de l'operació",
       "1 Menú de pinyó amb cafè i il·lusió 10,00 10,00 21%",
       "Preus sense IVA",
       "Descompte 10% -1,00 21%",
@@ -64,7 +61,6 @@ const languages = [
     name: "Menú de piñón e café",
     want: [
       "FACTURA FF/1",
-      "Data da operación",
       "1 Menú de piñón e café 10,00 10,00 21%",
       "Prezos sen IVE",
       "Desconto 10% -1,00 21%",
@@ -81,7 +77,6 @@ const languages = [
     name: "Pinoi eta kafe menua",
     want: [
       "FAKTURA FF/1",
-      "Eragiketaren data",
       "1 Pinoi eta kafe menua 10,00 10,00 21%",
       "Prezioak BEZik gabe",
       "Deskontua 10% -1,00 21%",
@@ -116,7 +111,7 @@ describe("invoice receipt languages", () => {
         .flatMap((item) => ("str" in item ? [item.str] : []))
         .join(" ")
         .replace(/\s+/g, " ");
-      expect(text).toContain("Data de l'operació");
+      expect(text).toContain("Preus sense IVA");
       expect(text).toContain("Menú del día con un nombre especialmente largo");
       expect(text).not.toContain("Set menu with a particularly long name");
     } finally {

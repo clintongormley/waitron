@@ -1139,7 +1139,7 @@ describe("a sale prints its goods in the default content language its lines stor
             ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
             : [],
     );
-    expect(startsWith(text, "Data de l'operació"), "Data de l'operació").toBe(true);
+    expect(startsWith(text, "Base imposable"), "Base imposable").toBe(true);
     expect(text.some((line) => /^Comanda \d+/u.test(line))).toBe(true);
     expect(startsWith(text, "Pedido")).toBe(false);
     expect(text).toContain("Client");

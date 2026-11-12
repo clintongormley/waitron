@@ -92,7 +92,7 @@ describe("receiptDay", () => {
     ["ca-ES", "28 de febr. 2026"],
     ["gl-ES", "28 de feb. de 2026"],
     ["eu-ES", "2026(e)ko ots. 28(a)"],
-  ])("prints the operation day in %s", (locale, want) => {
+  ])("prints a calendar day in %s", (locale, want) => {
     expect(receiptDay("2026-02-28", locale)).toBe(want);
   });
 });

@@ -71,7 +71,6 @@ describe("A4 invoice PDF", () => {
       "FACTURA FF/1",
       "Mesa 6 Pedido 41",
       "Fecha 18 ago 2026, 00:34",
-      "Fecha de operación 17 ago 2026",
       "Menú del día con un nombre especialmente largo",
       "1 Menú del día con un nombre especialmente largo 10,00 10,00 21%",
       "Descuento 10% -1,00 21%",

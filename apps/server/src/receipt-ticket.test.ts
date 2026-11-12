@@ -156,89 +156,26 @@ describe("saved F1 issue offset", () => {
   );
 });
 
-describe("saved F1 operation date", () => {
-  it.each(
-    [PRINTER_58, PRINTER_80].flatMap((printer) =>
-      [false, true].flatMap((duplicate) =>
-        [
-          ["es-ES", "Fecha de operación", "28 feb 2026"],
-          ["ca-ES", "Data de l'operació", "28 de febr. 2026"],
-          ["gl-ES", "Data da operación", "28 de feb. de 2026"],
-          ["eu-ES", "Eragiketaren data", "2026(e)ko ots. 28(a)"],
-          ["en-GB", "Operation date", "28 Feb 2026"],
-        ].map(([locale, label, date]) => ({
-          printer,
-          duplicate,
-          locale: locale!,
-          label: label!,
-          date: date!,
-        })),
-      ),
-    ),
-  )(
-    "prints the saved operation day in $locale on $printer.paperWidth, duplicate=$duplicate",
-    ({ printer, duplicate, locale, label, date }) => {
-      const lines = drawn(
-        formatReceipt({
-          result: {
-            ...FILED_SALE,
-            invoiceType: "F1",
-            issuedAt: "2026-03-01T00:05:00.000+01:00",
-            operationDate: "2026-02-28",
-          },
-          issuer: ISSUER,
-          receipt: {},
-          invoiceLocale: locale,
-          printer,
-          duplicate,
-        }),
-      );
-      const operation = lines.filter((line) => line.startsWith(label));
-      expect(operation).toHaveLength(1);
-      expect(
-        lines.slice(lines.indexOf(operation[0]!), lines.indexOf(operation[0]!) + 2).join(" "),
-      ).toContain(date);
-      expect(lines.join("\n")).toContain("A/1");
-      expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
-    },
-  );
-
-  it.each([undefined, "F1", "F2"] as const)(
-    "omits a separate operation-date row for %s without a distinct saved day",
-    (invoiceType) => {
-      const lines = drawn(
-        formatReceipt({
-          result: { ...FILED_SALE, invoiceType },
-          issuer: ISSUER,
-          receipt: {},
-          invoiceLocale: "es-ES",
-          printer: PRINTER_58,
-        }),
-      );
-      expect(lines.join("\n")).not.toContain("Fecha de operación");
-      const at = lines.findIndex((line) => /^Mesa 6 +Pedido 41$/u.test(line));
-      expect(at).toBeGreaterThanOrEqual(0);
-      expect(
-        lines
-          .slice(at + 1, at + 3)
-          .join(" ")
-          .replace(/ +/gu, " "),
-      ).toContain(invoiceType === "F1" ? "Fecha 17 ago 2026" : "17/08/2026");
-    },
-  );
-
-  it("prints an F2's operation date under captioned rows when the payload carries one", () => {
+describe("receipt dates", () => {
+  it.each([undefined, "F1", "F2"] as const)("prints only the issue date for %s", (invoiceType) => {
     const lines = drawn(
       formatReceipt({
-        result: { ...FILED_SALE, invoiceType: "F2", operationDate: "2026-02-28" },
+        result: { ...FILED_SALE, invoiceType },
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
-        printer: PRINTER_80,
+        printer: PRINTER_58,
       }),
     );
-    expect(lines).toContainEqual(expect.stringMatching(/^Factura simplificada +A\/1$/u));
-    expect(lines).toContainEqual(expect.stringMatching(/^Fecha de operación +28 feb 2026$/u));
+    expect(lines.join("\n")).not.toContain("Fecha de operación");
+    const at = lines.findIndex((line) => /^Mesa 6 +Pedido 41$/u.test(line));
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(
+      lines
+        .slice(at + 1, at + 3)
+        .join(" ")
+        .replace(/ +/gu, " "),
+    ).toContain(invoiceType === "F1" ? "Fecha 17 ago 2026" : "17/08/2026");
   });
 });
 
@@ -2527,7 +2464,6 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 Comanda 41",
         date: "Data",
         day: "17 d’ag. 2026",
-        invoice: "Factura simplificada A/1",
         fullBase: "Base imposable 21% 10,00 €",
         heading: "FACTURA A/1",
         customer: "Client",
@@ -2563,7 +2499,6 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 Pedido 41",
         date: "Data",
         day: "17 de ago. de 2026",
-        invoice: "Factura simplificada A/1",
         fullBase: "Base impoñible 21% 10,00 €",
         heading: "FACTURA A/1",
         customer: "Cliente",
@@ -2599,7 +2534,6 @@ describe("the receipt's fixed words follow its language", () => {
         order: "Mesa 6 Eskaera 41",
         date: "Data",
         day: "2026(e)ko abu. 17(a)",
-        invoice: "Faktura erraztua A/1",
         fullBase: "Zerga-oinarria 21% 10,00 €",
         heading: "FAKTURA A/1",
         customer: "Bezeroa",
@@ -2634,7 +2568,6 @@ describe("the receipt's fixed words follow its language", () => {
       heading,
       date,
       day,
-      invoice,
       order,
       practice,
       fullBase,
@@ -2648,8 +2581,6 @@ describe("the receipt's fixed words follow its language", () => {
     const orderAt = sale.indexOf(order);
     expect(orderAt).toBeGreaterThanOrEqual(0);
     expect(sale[orderAt + 1]).toContain(`A/1 ${day}`);
-    const captioned = printed({ ...LABELLED_SALE, operationDate: "2026-08-16" }, locale);
-    expect(captioned[captioned.indexOf(order) + 1]).toBe(invoice);
     const full = printed(FULL_SALE, locale, VENUE_ADDRESS);
     const fullOrderAt = full.indexOf(order);
     expect(fullOrderAt).toBeGreaterThanOrEqual(0);
@@ -3757,20 +3688,6 @@ describe("the header rows on paper (A754)", () => {
         "FACTURA FF/1",
         "Fecha 18 ago 2026, 00:34",
       ]);
-    },
-  );
-
-  it.each([
-    { printer: PRINTER_58, heading: "Fra. simplificada" },
-    { printer: PRINTER_80, heading: "Factura simplificada" },
-  ])(
-    "captions a simplified receipt's rows when it carries an operation date, on $printer.paperWidth",
-    ({ printer, heading }) => {
-      const { lines, at } = header(printer, { operationDate: "2026-08-16" });
-      const rows = lines.slice(at + 1, at + 4);
-      expect(rows[0]).toMatch(new RegExp(`^${heading} +T/123$`, "u"));
-      expect(rows[1]).toMatch(/^Fecha +1[78] ago 2026, \d{2}:34$/u);
-      expect(rows[2]).toMatch(/^Fecha de operación +16 ago 2026$/u);
     },
   );
 });

@@ -29,7 +29,6 @@ const invoice = {
   invoiceNumber: "A/000001",
   invoiceType: "F1" as const,
   issueDate: "2026-11-01",
-  operationDate: "2026-10-31",
   customerName: "Harbour Foods",
   customerTaxId: "B12345678",
   customerIdentifierType: null,
@@ -97,7 +96,7 @@ describe("accountant workbook", () => {
     );
     const cells = row(strFromU8(files["xl/worksheets/sheet1.xml"]!), 2);
     expect(cells[0]).toBe("sale-1");
-    expect(cells.slice(12, 16)).toEqual(["", "", "", "0.00"]);
+    expect(cells.slice(11, 15)).toEqual(["", "", "", "0.00"]);
   });
   it.each(["en", "es"] as const)(
     "opens two header-only sheets when the period is empty (%s)",
@@ -159,7 +158,6 @@ describe("accountant workbook", () => {
       "A/000001",
       "F1",
       "2026-11-01",
-      "2026-10-31",
       "Harbour Foods",
       "B12345678",
       "",
@@ -175,7 +173,7 @@ describe("accountant workbook", () => {
       "2026-12-01T12:00:00Z",
       "",
     ]);
-    expect(row(xml, 3).slice(12, 20)).toEqual([
+    expect(row(xml, 3).slice(11, 19)).toEqual([
       "21.00",
       "10.00",
       "2.10",
@@ -185,7 +183,7 @@ describe("accountant workbook", () => {
       "2026-12-01T12:00:00Z",
       "",
     ]);
-    expect(row(xml, 4).slice(12, 20)).toEqual([
+    expect(row(xml, 4).slice(11, 19)).toEqual([
       "10.00",
       "-10.00",
       "-1.00",
@@ -196,9 +194,9 @@ describe("accountant workbook", () => {
       "",
     ]);
     expect(row(xml, 4)[3]).toBe("Corrective");
-    expect(xml).toContain('<c r="N2" t="n" s="1"><v>10.00</v></c>');
-    expect(row(xml, 1)[18]).toBe("Voided at (UTC)");
-    expect(row(xml, 1)[19]).toContain("original tickets retained");
+    expect(xml).toContain('<c r="M2" t="n" s="1"><v>10.00</v></c>');
+    expect(row(xml, 1)[17]).toBe("Voided at (UTC)");
+    expect(row(xml, 1)[18]).toContain("original tickets retained");
     expect(strFromU8(files["xl/styles.xml"]!)).toContain('numFmtId="2"');
   });
 
@@ -278,11 +276,11 @@ describe("accountant workbook", () => {
     const purchases = strFromU8(files["xl/worksheets/sheet2.xml"]!);
     expect(sales).toContain("=2+3 &amp; &lt;&quot;&apos;&gt;���😀");
     expect(sales).toContain('<c r="C2" t="inlineStr"><is><t xml:space="preserve">00123</t>');
-    expect(sales).toContain('<c r="H2" t="inlineStr"><is><t xml:space="preserve">+00123</t>');
+    expect(sales).toContain('<c r="G2" t="inlineStr"><is><t xml:space="preserve">+00123</t>');
     expect(sales).toContain("@SUM(A1:A2)\tRoad\nFlat 1&#13;");
     expect(purchases).toContain("A&amp;B &lt;supplier&gt;");
     expect(row(purchases, 2)[6]).toBe(ACCOUNTANT_EXPORT_WORDS.es.regimes.equivalence_surcharge);
-    expect(row(sales, 2)[8]).toBe(ACCOUNTANT_EXPORT_WORDS.es.identifierTypes.passport);
+    expect(row(sales, 2)[7]).toBe(ACCOUNTANT_EXPORT_WORDS.es.identifierTypes.passport);
     expect(row(purchases, 2)[8]).toBe(ACCOUNTANT_EXPORT_WORDS.es.vatKinds.ordinary);
     expect(row(purchases, 3)[8]).toBe(ACCOUNTANT_EXPORT_WORDS.es.vatKinds.capital);
     expect(purchases).toContain('xml:space="preserve">-0042</t>');
@@ -315,7 +313,6 @@ describe("accountant period selection", () => {
         invoiceNumber: 7,
         issuedAt: "2026-10-31T23:30:00.000Z",
         issuedOffsetMinutes: 60,
-        operationDate: "2026-10-29",
         total: 2310,
         vatBreakdown: [
           { rate: "10.00", base: "10.00", tax: "1.01" },
@@ -362,7 +359,6 @@ describe("accountant period selection", () => {
         invoiceNumber: "B/7",
         invoiceType: "F1",
         issueDate: "2026-11-01",
-        operationDate: "2026-10-29",
         customerName: "Harbour Foods",
         customerTaxId: "FR00123",
         customerIdentifierType: "vat-number",
@@ -384,7 +380,6 @@ describe("accountant period selection", () => {
         invoiceNumber: "A/1",
         invoiceType: "F2",
         issueDate: "2026-11-30",
-        operationDate: null,
         customerName: null,
         customerTaxId: null,
         customerIdentifierType: null,
