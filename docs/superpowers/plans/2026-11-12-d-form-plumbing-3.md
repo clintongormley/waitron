@@ -1,34 +1,29 @@
-# D-form-plumbing, slice 3: six dashboard forms
+# D-form-plumbing, slice 3: dashboard and image-library feedback
 
-Draft: separate GPT-6.1 Sol, high effort; checked by the driver. Awaiting Claude read and watcher clearance.
+Drafted by separate GPT-6.1 Sol, high effort; revised by the driver after Claude's 261-second approach read. Awaiting watcher build clearance; no owner design approval claimed.
 
-Request verbatim, `/Users/clintongormley/waitron-campaign-d/queue.md`, D-form-plumbing:
+**Ask/finish line:** continue [shared form plumbing](../../backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form), with no visible change. Menu copy, attendance export and the image-library editor reuse unchanged `FormFeedback` and `bottomMessage` from `@waitron/ui`. The image library advances the cross-package part of the ask. Remaining forms stay open. Inventory is source-read evidence, not run proof.
 
-> every form assembles its bottom message, waits for the render, calls focusFirstInvalid and remembers the first press and which refusals the person has since changed, in several shapes. Make one helper that the dashboard's forms use, in a package the module screens and the image library can reach (@waitron/ui or similar, never apps/dashboard, which packages/media cannot import), and move the forms onto it. Behaviour stays as design-system.md → Forms says; no visible change.
+**Build one bounded batch:**
 
-**Finish line:** all six inventoried forms share attempt/footer plumbing; two also share render-before-focus. Reuse unchanged `packages/ui/src/form-feedback.ts` exports `FormFeedback` and `bottomMessage`. No new feedback policy or API. Evidence below is source inventory, not run proof.
-
-**Inventory/build:** modify these six files in `apps/dashboard/src/widgets/`. Each repeats attempt and footer work.
-
-| Source pointers | Share; keep local |
+| File | Share; preserve locally |
 | --- | --- |
-| `email-settings-form.ts:190,303` | Attempt plus `bottomMessage`, correction first. Keep refusal clearing/SMTP mappings, Save/Test separation and render wait followed by connectivity-guarded focus. |
-| `menu-copy-dialog.ts:67,105,146` | Attempt, `message`, `focus(shadowRoot)` replacing the explicit render wait/walk. Keep request-error precedence and field-only edit clearing. |
-| `attendance-export-dialog.ts:230,248,308` | Attempt, `message`, render-before-focus. Compose `bottomMessage(message(...), unavailable)` to preserve action → read → correction → unavailable order. Keep refusal deletion, read/action separation and request/download generations. |
-| `attendance-proposal-dialog.ts:117,257,303` | Attempt plus `bottomMessage`, correction first. Keep `reasonEdited`, refusal-property change check, raw `reasonRefusal` suppression of general error, row validation and immediate `focusFirstInvalid` call. |
-| `invoice-email-dialog.ts:59,129,170` | Attempt and `message`; keep refusal/bottom strings and named-field focus after rendering, including opening focus. |
-| `theme-name-dialog.ts:81,168,253` | Attempt and `message`; keep refusal/bottom strings, either edit clearing both, warnings, savable-at-open policy and named-field focus after rendering. |
+| `apps/dashboard/src/widgets/menu-copy-dialog.ts:67,105,146` | Attempt state, render-before-focus and footer joining. Keep request-error precedence, field-only edit clearing, drafts and generations. |
+| `apps/dashboard/src/widgets/attendance-export-dialog.ts:129,248,308` | Attempt state, render-before-focus and footer joining. Keep refusal deletion, read/action separation, request/download generations and action → read → correction → unavailable order. |
+| `packages/media/src/dashboard/image-library.ts:708,837,862,1070` | Attempt state, render-before-focus and footer joining. Keep language/file mapping, checked-field precedence, save-error prefix, correction text, edit/reload lifecycle, framing, draft scopes and request generations. |
 
-Use one feedback instance per form; `press()` at existing attempts. Preserve reset boundaries; proposal's repeated closed `willUpdate` path assigns `feedback.attempted = false` without requesting another update. Never put `reset/newRefusal` in repeated render/closed paths. No dismissal-set conversion: local clearing and refusal identities stay. Dialog dismissal stays separate. Preserve validation, mapping, precedence, events, polling/requests, draft lifecycle and direct-focus timing.
+Use one feedback instance per form, `press()` at current attempts, and `reset()` at existing reset boundaries outside `willUpdate`. Menu's opening-time reset inside `willUpdate` may assign `feedback.attempted = false`; never introduce an unconditional update loop. Refusal objects/strings and their clearing remain local; no dismissal-set conversion.
 
-**Checks:** retain assertions in these six sibling `*.test.ts`, `*.unsaved.test.ts` and existing `*.a11y.test.ts` files. Cases include email “keeps a refused field editable and the changed save retryable”, export “marks every invalid field only after submission and focuses the first, then allows correction”, proposal “a refusal naming the reason marks that field without disabling retry and clears when it changes”, invoice opening-focus/refusal/reopen cases and theme “the browser's own checks speak after the first Save”. Menu's `Copy menu: $width $locale $theme` lacks focus assertions: focus Copy before pressing; assert invalid submission returns focus to Name. Keep its matrix. Pure refactor; new behavior needs red/green first.
+Use `bottomMessage` directly with the existing ordered conditional messages; do not introduce synthetic field keys or nest `message()` to preserve order. Replace explicit render-wait/focus walks with `feedback.focus` at the same submission/refusal sites and roots. Media retains its editor-modal root; preserve query-after-render ordering if that requires keeping its small wrapper. Do not broaden focus to the library. No helper/API, event, validation, request or product behavior changes.
 
-Run once before/after adoption, requiring test counts:
+**Stay/defer:** email settings and attendance proposal retain their flag/joiner because guarded/immediate focus and refusal handling stay local. Invoice email and theme-name also keep their flag/joiner and named-field/opening focus. Product variant-row focus, invoice-customer privacy flow, other dashboard/module/provider forms and till/setup remain outside this batch.
 
-`cd apps/dashboard && pnpm test src/widgets/{email-settings-form,menu-copy-dialog,attendance-export-dialog,attendance-proposal-dialog,invoice-email-dialog,theme-name-dialog}*.test.ts`
+**Checks:** keep all existing assertions. Run before/after, requiring counts:
 
-No helper/dependency retest or additional visual matrix. Normal hook, scoped CI and finish-branch follow.
+`cd apps/dashboard && pnpm test src/widgets/{menu-copy-dialog,attendance-export-dialog}*.test.ts`
 
-**Docs/scope:** narrow `docs/backlog/dashboard.md`, retaining remaining dashboard/module/media/provider/till work. Forms contract stays unchanged; no product/guide changes, with guide exemption requiring watcher agreement. Exclude Product variant-row focus, invoice-customer privacy flow and till/setup. Prior clearance covered slice one only; slice two is on main (#2985). Driver obtains Claude approach review and fresh watcher build clearance; no owner design approval recorded.
+`pnpm --filter @waitron/media test src/dashboard/image-library*.test.ts`
 
-**Estimate:** production +85/−105; tests +8/−0; docs including this plan 95 changed; support 0; total about 293. No generated files. Material growth returns to the watcher under RUNNER.
+Caller suites own invalid-field/footer/focus, refusal edit/retry, reopen, drafts and save-state behavior. Media already asserts mixed general/field message order and file/default-language focus. Add one standalone menu-copy test: enter an already-used name, focus Copy, press, assert Name receives focus. Do not expand its screenshot matrix. Pure refactor; new behavior needs red/green first. No dependency retesting or extra visual matrix; normal hook, scoped CI and finish-branch follow.
+
+**Docs/size:** narrow `docs/backlog/dashboard.md`; retain remaining work. No Forms-contract/guide changes; request watcher agreement for unchanged guide text. Slice two was cleared at 18:01 on 12 November (its plan records it); no earlier clearance covers this batch. Forecast production +55/−75, tests +25/−0, docs about 75 changed including this plan, support 0; about 230 overall, no generated files. Material growth returns to the watcher under RUNNER.
