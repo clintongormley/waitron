@@ -1299,8 +1299,9 @@ declare module "@waitron/shared" {
     /**
      * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a
      * UUID, `standbyPublicKey` absent or empty, `standbyContactUrl` absent, not a string, or a
-     * non-empty value that is not a bare http(s) origin, or `standbyStoreUrl` not an `https` bare
-     * origin at the contact URL's host (so an empty contact URL is refused). Not
+     * non-empty value that is not a bare http(s) origin, `standbyStoreUrl` not an `https` bare
+     * origin at the contact URL's host (so an empty contact URL is refused), or `standbyAt` not a
+     * number or not a time a `Date` can hold. Not
      * `password.invalid`: a bad identity is not a bad credential. The standby's key is not echoed.
      */
     "mirror.standby_invalid": Record<string, never>;
