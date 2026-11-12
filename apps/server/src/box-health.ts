@@ -1,16 +1,14 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import { devices, incidents, printers, sales, type Database, type Transaction } from "@waitron/db";
+import { and, asc, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { incidents, printers, sales, type Database, type Transaction } from "@waitron/db";
 import type {
   ClockConfirmationSource,
   ClockStopState,
   ClockWitness,
-  FiscalBackend,
   TrustedClock,
 } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
 import type { StreamView } from "@waitron/stream";
-import type { ClockStartUp } from "./clock-start-up.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { DiskUsage } from "./disk-usage.js";
 import type { LeftoverSurvey } from "./free-space-now.js";
@@ -140,74 +138,6 @@ export async function displayNameOf(tx: Transaction, personId: string): Promise<
     .from(persons)
     .where(eq(persons.id, personId));
   return row?.displayName ?? null;
-}
-
-/** The seat's raw clock stop at the box's reading; null when the seat has no `clockStopState`. */
-export async function readClockStopState(
-  tx: Transaction,
-  deps: {
-    backend: Pick<FiscalBackend, "clockStopState">;
-    witnesses: () => readonly ClockWitness[];
-    clock: Pick<TrustedClock, "now">;
-  },
-): Promise<ClockStopState | null> {
-  if (deps.backend.clockStopState === undefined) return null;
-  // Before the reading: a witness noted after it would be left out as taken after it.
-  const witnesses = deps.witnesses();
-  const { instant, offsetMinutes } = deps.clock.now();
-  return deps.backend.clockStopState(tx, { instant, offsetMinutes }, witnesses);
-}
-
-/** Reads the seat's clock stop at the box's reading, with device labels and the covering
- * confirmation's person named. A seat with no `clockStopState` has none. */
-export function clockStopReader(deps: {
-  backend: Pick<FiscalBackend, "clockStopState">;
-  witnesses: () => readonly ClockWitness[];
-  clock: Pick<TrustedClock, "now">;
-  /** Absent, the window reads closed. */
-  startUp?: Pick<ClockStartUp, "open">;
-}): (db: Database) => Promise<ClockStopView | null> {
-  return async (db) => {
-    const state = await readClockStopState(db, deps);
-    if (state === null) return null;
-    const ids = [...state.agreeing.devices, ...state.contrary.devices].map((witness) => witness.id);
-    const labelRows =
-      ids.length === 0
-        ? []
-        : await db
-            .select({ id: devices.id, label: devices.label })
-            .from(devices)
-            .where(inArray(devices.id, ids));
-    const labels = new Map(labelRows.map((row) => [row.id, row.label]));
-    const labelled = (list: ClockWitness[]): ClockStopWitness[] =>
-      list.map((witness) => ({ ...witness, label: labels.get(witness.id) ?? null }));
-    let confirmation: ClockStopView["confirmation"] = null;
-    if (state.confirmation !== null) {
-      const { id, source, personId, confirmedAt } = state.confirmation;
-      const personName = personId === null ? null : await displayNameOf(db, personId);
-      confirmation = { id, source, personName, confirmedAt };
-    }
-    return {
-      ...state,
-      agreeing: { authority: state.agreeing.authority, devices: labelled(state.agreeing.devices) },
-      contrary: { authority: state.contrary.authority, devices: labelled(state.contrary.devices) },
-      confirmation,
-      startUp: deps.startUp?.open() === true,
-    };
-  };
-}
-
-/** Reads the check that waits at the box's reading. A seat with no `waitingClockCheck` has none. */
-export function clockCheckWaitingReader(deps: {
-  backend: Pick<FiscalBackend, "waitingClockCheck">;
-  clock: Pick<TrustedClock, "now">;
-}): (db: Database) => Promise<{ since: string } | null> {
-  return async (db) => {
-    if (deps.backend.waitingClockCheck === undefined) return null;
-    const { instant, offsetMinutes } = deps.clock.now();
-    const waiting = await deps.backend.waitingClockCheck(db, { instant, offsetMinutes });
-    return waiting === null ? null : { since: waiting.openedAt };
-  };
 }
 
 const MISDATED = "clock.records_misdated";

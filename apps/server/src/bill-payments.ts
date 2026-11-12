@@ -1429,7 +1429,6 @@ export function clockUnconfirmedRefusal(error: unknown): boolean {
 function notRecordedReason(error: unknown): NotRecordedReason | null {
   if (error instanceof IssuanceRefusedError || isUniqueViolation(error)) return "issuance_refused";
   if (diskFullIn(error)) return "disk_full";
-  if (error instanceof AppError && error.code === "clock.behind_chain") return "clock_behind_chain";
   if (error instanceof AppError && error.code === "clock.unusable") return "clock_unusable";
   if (clockUnconfirmedRefusal(error)) return "clock_unconfirmed";
   return null;
@@ -1451,8 +1450,7 @@ export function collectFailure(
   return chargedNotRecorded(deps.log, workingOrderId, "disk_full");
 }
 
-type NotRecordedReason =
-  "disk_full" | "clock_behind_chain" | "clock_unusable" | "clock_unconfirmed" | "issuance_refused";
+type NotRecordedReason = "disk_full" | "clock_unusable" | "clock_unconfirmed" | "issuance_refused";
 
 /** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
 function chargedNotRecorded(

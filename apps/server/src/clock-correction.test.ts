@@ -4,7 +4,6 @@ import type {
   ClockConfirmation,
   ClockStepRecorded,
   ClockStepRequest,
-  ClockStopState,
   ClockWitness,
   TrustedReading,
 } from "@waitron/fiscal";
@@ -24,19 +23,6 @@ const START_MS = Date.parse("2026-10-31T10:00:00.000Z");
 /** The box's reading once the default host has set it an hour on, taking 50 ms. */
 const SET_AT = new Date(START_MS + H + 50).toISOString();
 
-const STOPPED: ClockStopState = {
-  clockAt: "2026-10-31T10:00:00.000Z",
-  offsetMinutes: 60,
-  lastRecordAt: "2026-10-31T11:00:00.000Z",
-  lastRecordOffsetMinutes: 60,
-  recordId: "record-1",
-  gapMs: H,
-  proof: "none",
-  agreeing: { authority: null, devices: [] },
-  contrary: { authority: null, devices: [] },
-  confirmation: null,
-};
-
 const UNSYNCHRONISED: ClockServiceStatus = {
   available: true,
   service: "on",
@@ -52,17 +38,6 @@ function authority(boxMs: number, differenceMs: number): ClockWitness {
     boxAt: new Date(boxMs).toISOString(),
     witnessAt: new Date(boxMs + differenceMs).toISOString(),
     uncertaintyMs: 40,
-  };
-}
-
-function device(id: string, address: string, differenceMs: number): ClockWitness {
-  return {
-    kind: "device",
-    id,
-    address,
-    boxAt: new Date(START_MS).toISOString(),
-    witnessAt: new Date(START_MS + differenceMs).toISOString(),
-    uncertaintyMs: 0,
   };
 }
 
@@ -88,11 +63,10 @@ const ANA_ON_A_TILL: ClockAdminConfirm = {
   },
 };
 
-function withoutMethod<T extends { clockStopState?: unknown; confirmClockStep?: unknown }>(
-  seat: "no-stop-state" | "no-step" | undefined,
+function withoutMethod<T extends { confirmClockStep?: unknown }>(
+  seat: "no-step" | undefined,
   backend: T,
 ): T {
-  if (seat === "no-stop-state") return { ...backend, clockStopState: undefined };
   if (seat === "no-step") return { ...backend, confirmClockStep: undefined };
   return backend;
 }
@@ -109,19 +83,18 @@ type HostBehaviour =
 
 function harness(
   options: {
-    stop?: () => ClockStopState | null;
+    /** Whether the clock reads before 28-10-2024; by default it does. */
     unusable?: () => boolean;
     /** The seat's date check throws this instead of `clock.unusable`. */
     recordableThrows?: Error;
-    /** A seat with no clock stop, or one that records no step. */
-    seat?: "no-stop-state" | "no-step";
+    /** A seat that records no step. */
+    seat?: "no-step";
     status?: ClockServiceStatus;
     host?: HostBehaviour;
     /** How far the host's set lands from the target. */
     missByMs?: number;
     /** The seat's transaction throws a full-disk refusal this many times. */
     seatFails?: number;
-    witnesses?: ClockWitness[];
     anchors?: ClockAnchor[];
     /** The boot-time clock cannot be read. */
     bootNaN?: boolean;
@@ -187,13 +160,9 @@ function harness(
       },
     },
     backend: withoutMethod(options.seat, {
-      clockStopState: async () => {
-        calls.push("clockStopState");
-        return (options.stop ?? (() => STOPPED))();
-      },
       assertRecordableAt: () => {
         if (options.recordableThrows !== undefined) throw options.recordableThrows;
-        if (options.unusable?.() === true)
+        if (options.unusable?.() ?? true)
           throw new AppError("clock.unusable", {
             clockAt: "2020-01-01T00:00:00.000Z",
             offsetMinutes: 60,
@@ -224,7 +193,6 @@ function harness(
     }),
     store: options.store ?? {
       clear: () => calls.push("clear"),
-      witnesses: () => options.witnesses ?? [],
     },
     clock: {
       now: () => ({ instant: new Date(wallMs), offsetMinutes: 60 }) as unknown as TrustedReading,
@@ -261,12 +229,7 @@ function harness(
           },
         }),
   });
-  for (const anchor of options.anchors ?? [
-    {
-      stepComing: async () => void calls.push("stepComing"),
-      reanchor: async () => void calls.push("reanchor"),
-    },
-  ])
+  for (const anchor of options.anchors ?? [{ reanchor: async () => void calls.push("reanchor") }])
     correction.addAnchor(anchor);
 
   return {
@@ -284,31 +247,23 @@ function harness(
 type Harness = ReturnType<typeof harness>;
 type SetInput = Parameters<Harness["correction"]["set"]>[0];
 
-function aeat(h: Harness, over: Partial<SetInput> = {}): SetInput {
+/** An administrator's set while the clock reads before 28-10-2024. */
+function byAdmin(h: Harness, over: Partial<SetInput> = {}): SetInput {
   return {
-    reason: "behind_chain",
-    source: "authority",
+    reason: "unusable",
+    source: "admin",
     offsetMs: H,
     measuredAt: h.measured(),
     stepsSeen: h.correction.steps(),
-    witnesses: [authority(START_MS, H)],
-    requester: { source: "authority", check: "check-1" },
+    witnesses: [],
+    admin: LUIS,
+    requester: { source: "admin", person: LUIS.personId },
     ...over,
   };
 }
 
-function byAdmin(h: Harness, over: Partial<SetInput> = {}): SetInput {
-  return aeat(h, {
-    source: "admin",
-    admin: LUIS,
-    witnesses: [],
-    requester: { source: "admin", person: LUIS.personId },
-    ...over,
-  });
-}
-
 function byStaff(h: Harness, over: Partial<SetInput> = {}): SetInput {
-  return aeat(h, {
+  return byAdmin(h, {
     source: "staff",
     admin: ANA_ON_A_TILL,
     witnesses: [],
@@ -325,7 +280,7 @@ function byStaff(h: Harness, over: Partial<SetInput> = {}): SetInput {
 describe("setting the box's clock", () => {
   it("judges the stop, reads the service, tells the anchors, judges the stop again, sets, re-anchors, clears and records, in that order", async () => {
     const h = harness();
-    const answer = await h.correction.set(aeat(h));
+    const answer = await h.correction.set(byAdmin(h));
 
     expect(h.calls).toEqual([
       "clockStopState",
@@ -352,7 +307,7 @@ describe("setting the box's clock", () => {
 
   it("records the step it measured, from before and after readings of both clocks", async () => {
     const h = harness({ setTakesMs: 300 });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
 
     const [request] = h.seatCalls;
     expect(request).toMatchObject({
@@ -372,8 +327,8 @@ describe("setting the box's clock", () => {
 
   it("hands each step's alert to the email duty once", async () => {
     const h = harness();
-    await h.correction.set(aeat(h));
-    await h.correction.set(aeat(h, { offsetMs: 2 * H }));
+    await h.correction.set(byAdmin(h));
+    await h.correction.set(byAdmin(h, { offsetMs: 2 * H }));
 
     expect(h.corrected).toEqual([
       { id: "incident-1", code: "clock.corrected", params: { stepMs: H } },
@@ -387,7 +342,6 @@ describe("setting the box's clock", () => {
     const h = harness({
       anchors: [
         {
-          stepComing: async () => void calls.push("stepComing"),
           reanchor: async () => {
             calls.push("reanchor");
             if (failing) throw new AppError("storage.disk_full", {});
@@ -395,7 +349,7 @@ describe("setting the box's clock", () => {
         },
       ],
     });
-    const answer = await h.correction.set(aeat(h));
+    const answer = await h.correction.set(byAdmin(h));
 
     expect(h.hostSets).toHaveLength(1);
     expect(h.calls).not.toContain("confirmClockStep");
@@ -412,7 +366,7 @@ describe("setting the box's clock", () => {
 
   it("keeps a step whose seat transaction failed on a full disk, and writes it once on the next writePending", async () => {
     const h = harness({ seatFails: 1 });
-    const answer = await h.correction.set(aeat(h));
+    const answer = await h.correction.set(byAdmin(h));
 
     expect(answer).toEqual({ set: true, confirmationId: null, stepMs: H, confirmedAt: SET_AT });
     expect(h.seatCalls).toHaveLength(0);
@@ -429,7 +383,7 @@ describe("setting the box's clock", () => {
 
   it("keeps the step when writePending's write fails again, logging it pending only once", async () => {
     const h = harness({ seatFails: 2 });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
 
     await expect(h.correction.writePending()).rejects.toThrow();
     await h.correction.writePending();
@@ -445,14 +399,14 @@ describe("the step not yet written, for the backups' hold", () => {
     const seen: unknown[] = [];
     const h = harness({ duringSet: () => void seen.push(h.correction.unwrittenStep()) });
     seen.push(h.correction.unwrittenStep());
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
     seen.push(h.correction.unwrittenStep());
     expect(seen).toEqual([null, "setting", null]);
   });
 
   it("is the step made while its row waits to be written, and null once writePending writes it", async () => {
     const h = harness({ seatFails: 1 });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
     expect(h.correction.unwrittenStep()).toEqual({ confirmedAt: SET_AT, stepMs: H });
 
     await h.correction.writePending();
@@ -463,26 +417,25 @@ describe("the step not yet written, for the backups' hold", () => {
     const h = harness({
       anchors: [
         {
-          stepComing: async () => {},
           reanchor: async () => {
             throw new AppError("storage.disk_full", {});
           },
         },
       ],
     });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
     expect(h.correction.unwrittenStep()).toEqual({ confirmedAt: SET_AT, stepMs: H });
   });
 
   it("is null when the host refused and the clock did not move", async () => {
     const h = harness({ host: "refuses" });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
     expect(h.correction.unwrittenStep()).toBeNull();
   });
 
   it("is null, with the anchor re-anchored, when the host client throws and the clock did not move", async () => {
     const h = harness({ host: "throws" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "refused" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "refused" });
     expect(h.correction.unwrittenStep()).toBeNull();
     expect(h.calls).toContain("reanchor");
     expect(h.calls).not.toContain("confirmClockStep");
@@ -493,14 +446,14 @@ describe("the step not yet written, for the backups' hold", () => {
 
   it("is as it was before the set, and the error passed on, when reading the clocks throws after the host answered", async () => {
     const h = harness({ bootThrowsAfterSet: true });
-    await expect(h.correction.set(aeat(h))).rejects.toThrow("boot clock broke");
+    await expect(h.correction.set(byAdmin(h))).rejects.toThrow("boot clock broke");
     expect(h.hostSets).toHaveLength(1);
     expect(h.correction.unwrittenStep()).toBeNull();
   });
 
   it("is null when the seat records no step", async () => {
     const h = harness({ seat: "no-step" });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
     expect(h.correction.unwrittenStep()).toBeNull();
   });
 
@@ -533,7 +486,6 @@ describe("rows kept pending", () => {
     let failing = true;
     return {
       anchor: {
-        stepComing: async () => {},
         reanchor: async () => {
           if (failing) {
             failing = false;
@@ -547,7 +499,7 @@ describe("rows kept pending", () => {
   it("refuses a set while an earlier step's row is pending, so rows are written in step order", async () => {
     const { anchor } = failingFirstReanchor();
     const h = harness({ anchors: [anchor] });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
     const calls = h.calls.length;
 
     expect(await h.correction.set(byAdmin(h, { stepsSeen: 1, measuredAt: h.measured() }))).toEqual({
@@ -566,7 +518,7 @@ describe("rows kept pending", () => {
   it("writes a pending row once when two writePending calls overlap", async () => {
     const { anchor } = failingFirstReanchor();
     const h = harness({ anchors: [anchor] });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
 
     await Promise.all([h.correction.writePending(), h.correction.writePending()]);
     expect(h.seatCalls).toHaveLength(1);
@@ -576,54 +528,26 @@ describe("rows kept pending", () => {
 describe("a set that asks nothing of the host", () => {
   it("refuses while the time service is synchronised", async () => {
     const h = harness({ status: { ...UNSYNCHRONISED, synchronised: true } });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "synchronised" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "synchronised" });
     expect(h.calls).toEqual(["clockStopState", "clockStatus"]);
   });
 
   it("refuses while the box's clock service is unavailable", async () => {
     const h = harness({ status: { available: false, reason: "missing", detail: "ENOENT" } });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "host_unavailable" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "host_unavailable" });
     expect(h.calls).toEqual(["clockStopState", "clockStatus"]);
   });
 
   it("refuses once the stop no longer holds", async () => {
-    const h = harness({ stop: () => null });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "not_stopped" });
+    const h = harness({ unusable: () => false });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "not_stopped" });
     expect(h.calls).toEqual(["clockStopState"]);
-  });
-
-  it("refuses once a confirmation covers the reading", async () => {
-    const h = harness({ stop: () => ({ ...STOPPED, proof: "confirmed" }) });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "not_stopped" });
-  });
-
-  it("refuses when an anchor cannot record what it holds, re-anchoring every anchor", async () => {
-    const calls: string[] = [];
-    const h = harness({
-      anchors: [
-        {
-          stepComing: async () => {
-            calls.push("first.stepComing");
-            throw new AppError("storage.disk_full", {});
-          },
-          reanchor: async () => void calls.push("first.reanchor"),
-        },
-        {
-          stepComing: async () => void calls.push("second.stepComing"),
-          reanchor: async () => void calls.push("second.reanchor"),
-        },
-      ],
-    });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "pending_disproofs" });
-    expect(h.hostSets).toEqual([]);
-    expect(calls).toContain("first.reanchor");
-    expect(calls).toContain("second.reanchor");
   });
 
   it("refuses a target before 28 October 2024", async () => {
     const h = harness();
     const offsetMs = Date.UTC(2024, 9, 27, 23) - START_MS;
-    expect(await h.correction.set(aeat(h, { offsetMs }))).toEqual({
+    expect(await h.correction.set(byAdmin(h, { offsetMs }))).toEqual({
       set: false,
       reason: "target_invalid",
     });
@@ -633,7 +557,7 @@ describe("a set that asks nothing of the host", () => {
   it("refuses a target from 2100 on", async () => {
     const h = harness();
     const offsetMs = Date.UTC(2100, 0, 1) - START_MS;
-    expect(await h.correction.set(aeat(h, { offsetMs }))).toEqual({
+    expect(await h.correction.set(byAdmin(h, { offsetMs }))).toEqual({
       set: false,
       reason: "target_invalid",
     });
@@ -650,15 +574,9 @@ describe("a set that asks nothing of the host", () => {
 });
 
 describe("what a seat or host may lack", () => {
-  it("answers not_stopped for the payment stop when the seat has no clock stop", async () => {
-    const h = harness({ seat: "no-stop-state" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "not_stopped" });
-    expect(h.calls).toEqual([]);
-  });
-
   it("sets but records nothing when the seat records no step", async () => {
     const h = harness({ seat: "no-step" });
-    expect(await h.correction.set(aeat(h))).toEqual({
+    expect(await h.correction.set(byAdmin(h))).toEqual({
       set: true,
       confirmationId: null,
       stepMs: H,
@@ -677,7 +595,7 @@ describe("what a seat or host may lack", () => {
 
   it("answers refused when the host answered but the clock did not move", async () => {
     const h = harness({ host: "answers-unmoved" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "refused" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "refused" });
     expect(h.log).toHaveBeenCalledWith("warn", "clock_correction.set_refused", {
       reason: "unmoved",
     });
@@ -688,7 +606,7 @@ describe("what a seat or host may lack", () => {
     const correction = clockCorrection({
       host: { clockStatus: vi.fn(), setClock: vi.fn() },
       backend: { assertRecordableAt: () => {} },
-      store: { clear: () => {}, witnesses: () => [] },
+      store: { clear: () => {} },
       clock: {
         now: () => ({ instant: new Date(), offsetMinutes: 0 }) as unknown as TrustedReading,
       },
@@ -700,7 +618,7 @@ describe("what a seat or host may lack", () => {
     });
     const answer = await correction.set({
       reason: "unusable",
-      source: "authority",
+      source: "admin",
       offsetMs: Date.UTC(2101, 0, 1) - Date.now(),
       measuredAt: { wallMs: Date.now(), monoMs: performance.now() },
       stepsSeen: 0,
@@ -715,10 +633,10 @@ describe("what a seat or host may lack", () => {
 describe("a stale offset", () => {
   it("refuses an offset measured before a step the correction made", async () => {
     const h = harness();
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
     const calls = h.calls.length;
 
-    expect(await h.correction.set(aeat(h, { stepsSeen: 0 }))).toEqual({
+    expect(await h.correction.set(byAdmin(h, { stepsSeen: 0 }))).toEqual({
       set: false,
       reason: "stale",
     });
@@ -727,7 +645,7 @@ describe("a stale offset", () => {
 
   it("refuses an offset measured before the wall clock moved against the steady clock", async () => {
     const h = harness();
-    const input = aeat(h);
+    const input = byAdmin(h);
     h.moveWall(5 * S);
     expect(await h.correction.set(input)).toEqual({ set: false, reason: "stale" });
     expect(h.calls).toEqual([]);
@@ -735,7 +653,7 @@ describe("a stale offset", () => {
 
   it("takes an offset when nothing moved since it was measured", async () => {
     const h = harness();
-    const input = aeat(h);
+    const input = byAdmin(h);
     expect(await h.correction.set(input)).toMatchObject({ set: true });
   });
 });
@@ -743,14 +661,14 @@ describe("a stale offset", () => {
 describe("clocks that move or cannot be read", () => {
   it("refuses stale when the wall clock steps while the host's status is read, re-anchoring", async () => {
     const h = harness({ statusMovesWallMs: 5 * S });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "stale" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "stale" });
     expect(h.hostSets).toEqual([]);
     expect(h.calls).toContain("reanchor");
   });
 
   it("measures the step on the steady clock when the boot-time clock cannot be read", async () => {
     const h = harness({ bootNaN: true });
-    expect(await h.correction.set(aeat(h))).toEqual({
+    expect(await h.correction.set(byAdmin(h))).toEqual({
       set: true,
       confirmationId: "confirmation-1",
       stepMs: H,
@@ -761,7 +679,7 @@ describe("clocks that move or cannot be read", () => {
 
   it("keeps a set's answer, and writes no second row, when the email duty throws", async () => {
     const h = harness({ onCorrectedThrows: true });
-    expect(await h.correction.set(aeat(h))).toEqual({
+    expect(await h.correction.set(byAdmin(h))).toEqual({
       set: true,
       confirmationId: "confirmation-1",
       stepMs: H,
@@ -775,13 +693,13 @@ describe("clocks that move or cannot be read", () => {
 describe("verifying the step", () => {
   it("verifies a step that lands within two seconds of the target", async () => {
     const h = harness({ missByMs: 2_000 });
-    expect(await h.correction.set(aeat(h))).toMatchObject({ set: true });
+    expect(await h.correction.set(byAdmin(h))).toMatchObject({ set: true });
     expect(h.seatCalls[0]).toMatchObject({ verified: true });
   });
 
   it("records a step that lands further than two seconds from the target as unverified", async () => {
     const h = harness({ missByMs: 2_001 });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "unverified" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "unverified" });
     expect(h.seatCalls).toHaveLength(1);
     expect(h.seatCalls[0]).toMatchObject({ verified: false, stepMs: H + 2_001 });
     expect(h.calls).toContain("reanchor");
@@ -789,7 +707,7 @@ describe("verifying the step", () => {
 
   it("asks the seat for nothing when the host refused and the clock did not move", async () => {
     const h = harness({ host: "refuses" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "refused" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "refused" });
     expect(h.calls).not.toContain("confirmClockStep");
     expect(h.calls).not.toContain("clear");
     expect(h.calls).toContain("reanchor");
@@ -798,7 +716,7 @@ describe("verifying the step", () => {
 
   it("records an unverified step when the host moved the clock and then never answered", async () => {
     const h = harness({ host: "times-out-after-moving" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "unverified" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "unverified" });
     expect(h.seatCalls).toHaveLength(1);
     expect(h.seatCalls[0]).toMatchObject({ verified: false, stepMs: H });
     expect(h.calls).toContain("reanchor");
@@ -806,7 +724,7 @@ describe("verifying the step", () => {
 
   it("records an unverified step when the host client threw after the clock moved, as for a lost answer", async () => {
     const h = harness({ host: "throws-after-moving" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "unverified" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "unverified" });
     expect(h.seatCalls).toHaveLength(1);
     expect(h.seatCalls[0]).toMatchObject({ verified: false, stepMs: H });
     expect(h.calls).toContain("reanchor");
@@ -815,7 +733,7 @@ describe("verifying the step", () => {
 
   it("answers host_unavailable when the host's socket was gone at the set, with the clock unmoved", async () => {
     const h = harness({ host: "missing" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "host_unavailable" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "host_unavailable" });
     expect(h.log).toHaveBeenCalledWith("warn", "clock_correction.set_refused", {
       reason: "missing",
     });
@@ -825,7 +743,7 @@ describe("verifying the step", () => {
 
   it("asks the seat for nothing when the host timed out with the clock unmoved", async () => {
     const h = harness({ host: "times-out" });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "refused" });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "refused" });
     expect(h.calls).not.toContain("confirmClockStep");
     expect(h.calls).toContain("reanchor");
   });
@@ -833,14 +751,13 @@ describe("verifying the step", () => {
 
 describe("one set at a time", () => {
   it("sends one set when two are started together on one measurement", async () => {
-    let stop: ClockStopState | null = STOPPED;
-    const h = harness({ stop: () => stop });
-    const first = aeat(h);
+    let unusable = true;
+    const h = harness({ unusable: () => unusable });
+    const first = byAdmin(h);
     const second = byAdmin(h);
     h.correction.addAnchor({
-      stepComing: async () => {},
       reanchor: async () => {
-        stop = null;
+        unusable = false;
       },
     });
 
@@ -852,13 +769,12 @@ describe("one set at a time", () => {
   });
 
   it("judges a set started after the first finished on its own", async () => {
-    let stop: ClockStopState | null = STOPPED;
-    const h = harness({ stop: () => stop });
+    let unusable = true;
+    const h = harness({ unusable: () => unusable });
     h.correction.addAnchor({
-      stepComing: async () => {},
-      reanchor: async () => void (stop = null),
+      reanchor: async () => void (unusable = false),
     });
-    await h.correction.set(aeat(h));
+    await h.correction.set(byAdmin(h));
 
     expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "not_stopped" });
     expect(h.hostSets).toHaveLength(1);
@@ -867,7 +783,7 @@ describe("one set at a time", () => {
   it("holds another user of the turn until a set has finished", async () => {
     const h = harness();
     const order: string[] = [];
-    const setting = h.correction.set(aeat(h)).then(() => order.push("set"));
+    const setting = h.correction.set(byAdmin(h)).then(() => order.push("set"));
     const other = h.correction.inTurn(async () => void order.push("other"));
     await Promise.all([setting, other]);
     expect(order).toEqual(["set", "other"]);
@@ -936,69 +852,6 @@ describe("a person's set", () => {
     expect(await h.correction.set(byAdmin(h, { offsetMs: 61 * S }))).toMatchObject({ set: true });
   });
 
-  it("refuses an administrator once AEAT disagreed with the box during the stop", async () => {
-    const h = harness({
-      stop: () => ({
-        ...STOPPED,
-        proof: "contrary",
-        contrary: { authority: authority(START_MS, H), devices: [] },
-      }),
-    });
-    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "witnessed" });
-    expect(h.hostSets).toEqual([]);
-  });
-
-  it("refuses an administrator and a staff member once AEAT agreed with the box during the stop", async () => {
-    const agreeing = {
-      ...STOPPED,
-      proof: "ready" as const,
-      agreeing: { authority: authority(START_MS, 0), devices: [] },
-    };
-    const h = harness({ stop: () => agreeing });
-    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "witnessed" });
-    expect(await h.correction.set(byStaff(h))).toEqual({ set: false, reason: "witnessed" });
-    expect(h.hostSets).toEqual([]);
-  });
-
-  it("goes on when only devices from two addresses disagree and AEAT has not spoken", async () => {
-    const h = harness({
-      stop: () => ({
-        ...STOPPED,
-        proof: "contrary",
-        contrary: {
-          authority: null,
-          devices: [device("a", "10.0.0.1", H), device("b", "10.0.0.2", H)],
-        },
-      }),
-    });
-    expect(await h.correction.set(byAdmin(h))).toMatchObject({ set: true });
-  });
-
-  it("refuses an administrator during clock.unusable once AEAT has a reading taken during it", async () => {
-    const before2024 = Date.parse("2020-01-01T00:00:00.000Z");
-    const h = harness({ unusable: () => true, witnesses: [authority(before2024, H)] });
-    expect(await h.correction.set(byAdmin(h, { reason: "unusable" }))).toEqual({
-      set: false,
-      reason: "witnessed",
-    });
-  });
-
-  it("does not count an AEAT disagreement kept from before clock.unusable began", async () => {
-    const h = harness({ unusable: () => true, witnesses: [authority(START_MS, H)] });
-    expect(await h.correction.set(byAdmin(h, { reason: "unusable" }))).toMatchObject({ set: true });
-  });
-
-  it("does not refuse AEAT's own set for AEAT's reading", async () => {
-    const h = harness({
-      stop: () => ({
-        ...STOPPED,
-        proof: "contrary",
-        contrary: { authority: authority(START_MS, H), devices: [] },
-      }),
-    });
-    expect(await h.correction.set(aeat(h))).toMatchObject({ set: true });
-  });
-
   it("passes the requester to the host as it is, never a person's name or a till's label", async () => {
     const h = harness();
     await h.correction.set(byStaff(h));
@@ -1017,95 +870,13 @@ describe("a person's set", () => {
   });
 });
 
-describe("AEAT answering while a person's set waits", () => {
-  const AEAT_DISAGREES: ClockStopState = {
-    ...STOPPED,
-    proof: "contrary",
-    contrary: { authority: authority(START_MS, H), devices: [] },
-  };
-
-  for (const [who, input] of [
-    ["an administrator", byAdmin],
-    ["a staff member", byStaff],
-  ] as const) {
-    it(`refuses ${who} witnessed when AEAT answers while the host's status is read`, async () => {
-      let stop = STOPPED;
-      const h = harness({ stop: () => stop, duringStatus: () => void (stop = AEAT_DISAGREES) });
-      expect(await h.correction.set(input(h))).toEqual({ set: false, reason: "witnessed" });
-      expect(h.hostSets).toEqual([]);
-      expect(h.calls).toContain("reanchor");
-    });
-
-    it(`refuses ${who} witnessed when AEAT answers while an anchor is told a step is coming`, async () => {
-      let stop = STOPPED;
-      const calls: string[] = [];
-      const h = harness({
-        stop: () => stop,
-        anchors: [
-          {
-            stepComing: async () => void (stop = AEAT_DISAGREES),
-            reanchor: async () => void calls.push("reanchor"),
-          },
-        ],
-      });
-      expect(await h.correction.set(input(h))).toEqual({ set: false, reason: "witnessed" });
-      expect(h.hostSets).toEqual([]);
-      expect(calls).toEqual(["reanchor"]);
-    });
-  }
-
-  it("refuses an administrator during clock.unusable when AEAT's reading arrives while an anchor is told", async () => {
-    const before2024 = Date.parse("2020-01-01T00:00:00.000Z");
-    const witnesses: ClockWitness[] = [];
-    const h = harness({
-      unusable: () => true,
-      witnesses,
-      anchors: [
-        {
-          stepComing: async () => void witnesses.push(authority(before2024, H)),
-          reanchor: async () => {},
-        },
-      ],
-    });
-    expect(await h.correction.set(byAdmin(h, { reason: "unusable" }))).toEqual({
-      set: false,
-      reason: "witnessed",
-    });
-    expect(h.hostSets).toEqual([]);
-  });
-
-  it("still sets AEAT's own set when AEAT's reading arrives while an anchor is told", async () => {
-    let stop = STOPPED;
-    const h = harness({
-      stop: () => stop,
-      anchors: [{ stepComing: async () => void (stop = AEAT_DISAGREES), reanchor: async () => {} }],
-    });
-    expect(await h.correction.set(aeat(h))).toMatchObject({ set: true });
-  });
-
-  it("refuses not_stopped, re-anchoring, when the stop ends while an anchor is told", async () => {
-    let stop: ClockStopState | null = STOPPED;
-    const calls: string[] = [];
-    const h = harness({
-      stop: () => stop,
-      anchors: [
-        {
-          stepComing: async () => void (stop = null),
-          reanchor: async () => void calls.push("reanchor"),
-        },
-      ],
-    });
-    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "not_stopped" });
-    expect(h.hostSets).toEqual([]);
-    expect(calls).toEqual(["reanchor"]);
-  });
-
+describe("a person's set judged again once the waits are over", () => {
   it("refuses a staff member when the till's check refuses once the waits are over", async () => {
     const h = harness();
     const admit = vi
-      .fn<() => Promise<"authority_pending" | null>>()
+      .fn<() => Promise<"not_admitted" | null>>()
       .mockResolvedValueOnce(null)
-      .mockResolvedValue("authority_pending");
+      .mockResolvedValue("not_admitted");
     expect(await h.correction.set(byStaff(h, { admit }))).toEqual({
       set: false,
       reason: "authority_pending",
@@ -1118,11 +889,9 @@ describe("AEAT answering while a person's set waits", () => {
     const h = harness({
       anchors: [
         {
-          stepComing: async () => void calls.push("first.stepComing"),
           reanchor: async () => void calls.push("first.reanchor"),
         },
         {
-          stepComing: async () => void calls.push("second.stepComing"),
           reanchor: async () => void calls.push("second.reanchor"),
         },
       ],
@@ -1145,7 +914,7 @@ describe("AEAT answering while a person's set waits", () => {
 });
 
 describe("a staff member's set", () => {
-  for (const reason of ["not_start_up", "authority_pending", "not_admitted"] as const) {
+  for (const reason of ["not_start_up", "not_admitted"] as const) {
     it(`answers ${reason} when the till's check refuses it, telling no anchor and asking the host nothing`, async () => {
       const h = harness();
       const admit = vi.fn(async () => reason);
@@ -1165,7 +934,7 @@ describe("a staff member's set", () => {
   });
 
   it("answers not_stopped, not the till's refusal, once the stop has ended", async () => {
-    const h = harness({ stop: () => null });
+    const h = harness({ unusable: () => false });
     const admit = vi.fn(async () => "not_start_up" as const);
     expect(await h.correction.set(byStaff(h, { admit }))).toEqual({
       set: false,
@@ -1208,7 +977,7 @@ describe("a set at the start", () => {
       let sets = 0;
       const start = waitingStart(() => sets);
       if (by !== null) start.state.confirm(by, { "node-1": 3 });
-      const h = harness({ stop: () => null, start, duringSet: () => void sets++ });
+      const h = harness({ start, duringSet: () => void sets++ });
       expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
       expect(h.hostSets).toHaveLength(1);
       expect(h.calls).toContain("clockStopState");
@@ -1218,60 +987,10 @@ describe("a set at the start", () => {
     },
   );
 
-  it("writes the row of a set while the start waits at reason behind_chain when that stop also holds, and confirms by a person", async () => {
-    let sets = 0;
-    const start = waitingStart(() => sets);
-    const h = harness({ start, duringSet: () => void sets++ });
-    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
-    expect(h.seatCalls).toHaveLength(1);
-    expect(h.seatCalls[0]).toMatchObject({ reason: "behind_chain", source: "staff" });
-    expect(start.state.status).toBe("by_person");
-    expect(start.state.mark).toEqual({ "node-1": 8 });
-  });
-
-  it.each([
-    [
-      "disagreed",
-      {
-        ...STOPPED,
-        proof: "contrary" as const,
-        contrary: { authority: authority(START_MS, H), devices: [] },
-      },
-    ],
-    [
-      "agreed",
-      {
-        ...STOPPED,
-        proof: "ready" as const,
-        agreeing: { authority: authority(START_MS, 0), devices: [] },
-      },
-    ],
-  ])(
-    "refuses a start set witnessed while the clock-behind stop holds and AEAT %s with the box during it, leaving the start waiting",
-    async (_, stop) => {
-      const start = waitingStart(() => 0);
-      const h = harness({ stop: () => stop, start });
-      expect(await h.correction.set(byStaff(h, { reason: "start" }))).toEqual({
-        set: false,
-        reason: "witnessed",
-      });
-      expect(h.hostSets).toEqual([]);
-      expect(h.seatCalls).toEqual([]);
-      expect(start.state.status).toBe("waiting");
-    },
-  );
-
-  it("does not count AEAT's reading for a start set when no clock-behind stop holds", async () => {
-    const start = waitingStart(() => 0);
-    const h = harness({ stop: () => null, witnesses: [authority(START_MS, H)], start });
-    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
-    expect(h.seatCalls[0]).toMatchObject({ reason: "start" });
-  });
-
   it("refuses not_stopped once the start is confirmed by the internet, asking the host nothing", async () => {
     const start = waitingStart(() => 0);
     start.state.confirm("by_internet", { "node-1": 3 });
-    const h = harness({ stop: () => null, start });
+    const h = harness({ start });
     expect(await h.correction.set(byStaff(h, { reason: "start" }))).toEqual({
       set: false,
       reason: "not_stopped",
@@ -1285,7 +1004,6 @@ describe("a set at the start", () => {
   it("still answers set when the heads cannot be read after the step, leaving the start waiting", async () => {
     const state = startClockState();
     const h = harness({
-      stop: () => null,
       start: {
         state,
         heads: () => {
@@ -1307,13 +1025,18 @@ describe("a set at the start", () => {
 
   it.each([
     [
-      "a step AEAT asked for that the host moved but did not verify",
+      "a step an administrator asked for that the host moved but did not verify",
       "by_person",
       "waiting",
       "times-out-after-moving",
     ],
     ["a step the host refused", "by_devices", "by_devices", "refuses"],
-    ["a step AEAT asked for that the host verified", "by_devices", "by_devices", "sets"],
+    [
+      "a step an administrator asked for that the host verified",
+      "by_devices",
+      "by_devices",
+      "sets",
+    ],
     [
       "a step the host moved but did not verify",
       "by_internet",
@@ -1324,7 +1047,7 @@ describe("a set at the start", () => {
     const state = startClockState();
     state.confirm(by, { "node-1": 3 });
     const h = harness({ host, start: { state, heads: () => ({ "node-1": 8 }) } });
-    expect(await h.correction.set(aeat(h))).toMatchObject({ set: host === "sets" });
+    expect(await h.correction.set(byAdmin(h))).toMatchObject({ set: host === "sets" });
     expect(state.status).toBe(after);
     expect(state.mark).toEqual({ "node-1": 3 });
   });
@@ -1345,12 +1068,11 @@ describe("a set at the start", () => {
         start: { state, heads: () => ({ "node-1": 8 }) },
         anchors: [
           {
-            stepComing: async () => {},
             reanchor: async () => void seen.push({ status: state.status, holds: gate() }),
           },
         ],
       });
-      expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "unverified" });
+      expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "unverified" });
       expect(seen).toEqual([{ status: "waiting", holds: true }]);
       expect(h.seatCalls).toHaveLength(1);
       expect(h.log).toHaveBeenCalledWith("warn", "clock_start.step_unverified", { stepMs: H });
@@ -1358,7 +1080,7 @@ describe("a set at the start", () => {
   );
 
   it.each([
-    ["AEAT's set", "by_devices", "by_devices"],
+    ["an administrator's set", "by_devices", "by_devices"],
     ["a staff member's set at the start", "by_devices", "by_person"],
     ["a staff member's set at the start", "by_person", "by_person"],
   ] as const)(
@@ -1371,7 +1093,6 @@ describe("a set at the start", () => {
       let reached!: () => void;
       const asked = new Promise<void>((resolve) => (reached = resolve));
       const h = harness({
-        ...(kind === "AEAT's set" ? {} : { stop: () => null }),
         start: { state, heads: () => ({ "node-1": 8 }) },
         duringSet: async () => {
           reached();
@@ -1386,7 +1107,7 @@ describe("a set at the start", () => {
       expect(gate()).toBe(false);
 
       const set = h.correction.set(
-        kind === "AEAT's set" ? aeat(h) : byStaff(h, { reason: "start" }),
+        kind === "an administrator's set" ? byAdmin(h) : byStaff(h, { reason: "start" }),
       );
       await asked;
       expect({ status: state.status, holds: gate() }).toEqual({ status: by, holds: true });
@@ -1396,17 +1117,6 @@ describe("a set at the start", () => {
       expect({ status: state.status, holds: gate() }).toEqual({ status: after, holds: false });
     },
   );
-
-  it("refuses AEAT's set at the start while the start waits", async () => {
-    const start = waitingStart(() => 0);
-    const h = harness({ stop: () => null, start });
-    expect(await h.correction.set(aeat(h, { reason: "start" }))).toEqual({
-      set: false,
-      reason: "not_admitted",
-    });
-    expect(h.hostSets).toEqual([]);
-    expect(start.state.status).toBe("waiting");
-  });
 });
 
 describe("the start check's device confirmation and a set", () => {
@@ -1422,11 +1132,11 @@ describe("the start check's device confirmation and a set", () => {
     state: StartClockState,
     store: ClockWitnessStore,
     heads: () => Promise<ChainHeads>,
-    isPrimary: () => boolean = () => true,
+    noStop: () => void = () => {},
   ) {
     const watchHeads = vi.fn(heads);
     const watch = createClockWatch({
-      backend: { assertRecordableAt: () => {}, clockStopState: async () => null },
+      backend: { assertRecordableAt: () => {} },
       store,
       clock: {
         now: () =>
@@ -1435,19 +1145,12 @@ describe("the start check's device confirmation and a set", () => {
             offsetMinutes: 60,
           }) as unknown as TrustedReading,
       },
-      wall: () => h.measured().wallMs,
-      monotonic: () => h.measured().monoMs,
-      boot: { readBoot: () => ({ ms: Number.NaN, id: null }), elapsed: () => h.measured().monoMs },
-      nodeId: "node-1",
       read: (fn) => fn(TX),
-      transaction: (fn) => fn(TX),
       correction: h.correction,
+      startUp: { noStop },
       start: { state, clockStatus: async () => UNSYNCHRONISED, heads: watchHeads },
-      filesRecords: () => true,
-      isPrimary,
       log: () => {},
     });
-    h.correction.addAnchor(watch);
     for (const [id, address] of AGREEING) store.noteDevice(id, address, START_MS, h.measured());
     /** Runs one look; resolves once it has finished. */
     const look = (): Promise<void> => watch.check();
@@ -1465,7 +1168,6 @@ describe("the start check's device confirmation and a set", () => {
     let looked: Promise<void> | undefined;
     let duringSet: string | undefined;
     const h = harness({
-      stop: () => null,
       store,
       start: { state, heads: async () => ({ "node-1": 8 }) },
       host: "times-out-after-moving",
@@ -1502,7 +1204,6 @@ describe("the start check's device confirmation and a set", () => {
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
     const h = harness({
-      stop: () => null,
       store,
       start: { state, heads: async () => ({ "node-1": 8 }) },
       host: "times-out-after-moving",
@@ -1537,18 +1238,17 @@ describe("the start check's device confirmation and a set", () => {
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
     const h = harness({
-      stop: () => null,
       store,
       start: { state, heads: async () => ({ "node-1": 8 }) },
       duringSet: () => released,
     });
-    // Asked after the start's look and before the step rows, which wait for the set's turn.
-    const isPrimary = vi.fn(() => true);
-    const w = watching(h, state, store, async () => ({ "node-1": 7 }), isPrimary);
+    // Called once the start's look is over.
+    const lookOver = vi.fn();
+    const w = watching(h, state, store, async () => ({ "node-1": 7 }), lookOver);
     const setting = h.correction.set(byStaff(h, { reason: "start" }));
     await vi.waitFor(() => expect(h.hostSets).toHaveLength(1));
     const looking = w.look();
-    await vi.waitFor(() => expect(isPrimary).toHaveBeenCalled(), { timeout: 200 });
+    await vi.waitFor(() => expect(lookOver).toHaveBeenCalled(), { timeout: 200 });
     expect(w.watchHeads).not.toHaveBeenCalled();
     release();
     await looking;

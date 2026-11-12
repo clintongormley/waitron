@@ -468,7 +468,6 @@ declare module "@waitron/shared" {
       workingOrderId: string;
       reason:
         | "disk_full"
-        | "clock_behind_chain"
         | "clock_unusable"
         | "clock_unconfirmed"
         | "issuance_refused"

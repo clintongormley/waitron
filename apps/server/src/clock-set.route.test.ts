@@ -209,22 +209,16 @@ async function stoppedBox(
       readHealth: () => Promise.reject(new Error("not read here")),
       freeSpace: () => Promise.reject(new Error("not freed here")),
       restart: () => {},
-      venue: { language: "en" },
       clockConfirm: {
         backend,
-        witnesses: () => witnesses.witnesses(),
-        clearWitnesses: () => witnesses.clear(),
         clock,
-        nodeId: venue.cfg.nodeId,
         steady: () => steadyMs,
-        readBoot: () => BOOT,
         requestFromBox: () => fromBox,
         devMode: false,
         ...(options.noCorrection === true
           ? {}
           : {
               correction: {
-                inTurn: correction.inTurn,
                 set: correction.set,
                 steps: () => correction.steps() - stepsBehind,
               },
@@ -272,15 +266,6 @@ async function useDevice(box: Box, cookie: string | undefined, offsetMs: number)
   return setWith(box, cookie, {
     challengeId: asked.json.challengeId,
     deviceAt: boxTime(box) + offsetMs,
-  });
-}
-
-/** AEAT's reading, taken during the stop, putting the true time `aheadMs` after the box's. */
-function noteAuthority(box: Box, aheadMs: number): void {
-  box.witnesses.noteAuthority({
-    authorityMs: boxTime(box) - 30_000 + aheadMs,
-    uncertaintyMs: 500,
-    at: { wallMs: boxTime(box) - 30_000, monoMs: 0 },
   });
 }
 
@@ -407,8 +392,6 @@ it("refuses a device's time that would set the clock before 28-10-2024", async (
 it("sets a clock that reads a date before 28-10-2024, as that stop", async () => {
   const box = await stoppedBox(10 * MINUTE);
   const trueTime = latest().at.getTime();
-  // Kept from the stop before this one: not taken during it, and not what sets the clock.
-  noteAuthority(box, 10 * MINUTE);
   box.setClock(Date.UTC(2020, 0, 1, 12));
 
   const answer = await useDevice(box, mario.cookie, trueTime - boxTime(box));

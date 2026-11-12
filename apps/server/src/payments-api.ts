@@ -216,7 +216,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.not_refundable": 409,
   "payment.refund_exceeds_capture": 422,
   "sale.number_reused": 409,
-  "clock.behind_chain": 409,
   "clock.unconfirmed": 409,
   "clock.unusable": 409,
   "pin.invalid": 401,

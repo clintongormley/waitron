@@ -2980,7 +2980,7 @@ show no privacy link, and the sign-in page offers no working Google sign-in. Thi
 page's locales read and password sign-in already go through `withTransaction` there (the S1b plan's
 decision 3).
 
-Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
+_2026-11-12, A1420 PR 6: both routes below are deleted._ Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
 one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
 `apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain.
 
@@ -4621,7 +4621,7 @@ open one with a second closing that cannot tell whose check opened earlier" and 
 one when a second closing that cannot tell opened at the same reading",
 `clock-stop-incidents.test.ts`). A list never folds into a "cannot tell": it has a sale and the
 "cannot tell" has none ("lists a later closing's wrongly dated sales beside an open alert that
-cannot tell, whatever sale each names", `apps/server/src/clock-confirm.route.test.ts`). A list
+cannot tell, whatever sale each names", `clock-confirm.route.test.ts` (deleted by A1420 PR 6)). A list
 still folds into an open list whose earliest record is the same sale; `GET /api/box/clock-misdated`
 gives a list only for a confirmation an open alert names (`readMisdatedOpen`,
 `apps/server/src/box-health.ts`), and `GET /api/box/clock-misdated/handled` only for one a handled
@@ -4644,7 +4644,7 @@ time that the system is suspended." Those three were read on 2026-10-23, not run
 `CLOCK_MONOTONIC`, which clock_gettime(2) says "does not count time that the system is suspended",
 so an hour asleep looked like the wall clock stepping an hour forward and recorded a
 `clock.behind_chain_disproved` for the sales under a lift (the review's simulated timings; the
-"sleeps an hour" case in `apps/server/src/clock-watch.elapsed.test.ts`, which failed before this).
+"sleeps an hour" case in `clock-watch.elapsed.test.ts` (deleted by A1420 PR 6), which failed before this).
 Across a setting of the wall clock, `/proc/uptime` moved 0.020 s while the wall clock moved
 120.25 s (slice 9b's M3, a GitHub Linux runner,
 [run 41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824)). Not
@@ -4683,7 +4683,7 @@ certificate-authenticated `consultar` reply (P11) — no AEAT certificate was us
 Guards: `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
 `packages/fiscal-verifactu/src/clock-confirmation.test.ts`, `clock-checks.test.ts`,
 `clock-misdated.test.ts` and `clock-stop-incidents.test.ts` beside them, and
-`apps/server/src/clock-confirm.route.test.ts` — weaker than the rule, because they cover the readings,
+`clock-confirm.route.test.ts` (deleted by A1420 PR 6) — weaker than the rule, because they cover the readings,
 closings and presses they name. What nothing checks:
 
 - that the stop reads `clock_confirmations` only through `clockBehindChain`. A new file that reads
@@ -4819,8 +4819,7 @@ covered only once that file lists it.
 Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
 the container — the **host service** — sets it when the server asks. The box sets its clock
-inside a stop it already has (the clock behind the latest record, or before 28-10-2024,
-`clock.unusable`), and, from a till's time, while a start waits for its time to be
+inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time, while a start waits for its time to be
 confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
 restore and handover pages' clock step. It opens no stop of its own.
 
@@ -6163,7 +6162,7 @@ for one step back**, with no limit on the gap; once a record is written under it
 held to the minute against the latest time written since. Guards:
 `packages/fiscal-verifactu/src/clock-behind.restart.test.ts`,
 `packages/fiscal-verifactu/src/clock-confirmation.test.ts` and
-`apps/server/src/clock-confirm.route.test.ts`, weaker than the rule — they cover the readings and
+`clock-confirm.route.test.ts` (deleted by A1420 PR 6), weaker than the rule — they cover the readings and
 requests they name. Receipt:
 [conventions-data.md](conventions-data.md#a-confirmation-of-the-clock-lifts-the-stop-for-one-step-back).
 
@@ -6594,11 +6593,13 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Box administration holder's own device, the device showing the clock step of the setup page (under its
   owner's pass), the restore page (under its recovery key or kit) or the handover page (signed in as
   a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
-  2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone
+  2026-11-12: "add \"This device\" to #2693 now") — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
   clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
   full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
-  2026-11-10: "we rely on NTP only, we don't bother about AEAT"). Guards:
+  2026-11-10: "we rely on NTP only, we don't bother about AEAT"). **Waitron never reads AEAT's time
+  except to warn of drift from its filing replies** (owner, 2026-11-11 14:34: "Instead we rely on
+  NTP"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
   `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than

@@ -2,7 +2,6 @@ import type { Transaction } from "@waitron/db";
 import type { AlertSource } from "@waitron/module";
 import "./errors.js";
 import type { ClockServiceStatus } from "./box-host-client.js";
-import type { AuthorityTimeSample } from "./clock-witnesses.js";
 
 /** Whether the system clock is NTP-synchronised, as the box's clock service reads it from the
  * host's `timedatectl`. `source: "unavailable"` (never `warn: true`) where that service does not
@@ -21,15 +20,10 @@ export async function checkTimeHealth(deps: {
 export type AuthorityClockStatus =
   { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
 
-const HALF_SECOND_MS = 500;
-
-export function createAuthorityClockStatus(
-  deps: { onSample?: (sample: AuthorityTimeSample) => void; monotonic?: () => number } = {},
-): {
+export function createAuthorityClockStatus(): {
   observe(sample: { authorityTimestamp: string | null; sentAt: Date; receivedAt: Date }): void;
   read(): AuthorityClockStatus;
 } {
-  const monotonic = deps.monotonic ?? (() => performance.now());
   let status: AuthorityClockStatus = { state: "unknown" };
   return {
     read: () => status,
@@ -77,17 +71,12 @@ export function createAuthorityClockStatus(
         driftSeconds: Math.round((midpoint - authority) / 1000),
         measuredAt: receivedAt.toISOString(),
       };
-      deps.onSample?.({
-        authorityMs: authority + HALF_SECOND_MS,
-        uncertaintyMs: (received - sent) / 2 + HALF_SECOND_MS,
-        at: { wallMs: midpoint, monoMs: monotonic() - (received - midpoint) },
-      });
     },
   };
 }
 
-/** `stopped` answers whether payments are stopped for the clock; while they are, the drift alert's
- * "you can continue selling" would be false, so it is left out whoever is looking. */
+/** `stopped` answers whether payments wait for the start's time to be confirmed; while they do, the
+ * drift alert's "you can continue selling" would be false, so it is left out whoever is looking. */
 export function authorityClockAlertSource(
   read: () => AuthorityClockStatus,
   stopped?: (tx: Transaction, now: Date) => Promise<boolean>,
