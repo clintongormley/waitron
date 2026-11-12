@@ -1651,6 +1651,63 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     ]);
   });
 
+  it("raises the alert for a refund pending over an hour whose answer cannot be recorded", async () => {
+    const { billId, paymentId, refundId, row } = await pendingRefund();
+    venue.db.run(sql`delete from incidents where code = 'payment.refund_unresolved'`);
+    venue.db.run(
+      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending' and id <> ${refundId}`,
+    );
+    const pass = (ms: number) =>
+      withProvider(
+        {
+          lookups: {
+            kind: "match",
+            providerRefundRef: randomUUID(),
+            outcome: "completed",
+            providerStatus: "SUCCESSFUL",
+          },
+        },
+        () =>
+          settlePendingBillPayments({
+            admission: testTradingAdmission(),
+            db: venue.db,
+            backend: venue.backend,
+            clock: clockPlus(ms),
+            cfg: venue.cfg,
+            refundProviderFor: (name) => venue.pool.get(name),
+            attendance: () => Promise.reject(new Error("attendance unavailable")),
+          }),
+      );
+    const alerts = () =>
+      inTx(venue, (tx) =>
+        tx.select().from(incidents).where(eq(incidents.code, "payment.refund_unresolved")),
+      );
+
+    const over = await pass(HOUR + 60_000);
+    const raised = await alerts();
+    const again = await pass(HOUR + 31 * 60_000);
+
+    expect(over.errors).toContainEqual({ refundId, error: "Error: attendance unavailable" });
+    expect(raised).toMatchObject([
+      {
+        source: "payment_check",
+        severity: "warning",
+        params: {
+          refundId,
+          billPaymentId: paymentId,
+          workingOrderId: billId,
+          amount: "5.00",
+          pendingSince: row.createdAt,
+        },
+      },
+    ]);
+    expect(over.refundsUnresolved).toBe(1);
+    expect(again.errors).toContainEqual({ refundId, error: "Error: attendance unavailable" });
+    expect(await alerts()).toHaveLength(1);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending" });
+  });
+
   it("lists the pending refunds nothing is driving, with their payment, bill and send", async () => {
     const { billId, paymentId, refundId } = await pendingRefund();
 
