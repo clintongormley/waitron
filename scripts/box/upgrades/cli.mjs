@@ -36,7 +36,7 @@ async function pending(boxDirectory) {
 // Mutating callers hold <box>.upgrade.lock; status takes no lock and writes nothing.
 export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = command } = {}) {
   if (
-    !["apply", "status", "restore", "keep", "offline-recovery"].includes(verb) ||
+    !["apply", "status", "restore", "keep", "recover", "offline-recovery"].includes(verb) ||
     !boxDirectory?.startsWith("/")
   )
     throw new Error(
@@ -81,7 +81,7 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
     boxDirectory,
     offline,
     run,
-    choice: offline ? undefined : verb,
+    choice: offline || verb === "recover" ? undefined : verb,
   });
 }
 

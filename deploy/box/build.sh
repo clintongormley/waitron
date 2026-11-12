@@ -34,6 +34,20 @@ install -d -m 0755 "$root/opt/waitron" "$root/etc/dracut.conf.d"
 install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron-dev-start"
 install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"
 systemctl --root="$root" enable waitron-dev.service
+install -D -m 0755 "$repo/deploy/box/upgrade-restart.sh" "$root/usr/local/lib/waitron/upgrade-restart.sh"
+for unit in waitron-app waitron-upgrade-recovery; do
+  install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"
+done
+install -D -m 0644 "$repo/deploy/box/docker-waitron-disk.conf" "$root/etc/systemd/system/waitron-upgrade-recovery.service.d/waitron-disk.conf"
+# Recovery precedes Docker; only the disk gate may precede recovery.
+sed -i 's/ waitron-upgrade-recovery.service//g' "$root/etc/systemd/system/waitron-upgrade-recovery.service.d/waitron-disk.conf"
+systemctl --root="$root" enable waitron-app.service waitron-upgrade-recovery.service
+for module in cli host transaction copy candidate restart; do
+  install -D -m 0644 "$repo/scripts/box/upgrades/$module.mjs" "$root/opt/waitron-host/box/upgrades/$module.mjs"
+done
+install -D -m 0755 "$repo/scripts/box/upgrades/bootstrap.sh" "$root/opt/waitron-host/box/upgrades/bootstrap.sh"
+chroot "$root" bash /opt/waitron-host/box/upgrades/bootstrap.sh /opt/waitron-host /opt/waitron
+install -m 0644 "$root/opt/waitron-host/node-v26.7.0/LICENSE" "$root/app/third-party/node-host-LICENSE"
 install -d -m 0755 "$root/opt/waitron-host/box"
 for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host host-protocol wifi-record wifi-boot-copy; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"

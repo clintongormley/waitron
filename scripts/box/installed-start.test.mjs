@@ -54,6 +54,7 @@ case "$name" in
  systemd-cryptsetup) echo chip >> "$WRITES"; exit "\${CHIP_EXIT:-0}" ;;
  tpm2_pcrextend) echo "extend:$(/bin/cat "$B3_OPEN_MARKER")" >> "$WRITES"; exit "\${EXTEND_EXIT:-0}" ;;
  reboot) echo reboot >> "$WRITES" ;;
+ systemctl) echo "systemctl $*" >> "$WRITES"; exit "\${APP_START_EXIT:-0}" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
  node)
   if [ "$1" = /opt/waitron-host/box/installer-return.mjs ]; then
@@ -112,6 +113,7 @@ for (const name of [
   "cmp",
   "sfdisk",
   "apparmor_parser",
+  "systemctl",
   "docker",
   "node",
   "systemd-cryptsetup",
@@ -241,9 +243,9 @@ describe("installed startup", () => {
   const bashEnv = join(scratch, "bash-env");
   writeFileSync(bashEnv, `cd() { builtin cd "$B3_TEST_CWD"; }\n`);
   it.each([
-    ["0", 43, "apparmor\ndocker compose up -d --pull never profile=waitron-print-agent\n"],
-    ["7", 7, "apparmor\n"],
-  ])("loads AppArmor before Compose and stops on refusal (%s)", (apparmorExit, code, calls) => {
+    ["43", 43, "systemctl start waitron-app.service\n"],
+    ["7", 7, "systemctl start waitron-app.service\n"],
+  ])("starts through the application owner and stops on refusal (%s)", (startExit, code, calls) => {
     const writes = join(scratch, "startup-calls");
     writeFileSync(writes, "");
     const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
@@ -254,7 +256,7 @@ describe("installed startup", () => {
         BASH_ENV: bashEnv,
         B3_TEST_CWD: scratch,
         WRITES: writes,
-        APPARMOR_EXIT: apparmorExit,
+        APP_START_EXIT: startExit,
       },
       encoding: "utf8",
       timeout: 5000,

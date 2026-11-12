@@ -96,3 +96,36 @@ it("clears an empty interrupted attempt through existing recovery without contac
   expect(await runUpgradeCli(["restore", f.box], { run })).toBeNull();
   await expect(fs.access(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
 });
+
+it("holds an interrupted manual candidate on startup without choosing restore or keep", async () => {
+  const f = await fixture();
+  const state = join(f.box, "state");
+  await fs.mkdir(state);
+  await fs.mkdir(f.directory, { recursive: true });
+  await fs.writeFile(
+    join(f.directory, "attempt.json"),
+    JSON.stringify({
+      mode: "manual",
+      phase: "candidate",
+      copied: true,
+      paths: [state],
+      images: { old: { app: "sha256:old" }, candidate: { app: "sha256:new" } },
+    }),
+  );
+  const calls = [];
+  const result = await runUpgradeCli(["recover", f.box], {
+    run: async (file, args) => {
+      calls.push([file, ...args]);
+      if (args[0] === "inspect")
+        throw Object.assign(new Error("missing check container"), {
+          code: 1,
+          stderr: "No such container",
+        });
+      return { stdout: "" };
+    },
+  });
+  expect(result).toMatchObject({ phase: "awaiting-choice", failure: "checks interrupted" });
+  expect(JSON.parse(await fs.readFile(join(f.directory, "attempt.json"), "utf8"))).toEqual(result);
+  expect(calls.some((args) => args.includes("stop"))).toBe(true);
+  expect(calls.some((args) => args.includes("up"))).toBe(false);
+});

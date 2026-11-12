@@ -12,9 +12,7 @@ box="$(pwd -P)"
 if [ -d "${box}.upgrades" ] && [ -n "$(find "${box}.upgrades" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
   refuse upgrade-pending
 fi
-apparmor_parser -r /etc/apparmor.d/waitron-print-agent
-export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
-docker compose up -d --pull never
+systemctl start waitron-app.service
 status=""
 for attempt in $(seq 1 90); do
   status="$(curl -ksS --max-time 5 -o /run/waitron-status.json -w '%{http_code}' https://127.0.0.1/setup-api/status)" || status=""
