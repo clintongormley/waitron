@@ -953,7 +953,6 @@ interface JoinMerge {
   seats: number | null;
 }
 
-/** A join's merge, absent for none: `moving` or `target` is the joined table, the other one the party must hold. */
 function requireMerge(value: unknown, tableId: string): JoinMerge | null {
   if (value === undefined) return null;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("merge");

@@ -2106,26 +2106,24 @@ it("reset slots prefer recorded placement size to kept size for a saved member",
   await giveKeptSize(v, master.a!, { width: 2, height: 2 });
   await inTx(v, async (tx) => {
     const [plan] = await tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId));
-    await tx
-      .insert(floorPlanPlacements)
-      .values({
-        planId: plan!.id,
-        planTableId: master.a!,
-        x: 90,
-        y: 90,
-        width: 4,
-        height: 6,
-        shape: "rect",
-        rotation: 0,
-      });
+    await tx.insert(floorPlanPlacements).values({
+      planId: plan!.id,
+      planTableId: master.a!,
+      x: 90,
+      y: 90,
+      width: 4,
+      height: 6,
+      shape: "rect",
+      rotation: 0,
+    });
   });
   await reset(zoneId);
   expect(await todayRow(table.a!)).toMatchObject({ x: 20, y: 31, width: 4, height: 6 });
   expect(await todayRow(table.b!)).toMatchObject({ x: 24, y: 30, width: 8, height: 8 });
 });
 
-it.each(["guests", "clearing", "food", "another group"] as const)(
-  "a saved group waits for a member held by %s",
+it.each(["guests", "clearing", "food"] as const)(
+  "a saved-group reset handles a member held by %s",
   async (heldBy) => {
     const { zoneId, table, master } = await plannedZone(
       v,
@@ -2137,16 +2135,6 @@ it.each(["guests", "clearing", "food", "another group"] as const)(
       NOW,
     );
     const partyId = heldBy === "guests" ? (await seat(v, table.t1!)).partyId : null;
-    if (heldBy === "another group")
-      await inTx(v, (tx) =>
-        writeMerge(tx, v.cfg, {
-          movingId: table.t1!,
-          targetId: table.t3!,
-          side: "right",
-          seats: 8,
-          free: true,
-        }),
-      );
     if (heldBy === "clearing")
       await inTx(v, (tx) =>
         tx
@@ -2191,5 +2179,46 @@ it.each(["guests", "clearing", "food", "another group"] as const)(
         [table.t1!, table.t2!].sort(),
       );
     }
+  },
+);
+
+it.each(["contained", "outside"] as const)(
+  "late saved-group formation handles a %s manual group",
+  async (kind) => {
+    const { zoneId, table, master } = await plannedZone(
+      v,
+      [
+        { key: "a", place: null },
+        { key: "b", place: null },
+        { key: "c", place: null },
+        { key: "spare", place: { x: 80, y: 80 } },
+        { key: "long", seats: 10, place: { x: 10, y: 20 }, partKeys: ["a", "b", "c"] },
+      ],
+      NOW,
+    );
+    const other = await inTx(v, (tx) =>
+      createTable(tx, v.cfg, { label: `Held ${floorLabelSuffix()}`, zoneId: v.tables.zoneId }),
+    );
+    const heldLabel = (await tableRow(v, other.id)).label;
+    await editMaster(master.c!, { label: heldLabel });
+    await reset(zoneId);
+    const targetId = kind === "contained" ? table.a! : table.spare!;
+    await inTx(v, (tx) =>
+      writeMerge(tx, v.cfg, { movingId: table.b!, targetId, side: "right", seats: 8, free: true }),
+    );
+    const before = await mergeOf(v, table.b!);
+    await inTx(v, (tx) =>
+      tx
+        .update(diningTables)
+        .set({ label: `${heldLabel} freed` })
+        .where(eq(diningTables.id, other.id)),
+    );
+    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
+    const after = await mergeOf(v, table.b!);
+    if (kind === "outside") expect(after).toEqual(before);
+    else
+      expect(after!.members.map((m) => m.tableId).sort()).toEqual(
+        [table.a!, table.b!, table.c!].sort(),
+      );
   },
 );

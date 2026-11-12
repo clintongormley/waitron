@@ -1793,9 +1793,6 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
-  /** While its split is out, the window keeps what it showed unless the table it was opened on has
-   * left the floor read; otherwise it shows that table's joined table, or its group, as the floor
-   * reads it now. */
   #splitShown(splitting: SplittingJoined): SplitShown | undefined {
     if (splitting.sent !== null)
       return this.tables.some((each) => each.id === splitting.tableId) ? splitting.sent : undefined;

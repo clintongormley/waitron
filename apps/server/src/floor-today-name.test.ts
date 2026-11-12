@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, floorTodayTables } from "@waitron/db";
+import { floorPlanTables, floorTodayJoins, floorTodayTables } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
@@ -821,4 +821,27 @@ describe("a reset clears today's name", () => {
       }
     },
   );
+});
+
+it("reserves the saved group name after splitting, while its own group may restore it", async () => {
+  const { table, master, zoneId } = await LONG_TABLE();
+  await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, new Date(), "due"));
+  const [saved] = await inTx(v, (tx) =>
+    tx.select().from(floorPlanTables).where(eq(floorPlanTables.id, master.long!)),
+  );
+  await rename(table.c3!, suffixed("Dinner"));
+  await rename(table.c3!, saved!.label);
+  expect(await groupName(table.c3!)).toBe(saved!.label);
+  await inTx(v, (tx) =>
+    splitOff(tx, v.cfg, REMOVALS, new Date(), {
+      tableId: table.c3!,
+      partIds: [table.c4!, table.c5!],
+      seats: null,
+      expectedParties: [],
+    }),
+  );
+  expect(await refused(rename(table.bar!, saved!.label))).toEqual({
+    code: "table.label_taken",
+    params: { todayName: saved!.label, field: "name" },
+  });
 });

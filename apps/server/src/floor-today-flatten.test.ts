@@ -15,7 +15,16 @@ import type { AppError, JoinSide } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { splitOff } from "./floor-today-split-group.js";
-import { catchUpZone, resetZone } from "./floor-today-store.js";
+import {
+  catchUpZone,
+  resetZone,
+  takeOffToday,
+  putBackToday,
+  updateLayout,
+  todayBusinessDay,
+} from "./floor-today-store.js";
+import { readLayout, saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import { splitTable } from "./testing/table-action-fixture.js";
@@ -229,7 +238,7 @@ describe("refusals of a free push with a joined table", () => {
     expect(await everything()).toEqual(before);
   });
 
-  it("Bar onto a saved group is refused while Counter 4 needs clearing", async () => {
+  it("Bar can join a saved group while another member needs clearing", async () => {
     const { table } = await LONG_TABLE();
     await inTx(v, (tx) =>
       tx
@@ -237,29 +246,19 @@ describe("refusals of a free push with a joined table", () => {
         .set({ needsClearingSince: NOW.toISOString() })
         .where(eq(diningTables.id, table.c4!)),
     );
-    const before = await everything();
-
-    const error = await refusalOf(push(table.bar!, table.c3!, "left"));
-
-    expect({ code: error?.code, params: error?.params }).toEqual({
-      code: "table.needs_clearing",
-      params: { tableId: table.c4! },
-    });
-    expect(await everything()).toEqual(before);
+    await push(table.bar!, table.c3!, "left");
+    expect(await membersOf(table.bar!)).toEqual(
+      sorted([table.bar!, table.c3!, table.c4!, table.c5!]),
+    );
   });
 
-  it("Bar pushed onto Long table while a counter order is on its way to Long table is refused", async () => {
+  it("Bar can join a saved group while food is on its way to it", async () => {
     const { table } = await LONG_TABLE();
     await foodOnItsWayTo(table.c3!);
-    const before = await everything();
-
-    const error = await refusalOf(push(table.bar!, table.c3!, "left"));
-
-    expect({ code: error?.code, params: error?.params }).toEqual({
-      code: "table.delivery_pending",
-      params: { tableId: table.c3! },
-    });
-    expect(await everything()).toEqual(before);
+    await push(table.bar!, table.c3!, "left");
+    expect(await membersOf(table.bar!)).toEqual(
+      sorted([table.bar!, table.c3!, table.c4!, table.c5!]),
+    );
   });
 });
 
@@ -295,21 +294,9 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     expect(await placeOf(table.c4!)).toEqual({ x: 12, y: 20 });
   });
 
-  it("a reset waits for an outside group member, then reforms the saved group after it leaves", async () => {
+  it("a reset dissolves a free group whose members all belong to that reset", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await push(table.bar!, table.c3!, "left");
-    const before = await everything();
-    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
-    expect(await everything()).toEqual(before);
-
-    await inTx(v, (tx) =>
-      splitOff(tx, v.cfg, REMOVALS, NOW, {
-        tableId: table.bar!,
-        partIds: [table.bar!],
-        seats: 10,
-        expectedParties: [],
-      }),
-    );
     await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
     for (const [id, x] of counters(table)) {
       expect(await todayRow(v, id)).toMatchObject({
@@ -351,4 +338,72 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     );
     expect(marked.map((row) => row.tableId).sort()).toEqual([]);
   });
+});
+
+it("reset applies an edited saved membership, leaving its former member separate", async () => {
+  const { table, master, zoneId } = await LONG_TABLE();
+  const layout = await inTx(v, async (tx) =>
+    readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
+  );
+  await inTx(v, async (tx) =>
+    saveLayout(
+      tx,
+      REMOVALS,
+      await defaultLayout(tx, v.cfg, zoneId),
+      {
+        revision: layout.revision,
+        tables: layout.tables.map((t) => ({
+          id: t.id,
+          key: t.id,
+          label: t.label,
+          seats: t.seats,
+          fixed: t.fixed,
+          placement:
+            t.id === master.c5
+              ? { x: 60, y: 60, width: 2, height: 2, shape: "rect" as const, rotation: 0 }
+              : t.placement,
+          partKeys: t.partIds.filter((id) => id !== master.c5),
+        })),
+      },
+      NOW,
+    ),
+  );
+  await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
+  expect(await membersOf(table.c3!)).toEqual(sorted([table.c3!, table.c4!]));
+  expect(await mergeOf(v, table.c5!)).toBeNull();
+  expect(await placeOf(table.c5!)).toEqual({ x: 60, y: 60 });
+  expect(
+    await inTx(v, (tx) =>
+      tx
+        .select()
+        .from(floorResetTables)
+        .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.pending, true))),
+    ),
+  ).toEqual([]);
+});
+
+it("Update layout keeps a taken-off member out of its saved group until Put back", async () => {
+  const { table, zoneId } = await LONG_TABLE();
+  await inTx(v, (tx) =>
+    splitOff(tx, v.cfg, REMOVALS, NOW, {
+      tableId: table.c3!,
+      partIds: [table.c5!],
+      seats: 6,
+      expectedParties: [],
+    }),
+  );
+  await inTx(v, (tx) => takeOffToday(tx, table.c5!));
+  await inTx(v, async (tx) => {
+    const key = await defaultLayout(tx, v.cfg, zoneId);
+    const layout = await readLayout(tx, key);
+    await updateLayout(tx, REMOVALS, zoneId, await todayBusinessDay(tx, NOW), NOW, {
+      setId: key.setId,
+      layoutRevision: layout.revision,
+    });
+  });
+  expect(await mergeOf(v, table.c3!)).toBeNull();
+  expect(await todayRow(v, table.c5!)).toMatchObject({ takenOff: true });
+  await inTx(v, (tx) => putBackToday(tx, table.c5!));
+  await inTx(v, (tx) => catchUpZone(tx, REMOVALS, zoneId, NOW));
+  expect(await membersOf(table.c3!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
 });

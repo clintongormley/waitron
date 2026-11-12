@@ -1,5 +1,12 @@
 import { eq, isNotNull } from "drizzle-orm";
-import { diningTables, floorTodayJoins, floorTodayTables } from "@waitron/db";
+import {
+  diningTables,
+  floorPlanTables,
+  floorPlanTableParts,
+  floorTodayJoins,
+  floorTodayJoinTables,
+  floorTodayTables,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, normalisePartyName } from "@waitron/shared";
 import { todayOf } from "./floor-today-table.js";
@@ -76,6 +83,17 @@ async function refuseInUse(
     .select({ id: diningTables.id, label: diningTables.label })
     .from(diningTables);
   if (saved.some((t) => t.id !== selfTable && sameName(t.label, name))) throw taken;
+
+  const savedGroups = await tx
+    .select({ label: floorPlanTables.label, joinId: floorTodayJoinTables.joinId })
+    .from(floorPlanTableParts)
+    .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.joinedTableId))
+    .leftJoin(diningTables, eq(diningTables.planTableId, floorPlanTableParts.partTableId))
+    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id));
+  if (
+    savedGroups.some((g) => sameName(g.label, name) && (selfJoin === null || g.joinId !== selfJoin))
+  )
+    throw taken;
 
   const todays = await tx
     .select({ tableId: floorTodayTables.tableId, name: floorTodayTables.name })

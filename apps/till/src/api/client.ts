@@ -2149,8 +2149,6 @@ export interface PartyBill {
   amountDue?: string;
 }
 
-/** A join's merge: `moving` or `target` is the joined table, the other one a table the party holds.
- * `seats` is left out when unset: the server refuses a null. */
 export interface JoinMerge {
   moving: string;
   target: string;
@@ -4666,8 +4664,6 @@ export class TillApi {
     );
   }
 
-  /** Split tables… → `POST /api/tables/:id/today/split-off`: parts off a joined table, or tables off
-   * a group. `seats` is left out when unset: the server refuses a null. */
   splitOffToday(
     tableId: string,
     split: {

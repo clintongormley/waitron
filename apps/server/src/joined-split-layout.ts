@@ -1,5 +1,4 @@
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
-import { NEW_TABLE_SIZE } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 
 export interface LaidPart {
@@ -9,9 +8,6 @@ export interface LaidPart {
 }
 
 const held = (value: number): number => Math.min(Math.max(Math.round(value), 0), 999);
-
-/** Every placed table's width check allows 1–99 (`placementChecks`, `packages/db/src/schema/floor-plans.ts`). */
-const MAX_WIDTH = 99;
 
 const slotStart = (parts: readonly LaidPart[], index: number): number =>
   parts.slice(0, index).reduce((sum, part) => sum + part.width, 0);
@@ -64,59 +60,6 @@ export function partPlaces(
   return parts.map((part, index) =>
     slotPlace(frame, row, slotStart(parts, index), part.width, part.height),
   );
-}
-
-/** Where the joined table that remains stands: over the slots of parts[from..to], at the row's own depth. */
-export function remainingPlace(
-  row: Placement,
-  parts: readonly LaidPart[],
-  covered: number,
-  from: number,
-  to: number,
-): Placement {
-  const frame = frameOf(row, parts, covered);
-  const start = slotStart(parts, from);
-  const last = parts[to]!;
-  const width = Math.min(slotStart(parts, to) + last.width - start, MAX_WIDTH);
-  return slotPlace(frame, row, start, width, row.height);
-}
-
-/** The joined table whole again: its left end kept, at `size`, with the row's shape and turn. */
-export function wholePlace(
-  row: Placement,
-  parts: readonly LaidPart[],
-  covered: number,
-  size: { width: number; height: number },
-): Placement {
-  return slotPlace(frameOf(row, parts, covered), row, 0, size.width, size.height);
-}
-
-export function joinedPlaceAfter(args: {
-  row: Placement | null;
-  standing: boolean;
-  saved: Placement | null;
-  parts: readonly LaidPart[];
-  covered: number;
-  staying: readonly number[];
-  whole: boolean;
-}): Placement | null {
-  const { row, standing, saved, parts, covered, staying, whole } = args;
-  const from = standing && row !== null && covered >= 0 ? row : null;
-  if (whole) {
-    if (from === null) return saved;
-    const size = saved ?? { width: NEW_TABLE_SIZE, height: NEW_TABLE_SIZE };
-    return wholePlace(from, parts, covered, { width: size.width, height: size.height });
-  }
-  const origin =
-    from !== null
-      ? { at: from, covered }
-      : saved !== null
-        ? { at: saved, covered: 0 }
-        : row !== null
-          ? { at: row, covered: 0 }
-          : null;
-  if (origin === null) return null;
-  return remainingPlace(origin.at, parts, origin.covered, staying[0]!, staying.at(-1)!);
 }
 
 type Point = [number, number];

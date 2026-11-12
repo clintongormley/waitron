@@ -1953,7 +1953,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Joined-table writers keep their rows right
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A592. A party that joins a group's table names the group's other tables in random order
   (2026-10-13).** Group members are written in table-id order; number order remains open. A618
@@ -3135,14 +3135,13 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
 - **A refusal not about the name stays in the Rename window (A638, owner 2026-10-14, overturning
   A581 part 4's decision to close the window).** "The floor has changed" or any other refusal shows
   at the window's foot and keeps what the waiter typed, so Save can be pressed again, as Split
-  tables… and Reset table do; a name in use or too long stays under the field. The window still
+  tables… does; a name in use or too long stays under the field. The window still
   closes when its table leaves the floor read, stops offering Rename or its group changes, and a
   refusal shown in it then moves to the floor (`#rename` and `willUpdate`,
   `apps/till/src/screens/till-floor-screen.ts`).
-- **A joined table replaces a saved join (A503, owner 2026-10-11).** A table made of other tables
-  is set up in the floor plan editor and starts each day as one table; the till splits it and joins
-  it again, and the reset puts it back whole once its tables are free
-  ([design](../superpowers/specs/2026-10-12-a503-joined-tables-design.md)).
+- **Saved joined tables use ordinary groups (owner Proposal 3, watcher 2026-11-11 17:12).**
+  A saved big table starts as its real tables in one named group; Split tables and Join tables use
+  the ordinary group paths. This supersedes A503's synthetic live parent and Reset table.
 - **The floor plan editor's booked reason stays in the dashboard's own strings (owner,
   2026-10-10).** "Booked 12 Oct, 21:00" is worded in the dashboard's core strings, not the bookings
   module's, because the module code-message route takes no parameters.

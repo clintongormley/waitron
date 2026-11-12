@@ -15,7 +15,6 @@ import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { joinTables } from "./table-actions.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
-import { refuseDeliveryPending } from "./floor-today-store.js";
 import "./errors.js";
 
 /**
@@ -147,14 +146,8 @@ export async function writeMerge(
   refuseUnmovable(moving, target);
   if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
   if (args.free) {
-    const joining = [
-      moving.tableId,
-      target.tableId,
-      ...(target.merge?.members ?? []).map((m) => m.tableId).filter((id) => id !== target.tableId),
-    ];
-    await refuseUnfree(tx, joining);
-    await refuseNeedsMoving(tx, joining);
-    if (target.merge !== null) for (const id of joining) await refuseDeliveryPending(tx, id);
+    await refuseUnfree(tx, [moving.tableId, target.tableId]);
+    await refuseNeedsMoving(tx, [moving.tableId, target.tableId]);
   }
   if (zoneId !== moving.zoneId) {
     throw new AppError("service_zone.join_mismatch", {

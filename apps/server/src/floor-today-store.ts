@@ -499,12 +499,16 @@ async function catchUpPass(
       )
     ).keys(),
   );
+  const resetIds = new Set(rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])));
   const otherGroup = groups.flatMap((group) => {
     const ids = new Set(group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])));
     const joins = new Set(merges.filter((m) => ids.has(m.tableId)).map((m) => m.joinId));
     return [...joins].some((joinId) => {
       const members = merges.filter((m) => m.joinId === joinId);
-      return members.some((m) => !ids.has(m.tableId));
+      return (
+        members.some((m) => !ids.has(m.tableId)) &&
+        !(inReset && members.every((m) => resetIds.has(m.tableId)))
+      );
     })
       ? [...ids]
       : [];
@@ -541,6 +545,7 @@ async function catchUpPass(
   const blocked = new Set<string>();
   const blockedCreates = new Set<string>();
   let plan: ResetPlan;
+  let waitingGroupRows: ReadonlySet<string>;
   for (;;) {
     const createGroups = groups.filter((group) => group.rows.some((r) => blockedCreates.has(r.id)));
     const { mergedWithHeld, joinedBusy, waitingRows } = waitingTogether(
@@ -555,6 +560,7 @@ async function catchUpPass(
       ]),
       foodComing,
     );
+    waitingGroupRows = waitingRows;
     const live: LiveTable[] = inZone.map((table) => ({
       id: table.id,
       label: table.label,
@@ -773,8 +779,17 @@ async function catchUpPass(
           group.rows.filter((r) => r.id !== joinedId).map((r) => r.id),
         ),
       );
-    if (parts.some((row) => row.pending || row.tableId === null)) continue;
+    if (waitingGroupRows.has(joinedId) || parts.some((row) => row.pending || row.tableId === null))
+      continue;
+    const memberIds = parts.map((row) => row.tableId!);
+    const [takenOff] = await tx
+      .select({ id: floorTodayTables.id })
+      .from(floorTodayTables)
+      .where(and(inArray(floorTodayTables.tableId, memberIds), eq(floorTodayTables.takenOff, true)))
+      .limit(1);
+    if (takenOff !== undefined) continue;
     if (joined.x !== null) {
+      await leaveMerges(tx, memberIds);
       const [merge] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId, name: joined.label, seats: joined.seats! })

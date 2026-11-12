@@ -37,7 +37,7 @@ export interface LiveTable {
   tied: boolean;
   /** It has a today's row. */
   hasToday: boolean;
-
+  /** It shares an ordinary group with a waiting table. */
   mergedWithHeld: boolean;
 
   /** It needs clearing, so it waits as a held table does, and is seeded as one is. */
@@ -77,7 +77,6 @@ export function planReset(input: {
   takenElsewhere: ReadonlySet<string>;
   /** Short-name keys of the venue's live tables in other zones. */
   shortNameKeysElsewhere: ReadonlySet<string>;
-
   waitingToCreate?: ReadonlySet<Target>;
 }): ResetPlan {
   const live = new Map(input.live.map((table) => [table.id, table]));
