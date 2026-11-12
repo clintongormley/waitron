@@ -447,5 +447,5 @@ it("switches the button off when Current orders could not be read, saying so", a
   const { el } = await mountWidget<TillApp>("till-app", { api });
   await openTable(el);
   await openDialog(el, "rest");
-  expect(deferredReason(el)).toBe(t("table.current_orders_unread"));
+  expect(deferredReason(el)).toBe(t("deferred_close.orders_unread"));
 });

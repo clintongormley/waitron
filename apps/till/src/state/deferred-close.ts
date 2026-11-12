@@ -45,7 +45,7 @@ export function deferredOffered(input: DeferredOfferInput): DeferredOffer {
   if (currentOrders === null)
     return {
       state: "off",
-      reason: input.currentOrdersUnread ? "table.current_orders_unread" : "table.loading",
+      reason: input.currentOrdersUnread ? "deferred_close.orders_unread" : "table.loading",
     };
   if (
     [...currentOrders.groups.flatMap((group) => group.rows), ...currentOrders.ungrouped].some(

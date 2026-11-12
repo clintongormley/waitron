@@ -91,7 +91,7 @@ describe("deferredOffered", () => {
       [
         "Current orders could not be read",
         { currentOrders: null, currentOrdersUnread: true },
-        { state: "off", reason: "table.current_orders_unread" },
+        { state: "off", reason: "deferred_close.orders_unread" },
       ],
     ];
     for (const [name, over, expected] of cases)

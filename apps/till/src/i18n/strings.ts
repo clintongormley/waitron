@@ -1632,6 +1632,8 @@ export const en = {
   "deferred_close.issue_and_close": "Issue invoice and close",
   "deferred_close.close": "Close bill",
   "deferred_close.unserved": "Mark every dish served or cancel it first",
+  "deferred_close.orders_unread":
+    "Current orders could not be read, so the till cannot check every dish is served. Open the table again to retry.",
   "deferred_close.payment_unconfirmed":
     "A payment on this bill could not be confirmed and may have gone through. Look at the bill's payments, then take what is still owed here instead.",
   "deferred_close.unanswered": "The server did not answer. Confirm again to try once more.",
@@ -3594,6 +3596,8 @@ export const es: Record<StringKey, string> = {
   "deferred_close.issue_and_close": "Emitir factura y cerrar",
   "deferred_close.close": "Cerrar cuenta",
   "deferred_close.unserved": "Marca todos los platos como servidos o cancélalos primero",
+  "deferred_close.orders_unread":
+    "No se pudieron leer los pedidos en curso, así que la caja no puede comprobar que todos los platos estén servidos. Vuelve a abrir la mesa para reintentarlo.",
   "deferred_close.payment_unconfirmed":
     "Un pago de esta cuenta no se ha podido confirmar y puede que se haya cobrado. Mira los pagos de la cuenta y cobra aquí lo que quede pendiente.",
   "deferred_close.unanswered":
