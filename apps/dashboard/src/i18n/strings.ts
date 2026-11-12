@@ -4082,8 +4082,8 @@ export const en = {
     "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Close this and check again in a few minutes.",
   "box_status.clock.admin.set.refused.target_invalid":
     "Your device's date is not one the box can take. Check your device's date and time.",
-  "box_status.clock.admin.set.refused.pending_disproofs":
-    "The box has not finished recording what it found about its clock. Try again in a minute.",
+  "box_status.clock.admin.set.refused.pending_step":
+    "The box has not finished saving its last clock change. Try again in a minute.",
   "box_status.clock.admin.set.refused.same_machine":
     "This screen is the box itself, so its clock is the box's own. Use your phone or another computer.",
   "box_status.clock.admin.set.refused.not_stopped":
@@ -8294,8 +8294,8 @@ export const es: Record<StringKey, string> = {
     "Este servidor no puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cierra esto y vuelve a comprobarlo dentro de unos minutos.",
   "box_status.clock.admin.set.refused.target_invalid":
     "La fecha de tu dispositivo no es una que el servidor pueda tomar. Comprueba la fecha y la hora de tu dispositivo.",
-  "box_status.clock.admin.set.refused.pending_disproofs":
-    "El servidor aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a intentarlo dentro de un minuto.",
+  "box_status.clock.admin.set.refused.pending_step":
+    "El servidor aún no ha terminado de guardar su último cambio de hora. Vuelve a intentarlo dentro de un minuto.",
   "box_status.clock.admin.set.refused.same_machine":
     "Esta pantalla es el propio servidor, así que su hora es la del servidor. Usa tu móvil u otro ordenador.",
   "box_status.clock.admin.set.refused.not_stopped":

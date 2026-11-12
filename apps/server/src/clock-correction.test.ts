@@ -490,7 +490,7 @@ describe("rows kept pending", () => {
 
     expect(await h.correction.set(byAdmin(h, { stepsSeen: 1, measuredAt: h.measured() }))).toEqual({
       set: false,
-      reason: "pending_disproofs",
+      reason: "pending_step",
     });
     expect(h.calls.slice(calls)).toEqual([]);
 
@@ -978,10 +978,9 @@ describe("a staff member's set", () => {
 });
 
 describe("clock.unusable", () => {
-  it("sets during clock.unusable without reading the payment stop", async () => {
+  it("sets during clock.unusable", async () => {
     const h = harness({ unusable: () => true });
     expect(await h.correction.set(byAdmin(h, { reason: "unusable" }))).toMatchObject({ set: true });
-    expect(h.calls).not.toContain("clockStopState");
     expect(h.seatCalls[0]).toMatchObject({ reason: "unusable" });
   });
 

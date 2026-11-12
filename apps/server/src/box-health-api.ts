@@ -28,7 +28,7 @@ export interface BoxHealthApiDeps {
   restart: () => void;
   /** With a correction and a seat that records a step, mounts `POST /api/box/clock-challenge` and
    * `POST /api/box/clock-set`. */
-  clockConfirm: {
+  clockSet: {
     backend: FiscalBackend;
     clock: TrustedClock;
     /** Times each challenge; never stepped by a change of the wall clock. */
@@ -78,7 +78,7 @@ async function authorizeOnAnyDisk(
 /** Dates beyond this are not times `Date` can hold. */
 const LATEST_DATE_MS = 8.64e15;
 
-export function confirmBody(body: unknown): { challengeId: string; deviceAt: number } {
+export function clockSetBody(body: unknown): { challengeId: string; deviceAt: number } {
   const fields =
     typeof body === "object" && body !== null && !Array.isArray(body)
       ? (body as { challengeId?: unknown; deviceAt?: unknown })
@@ -127,17 +127,17 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       return c.json({}, 202);
     }),
   );
-  const clockConfirm = deps.clockConfirm;
-  const correction = clockConfirm.correction;
-  const backend = clockConfirm.backend;
+  const clockSet = deps.clockSet;
+  const correction = clockSet.correction;
+  const backend = clockSet.backend;
   if (correction === undefined || backend.confirmClockStep === undefined) return;
   const challenges = clockChallenges({
-    steady: clockConfirm.steady,
-    wall: () => clockConfirm.clock.now().instant.getTime(),
+    steady: clockSet.steady,
+    wall: () => clockSet.clock.now().instant.getTime(),
   });
   // An administrator sets the box's clock against a clock that is not the box's.
   const refuseOnTheBox = (c: Context) => {
-    if (!clockConfirm.devMode && (clockConfirm.requestFromBox ?? requestFromBox)(c))
+    if (!clockSet.devMode && (clockSet.requestFromBox ?? requestFromBox)(c))
       throw new AppError("clock.set_refused", { reason: "same_machine" });
   };
   const authorizeAdmin = (tx: Transaction, sessionId: string) =>
@@ -161,10 +161,10 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
         const { authorizedBy } = await authorizeAdmin(tx, sessionId);
         return { authorizedBy, personName: await requiredNameOf(tx, authorizedBy) };
       });
-      const { challengeId, deviceAt } = confirmBody(await readRawJsonBody<unknown>(c));
+      const { challengeId, deviceAt } = clockSetBody(await readRawJsonBody<unknown>(c));
       const stepsSeen = correction.steps();
-      const reading = clockConfirm.clock.now();
-      const steadyMs = clockConfirm.steady();
+      const reading = clockSet.clock.now();
+      const steadyMs = clockSet.steady();
       const challenge = challenges.take(sessionId, challengeId);
       if (challenge === null) throw new AppError("clock.check_expired", {});
       // The device read its clock at the round trip's midpoint, give or take half of it.

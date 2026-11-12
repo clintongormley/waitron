@@ -13,7 +13,6 @@ const HOUR_MS = 3_600_000;
 function device(id: string, offsetMs: number, boxAtShiftMs = 0): ClockWitness {
   const boxAt = BOX_AT_MS + boxAtShiftMs;
   return {
-    kind: "device",
     id,
     boxAt: new Date(boxAt).toISOString(),
     witnessAt: new Date(boxAt + offsetMs).toISOString(),
@@ -21,15 +20,8 @@ function device(id: string, offsetMs: number, boxAtShiftMs = 0): ClockWitness {
   };
 }
 
-function authority(offsetMs: number, uncertaintyMs: number, boxAtShiftMs = 0): ClockWitness {
-  const boxAt = BOX_AT_MS + boxAtShiftMs;
-  return {
-    kind: "authority",
-    id: "authority",
-    boxAt: new Date(boxAt).toISOString(),
-    witnessAt: new Date(boxAt + offsetMs).toISOString(),
-    uncertaintyMs,
-  };
+function uncertain(witness: ClockWitness, uncertaintyMs: number): ClockWitness {
+  return { ...witness, uncertaintyMs };
 }
 
 function ids(witnesses: readonly ClockWitness[]): string[] {
@@ -63,73 +55,42 @@ describe("a single witness against the box", () => {
     expect(ids(verdict.devicesDisagreeing)).toEqual(["a", "b"]);
   });
 
-  it("widens an authority's difference by its uncertainty before calling it agreeing", () => {
-    const within = authority(59_000, 1_000);
+  it("widens a device's difference by its uncertainty before calling it agreeing", () => {
+    const within = uncertain(device("a", 59_000), 1_000);
     expect(judgeClockWitnesses([within])).toEqual({
       agreeing: [within],
-      authorityDisagrees: [],
       devicesDisagreeing: [],
     });
-    const behind = authority(-59_000, 1_000);
+    const behind = uncertain(device("a", -59_000), 1_000);
     expect(judgeClockWitnesses([behind]).agreeing).toEqual([behind]);
   });
 
-  it("lets an authority whose uncertainty straddles the minute say nothing", () => {
-    expect(judgeClockWitnesses([authority(59_000, 1_001)])).toEqual({
+  it("lets devices whose uncertainty straddles the minute say nothing", () => {
+    expect(judgeClockWitnesses([uncertain(device("a", 59_000), 1_001)])).toEqual({
       agreeing: [],
-      authorityDisagrees: [],
       devicesDisagreeing: [],
     });
-    expect(judgeClockWitnesses([authority(61_000, 1_000)])).toEqual({
-      agreeing: [],
-      authorityDisagrees: [],
-      devicesDisagreeing: [],
-    });
+    expect(
+      judgeClockWitnesses([
+        uncertain(device("a", 61_000), 1_000),
+        uncertain(device("b", 61_000), 1_000),
+      ]),
+    ).toEqual({ agreeing: [], devicesDisagreeing: [] });
   });
 
-  it("calls an authority disagreeing only once its difference less its uncertainty passes the minute", () => {
-    const ahead = authority(61_001, 1_000);
-    expect(judgeClockWitnesses([ahead])).toEqual({
-      agreeing: [],
-      authorityDisagrees: [ahead],
-      devicesDisagreeing: [],
-    });
-    const behind = authority(-61_001, 1_000);
-    expect(judgeClockWitnesses([behind]).authorityDisagrees).toEqual([behind]);
-  });
-
-  it("lists every disagreeing authority reading, the latest first", () => {
-    const older = authority(2 * HOUR_MS, 500, -10_000);
-    const newest = authority(2 * HOUR_MS, 500, 10_000);
-    const middle = authority(2 * HOUR_MS, 500);
-    expect(judgeClockWitnesses([older, newest, middle]).authorityDisagrees).toEqual([
-      newest,
-      middle,
-      older,
-    ]);
-  });
-
-  it("keeps an authority's latest AGREEING reading even when a newer one says nothing or disagrees", () => {
-    const agreed = authority(0, 500, -10_000);
-    const vague = authority(59_000, 5_000, 10_000);
-    const contrary = authority(2 * HOUR_MS, 500, 5_000);
-    expect(judgeClockWitnesses([agreed, vague, contrary])).toEqual({
-      agreeing: [agreed],
-      authorityDisagrees: [contrary],
-      devicesDisagreeing: [],
-    });
+  it("calls devices disagreeing only once their difference less their uncertainty passes the minute", () => {
+    for (const offsetMs of [61_001, -61_001]) {
+      const verdict = judgeClockWitnesses([
+        uncertain(device("a", offsetMs), 1_000),
+        uncertain(device("b", offsetMs), 1_000),
+      ]);
+      expect(ids(verdict.devicesDisagreeing)).toEqual(["a", "b"]);
+    }
   });
 
   it("does not count a device as agreeing when its LATEST reading disagrees, even though an older one agreed", () => {
     const verdict = judgeClockWitnesses([device("a", 0, -10_000), device("a", 61_000, 10_000)]);
     expect(verdict.agreeing).toEqual([]);
-  });
-
-  it("keeps only the latest agreeing authority reading", () => {
-    const older = authority(0, 500, -10_000);
-    const newer = authority(0, 500, 10_000);
-    expect(judgeClockWitnesses([newer, older]).agreeing).toEqual([newer]);
-    expect(judgeClockWitnesses([older, newer]).agreeing).toEqual([newer]);
   });
 });
 
@@ -243,7 +204,6 @@ describe("the same device twice", () => {
     const fresh = device("a", 0, 30_000);
     expect(judgeClockWitnesses([stale, fresh, device("b", 2 * HOUR_MS)])).toEqual({
       agreeing: [fresh],
-      authorityDisagrees: [],
       devicesDisagreeing: [],
     });
     expect(judgeClockWitnesses([fresh, device("b", 2 * HOUR_MS), stale]).agreeing).toEqual([fresh]);
@@ -432,10 +392,8 @@ describe("the group of agreeing devices", () => {
     expect(agreeingDeviceGroup([device("a", 0)])).toEqual([]);
   });
 
-  it("leaves out devices that disagree with the box and every authority reading", () => {
-    expect(agreeingDeviceGroup([device("a", 0), device("far", 61_000), authority(0, 500)])).toEqual(
-      [],
-    );
+  it("leaves out devices that disagree with the box", () => {
+    expect(agreeingDeviceGroup([device("a", 0), device("far", 61_000)])).toEqual([]);
   });
 
   it("leaves out a device that disagrees with the box even when it is within a minute of one that agrees", () => {
@@ -510,10 +468,6 @@ describe("agreeing devices within a narrower margin", () => {
     expect(agreeingDeviceCount([], FIVE_SECONDS_MS)).toBe(0);
   });
 
-  it("leaves out every authority reading from the count", () => {
-    expect(agreeingDeviceCount([authority(0, 0)], FIVE_SECONDS_MS)).toBe(0);
-  });
-
   it("lets a tie at one address keep the reading outside the narrower margin, in either order", () => {
     const agreed = at("10.0.0.5", device("a", 0));
     const outside = at("10.0.0.5", device("b", 10_000));
@@ -529,8 +483,6 @@ describe("agreeing devices within a narrower margin", () => {
 });
 
 describe("a witness that cannot be judged", () => {
-  const empty = { agreeing: [], authorityDisagrees: [], devicesDisagreeing: [] };
-
   it("is dropped when its box time is unreadable, so a later valid reading from the device counts", () => {
     const unreadable = { ...device("a", 0, -30_000), boxAt: "not a time" };
     const valid = device("a", 0);
@@ -546,20 +498,18 @@ describe("a witness that cannot be judged", () => {
   });
 
   it("is dropped when its uncertainty is negative, rather than turning a disagreement into agreement", () => {
-    expect(judgeClockWitnesses([authority(61_001, -2_000)])).toEqual(empty);
-    expect(judgeClockWitnesses([authority(0, -1)])).toEqual(empty);
+    expect(judgeClockWitnesses([uncertain(device("a", 61_001), -2_000)])).toEqual({
+      agreeing: [],
+      devicesDisagreeing: [],
+    });
   });
 
-  it("is dropped when its uncertainty is not a finite number", () => {
-    expect(judgeClockWitnesses([authority(0, Number.NaN)])).toEqual(empty);
-    expect(judgeClockWitnesses([authority(0, Number.POSITIVE_INFINITY)])).toEqual(empty);
-  });
-
-  it("still counts an authority with no uncertainty at all", () => {
-    const exact = authority(61_001, 0);
-    expect(judgeClockWitnesses([exact]).authorityDisagrees).toEqual([exact]);
-    const agreed = authority(60_000, 0);
-    expect(judgeClockWitnesses([agreed]).agreeing).toEqual([agreed]);
+  it("is dropped when its uncertainty is not a finite number, so an earlier valid reading from the device counts", () => {
+    const valid = device("a", 0, -30_000);
+    for (const uncertaintyMs of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const broken = uncertain(device("a", 0), uncertaintyMs);
+      expect(judgeClockWitnesses([valid, broken]).agreeing).toEqual([valid]);
+    }
   });
 
   it("does not let a dropped reading replace a valid one from the same device in a group", () => {
@@ -575,7 +525,6 @@ describe("no witnesses", () => {
   it("gives an empty verdict", () => {
     expect(judgeClockWitnesses([])).toEqual({
       agreeing: [],
-      authorityDisagrees: [],
       devicesDisagreeing: [],
     });
   });

@@ -252,12 +252,12 @@ puede poner su propio reloj en hora: la parte del servidor que lo hace no respon
 tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cierra
 esto y vuelve a comprobarlo dentro de unos minutos.** Cuando
 el reloj del servidor ha cambiado mientras lo comprobabas, o el servidor no había terminado de
-registrar lo que encontró sobre su reloj, cierra el diálogo y vuelve a comprobarlo.
+guardar su último cambio de hora, cierra el diálogo y vuelve a comprobarlo.
 
 El servidor da por buena la hora de tu dispositivo, así que comprueba antes que tu móvil u ordenador
 tiene la hora bien. Por la misma razón, nunca funciona desde la pantalla del propio servidor: ahí la
 hora del dispositivo es la del servidor, y el servidor lo rechaza con **Esta pantalla es el propio
-servidor, así que su hora es la del servidor. Confírmalo desde tu móvil o desde otro ordenador.**
+servidor, así que su hora es la del servidor. Usa tu móvil u otro ordenador.**
 
 Cada vez que el servidor pone su reloj en hora, sea quien sea o lo que sea que lo puso, la campana
 tiene un aviso que lo dice, con la hora de antes y la de después y cuánto se movió el reloj, por

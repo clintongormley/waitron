@@ -69,7 +69,7 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     freeSpace: vi.fn<(personId: string) => Promise<FreedSpace>>(async () => FREED),
     restart: vi.fn<() => void>(),
     venue: { language: "en" as const },
-    clockConfirm: {
+    clockSet: {
       backend: new FakeFiscalBackend(db),
       witnesses: () => [],
       clearWitnesses: () => {},

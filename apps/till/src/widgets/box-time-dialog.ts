@@ -64,7 +64,7 @@ const REASONS: Record<string, { key: StringKey; checkAgain: boolean }> = {
   host_unavailable: { key: "box_time.refused.host_unavailable", checkAgain: false },
   stale: { key: "box_time.refused.stale", checkAgain: true },
   same_machine: { key: "box_time.refused.same_machine", checkAgain: false },
-  pending_disproofs: { key: "box_time.refused.pending_disproofs", checkAgain: true },
+  pending_step: { key: "box_time.refused.pending_step", checkAgain: true },
   stopped: { key: "box_time.refused.stopped", checkAgain: true },
 };
 

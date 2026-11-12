@@ -34,7 +34,7 @@ const INCIDENT_CODE_SOURCES = [
   "packages/core/src/record-void.ts",
   "packages/fiscal/src/clock.ts",
   "packages/fiscal-verifactu/src/chain.ts",
-  "packages/fiscal-verifactu/src/clock-stop-incidents.ts",
+  "packages/fiscal-verifactu/src/clock-corrected-incident.ts",
   "packages/fiscal-verifactu/src/drain.ts",
   "packages/fiscal-verifactu/src/reconcile.ts",
   "packages/fiscal-verifactu/src/record-remedy.ts",

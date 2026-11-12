@@ -36,7 +36,6 @@ describe("createClockWitnessStore", () => {
     clock.advance(299_000);
     expect(store.witnesses()).toEqual([
       {
-        kind: "device",
         id: "till-1",
         address: "192.168.10.31",
         boxAt: iso(START_WALL),
@@ -72,7 +71,6 @@ describe("createClockWitnessStore", () => {
     store.noteDevice("till-1", "192.168.10.31", START_WALL + 16_500, clock.arrived());
     expect(store.witnesses()).toEqual([
       {
-        kind: "device",
         id: "till-1",
         address: "192.168.10.31",
         boxAt: iso(START_WALL + 15_000),
@@ -126,7 +124,6 @@ describe("createClockWitnessStore", () => {
     store.noteDevice("till-1", address, START_WALL + 3_000, clock.arrived());
     expect(store.witnesses()).toEqual([
       {
-        kind: "device",
         id: "till-1",
         boxAt: iso(START_WALL),
         witnessAt: iso(START_WALL + 3_000),

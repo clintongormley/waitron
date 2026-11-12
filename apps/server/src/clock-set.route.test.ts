@@ -209,7 +209,7 @@ async function stoppedBox(
       readHealth: () => Promise.reject(new Error("not read here")),
       freeSpace: () => Promise.reject(new Error("not freed here")),
       restart: () => {},
-      clockConfirm: {
+      clockSet: {
         backend,
         clock,
         steady: () => steadyMs,
@@ -401,7 +401,7 @@ it("sets a clock that reads a date before 28-10-2024, as that stop", async () =>
     source: "admin",
     reason: "unusable",
     check_id: null,
-    proof: { authority: null, devices: [] },
+    proof: { devices: [] },
   });
   expect(boxTime(box)).toBe(trueTime);
 });

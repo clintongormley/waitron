@@ -10,7 +10,7 @@ import type {
   ClockWitness,
 } from "@waitron/fiscal";
 import type { ErrorParams, NodeId } from "@waitron/shared";
-import { recordCorrected } from "./clock-stop-incidents.js";
+import { recordCorrected } from "./clock-corrected-incident.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 /** An unverified step this small is the clock's own drift, not a step worth an alert. */
@@ -39,7 +39,6 @@ async function nextConfirmationSeq(tx: Transaction): Promise<number> {
 }
 
 interface StepWitnesses {
-  authority: ClockWitness | null;
   devices: readonly ClockWitness[];
   /** The person's device's reading: an administrator's, or with `role: "staff"` a staff member's. */
   admin: ClockAdminReading | null;
@@ -51,20 +50,12 @@ interface StepWitnesses {
  * `staff`, with the till's id and address and no `admin` key; an administrator's on a till gets a
  * `device` key, naming the till, beside `admin`. */
 function storedWitnesses(witnesses: StepWitnesses) {
-  const { authority, admin, device } = witnesses;
+  const { admin, device } = witnesses;
   const person =
     admin === null
       ? null
       : { boxAt: admin.boxAt, witnessAt: admin.witnessAt, uncertaintyMs: admin.uncertaintyMs };
   const stored = {
-    authority:
-      authority === null
-        ? null
-        : {
-            boxAt: authority.boxAt,
-            witnessAt: authority.witnessAt,
-            uncertaintyMs: authority.uncertaintyMs,
-          },
     devices: witnesses.devices.map((witness) => ({
       deviceId: witness.id,
       address: witness.address,
@@ -136,8 +127,7 @@ export async function confirmClockStep(
       reason: input.reason,
       proof: {
         ...storedWitnesses({
-          authority: input.witnesses.find((witness) => witness.kind === "authority") ?? null,
-          devices: input.witnesses.filter((witness) => witness.kind === "device"),
+          devices: input.witnesses,
           admin: admin?.reading ?? null,
           ...(admin?.role === undefined ? {} : { role: admin.role }),
           ...(admin?.device === undefined

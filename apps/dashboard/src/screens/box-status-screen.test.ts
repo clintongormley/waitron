@@ -651,10 +651,10 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     return api;
   }
 
-  async function mountClock(api: DashboardApi, canConfirmClock = true) {
+  async function mountClock(api: DashboardApi, canCheckClock = true) {
     const mounted = await mountWidget<BoxStatusScreen>("dashboard-box-status-screen", {
       api,
-      canConfirmClock,
+      canCheckClock,
     });
     await flush(mounted.el);
     return mounted.el;
@@ -1020,9 +1020,9 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
         false,
       ],
       [
-        "pending_disproofs",
-        "box_status.clock.admin.set.refused.pending_disproofs",
-        "The box has not finished recording what it found about its clock. Try again in a minute.",
+        "pending_step",
+        "box_status.clock.admin.set.refused.pending_step",
+        "The box has not finished saving its last clock change. Try again in a minute.",
         false,
       ],
       [

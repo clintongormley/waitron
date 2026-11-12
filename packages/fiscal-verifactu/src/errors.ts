@@ -403,7 +403,7 @@ declare module "@waitron/shared" {
     "clock.unusable": { clockAt: string; offsetMinutes: number };
 
     /**
-     * Recorded, never thrown, by `recordCorrected` (./clock-stop-incidents.ts) for each step of the
+     * Recorded, never thrown, by `recordCorrected` (./clock-corrected-incident.ts) for each step of the
      * box's clock, and for a `setup` step by the server at the venue's first full start that is
      * neither a mirror nor fenced.
      * `confirmationId` is the step's confirmation, null when the step was not verified (`verified`

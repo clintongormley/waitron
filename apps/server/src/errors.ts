@@ -1670,7 +1670,7 @@ declare module "@waitron/shared" {
      * device is within a minute of the box (`agrees`), the device's time was measured before a
      * step of the box's clock, the time would be before 28-10-2024 or from 2100 on
      * (`target_invalid`), an earlier step's record could not yet be written
-     * (`pending_disproofs`), a till asked the box to keep its time while a stop holds
+     * (`pending_step`), a till asked the box to keep its time while a stop holds
      * (`stopped`), or, for a staff member on a till, the box's start-up is over
      * (`not_start_up`). */
     "clock.set_refused": {
@@ -1684,7 +1684,7 @@ declare module "@waitron/shared" {
         | "agrees"
         | "stale"
         | "target_invalid"
-        | "pending_disproofs";
+        | "pending_step";
     };
     /** The box asked its host to set the clock: `refused`, the clock moved by a second or less;
      * `unverified`, it moved further, but the box could not confirm it landed where it was asked

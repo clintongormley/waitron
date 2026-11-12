@@ -234,12 +234,12 @@ part of the box that sets its clock is not answering, it says **This box cannot 
 the part of the box that does that is not answering. If the box can reach the internet, its time
 service may still put the clock right by itself. Close this and check again in a few minutes.**
 When the box's clock changed while you were checking, or the
-box had not finished recording what it found about its clock, close the dialog and check again.
+box had not finished saving its last clock change, close the dialog and check again.
 
 The box takes your device's word for the time, so check that your phone or computer shows the
 right time first. For the same reason this never works from the box's own screen: there, the
 device's clock is the box's clock, and the box refuses with **This screen is the box itself, so its
-clock is the box's own. Confirm from your phone or another computer.**
+clock is the box's own. Use your phone or another computer.**
 
 Each time the box sets its clock, whoever or whatever set it, the bell has an alert saying so, with
 the time before and after and how far the clock moved, for example **The box's clock was set from

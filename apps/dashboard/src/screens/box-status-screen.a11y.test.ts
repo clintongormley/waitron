@@ -158,7 +158,7 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       const api = Object.assign(stubApi(STOPPED), { clockChallenge });
       const mounted = await mountWidget<BoxStatusScreen>(
         "dashboard-box-status-screen",
-        { api, canOpen: () => true, canConfirmClock: true },
+        { api, canOpen: () => true, canCheckClock: true },
         theme,
       );
       await flush(mounted.el);
@@ -223,7 +223,7 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       const api = Object.assign(stubApi(settable), { clockChallenge: challenged(), clockSet });
       const { el, host } = await mountWidget<BoxStatusScreen>(
         "dashboard-box-status-screen",
-        { api, canOpen: () => true, canConfirmClock: true },
+        { api, canOpen: () => true, canCheckClock: true },
         theme,
       );
       await flush(el);

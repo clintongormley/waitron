@@ -385,6 +385,48 @@ describe("a note sent with marking an alert handled", () => {
       acknowledgedNote: null,
     });
   });
+
+  it("refuses a note of any length as not found", async () => {
+    const v = await seedVenueWithStaff();
+    const id = await raise(v, "printing.mystery");
+    await expectError(await postBody(appFor(), id, v.manager, note("x".repeat(501))), 404, {
+      code: "alert.not_found",
+      params: { id },
+    });
+    expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
+  });
+
+  it("handles it for a whitespace-only note, an empty body, null, {} and an absent note", async () => {
+    const v = await seedVenueWithStaff();
+    const app = appFor();
+    for (const body of [note("   \n\t "), "", "null", "{}", note(undefined)]) {
+      const id = await raise(v, "printing.mystery");
+      expect((await postBody(app, id, v.manager, body)).status).toBe(204);
+      expect(await storedIncident(id)).toEqual({
+        acknowledgedAt: NOW.toISOString(),
+        acknowledgedNote: null,
+      });
+    }
+  });
+
+  it("refuses a note that is not a string under the note, and a body that is not an object as the body", async () => {
+    const v = await seedVenueWithStaff();
+    const app = appFor();
+    const id = await raise(v, "printing.mystery");
+    for (const body of [note(42), note(null), note(["x"])]) {
+      await expectError(await postBody(app, id, v.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "note" },
+      });
+    }
+    for (const body of ["[]", '"x"', "7"]) {
+      await expectError(await postBody(app, id, v.manager, body), 400, {
+        code: "management.request_invalid",
+        params: { field: "body" },
+      });
+    }
+    expect(await storedIncident(id)).toEqual({ acknowledgedAt: null, acknowledgedNote: null });
+  });
 });
 
 // A card-provider seat whose only live method reports a 5% battery by default.

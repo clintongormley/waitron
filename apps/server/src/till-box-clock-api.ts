@@ -13,7 +13,7 @@ import {
 } from "@waitron/identity";
 import { codeOf, createErrorBoundary, readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { confirmBody, requiredNameOf } from "./box-health-api.js";
+import { clockSetBody, requiredNameOf } from "./box-health-api.js";
 import { clockChallenges } from "./clock-challenges.js";
 import {
   EARLIEST_TARGET_MS,
@@ -201,7 +201,7 @@ export function mountTillBoxClockApi(
       const session = await requireSession(deps, c);
       await assertRequestDevice(deps, c, session);
       const raw = await readRawJsonBody<unknown>(c);
-      const { challengeId, deviceAt } = confirmBody(raw);
+      const { challengeId, deviceAt } = clockSetBody(raw);
       const override = overrideOf(raw);
       const keep = keepOf(raw);
       const asAdmin = await withTransaction(db, async (tx) => {

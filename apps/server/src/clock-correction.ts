@@ -50,7 +50,7 @@ export type ClockSetRefusal =
   | "host_unavailable"
   | "synchronised"
   | "agrees"
-  | "pending_disproofs"
+  | "pending_step"
   | "refused"
   | "unverified";
 
@@ -233,7 +233,7 @@ export function clockCorrection(deps: {
   async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
     // The latest step is read by the order rows were written, so a later step's row written
     // before an earlier one's would leave the earlier step read as the latest.
-    if (pending.length > 0) return { set: false, reason: "pending_disproofs" };
+    if (pending.length > 0) return { set: false, reason: "pending_step" };
     if (stale(input)) return { set: false, reason: "stale" };
     const planned = wall() + input.offsetMs;
     if (!(planned >= EARLIEST_TARGET_MS && planned < LATEST_TARGET_MS))

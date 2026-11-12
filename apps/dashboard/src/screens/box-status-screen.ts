@@ -41,7 +41,7 @@ const SET_REFUSALS = {
   stale: "box_status.clock.admin.set.refused.stale",
   host_unavailable: "box_status.clock.admin.set.refused.host_unavailable",
   target_invalid: "box_status.clock.admin.set.refused.target_invalid",
-  pending_disproofs: "box_status.clock.admin.set.refused.pending_disproofs",
+  pending_step: "box_status.clock.admin.set.refused.pending_step",
 } as const satisfies Record<string, StringKey>;
 
 const SET_FAILURES = {
@@ -245,7 +245,7 @@ export class BoxStatusScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
-  @property({ attribute: false }) canConfirmClock = false;
+  @property({ attribute: false }) canCheckClock = false;
   @property({ attribute: false }) canRestart = false;
 
   @state() private network: BoxNetwork | null = null;
@@ -271,7 +271,7 @@ export class BoxStatusScreen extends LitElement {
   @state() private clockCheckOpen = false;
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
-  @state() private confirmingClock = false;
+  @state() private settingClock = false;
   /** Set once the box has set its clock from this device's; null otherwise. */
   @state() private clockSetDone: { signInAgain: boolean } | null = null;
   /** The check's refusal, shown above the dialog's buttons. */
@@ -380,13 +380,11 @@ export class BoxStatusScreen extends LitElement {
     return clockUnusable(health);
   }
 
-  /** Whether to offer this device's time, from the last read: the box runs a time service it can
-   * set and is not in time by it, and a stop holds that the tax agency has not spoken on. A
-   * waiting check alone is not a stop. The box judges all of it again when asked. */
+  /** From the last read; the box judges it again when asked. */
   #canSetClock(health: BoxHealth | null): boolean {
     return (
       health !== null &&
-      this.canConfirmClock &&
+      this.canCheckClock &&
       health.clock.sync.source === "timedatectl" &&
       !health.clock.sync.synced &&
       clockUnusable(health)
@@ -426,8 +424,8 @@ export class BoxStatusScreen extends LitElement {
   }
 
   async #setClock(): Promise<void> {
-    if (this.confirmingClock) return;
-    this.confirmingClock = true;
+    if (this.settingClock) return;
+    this.settingClock = true;
     this.clockCheckError = "";
     let fresh: ClockReading | null = null;
     try {
@@ -449,7 +447,7 @@ export class BoxStatusScreen extends LitElement {
       }
     } finally {
       this.api.liveData.refresh();
-      this.confirmingClock = false;
+      this.settingClock = false;
     }
   }
 
@@ -486,7 +484,7 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #renderClockCheckDialog(): TemplateResult | typeof nothing {
-    if (!this.canConfirmClock) return nothing;
+    if (!this.canCheckClock) return nothing;
     const reading = this.clockReading;
     const done = this.clockSetDone;
     const offeringSet =
@@ -495,7 +493,7 @@ export class BoxStatusScreen extends LitElement {
       slot="cancel"
       variant="secondary"
       data-test="clock-check-cancel"
-      ?disabled=${this.confirmingClock}
+      ?disabled=${this.settingClock}
       @click=${() => this.#closeClockCheck()}
       >${t("action.cancel")}</wt-button
     >`;
@@ -503,7 +501,7 @@ export class BoxStatusScreen extends LitElement {
       class="clock-check"
       data-test="clock-check-dialog"
       .open=${this.clockCheckOpen}
-      .dismissible=${!this.confirmingClock}
+      .dismissible=${!this.settingClock}
       heading=${t("box_status.clock.admin.open")}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
@@ -551,8 +549,8 @@ export class BoxStatusScreen extends LitElement {
                 <wt-button
                   variant="primary"
                   data-test="clock-set-confirm"
-                  ?disabled=${this.confirmingClock}
-                  ?loading=${this.confirmingClock}
+                  ?disabled=${this.settingClock}
+                  ?loading=${this.settingClock}
                   @click=${() => void this.#setClock()}
                   >${t("box_status.clock.admin.set.confirm")}</wt-button
                 >`
@@ -717,7 +715,7 @@ export class BoxStatusScreen extends LitElement {
             : nothing
         }
         ${
-          row.id === "clock" && !this.canConfirmClock && this.#clockCheckNeeded(health)
+          row.id === "clock" && !this.canCheckClock && this.#clockCheckNeeded(health)
             ? html`<p class="aside" data-test="clock-admin-hint">
                 ${t("box_status.clock.admin.sign_in_hint")}
               </p>`
@@ -758,7 +756,7 @@ export class BoxStatusScreen extends LitElement {
         ${
           row.id !== "clock" || !this.#clockCheckNeeded(health)
             ? nothing
-            : this.canConfirmClock
+            : this.canCheckClock
               ? this.#clockCheckButton()
               : this.#clockAdminSignIn()
         }

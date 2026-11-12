@@ -30,43 +30,30 @@ const STATUS = {
   "management.request_invalid": 400,
 } as const;
 
-const NOTE_MAX = 500;
-
 /**
- * Judges a note request's raw body: the trimmed note, or null for none. An empty body, `null`, an
- * object without `note` and a blank note are no note; with `required`, none is refused.
+ * Whether a handled request's raw body sends a note. An empty body, `null`, an object without
+ * `note` and a blank note send none.
  */
-function judgeNoteBody(text: string, required: boolean): string | null {
-  let note: string | null = null;
-  if (text !== "") {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      throw new AppError("management.request_invalid", { field: "body" });
-    }
-    if (parsed !== null) {
-      if (typeof parsed !== "object" || Array.isArray(parsed))
-        throw new AppError("management.request_invalid", { field: "body" });
-      const raw = (parsed as { note?: unknown }).note;
-      if (raw !== undefined) {
-        if (typeof raw !== "string")
-          throw new AppError("management.request_invalid", { field: "note" });
-        const trimmed = raw.trim();
-        if (trimmed.length > NOTE_MAX)
-          throw new AppError("management.request_invalid", { field: "note" });
-        if (trimmed !== "") note = trimmed;
-      }
-    }
+function sendsNote(text: string): boolean {
+  if (text === "") return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new AppError("management.request_invalid", { field: "body" });
   }
-  if (required && note === null)
-    throw new AppError("management.request_invalid", { field: "note" });
-  return note;
+  if (parsed === null) return false;
+  if (typeof parsed !== "object" || Array.isArray(parsed))
+    throw new AppError("management.request_invalid", { field: "body" });
+  const note = (parsed as { note?: unknown }).note;
+  if (note === undefined) return false;
+  if (typeof note !== "string") throw new AppError("management.request_invalid", { field: "note" });
+  return note.trim() !== "";
 }
 
 /**
- * The dashboard alerts: open alerts, recently handled ones, and marking an incident handled. Each request opens one transaction; a read refused by a full disk
- * retries in a turn with no drain.
+ * The dashboard alerts: open alerts, recently handled ones, and marking an incident handled. Each
+ * request opens one transaction; a read refused by a full disk retries in a turn with no drain.
  */
 export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "alerts.failed");
@@ -132,9 +119,8 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
         const { permission } = claimFor(deps.registry, incident.code);
         if (!held.has(permission))
           throw new AppError("authorization.not_permitted", { permission });
-        const note = judgeNoteBody(text, false);
         // No alert takes a note, so one sent is refused as for an unknown alert.
-        if (note !== null) throw new AppError("alert.not_found", { id });
+        if (sendsNote(text)) throw new AppError("alert.not_found", { id });
         await markIncidentHandled(tx, { id, personId, handledAt: deps.now() });
       });
       return c.body(null, 204);

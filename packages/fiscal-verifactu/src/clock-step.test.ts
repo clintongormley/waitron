@@ -15,7 +15,7 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { confirmClockStep } from "./clock-step.js";
-import { recordCorrected } from "./clock-stop-incidents.js";
+import { recordCorrected } from "./clock-corrected-incident.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -69,7 +69,6 @@ async function sale(ms: number): Promise<void> {
 
 function device(id: string, boxMs: number, differenceMs: number, address: string): ClockWitness {
   return {
-    kind: "device",
     id,
     address,
     boxAt: iso(boxMs),
@@ -201,7 +200,6 @@ describe("a step of the box's clock", () => {
     const [row] = await rows();
     expect(row).toMatchObject({ checkId: null, registroId: null, reason: "unusable" });
     expect(row!.proof).toEqual({
-      authority: null,
       devices: [],
       admin: LUIS.reading,
       step: { beforeAt: iso(R), afterAt: iso(A), stepMs: input.stepMs, targetAt: input.targetAt },
@@ -232,6 +230,9 @@ describe("a step of the box's clock", () => {
       registroId: null,
       confirmedAt: new Date(A),
     });
+    expect((stored[0]!.proof as { devices: unknown }).devices).toEqual([
+      { deviceId: "till-1", address: "10.0.0.1", boxAt: iso(R - S), witnessAt: iso(A - S) },
+    ]);
     expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
       { confirmationId: stored[0]!.id },
     ]);

@@ -406,7 +406,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
           }),
         freeSpace: createSpaceFreer({ ...leftoverDeps, venueDir, space, disk: diskState }),
         restart: () => {},
-        clockConfirm: {
+        clockSet: {
           backend: new FakeFiscalBackend(db),
           clock: systemClock(),
           steady: () => 0,

@@ -367,9 +367,9 @@ describe("till-box-time-dialog", () => {
       ["close", "check-again"],
     ],
     [
-      "pending_disproofs",
-      { code: "clock.set_refused", reason: "pending_disproofs" },
-      "box_time.refused.pending_disproofs",
+      "pending_step",
+      { code: "clock.set_refused", reason: "pending_step" },
+      "box_time.refused.pending_step",
       ["close", "check-again"],
     ],
     [

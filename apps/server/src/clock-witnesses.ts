@@ -59,7 +59,6 @@ export function createClockWitnessStore(
       if (seen !== undefined && seen.at.monoMs > arrived.monoMs) return;
       devices.set(deviceId, {
         witness: {
-          kind: "device",
           id: deviceId,
           ...(address === undefined || address === "" ? {} : { address }),
           boxAt: new Date(arrived.wallMs).toISOString(),
