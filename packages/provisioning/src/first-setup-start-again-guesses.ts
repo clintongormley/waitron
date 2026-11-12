@@ -18,6 +18,7 @@ const turns = {};
 
 interface Counter {
   version: 1;
+  /** The id never selects or resets the shared password wait. */
   attemptId: string;
   failures: number;
   lastFailureAt: string | null;

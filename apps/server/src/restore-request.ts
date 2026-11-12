@@ -633,6 +633,7 @@ export async function readRestoreAdminVerifiers(databasePath: string): Promise<r
       if (typeof row.password_hash === "string" && row.password_hash !== "")
         hashes.push(row.password_hash);
     }
+    // An unfinished flow without a password cannot offer authenticated discard.
     if (hashes.length === 0) throw new AppError("restore.administrator_password_missing", {});
     return hashes;
   } finally {

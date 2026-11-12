@@ -2,6 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as filesystem from "node:fs/promises";
 import { mkdtemp, mkdir, rm, readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { Socket } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import { TLSSocket } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -543,4 +544,36 @@ it("rechecks a corrected saved environment before moving the installed database"
   await expect(
     stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("authorizes Move using an administrator password committed only in a retained WAL", async () => {
+  const f = await recoveryFixture();
+  const path = join(f.venueDir, "venue.db");
+  const before = await readFile(path);
+  const password = "the password committed in WAL";
+  const hash = hashPassword(password);
+  const writer = new DatabaseSync(path);
+  let wal: Buffer;
+  let shm: Buffer;
+  try {
+    writer.exec("pragma journal_mode = wal; pragma wal_autocheckpoint = 0");
+    writer.prepare("update persons set password_hash = ? where role = 'admin'").run(hash);
+    wal = await readFile(`${path}-wal`);
+    shm = await readFile(`${path}-shm`);
+  } finally {
+    writer.close();
+  }
+  expect(before.includes(Buffer.from(hash))).toBe(false);
+  expect(wal.includes(Buffer.from(hash))).toBe(true);
+  await writeFile(path, before);
+  await writeFile(`${path}-wal`, wal);
+  await writeFile(`${path}-shm`, shm);
+  const app = new Hono();
+  mountEnvironmentChoice(
+    app,
+    { roots: f, baseEnv: f.baseEnv, onFinished: async () => {} },
+    async () => "<main></main>",
+  );
+  expect((await post(app, { choice: "move", password: PASSWORD })).status).toBe(403);
+  expect((await post(app, { choice: "move", password })).status).toBe(200);
 });

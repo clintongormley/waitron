@@ -409,12 +409,11 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
   "restore.flow_unreadable": {
     "en-GB": {
       title: "The unfinished restore request cannot be read.",
-      action: "The box cannot read this unfinished restore. Retry a normal boot.",
+      action: "The box cannot finish this restore.",
     },
     "es-ES": {
       title: "No se puede leer la solicitud de restauración sin terminar.",
-      action:
-        "El equipo no puede leer esta restauración sin terminar. Reintenta un arranque normal.",
+      action: "El equipo no puede terminar esta restauración.",
     },
   },
   "restore.placement_failed": {
