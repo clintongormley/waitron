@@ -1,10 +1,14 @@
 # A444, revised: a full invoice carries the day the bill closed
 
-Status: **awaiting the watcher's clearance of decisions 1, 2 and 4. Build nothing before then.**
-Replaces the [27 October plan](2026-10-27-a444-meal-completion-date.md). The
-[spec](../specs/2026-10-27-a444-meal-completion-date-design.md) still holds except where decision 2
-says otherwise. Main input: the re-map `~/waitron-campaign-l/receipts/a444-remap-20261112.md`, taken
-at `3dc5acd83a`. This plan is written at `dab79e12cf`.
+Status: **awaiting clearance. The owner clears decisions 2, 5, 7 and 8; the watcher clears 1, 3, 4
+and 6. Build nothing before then.** Replaces the [27 October plan](2026-10-27-a444-meal-completion-date.md);
+the [spec](../specs/2026-10-27-a444-meal-completion-date-design.md) holds except where a decision
+says otherwise. Main input: the re-map `~/waitron-campaign-l/receipts/a444-remap-20261112.md`
+(at `3dc5acd83a`); this plan is at `dab79e12cf`, revised after a fresh-context review.
+
+**Where the approvals live.** The owner's rule and the H2 permission ("the grant"):
+`~/waitron-campaign-e/archive/questions-to-20261108.md:578–602` (27 Oct, 07:45 and ~12:00). The
+watcher's instruction for this plan: `~/waitron-campaign-l/questions.md:1037–1038` (12 Nov, 08:06).
 
 **RUN** means a command was run and its output read; **READ** means source was read only. #2919
 moved lines in four server files this plan names (re-located here); under `packages/` it and #2920
@@ -14,66 +18,80 @@ changed only `ui` tests and `db`'s mutation costs (RUN: `git diff --stat 3dc5acd
 
 Staff see nothing new: no date to pick, no question to answer, no new button.
 
-A full invoice (an F1, the kind with the customer's tax details) for a meal that was open across
-midnight will carry, on paper and at AEAT, the day the bill closed. "Closed" is the owner's rule from
-27 October: the earliest of the final payment being accepted, the first full invoice being issued, an
-edit that settles the balance, or an accepted unpaid departure. Asking for the bill never counts.
+A full invoice (an F1, the kind with the customer's tax details) for a meal open across midnight
+will carry, on paper and at AEAT, the day the bill closed. The owner's rule: the bill closes at the
+**earliest** of the final payment being accepted by the server (before the card reader answers),
+the first full invoice being issued, an edit that settles the balance, or an accepted unpaid
+departure. Asking for the bill never counts.
 
 **The bug today.** A table's full invoice saves the day the bill was **opened**
 (`packages/core/src/record-sale.ts:276–293`, READ; the three cases at `record-sale.test.ts:2016–2052`
-pass, RUN by the re-map). The receipt, A4 invoice, email and till print that day as the "operation
-date" whenever it differs from the issue day (`receipt-issuer.ts:55–57`, `invoice-document.ts:174`,
-`receipt-document.ts:254`, till `till-ticket-view.ts:1220`, READ). AEAT never receives it: the backend
-call carries no operation date (`record-sale.ts:351–364`, READ) and the record mapping refuses
-`FechaOperacion` (`packages/fiscal-verifactu/src/registro-row.ts:120`, READ). So a table opened at
-23:30 and invoiced at 00:10 prints yesterday's date that the filed record does not contain. Table
-full invoices are switched on (`docs/backlog.md:280`, READ), so this is live behaviour.
+pass, RUN by the re-map). The receipt, A4 invoice, email and till print it as the "operation date"
+when it differs from the issue day (`receipt-issuer.ts:55–57`, `invoice-document.ts:174`,
+`receipt-document.ts:254`, till `till-ticket-view.ts:1220`, READ). AEAT never receives it: the
+backend call carries none (`record-sale.ts:351–364`, READ) and the record mapping refuses
+`FechaOperacion` (`packages/fiscal-verifactu/src/registro-row.ts:120`, READ). A table opened at
+23:30 and invoiced at 00:10 prints a date the filed record does not contain. Table full invoices are
+switched on (`docs/backlog.md:280`, READ), so this is live.
 
-## The design, and where it departs from the spec
+## The design
 
-Only one case needs a stored date: the final payment is **accepted before midnight and the invoice is
-issued after it**: a card still at the reader at midnight, or recovered after a restart or by a
-manager's attestation. Every other close issues in the transaction that closes the bill, so its day
-**is** the issue day (re-map Summary 4): cash (`takeBillPayment`, `bill-payments.ts:1277`), settling
-edits, unpaid departure (`unpaid-departure.ts:152`) and close-by-transfer (`transfer-close.ts:164`), READ.
+**Only one case needs a stored date:** the final payment is accepted before midnight and the invoice
+is issued after it. Every other close issues in the transaction that closes the bill, so its day is
+the issue day (re-map Summary 4): cash (`takeBillPayment`, `bill-payments.ts:1277`), settling edits,
+unpaid departure (`unpaid-departure.ts:152`) and close-by-transfer (`transfer-close.ts:164`), READ.
+A card that is captured also issues in the capture's own transaction (`completeBillPayment` calls
+`issueWhenFullyPaid` at `bill-payments.ts:1505`, READ), so "captured" and "issued" share a time below.
 
-- **Save the close moment on the final payment row.** When `beginBillPayment`
-  (`bill-payments.ts:1153`, READ) accepts a payment that leaves nothing owed once every received and
-  pending payment is counted, and the meal is complete, it writes the acceptance reading's instant
-  and venue day into two new nullable columns on `bill_payments`. The row is inserted after every
-  admission check and before the card reader starts (`:1217–1235`, READ), and its guard trigger
-  already freezes the other identity columns (`packages/db/triggers/core.sql:98–134`, READ).
-- **Use it at issue.** `issueWhenFullyPaid` (`bill-payments.ts:686`, `recordSale` at `:760`, READ) is
-  the one place a paid table bill becomes an invoice: cash, card, the pending loop, attestation and
-  every settling edit reach it. If the meal is complete, it passes the day saved on the bill's last
-  accepted received payment, or else the issue day. `issueUnpaidInvoice` (`working-order.ts:7024`,
-  READ) passes the issue day for a complete meal.
-- **"Complete meal"** keeps the spec's rule: no unsent draft on any bill of the party, and every
-  active dish served or cancelled (`serviceQuantities`, `line-service-state.ts:20`, READ). A meal still
-  in service keeps today's behaviour (decision 5).
-- **Departure from the spec (decision 2).** The spec kept a snapshot on the bill
-  (`working_orders.meal_completion`), with rules to clear it on split, merge, move or a new dish and a
-  new `meal.completion_in_flight` refusal: 500–700 more lines (re-map). On the payment row none of it
-  is needed: a declined card is never read, a resumed meal needs a new final payment with its own
-  reading, and edits are already refused while a card is pending (`refusePaymentInFlight`,
-  `working-order.ts:5372`; `requireUntouched`, `bill-actions.ts:68–80`; READ).
+- **Capture.** When `beginBillPayment` (`bill-payments.ts:1153`, READ) accepts a payment that leaves
+  nothing owed once every received and pending payment is counted, and the meal is complete, it
+  writes three things on that `bill_payments` row: the acceptance instant, its venue day, and a
+  **service print** (a hash of every active line of the party's bills with its quantity and
+  cancelled quantity, built with `fingerprint`, `parties.ts:928`, READ). The row is inserted after
+  every admission check and before the reader starts (`:1217–1235`, READ); the guard trigger
+  freezes its identity columns (`packages/db/triggers/core.sql:98–134`, READ) and will freeze these.
+- **The venue day comes from the saved venue zone**, through `prepareIssueClock`
+  (`packages/fiscal/src/issue-clock.ts:14–28`, READ), as `transfer-close.ts:97` does. The raw server
+  reading carries the **process** zone's offset (`till-backend.ts:21`, READ) and `deploy/Dockerfile`
+  sets no `TZ` (READ: its `ENV` lines), so the raw offset is never used.
+- **Use at issue** (`issueWhenFullyPaid`, `:686`; `recordSale` at `:760`, READ). If the meal is
+  complete, take the bill's payment rows **in any state** (received, failed, declined) that carry a
+  day and whose service print equals the party's print now; use the one with the **earliest saved
+  instant**. If none matches, or the meal is not complete, use the issue day (decision 5).
+  This follows the owner's "earliest close" rule and the spec's "a repeated close command … retains
+  the earliest snapshot unless service actually resumed" (spec, "Capture automatically"): a retry
+  after a decline keeps the first day; a new dish changes the print, so a resumed meal takes the
+  new final payment's day.
+- **A card captured short** stays `received` with `remaining_after` above zero, set at capture
+  (`bill-payments.ts:1478–1499`, READ). It keeps its day; the payment that tops it up is the new
+  final payment, and the earliest matching day still wins.
+- **Edits are refused per bill while a card is pending** (`order-drafts.ts:160`, `:300` pass
+  `[billId]` to `refusePaymentInFlight`, `working-order.ts:5372`, READ), but completeness is
+  party-wide. A sibling bill can take a dessert meanwhile; its print change makes the stored day
+  inapplicable and the meal is no longer complete. Accepted, and tested in Task 2.4.
+- **Departure from the spec (decision 2).** The spec kept the snapshot on the bill
+  (`working_orders.meal_completion`) with clearing rules for split, merge, move and new dishes and a
+  new in-flight refusal: 500–700 more lines (re-map). The print replaces those rules.
 - **#2919.** `beginBillPayment` now also admits a sent counter order or presented bill
   (`bill-payments.ts:1189`, `:1198–1200`, READ); Task 2.3 tests a presented bill. Counter full
   invoices stay refused (`till-sale.ts:558`, `working-order.ts:4248`, READ).
+- **Cancellations.** A cancellation record has no operation date, and its row cannot be given one:
+  `chain.ts:224` builds the row from the record (READ), and the grant excludes chain code. So the
+  period readers take a cancellation's day from the same invoice's alta (matched by `sale_id`, as
+  `reconcile.ts:297`'s `sameInvoice` already joins, READ). The cancellation's body is unchanged:
+  `FechaExpedicionFacturaAnulada` stays the original's issue date (`backend.ts:490–496`, READ).
 
 ## Pull requests
 
-Each leaves main working, is under 400 production lines, and needs a venue reset because it rebuilds
-a starting migration. Its title starts "Reset test venues:", as #2804 did (RUN: `git log -- packages/db/drizzle`).
+Each leaves main working, is under 400 production lines, and rebuilds a starting migration, so each
+needs a venue reset and a title starting "Reset test venues:", as #2804 did (RUN: `git log -- packages/db/drizzle`).
 
-**PR 1, the fiscal path (H2 files only).** An optional, trusted operation day travels from the sale
-to the stored record, to AEAT as `FechaOperacion`, and into the consultation and reconciliation
-periods, including a cancellation's original period. No caller passes it, so every record, receipt
-and query stays as today. **Usable when it lands:** nothing visible; PR 2 builds on it.
+**PR 1, the fiscal path.** An optional, trusted operation day travels from the sale to the stored
+record, to AEAT as `FechaOperacion`, and into every period reader. No caller passes it, so every
+record, receipt and query stays as today. **Usable when it lands:** nothing visible.
 
-**PR 2, capture and use.** The close day is saved on the final payment and handed to the sale.
-**Usable when it lands:** the whole feature; it deletes the A444 backlog entries
-(`docs/backlog.md:237`, `docs/backlog/fiscal.md:11`).
+**PR 2, capture and use.** **Usable when it lands:** the whole feature; it deletes the A444
+backlog entries (`docs/backlog.md:237`, `docs/backlog/fiscal.md:11`).
 
 ## Process
 
@@ -81,20 +99,21 @@ and query stays as today. **Usable when it lands:** nothing visible; PR 2 builds
   global rule). Fiscal is a risk trigger: a fresh-context plan review before the first dispatch, a
   per-task review, `/finish-branch`'s full wave with **two** Codex run-it angles; the watcher may add
   Fable in lane M. The owner lands every PR.
-- Every task: tests first, watched failing on the **behaviour** (a missing column is not the red);
-  least code; rerun with a nonzero `Tests` count and checked exit; `git diff --check`; `git commit -s`.
-- Never edited, in either PR: `computeHuella`, chain code, numbering and allocation, the library's
-  record builders, `registerSif`/`restoreFiscal`, historical sales, `packages/fiscal-verifactu/src/classification.ts`
-  (it makes `registros_facturacion` append-only, `:6`, READ), and the protected tests.
+- Every task: tests first, watched failing on the **behaviour**; least code; rerun with a nonzero
+  `Tests` count and checked exit; `git diff --check`; `git commit -s`. Every bill in a test opens the
+  day **before** the expected operation day, so today's opening-day value cannot pass it.
+- Never edited: `computeHuella`, chain code, numbering, the library's record builders,
+  `registerSif`/`restoreFiscal`, historical sales, `classification.ts` (it makes
+  `registros_facturacion` append-only, `:6`, READ), and protected tests, except the lines decision 8 names.
 
-**The fiscal gate**, run at the end of every task in both PRs and again before finish:
+**The fiscal gate**, at the end of every task in both PRs and again before finish:
 
 ```sh
-git diff main -- packages/fiscal-verifactu/src/write-path.e2e.test.ts packages/fiscal-verifactu/src/inmutabilidad.test.ts packages/fiscal-verifactu/src/classification.ts   # expect no output
+git diff main -- packages/fiscal-verifactu/src/write-path.e2e.test.ts packages/fiscal-verifactu/src/inmutabilidad.test.ts packages/fiscal-verifactu/src/classification.ts packages/fiscal-verifactu/src/chain.ts packages/fiscal-verifactu/src/registro-sif.ts packages/db/src/allocate-number.ts   # expect no output
 pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
 ```
 
-**After each baseline rebuild** (Tasks 1.2, 2.1), the CLAUDE.md §3 list (inmutabilidad is in the gate):
+**After each baseline rebuild** (Tasks 1.2, 2.1), the root CLAUDE.md §3 list:
 `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts`.
 On a rebase conflict in a starting migration, take main's copy and rerun the rebuild. If A1308's
 rename of `registros_facturacion` to `verifactu_records` lands first (`docs/superpowers/specs/2026-11-02-rationalisation/tables-fiscal.md:654`, READ), use the new name.
@@ -103,167 +122,155 @@ rename of `registros_facturacion` to `verifactu_records` lands first (`docs/supe
 
 | Case | Accepted | Issued | Operation day / `FechaOperacion` |
 | --- | --- | --- | --- |
-| Across midnight | 27 Oct 2026 23:55 (+01:00, 22:55Z) | 28 Oct 00:10 | 2026-10-27 / `27-10-2026` |
-| Same day | 28 Oct 00:05 | 28 Oct 00:10 | 2026-10-28 / omitted |
-| Clocks go back (25 Oct 2026, 03:00 CEST becomes 02:00 CET) | 24 Oct 23:55 (+02:00, 21:55Z) | 25 Oct 03:30 (+01:00) | 2026-10-24 / `24-10-2026` |
-| Month end | 31 Oct 23:55 | 1 Nov 00:10 | 2026-10-31; consultation period 2026/10 |
-| Year end | 31 Dec 2026 23:55 | 1 Jan 2027 00:05 | 2026-12-31; period 2026/12; invoice id and QR keep 01-01-2027 |
-| Canary venue (`Atlantic/Canary`) | 27 Oct 23:55 WET (23:55Z; 00:55 in Madrid) | 28 Oct 00:10 | 2026-10-27 |
+| Across midnight | 27 Oct 2026 23:55 (22:55Z) | 28 Oct 00:05 | 2026-10-27 / `27-10-2026` |
+| Same day | 28 Oct 00:05 | 28 Oct 00:05 | 2026-10-28 / omitted |
+| Clocks go back (25 Oct) | 25 Oct 00:30 summer time (24 Oct 22:30Z) | 25 Oct 03:30 winter time | 2026-10-25 / omitted; the issue offset would give 24 |
+| Server in UTC (`TZ=UTC`) | 28 Oct 00:30 (27 Oct 23:30Z) | 28 Oct 00:30 | 2026-10-28 / omitted; the process zone would give 27 |
+| Month end | 31 Oct 23:55 | 1 Nov 00:05 | 2026-10-31; consultation period 2026/10 |
+| Year end | 31 Dec 2026 23:55 | 1 Jan 2027 00:05 | 2026-12-31; 2026/12; invoice id and QR keep 01-01-2027 |
+| Canary venue | 27 Oct 23:55 WET (23:55Z) | 28 Oct 00:05 | 2026-10-27 (Madrid's day would be 28) |
 
 **Conversion control.** The library shifts a `Date` by the **issue** offset before formatting
 (`dist/records.js:99–100`, `format.js:108–111`, READ); the re-map RAN UTC midnight `2026-10-27T00:00Z`
 at offset −60 and got `26-10-2026`. The converter must give `27-10-2026` at −60, 0, +60 and +120;
-reuse the "midnight UTC minus the issue offset" anchor the cancellation path uses (`backend.ts:490–495`, READ).
+reuse the "midnight UTC minus the issue offset" anchor at `backend.ts:490–495` (READ).
 
 ## PR 1 tasks (branch `a444-fiscal-operation-day`)
 
-### Task 1.1: the sale accepts a trusted operation day
+**1.1 The sale accepts a trusted day.** Files: `packages/fiscal/src/backend.ts` (`SaleForFiscalRecord`
+`:97–114`: `operationDate?: string`), `packages/core/src/record-sale.ts` (`RecordSaleInput` `:62`),
+`packages/core/src/errors.ts` (`sale.operation_date_invalid`), `record-sale.test.ts`.
+- Red: a bill opened 26 Oct, an F1 given `2026-10-27` and issued 28 Oct 00:05 saves `2026-10-27` and
+  hands the backend that day; refusals for `2026-02-30`, `27-10-2026`, a day after the issue day, and
+  any day on an F2. The cases at `:2016–2052` stay unedited and green.
+- `pnpm --filter @waitron/core exec vitest run src/record-sale.test.ts`; `pnpm --filter @waitron/core typecheck`; `pnpm --filter @waitron/fiscal typecheck`.
 
-Files: `packages/fiscal/src/backend.ts` (`SaleForFiscalRecord`, `:97–114`, READ: add
-`operationDate?: string`), `packages/core/src/record-sale.ts` (`RecordSaleInput`, `:62`),
-`packages/core/src/errors.ts` (one code, `sale.operation_date_invalid`), `record-sale.test.ts`.
+**1.2 The record stores and sends it.** Files: `schema/registros.ts` (nullable `fecha_operacion` by
+`:66`), `registro-row.ts` (drop it from the refused list `:120`; map it in `:111` and `:350`),
+`backend.ts` (`recordSale` `:314–371`: set `AltaInput.FechaOperacion` only when the day differs),
+the fiscal starting migration. New `src/operation-date.test.ts`; added cases only in
+`registro-row.roundtrip.test.ts`. **Changed assertions (decision 8):** in
+`record-payload-admission.test.ts`, the `FechaOperacion` entry at `:35` goes, and the correction case
+at `:129–137` expects `["Cupon"]` alone. All READ.
+- Red, through the real backend and store: across midnight files `27-10-2026` and stores
+  `2026-10-27`, and `fromRegistroRow` returns it after the database is closed and reopened; same day
+  omits it and stores null; the conversion control; equal `Huella` with and without the field (the
+  re-map RAN this on library 0.2.1; `dist/validate.js:403–412` lists the hash inputs, READ).
+- Rebuild: `pnpm --filter @waitron/fiscal-verifactu db:generate` (`--set fiscal-verifactu`,
+  `package.json:15`, READ). The append-only trigger is table-wide; no trigger change (re-map, READ).
+- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/operation-date.test.ts src/registro-row.roundtrip.test.ts src/record-payload-admission.test.ts`, the guards, the gate.
 
-- Red, in a new `describe` in `record-sale.test.ts`: an F1 given `2026-10-27` and issued 28 Oct 00:10
-  saves `2026-10-27` and hands the backend `operationDate: "2026-10-27"`; refusals with the domain
-  code for `2026-02-30`, `27-10-2026`, a day after the issue day, and any day on an F2.
-- The three opening-day cases at `:2016–2052` stay **unedited** and green: with no day supplied the
-  opening-day default and the backend call are unchanged.
-- `pnpm --filter @waitron/core exec vitest run src/record-sale.test.ts`, then
-  `pnpm --filter @waitron/core typecheck` and `pnpm --filter @waitron/fiscal typecheck`.
+**1.3 Every period reader follows the operation day.** Files: `drain.ts` (`routeB` `:1749`),
+`reconcile.ts` (`rowsForPeriod` `:278`), and, if decision 7 is cleared, `reconcile-sweep.ts:47` (the
+months to reconcile) and `reconcile-series.ts:47` (the local list it compares with AEAT's). Each uses
+the alta's `fecha_operacion`, a cancellation's from its invoice's alta, else `fecha_expedicion_factura`.
+New `src/operation-date.periods.test.ts`; added cases only in `reconcile.period.test.ts`. All READ.
+- Red, synthetic AEAT replies through the real client: month end and year end are queried under
+  2026/10 and 2026/12; the sweep visits 2026/12 when the only December operation was issued 1 Jan;
+  a cancellation of the year-end invoice made on 2 Jan 2027 reconciles under 2026/12 with no
+  incident and no resubmission; the series check raises no gap; an F2 and a same-day F1 keep the
+  issue month. That AEAT files the cancellation under the operation period is the reviewer's reading
+  of the spec's §6.4 source; only the synthetic test checks it.
+- Cut the "records never carry `FechaOperacion`" comments (`drain.ts:1746–1747`, `reconcile.ts:269–270`);
+  run `rg -n 'FechaOperacion|operation month|expedition month' apps packages docs` and fix every sentence made false.
+- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/operation-date.periods.test.ts src/reconcile.period.test.ts src/drain.test.ts`, the gate.
 
-### Task 1.2: the record stores and sends it
+**1.4 A correction resend keeps the day (only if decision 8 is cleared).** `record-remedy-http.ts`
+(the subsanación, AEAT's word for re-sending a corrected record) rebuilds the record field by field
+from `fromRegistroRow` (`:115`, `:164–202`, READ) and has no `FechaOperacion` line, so it would drop
+the day. Add that line through its `day()` helper (`:124–127`). Test: a dated invoice's resend
+files `27-10-2026`. `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/record-remedy-http.test.ts`, the gate.
 
-Files: `packages/fiscal-verifactu/src/schema/registros.ts` (nullable `fecha_operacion`, next to
-`fecha_expedicion_factura` at `:66`), `registro-row.ts` (drop `FechaOperacion` from the refused list
-at `:120`; map it in `toRegistroRow` `:111` and `fromRegistroRow` `:350`), `backend.ts` (`recordSale`
-`:314–371`: set `AltaInput.FechaOperacion` only when the day differs from the issue day), the fiscal
-starting migration. New `src/operation-date.test.ts`; additional cases only in
-`registro-row.roundtrip.test.ts`. All READ.
+## PR 2 tasks (branch `a444-close-day`, after PR 1 lands)
 
-- Red, through the real backend and store: the across-midnight case files `27-10-2026`, stores
-  `2026-10-27`, and after closing and reopening the database `fromRegistroRow` gives it back; the
-  same-day case omits the field and stores null; the clocks-go-back case; the conversion control at
-  four offsets.
-- Fingerprint: the same record with and without `FechaOperacion` has the same `Huella` (the re-map
-  RAN this against the installed library 0.2.1; `dist/validate.js:403–412` lists the inputs, READ).
-- Rebuild: `pnpm --filter @waitron/fiscal-verifactu db:generate` (which runs
-  `migration-baseline rebuild --set fiscal-verifactu`, `packages/fiscal-verifactu/package.json:15`, READ).
-  The append-only trigger is table-wide, so a new column needs no trigger change (re-map, READ).
-- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/operation-date.test.ts src/registro-row.roundtrip.test.ts`,
-  then the migration guards and the fiscal gate.
+**2.1 The payment row can hold a close.** Files: `packages/db/src/schema/bill-payments.ts`
+(`meal_ended_at`, `meal_end_date`, `meal_service_print`, all three or none, by CHECK), `core.sql`
+(`bill_payments_guard_update`: all frozen, in every state change), the core starting migration;
+added cases in `src/schema/bill-payments.test.ts`. The red here is the missing column; accepted for
+a schema-only task. Rebuild: `pnpm --filter @waitron/db db:generate` (`--set core`,
+`packages/db/package.json:29`, READ). `pnpm --filter @waitron/db exec vitest run src/schema/bill-payments.test.ts`, the guards.
 
-### Task 1.3: periods follow the operation day
+**2.2 Completeness, print and day.** New `apps/server/src/meal-completion.ts` and test:
+`mealServiceState` from `partyFamily`/`readFamilyBills` (`parties.ts:495`, `:870`), `readBillUnsent`
+(`bill-unsent.ts:8`) and `serviceQuantities`/`readLineCancellations` (`line-service-state.ts:20`, `:51`),
+all READ; `servicePrint`; and the venue day of a reading through `prepareIssueClock` and
+`localCalendarDate` (`issue-moment.ts:25`, READ). Red: unserved dish, held course, unsent draft, or an
+unserved dish on a settled sibling bill → continuing; the print changes on a new or cancelled dish
+but not on a price cut; the clocks-go-back, `TZ=UTC` and Canary rows. `pnpm --filter @waitron/server exec vitest run src/meal-completion.test.ts`.
 
-Files: `drain.ts` (`routeB`, `:1741–1765`), `reconcile.ts` (`rowsForPeriod`, `:268–280`, as
-`coalesce(fecha_operacion, fecha_expedicion_factura)`), `backend.ts:490–500` (a cancellation looks up
-its original by the original's operation period). New `src/operation-date.periods.test.ts`;
-additional cases only in `reconcile.period.test.ts`. All READ.
+**2.3 Capture.** `beginBillPayment`; new `src/meal-completion.capture.test.ts`. Red: a final cash or
+card payment of a complete meal writes all three; a share that leaves money owed writes none; two
+cards begun 23:50 and 23:55 (the second leaves nothing owed) → only the second carries a day; a
+presented bill (#2919) carries one; an unserved dish → none.
+`pnpm --filter @waitron/server exec vitest run src/meal-completion.capture.test.ts src/bill-payments.card.test.ts src/placed-order-one-payment.test.ts`, the gate.
 
-- Red, with synthetic AEAT HTTP replies through the real client: the month-end and year-end cases ask
-  for 2026/10 and 2026/12 in the targeted query and reconciliation; cancelling the year-end invoice
-  looks in 2026/12; an F2 and a same-day F1 still use the issue month.
-- Cut the comments at `drain.ts:1746–1747` and `reconcile.ts:269–270` that say records never carry
-  the field. Grep `rg -n 'FechaOperacion|operation month' apps packages docs` and fix every sentence
-  this makes false.
-- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/operation-date.periods.test.ts src/reconcile.period.test.ts src/drain.test.ts`,
-  then the fiscal gate.
+**2.4 Use at issue.** `issueWhenFullyPaid`; new `src/meal-completion.issue.test.ts`, each asserting
+the sale's day, the backend's day and the printed ticket:
+- card accepted 23:55, captured and issued 00:05 → 27 and 28, both printed; the same through the
+  pending loop after a restart on 29 Oct, and through attestation → 27, one charge, one invoice;
+- card declined 23:58, second card accepted and captured 00:05, no new dish → 27 (decision 2);
+- declined 23:58, dessert sent and served, new final payment 00:15 → 28;
+- captured short at 23:57, rest in cash 00:20 → 27 (decision 2);
+- the two cards of Task 2.3 captured in reverse order → 27;
+- a sibling bill takes a dessert while the card is pending → incomplete-meal result (decision 5);
+- bill requested 23:50, cash final payment 00:05 → 28, nothing extra printed;
+- settling price cut at 00:10 on a complete, part-paid bill with no dated row → 28.
+Rerun unedited: `bill-payments-loop`, `bill-payments.issue-clock`, `bill-payments.in-flight`,
+`adjustments-bill-payments` (exist, RUN: `ls`).
+`pnpm --filter @waitron/server exec vitest run src/meal-completion.issue.test.ts src/bill-payments-loop.test.ts src/bill-payments.issue-clock.test.ts src/bill-payments.in-flight.test.ts src/adjustments-bill-payments.test.ts`, the gate.
 
-## PR 2 tasks (branch `a444-close-day`, on main after PR 1 lands)
+**2.5 Unpaid departure and transfer close.** `issueUnpaidInvoice` (`working-order.ts:7024`); added
+cases in `unpaid-departure.test.ts`, `transfer-close.test.ts`. Red: bill opened 27 Oct 23:30,
+departure accepted 28 Oct 00:10 → 28, nothing extra printed; collection on 30 Oct adds no date; the
+same for a transfer close; an unserved dish → decision 5's result.
+`pnpm --filter @waitron/server exec vitest run src/unpaid-departure.test.ts src/transfer-close.test.ts`, the gate. Delete the backlog entries.
 
-### Task 2.1: the payment row can hold a close day
+## Decisions
 
-Files: `packages/db/src/schema/bill-payments.ts` (`meal_ended_at`, the trusted instant, and
-`meal_end_date`, the ISO venue day; both or neither, by CHECK), `packages/db/triggers/core.sql`
-(`bill_payments_guard_update`, `:98–134`: both frozen, including on the pending-to-received move),
-the core starting migration. Additional cases in `packages/db/src/schema/bill-payments.test.ts`.
-
-- Red: a row inserted with both reads back; one without the other, or `2026-13-01`, is refused; any
-  update to either column is refused, in every state change the trigger allows.
-- Rebuild: `pnpm --filter @waitron/db db:generate` (`migration-baseline rebuild --set core`,
-  `packages/db/package.json:29`, READ). `bill_payments` keeps its classification
-  (`packages/db/src/classification.ts:84`, READ).
-- `pnpm --filter @waitron/db exec vitest run src/schema/bill-payments.test.ts`, then the guards.
-
-### Task 2.2: is the meal complete, and which day closes it
-
-Files: new `apps/server/src/meal-completion.ts` and `.test.ts`. `mealServiceState(tx, billId)`
-returns `"complete" | "continuing"` from the party's bills (`partyFamily` `parties.ts:495`,
-`readFamilyBills` `:870`, abandoned bills left out), `readBillUnsent` (`bill-unsent.ts:8`) and
-`serviceQuantities`/`readLineCancellations` (`line-service-state.ts:20`, `:51`), all READ. A second
-function turns a trusted reading into the venue day.
-
-- Red: an unserved dish, a held course, an unsent draft, or an unserved dish on a settled bill of the
-  same party → continuing; all served, or the rest cancelled → complete.
-- Unverified, so RUN first: is the reading's `offsetMinutes` the saved venue zone's? The Canary case
-  must give 2026-10-27 under `TZ=Europe/Madrid`. Candidate: `localCalendarDate` (`issue-moment.ts:25`,
-  READ); otherwise the saved zone, as `record-sale.ts:286–292` uses.
-- `pnpm --filter @waitron/server exec vitest run src/meal-completion.test.ts`
-
-### Task 2.3: capture at final payment, use at issue
-
-Files: `bill-payments.ts` (`beginBillPayment` `:1153`, `issueWhenFullyPaid` `:686`), new
-`src/meal-completion.issue.test.ts`.
-
-- Red, each asserting the sale's `operationDate`, the backend's day and what the ticket prints:
-  - card accepted 23:55, captured 00:05, issued 00:10 → 27 and 28, both printed; the same answered
-    by the pending loop after a restart on 29 Oct, and by attestation → 27, one charge, one invoice;
-  - bill requested 23:50, cash final payment 00:05 → 28, nothing extra printed;
-  - card declined 23:50, dessert added and served, new final payment 00:15 → 28;
-  - a share at 23:30, the rest by card accepted 23:55, captured 00:05 → 27; two guests' cards begun
-    23:50 and 23:55 (the second leaves nothing owed), captured in the other order → 27;
-  - a final card captured short at 23:57, the rest in cash at 00:20 → 28 (decision 2);
-  - a presented bill (#2919) paid by card accepted 23:55, captured 00:05 → 27;
-  - a settling price cut at 00:10 on a complete, part-paid bill → 28, nothing extra printed;
-  - control: one dish unserved at 23:55 → no day saved, the opening-day default stands (decision 5).
-- Rerun unedited: `bill-payments.card`, `bill-payments-loop`, `bill-payments.issue-clock`,
-  `bill-payments.in-flight`, `adjustments-bill-payments`, `placed-order-one-payment` (exist, RUN: `ls`).
-- `pnpm --filter @waitron/server exec vitest run src/meal-completion.issue.test.ts src/bill-payments.card.test.ts src/bill-payments-loop.test.ts src/bill-payments.issue-clock.test.ts src/bill-payments.in-flight.test.ts src/adjustments-bill-payments.test.ts src/placed-order-one-payment.test.ts`,
-  then the fiscal gate.
-
-### Task 2.4: unpaid departure and close-by-transfer
-
-Files: `working-order.ts` (`issueUnpaidInvoice`, `:7024`), additional cases in
-`unpaid-departure.test.ts` and `transfer-close.test.ts`.
-
-- Red: a complete meal's unpaid departure accepted 28 Oct 00:10 on a bill opened 27 Oct 23:30 → 28,
-  nothing extra printed; collection on 30 Oct creates no new date. The same for a transfer close.
-  Control: an unserved dish keeps the opening day.
-- `pnpm --filter @waitron/server exec vitest run src/unpaid-departure.test.ts src/transfer-close.test.ts`,
-  then the fiscal gate. Delete the A444 backlog entries.
-
-## Decisions for the watcher or owner
-
-1. **Split into two PRs.** The old plan said "one complete fiscal PR, no partial publication",
-   meant to stop a receipt-only change. PR 1 changes no receipt and no filing, so it is not that.
-   **Default: split** (superseding that line only if cleared). Example: PR 1 lands; a meal closed
-   23:55 and invoiced 00:10 still prints the opening day and files none, exactly as today.
-2. **Store the close day on the final payment row, not on the bill.** **Default: the payment row**,
-   using the day on the bill's last accepted payment. Example: a card captured short at 23:57 and
-   topped up in cash at 00:20 files 28 Oct, though the owner's "earliest close" wording would say 27;
-   the meal may have resumed in between, and checking that is the machinery this design drops.
-3. **Close-by-transfer (A275) counts as a close, like unpaid departure.** **Default: yes**; it issues
-   in the same transaction, so the answer changes nothing. Example: closed by transfer 00:20 → 28 Oct.
-4. **Rebuilding the fiscal set's starting migration is inside the H2 grant.** The grant's "no shipped
-   migrations" was written under the old rule; before go-live nothing is shipped and the rebuild is
-   how a column is added. **Default: yes.** Example: PR 1 adds one nullable column to
-   `packages/fiscal-verifactu/drizzle/0000_baseline.sql`, and boxes are reset.
-5. **A meal still in service keeps today's behaviour** (the S3/A447 question). **Default: keep**, as
-   the spec says. Example: opened 23:30, paid in full at 00:10 with a dessert unserved → the receipt
-   still prints 27 Oct and AEAT still gets no date; that mismatch stays until S3 is decided.
-6. **"Complete" means every dish marked served or cancelled.** Payment marks nothing served; staff
-   actions do (`markServed`, `markGroupServed`, `working-order.ts:3684`, `:3770`, READ).
-   **Default: keep the spec's rule.** Example: a venue whose staff never tap "served" sees no change
-   from A444 on any table. Counting "sent to the kitchen" instead is a small change to Task 2.2.
+1. **Watcher: split into two PRs**, superseding the old "one complete fiscal PR, no partial
+   publication" line. PR 1 changes no receipt and no filing. Default: split. Example: after PR 1, a
+   meal closed 23:55 and invoiced 00:05 prints and files exactly as today.
+2. **Owner: the earliest close holds until service changes.** Default: yes, as designed above.
+   Example A: card declined 23:58, second card accepted 00:05, no new dish → 27 Oct. Example B: card
+   captured short 23:57, rest paid in cash 00:20 → 27 Oct. The alternative, "the last payment's day",
+   gives 28 Oct in both and is simpler by one column.
+3. **Watcher: close-by-transfer (A275) is a close**, like unpaid departure. Default: yes; it issues
+   in the same transaction, so nothing changes. Example: closed by transfer 00:20 → 28 Oct.
+4. **Watcher: rebuilding the fiscal set's starting migration is inside the grant.** Root CLAUDE.md
+   §3: before go-live "a schema change rebuilds the set's one starting migration, never a new
+   migration". The grant's "new migration" and "no shipped migrations" were written under the old
+   rule. Default: yes. Example: PR 1 adds one nullable column to `0000_baseline.sql`; boxes reset.
+5. **Owner: what an incomplete meal's full invoice prints.** Today it saves and prints the opening
+   day, which AEAT never receives. Default (recommended): the issue day, so paper and filing agree
+   and nothing is filed. Example: opened 27 Oct 23:30, paid 28 Oct 00:10 with a dessert unserved →
+   today prints "operation date 27 Oct"; recommended prints none. The opening day is not when the
+   meal ended under the owner's rule either.
+6. **Watcher: "complete" means every dish served or cancelled.** Payment marks nothing served; staff
+   do (`markServed`, `markGroupServed`, `working-order.ts:3684`, `:3770`, READ). Default: keep the
+   spec's rule. Example: where staff never tap "served", a card accepted 23:55 and captured 00:05
+   files 28 Oct; with decision 5's default, paper and filing still agree.
+7. **Owner: `reconcile-sweep.ts` and `reconcile-series.ts` are inside the grant.** The grant names
+   `drain.ts` and `reconcile.ts` "consultation periods"; these two files choose which periods to
+   consult and compare a period's local records with AEAT's, so they are the same periods, but the
+   grant does not name the files. Default: yes. Example: without them, the year-end invoice is
+   checked under January and shows as missing.
+8. **Owner: the changed fiscal assertions and the correction resend.** (a) In
+   `record-payload-admission.test.ts`, delete the `FechaOperacion` row at `:35` and change `:137`'s
+   expected fields from `["FechaOperacion", "Cupon"]` to `["Cupon"]`. (b) Let a resend carry the
+   day (Task 1.4, `record-remedy-http.ts`, outside the grant). AEAT lists, as content of an alta
+   record, «la fecha en que se hayan efectuado las operaciones» «si son distintas a la de expedición
+   de la factura» (spec's source table, AEAT alta-content page, item 5, checked 27 Oct; not
+   re-fetched); a resend is an alta. Default: yes to both. Example: a dated invoice rejected and
+   resent on 3 Nov still files `27-10-2026`. R5/F3 corrections stay unchanged, as the spec says.
 
 ## Size (estimates, not measured)
 
 | PR | Production | Tests | Generated | Docs |
 | --- | --- | --- | --- | --- |
-| 1, fiscal path | 95–130 | 300–400 | 15–40 | about 10 (comments and claims) |
-| 2, capture and use | 150–220 | 600–800 | 15–40 | about 10 (backlog deletions) |
-| Total | 245–350 | 900–1,200 | 30–80 | about 20, plus this plan |
+| 1, fiscal path | 130–180 | 400–550 | 15–40 | about 10 |
+| 2, capture and use | 200–280 | 700–900 | 15–40 | about 10 (backlog) |
+| Total | 330–460 | 1,100–1,450 | 30–80 | about 20, plus this plan |
 
-Below the re-map's 330–430: PR 2 needs no shared snapshot type, no data-fault code (a missing day
-means the bill closed at issue), and no guide text, since root CLAUDE.md §3 keeps a guide sentence
-only if it changes what staff do. "Generated" is each rebuilt `0000_baseline.sql`, its snapshot and
-journal, and `scripts/migration-baseline-epoch.json`.
+No guide text: root CLAUDE.md §3 keeps a guide sentence only if it changes what staff do. No
+data-fault code: a payment without a matching day means the bill closed at issue. "Generated" is
+each rebuilt `0000_baseline.sql`, its snapshot and journal, and `scripts/migration-baseline-epoch.json`.
