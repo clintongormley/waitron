@@ -112,6 +112,13 @@ export async function serverHealth(options, unavailable) {
     progressing = false,
     recent = false;
   for (const run of runs.values()) {
+    if (
+      options.plannersOnly &&
+      (run.event !== "pull_request" ||
+        run.run_attempt !== 1 ||
+        Object.hasOwn(options.hostedAttempts ?? {}, run.id))
+    )
+      continue;
     const jobs = await readInventory(() => serverJobs(options, run), unavailable);
     running += jobs.filter(assigned).length;
     progressing ||= jobs.some(
@@ -125,10 +132,22 @@ export async function serverHealth(options, unavailable) {
         assigned(job) ||
         (job.runner_id > 0 && now - Date.parse(job.completed_at) < 300_000),
     );
-    if (jobs.some((job) => job.status === "queued" && !job.runner_id && old(job, now)))
+    if (
+      jobs.some(
+        (job) =>
+          job.status === "queued" &&
+          !job.runner_id &&
+          old(job, now) &&
+          (!options.plannersOnly ||
+            (job.name === "changes" &&
+              job.labels.includes(
+                `${options.prefix || "dt"}-${repositoryId}-${run.id}-${run.run_attempt}-changes-1`,
+              ))),
+      )
+    )
       stuck.push(run);
   }
-  return { stuck: running || progressing ? [] : stuck, running, recent };
+  return { stuck: !options.plannersOnly && (running || progressing) ? [] : stuck, running, recent };
 }
 
 export async function serverRoute(options) {
@@ -204,12 +223,36 @@ export async function serverRoute(options) {
   };
 }
 
+function serverFull(options) {
+  let capacity;
+  try {
+    capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
+  } catch {
+    return false;
+  }
+  const age = (options.now ?? Date.now()) - capacity?.observedAt;
+  return (
+    Number.isSafeInteger(capacity?.slots) &&
+    capacity.slots > 0 &&
+    Number.isSafeInteger(capacity.serverRunning) &&
+    capacity.serverRunning >= capacity.slots &&
+    Number.isSafeInteger(capacity.observedAt) &&
+    age >= 0 &&
+    age < 300_000
+  );
+}
+
 export async function recoverServer(options) {
-  const { request, repository, wait = delay } = options;
+  const { request, repository, wait = delay, plannersOnly = false } = options;
+  if (plannersOnly && serverFull(options)) {
+    options.report?.("Planner rescue skipped: server is full in a fresh capacity snapshot.");
+    return { retried: [] };
+  }
   const retried = [],
     preserved = [],
     state = await serverHealth(options);
-  if (state.stuck.length && (await completedServerTraffic(options))) return { retried };
+  if (!plannersOnly && state.stuck.length && (await completedServerTraffic(options)))
+    return { retried };
   const oldest = state.stuck.sort(
     (a, b) =>
       Date.parse(a.run_started_at || a.created_at) - Date.parse(b.run_started_at || b.created_at),
@@ -220,17 +263,53 @@ export async function recoverServer(options) {
       continue;
     }
     const path = `/repos/${repository}/actions/runs/${run.id}`;
-    const eligible = async () => {
+    const eligible = async (cancelled = false) => {
       const current = await request(path);
       if (
         current.id !== run.id ||
         current.run_attempt !== run.run_attempt ||
         current.head_sha !== run.head_sha ||
-        current.status === "completed"
+        (!cancelled && current.status === "completed")
+      )
+        return;
+      if (plannersOnly) {
+        if (
+          !owned(current, options.repositoryId) ||
+          current.workflow_id !== run.workflow_id ||
+          current.event !== "pull_request" ||
+          current.pull_requests?.length !== 1 ||
+          current.pull_requests[0].number !== run.pull_requests?.[0]?.number
+        )
+          return;
+        const pull = await request(`/repos/${repository}/pulls/${current.pull_requests[0].number}`);
+        if (
+          pull.number !== current.pull_requests[0].number ||
+          pull.state !== "open" ||
+          pull.head?.sha !== run.head_sha ||
+          pull.head.repo?.id !== options.repositoryId ||
+          pull.base?.repo?.id !== options.repositoryId
+        )
+          return;
+      }
+      const jobs = await runJobs(options, current);
+      if (
+        plannersOnly &&
+        !jobs.some(
+          (job) =>
+            job.name === "changes" &&
+            job.labels.includes("self-hosted") &&
+            job.labels.includes(
+              `${options.prefix || "dt"}-${options.repositoryId}-${run.id}-1-changes-1`,
+            ) &&
+            (cancelled
+              ? job.status === "completed" && job.conclusion === "cancelled"
+              : job.status === "queued" && !job.runner_id) &&
+            old(job, options.now ?? Date.now()),
+        )
       )
         return;
       if (
-        (await runJobs(options, current)).some(
+        jobs.some(
           (job) =>
             job.name !== "server-queue-watchdog" &&
             !(
@@ -248,8 +327,9 @@ export async function recoverServer(options) {
       }
       return current;
     };
-    if (!(await eligible())) continue;
+    if (!plannersOnly && !(await eligible())) continue;
     if (
+      !plannersOnly &&
       !(await serverHealth(options)).stuck.some(
         (current) => current.id === run.id && current.run_attempt === run.run_attempt,
       )
@@ -257,6 +337,10 @@ export async function recoverServer(options) {
       continue;
     let current = await eligible();
     if (!current) continue;
+    if (plannersOnly)
+      options.report?.(
+        `Recovering PR run ${run.id}; cancellation/retry pending. If this pass stops, intervention is needed.`,
+      );
     try {
       await request(path + "/force-cancel", { method: "POST" });
     } catch (error) {
@@ -278,10 +362,35 @@ export async function recoverServer(options) {
     }
     assert.equal(current.status, "completed", "Stuck run cancellation did not finish");
     if (current.conclusion === "cancelled") {
-      await request(path + "/rerun", { method: "POST" });
-      retried.push(run.id);
+      try {
+        if (plannersOnly) {
+          if (!(await eligible(true))) {
+            const number = run.pull_requests[0].number;
+            const pull = await request(`/repos/${repository}/pulls/${number}`);
+            if (
+              pull.number === number &&
+              (pull.state === "closed" ||
+                (typeof pull.head?.sha === "string" && pull.head.sha !== run.head_sha))
+            ) {
+              options.report?.(`Cancelled PR run ${run.id} is obsolete; not retried.`);
+              continue;
+            }
+            throw new Error(
+              "Current-head PR identity or work could not be verified after cancellation",
+            );
+          }
+        }
+        await request(path + "/rerun", { method: "POST" });
+        retried.push(run.id);
+        if (plannersOnly) options.report?.(`Retried PR run ${run.id} on GitHub.`);
+      } catch (error) {
+        if (!plannersOnly) throw error;
+        throw new Error(`Cancelled PR run ${run.id}; intervention needed: ${error.message}`, {
+          cause: error,
+        });
+      }
     }
-    break;
+    if (!plannersOnly) break;
   }
   return { retried, ...(preserved.length ? { preserved } : {}) };
 }
@@ -328,28 +437,17 @@ export async function healthCommand(command, options, { report, output }) {
       if (answer.blind) report(`CI_ROUTE_BLIND run=${options.runId} attempt=${options.attempt}`);
     } else if (command === "check") {
       const state = await serverHealth(options);
-      let capacity;
-      try {
-        capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
-      } catch {
-        capacity = undefined;
-      }
-      const age = (options.now ?? Date.now()) - capacity?.observedAt;
-      const full =
-        Number.isSafeInteger(capacity?.slots) &&
-        capacity.slots > 0 &&
-        Number.isSafeInteger(capacity.serverRunning) &&
-        capacity.serverRunning >= capacity.slots &&
-        Number.isSafeInteger(capacity.observedAt) &&
-        age >= 0 &&
-        age < 300_000;
       assert.ok(
-        !state.stuck.length || full || (await completedServerTraffic(options)),
+        !state.stuck.length || serverFull(options) || (await completedServerTraffic(options)),
         `SERVER STUCK: runs ${state.stuck.map((run) => run.id).join(", ")} have waited five minutes without server progress.`,
       );
       report("No stalled server queue needs attention.");
-    } else if (command === "recover") {
-      const { retried, preserved = [] } = await recoverServer(options);
+    } else if (command === "recover" || command === "recover-planners") {
+      const { retried, preserved = [] } = await recoverServer({
+        ...options,
+        plannersOnly: command === "recover-planners",
+        report,
+      });
       if (preserved.length)
         report(
           `Preserved runs ${preserved.join(", ")} because work has started or completed, or this is already a retry.`,
@@ -357,7 +455,7 @@ export async function healthCommand(command, options, { report, output }) {
       if (retried.length || !preserved.length)
         report(
           retried.length
-            ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned or recently progressing server work.`
+            ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned${command === "recover" ? " or recently progressing server" : ""} work.`
             : "No stalled server run needed recovery.",
         );
     } else {
@@ -372,7 +470,11 @@ export async function healthCommand(command, options, { report, output }) {
     }
   } catch (error) {
     if (!(error instanceof InventoryUnavailable)) throw error;
-    report(`Server inventory unavailable; ${command} made no change: ${error.message}`);
+    report(
+      command === "recover-planners"
+        ? `Server inventory unavailable; planner recovery stopped: ${error.message}`
+        : `Server inventory unavailable; ${command} made no change: ${error.message}`,
+    );
   }
 }
 
@@ -413,6 +515,10 @@ export async function main(command, env = process.env, request = githubRequest) 
       runId: Number(env.GITHUB_RUN_ID),
       attempt: Number(env.GITHUB_RUN_ATTEMPT),
       capacity: () => JSON.parse(env.CAPACITY),
+      hostedAttempts:
+        command === "recover-planners" && env.HOSTED_ATTEMPTS
+          ? JSON.parse(env.HOSTED_ATTEMPTS)
+          : {},
       prefix: env.LABEL_PREFIX || "dt",
       ref: "main",
     },

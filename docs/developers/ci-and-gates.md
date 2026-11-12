@@ -240,15 +240,27 @@ Hosted-first routing can leave the server idle; the existing idle probe still ch
 server pickup when no recent server traffic is observed.
 
 The independent Server health workflow runs on GitHub every five minutes, or by manual
-dispatch, on trusted `main` only. Its scheduled `check` command reads the queue without
-cancelling or retrying a run. A queue waiting five minutes without assigned or recent
-server progress raises `SERVER STUCK` unless a valid capacity snapshot under five minutes
-old shows positive slots all occupied, or recent completed server traffic explains the gap.
-Missing, invalid, stale or zero capacity cannot suppress that alarm. The existing
-machine-local stall watcher reports failed health workflows for intervention.
-Incomplete inventories are reported without changing work; API failures remain visible.
-The explicit `recover` helper is retained for manual tools and is not scheduled. A stuck
-job can keep new runs on hosted until someone resolves it; the check only reports the stop.
+dispatch, on trusted `main` only. Its `recover-planners` command can cancel and retry an
+untouched, current-head PR's first attempt when its server `changes` job has waited five
+minutes without assignment. It skips runs already marked for hosted recovery and a server
+whose capacity snapshot under five minutes old shows every positive slot occupied.
+Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
+It checks complete job inventories and the PR head again before cancellation and retry.
+The pass attempts eligible planners in order; its five-minute step limit can end a busy pass
+before every planner is reached. Later passes reconsider work that is still queued.
+After cancellation, an interrupted retry is reported for intervention; later passes do not
+resume cancelled runs from history alone. Age, nominal schedule and cancellation polling add
+about twelve minutes; GitHub's own queue can add more. PR planning still starts on GitHub
+until guest tools and the owned unavailable-label drill qualify server placement.
+
+The following `check` command reads the queue without changing runs. A queue waiting five
+minutes without assigned or recent server progress raises `SERVER STUCK` unless a valid
+capacity snapshot under five minutes old shows positive slots all occupied, or recent
+completed server traffic explains the gap. Missing, invalid, stale or zero capacity cannot
+suppress that alarm. The machine-local stall watcher reports failed health workflows for
+intervention. Incomplete inventories are reported without changing work; API failures remain
+visible. The explicit general `recover` helper remains manual. Non-planner health checks
+report a stop for a person to resolve.
 
 The health reader requests job inventories in pages of 30 and run inventories in pages of 100.
 GET failures reporting HTTP 5xx get two 15-second attempts, one second apart. Writes and

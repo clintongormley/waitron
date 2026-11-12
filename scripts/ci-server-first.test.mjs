@@ -82,13 +82,20 @@ describe("server-first workflow routing", () => {
     expect(route(selected, { attempt: 1 })).toEqual(["self-hosted", "dt-42-1234-1-server-probe-1"]);
     expect(route(selected, { attempt: 2 })).toBe("ubuntu-latest");
   });
-  it("runs the read-only health check only from trusted main", () => {
+  it("runs independent planner recovery only from trusted main", () => {
     const workflow = readFileSync(
       new URL("../.github/workflows/server-health.yml", import.meta.url),
       "utf8",
     );
     expect(workflow).toContain("node scripts/ci-server-health.mjs check");
-    expect(workflow).not.toContain("node scripts/ci-server-health.mjs recover");
+    expect(workflow).toContain("node scripts/ci-server-health.mjs recover-planners");
+    expect(workflow).toContain("HOSTED_ATTEMPTS: ${{ vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS }}");
+    expect(workflow).toContain("pull-requests: read");
+    expect(workflow.indexOf("mjs recover-planners")).toBeLessThan(workflow.indexOf("mjs check"));
+    expect(workflow).not.toContain("needs:");
+    expect(workflow).not.toMatch(/mjs recover\s*$/m);
+    expect(workflow).toContain("if: ${{ !cancelled() }}");
+    expect(workflow).toContain("if: ${{ !cancelled() && github.event_name");
     expect(workflow).toContain("CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}");
     expect(workflow).toContain("node scripts/ci-server-health.mjs probe");
     const expression = workflow.match(/^ {4}if: \$\{\{ (.+) \}\}$/m)[1];

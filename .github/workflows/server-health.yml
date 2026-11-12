@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   actions: write
+  pull-requests: read
 concurrency:
   group: server-health
   cancel-in-progress: false
@@ -18,6 +19,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
+      HOSTED_ATTEMPTS: ${{ vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS }}
       CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}
     steps:
       - id: checkout
@@ -60,10 +62,14 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
+      - name: Recover untouched PR planning jobs
+        timeout-minutes: 5
+        run: node scripts/ci-server-health.mjs recover-planners
       - name: Check for a stalled server queue
+        if: ${{ !cancelled() }}
         timeout-minutes: 5
         run: node scripts/ci-server-health.mjs check
       - name: Probe an idle server
-        if: github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *' && vars.DISPOSABLE_TESTS_MODE == 'server'
+        if: ${{ !cancelled() && github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *' && vars.DISPOSABLE_TESTS_MODE == 'server' }}
         timeout-minutes: 3
         run: node scripts/ci-server-health.mjs probe
