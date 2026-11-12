@@ -36,7 +36,7 @@ No resize listeners, observers, live positioning, guide text, framework or new h
    `pnpm --filter @waitron/ui test src/components/wt-help-tooltip`.
    Confirm nonzero passing test counts.
 4. Using the existing demo till, visually inspect Order-bar help in EN/ES,
-   light/dark, at 1280×900 and 390×844. Check badge/bar clearance and wrapping.
+   light/dark, at 1280×900 and 390×844. Record what the open box covers, badge clearance and wrapping.
    Keep screenshots uncommitted.
 5. Remove A1209 from `docs/backlog.md` and its section in `docs/backlog/till.md`.
 
