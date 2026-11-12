@@ -245,20 +245,28 @@ function counts() {
 }
 
 /** A completed goodwill return of `amount` from the sale's first cash payment; a leg of
- * `correctionId` when named. */
-async function giveBack(saleId: string, amount: string, correctionId?: string) {
+ * `correctionId` when named. A repeat of `submissionId` answers the first refund, carrying nothing. */
+async function giveBack(
+  saleId: string,
+  amount: string,
+  correctionId?: string,
+  {
+    submissionId = randomUUID(),
+    tipAmount = "0.00",
+  }: { submissionId?: string; tipAmount?: string } = {},
+) {
   return inTx(venue, async (tx) => {
     const [cash] = await readRefundableTenders(tx, saleId);
     const reading = venue.clock.now();
-    const { refund } = await reserveTenderRefund(
+    const begun = await reserveTenderRefund(
       tx,
       venue.cfg,
       saleId,
       {
-        submissionId: randomUUID(),
+        submissionId,
         tenderId: cash!.tenderId,
         appliedAmount: amount,
-        tipAmount: "0.00",
+        tipAmount,
         reason: "Goodwill",
         ...(correctionId === undefined
           ? {}
@@ -267,8 +275,9 @@ async function giveBack(saleId: string, amount: string, correctionId?: string) {
       { requestedBy: managerId, authorizedBy: managerId },
       reading.instant.toISOString(),
     );
-    await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, refund);
-    return refund.id;
+    if (!begun.replayed)
+      await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, begun.refund);
+    return { id: begun.refund.id, replayed: begun.replayed };
   });
 }
 
@@ -593,27 +602,7 @@ describe("a correction's legs", () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const earlier = { submissionId: randomUUID(), amount: "1.00" };
     const ordinary = (submissionId: string, amount: string) =>
-      inTx(venue, async (tx) => {
-        const [cash] = await readRefundableTenders(tx, saleId);
-        const reading = venue.clock.now();
-        const begun = await reserveTenderRefund(
-          tx,
-          venue.cfg,
-          saleId,
-          {
-            submissionId,
-            tenderId: cash!.tenderId,
-            appliedAmount: amount,
-            tipAmount: "0.00",
-            reason: "Goodwill",
-          },
-          { requestedBy: managerId, authorizedBy: managerId },
-          reading.instant.toISOString(),
-        );
-        if (!begun.replayed)
-          await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, begun.refund);
-        return { id: begun.refund.id, replayed: begun.replayed };
-      });
+      giveBack(saleId, amount, undefined, { submissionId });
     const first = await ordinary(earlier.submissionId, earlier.amount);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
 
@@ -672,25 +661,7 @@ describe("a correction's leg refuses", () => {
     await payFor(sale!.workingOrderId!, ["12.10"], "1.00");
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "12.10" });
     await refusedWithNothingWritten(
-      () =>
-        inTx(venue, async (tx) => {
-          const [cash] = await readRefundableTenders(tx, saleId);
-          return reserveTenderRefund(
-            tx,
-            venue.cfg,
-            saleId,
-            {
-              submissionId: randomUUID(),
-              tenderId: cash!.tenderId,
-              reason: "Goodwill",
-              appliedAmount: "12.10",
-              tipAmount: "1.00",
-              invoiceCorrection: { id: correction.id, requestId: randomUUID() },
-            },
-            { requestedBy: managerId, authorizedBy: managerId },
-            venue.clock.now().instant.toISOString(),
-          );
-        }),
+      () => giveBack(saleId, "12.10", correction.id, { tipAmount: "1.00" }),
       { code: "management.request_invalid", params: { field: "tipAmount" } },
     );
   });
