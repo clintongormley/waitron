@@ -120,7 +120,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
           passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",

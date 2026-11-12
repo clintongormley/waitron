@@ -2240,6 +2240,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Tighten the checks the A974 review probed** (bundle of 3, size S). [Detail](backlog/architecture.md#bundle-tighten-the-checks-the-a974-review-probed)
 
 - **A976. Finish the server's English test-venue defaults.**
+  The shared party venue uses Administrator for its staff display sample and station authorizer readbacks.
   The single- and multi-bill editor suites use Anna and Lewis as local staff samples.
   The `floor-today-*` route suites use Anna as their staff sample.
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
