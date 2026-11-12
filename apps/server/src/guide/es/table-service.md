@@ -101,6 +101,10 @@ púlsalo. Elegir un documento o una impresora, actualizar la lista y volver atr�
 La copia sigue preguntando el idioma cuando hay más de uno; cancelar no imprime nada. Si la
 elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se ha podido leer la lista.
 
+Para una factura completa antigua sin cuenta, ábrela en **Transacciones** y elige **Factura**.
+Usa **Recibo** para una copia compacta cuando se haya completado un original. Si falla la impresión,
+comprueba el destino de **Reintentar original** o elige la impresora de recibos indicada en su lugar.
+
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 
 Activa **Imprimir justificante de tarjeta** antes de cobrar si el cliente lo quiere. Empieza desactivado para cada pago e imprime cuando se confirma la tarjeta. Si la respuesta del lector no está clara o el servidor se reinicia antes de imprimir, usa una copia.

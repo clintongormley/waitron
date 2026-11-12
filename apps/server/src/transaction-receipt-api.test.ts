@@ -40,6 +40,7 @@ import {
 } from "./testing/order-venue.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
+import { DEVICE_COOKIE } from "./device-session.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
 beforeEach(async () => {
@@ -381,9 +382,13 @@ it("keeps the original Invoice destination through status, retry and handover", 
     receiptCopy: false,
     resendOf: original.id,
   });
-  await inTx(venue, (tx) =>
-    tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, resent.id)),
-  );
+  await inTx(venue, async (tx) => {
+    await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, resent.id));
+    await tx
+      .update(invoiceDeliveries)
+      .set({ status: "sent" })
+      .where(eq(invoiceDeliveries.printJobId, resent.id));
+  });
   const handover = await send(
     venue.app,
     venue.cookie,
@@ -393,6 +398,28 @@ it("keeps the original Invoice destination through status, retry and handover", 
   );
   expect(handover.status, JSON.stringify(handover.json)).toBe(200);
   expect(handover.json).toMatchObject({ status: "done", handover: { personId: venue.operatorId } });
+  const copy = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/transactions/${sale.id}/deliveries`,
+    {
+      medium: "print",
+      requestKey: randomUUID(),
+      printerId: venue.printerId,
+    },
+  );
+  expect(copy.status, JSON.stringify(copy.json)).toBe(200);
+  expect(copy.json).toMatchObject({ designation: "duplicate", medium: "receipt" });
+  const copyJobs = await jobs();
+  expect(copyJobs.prints.at(-1)).toMatchObject({ saleId: sale.id, receiptCopy: true });
+  expect(copyJobs.reprints).toEqual([
+    expect.objectContaining({
+      saleId: sale.id,
+      personId: venue.operatorId,
+      printJobId: copyJobs.prints.at(-1)!.id,
+    }),
+  ]);
   expect((await jobs()).drawers).toEqual([]);
   expect(await snapshot()).toEqual(before);
 });
@@ -491,6 +518,118 @@ it("the new delivery paths refuse order-linked sales and simplified invoices wit
   }
   expect(await snapshot()).toEqual(before);
   expect(await jobs()).toEqual(printed);
+});
+it("orderless writes require their device proof and print actions require print-receipt", async () => {
+  const id = (
+    await projectionInvoice({ counterpartyTaxId: "B00000000", counterpartyLegalName: "Recipient" })
+  ).id;
+  const noProof = venue.cookie
+    .split(";")
+    .filter((part) => !part.trim().startsWith(`${DEVICE_COOKIE}=`))
+    .join(";");
+  const before = await jobs();
+  for (const suffix of [
+    "deliveries",
+    `deliveries/${randomUUID()}/to-receipt`,
+    "receipt-print/retry",
+    "receipt-print/handover",
+  ]) {
+    expect(
+      await send(venue.app, noProof, "POST", `/api/transactions/${id}/${suffix}`, {}),
+      suffix,
+    ).toMatchObject({ status: 401, json: { code: "device.unauthorized" } });
+  }
+  const profileId = await profile();
+  await inTx(venue, (tx) =>
+    tx.update(deviceProfiles).set({ capabilities: [] }).where(eq(deviceProfiles.id, profileId)),
+  );
+  for (const [suffix, action] of [
+    ["deliveries", "invoice_delivery"],
+    [`deliveries/${randomUUID()}/to-receipt`, "invoice_delivery_to_receipt"],
+    ["receipt-print/retry", "receipt_retry"],
+  ]) {
+    expect(
+      await send(venue.app, venue.cookie, "POST", `/api/transactions/${id}/${suffix}`, {}),
+      suffix,
+    ).toMatchObject({ status: 403, json: { code: "device.forbidden_action", params: { action } } });
+  }
+  expect(
+    (await send(venue.app, venue.cookie, "GET", `/api/transactions/${id}/deliveries`)).status,
+  ).toBe(200);
+  expect(
+    (await send(venue.app, venue.cookie, "GET", `/api/transactions/${id}/receipt-print`)).status,
+  ).toBe(200);
+  expect(
+    await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${id}/receipt-print/handover`,
+      {},
+    ),
+  ).toMatchObject({ status: 409, json: { code: "receipt.not_printed" } });
+  expect(await jobs()).toEqual(before);
+});
+it("orderless delivery checks every source zone before any status or action", async () => {
+  const allowed = await saleOf(await placedIssuedBill(venue, "Croquettes"));
+  const denied = await saleOf(await placedIssuedBill(venue, "Caña"));
+  const own = await projectionInvoice({
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Recipient",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: "Address",
+  });
+  const sourceProfile = await profile();
+  await inTx(venue, async (tx) => {
+    await tx.insert(saleSubstitutions).values(
+      [allowed, denied].map((sale) => ({
+        substitutionSaleId: own.id,
+        substitutedSaleId: sale.id,
+      })),
+    );
+    const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
+    await setProfileServiceAccess(tx, sourceProfile, {
+      departmentId: zone!.departmentId,
+      allowedZoneIds: [venue.zoneId],
+      startingZoneId: venue.zoneId,
+    });
+  });
+  const before = await jobs();
+  for (const [method, suffix] of [
+    ["GET", "deliveries"],
+    ["POST", "deliveries"],
+    ["POST", `deliveries/${randomUUID()}/to-receipt`],
+    ["GET", "receipt-print"],
+    ["POST", "receipt-print/retry"],
+    ["POST", "receipt-print/handover"],
+  ] as const) {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      method,
+      `/api/transactions/${own.id}/${suffix}`,
+      method === "GET"
+        ? undefined
+        : { medium: "print", printerId: venue.printerId, requestKey: randomUUID() },
+    );
+    expect(answer, suffix).toMatchObject({
+      status: 403,
+      json: { code: "service_zone.not_allowed" },
+    });
+  }
+  expect(await jobs()).toEqual(before);
+  await inTx(venue, async (tx) => {
+    const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
+    await setProfileServiceAccess(tx, sourceProfile, {
+      departmentId: zone!.departmentId,
+      allowedZoneIds: [venue.zoneId, venue.counterZone],
+      startingZoneId: venue.zoneId,
+    });
+  });
+  expect(
+    await send(venue.app, venue.cookie, "GET", `/api/transactions/${own.id}/deliveries`),
+  ).toMatchObject({ status: 200 });
+  expect(await jobs()).toEqual(before);
 });
 it.each([false, true])(
   "a historical full invoice retains its own recipient, domicile and offset, paid=%s",

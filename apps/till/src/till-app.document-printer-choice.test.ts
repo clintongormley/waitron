@@ -168,7 +168,7 @@ it("Equipment's Receipt save updates the open document row", async () => {
   expect(part(el, "print-receipt").textContent!.trim()).toBe("Print on Belt");
 });
 
-it.each([false, true])(
+it.each([false, true, "orderless"])(
   "F1 Receipt copy refreshes both statuses and shows its domain refusal, history=%s",
   async (historical) => {
     const refusal = { code: "invoice_delivery.active", status: 409 };
@@ -185,6 +185,8 @@ it.each([false, true])(
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
       listBills: vi.fn().mockResolvedValue(listPage([])),
       listTransactions: vi.fn().mockResolvedValue(listPage([])),
+      getTransactionDeliveries: vi.fn().mockResolvedValue(delivered),
+      getTransactionReceiptPrint: vi.fn().mockResolvedValue({ status: "not_queued" }),
       getTransactionReceipt: vi
         .fn()
         .mockResolvedValue({ ...invoiceOf("12.00"), invoiceType: "F1" }),
@@ -195,14 +197,21 @@ it.each([false, true])(
       emit(shell(el), "find-bill");
       await flush(el);
       emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-transaction-open", {
-        row: transactionRow({ saleId: "sale-history", workingOrderId: "wo-history" }),
+        row: transactionRow({
+          saleId: "sale-history",
+          workingOrderId: historical === "orderless" ? null : "wo-history",
+        }),
       });
       await flush(el);
       await press(el, "document-print-toggle");
       await press(el, "document-receipt");
     }
-    const receiptReads = vi.mocked(api.getReceiptPrintStatus).mock.calls.length;
-    const deliveryReads = vi.mocked(api.getInvoiceDeliveries).mock.calls.length;
+    const receiptStatus =
+      historical === "orderless" ? api.getTransactionReceiptPrint : api.getReceiptPrintStatus;
+    const deliveries =
+      historical === "orderless" ? api.getTransactionDeliveries : api.getInvoiceDeliveries;
+    const receiptReads = vi.mocked(receiptStatus).mock.calls.length;
+    const deliveryReads = vi.mocked(deliveries).mock.calls.length;
     await press(el, "reprint");
     const language = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
     expect(language).not.toBeNull();
@@ -212,8 +221,8 @@ it.each([false, true])(
       historical ? "sale-history" : id,
       "es-ES",
     );
-    expect(api.getReceiptPrintStatus).toHaveBeenCalledTimes(receiptReads + 1);
-    expect(api.getInvoiceDeliveries).toHaveBeenCalledTimes(deliveryReads + 1);
+    expect(receiptStatus).toHaveBeenCalledTimes(receiptReads + 1);
+    expect(deliveries).toHaveBeenCalledTimes(deliveryReads + 1);
     expect(part(el, "delivery-refused").textContent).toContain(
       "This invoice is already waiting for delivery. Check its status before trying again.",
     );
@@ -308,4 +317,156 @@ it("Receipt opens without waiting for a changed Invoice printer's offer", async 
   expect(part(el, "print-receipt").hasAttribute("disabled")).toBe(false);
   expect(part(el, "print-receipt").textContent!.trim()).toBe("Print on Bar");
   expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
+});
+
+async function orderless(overrides: Record<string, unknown> = {}) {
+  const api = stubApi({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      deviceId: "dev-1",
+      capabilities: ["take-orders", "print-receipt"],
+    }),
+    findBillOptions: vi.fn().mockResolvedValue(billOptions),
+    listBills: vi.fn().mockResolvedValue(listPage([])),
+    listTransactions: vi.fn().mockResolvedValue(listPage([])),
+    getTransactionReceipt: vi.fn().mockResolvedValue({ ...invoiceOf("12.00"), invoiceType: "F1" }),
+    getTransactionReceiptPrint: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    getTransactionDeliveries: vi.fn().mockResolvedValue({ ...delivered, originalCompleted: false }),
+    getDeviceEquipment: vi.fn().mockResolvedValue(equipment()),
+    getReceiptPrintStatus: vi.fn(),
+    getInvoiceDeliveries: vi.fn(),
+    printReceipt: vi.fn(),
+    printTransactionInvoice: vi.fn().mockResolvedValue({}),
+    ...overrides,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
+  await flush(el);
+  emit(shell(el), "find-bill");
+  await flush(el);
+  emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-transaction-open", {
+    row: transactionRow({ saleId: "sale-history", workingOrderId: null }),
+  });
+  await flush(el);
+  return { el, api };
+}
+
+it.each(["receipt", "a4"] as const)(
+  "orderless Invoice uses the saved %s choice only after confirmation; Receipt has no original action",
+  async (kind) => {
+    const chosen = equipmentItem("invoice", "Invoice desk", { kind });
+    const all = { roles: [...equipment().roles, roleOf("invoice", chosen, [chosen])] };
+    let saved!: (value: DeviceEquipment) => void;
+    const state = {
+      ...delivered,
+      originalCompleted: false,
+      actions: {
+        ...delivered.actions,
+        print: {
+          printers: [{ id: chosen.id, name: chosen.name, kind }],
+          designation: "original" as const,
+        },
+      },
+    };
+    const { el, api } = await orderless({
+      getDeviceEquipment: vi.fn().mockResolvedValue(all),
+      setDeviceEquipment: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            saved = resolve;
+          }),
+      ),
+      getTransactionDeliveries: vi.fn().mockResolvedValue(state),
+    });
+    await press(el, "document-print-toggle");
+    await press(el, "document-receipt");
+    expect(part(el, "print-receipt")).toBeNull();
+    emit(ticket(el), "print-receipt");
+    await flush(el);
+    expect(api.printReceipt).not.toHaveBeenCalled();
+    await press(el, "document-back");
+    await press(el, "document-invoice");
+    emit(ticket(el), "equipment-change", { role: "invoice", selection: "default", via: "list" });
+    await flush(el);
+    expect(part(el, "print-invoice").hasAttribute("disabled")).toBe(true);
+    expect(api.printTransactionInvoice).not.toHaveBeenCalled();
+    saved(all);
+    await flush(el);
+    expect(part(el, "print-invoice").textContent).toContain("Invoice desk");
+    await press(el, "print-invoice");
+    expect(api.printTransactionInvoice).toHaveBeenCalledWith(
+      "sale-history",
+      "invoice",
+      expect.any(String),
+    );
+    expect(api.getReceiptPrintStatus).not.toHaveBeenCalled();
+    expect(api.getInvoiceDeliveries).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "orderless recovery names its retained retry printer and saved fallback in %s",
+  async (locale) => {
+    const { el, api } = await orderless({
+      getTransactionReceiptPrint: vi.fn().mockResolvedValue({
+        status: "failed",
+        jobId: "job",
+        canRetry: true,
+        printerId: "old",
+        printerName: "Retained belt",
+      }),
+      getTransactionDeliveries: vi.fn().mockResolvedValue({
+        ...delivered,
+        originalCompleted: false,
+        actions: { ...delivered.actions, receiptInstead: { deliveryId: "a4-job" } },
+      }),
+      retryTransactionReceipt: vi.fn().mockResolvedValue({ jobId: "retry" }),
+      transactionReceiptInstead: vi.fn().mockResolvedValue({}),
+    });
+    setLocale(locale);
+    await flush(el);
+    expect(part(el, "retry-receipt").textContent).toContain("Retained belt");
+    expect(part(el, "receipt-instead").textContent).toContain("Bar");
+    const reads = vi.mocked(api.getTransactionReceiptPrint).mock.calls.length;
+    await press(el, "retry-receipt");
+    expect(api.retryTransactionReceipt).toHaveBeenCalledWith("sale-history");
+    expect(api.getTransactionReceiptPrint).toHaveBeenCalledTimes(reads + 1);
+    await press(el, "receipt-instead");
+    expect(api.transactionReceiptInstead).toHaveBeenCalledWith(
+      "sale-history",
+      "a4-job",
+      expect.any(String),
+    );
+    expect(api.getTransactionReceiptPrint).toHaveBeenCalledTimes(reads + 2);
+    expect(api.getTransactionDeliveries).toHaveBeenCalledTimes(reads + 2);
+  },
+);
+
+it("orderless handover targets the sale and ignores its answer after Back and reopening", async () => {
+  let confirm!: (value: unknown) => void;
+  const done = { status: "done", jobId: "original", canRetry: false };
+  const { el, api } = await orderless({
+    getTransactionReceiptPrint: vi.fn().mockResolvedValue(done),
+    getTransactionDeliveries: vi.fn().mockResolvedValue(delivered),
+    confirmTransactionReceiptHandover: vi.fn(
+      () =>
+        new Promise((resolve) => {
+          confirm = resolve;
+        }),
+    ),
+  });
+  await press(el, "confirm-handover");
+  expect(api.confirmTransactionReceiptHandover).toHaveBeenCalledWith("sale-history");
+  emit(ticket(el), "back-to-find-bill");
+  await flush(el);
+  emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-transaction-open", {
+    row: transactionRow({ saleId: "sale-new", workingOrderId: null }),
+  });
+  await flush(el);
+  confirm({ ...done, handover: { personId: "old", confirmedAt: "2026-11-12T12:00:00Z" } });
+  await flush(el);
+  expect(part(el, "confirm-handover")).not.toBeNull();
+  expect(api.printReceipt).not.toHaveBeenCalled();
+  expect(api.printTransactionInvoice).not.toHaveBeenCalled();
 });

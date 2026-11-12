@@ -290,6 +290,27 @@ const ROUTES: readonly Row[] = [
   ["POST", `/api/sales/${id}/deliveries`, "print-receipt", forbidden("invoice_delivery"), {}],
   [
     "POST",
+    `/api/transactions/${id}/deliveries`,
+    "print-receipt",
+    forbidden("invoice_delivery"),
+    {},
+  ],
+  [
+    "POST",
+    `/api/transactions/${id}/deliveries/${id}/to-receipt`,
+    "print-receipt",
+    forbidden("invoice_delivery_to_receipt"),
+    {},
+  ],
+  [
+    "POST",
+    `/api/transactions/${id}/receipt-print/retry`,
+    "print-receipt",
+    forbidden("receipt_retry"),
+    {},
+  ],
+  [
+    "POST",
     `/api/sales/${id}/deliveries/${id}/to-receipt`,
     "print-receipt",
     forbidden("invoice_delivery_to_receipt"),
@@ -652,6 +673,8 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/tender-refunds/:refundId/receipt",
       "GET /api/transactions",
       "GET /api/transactions/:saleId/receipt",
+      "GET /api/transactions/:saleId/deliveries",
+      "GET /api/transactions/:saleId/receipt-print",
       "GET /api/transactions/:saleId/refundable-tenders",
       "GET /api/unpaid-departure-authorizers",
       "GET /api/working-orders",
@@ -683,6 +706,13 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     basis:
       'File now files the corrective for money its refunds already gave back, and Close ends a correction; neither moves money nor opens the drawer. invoice-correction-api.ts; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
     routes: ["POST /api/invoice-corrections/:id/file", "POST /api/invoice-corrections/:id/close"],
+  },
+  {
+    proof: "matching request (source)",
+    actions: [],
+    basis:
+      "transaction-receipt-api.test.ts: orderless handover records completion without printing; request proof is checked before its transaction.",
+    routes: ["POST /api/transactions/:saleId/receipt-print/handover"],
   },
   {
     proof: "matching request (tested)",

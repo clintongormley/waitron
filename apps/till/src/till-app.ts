@@ -1977,6 +1977,8 @@ function zoneKeepOpenMoved(
   );
 }
 
+type TicketDeliveryTarget = { id: string; transaction: boolean };
+
 /**
  * Owns the one {@link WorkingOrderStore}, which belongs to the till and survives a change of operator,
  * and the one {@link TillApi}. Screens emit composed events; this element decides what happens next. A
@@ -4832,19 +4834,19 @@ export class TillApp extends LitElement {
           this.#deliveryLive = queuedLiveRefresh(live, {
             types: TILL_LIVE_TYPES.deliveries!,
             run: async () => {
-              const id = this.ticketWorkingOrderId;
+              const target = this.#ticketDeliveryTarget();
               if (
                 this.isConnected &&
                 this.#live === live &&
-                id !== undefined &&
-                this.#ticketIsCurrent(id, this.#operatorSession, this.#receiptPrintVisit)
+                target !== undefined &&
+                this.#ticketIsCurrent(target, this.#operatorSession, this.#receiptPrintVisit)
               )
                 await Promise.all([
-                  this.#readReceiptPrint(id, this.#operatorSession, this.#receiptPrintVisit),
+                  this.#readReceiptPrint(target, this.#operatorSession, this.#receiptPrintVisit),
                   ...(this.result?.invoiceType === "F1"
                     ? [
                         this.#readInvoiceDeliveries(
-                          id,
+                          target,
                           this.#operatorSession,
                           this.#receiptPrintVisit,
                         ),
@@ -8372,17 +8374,12 @@ export class TillApp extends LitElement {
         const result = await api.getTransactionReceipt(saleId, { signal: controller.signal });
         if (!current()) return;
         this.result = result;
-        if (workingOrderId !== null) this.#showTicket(workingOrderId, false);
-        else {
-          this.ticketWorkingOrderId = undefined;
-          this.originalReceiptAvailable = false;
-          this.originalReceiptPrint = undefined;
-          this.originalReceiptReadFailed = false;
-          this.originalReceiptBusy = false;
-          this.#receiptPrintVisit++;
-          this.#stopDeliveryReread();
-        }
-        this.historicalReceipt = { kind: "invoice", saleId, workingOrderId, returnTo: "find-bill" };
+        this.#showTicket(workingOrderId ?? undefined, false, null, {
+          kind: "invoice",
+          saleId,
+          workingOrderId,
+          returnTo: "find-bill",
+        });
       }
       this.refundableTenders = [];
       this.#refundPrint = undefined;
@@ -9569,8 +9566,8 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const receipt = this.historicalReceipt;
     const session = this.#operatorSession;
-    if (this.result?.invoiceType === "F1" && this.ticketWorkingOrderId !== undefined) {
-      await this.#deliveryAction(this.ticketWorkingOrderId, () =>
+    if (this.result?.invoiceType === "F1" && this.#ticketDeliveryTarget() !== undefined) {
+      await this.#deliveryAction(this.#ticketDeliveryTarget()!, () =>
         transaction
           ? this.api.reprintTransaction(workingOrderId, language)
           : language === undefined
@@ -9800,49 +9797,76 @@ export class TillApp extends LitElement {
     if (this.#store.id === id) this.#store.markSaved(saved.revision);
   }
 
-  #ticketIsCurrent(id: string, session: number, visit: number): boolean {
+  #ticketDeliveryTarget(): TicketDeliveryTarget | undefined {
+    const receipt = this.historicalReceipt;
+    if (
+      receipt?.kind === "invoice" &&
+      receipt.workingOrderId === null &&
+      this.result?.invoiceType === "F1"
+    )
+      return { id: receipt.saleId, transaction: true };
+    return this.ticketWorkingOrderId === undefined
+      ? undefined
+      : { id: this.ticketWorkingOrderId, transaction: false };
+  }
+
+  #ticketIsCurrent(target: TicketDeliveryTarget, session: number, visit: number): boolean {
     return (
       this.#receiptPrintVisit === visit &&
-      this.ticketWorkingOrderId === id &&
+      this.#ticketDeliveryTarget()?.id === target.id &&
+      this.#ticketDeliveryTarget()?.transaction === target.transaction &&
       this.#operatorSession === session &&
       (this.settlementDocument !== null || this.drill?.kind === "ticket")
     );
   }
 
   async #refreshReceiptPrint(): Promise<void> {
-    const id = this.ticketWorkingOrderId;
-    if (id === undefined || this.originalReceiptBusy) return;
+    const target = this.#ticketDeliveryTarget();
+    if (target === undefined || this.originalReceiptBusy) return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     this.originalReceiptBusy = true;
     try {
       await Promise.all([
-        this.#readReceiptPrint(id, session, visit),
-        this.#readInvoiceDeliveries(id, session, visit),
+        this.#readReceiptPrint(target, session, visit),
+        this.#readInvoiceDeliveries(target, session, visit),
       ]);
     } finally {
-      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
+      if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptBusy = false;
     }
   }
 
-  async #readReceiptPrint(id: string, session: number, visit: number): Promise<void> {
+  async #readReceiptPrint(
+    target: TicketDeliveryTarget,
+    session: number,
+    visit: number,
+  ): Promise<void> {
     try {
-      const status = await this.api.getReceiptPrintStatus(id);
-      if (!this.#ticketIsCurrent(id, session, visit)) return;
+      const status = await (target.transaction
+        ? this.api.getTransactionReceiptPrint(target.id)
+        : this.api.getReceiptPrintStatus(target.id));
+      if (!this.#ticketIsCurrent(target, session, visit)) return;
       this.originalReceiptPrint = status;
       this.originalReceiptReadFailed = false;
     } catch {
-      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptReadFailed = true;
+      if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptReadFailed = true;
     }
   }
 
-  async #readInvoiceDeliveries(id: string, session: number, visit: number): Promise<void> {
+  async #readInvoiceDeliveries(
+    target: TicketDeliveryTarget,
+    session: number,
+    visit: number,
+  ): Promise<void> {
     const read = ++this.#invoiceDeliveryReads;
     try {
-      const status = await (this.result?.invoiceType === "F1"
-        ? this.api.getInvoiceDeliveries(id)
-        : this.api.getReceiptEmailDeliveries(id));
-      if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoiceDeliveryReads) return;
+      const status = await (target.transaction
+        ? this.api.getTransactionDeliveries(target.id)
+        : this.result?.invoiceType === "F1"
+          ? this.api.getInvoiceDeliveries(target.id)
+          : this.api.getReceiptEmailDeliveries(target.id));
+      if (!this.#ticketIsCurrent(target, session, visit) || read !== this.#invoiceDeliveryReads)
+        return;
       this.invoiceDeliveries = status;
       this.invoiceDeliveriesReadFailed = false;
       if (this.invoicePrinterBlocked && this.#invoicePrinterSaved) {
@@ -9854,17 +9878,18 @@ export class TillApp extends LitElement {
         this.invoicePrinterError = confirmed ? "" : t("invoice.delivery_read_failed");
       }
     } catch {
-      if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoiceDeliveryReads) return;
+      if (!this.#ticketIsCurrent(target, session, visit) || read !== this.#invoiceDeliveryReads)
+        return;
       this.invoiceDeliveriesReadFailed = true;
       if (this.invoicePrinterBlocked && this.#invoicePrinterSaved)
         this.invoicePrinterError = t("invoice.delivery_read_failed");
     }
-    this.#scheduleDeliveryReread(id, session, visit);
+    this.#scheduleDeliveryReread(target, session, visit);
   }
 
   async #readInvoicePrinters(role: "receipt" | "invoice" = "invoice"): Promise<void> {
-    const id = this.ticketWorkingOrderId;
-    if (id === undefined || this.deviceId === undefined) return;
+    const target = this.#ticketDeliveryTarget();
+    if (target === undefined || this.deviceId === undefined) return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     if (role !== this.#documentPrinterRole) {
@@ -9880,7 +9905,8 @@ export class TillApp extends LitElement {
     const pick = this.#invoicePrinterPick;
     this.invoicePrinterLoading = true;
     const answered = await this.#readEquipmentBounded();
-    if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoicePrinterReads) return;
+    if (!this.#ticketIsCurrent(target, session, visit) || read !== this.#invoicePrinterReads)
+      return;
     this.invoicePrinterLoading = false;
     this.invoicePrinterReadFailed = !answered;
     if (answered && pick === this.#invoicePrinterPick) {
@@ -9896,16 +9922,16 @@ export class TillApp extends LitElement {
         ) {
           this.#invoicePrinterSaved = true;
           this.invoicePrinterBlocked = true;
-          await this.#readInvoiceDeliveries(id, session, visit);
+          await this.#readInvoiceDeliveries(target, session, visit);
         }
       }
     }
   }
 
   async #chooseInvoicePrinter(change: EquipmentChange): Promise<void> {
-    const id = this.ticketWorkingOrderId;
+    const target = this.#ticketDeliveryTarget();
     if (
-      id === undefined ||
+      target === undefined ||
       this.deviceId === undefined ||
       !this.capabilities.includes("print-receipt") ||
       (change.role !== "invoice" && change.role !== "receipt")
@@ -9915,7 +9941,7 @@ export class TillApp extends LitElement {
     const visit = this.#receiptPrintVisit;
     const pick = ++this.#invoicePrinterPick;
     const current = () =>
-      this.#ticketIsCurrent(id, session, visit) && pick === this.#invoicePrinterPick;
+      this.#ticketIsCurrent(target, session, visit) && pick === this.#invoicePrinterPick;
     this.#documentPrinterRole = change.role;
     this.#invoicePrinterChoice = change;
     this.invoicePrinterValue = change.selection === "default" ? "" : change.selection.id;
@@ -9936,20 +9962,20 @@ export class TillApp extends LitElement {
     this.#invoicePrinterSaved = true;
     this.invoicePrinterValue = undefined;
     if (change.role === "receipt") this.invoicePrinterBlocked = false;
-    else await this.#readInvoiceDeliveries(id, session, visit);
+    else await this.#readInvoiceDeliveries(target, session, visit);
   }
 
   /** Follows the last status read, so a failed read of a waiting attempt is tried again. */
-  #scheduleDeliveryReread(id: string, session: number, visit: number): void {
+  #scheduleDeliveryReread(target: TicketDeliveryTarget, session: number, visit: number): void {
     this.#stopDeliveryReread();
     const status = this.invoiceDeliveries?.current?.status;
     if (status !== "queued" && status !== "sending") return;
     this.#deliveryReread = setTimeout(() => {
       this.#deliveryReread = undefined;
-      if (!this.#ticketIsCurrent(id, session, visit)) return;
+      if (!this.#ticketIsCurrent(target, session, visit)) return;
       // A receipt attempt's words and its handover come from the receipt status.
-      void this.#readReceiptPrint(id, session, visit);
-      void this.#readInvoiceDeliveries(id, session, visit);
+      void this.#readReceiptPrint(target, session, visit);
+      void this.#readInvoiceDeliveries(target, session, visit);
     }, DELIVERY_REREAD_MS);
   }
 
@@ -9960,20 +9986,24 @@ export class TillApp extends LitElement {
 
   async #onPrintInvoice(): Promise<void> {
     if (this.invoicePrinterBlocked) return;
-    const id = this.ticketWorkingOrderId;
+    const target = this.#ticketDeliveryTarget();
     const printer = this.invoiceDeliveries?.actions.print?.printers[0];
-    if (id === undefined || printer === undefined) return;
-    await this.#deliveryAction(id, (requestKey) =>
-      this.api.requestPrintDelivery(id, printer.id, requestKey),
+    if (target === undefined || printer === undefined) return;
+    await this.#deliveryAction(target, (requestKey) =>
+      target.transaction
+        ? this.api.printTransactionInvoice(target.id, printer.id, requestKey)
+        : this.api.requestPrintDelivery(target.id, printer.id, requestKey),
     );
   }
 
   async #onReceiptInstead(): Promise<void> {
-    const id = this.ticketWorkingOrderId;
+    const target = this.#ticketDeliveryTarget();
     const offer = this.invoiceDeliveries?.actions.receiptInstead;
-    if (id === undefined || offer == null) return;
-    await this.#deliveryAction(id, (requestKey) =>
-      this.api.switchA4ToReceipt(id, offer.deliveryId, requestKey),
+    if (target === undefined || offer == null) return;
+    await this.#deliveryAction(target, (requestKey) =>
+      target.transaction
+        ? this.api.transactionReceiptInstead(target.id, offer.deliveryId, requestKey)
+        : this.api.switchA4ToReceipt(target.id, offer.deliveryId, requestKey),
     );
   }
 
@@ -9990,12 +10020,12 @@ export class TillApp extends LitElement {
   }
 
   async #onSendEmail(event: Event): Promise<void> {
-    const id = this.ticketWorkingOrderId;
-    if (id === undefined) return;
+    const target = this.#ticketDeliveryTarget();
+    if (target === undefined || target.transaction) return;
     const { recipient } = (event as CustomEvent<InvoiceEmailSendDetail>).detail;
     await this.#deliveryAction(
-      id,
-      (requestKey) => this.api.requestEmailDelivery(id, recipient, requestKey),
+      target,
+      (requestKey) => this.api.requestEmailDelivery(target.id, recipient, requestKey),
       {
         sent: () => this.#onEmailCancel(),
         refused: (refusal) => (this.invoiceEmailRefusal = refusal),
@@ -10004,19 +10034,24 @@ export class TillApp extends LitElement {
   }
 
   async #onRetryEmail(): Promise<void> {
-    const id = this.ticketWorkingOrderId;
+    const target = this.#ticketDeliveryTarget();
     const status = this.invoiceDeliveries;
     const deliveryId = status?.current?.id;
-    if (id === undefined || status?.actions.retryOriginal?.medium !== "email" || !deliveryId)
+    if (
+      target === undefined ||
+      target.transaction ||
+      status?.actions.retryOriginal?.medium !== "email" ||
+      !deliveryId
+    )
       return;
-    await this.#deliveryAction(id, (requestKey) =>
-      this.api.retryEmailDelivery(id, deliveryId, requestKey),
+    await this.#deliveryAction(target, (requestKey) =>
+      this.api.retryEmailDelivery(target.id, deliveryId, requestKey),
     );
   }
 
   /** Each press sends under a new request key; both statuses are read again whatever the answer. */
   async #deliveryAction(
-    id: string,
+    target: TicketDeliveryTarget,
     send: (requestKey: string) => Promise<unknown>,
     on: { sent?: () => void; refused?: (refusal: InvoiceEmailRefusal) => void } = {},
   ): Promise<void> {
@@ -10028,9 +10063,9 @@ export class TillApp extends LitElement {
     this.invoiceEmailRefusal = undefined;
     try {
       await send(crypto.randomUUID());
-      if (this.#ticketIsCurrent(id, session, visit)) on.sent?.();
+      if (this.#ticketIsCurrent(target, session, visit)) on.sent?.();
     } catch (error) {
-      if (this.#ticketIsCurrent(id, session, visit)) {
+      if (this.#ticketIsCurrent(target, session, visit)) {
         const { code, field } = (error ?? {}) as { code?: unknown; field?: unknown };
         (on.refused ?? this.#refusedInSection)(
           typeof code !== "string" ? {} : typeof field === "string" ? { code, field } : { code },
@@ -10038,13 +10073,13 @@ export class TillApp extends LitElement {
       }
     }
     try {
-      if (this.#ticketIsCurrent(id, session, visit))
+      if (this.#ticketIsCurrent(target, session, visit))
         await Promise.all([
-          this.#readReceiptPrint(id, session, visit),
-          this.#readInvoiceDeliveries(id, session, visit),
+          this.#readReceiptPrint(target, session, visit),
+          this.#readInvoiceDeliveries(target, session, visit),
         ]);
     } finally {
-      if (this.#ticketIsCurrent(id, session, visit)) this.invoiceDeliveryBusy = false;
+      if (this.#ticketIsCurrent(target, session, visit)) this.invoiceDeliveryBusy = false;
     }
   }
 
@@ -10053,10 +10088,10 @@ export class TillApp extends LitElement {
   };
 
   async #confirmReceiptHandover(): Promise<void> {
-    const id = this.ticketWorkingOrderId;
+    const target = this.#ticketDeliveryTarget();
     const print = this.originalReceiptPrint;
     if (
-      id === undefined ||
+      target === undefined ||
       this.result?.invoiceType !== "F1" ||
       print?.status !== "done" ||
       print.handover !== undefined ||
@@ -10069,20 +10104,28 @@ export class TillApp extends LitElement {
     this.originalReceiptBusy = true;
     this.errorKey = undefined;
     try {
-      const confirmed = await this.api.confirmReceiptHandover(id);
-      if (!this.#ticketIsCurrent(id, session, visit)) return;
+      const confirmed = await (target.transaction
+        ? this.api.confirmTransactionReceiptHandover(target.id)
+        : this.api.confirmReceiptHandover(target.id));
+      if (!this.#ticketIsCurrent(target, session, visit)) return;
       this.originalReceiptPrint = confirmed;
     } catch (error) {
-      if (this.#ticketIsCurrent(id, session, visit))
+      if (this.#ticketIsCurrent(target, session, visit))
         this.errorKey = counterError(error, "invoice.handover_failed");
     } finally {
-      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
+      if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptBusy = false;
     }
   }
 
   async #onPrintReceipt(retry = false): Promise<void> {
-    const id = this.ticketWorkingOrderId;
-    if (id === undefined || this.originalReceiptBusy || this.invoiceDeliveryBusy) return;
+    const target = this.#ticketDeliveryTarget();
+    if (
+      target === undefined ||
+      (target.transaction && !retry) ||
+      this.originalReceiptBusy ||
+      this.invoiceDeliveryBusy
+    )
+      return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     const full = this.result?.invoiceType === "F1";
@@ -10097,19 +10140,21 @@ export class TillApp extends LitElement {
     this.originalReceiptBusy = true;
     this.errorKey = undefined;
     try {
-      if (retry) await this.api.retryReceipt(id);
-      else await this.api.printReceipt(id);
-      if (!this.#ticketIsCurrent(id, session, visit)) return;
+      if (retry) {
+        if (target.transaction) await this.api.retryTransactionReceipt(target.id);
+        else await this.api.retryReceipt(target.id);
+      } else await this.api.printReceipt(target.id);
+      if (!this.#ticketIsCurrent(target, session, visit)) return;
       this.originalReceiptAvailable = false;
       this.originalReceiptPrint = undefined;
       await Promise.all([
-        this.#readReceiptPrint(id, session, visit),
-        this.#readInvoiceDeliveries(id, session, visit),
+        this.#readReceiptPrint(target, session, visit),
+        this.#readInvoiceDeliveries(target, session, visit),
       ]);
     } catch {
-      if (this.#ticketIsCurrent(id, session, visit)) this.errorKey = "receipt.error";
+      if (this.#ticketIsCurrent(target, session, visit)) this.errorKey = "receipt.error";
     } finally {
-      if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
+      if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptBusy = false;
     }
   }
 
@@ -20295,11 +20340,12 @@ export class TillApp extends LitElement {
   }
 
   #showTicket(
-    workingOrderId: string,
+    workingOrderId: string | undefined,
     invoiceIssuedNow = true,
     settlement: SettlementDocument | null = null,
+    historical: TillApp["historicalReceipt"] = null,
   ): void {
-    this.historicalReceipt = null;
+    this.historicalReceipt = historical;
     this.ticketWorkingOrderId = workingOrderId;
     this.#receiptPrintVisit++;
     this.originalReceiptPrint = undefined;
@@ -20325,7 +20371,10 @@ export class TillApp extends LitElement {
     if (settlement !== null) {
       this.settlementDocument = settlement;
       void this.#readInvoicePrinters("receipt");
-    } else this.#pushDrill({ kind: "ticket" });
+    } else {
+      this.#pushDrill({ kind: "ticket" });
+      if (this.#ticketDeliveryTarget()?.transaction) void this.#readInvoicePrinters("receipt");
+    }
     void this.#refreshReceiptPrint();
     if (settlement?.surface === "table" && this.handheldMode && this.result?.invoiceType === "F2")
       void this.#readSettlementBills();
@@ -20959,7 +21008,8 @@ export class TillApp extends LitElement {
           .refundable=${this.#hasRefundableTenders()}
           @tender-refund-open=${() => this.#openTenderRefund()}
           .historical=${this.historicalReceipt !== null}
-          .historicalDelivery=${this.historicalReceipt?.kind === "invoice" && this.historicalReceipt.workingOrderId != null}
+          .receiptCopiesOnly=${this.#ticketDeliveryTarget()?.transaction === true}
+          .historicalDelivery=${this.historicalReceipt?.kind === "invoice" && this.#ticketDeliveryTarget() !== undefined}
           @back-to-find-bill=${() => this.#requestLeave(() => this.#backToFindBill())}
           slot="drill"
           .result=${this.result}
@@ -20971,7 +21021,7 @@ export class TillApp extends LitElement {
           .originalReceiptReadFailed=${this.originalReceiptReadFailed}
           .deliveries=${this.invoiceDeliveries}
           .deliveriesReadFailed=${this.invoiceDeliveriesReadFailed}
-          .invoicePrintersEnabled=${this.deviceId !== undefined && this.ticketWorkingOrderId !== undefined}
+          .invoicePrintersEnabled=${this.deviceId !== undefined && this.#ticketDeliveryTarget() !== undefined}
           .invoiceEquipment=${this.invoiceEquipment}
           .receiptEquipment=${this.receiptEquipment}
           .invoicePrinterValue=${this.invoicePrinterValue}

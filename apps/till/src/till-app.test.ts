@@ -23225,6 +23225,18 @@ describe("A737 Find a bill page", () => {
       getTransactionReceipt,
       getReceiptPrintStatus: originalRead,
       getInvoiceDeliveries: originalRead,
+      getTransactionReceiptPrint: vi
+        .fn()
+        .mockResolvedValue({ status: "done", jobId: "history-print", canRetry: false }),
+      getTransactionDeliveries: vi
+        .fn()
+        .mockResolvedValue({
+          current: null,
+          originalCompleted: true,
+          originalPrinterId: null,
+          history: [],
+          actions: { print: null, retryOriginal: null, receiptInstead: null, email: null },
+        }),
     });
     counter.store.addProduct(coffee, "2");
     await view.updateComplete;
@@ -23260,7 +23272,15 @@ describe("A737 Find a bill page", () => {
     const receipt = ticket(el)!;
     await receipt.updateComplete;
     expect(receipt.shadowRoot!.querySelector(".new-sale")).toBeNull();
-    expect(receipt.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
+    expect(receipt.shadowRoot!.querySelector("[data-test=original-delivery]")).not.toBeNull();
+    await userEvent.click(
+      receipt.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]")!,
+    );
+    await flush(el);
+    await userEvent.click(
+      receipt.shadowRoot!.querySelector<HTMLElement>("[data-test=document-receipt]")!,
+    );
+    await flush(el);
     expect(receipt.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
     expect(originalRead).not.toHaveBeenCalled();
     emit(receipt, "back-to-find-bill");

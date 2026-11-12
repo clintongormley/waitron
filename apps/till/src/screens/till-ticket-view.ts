@@ -625,6 +625,7 @@ export class TillTicketView extends LitElement {
   @property({ type: Boolean }) simulated = false;
   @property({ type: Boolean }) historical = false;
   @property({ type: Boolean }) historicalDelivery = false;
+  @property({ type: Boolean }) receiptCopiesOnly = false;
   @property({ type: Boolean }) refundable = false;
   /** True only while the issuance-time original action remains available on this completion screen. */
   @property({ type: Boolean }) originalReceiptAvailable = false;
@@ -690,7 +691,7 @@ export class TillTicketView extends LitElement {
     )
       return null;
     if (status === "done" || this.deliveries?.originalCompleted) return "duplicate";
-    return status === "not_queued" ? "original" : null;
+    return status === "not_queued" && !this.receiptCopiesOnly ? "original" : null;
   }
 
   #renderDocumentPrinter() {
@@ -1022,7 +1023,14 @@ export class TillTicketView extends LitElement {
                     composed: true,
                   }),
                 )}
-              >${t("invoice.receipt_instead")}</wt-button
+              >${
+                this.receiptCopiesOnly
+                  ? t("invoice.receipt_instead_on").replace(
+                      "{printer}",
+                      () => this.receiptEquipment?.resolved?.name ?? t("equipment.none"),
+                    )
+                  : t("invoice.receipt_instead")
+              }</wt-button
             >`
           : nothing
       }
@@ -1031,6 +1039,10 @@ export class TillTicketView extends LitElement {
 
   protected renderReceiptRetry(failedButSuperseded: boolean) {
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    const printerName =
+      this.originalReceiptPrint?.status === "not_queued"
+        ? undefined
+        : this.originalReceiptPrint?.printerName;
     return this.canPrintReceipt &&
       this.originalReceiptPrint?.status === "failed" &&
       this.originalReceiptPrint.canRetry &&
@@ -1042,7 +1054,11 @@ export class TillTicketView extends LitElement {
           size="lg"
           ?disabled=${receiptBusy}
           @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
-          >${t("invoice.retry_original")}</wt-button
+          >${
+            printerName === undefined
+              ? t("invoice.retry_original")
+              : t("invoice.retry_original_on").replace("{printer}", () => printerName)
+          }</wt-button
         >`
       : nothing;
   }

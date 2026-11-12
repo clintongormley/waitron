@@ -2422,6 +2422,8 @@ export type OriginalReceiptPrint =
   | {
       status: "queued" | "printing" | "failed" | "done";
       jobId: string;
+      printerId?: string;
+      printerName?: string;
       canRetry: boolean;
       /** Only on a failed original: its printer was deleted, so it will never print there. */
       failureCode?: "printer.deleted";
@@ -3900,6 +3902,54 @@ export class TillApi {
 
   findBillOptions(options: ReadOptions = {}): Promise<FindBillOptions> {
     return this.#request("/api/find-bill/options", "GET", undefined, options.signal);
+  }
+
+  getTransactionDeliveries(saleId: string): Promise<InvoiceDeliveryStatus> {
+    return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/deliveries`, "GET");
+  }
+
+  getTransactionReceiptPrint(saleId: string): Promise<OriginalReceiptPrint> {
+    return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/receipt-print`, "GET");
+  }
+
+  printTransactionInvoice(
+    saleId: string,
+    printerId: string,
+    requestKey: string,
+  ): Promise<InvoiceDeliveryAttempt> {
+    return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/deliveries`, "POST", {
+      medium: "print",
+      printerId,
+      requestKey,
+    });
+  }
+
+  transactionReceiptInstead(
+    saleId: string,
+    deliveryId: string,
+    requestKey: string,
+  ): Promise<InvoiceDeliveryAttempt> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/deliveries/${encodeURIComponent(deliveryId)}/to-receipt`,
+      "POST",
+      { requestKey },
+    );
+  }
+
+  retryTransactionReceipt(saleId: string): Promise<{ jobId: string }> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/receipt-print/retry`,
+      "POST",
+      {},
+    );
+  }
+
+  confirmTransactionReceiptHandover(saleId: string): Promise<OriginalReceiptPrint> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/receipt-print/handover`,
+      "POST",
+      {},
+    );
   }
 
   getTransactionReceipt(saleId: string, options: ReadOptions = {}): Promise<TillSaleResult> {
