@@ -11,6 +11,7 @@ import {
   updateHeldOrder,
   updateOrderLine,
   placeOrder,
+  setWorkingOrderLabel,
 } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
@@ -20,6 +21,8 @@ import { DatabaseSync } from "node:sqlite";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  billPaymentRefunds,
+  billPayments,
   captureError,
   isUniqueViolation,
   kitchenCourses,
@@ -4493,6 +4496,282 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
     await unchanged(id, before);
   });
+
+  /** A received card payment of the bill, and a refund of it the provider has not answered. */
+  async function pendingRefund(cfg: DeviceRequestConfig, id: string): Promise<void> {
+    const [payment] = await db
+      .insert(billPayments)
+      .values({
+        workingOrderId: id,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        kind: "contribution",
+        method: "card",
+        applied: 100,
+        state: "received",
+        receivedAt: new Date().toISOString(),
+        requestedBy: OPERATOR,
+        source: cfg.origin.source,
+        deviceId: cfg.origin.deviceId,
+      })
+      .returning({ id: billPayments.id });
+    await db.insert(billPaymentRefunds).values({
+      billPaymentId: payment!.id,
+      submissionId: randomUUID(),
+      fingerprint: "f",
+      appliedAmount: 100,
+      reason: "r",
+      authorizedBy: OPERATOR,
+      requestedBy: OPERATOR,
+      source: cfg.origin.source,
+      deviceId: cfg.origin.deviceId,
+      state: "pending",
+    });
+  }
+
+  /** The order and its lines as `before` holds them, but for `note` on the dish line. */
+  async function onlyNoteChanged(
+    id: string,
+    before: { order: unknown; lines: (typeof workingOrderLines.$inferSelect)[] },
+    note: string,
+  ) {
+    const [order] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(order).toEqual({
+      ...(before.order as object),
+      revision: (before.order as { revision: number }).revision + 1,
+    });
+    expect(lines).toEqual(before.lines.map((row) => ({ ...row, note })));
+  }
+
+  it("takes a dish's note while a card is at the reader, keeping the payment's mark", async () => {
+    const { cfg, id, before } = await payingHeldOrder();
+
+    await withTransaction(db, (tx) =>
+      updateOrderLine(tx, cfg, id, 1, { note: "No salt" }, before.order!.revision),
+    );
+
+    await onlyNoteChanged(id, before, "No salt");
+  });
+
+  it("takes a dish's note while a card refund waits on its bill", async () => {
+    const venue = await setupVenue();
+    await withTransaction(db, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));
+    const id = randomUUID();
+    await parkProducts(venue.cfg, { id, lines: [{ productId: venue.coffeeId, quantity: "1" }] });
+    await pendingRefund(venue.cfg, id);
+    const [order] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+
+    await withTransaction(db, (tx) =>
+      updateOrderLine(tx, venue.cfg, id, 1, { note: "No salt" }, order!.revision),
+    );
+
+    await onlyNoteChanged(id, { order, lines }, "No salt");
+    expect(
+      await db
+        .select({ state: billPaymentRefunds.state })
+        .from(billPaymentRefunds)
+        .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+        .where(eq(billPayments.workingOrderId, id)),
+    ).toEqual([{ state: "pending" }]);
+  });
+
+  it("renames the bill while a card is at the reader, keeping the payment's mark", async () => {
+    const { cfg, coffeeId, id, before } = await payingHeldOrder();
+
+    await setWorkingOrderLabel(db, id, { label: "Window", revision: before.order!.revision });
+    const [renamed] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(renamed).toEqual({
+      ...before.order,
+      label: "Window",
+      revision: before.order!.revision + 1,
+    });
+
+    const [line] = before.lines;
+    await updateProducts(cfg, id, {
+      label: "Terrace",
+      lines: [{ productId: coffeeId, quantity: "1", workingOrderLineId: line!.id }],
+    });
+    const [saved] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(saved).toEqual({
+      ...before.order,
+      label: "Terrace",
+      revision: before.order!.revision + 2,
+    });
+    expect(
+      await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
+    ).toEqual(before.lines);
+  });
+
+  it("still refuses a quantity change, with or without a note, writing nothing", async () => {
+    const { cfg, id, before } = await payingHeldOrder();
+
+    for (const patch of [{ quantity: "2" }, { quantity: "2", note: "No salt" }]) {
+      await expect(
+        withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, patch, before.order!.revision)),
+      ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
+    }
+    await unchanged(id, before);
+  });
+
+  const UNRESOLVED = [
+    { money: "a card at the reader", code: "order.payment_in_flight" },
+    { money: "a card refund waiting", code: "bill.refund_in_progress" },
+  ] as const;
+
+  /**
+   * A held, unsent coffee answering a two-label options list, beside an extras list it picks
+   * nothing from and a second station it could be made at, with `money` unresolved on its bill.
+   */
+  async function unresolvedCoffee(money: (typeof UNRESOLVED)[number]["money"]) {
+    const venue = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const bar = await createStation(tx, { name: "Bar" });
+      const extra = await addExtraList(tx, venue.catalogueId, venue.coffeeId, "Bacon");
+      const options = await addOptionList(tx, venue.coffeeId, "Cooking", ["Rare", "Well done"]);
+      return { barId: bar.id, extra, options };
+    });
+    const answer = (label: number) => [
+      { listId: seeded.options.listId, labelId: seeded.options.labelIds[label]! },
+    ];
+    const id = randomUUID();
+    await parkProducts(venue.cfg, {
+      id,
+      lines: [{ productId: venue.coffeeId, quantity: "1", options: answer(0) }],
+    });
+    if (money === "a card at the reader") {
+      await db
+        .update(workingOrders)
+        .set({ paymentAttemptAt: "2026-09-26T10:00:00.000Z" })
+        .where(eq(workingOrders.id, id));
+    } else {
+      await pendingRefund(venue.cfg, id);
+    }
+    const [order] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(lines).toEqual([expect.objectContaining({ sentAt: null, makeAtStationId: null })]);
+    return { ...venue, ...seeded, answer, id, before: { order: order!, lines } };
+  }
+
+  /** The order as `before` holds it, a revision on, its one line changed only by `change`; any
+   * card refund still waiting. */
+  async function onlyLineChanged(
+    id: string,
+    before: { order: typeof workingOrders.$inferSelect; lines: unknown[] },
+    change: Partial<typeof workingOrderLines.$inferSelect>,
+  ) {
+    const [order] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(order).toEqual({ ...before.order, revision: before.order.revision + 1 });
+    expect(
+      await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
+    ).toEqual(before.lines.map((row) => ({ ...(row as object), ...change })));
+    for (const refund of await db.select().from(billPaymentRefunds))
+      expect(refund.state).toBe("pending");
+  }
+
+  // A sale line files its own options answer, and a whole-order card files the answers it priced.
+  it.each(UNRESOLVED)(
+    "still refuses a dish's options answer with $money, writing nothing",
+    async ({ money, code }) => {
+      const { cfg, answer, id, before } = await unresolvedCoffee(money);
+
+      await expect(
+        withTransaction(db, (tx) =>
+          updateOrderLine(tx, cfg, id, 1, { options: answer(1) }, before.order.revision),
+        ),
+      ).rejects.toMatchObject({ code });
+      await unchanged(id, before);
+    },
+  );
+
+  it.each(UNRESOLVED)(
+    "still refuses an options answer through a whole-order save with $money, writing nothing",
+    async ({ money, code }) => {
+      const { cfg, answer, id, before, coffeeId } = await unresolvedCoffee(money);
+
+      await expect(
+        updateProducts(cfg, id, {
+          revision: before.order.revision,
+          lines: [
+            {
+              productId: coffeeId,
+              quantity: "1",
+              options: answer(1),
+              workingOrderLineId: before.lines[0]!.id,
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ code });
+      await unchanged(id, before);
+    },
+  );
+
+  it.each(UNRESOLVED)("takes where an unsent dish is made with $money", async ({ money }) => {
+    const { cfg, barId, id, before } = await unresolvedCoffee(money);
+
+    await withTransaction(db, (tx) =>
+      updateOrderLine(tx, cfg, id, 1, { makeAt: barId }, before.order.revision),
+    );
+
+    await onlyLineChanged(id, before, { makeAtStationId: barId });
+  });
+
+  it.each(UNRESOLVED)(
+    "still refuses an added extra with $money, writing nothing",
+    async ({ money, code }) => {
+      const { cfg, extra, id, before } = await unresolvedCoffee(money);
+
+      await expect(
+        withTransaction(db, (tx) =>
+          updateOrderLine(
+            tx,
+            cfg,
+            id,
+            1,
+            {
+              extras: [
+                { listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] },
+              ],
+            },
+            before.order.revision,
+          ),
+        ),
+      ).rejects.toMatchObject({ code });
+      await unchanged(id, before);
+    },
+  );
+
+  it.each(UNRESOLVED)(
+    "still refuses a quantity change beside an options answer with $money, writing nothing",
+    async ({ money, code }) => {
+      const { cfg, answer, id, before } = await unresolvedCoffee(money);
+
+      await expect(
+        withTransaction(db, (tx) =>
+          updateOrderLine(
+            tx,
+            cfg,
+            id,
+            1,
+            { quantity: "2", options: answer(1) },
+            before.order.revision,
+          ),
+        ),
+      ).rejects.toMatchObject({ code });
+      await unchanged(id, before);
+    },
+  );
 });
 
 describe("placeOrder / sendToPrep fire ticket items", () => {
@@ -5724,6 +6003,36 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       });
     });
   });
+
+  it("moves a held line to another course while a card is at the reader for its bill", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const post = await createCourse(tx, { name: "Desserts", displayOrder: 2 });
+      const starter = await makeProduct(tx, catalogueId, {});
+      const main = await makeProduct(tx, catalogueId, {});
+      await setProductCourse(tx, starter, starterCourse.id);
+      await setProductCourse(tx, main, mainCourse.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
+      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
+      await tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, tabId));
+
+      await setLineCourse(tx, cfg, tabId, 2, post.id);
+
+      const after = await courseItemsFor(tx, tabId);
+      expect(byLine(after, main).courseId).toBe(post.id);
+      expect(byLine(after, main).firedAt).toBeNull();
+      const [order] = await tx
+        .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      expect(order!.paymentAttemptAt).toBe(paymentAttemptAt);
+    });
+  });
 });
 
 // sendLines releases selected held items, refreshes queue time and enqueues their kitchen prints.
@@ -5916,6 +6225,34 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
         .from(printJobs)
         .where(eq(printJobs.printerId, barPrinterId));
       expect(barJobsAfter).toHaveLength(1);
+    });
+  });
+
+  it("sends a held line while a card is at the reader for its bill", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const starter = await makeProduct(tx, catalogueId, {});
+      const main = await makeProduct(tx, catalogueId, {});
+      await setProductCourse(tx, starter, starterCourse.id);
+      await setProductCourse(tx, main, mainCourse.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
+      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
+      await tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, tabId));
+      expect((await itemsByLineNo(tx, tabId)).get(2)!.firedAt).toBeNull();
+
+      await sendLines(tx, cfg, tabId, [2]);
+
+      expect((await itemsByLineNo(tx, tabId)).get(2)!.firedAt).not.toBeNull();
+      const [order] = await tx
+        .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      expect(order!.paymentAttemptAt).toBe(paymentAttemptAt);
     });
   });
 });

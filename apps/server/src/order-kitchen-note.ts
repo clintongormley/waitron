@@ -13,8 +13,6 @@ import { VENUE_SERVICE } from "./modules.js";
 import { enqueueOrderKitchenNoteChange } from "./kitchen-print.js";
 import { checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
 import type { TradingContext } from "./trading-context.js";
-import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
-import type { Database } from "@waitron/db";
 import "./errors.js";
 
 export async function inheritKitchenNote(
@@ -156,7 +154,6 @@ export interface KitchenNoteCommand {
 
 export async function setOrderKitchenNote(
   tx: Transaction,
-  db: Database,
   cfg: TradingContext,
   scope: KitchenNoteScope,
   args: KitchenNoteCommand,
@@ -200,21 +197,6 @@ export async function setOrderKitchenNote(
         current = (await readOrderKitchenNotes(tx, [order.id])).get(order.id)!;
         orderIds = [order.id];
       }
-      const pending =
-        orderIds.find((id) => paymentAttemptIsLive(db, id)) ??
-        (orderIds.length === 0
-          ? undefined
-          : [...(await ordersWithUnfiledPayment(tx, orderIds))][0]);
-      const marked =
-        orderIds.length === 0
-          ? []
-          : await tx
-              .select({ id: workingOrders.id, at: workingOrders.paymentAttemptAt })
-              .from(workingOrders)
-              .where(inArray(workingOrders.id, orderIds));
-      const busy = pending ?? marked.find((o) => o.at !== null)?.id;
-      if (busy !== undefined)
-        throw new AppError("order.payment_in_flight", { workingOrderId: busy });
       const next = await VENUE_SERVICE.writeKitchenNote(
         tx,
         scope,

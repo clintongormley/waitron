@@ -18,7 +18,7 @@ it.each([
 it("registers the dashboard's alert wording on import", () => {
   expect(hasAlertMessage("payment.refund_unresolved")).toBe(true);
   expect(alertMessage("payment.refund_unresolved", { amount: "12.50" }, "en")).toBe(
-    "A card refund of €12.50 has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms. Later checks do not add to this alert while it is open, so there may be more.",
+    "A card refund of €12.50 has been waiting for over an hour for the card provider to show what happened. Until then its bill cannot take payments or be invoiced, and what it charges cannot be changed. Check the refund in the provider's own dashboard, and record the outcome it confirms. Later checks do not add to this alert while it is open, so there may be more.",
   );
 });
 

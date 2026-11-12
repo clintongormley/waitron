@@ -2699,7 +2699,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       async () => {
         const revision = await revisionOf(id);
         return withTransaction(suite.db, (tx) =>
-          updateOrderLine(tx, t.cfg, id, 1, { portionLineNos: [], note: "sin azúcar" }, revision),
+          updateOrderLine(tx, t.cfg, id, 1, { portionLineNos: [], quantity: "3" }, revision),
         );
       },
       () => withTransaction(suite.db, (tx) => cancelLine(tx, t.cfg, id, 1, "1")),

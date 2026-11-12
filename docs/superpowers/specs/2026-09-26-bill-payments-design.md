@@ -471,6 +471,9 @@ checks are the ones below.
   through while a card is at the reader is open point §11.3.
   _(2026-09-28: a served mark is no longer refused while a card payment is pending; owner ruling,
   campaign item A118.)_
+  _(2026-11-12: kitchen and course work, a dish's note and the bill's name are no longer
+  refused while a card payment or a card refund is pending. Owner ruling, campaign item R7-1; the list is in
+  `docs/backlog/payments.md` → Decisions and deliberate limits.)_
 - **Allowed while a card payment on the bill is pending:** a cash payment, and a second card payment
   on another reader, each against what is still available after the pending one's reservation
   (§3.1). So a second device may take cash while a card is at the terminal. **Why:** at a large
@@ -925,8 +928,8 @@ its code.
 
 17. **Crash after the provider refunded:** a €20.00 card refund whose provider call succeeds, with
     R3 made to throw. The row is `pending` with `sent_at` set, `payment_refunds` has nothing, and
-    the bill is locked: a cash payment, a line edit, an adjustment, a move, abandoning the bill and a
-    second refund are each `bill.refund_in_progress`, and no invoice is issued. A staff retry with
+    the bill is locked: a cash payment, a quantity change, an adjustment, a move, abandoning the bill
+    and a second refund are each `bill.refund_in_progress`, and no invoice is issued. A staff retry with
     the SAME `submission_id` LOOKS UP first, finds the refund `succeeded`, and completes the row
     locally: the provider's refund method is NOT called again (the stub counts one refund call in
     total), `payment_refunds` gets one row carrying the provider's refund id, and the lock is

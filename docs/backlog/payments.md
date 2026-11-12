@@ -287,8 +287,10 @@ The
 design's §8 test 17 lists "a move" among the writes refused `bill.refund_in_progress`, and §5.2
 lists "transfer". Read, not run (A847's review, #1860): neither moving guests nor moving a bill
 appears to check for a pending refund, and the test covering test 17 makes no move. Move dishes… refuses `bill.refund_in_progress` on either bill
-(`apps/server/src/move-dishes.test.ts`). Next: one route case each during a pending refund, then fix the
-design's wording, or the code if a move can change what a bill charges (ask the owner first).
+(`apps/server/src/move-dishes.test.ts`). The owner's R7-1 ruling (2026-11-12, under Decisions below) settles the
+question: moving a bill or its guests changes nothing the bill charges, so it goes through. Next: one route case each during a
+pending refund, then reword §8 test 17's "a move" and §5.2's "transfer" to name only moves of
+dishes between bills.
 
 ## Check first: on a venue with no fiscal module, replaying a settled bill may throw
 
@@ -409,6 +411,24 @@ Remaining Stripe qualification and maintenance.
 
 ## Decisions and deliberate limits
 
+- **Money moving does not stop kitchen and course work** (owner, 2026-11-12, R7-1: asked whether
+  staff may still "do everything that does not change what the bill charges", he answered "Yes,
+  kitchen carries on"). While a card is at the reader or a card refund waits on a bill, staff may
+  still fire a held course or dish, send held dishes, move dishes between stations, close or delete
+  a station, change or reorder courses, move a whole dish between held courses, choose Make at,
+  change a dish's note, rename the bill and change the whole-order kitchen note. Adding, removing
+  or repricing dishes, a quantity, extras or options-answer change (a card taken for the whole
+  order files the options answered when the card payment began; refusing it while a refund or a
+  part payment waits is the lane's reading, not the owner's words), comps, discounts and moving
+  dishes between bills stay refused. So do a partial move or split of a held dish, which rewrite
+  the rows carrying its price: that is the lane's reading, not the owner's words. Moving a whole bill
+  was already allowed ([till.md](till.md#a-pending-card-payment-does-not-stop-a-bill-moving-table-actions-plan-p19)).
+  The writes allowed above count their write with `bumpRevisionKeepingPayment`
+  (`apps/server/src/working-order.ts`). Tests: the "card payment" and "refund" cases in
+  `apps/server/src/bill-editing.station-move.test.ts`, `order-groups.test.ts`,
+  `working-order.test.ts`, `till-api.unroutable-dish.test.ts` and `station-delete.test.ts`; the
+  card-at-the-reader cases in `till-api.kitchen-note.test.ts` and `till-api.test.ts`.
+
 - **An uncertain bill payment keeps its original confirmation** (A1399, watcher answer,
   2026-11-06 23:12). A server error or code-less answer that does not prove the payment was refused
   uses the existing hold and **Check again**, with the same complete request. An empty balance
@@ -458,7 +478,7 @@ Remaining Stripe qualification and maintenance.
   held payment by recording an outcome in the Payments screen's held list.
 
 - **Uncertain Stripe reader payments stay unknown** (owner, 2026-10-16, A764).
-  Check them automatically after collection ends; keep the order locked until the outcome is known.
+  Check them automatically after collection ends; keep what the order charges locked until the outcome is known.
   Retain the manager check as a fallback. A confirmed cancellation advances the next attempt's key;
   a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
   Each payment records the box that started it in `payments.node_id`: every payment insert takes a

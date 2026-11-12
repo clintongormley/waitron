@@ -109,8 +109,8 @@ describe.each(["en-GB", "es-ES"])("card failure messages in %s", (locale) => {
     if (row.outcome === "timeout") {
       expect(explanation?.textContent?.trim()).toBe(
         locale === "es-ES"
-          ? "Waitron está comprobando el pago. El pedido sigue bloqueado hasta conocer el resultado. Si no se resuelve, pide a un encargado que lo consulte en Pagos con tarjeta."
-          : "Waitron is checking the payment. This order stays locked until the result is known. If it stays unresolved, ask a manager to check Card payments.",
+          ? "Waitron está comprobando el pago. Hasta conocer el resultado, no se puede cambiar el importe del pedido. Si no se resuelve, pide a un encargado que lo consulte en Pagos con tarjeta."
+          : "Waitron is checking the payment. Until the result is known, what this order charges cannot be changed. If it stays unresolved, ask a manager to check Card payments.",
       );
     } else expect(explanation).toBeNull();
     expect(el.shadowRoot!.querySelector(".retry") !== null).toBe(row.retry);

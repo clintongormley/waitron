@@ -352,8 +352,8 @@ export const ALERT_MESSAGES: Readonly<
     es: `Comprueba el pago con tarjeta {paymentRef} y sus devoluciones en el panel del proveedor antes de volver a cobrar.${MORE_ES}`,
   },
   "payment.bill_settle_failed": {
-    en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Waitron tries again by itself; to try now, open Card payments and, under Bill payments and refunds awaiting a card provider, press Check with provider. Do not charge the card again.${MORE_EN}`,
-    es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. La cuenta no se puede modificar ni facturar hasta que se registre. Waitron lo vuelve a intentar por sí solo; para intentarlo ya, abre Pagos con tarjeta y, en Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas, pulsa Consultar al proveedor. No vuelvas a cobrar la tarjeta.${MORE_ES}`,
+    en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. Until it is recorded, the bill cannot be invoiced and what it charges cannot be changed. Waitron tries again by itself; to try now, open Card payments and, under Bill payments and refunds awaiting a card provider, press Check with provider. Do not charge the card again.${MORE_EN}`,
+    es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. Hasta que se registre, la cuenta no se puede facturar y no se puede cambiar su importe. Waitron lo vuelve a intentar por sí solo; para intentarlo ya, abre Pagos con tarjeta y, en Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas, pulsa Consultar al proveedor. No vuelvas a cobrar la tarjeta.${MORE_ES}`,
   },
   "payment.tender_refund_unresolved": {
     en: `A card refund of {amount:money} has been waiting for over an hour for the card provider to show what happened. Check the refund in the provider's own dashboard, and record the outcome it confirms. The original invoice is unchanged.${MORE_EN}`,
@@ -368,8 +368,8 @@ export const ALERT_MESSAGES: Readonly<
     es: `El proveedor de pagos muestra como hecha una devolución de {amount:money} que Waitron ya había registrado como no hecha. Waitron no ha cambiado nada: el dinero se devolvió al cliente, así que revisa los pagos de la cuenta en el panel del proveedor.${MORE_ES}`,
   },
   "payment.refund_unresolved": {
-    en: `A card refund of {amount:money} has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms.${MORE_EN}`,
-    es: `Una devolución con tarjeta de {amount:money} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no se puede modificar ni facturar. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.${MORE_ES}`,
+    en: `A card refund of {amount:money} has been waiting for over an hour for the card provider to show what happened. Until then its bill cannot take payments or be invoiced, and what it charges cannot be changed. Check the refund in the provider's own dashboard, and record the outcome it confirms.${MORE_EN}`,
+    es: `Una devolución con tarjeta de {amount:money} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no admite cobros ni se puede facturar, y no se puede cambiar su importe. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.${MORE_ES}`,
   },
   "payment.reconcile_unsettled": {
     en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_FIXED_EN}`,

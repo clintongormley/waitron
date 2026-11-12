@@ -2495,7 +2495,7 @@ async function finishRelease(
         .map((row) => row.id),
     );
   }
-  if (released.length > 0) await bumpRevision(tx, [orderId]);
+  if (released.length > 0) await bumpRevisionKeepingPayment(tx, [orderId]);
 }
 
 /**
@@ -3368,7 +3368,7 @@ export async function setLineCourse(
     .update(ticketItems)
     .set({ courseId })
     .where(onDishesOrTheirExtras(tx, [line.id]));
-  await bumpRevision(tx, [tabId]);
+  await bumpRevisionKeepingPayment(tx, [tabId]);
   if (line.courseId !== courseId) await captureOrderService(tx, attendance, tabId, "course");
 }
 
@@ -5424,6 +5424,14 @@ export async function refuseOrderPaymentMarked(
  */
 export async function bumpRevision(tx: Transaction, orderIds: readonly string[]): Promise<void> {
   await refusePaymentInFlight(tx, orderIds);
+  await bumpRevisionKeepingPayment(tx, orderIds);
+}
+
+/** {@link bumpRevision} without the refusal, for a write that changes nothing the bill charges. */
+export async function bumpRevisionKeepingPayment(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<void> {
   await tx
     .update(workingOrders)
     .set({ revision: sql`${workingOrders.revision} + 1` })
@@ -5604,7 +5612,7 @@ async function applyLineEdits(
   operatorId: string | undefined,
   attendance?: OrderAttendance,
   lateSend?: LateSendConfirmation,
-): Promise<{ changed: boolean; at?: string }> {
+): Promise<{ changed: boolean; chargesUnchanged: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
   const routing = routingOnce(tx, new Date());
   const context = await VENUE_SERVICE.findOrderContext(tx, orderId);
@@ -5770,6 +5778,7 @@ async function applyLineEdits(
   }));
   const raised: RequestedLine[] = [];
   const resent: string[] = [];
+  let chargesUnchanged = plan.removed.length === 0 && plan.fresh.length === 0;
   const paid = await readPaidQuantities(tx, orderId);
   const portionOf = await readGrowingPortions(
     tx,
@@ -5822,6 +5831,7 @@ async function applyLineEdits(
             },
             defaultLanguage,
           );
+    const extrasChanged = extras.added.length > 0 || extras.removed.length > 0;
     const changed =
       intent.note !== parent.note ||
       (parent.sentAt === null &&
@@ -5829,9 +5839,12 @@ async function applyLineEdits(
         intent.makeAt !== undefined &&
         intent.makeAt !== parent.makeAtStationId) ||
       optionSnapshots !== parent.optionSnapshots ||
-      extras.added.length > 0 ||
-      extras.removed.length > 0;
+      extrasChanged;
     if (!changed && rise === 0) continue;
+    // A stored line keeps its unit price, so its extras and its quantity move what it charges; its
+    // options answer is filed on the sale line, and a card at the reader files the answer it priced.
+    if (extrasChanged || rise !== 0 || optionSnapshots !== parent.optionSnapshots)
+      chargesUnchanged = false;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
     const refusedDrop = rise < 0 && plan.refuseSentDrop === true;
@@ -6479,7 +6492,7 @@ async function applyLineEdits(
       activity,
     );
   }
-  return { changed, at: activity?.at };
+  return { changed, chargesUnchanged: changed && chargesUnchanged, at: activity?.at };
 }
 
 /** How many portions raising a whole portion of 1 to `requested` adds. */
@@ -6594,20 +6607,23 @@ function paidLineParts(parent: EditableParent): { id: string; lineNo: number; ke
 /**
  * Count a write on the order's revision only when it changed something, and answer the revision the
  * order is at after it: `copy` is the one {@link requireEditableOrder} matched in this transaction.
- * One that changes nothing is still refused while a card payment of the order is in flight, as a
- * write that changes something is.
+ * While card money of the order is unresolved ({@link refusePaymentInFlight}) a write is refused
+ * unless `uncharged` says it changed nothing the bill charges, and one that changes nothing is
+ * refused too.
  */
 async function countEdit(
   tx: Transaction,
   orderId: string,
   copy: number,
   changed: boolean,
+  uncharged: boolean,
 ): Promise<number> {
   if (!changed) {
     await refusePaymentInFlight(tx, [orderId]);
     return copy;
   }
-  await bumpRevision(tx, [orderId]);
+  if (uncharged) await bumpRevisionKeepingPayment(tx, [orderId]);
+  else await bumpRevision(tx, [orderId]);
   return copy + 1;
 }
 
@@ -6627,7 +6643,7 @@ export async function setWorkingOrderLabel(
         .set({ label: request.label })
         .where(eq(workingOrders.id, orderId));
     }
-    const revision = await countEdit(tx, orderId, request.revision, changed);
+    const revision = await countEdit(tx, orderId, request.revision, changed, true);
     if (changed)
       await captureOrderEdit(tx, attendance, orderId, attendance?.personId, revision, "label");
     return revision;
@@ -6715,7 +6731,7 @@ export async function updateHeldOrder(
         },
       });
     }
-    const { changed, at } = await applyLineEdits(
+    const { changed, chargesUnchanged, at } = await applyLineEdits(
       tx,
       cfg,
       id,
@@ -6737,7 +6753,13 @@ export async function updateHeldOrder(
         .set({ label: req.label ?? null })
         .where(eq(workingOrders.id, id));
     }
-    const revision = await countEdit(tx, id, req.revision, changed || relabelled);
+    const revision = await countEdit(
+      tx,
+      id,
+      req.revision,
+      changed || relabelled,
+      !changed || chargesUnchanged,
+    );
     const invoice =
       issue === undefined
         ? null
@@ -6783,7 +6805,7 @@ export async function updateOrderLine(
   const portions = rowPortions(order, parent, patch.portionLineNos);
   const row = [parent, ...portions];
   const rise = patch.quantity === undefined ? null : rowRise(patch.quantity, row);
-  const { changed, at } = await applyLineEdits(
+  const { changed, chargesUnchanged, at } = await applyLineEdits(
     tx,
     cfg,
     orderId,
@@ -6805,7 +6827,7 @@ export async function updateOrderLine(
     operatorId,
     attendance,
   );
-  const saved = await countEdit(tx, orderId, revision, changed);
+  const saved = await countEdit(tx, orderId, revision, changed, chargesUnchanged);
   if (changed) await captureOrderEdit(tx, attendance, orderId, operatorId, saved, "line", at);
   return saved;
 }

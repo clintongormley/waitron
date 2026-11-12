@@ -275,7 +275,7 @@ async function lockedWrites(billId: string, paymentId: string) {
     lineEdit: await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/lines/1`, {
       portionLineNos: [],
       revision: lines.json.revision,
-      note: "sin cebolla",
+      quantity: "9",
     }),
     reduction: await cancelItemHttp(venue.db, venue.app, venue.cookie, billId, 2),
     billSplit: await send(

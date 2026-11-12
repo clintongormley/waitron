@@ -1149,6 +1149,8 @@ tests drive the routes.
     split of one onto a check keeps Alex; a counter sale's lines are credited to its operator.
   - **During a card payment:** with `payment_attempt_at` set on the tab (M7b's D22 test setup), a
     submit and a move into a held group are each `order.payment_in_flight`.
+    _(2026-11-12: firing, reordering and whole-dish moves between held groups are no longer refused
+    while a card payment or refund is pending; a partial move still is. Owner ruling, R7-1.)_
   - **A counter order** places and fires as today, with no groups.
   - **Edits inside groups (D19):** voiding the only line of a held group marks it `removed` and
     bumps the visit; a Change-action edit that raises a FIRED line's quantity creates a new fired

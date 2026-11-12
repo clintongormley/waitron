@@ -124,8 +124,7 @@ import {
   updateHeldOrder,
   setWorkingOrderLabel,
   updateOrderLine,
-  bumpRevision,
-  refusePaymentInFlight,
+  bumpRevisionKeepingPayment,
   priceOrderLines,
   paysAfterSending,
   unsentDishLines,
@@ -3983,8 +3982,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             .update(workingOrderLines)
             .set({ makeAtStationId: stationId })
             .where(eq(workingOrderLines.id, lineId));
-        if (entries.length > 0) await bumpRevision(tx, [id]);
-        else await refusePaymentInFlight(tx, [id]);
+        if (entries.length > 0) await bumpRevisionKeepingPayment(tx, [id]);
         if (
           entries.some(([lineId, stationId]) =>
             previousChoices.some((line) => line.id === lineId && line.stationId !== stationId),

@@ -23,7 +23,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { clearStationDeleteSettings, readStationDeleteSettings } from "@waitron/venue-service";
-import { bumpRevision } from "./working-order.js";
+import { bumpRevisionKeepingPayment } from "./working-order.js";
 import { kitchenWork } from "./kitchen-print.js";
 
 function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {
@@ -172,7 +172,7 @@ export async function deleteStation(
           unsent.map((row) => row.id),
         ),
       );
-    await bumpRevision(tx, [...new Set(unsent.map((row) => row.orderId))]);
+    await bumpRevisionKeepingPayment(tx, [...new Set(unsent.map((row) => row.orderId))]);
   }
   if (drafts.length) {
     await tx

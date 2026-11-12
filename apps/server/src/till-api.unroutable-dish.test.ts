@@ -7,6 +7,8 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  billPaymentRefunds,
+  billPayments,
   incidents,
   kitchenStations,
   sales,
@@ -1248,6 +1250,101 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(stale.status).toBe(409);
     expect((await stale.json()).error.code).toBe("working_order.out_of_date");
   });
+
+  /** Leaves card money on the bill unresolved; the check reads that it still is. */
+  const unresolvedCard = {
+    "a card is at the reader": async (id: string) => {
+      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
+      await inTx(v, (tx) =>
+        tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, id)),
+      );
+      return async () => {
+        const [order] = await inTx(v, (tx) =>
+          tx
+            .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, id)),
+        );
+        expect(order?.paymentAttemptAt).toBe(paymentAttemptAt);
+      };
+    },
+    "a card refund waits": async (id: string) => {
+      const personId = v.operator.personId;
+      const [payment] = await inTx(v, (tx) =>
+        tx
+          .insert(billPayments)
+          .values({
+            workingOrderId: id,
+            submissionId: randomUUID(),
+            fingerprint: "f",
+            kind: "contribution",
+            method: "card",
+            applied: 100,
+            state: "received",
+            receivedAt: new Date().toISOString(),
+            requestedBy: personId,
+            source: v.cfg.origin.source,
+            deviceId: v.cfg.origin.deviceId,
+          })
+          .returning({ id: billPayments.id }),
+      );
+      await inTx(v, (tx) =>
+        tx.insert(billPaymentRefunds).values({
+          billPaymentId: payment!.id,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          appliedAmount: 100,
+          reason: "r",
+          authorizedBy: personId,
+          requestedBy: personId,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
+          state: "pending",
+        }),
+      );
+      return async () => {
+        const [refund] = await inTx(v, (tx) =>
+          tx
+            .select({ state: billPaymentRefunds.state })
+            .from(billPaymentRefunds)
+            .where(eq(billPaymentRefunds.billPaymentId, payment!.id)),
+        );
+        expect(refund?.state).toBe("pending");
+      };
+    },
+  };
+
+  it.each(Object.keys(unresolvedCard) as (keyof typeof unresolvedCard)[])(
+    "stores a dish's make-at station while %s for its order",
+    async (state) => {
+      const made = await strandedDish(`Paying question ${state}`);
+      const chosen = await station("Paying bar");
+      const id = randomUUID();
+      await park(id, [made]);
+      const stillUnresolved = await unresolvedCard[state](id);
+      const [line] = await inTx(v, (tx) =>
+        tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id)),
+      );
+      const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+      const saved = await app.request(`/api/working-orders/${id}/make-at`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: session },
+        body: JSON.stringify({ revision, lines: { [line!.id]: chosen } }),
+      });
+      expect(saved.status, await saved.clone().text()).toBe(200);
+      const [stored] = await inTx(v, (tx) =>
+        tx
+          .select({ makeAt: workingOrderLines.makeAtStationId })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.id, line!.id)),
+      );
+      expect(stored?.makeAt).toBe(chosen);
+      await stillUnresolved();
+    },
+  );
 
   it("copies the chosen station to both parts of a split dish", async () => {
     const made = await dish("Split lager");

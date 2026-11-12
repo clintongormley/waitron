@@ -6620,11 +6620,11 @@ describe("alerts in the shell", () => {
         const message = () => toastButton(el, "message").textContent!.trim();
         const english =
           count === 1
-            ? "A card refund of €12.50 has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms. Later checks do not add to this alert while it is open, so there may be more."
+            ? "A card refund of €12.50 has been waiting for over an hour for the card provider to show what happened. Until then its bill cannot take payments or be invoiced, and what it charges cannot be changed. Check the refund in the provider's own dashboard, and record the outcome it confirms. Later checks do not add to this alert while it is open, so there may be more."
             : "2 new alerts";
         const spanish =
           count === 1
-            ? "Una devolución con tarjeta de 12,50\u00a0€ lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no se puede modificar ni facturar. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más."
+            ? "Una devolución con tarjeta de 12,50\u00a0€ lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no admite cobros ni se puede facturar, y no se puede cambiar su importe. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más."
             : "2 avisos nuevos";
         expect(message()).toBe(english);
         emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });

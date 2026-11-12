@@ -18,6 +18,8 @@ import { fileURLToPath } from "node:url";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
+  billPaymentRefunds,
+  billPayments,
   devices,
   diningTables,
   kitchenPrintJobs,
@@ -476,6 +478,55 @@ async function expectRefusedWithNothingWritten(
   const before = await snapshot(v, partyId);
   await expect(attempt()).rejects.toMatchObject(expected);
   expect(await snapshot(v, partyId)).toEqual(before);
+}
+
+async function stillPaying(tabId: string): Promise<void> {
+  const [order] = await db
+    .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  expect(order!.paymentAttemptAt).not.toBeNull();
+}
+
+/** A received card payment of the bill, and a refund of it the provider has not answered. */
+async function pendingRefund(v: Venue, billId: string): Promise<void> {
+  const [payment] = await db
+    .insert(billPayments)
+    .values({
+      workingOrderId: billId,
+      submissionId: randomUUID(),
+      fingerprint: "f",
+      kind: "contribution",
+      method: "card",
+      applied: 100,
+      state: "received",
+      receivedAt: new Date().toISOString(),
+      requestedBy: ALEX,
+      source: v.cfg.origin.source,
+      deviceId: v.cfg.origin.deviceId,
+    })
+    .returning({ id: billPayments.id });
+  await db.insert(billPaymentRefunds).values({
+    billPaymentId: payment!.id,
+    submissionId: randomUUID(),
+    fingerprint: "f",
+    appliedAmount: 100,
+    reason: "r",
+    authorizedBy: ALEX,
+    requestedBy: ALEX,
+    source: v.cfg.origin.source,
+    deviceId: v.cfg.origin.deviceId,
+    state: "pending",
+  });
+}
+
+async function refundStates(billId: string): Promise<string[]> {
+  const rows = await db
+    .select({ state: billPaymentRefunds.state })
+    .from(billPaymentRefunds)
+    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .where(eq(billPayments.workingOrderId, billId));
+  return rows.map((row) => row.state);
 }
 
 interface SpecExample extends Seated {
@@ -1942,20 +1993,36 @@ describe("during a card payment", () => {
     );
   });
 
-  it("refuses to fire a group (order.payment_in_flight), writing nothing", async () => {
+  it("fires a held group while the card is at the reader", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
+    const warm = (await linesIn(s.partyId, s.warm)).map((row) => row.id);
     await paying(s.tabId);
-    await expectRefusedWithNothingWritten(v, s.partyId, () => fire(v, s.partyId, s.warm), {
-      code: "order.payment_in_flight",
-      params: { workingOrderId: s.tabId },
+    await fire(v, s.partyId, s.warm);
+    expect((await groupsOf(s.partyId)).groups.find((group) => group.id === s.warm)).toMatchObject({
+      state: "fired",
     });
+    expect(await firedTicketLineIds(s.partyId)).toEqual(expect.arrayContaining(warm));
+    await stillPaying(s.tabId);
   });
 
-  it("refuses a move into a held group (order.payment_in_flight), writing nothing", async () => {
+  it("moves a whole line into a held group while the card is at the reader", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const [steak] = await linesIn(s.partyId, s.mains);
+    expect(steak!.quantity).toBe(1000);
+    await paying(s.tabId);
+    await move(v, s.partyId, [{ lineId: steak!.id, quantity: "1" }], { groupId: s.desserts });
+    expect((await linesIn(s.partyId, s.desserts)).map((row) => row.id)).toContain(steak!.id);
+    expect((await linesIn(s.partyId, s.mains)).map((row) => row.id)).not.toContain(steak!.id);
+    await stillPaying(s.tabId);
+  });
+
+  it("refuses a partial move into a held group (order.payment_in_flight), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v, "grouped");
+    const [steak] = await linesIn(s.partyId, s.mains);
+    expect(steak!.quantity).toBe(2000);
     await paying(s.tabId);
     await expectRefusedWithNothingWritten(
       v,
@@ -1965,24 +2032,85 @@ describe("during a card payment", () => {
     );
   });
 
-  it("refuses a reorder of the held groups (order.payment_in_flight), writing nothing", async () => {
+  it("reorders the held groups while the card is at the reader", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     await paying(s.tabId);
     const revision = await revisionOf(s.partyId);
-    const before = (await groupsOf(s.partyId)).groups.map(({ id, position }) => ({ id, position }));
-    const events = await eventsOf(s.partyId);
+    const positions = (await groupsOf(s.partyId)).groups
+      .filter((group) => group.state === "held")
+      .map(({ position }) => position)
+      .sort((a, b) => a - b);
+    await reorder(s.partyId, [s.desserts, s.mains, s.warm]);
+    expect(await revisionOf(s.partyId)).toBeGreaterThan(revision);
+    const after = new Map(
+      (await groupsOf(s.partyId)).groups.map(({ id, position }) => [id, position]),
+    );
+    expect([s.desserts, s.mains, s.warm].map((id) => after.get(id))).toEqual(positions);
+    await stillPaying(s.tabId);
+  });
+
+  it("refuses a whole line on one bill moved with part of a line on a bill being paid, writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const { groups } = await submitGrouped(v, s, [
+      { release: "hold", lines: [line(v, "water", "3"), line(v, "steak", "2")] },
+    ]);
+    const [water, steak] = await linesIn(s.partyId, groups[0]!.id);
+    const checkId = await onSecondBill(
+      v,
+      s,
+      [{ lineNo: water!.lineNo, quantity: "2" }],
+      await revisionOf(s.partyId),
+      ALEX,
+    );
+    const [checkWater] = await linesOfBill(checkId);
+    await paying(checkId);
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => reorder(s.partyId, [s.desserts, s.mains, s.warm]),
-      { code: "order.payment_in_flight", params: { workingOrderId: s.tabId } },
+      () =>
+        move(
+          v,
+          s.partyId,
+          [
+            { lineId: steak!.id, quantity: "2" },
+            { lineId: checkWater!.id, quantity: "1" },
+          ],
+          "new",
+        ),
+      { code: "order.payment_in_flight", params: { workingOrderId: checkId } },
     );
-    expect(await revisionOf(s.partyId)).toBe(revision);
-    expect(
-      (await groupsOf(s.partyId)).groups.map(({ id, position }) => ({ id, position })),
-    ).toEqual(before);
-    expect(await eventsOf(s.partyId)).toEqual(events);
+  });
+});
+
+describe("while a card refund waits on the bill", () => {
+  it("reorders the held groups", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await pendingRefund(v, s.tabId);
+    const positions = (await groupsOf(s.partyId)).groups
+      .filter((group) => group.state === "held")
+      .map(({ position }) => position)
+      .sort((a, b) => a - b);
+    await reorder(s.partyId, [s.desserts, s.mains, s.warm]);
+    const after = new Map(
+      (await groupsOf(s.partyId)).groups.map(({ id, position }) => [id, position]),
+    );
+    expect([s.desserts, s.mains, s.warm].map((id) => after.get(id))).toEqual(positions);
+    expect(await refundStates(s.tabId)).toEqual(["pending"]);
+  });
+
+  it("moves a whole line into a held group", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [steak] = await linesIn(s.partyId, s.mains);
+    expect(steak!.quantity).toBe(1000);
+    await pendingRefund(v, s.tabId);
+    await move(v, s.partyId, [{ lineId: steak!.id, quantity: "1" }], { groupId: s.desserts });
+    expect((await linesIn(s.partyId, s.desserts)).map((row) => row.id)).toContain(steak!.id);
+    expect((await linesIn(s.partyId, s.mains)).map((row) => row.id)).not.toContain(steak!.id);
+    expect(await refundStates(s.tabId)).toEqual(["pending"]);
   });
 });
 
@@ -5936,19 +6064,16 @@ describe("Fire now on one held dish", () => {
     ]);
   });
 
-  it("refuses a dish while its bill is being paid", async () => {
+  it("fires a dish while its bill is being paid, leaving the payment in place", async () => {
     const { v, s, steak } = await fixture(true);
     await db
       .update(workingOrders)
       .set({ paymentAttemptAt: "2026-10-17T10:00:00.000Z" })
       .where(eq(workingOrders.id, s.tabId));
     const command = await args(s.partyId);
-    await expectRefusedWithNothingWritten(
-      v,
-      s.partyId,
-      () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
-      { code: "order.payment_in_flight" },
-    );
+    await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
+    expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);
+    await stillPaying(s.tabId);
   });
 
   it("refuses a different dish reusing an accepted submission id", async () => {

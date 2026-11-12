@@ -75,7 +75,6 @@ export function mountOrderKitchenNoteApi(
                 throw new AppError("kitchen_note.invalid", { field: "note" });
               return setOrderKitchenNote(
                 tx,
-                deps.db,
                 deps.cfg,
                 party ? { partyId: id } : { workingOrderId: id },
                 {

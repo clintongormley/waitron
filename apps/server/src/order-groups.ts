@@ -62,6 +62,7 @@ import {
 import {
   advanceSet,
   bumpRevision,
+  bumpRevisionKeepingPayment,
   clearGroups,
   dishesWithHeldExtra,
   dishReleased,
@@ -565,7 +566,6 @@ export async function fireHeldLine(
       const cancelled = (await readLineCancellations(tx, [lineId])).get(lineId) ?? 0;
       if (line.quantity <= cancelled)
         throw new AppError("management.request_invalid", { field: "lineId" });
-      await refusePaymentInFlight(tx, [line.workingOrderId]);
       await prepareAllergyRelease(
         tx,
         cfg,
@@ -1144,7 +1144,6 @@ export async function reorderHeldGroups(
       ) {
         throw new AppError("management.request_invalid", { field: "heldGroupIds" });
       }
-      await refusePaymentInFlight(tx, await billsOfGroups(tx, heldGroupIds));
       const positions = held.map((group) => group.position).sort((a, b) => a - b);
       for (const [i, id] of heldGroupIds.entries()) {
         if (byId.get(id)!.position !== positions[i]) {
@@ -1306,8 +1305,15 @@ export async function moveLinesToGroup(
       const billIds = [...new Set(lines.map((line) => line.workingOrderId))];
       for (const billId of billIds) {
         await requireBillOfParty(tx, partyId, billId);
-        await refusePaymentInFlight(tx, [billId]);
       }
+      // A partial move splits the line, rewriting the rows that carry its price.
+      const splitting = new Set(
+        moves.flatMap(({ lineId, quantity }) => {
+          const line = lineById.get(lineId)!;
+          return isWholeLine(quantity, line.quantity) ? [] : [line.workingOrderId];
+        }),
+      );
+      if (splitting.size > 0) await refusePaymentInFlight(tx, [...splitting]);
       await requireBillEditors(tx, billIds, args.operatorId, expectedEdits);
       const printed = await printedHeldGroups(tx, [
         ...lines.map((line) => line.groupId!),
@@ -1395,7 +1401,7 @@ export async function moveLinesToGroup(
       await recordJoiningStations(tx, given);
       await correctHoldTickets(tx, cfg, given, { kind: "HOLD CHANGED", direction: "added" });
       if (target === "new") await printHoldTickets(tx, cfg, [targetId]);
-      await bumpRevision(tx, [...splitsByBill.keys()]);
+      await bumpRevisionKeepingPayment(tx, [...splitsByBill.keys()]);
       const snapshot =
         attendance === undefined
           ? undefined
@@ -2554,15 +2560,6 @@ function isWholeLine(quantity: string, stored: number): boolean {
   } catch {
     return false;
   }
-}
-
-/** The bills holding a line of any of these groups. */
-async function billsOfGroups(tx: Transaction, groupIds: readonly string[]): Promise<string[]> {
-  const rows = await tx
-    .selectDistinct({ workingOrderId: workingOrderLines.workingOrderId })
-    .from(workingOrderLines)
-    .where(inArray(workingOrderLines.groupId, [...groupIds]));
-  return rows.map((row) => row.workingOrderId);
 }
 
 /** The group is the party's first held one with active sent dishes. */

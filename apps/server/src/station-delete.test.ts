@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  billPaymentRefunds,
+  billPayments,
   devices,
   deviceMadeHereStations,
   kitchenStations,
@@ -472,6 +474,82 @@ describe("permanent station deletion", () => {
     ])
       expect(after[key]).toEqual(before[key]);
   });
+  /** Leaves card money on the order unresolved; the check reads that it still is. */
+  const unresolvedCard = {
+    "a card is at the reader": async (v: PartyVenue, orderId: string) => {
+      await inTx(v, (tx) =>
+        tx.update(workingOrders).set({ paymentAttemptAt: at }).where(eq(workingOrders.id, orderId)),
+      );
+      return async () => {
+        const [order] = await inTx(v, (tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
+        );
+        expect(order!.paymentAttemptAt).toBe(at);
+      };
+    },
+    "a card refund waits": async (v: PartyVenue, orderId: string) => {
+      const [payment] = await inTx(v, (tx) =>
+        tx
+          .insert(billPayments)
+          .values({
+            workingOrderId: orderId,
+            submissionId: randomUUID(),
+            fingerprint: "f",
+            kind: "contribution",
+            method: "card",
+            applied: 100,
+            state: "received",
+            receivedAt: at,
+            requestedBy: OPERATOR,
+            source: v.cfg.origin.source,
+            deviceId: v.cfg.origin.deviceId,
+          })
+          .returning({ id: billPayments.id }),
+      );
+      await inTx(v, (tx) =>
+        tx.insert(billPaymentRefunds).values({
+          billPaymentId: payment!.id,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          appliedAmount: 100,
+          reason: "r",
+          authorizedBy: OPERATOR,
+          requestedBy: OPERATOR,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
+          state: "pending",
+        }),
+      );
+      return async () => {
+        const [refund] = await inTx(v, (tx) =>
+          tx
+            .select({ state: billPaymentRefunds.state })
+            .from(billPaymentRefunds)
+            .where(eq(billPaymentRefunds.billPaymentId, payment!.id)),
+        );
+        expect(refund?.state).toBe("pending");
+      };
+    },
+  };
+  it.each(Object.keys(unresolvedCard) as (keyof typeof unresolvedCard)[])(
+    "deletes a station and clears an unsent dish's make-at while %s for its order",
+    async (state) => {
+      const { v, id } = await fixture();
+      const unsent = await food(v, id, { ticket: false });
+      const stillUnresolved = await unresolvedCard[state](v, unsent.order.id);
+      expect((await inTx(v, (tx) => deleteStation(tx, id, new Date(at)))).refusals).toEqual([]);
+      expect((await inTx(v, (tx) => listStations(tx))).some((row) => row.id === id)).toBe(false);
+      const [line] = await inTx(v, (tx) =>
+        tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, unsent.line.id)),
+      );
+      expect(line!.makeAtStationId).toBeNull();
+      const [order] = await inTx(v, (tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, unsent.order.id)),
+      );
+      expect(order!.revision).toBe(unsent.order.revision + 1);
+      await stillUnresolved();
+    },
+  );
   it("leaves finished unsent orders and closed drafts unchanged and increments each affected parent once", async () => {
     const { v, id } = await fixture();
     const unsent = await food(v, id, { ticket: false });

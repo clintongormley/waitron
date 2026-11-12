@@ -1283,8 +1283,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 
 - **A875. Check two writes the bill payments design says a pending card refund refuses.**
-  Next: one route case each during a pending refund, then fix the design's wording, or the code
-  if a move can change what a bill charges (ask the owner first). Read, not run.
+  The owner's R7-1 ruling (2026-11-12) settles it: moving a bill or its guests changes nothing the bill charges, so it goes through.
+  Next: one route case each during a pending refund, then fix the design's wording. Read, not run.
   [Detail](backlog/payments.md#a875-check-two-writes-the-bill-payments-design-says-a-pending-card-refund-refuses)
 
 - **The SumUp Solo experiments.** Still open after the 9 November cross-account session: signature-required

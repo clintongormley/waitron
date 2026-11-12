@@ -842,8 +842,9 @@ The ones worth grepping for:
   in this process, and the order has no payment still `attempting`, nor a `captured` one without a sale or received bill contribution (`releaseStalePaymentAttempts`, `src/till-sale.ts`, run by
   `withStalePaymentRelease`, `src/boot.ts`). The loop's first pass runs at start, before any sleep;
   after that, its independent card loop sleeps at most 60 seconds between passes. Until its mark is cleared,
-  the server refuses changes to that order with `order.payment_in_flight`, except marking its lines
-  served or taking that back.
+  the server refuses changes to what that order charges with `order.payment_in_flight`; marking its
+  lines served or taking that back, and the other writes listed in `docs/backlog/payments.md` →
+  Decisions and deliberate limits, still go through.
 - **`payment_attempt.release_failed`** (`warn`) — `{ error }`, plus `workingOrderId` when it is the
   clear that follows a card attempt which filed nothing (`releasePaymentAttempt`,
   `src/till-sale.ts`). That clear threw; the till still gets the attempt's own outcome, and the
