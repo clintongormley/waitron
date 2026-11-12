@@ -34,6 +34,8 @@ export interface CancelForRefund {
   chargeKept: boolean;
   refundHandoff: boolean;
   refundValue: Decimal | null;
+  requestedBy: string;
+  approvedBy: string | null;
   /** What refunds still pending or completed have paid back of it; a failed refund counts nothing. */
   linked: Decimal;
 }
@@ -52,12 +54,15 @@ export async function readCancelsForRefund(
     chargeKept: number;
     refundHandoff: number;
     refundValue: string | null;
+    requestedBy: string;
+    approvedBy: string | null;
     linked: string;
   }>(sql`
     select a.id, a.working_order_id as workingOrderId, a.line_id as lineId,
       cast(a.quantity as text) as quantity,
       a.action, a.charge_kept as chargeKept, a.refund_handoff as refundHandoff,
       cast(a.refund_value as text) as refundValue,
+      a.requested_by as requestedBy, a.approved_by as approvedBy,
       cast(coalesce((
         select sum(l.amount) from adjustment_refunds l
         join tender_refunds r on r.id = l.tender_refund_id
