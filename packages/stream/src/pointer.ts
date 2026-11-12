@@ -3,11 +3,11 @@ import type { CanonicalValue } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { putOwnBytes } from "./conditional.js";
-import { isKeySegment, parseGenerationName, venuePrefix } from "./names.js";
+import { isKeySegment, parseGenerationName } from "./names.js";
 import type { ObjectStore, StoreCall } from "./object-store.js";
 
 export interface StreamPointer {
-  venueId: string;
+  streamId: string;
   term: number;
   nodeId: string;
   generation: string;
@@ -23,8 +23,8 @@ export interface SignedPointer {
 const PURPOSE = "waitron.stream.pointer.v1";
 const BODY_KEYS = 5;
 
-export function pointerKey(venueId: string): string {
-  return `${venuePrefix(venueId)}current.json`;
+export function pointerKey(): string {
+  return "current.json";
 }
 
 /** The exact string a pointer's signature covers. */
@@ -44,7 +44,7 @@ function bodyProblem(body: unknown): string | null {
   if (
     !isRecord(body) ||
     Object.keys(body).length !== BODY_KEYS ||
-    typeof body.venueId !== "string" ||
+    typeof body.streamId !== "string" ||
     typeof body.term !== "number" ||
     typeof body.nodeId !== "string" ||
     typeof body.generation !== "string" ||
@@ -52,7 +52,7 @@ function bodyProblem(body: unknown): string | null {
   ) {
     return "shape";
   }
-  if (!isKeySegment(body.venueId)) return "venue_id";
+  if (!isKeySegment(body.streamId)) return "venue_id";
   if (!Number.isSafeInteger(body.term) || body.term < 0) return "term";
   const generation = parseGenerationName(body.generation);
   if (generation === null || generation.term !== body.term || generation.nodeId !== body.nodeId)
@@ -96,10 +96,10 @@ function encode(pointer: SignedPointer): Uint8Array {
  */
 export async function readPointer(
   store: ObjectStore,
-  venueId: string,
+  streamId: string,
   call?: StoreCall,
 ): Promise<{ pointer: SignedPointer; etag: string } | null> {
-  const stored = await store.get(pointerKey(venueId), call);
+  const stored = await store.get(pointerKey(), call);
   if (stored === null) return null;
   let parsed: unknown;
   try {
@@ -110,7 +110,7 @@ export async function readPointer(
   const problem = pointerProblem(parsed);
   if (problem !== null) throw invalid(problem);
   const pointer = parsed as SignedPointer;
-  if (pointer.body.venueId !== venueId) throw invalid("other_venue");
+  if (pointer.body.streamId !== streamId) throw invalid("other_venue");
   return { pointer, etag: stored.etag };
 }
 
@@ -145,7 +145,7 @@ export class SentPointers {
  */
 export async function writePointer(
   store: ObjectStore,
-  venueId: string,
+  streamId: string,
   pointer: SignedPointer,
   previousEtag: string | null,
   sent?: SentPointers,
@@ -153,10 +153,10 @@ export async function writePointer(
 ): Promise<string | undefined> {
   const problem = pointerProblem(pointer);
   if (problem !== null) throw invalid(problem);
-  if (pointer.body.venueId !== venueId) throw invalid("other_venue");
+  if (pointer.body.streamId !== streamId) throw invalid("other_venue");
   const stored = await putOwnBytes(
     store,
-    pointerKey(venueId),
+    pointerKey(),
     encode(pointer),
     previousEtag === null ? { ifNoneMatch: "*" } : { ifMatch: previousEtag },
     sent && ((bytes) => sent.includes(bytes)),

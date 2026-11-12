@@ -217,7 +217,7 @@ export async function readBucketPointerTerm(
     const bound = new AbortController();
     try {
       read = await Promise.race([
-        readPointer(store, settings.venueId, { signal: reading.signal }),
+        readPointer(store, settings.streamId, { signal: reading.signal }),
         delay(options.timeoutMs ?? POINTER_READ_TIMEOUT_MS, TIMED_OUT, {
           ref: false,
           signal: bound.signal,

@@ -4,7 +4,6 @@ import { generationPrefix } from "./generations.js";
 import type { ObjectStore } from "./object-store.js";
 import { createMemoryObjectStore } from "./testing/memory-store.js";
 
-const VENUE = "c0000000-0000-4000-8000-000000000002";
 const GENERATION = "gen-0-c0000000-0000-4000-8000-000000000008-20260923T090000Z";
 const AT = (minute: number) => new Date(Date.UTC(2026, 8, 23, 12, minute));
 
@@ -13,7 +12,7 @@ async function generationWith(files: Record<string, number>) {
   const store = createMemoryObjectStore({ now: () => clock });
   for (const [name, minute] of Object.entries(files)) {
     clock = AT(minute);
-    await store.put(`${generationPrefix(VENUE, GENERATION)}${name}`, Uint8Array.from([1]));
+    await store.put(`${generationPrefix(GENERATION)}${name}`, Uint8Array.from([1]));
   }
   return store;
 }
@@ -32,24 +31,22 @@ describe("newestUpload", () => {
       "0003/b.ltx": 40,
       "0001/c.ltx": 10,
     });
-    expect(await newestUpload(store, VENUE, GENERATION)).toEqual(AT(40));
+    expect(await newestUpload(store, GENERATION)).toEqual(AT(40));
   });
 
   it("reads only the named level's folder when one is given", async () => {
     const store = await generationWith({ "0000/a.ltx": 5, "0001/b.ltx": 30, "0003/c.ltx": 40 });
-    expect(await newestUpload(store, VENUE, GENERATION, { level: 1 })).toEqual(AT(30));
+    expect(await newestUpload(store, GENERATION, { level: 1 })).toEqual(AT(30));
     expect(store.calls.at(-1)).toMatchObject({
       operation: "list",
-      key: `${generationPrefix(VENUE, GENERATION)}0001/`,
+      key: `${generationPrefix(GENERATION)}0001/`,
     });
   });
 
   it("keeps the floor when nothing listed is newer, and is null for an empty generation", async () => {
     const store = await generationWith({ "0000/a.ltx": 5 });
-    expect(await newestUpload(store, VENUE, GENERATION, { level: 0, floor: AT(20) })).toEqual(
-      AT(20),
-    );
-    expect(await newestUpload(store, VENUE, GENERATION, { level: 1 })).toBeNull();
+    expect(await newestUpload(store, GENERATION, { level: 0, floor: AT(20) })).toEqual(AT(20));
+    expect(await newestUpload(store, GENERATION, { level: 1 })).toBeNull();
   });
 });
 
@@ -82,7 +79,7 @@ describe("a call's signal", () => {
     const store = await generationWith({ "0000/a.ltx": 5 });
     const { signal } = new AbortController();
     const before = store.calls.length;
-    await newestUpload(store, VENUE, GENERATION, { level: 0 }, { signal });
+    await newestUpload(store, GENERATION, { level: 0 }, { signal });
     await bucketClockOffset(store, "probe", 0, 0, { signal });
     expect(store.calls.slice(before).map((call) => [call.operation, call.signal])).toEqual([
       ["list", signal],

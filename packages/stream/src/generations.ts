@@ -3,7 +3,7 @@ import { canonicalize } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { putOwnBytes } from "./conditional.js";
-import { parseGenerationName, strayListedKey, venuePrefix } from "./names.js";
+import { parseGenerationName } from "./names.js";
 import type { ObjectStore, StoreCall } from "./object-store.js";
 
 function parsed(field: string, generation: string): { term: number; nodeId: string } {
@@ -13,13 +13,13 @@ function parsed(field: string, generation: string): { term: number; nodeId: stri
 }
 
 /** The folder a generation's objects live in, relative to the configured prefix. */
-export function generationPrefix(venueId: string, generation: string): string {
+export function generationPrefix(generation: string): string {
   parsed("generation", generation);
-  return `${venuePrefix(venueId)}${generation}/`;
+  return `${generation}/`;
 }
 
-export function markerKey(venueId: string, generation: string): string {
-  return `${generationPrefix(venueId, generation)}opened.json`;
+export function markerKey(generation: string): string {
+  return `${generationPrefix(generation)}opened.json`;
 }
 
 /**
@@ -30,33 +30,25 @@ export function markerKey(venueId: string, generation: string): string {
  */
 export async function claimGeneration(
   store: ObjectStore,
-  venueId: string,
+  streamId: string,
   generation: string,
   call?: StoreCall,
 ): Promise<void> {
   const { term, nodeId } = parsed("generation", generation);
   const bytes = new TextEncoder().encode(
-    canonicalize({ generation, venueId, term, nodeId, nonce: randomUUID() }),
+    canonicalize({ generation, streamId, term, nodeId, nonce: randomUUID() }),
   );
-  await putOwnBytes(
-    store,
-    markerKey(venueId, generation),
-    bytes,
-    { ifNoneMatch: "*" },
-    undefined,
-    call,
-  );
+  await putOwnBytes(store, markerKey(generation), bytes, { ifNoneMatch: "*" }, undefined, call);
 }
 
 /**
- * Delete every generation of this venue whose newest object is older than `windowMs` before `now`,
+ * Delete every generation at the configured prefix whose newest object is older than `windowMs` before `now`,
  * except `live` — the one the pointer names. Litestream tidies only the generation it writes.
  * Only folders whose name is a generation name are ever touched; `current.json` and anything else
- * at the venue's root are not. Answers the names deleted, in order.
+ * at the configured prefix are not. Answers the names deleted, in order.
  */
 export async function pruneGenerations(
   store: ObjectStore,
-  venueId: string,
   live: string,
   now: Date,
   windowMs: number,
@@ -69,12 +61,11 @@ export async function pruneGenerations(
       value: String(windowMs),
     });
   }
-  const root = venuePrefix(venueId);
+  const root = "";
   type Folder = { name: string; newest: number; marker: string; claimed: boolean; files: string[] };
   // null for a folder whose name is not a generation's.
   const folders = new Map<string, Folder | null>();
   for (const object of await store.list(root, call)) {
-    if (!object.key.startsWith(root)) throw strayListedKey();
     const rest = object.key.slice(root.length);
     const slash = rest.indexOf("/");
     if (slash <= 0) continue;
@@ -88,7 +79,7 @@ export async function pruneGenerations(
           : {
               name,
               newest: Number.NEGATIVE_INFINITY,
-              marker: markerKey(venueId, name),
+              marker: markerKey(name),
               claimed: false,
               files: [],
             };

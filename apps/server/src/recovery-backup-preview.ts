@@ -121,7 +121,7 @@ export async function previewRecoveryStream(
     const activationSourceId = copy.sourceId;
     const preview = await readRecoveryCopyPreview(
       copy,
-      `stream:${deps.kit.venueId}:${prepared.generation}`,
+      `stream:${deps.kit.streamId}:${prepared.generation}`,
       deps,
     );
     return { ...preview, activationSourceId };

@@ -15,6 +15,8 @@ import {
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import {
   CORE_MIGRATIONS,
+  createVenueSettings,
+  VENUE_SETTINGS,
   readNodeMembership,
   withNodeTransaction,
   withTransaction,
@@ -27,7 +29,6 @@ import {
   pointerKey,
   signPointer,
   readPointer,
-  venuePrefix,
   verifyPointer,
   type SpawnFn,
   type StreamStatus,
@@ -65,7 +66,6 @@ const RING: KeyRing = loadKeyRing({
 const NODE_ID = "node-a";
 const AT = new Date("2026-09-15T11:00:00.000Z");
 const SETTINGS = {
-  venueId: "venue-1",
   endpoint: "-",
   region: "eu-south-2",
   bucket: "venue-copies",
@@ -111,6 +111,17 @@ describe("the live copy's wiring", () => {
 
   // useVenueDb empties the migrated tables after each case, so their rows are written per case.
   beforeEach(async () => {
+    await withTransaction(db, (tx) =>
+      createVenueSettings(
+        tx,
+        {
+          ...VENUE_SETTINGS.defaults(),
+          name: "Stream venue",
+          streamId: "c0000000-0000-4000-8000-000000000002",
+        },
+        null,
+      ),
+    );
     await withNodeTransaction(suite.node, (tx) =>
       sealNodeSigningKeyTx(tx, RING, NODE_ID, keys.privateKey),
     );
@@ -173,7 +184,7 @@ describe("the live copy's wiring", () => {
     ) {
       const pointer = signPointer(
         {
-          venueId: "venue-1",
+          streamId: "c0000000-0000-4000-8000-000000000002",
           nodeId,
           term,
           generation: `gen-${term}-${nodeId}-20260915T110000Z`,
@@ -181,7 +192,7 @@ describe("the live copy's wiring", () => {
         },
         privateKey,
       );
-      await bucket.put(pointerKey("venue-1"), new TextEncoder().encode(JSON.stringify(pointer)));
+      await bucket.put(pointerKey(), new TextEncoder().encode(JSON.stringify(pointer)));
     }
     it("recognises only another enrolled box's newer signed pointer", async () => {
       await configure();
@@ -230,8 +241,7 @@ describe("the live copy's wiring", () => {
           kind === "self" ? NODE_ID : kind === "unknown" ? "stranger" : "node-b",
           kind === "bad-signature" || kind === "self" ? keys.privateKey : spareKeys.privateKey,
         );
-      if (kind === "malformed")
-        await bucket.put(pointerKey("venue-1"), new TextEncoder().encode("{}"));
+      if (kind === "malformed") await bucket.put(pointerKey(), new TextEncoder().encode("{}"));
       if (kind === "unavailable") bucket.down = true;
       if (kind === "unconfigured")
         await withTransaction(db, (tx) => tx.run(sql`delete from tenant_credentials`));
@@ -404,7 +414,7 @@ describe("the live copy's wiring", () => {
 
   it("stores an absent endpoint and an empty prefix as '-', and a present one as itself", () => {
     const settings = {
-      venueId: "venue-1",
+      streamId: "c0000000-0000-4000-8000-000000000002",
       bucket: {
         region: "eu-south-2",
         bucket: "b",
@@ -414,7 +424,6 @@ describe("the live copy's wiring", () => {
       },
     };
     expect(streamSettingsPayload(settings)).toEqual({
-      venueId: "venue-1",
       endpoint: "-",
       region: "eu-south-2",
       bucket: "b",
@@ -434,7 +443,6 @@ describe("the live copy's wiring", () => {
   it("refuses a prefix of a single hyphen, naming the field", () => {
     expect(() =>
       streamSettingsPayload({
-        venueId: "venue-1",
         bucket: {
           region: "eu-south-2",
           bucket: "b",
@@ -469,7 +477,7 @@ describe("the live copy's wiring", () => {
 
     it("reads the settings, with `-` read as absent", async () => {
       expect(await readStreamSettings(db, RING)).toEqual({
-        venueId: "venue-1",
+        streamId: "c0000000-0000-4000-8000-000000000002",
         bucket: {
           endpoint: undefined,
           region: "eu-south-2",
@@ -494,21 +502,16 @@ describe("the live copy's wiring", () => {
       });
     });
 
-    it.each([
-      "venueId",
-      "endpoint",
-      "region",
-      "bucket",
-      "prefix",
-      "accessKeyId",
-      "secretAccessKey",
-    ])("refuses an older sealed bucket missing %s", async (field) => {
-      await omitStoredStreamField(db, RING, field);
-      await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
-        code: "server.credential_unusable",
-        params: { purpose: "backup.stream", field },
-      });
-    });
+    it.each(["endpoint", "region", "bucket", "prefix", "accessKeyId", "secretAccessKey"])(
+      "refuses an older sealed bucket missing %s",
+      async (field) => {
+        await omitStoredStreamField(db, RING, field);
+        await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
+          code: "server.credential_unusable",
+          params: { purpose: "backup.stream", field },
+        });
+      },
+    );
 
     it("starts nothing on a node that is not the primary", async () => {
       logs = [];
@@ -637,7 +640,7 @@ describe("the live copy's wiring", () => {
             await rt.start();
             await vi.waitFor(() => expect(litestream.running()).toBeDefined());
             expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).toBe(
-              "eZOKn+2qHfg5lh9N8KukguwiEexVtiKGzbtZJFj3c8s=",
+              "55OllgSkca2LtVvPZy6+4Lliqv3aCEHx9RWNW9CX89k=",
             );
             expect(Object.values(litestream.running()!.env)).not.toContain(
               "backup-key-for-test-0123456789",
@@ -711,7 +714,7 @@ describe("the live copy's wiring", () => {
             }
             await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
             expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).not.toBe(
-              "eZOKn+2qHfg5lh9N8KukguwiEexVtiKGzbtZJFj3c8s=",
+              "55OllgSkca2LtVvPZy6+4Lliqv3aCEHx9RWNW9CX89k=",
             );
           } finally {
             releaseKey("backup-key-for-test-0123456789");
@@ -973,13 +976,14 @@ describe("the live copy's wiring", () => {
           await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
           const generation = generationOf(rt.status());
           expect(generation).toMatch(/^gen-0-node-a-\d{8}T\d{6}Z$/);
-          store.upload(
-            `${venuePrefix("venue-1")}${generation}/0000/0000000000000001-0000000000000001.ltx`,
-          );
+          store.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
           await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), { timeout: 10_000 });
-          const pointer = await readPointer(store, "venue-1");
+          const pointer = await readPointer(store, "c0000000-0000-4000-8000-000000000002");
           expect(verifyPointer(pointer!.pointer, keys.publicKey)).toBe(true);
-          expect(pointer!.pointer.body).toMatchObject({ venueId: "venue-1", nodeId: NODE_ID });
+          expect(pointer!.pointer.body).toMatchObject({
+            streamId: "c0000000-0000-4000-8000-000000000002",
+            nodeId: NODE_ID,
+          });
         } finally {
           await rt.stop();
         }
@@ -991,7 +995,7 @@ describe("the live copy's wiring", () => {
         const store = new SwitchableStore(() => new Date());
         const put = store.put.bind(store);
         const get = store.get.bind(store);
-        const key = pointerKey("venue-1");
+        const key = pointerKey();
         let release: (() => void) | undefined;
         let reloaded = false;
         store.put = async (k, body, cond) => {
@@ -1016,9 +1020,7 @@ describe("the live copy's wiring", () => {
           await rt.start();
           await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
           const first = generationOf(rt.status());
-          store.upload(
-            `${venuePrefix("venue-1")}${first}/0000/0000000000000001-0000000000000001.ltx`,
-          );
+          store.upload(`${first}/0000/0000000000000001-0000000000000001.ltx`);
           await vi.waitFor(() => expect(release).toBeDefined(), { timeout: 10_000 });
           const oldKey = litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY;
           reloaded = true;
@@ -1039,15 +1041,19 @@ describe("the live copy's wiring", () => {
           expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).not.toBe(oldKey);
           const second = generationOf(rt.status());
           expect(second).not.toBe(first);
-          expect((await readPointer(store, "venue-1"))!.pointer.body.generation).toBe(first);
-          store.upload(
-            `${venuePrefix("venue-1")}${second}/0000/0000000000000001-0000000000000001.ltx`,
-          );
+          expect(
+            (await readPointer(store, "c0000000-0000-4000-8000-000000000002"))!.pointer.body
+              .generation,
+          ).toBe(first);
+          store.upload(`${second}/0000/0000000000000001-0000000000000001.ltx`);
           await vi.waitFor(() => expect(["streaming", "refused"]).toContain(rt.status().state), {
             timeout: 10_000,
           });
           expect(rt.status()).toMatchObject({ state: "streaming", generation: second });
-          expect((await readPointer(store, "venue-1"))!.pointer.body.generation).toBe(second);
+          expect(
+            (await readPointer(store, "c0000000-0000-4000-8000-000000000002"))!.pointer.body
+              .generation,
+          ).toBe(second);
         } finally {
           await rt.stop();
         }
@@ -1106,7 +1112,7 @@ describe("the live copy's wiring", () => {
           await vi.waitFor(() => expect(whilePaused).not.toHaveLength(0), { timeout: 10_000 });
           const [{ prefix, generation }] = whilePaused as [(typeof whilePaused)[number]];
           expect(generation).not.toBe("");
-          expect(prefix).toBe(pauseListingPrefix({ prefix: "" }, SETTINGS.venueId, generation));
+          expect(prefix).toBe(pauseListingPrefix({ prefix: "" }, generation));
         } finally {
           await rt.stop();
           foldBack.mockRestore();

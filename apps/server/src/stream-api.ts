@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
+  ensureStreamId,
   withNodeTransaction,
   withTransaction,
   type Database,
@@ -49,8 +50,6 @@ export interface StreamApiDeps {
   nodeId: string;
   ring: KeyRing;
   stream: Pick<StreamHost, "reload" | "status">;
-  /** The venue the stream writes under; Save stores it with the settings. */
-  venueId: string;
   isPrimary: () => boolean;
 
   readRecoveryKey: () => Promise<string | undefined>;
@@ -130,7 +129,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     const bucket = readBucketConfig(await readJsonBody<unknown>(c), (field) => {
       throw new AppError("backup.request_invalid", { field });
     });
-    streamSettingsPayload({ venueId: deps.venueId, bucket });
+    streamSettingsPayload({ bucket });
     return bucket;
   };
   const bucketWait = (c: Context): AbortSignal =>
@@ -153,7 +152,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
 
   const refuseArchiveOverlap = async (bucket: BucketConfig): Promise<void> => {
     for (const place of await archivePlaces()) {
-      refuseStreamOverlap(place, { venueId: deps.venueId, bucket });
+      refuseStreamOverlap(place, { bucket });
     }
   };
 
@@ -253,12 +252,13 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
         // under the same lock (`mirror-bundle-api.ts`), so one of the two sees the other.
         await withNodeTransaction(deps.node, async (nodeTx) => {
           await refuseWhilePaired(nodeTx);
-          await withTransaction(deps.db, (tx) =>
-            putCredential(tx, deps.ring, {
+          await withTransaction(deps.db, async (tx) => {
+            await ensureStreamId(tx);
+            await putCredential(tx, deps.ring, {
               purpose: STREAM_PURPOSE,
-              value: streamSettingsPayload({ venueId: deps.venueId, bucket }),
-            }),
-          );
+              value: streamSettingsPayload({ bucket }),
+            });
+          });
         });
         await deps.stream.reload();
         return c.json(await view());

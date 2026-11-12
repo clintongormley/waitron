@@ -37,7 +37,6 @@ import {
   parseRecoveryKit,
   readPointer,
   restoreGeneration,
-  venuePrefix,
   verifyPointer,
   type BucketConfig,
   type ObjectStore,
@@ -164,16 +163,11 @@ async function keysContaining(store: ObjectStore, fragment: string): Promise<str
   return (await store.list("")).map(({ key }) => key).filter((key) => key.includes(fragment));
 }
 
-/** The one venue id with a pointer in this bucket, or undefined before any pointer exists. */
-async function venueIdInBucket(store: ObjectStore): Promise<string | undefined> {
-  const ids = new Set<string>();
-  for (const key of await keysContaining(store, "venues/")) {
-    const match = /(?:^|\/)venues\/([^/]+)\/current\.json$/.exec(key);
-    if (match !== null) ids.add(match[1]!);
-  }
-  if (ids.size > 1)
-    throw new Error(`expected one venue in the loop test's bucket, found ${[...ids].join(", ")}`);
-  return [...ids][0];
+async function streamIdInBucket(store: ObjectStore): Promise<string | undefined> {
+  const stored = await store.get("current.json");
+  return stored === null
+    ? undefined
+    : JSON.parse(new TextDecoder().decode(stored.body)).body.streamId;
 }
 
 /**
@@ -284,19 +278,19 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       { stream: { ...fixture.serverSeams } },
     );
     running.add(serverA);
-    const venueId = await waitFor("a pointer in the bucket", POINTER_WAIT_MS, () =>
-      venueIdInBucket(store),
+    const streamId = await waitFor("a pointer in the bucket", POINTER_WAIT_MS, () =>
+      streamIdInBucket(store),
     );
     let pointerA = await waitFor(
       "the pointer to name box A's generation",
       POINTER_WAIT_MS,
       async () => {
-        const read = await readPointer(store, venueId);
+        const read = await readPointer(store, streamId);
         return read !== null && read.pointer.body.nodeId === a.nodeId ? read : undefined;
       },
     );
     expect(verifyPointer(pointerA.pointer, a.publicKey)).toBe(true);
-    expect(pointerA.pointer.body).toMatchObject({ venueId, nodeId: a.nodeId, term: 0 });
+    expect(pointerA.pointer.body).toMatchObject({ streamId, nodeId: a.nodeId, term: 0 });
     expect(pointerA.pointer.body.generation.startsWith(`gen-0-${a.nodeId}-`)).toBe(true);
 
     const saleInGeneration = async (
@@ -310,8 +304,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         await restoreGeneration({
           litestreamBin,
           bucket,
-          streamKey: deriveStreamKey(recoveryKey, venueId),
-          venueId,
+          streamKey: deriveStreamKey(recoveryKey, streamId),
+          streamId,
           generation,
           outPath: out,
           ceilingMs: RESTORE_MS,
@@ -408,7 +402,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         expect(rotated.status).toBe(200);
         await rotated.arrayBuffer();
         pointerA = await waitFor("the rotated generation's pointer", POINTER_WAIT_MS, async () => {
-          const read = await readPointer(store, venueId);
+          const read = await readPointer(store, streamId);
           return read !== null && read.pointer.body.generation !== originalGeneration
             ? read
             : undefined;
@@ -422,9 +416,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
             restoreGeneration({
               litestreamBin,
               bucket,
-              venueId,
+              streamId,
               generation,
-              streamKey: deriveStreamKey(key, venueId),
+              streamKey: deriveStreamKey(key, streamId),
               outPath: join(checkFolder, file),
               ceilingMs: RESTORE_MS,
             });
@@ -481,8 +475,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       await writeFile(
         kitPath,
         encodeRecoveryKit({
-          version: 1,
-          venueId,
+          version: 2,
+          streamId,
           bucket,
           recoveryKey: RECOVERY_KEY,
           pointerSignerPublicKey: a.publicKey,
@@ -562,19 +556,17 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       "the pointer to move to box B's generation",
       POINTER_WAIT_MS,
       async () => {
-        const read = await readPointer(store, venueId);
+        const read = await readPointer(store, streamId);
         return read !== null && read.pointer.body.generation !== pointerA.pointer.body.generation
           ? read
           : undefined;
       },
     );
     expect(verifyPointer(pointerB.pointer, a.publicKey)).toBe(true);
-    expect(pointerB.pointer.body).toMatchObject({ venueId, nodeId: a.nodeId, term: 1 });
+    expect(pointerB.pointer.body).toMatchObject({ streamId, nodeId: a.nodeId, term: 1 });
     expect(pointerB.pointer.body.generation.startsWith(`gen-1-${a.nodeId}-`)).toBe(true);
     // The old generation is still there: moving the pointer deletes nothing inside the window.
-    expect(
-      await keysContaining(store, `${venuePrefix(venueId)}${pointerA.pointer.body.generation}/`),
-    ).not.toHaveLength(0);
+    expect(await keysContaining(store, `${pointerA.pointer.body.generation}/`)).not.toHaveLength(0);
     // B serves a NEW leaf, signed by the authority A had, to a client that trusts only the
     // restored ca.crt. The dead box's leaf would also verify against that authority, so the served
     // certificate is compared with both files: it must be B's re-issued one, not A's.
@@ -696,8 +688,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     await restoreGeneration({
       litestreamBin,
       bucket,
-      streamKey: deriveStreamKey(recoveryKey, venueId),
-      venueId,
+      streamKey: deriveStreamKey(recoveryKey, streamId),
+      streamId,
       generation: pointerB.pointer.body.generation,
       outPath: restoredB,
       ceilingMs: RESTORE_MS,

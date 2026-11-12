@@ -26,19 +26,17 @@ describe("claimGeneration", () => {
   it("claims a new generation by writing its marker only if absent", async () => {
     const store = createMemoryObjectStore();
     await claimGeneration(store, VENUE, gen(1));
-    expect(markerKey(VENUE, gen(1))).toBe(`venues/${VENUE}/${gen(1)}/opened.json`);
-    expect(generationPrefix(VENUE, gen(1))).toBe(`venues/${VENUE}/${gen(1)}/`);
+    expect(markerKey(gen(1))).toBe(`${gen(1)}/opened.json`);
+    expect(generationPrefix(gen(1))).toBe(`${gen(1)}/`);
     expect(store.calls.at(-1)).toEqual({
       operation: "put",
-      key: markerKey(VENUE, gen(1)),
+      key: markerKey(gen(1)),
       condition: { ifNoneMatch: "*" },
     });
-    const marker = JSON.parse(
-      new TextDecoder().decode((await store.get(markerKey(VENUE, gen(1))))!.body),
-    );
+    const marker = JSON.parse(new TextDecoder().decode((await store.get(markerKey(gen(1))))!.body));
     expect(marker).toEqual({
       generation: gen(1),
-      venueId: VENUE,
+      streamId: VENUE,
       term: 1,
       nodeId: NODE,
       nonce: expect.any(String),
@@ -48,12 +46,12 @@ describe("claimGeneration", () => {
   it("refuses a generation whose marker already exists, and leaves that marker alone", async () => {
     const store = createMemoryObjectStore();
     await claimGeneration(store, VENUE, gen(1));
-    const before = (await store.get(markerKey(VENUE, gen(1))))!.body;
+    const before = (await store.get(markerKey(gen(1))))!.body;
     expect(await rejection(claimGeneration(store, VENUE, gen(1)))).toEqual({
       code: "backup.stream_precondition_failed",
-      params: { key: markerKey(VENUE, gen(1)) },
+      params: { key: markerKey(gen(1)) },
     });
-    expect((await store.get(markerKey(VENUE, gen(1))))!.body).toEqual(before);
+    expect((await store.get(markerKey(gen(1))))!.body).toEqual(before);
   });
 
   it("lets exactly one of two boxes claiming the same name at once win", async () => {
@@ -69,7 +67,7 @@ describe("claimGeneration", () => {
     const store = createMemoryObjectStore();
     store.failNext({
       operation: "put",
-      error: new AppError("backup.stream_precondition_failed", { key: markerKey(VENUE, gen(1)) }),
+      error: new AppError("backup.stream_precondition_failed", { key: markerKey(gen(1)) }),
       landed: true,
     });
     await expect(claimGeneration(store, VENUE, gen(1))).resolves.toBeUndefined();
@@ -107,13 +105,13 @@ describe("claimGeneration", () => {
     // The same node reading a clock that stepped back into a second it already used.
     const again = generationName(2, NODE, late);
     expect(again).toBe(mine);
-    const before = (await store.get(markerKey(VENUE, mine)))!.body;
+    const before = (await store.get(markerKey(mine)))!.body;
     expect(await rejection(claimGeneration(store, VENUE, again))).toEqual({
       code: "backup.stream_precondition_failed",
-      params: { key: markerKey(VENUE, mine) },
+      params: { key: markerKey(mine) },
     });
-    expect((await store.get(markerKey(VENUE, mine)))!.body).toEqual(before);
-    expect(await store.get(markerKey(VENUE, theirs))).not.toBeNull();
+    expect((await store.get(markerKey(mine)))!.body).toEqual(before);
+    expect(await store.get(markerKey(theirs))).not.toBeNull();
   });
 
   it("refuses a name that is not a generation, before touching the bucket", async () => {
@@ -134,7 +132,7 @@ describe("pruneGenerations", () => {
       clock = at;
       await store.put(key, new Uint8Array([1]));
     };
-    const root = `venues/${VENUE}/`;
+    const root = ``;
     const old = gen(1);
     const oldButLive = gen(2);
     const oldMarkerFreshFile = gen(3);
@@ -154,7 +152,7 @@ describe("pruneGenerations", () => {
   it("deletes a whole generation once its newest file is older than the window and the pointer does not name it", async () => {
     const { store, root, old, oldButLive } = await seeded();
     const now = new Date(T0.getTime() + WINDOW + DAY);
-    await expect(pruneGenerations(store, VENUE, oldButLive, now, WINDOW)).resolves.toEqual([old]);
+    await expect(pruneGenerations(store, oldButLive, now, WINDOW)).resolves.toEqual([old]);
     const left = [...store.snapshot().keys()];
     expect(left.filter((key) => key.startsWith(`${root}${old}/`))).toEqual([]);
     expect(left).toEqual(
@@ -170,14 +168,14 @@ describe("pruneGenerations", () => {
   it("keeps a generation whose newest file is exactly at the window's edge", async () => {
     const { store, oldButLive } = await seeded();
     await expect(
-      pruneGenerations(store, VENUE, oldButLive, new Date(T0.getTime() + WINDOW), WINDOW),
+      pruneGenerations(store, oldButLive, new Date(T0.getTime() + WINDOW), WINDOW),
     ).resolves.toEqual([]);
   });
 
   it("keeps the live generation however old it is", async () => {
     const { store, old, oldButLive } = await seeded();
     const now = new Date(T0.getTime() + 30 * DAY);
-    const deleted = await pruneGenerations(store, VENUE, old, now, WINDOW);
+    const deleted = await pruneGenerations(store, old, now, WINDOW);
     expect(deleted).not.toContain(old);
     expect(deleted).toContain(oldButLive);
   });
@@ -185,15 +183,13 @@ describe("pruneGenerations", () => {
   it("refuses a live name that is not a generation, and a window that is not a positive duration, deleting nothing", async () => {
     const { store } = await seeded();
     const before = store.snapshot().size;
-    expect(
-      await rejection(pruneGenerations(store, VENUE, "current.json", new Date(), WINDOW)),
-    ).toEqual({
+    expect(await rejection(pruneGenerations(store, "current.json", new Date(), WINDOW))).toEqual({
       code: "backup.stream_name_invalid",
       params: { field: "live", value: "current.json" },
     });
     for (const windowMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(
-        (await rejection(pruneGenerations(store, VENUE, gen(2), new Date(), windowMs))).params,
+        (await rejection(pruneGenerations(store, gen(2), new Date(), windowMs))).params,
       ).toEqual({
         field: "windowMs",
         value: String(windowMs),
@@ -202,34 +198,23 @@ describe("pruneGenerations", () => {
     expect(store.snapshot().size).toBe(before);
   });
 
-  it("refuses a listing that names a key outside this venue, without the key, deleting nothing", async () => {
-    const inner = createMemoryObjectStore({ now: () => T0 });
-    await inner.put(`venues/${VENUE}/${gen(1)}/opened.json`, new Uint8Array([1]));
-    const stray = `venues/loc-2/${gen(1)}/0000/a.ltx`;
-    const store: ObjectStore = {
-      ...inner,
-      list: async (prefix) => [
-        ...(await inner.list(prefix)),
-        { key: stray, lastModified: new Date(T0) },
-      ],
-    };
+  it("ignores folders that are not generations at the owner's root", async () => {
+    const store = createMemoryObjectStore({ now: () => T0 });
+    const stray = `unrelated/${gen(1)}/0000/a.ltx`;
+    await store.put(stray, new Uint8Array([1]));
     expect(
-      await rejection(
-        pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
-      ),
-    ).toEqual({
-      code: "backup.stream_name_invalid",
-      params: { field: "listedKey", value: "other" },
-    });
-    expect(inner.calls.filter((call) => call.operation === "delete")).toEqual([]);
+      await pruneGenerations(store, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+    ).toEqual([]);
+    expect(store.snapshot().has(stray)).toBe(true);
+    expect(store.calls.filter((call) => call.operation === "delete")).toEqual([]);
   });
 
   it("hands every old generation's files to one batch delete, then every marker to a second", async () => {
     const inner = createMemoryObjectStore({ now: () => T0 });
     const files = (term: number) =>
-      Array.from({ length: 5 }, (_, i) => `venues/${VENUE}/${gen(term)}/0000/${i}.ltx`);
+      Array.from({ length: 5 }, (_, i) => `${gen(term)}/0000/${i}.ltx`);
     for (const term of [1, 3]) {
-      await inner.put(markerKey(VENUE, gen(term)), new Uint8Array([1]));
+      await inner.put(markerKey(gen(term)), new Uint8Array([1]));
       for (const key of files(term)) await inner.put(key, new Uint8Array([1]));
     }
     const batches: string[][] = [];
@@ -241,11 +226,11 @@ describe("pruneGenerations", () => {
       },
     };
     await expect(
-      pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+      pruneGenerations(store, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
     ).resolves.toEqual([gen(1), gen(3)]);
     expect(batches).toEqual([
       [...files(1), ...files(3)],
-      [markerKey(VENUE, gen(1)), markerKey(VENUE, gen(3))],
+      [markerKey(gen(1)), markerKey(gen(3))],
     ]);
     expect(inner.calls.filter((call) => call.operation === "delete")).toHaveLength(12);
     expect(inner.snapshot().size).toBe(0);
@@ -254,7 +239,7 @@ describe("pruneGenerations", () => {
   // A generation whose marker is gone could be claimed again, and would then be streamed into
   // on top of its own old files.
   it("keeps a generation's marker when a file that sorts after it fails to delete", async () => {
-    const root = `venues/${VENUE}/${gen(1)}/`;
+    const root = `${gen(1)}/`;
     const inner = createMemoryObjectStore({ now: () => T0 });
     for (const file of ["0000/a.ltx", "0000/b.ltx", "opened.json", "zz/after-the-marker.ltx"])
       await inner.put(`${root}${file}`, new Uint8Array([1]));
@@ -264,30 +249,30 @@ describe("pruneGenerations", () => {
       error: new Error("refused"),
     });
     await expect(
-      pruneGenerations(inner, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+      pruneGenerations(inner, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
     ).rejects.toThrow("refused");
-    expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
+    expect(inner.snapshot().has(markerKey(gen(1)))).toBe(true);
     expect(
       inner.calls.filter((call) => call.operation === "delete").map((call) => call.key),
-    ).not.toContain(markerKey(VENUE, gen(1)));
+    ).not.toContain(markerKey(gen(1)));
   });
 
   it("keeps every old generation's marker when a file delete in any of them fails", async () => {
     const inner = createMemoryObjectStore({ now: () => T0 });
     for (const term of [1, 3]) {
-      await inner.put(markerKey(VENUE, gen(term)), new Uint8Array([1]));
-      await inner.put(`venues/${VENUE}/${gen(term)}/0000/a.ltx`, new Uint8Array([1]));
+      await inner.put(markerKey(gen(term)), new Uint8Array([1]));
+      await inner.put(`${gen(term)}/0000/a.ltx`, new Uint8Array([1]));
     }
     inner.failNext({
       operation: "delete",
-      key: `venues/${VENUE}/${gen(3)}/0000/a.ltx`,
+      key: `${gen(3)}/0000/a.ltx`,
       error: new Error("delete refused"),
     });
     await expect(
-      pruneGenerations(inner, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+      pruneGenerations(inner, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
     ).rejects.toThrow("delete refused");
-    expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
-    expect(inner.snapshot().has(markerKey(VENUE, gen(3)))).toBe(true);
+    expect(inner.snapshot().has(markerKey(gen(1)))).toBe(true);
+    expect(inner.snapshot().has(markerKey(gen(3)))).toBe(true);
   });
 });
 
@@ -297,10 +282,10 @@ describe("a call's signal", () => {
     const store = createMemoryObjectStore({ now: () => now });
     const { signal } = new AbortController();
     await claimGeneration(store, VENUE, gen(1), { signal });
-    await store.put(`${generationPrefix(VENUE, gen(1))}0000/a.ltx`, new Uint8Array());
+    await store.put(`${generationPrefix(gen(1))}0000/a.ltx`, new Uint8Array());
     now = new Date(T0.getTime() + 2 * WINDOW);
     const before = store.calls.length;
-    const pruned = await pruneGenerations(store, VENUE, gen(2), now, WINDOW, { signal });
+    const pruned = await pruneGenerations(store, gen(2), now, WINDOW, { signal });
     expect(pruned).toEqual([gen(1)]);
     expect(store.calls[0]).toMatchObject({ operation: "put", signal });
     expect(store.calls.slice(before).map((call) => [call.operation, call.signal])).toEqual([

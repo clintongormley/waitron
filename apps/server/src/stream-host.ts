@@ -13,6 +13,7 @@ import {
 } from "@waitron/credentials";
 import {
   readNodeMembership,
+  readStreamId,
   withTransaction,
   type Database,
   type NodeDatabase,
@@ -58,16 +59,17 @@ export const FIRST_START_PENDING = "first_start_pending";
 const ABSENT = "-";
 
 export interface StreamSettings {
-  venueId: string;
+  streamId: string;
   bucket: BucketConfig;
 }
 
 /** What `putCredential` stores for `settings`: the inverse of {@link readStreamSettings}. */
-export function streamSettingsPayload(settings: StreamSettings): Record<string, string> {
+export function streamSettingsPayload(
+  settings: Pick<StreamSettings, "bucket">,
+): Record<string, string> {
   const { bucket } = settings;
   if (bucket.prefix === ABSENT) throw new AppError("backup.request_invalid", { field: "prefix" });
   return {
-    venueId: settings.venueId,
     endpoint: bucket.endpoint ?? ABSENT,
     region: bucket.region,
     bucket: bucket.bucket,
@@ -91,13 +93,18 @@ export async function readStreamSettingsIn(
   const value = await tryGetCredential(tx, ring, { purpose: STREAM_PURPOSE });
   if (value === null) return null;
   const field = (
-    name:
-      "venueId" | "endpoint" | "region" | "bucket" | "prefix" | "accessKeyId" | "secretAccessKey",
+    name: "endpoint" | "region" | "bucket" | "prefix" | "accessKeyId" | "secretAccessKey",
   ) => credentialField(value, STREAM_PURPOSE, name);
   const endpoint = field("endpoint");
   const prefix = field("prefix");
+  const streamId = await readStreamId(tx);
+  if (streamId === null)
+    throw new AppError("server.credential_unusable", {
+      purpose: STREAM_PURPOSE,
+      field: "streamId",
+    });
   return {
-    venueId: field("venueId"),
+    streamId,
     bucket: {
       endpoint: endpoint === ABSENT ? undefined : endpoint,
       region: field("region"),
@@ -125,7 +132,7 @@ export async function readNewerBucketMain(
     if (settings === null) return null;
     const stored = await readPointer(
       boundObjectStore(deps.store ?? openStore(settings.bucket), 15_000),
-      settings.venueId,
+      settings.streamId,
       { signal },
     );
     if (stored === null) return null;
@@ -336,8 +343,8 @@ export class StreamHost {
         venueDbPath,
         configDir: join(this.#deps.stateDir, STREAM_DIR),
         bucket,
-        streamKey: deriveStreamKey(recoveryKey, target.venueId),
-        venueId: target.venueId,
+        streamKey: deriveStreamKey(recoveryKey, target.streamId),
+        streamId: target.streamId,
         nodeId: this.#deps.nodeId,
         term: membership.body.term,
         sign: async (message) =>

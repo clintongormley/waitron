@@ -25,7 +25,6 @@ export interface ReplacementView {
   pointId: string;
   venueId: string;
   oldInstallationId: string;
-  localVenueId: string;
   nodeId: string;
   environment: "test";
   publicKey: string;
@@ -37,11 +36,10 @@ export interface ReplacementView {
   registration: CloudRegistration | null;
 }
 interface SavedReplacement {
-  version: 1;
+  version: 2;
   origin: string;
   requestId: string;
   pointId: string;
-  localVenueId: string;
   nodeId: string;
   publicKey: string;
   privateKey: string;
@@ -55,7 +53,6 @@ interface SavedReplacement {
 export interface ReplacementOptions {
   stateDir: string;
   origin: string;
-  localVenueId: string;
   nodeId: string;
   connection: CloudConnection;
   fetch?: typeof fetch;
@@ -90,11 +87,11 @@ export function createCloudReplacement(options: ReplacementOptions) {
       const info = await lstat(path);
       if (!info.isFile() || info.size > 16384 || info.mode & 0o077) throw Error();
       const value: unknown = JSON.parse(await readFile(path, "utf8"));
+      if (record(value) && value.version === 1) return undefined;
       if (
         !record(value) ||
-        value.version !== 1 ||
+        value.version !== 2 ||
         value.origin !== options.origin ||
-        value.localVenueId !== options.localVenueId ||
         value.nodeId !== options.nodeId ||
         !uuid(value.requestId) ||
         !uuid(value.pointId) ||
@@ -183,11 +180,10 @@ export function createCloudReplacement(options: ReplacementOptions) {
       const peerPrivate = peer.privateKey.export({ format: "der", type: "pkcs8" });
       const peerPublic = peer.publicKey.export({ format: "der", type: "spki" });
       saved = {
-        version: 1,
+        version: 2,
         origin: options.origin,
         requestId: proof.requestId,
         pointId: proof.pointId,
-        localVenueId: options.localVenueId,
         nodeId: options.nodeId,
         privateKey: installation.privateKey
           .export({ format: "der", type: "pkcs8" })
@@ -212,7 +208,6 @@ export function createCloudReplacement(options: ReplacementOptions) {
           "pointId",
           "venueId",
           "oldInstallationId",
-          "localVenueId",
           "nodeId",
           "environment",
           "publicKey",
@@ -229,7 +224,6 @@ export function createCloudReplacement(options: ReplacementOptions) {
       value.pointId !== state.pointId ||
       !uuid(value.venueId) ||
       !uuid(value.oldInstallationId) ||
-      value.localVenueId !== state.localVenueId ||
       value.nodeId !== state.nodeId ||
       value.environment !== "test" ||
       value.publicKey !== state.publicKey ||
@@ -299,11 +293,10 @@ export function createCloudReplacement(options: ReplacementOptions) {
     const sent = saved.reissued && !saved.view ? "reissue" : action;
     const bytes = Buffer.from(
       JSON.stringify([
-        "waitron-cloud-replacement-v1",
+        "waitron-cloud-replacement-v2",
         options.origin,
         saved.requestId,
         sent,
-        saved.localVenueId,
         saved.nodeId,
         "test",
         saved.publicKey,

@@ -30,18 +30,9 @@ export const PURPOSES = {
    * renamed. */
   "membership.node_key": ["privateKey"],
   /**
-   * The owner's S3-compatible bucket the venue's database streams to. `venueId` names the venue's
-   * folder in it. An absent `endpoint` (Amazon itself) or `prefix` is sealed as `-` because every field must be non-empty.
+   * An absent `endpoint` (Amazon itself) or `prefix` is sealed as `-` because every field must be non-empty.
    */
-  "backup.stream": [
-    "venueId",
-    "endpoint",
-    "region",
-    "bucket",
-    "prefix",
-    "accessKeyId",
-    "secretAccessKey",
-  ],
+  "backup.stream": ["endpoint", "region", "bucket", "prefix", "accessKeyId", "secretAccessKey"],
   /** The venue's archive configuration as one JSON document, bucket credentials included;
    * validated by its reader (`parseArchiveSettings`, `apps/server/src/archive-settings.ts`), not
    * here. */

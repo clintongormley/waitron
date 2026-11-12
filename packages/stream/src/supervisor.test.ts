@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { BucketOperation } from "./errors.js";
 import { claimGeneration, generationPrefix, markerKey } from "./generations.js";
-import { generationName, venuePrefix } from "./names.js";
+import { generationName } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 import {
   pointerKey,
@@ -53,13 +53,13 @@ afterEach(async () => {
 });
 
 const fullCopyOf = (generation: string) =>
-  `${generationPrefix(VENUE, generation)}0000/0000000000000001-0000000000000001.ltx`;
-const markerOf = (generation: string) => markerKey(VENUE, generation);
+  `${generationPrefix(generation)}0000/0000000000000001-0000000000000001.ltx`;
+const markerOf = (generation: string) => markerKey(generation);
 const hex16 = (n: number) => n.toString(16).padStart(16, "0");
 
 interface HarnessOptions {
   term?: number;
-  venueId?: string;
+  streamId?: string;
   bucket?: BucketConfig;
   version?: string;
   versionExitCode?: number | null;
@@ -127,7 +127,7 @@ async function harness(options: HarnessOptions = {}) {
     configDir: join(directory, "stream"),
     bucket: options.bucket ?? BUCKET,
     streamKey: STREAM_KEY,
-    venueId: options.venueId ?? VENUE,
+    streamId: options.streamId ?? VENUE,
     nodeId: NODE,
     term: options.term ?? 2,
     sign: async (message) => `signed:${message.length}`,
@@ -257,7 +257,7 @@ async function silentFor(pick: (operation: BucketOperation, key: string) => bool
 const REQUEST_FAILED = { errorCode: "backup.stream_request_failed" };
 
 const pointerFrom = (nodeId: string, term: number, generation: string): SignedPointer => ({
-  body: { venueId: VENUE, term, nodeId, generation, writtenAt: new Date(START).toISOString() },
+  body: { streamId: VENUE, term, nodeId, generation, writtenAt: new Date(START).toISOString() },
   signature: "another box",
 });
 
@@ -271,9 +271,7 @@ describe("opening a generation", () => {
     expect(h.supervisor.status().state).toBe("opening");
 
     // Litestream has uploaded something, but not a file that starts at the first transaction.
-    h.store.upload(
-      `${generationPrefix(VENUE, generation)}0000/0000000000000002-0000000000000002.ltx`,
-    );
+    h.store.upload(`${generationPrefix(generation)}0000/0000000000000002-0000000000000002.ltx`);
     await h.clock.next();
     await h.clock.asleep();
     expect(await readPointer(h.store, VENUE)).toBeNull();
@@ -283,7 +281,7 @@ describe("opening a generation", () => {
     await h.clock.until(() => h.supervisor.status().state === "streaming");
     const pointer = await readPointer(h.store, VENUE);
     expect(pointer?.pointer.body).toEqual({
-      venueId: VENUE,
+      streamId: VENUE,
       term: 2,
       nodeId: NODE,
       generation,
@@ -323,9 +321,7 @@ describe("opening a generation", () => {
     expect(config).not.toContain("secret-example");
     expect(config).not.toContain(STREAM_KEY);
     expect(config).toContain("sse-customer-key: '${WAITRON_STREAM_ENCRYPTION_KEY}'");
-    expect(config).toContain(
-      `venues/${VENUE}/${h.supervisor.status().generation}?region=eu-south-2`,
-    );
+    expect(config).toContain(`${h.supervisor.status().generation}?region=eu-south-2`);
   });
 
   // Every check on what goes into Litestream's configuration and environment is made once, before
@@ -354,13 +350,13 @@ describe("opening a generation", () => {
   );
 
   it("refuses a venue id no key can be formed from, before touching the bucket", async () => {
-    const h = await harness({ venueId: "venue/1" });
+    const h = await harness({ streamId: "venue/1" });
     await h.supervisor.start();
     await vi.waitFor(() => expect(h.supervisor.status().state).toBe("refused"));
     expect(h.logs).toContainEqual({
       level: "error",
       event: "stream.config_unsafe",
-      fields: { errorCode: "backup.stream_name_invalid", field: "venueId" },
+      fields: { errorCode: "backup.stream_name_invalid", field: "streamId" },
     });
     expect(h.events).toEqual([]);
   });
@@ -403,7 +399,7 @@ describe("opening a generation", () => {
     mkdirSync(join(h.directory, "stream"), { recursive: true });
     writeFileSync(
       join(h.directory, "stream", "litestream.yml"),
-      'dbs:\n  - path: "/stale"\n    replica:\n      url: "s3://venue-copies/venues/venue-1/gen-1-node-a-20260922T000000Z"\n',
+      'dbs:\n  - path: "/stale"\n    replica:\n      url: "s3://venue-copies/gen-1-node-a-20260922T000000Z"\n',
     );
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
@@ -460,18 +456,18 @@ describe("opening a generation", () => {
     );
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
-    await h.store.delete(pointerKey(VENUE));
+    await h.store.delete(pointerKey());
     h.store.upload(fullCopyOf(h.supervisor.status().generation!));
     await h.clock.until(() => h.supervisor.status().state === "refused");
     expect(h.supervisor.status().reason).toBe("pointer_changed");
-    expect(h.store.has(pointerKey(VENUE))).toBe(false);
+    expect(h.store.has(pointerKey())).toBe(false);
   });
 
   it("treats its own pointer write as done when only the answer was lost", async () => {
     const h = await harness();
     h.store.failNext({
       operation: "put",
-      key: pointerKey(VENUE),
+      key: pointerKey(),
       error: new Error("connection reset after the write"),
       landed: true,
     });
@@ -692,7 +688,7 @@ describe("opening a generation", () => {
 
   it.each<[string, (operation: BucketOperation, key: string) => boolean]>([
     ["the bucket check", (operation, key) => operation === "put" && key.startsWith(PROBE_PREFIX)],
-    ["the pointer read", (operation, key) => operation === "get" && key === pointerKey(VENUE)],
+    ["the pointer read", (operation, key) => operation === "get" && key === pointerKey()],
     ["the claim", (operation, key) => operation === "put" && key.endsWith("/opened.json")],
   ])(
     "gives %s up when the bucket takes the connection and never answers, and opens once it answers",
@@ -723,9 +719,7 @@ describe("opening a generation", () => {
   );
 
   it("gives the pointer write up when the bucket takes the connection and never answers, and writes it again", async () => {
-    const silent = await silentFor(
-      (operation, key) => operation === "put" && key === pointerKey(VENUE),
-    );
+    const silent = await silentFor((operation, key) => operation === "put" && key === pointerKey());
     const h = await harness({ wrapStore: silent.wrap });
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
@@ -860,7 +854,7 @@ describe("opening a generation", () => {
     let release: (() => void) | undefined;
     // This fake ignores the call's signal on purpose.
     h.store.put = async (key, body, cond) => {
-      if (key === pointerKey(VENUE) && release === undefined) {
+      if (key === pointerKey() && release === undefined) {
         await new Promise<void>((resolve) => (release = resolve));
       }
       return put(key, body, cond);
@@ -868,7 +862,7 @@ describe("opening a generation", () => {
     // The held write lands just after the pointer is next read: the order that makes it a change.
     h.store.get = async (key) => {
       const answer = await get(key);
-      if (key === pointerKey(VENUE)) release?.();
+      if (key === pointerKey()) release?.();
       return answer;
     };
     await h.supervisor.start();
@@ -901,7 +895,7 @@ describe("opening a generation", () => {
     const put = h.store.put.bind(h.store);
     let release: (() => void) | undefined;
     h.store.put = async (key, body, cond) => {
-      if (key === pointerKey(VENUE) && release === undefined) {
+      if (key === pointerKey() && release === undefined) {
         await new Promise<void>((resolve) => (release = resolve));
       }
       return put(key, body, cond);
@@ -918,7 +912,7 @@ describe("opening a generation", () => {
     release!();
     await vi.waitFor(() => expect(h.events.length).toBeGreaterThan(before));
     await new Promise((resolve) => setImmediate(resolve));
-    expect(h.events.slice(before)).toEqual([`put ${pointerKey(VENUE)}`]);
+    expect(h.events.slice(before)).toEqual([`put ${pointerKey()}`]);
   });
 
   /**
@@ -933,14 +927,14 @@ describe("opening a generation", () => {
     let release: (() => void) | undefined;
     let armed = false;
     h.store.put = async (key, body, cond) => {
-      if (key === pointerKey(VENUE) && release === undefined) {
+      if (key === pointerKey() && release === undefined) {
         await new Promise<void>((resolve) => (release = resolve));
       }
       return put(key, body, cond);
     };
     h.store.get = async (key) => {
       const answer = await get(key);
-      if (key === pointerKey(VENUE) && armed) release?.();
+      if (key === pointerKey() && armed) release?.();
       return answer;
     };
     await h.supervisor.start();
@@ -952,7 +946,7 @@ describe("opening a generation", () => {
     const next = h.successor();
     await next.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
-    await vi.waitFor(() => expect(h.store.has(pointerKey(VENUE))).toBe(true));
+    await vi.waitFor(() => expect(h.store.has(pointerKey())).toBe(true));
     return { ...h, next };
   }
 
@@ -986,7 +980,7 @@ describe("opening a generation", () => {
     const get = h.store.get.bind(h.store);
     let reads = 0;
     h.store.get = async (key) => {
-      if (key === pointerKey(VENUE) && ++reads === 1) {
+      if (key === pointerKey() && ++reads === 1) {
         throw new AppError("backup.stream_request_failed", {
           operation: "get",
           key,
@@ -1019,7 +1013,7 @@ describe("opening a generation", () => {
     const get = h.store.get.bind(h.store);
     let writes = 0;
     h.store.put = async (key, body, cond) => {
-      if (key !== pointerKey(VENUE)) return put(key, body, cond);
+      if (key !== pointerKey()) return put(key, body, cond);
       writes += 1;
       throw new AppError("backup.stream_precondition_failed", { key });
     };
@@ -1059,7 +1053,7 @@ describe("opening a generation", () => {
     const held: (() => void)[] = [];
     let holding = true;
     h.store.put = async (key, body, cond) => {
-      if (key === pointerKey(VENUE) && holding) {
+      if (key === pointerKey() && holding) {
         await new Promise<void>((resolve) => held.push(resolve));
       }
       return put(key, body, cond);
@@ -1067,7 +1061,7 @@ describe("opening a generation", () => {
     let armed = false;
     h.store.get = async (key) => {
       const answer = await get(key);
-      if (key === pointerKey(VENUE) && armed) for (const release of held) release();
+      if (key === pointerKey() && armed) for (const release of held) release();
       return answer;
     };
     const opened = async (supervisor: StreamSupervisor, writesHeld: number) => {
@@ -1386,7 +1380,7 @@ describe("while streaming", () => {
     expect(h.events.filter((event) => event.endsWith("opened.json"))).toEqual([
       `put ${markerOf(h.generation)}`,
     ]);
-    expect(await readFile(configPath, "utf8")).toContain(`venues/${VENUE}/${h.generation}?`);
+    expect(await readFile(configPath, "utf8")).toContain(`${h.generation}?`);
     const after = h.litestream.running()!;
     expect(after).not.toBe(before);
     expect(after.args).toEqual(before.args);
@@ -1678,7 +1672,7 @@ describe("generation housekeeping", () => {
   });
 
   it.each<[string, (operation: BucketOperation, key: string) => boolean]>([
-    ["listing", (operation, key) => operation === "list" && key === venuePrefix(VENUE)],
+    ["listing", (operation, key) => operation === "list" && key === ""],
     ["delete", (operation, key) => operation === "delete" && !key.startsWith(PROBE_PREFIX)],
   ])(
     "gives a prune's %s up when the bucket takes the connection and never answers, and prunes the next day",
@@ -1931,9 +1925,9 @@ const MINUTE = 60_000;
 
 describe("freshness", () => {
   const l0 = (generation: string, n: number) =>
-    `${generationPrefix(VENUE, generation)}0000/${hex16(n)}-${hex16(n)}.ltx`;
+    `${generationPrefix(generation)}0000/${hex16(n)}-${hex16(n)}.ltx`;
   const l1 = (generation: string, n: number) =>
-    `${generationPrefix(VENUE, generation)}0001/${hex16(1)}-${hex16(n)}.ltx`;
+    `${generationPrefix(generation)}0001/${hex16(1)}-${hex16(n)}.ltx`;
   const listingsOf = (h: { listed: string[] }, level: string) =>
     h.listed.filter((prefix) => prefix.endsWith(`/${level}/`)).length;
 
@@ -2598,7 +2592,7 @@ describe("constructed without test seams", () => {
       configDir: "/nowhere/stream",
       bucket: BUCKET,
       streamKey: STREAM_KEY,
-      venueId: VENUE,
+      streamId: VENUE,
       nodeId: NODE,
       term: 0,
       sign: async () => "",
@@ -2732,7 +2726,7 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
 
   it("a listing refused while waiting for the full copy", async () => {
     const h = await harness();
-    const prefix = generationPrefix(VENUE, firstGeneration);
+    const prefix = generationPrefix(firstGeneration);
     h.store.failNext({ operation: "list", key: prefix, error: refused("list", prefix, 503) });
     await h.supervisor.start();
     await h.clock.until(() => h.logs.some((line) => line.event === "stream.list_failed"));
@@ -2747,8 +2741,8 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
     const h = await harness();
     h.store.failNext({
       operation: "put",
-      key: pointerKey(VENUE),
-      error: refused("put", pointerKey(VENUE), 403),
+      key: pointerKey(),
+      error: refused("put", pointerKey(), 403),
     });
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);

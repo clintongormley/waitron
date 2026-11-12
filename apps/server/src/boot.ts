@@ -69,7 +69,6 @@ import {
   outgoingMail,
   applicationVersion,
   nodes,
-  venueLocationId,
   readCloudVenueId,
   saveCloudVenueId,
   type Database,
@@ -2466,7 +2465,6 @@ async function bootServer(
     if (holders.singletonRole.current !== "primary") throw new AppError("node.read_only", {});
   };
   // Interim: the venue row's id; removed by S18e or S28.
-  const venueId = await venueLocationId(db);
   const tradingAdmission = new TradingAdmission();
   health.readTradingAdmission = () => tradingAdmission.snapshot();
   const scope = { nodeId: tradingContext.nodeId };
@@ -3863,7 +3861,6 @@ async function bootServer(
       ? createCloudReplacement({
           stateDir: config.stateDir,
           origin: cloudOrigin,
-          localVenueId: venueId,
           nodeId: tradingContext.nodeId,
           connection: cloudConnection,
         })
@@ -3954,7 +3951,6 @@ async function bootServer(
       nodeDb: store.node,
       ring,
       node: tradingContext,
-      venueId,
       modules: setsToMigrate,
       turns: backupTurns,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
@@ -3973,7 +3969,6 @@ async function bootServer(
       nodeId: config.node.nodeId,
       ring,
       stream: streamHost,
-      venueId,
       isPrimary: () => holders.singletonRole.current === "primary",
 
       readRecoveryKey,

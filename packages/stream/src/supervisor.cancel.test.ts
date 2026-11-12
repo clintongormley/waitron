@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { generationPrefix, markerKey } from "./generations.js";
-import { generationName, venuePrefix } from "./names.js";
+import { generationName } from "./names.js";
 import type { ObjectStore, StoreCall } from "./object-store.js";
 import { pointerKey, readPointer, SentPointers } from "./pointer.js";
 import { PROBE_PREFIX } from "./probe.js";
@@ -20,8 +20,8 @@ const START = "2026-09-23T12:00:00Z";
 const LIMIT = 1_000;
 
 const fullCopyOf = (generation: string) =>
-  `${generationPrefix(VENUE, generation)}0000/0000000000000001-0000000000000001.ltx`;
-const levelZero = (generation: string) => `${generationPrefix(VENUE, generation)}0000/`;
+  `${generationPrefix(generation)}0000/0000000000000001-0000000000000001.ltx`;
+const levelZero = (generation: string) => `${generationPrefix(generation)}0000/`;
 
 type Call = { operation: BucketOperation; key: string; signal: AbortSignal | undefined };
 
@@ -79,7 +79,7 @@ async function harness() {
       secretAccessKey: "secret-example",
     },
     streamKey: Buffer.alloc(32, 7).toString("base64"),
-    venueId: VENUE,
+    streamId: VENUE,
     nodeId: NODE,
     term: 2,
     sign: async (message) => `signed:${message.length}`,
@@ -220,7 +220,7 @@ describe("the freshness read", () => {
       expect(h.callsOn("list", levelZero(h.generation), h.callsBefore)).toHaveLength(1),
     );
     const [read] = h.callsOn("list", levelZero(h.generation), h.callsBefore);
-    const [prune] = h.callsOn("list", venuePrefix(VENUE), h.callsBefore);
+    const [prune] = h.callsOn("list", "", h.callsBefore);
     expect(prune).toBeDefined();
     const logged = h.logs.length;
     await h.supervisor.stop();
@@ -256,15 +256,11 @@ describe("opening", () => {
   const first = generationName(2, NODE, new Date(START));
   it.each([
     ["the safe-write check's write", "put", (key: string) => key.startsWith(PROBE_PREFIX)],
-    ["the pointer read", "get", (key: string) => key === pointerKey(VENUE)],
-    ["the claim", "put", (key: string) => key === markerKey(VENUE, first)],
-    ["the read of the claim's time", "list", (key: string) => key === markerKey(VENUE, first)],
-    [
-      "the wait for the first full copy",
-      "list",
-      (key: string) => key === generationPrefix(VENUE, first),
-    ],
-    ["the pointer write", "put", (key: string) => key === pointerKey(VENUE)],
+    ["the pointer read", "get", (key: string) => key === pointerKey()],
+    ["the claim", "put", (key: string) => key === markerKey(first)],
+    ["the read of the claim's time", "list", (key: string) => key === markerKey(first)],
+    ["the wait for the first full copy", "list", (key: string) => key === generationPrefix(first)],
+    ["the pointer write", "put", (key: string) => key === pointerKey()],
   ] as const)("cancels %s on stop, and logs nothing after", async (_, operation, picks) => {
     const h = await harness();
     const pick = (op: BucketOperation, key: string) => op === operation && picks(key);
@@ -287,7 +283,7 @@ describe("opening", () => {
   it("cancels the wait for the first full copy when the side file reaches the limit, and logs no failed listing after", async () => {
     const h = await harness();
     const waiting = (op: BucketOperation, key: string) =>
-      op === "list" && key === generationPrefix(VENUE, first);
+      op === "list" && key === generationPrefix(first);
     h.holdWhen(waiting);
     await h.supervisor.start();
     await h.clock.until(() => h.calls.some((call) => waiting(call.operation, call.key)));
@@ -313,7 +309,7 @@ describe("opening", () => {
     let land: (() => void) | undefined;
     // The first pointer write answers its caller as cancelled, yet the bucket still takes it later.
     h.store.put = (key, body, condition, call) => {
-      if (key !== pointerKey(VENUE) || held !== undefined) return put(key, body, condition, call);
+      if (key !== pointerKey() || held !== undefined) return put(key, body, condition, call);
       held = call ?? {};
       return new Promise((_, reject) => {
         call?.signal?.addEventListener("abort", () => reject(callCancelled("put", key)), {
@@ -328,7 +324,7 @@ describe("opening", () => {
     // It lands just after the pointer is next read: the order that makes it a change.
     h.store.get = async (key, call) => {
       const answer = await get(key, call);
-      if (key === pointerKey(VENUE) && held?.signal?.aborted) land?.();
+      if (key === pointerKey() && held?.signal?.aborted) land?.();
       return answer;
     };
     await h.supervisor.start();

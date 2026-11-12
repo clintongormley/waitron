@@ -24,7 +24,7 @@ export interface RestoreGenerationArgs {
   litestreamBin: string;
   bucket: BucketConfig;
   streamKey: string;
-  venueId: string;
+  streamId: string;
   generation: string;
   /** Must not exist, or exist empty, with no `-wal`, `-shm` or `-journal` beside it. Litestream
    * refuses a non-empty file, and those names only beside a file that exists
@@ -62,10 +62,10 @@ export async function restoreGeneration(args: RestoreGenerationArgs): Promise<vo
   const namedPath = join(configDir, VENUE_FILE);
   const config = litestreamConfig({
     dbPath: namedPath,
-    replicaUrl: replicaUrl(args.bucket, args.venueId, args.generation),
+    replicaUrl: replicaUrl(args.bucket, args.generation),
   });
   const env = litestreamEnv(args.bucket, args.streamKey);
-  await verifyStreamKey(args.bucket, args.venueId, args.generation, args.streamKey);
+  await verifyStreamKey(args.bucket, args.generation, args.streamKey);
   const configPath = join(configDir, "restore.yml");
   try {
     await mkdir(configDir, { recursive: true, mode: 0o700 });

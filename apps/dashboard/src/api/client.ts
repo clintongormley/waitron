@@ -1690,7 +1690,6 @@ export interface CloudConnectionStatus {
     pointId: string;
     venueId: string;
     oldInstallationId: string;
-    localVenueId: string;
     nodeId: string;
     environment: "test";
     publicKey: string;

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { hasCode, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { loggableErrorName } from "./bucket-error-names.js";
 import { bucketClockOffset, levelFolder, newestOf, newestUpload } from "./bucket-times.js";
 import { isPreconditionFailure } from "./conditional.js";
@@ -22,7 +22,7 @@ import {
   type ChildHandle,
   type SpawnFn,
 } from "./litestream-process.js";
-import { generationName } from "./names.js";
+import { generationName, isKeySegment } from "./names.js";
 import type { ListedObject, ObjectStore } from "./object-store.js";
 import {
   pointerMessage,
@@ -92,7 +92,7 @@ export interface SupervisorDeps {
   configDir: string;
   bucket: BucketConfig;
   streamKey: string;
-  venueId: string;
+  streamId: string;
   nodeId: string;
   /** The membership term this box holds: written into every generation name and the pointer. */
   term: number;
@@ -369,11 +369,13 @@ export class StreamSupervisor {
    * stands for every one this run opens.
    */
   #configurationIsSafe(): boolean {
-    const { bucket, venueDbPath, venueId, nodeId, term } = this.#deps;
+    const { bucket, venueDbPath, streamId, nodeId, term } = this.#deps;
     try {
+      if (!isKeySegment(streamId))
+        throw new AppError("backup.stream_name_invalid", { field: "streamId", value: streamId });
       this.#env = litestreamEnv(bucket, this.#deps.streamKey);
       const sample = generationName(term, nodeId, this.#deps.now());
-      litestreamConfig({ dbPath: venueDbPath, replicaUrl: replicaUrl(bucket, venueId, sample) });
+      litestreamConfig({ dbPath: venueDbPath, replicaUrl: replicaUrl(bucket, sample) });
       return true;
     } catch (error) {
       const field =
@@ -414,7 +416,7 @@ export class StreamSupervisor {
 
   /** Opens a generation and moves the pointer to it; null when refused. */
   async #open(signal: AbortSignal): Promise<string | null> {
-    const { venueId, nodeId, term } = this.#deps;
+    const { streamId, nodeId, term } = this.#deps;
     for (;;) {
       signal.throwIfAborted();
       this.#set("opening", null, null);
@@ -429,7 +431,7 @@ export class StreamSupervisor {
         }
         this.#noteBucketProblem(null);
         this.#lastProbeAt = this.#monotonic();
-        const previous = await readPointer(this.#store, venueId, { signal });
+        const previous = await readPointer(this.#store, streamId, { signal });
         signal.throwIfAborted();
         if (previous !== null && previous.pointer.body.term > term) {
           this.#refuse("pointer_newer_term");
@@ -438,7 +440,7 @@ export class StreamSupervisor {
         const generation = generationName(term, nodeId, this.#deps.now());
         const claimStarted = this.#instant();
         try {
-          await claimGeneration(this.#store, venueId, generation, { signal });
+          await claimGeneration(this.#store, streamId, generation, { signal });
         } catch (error) {
           if (!isPreconditionFailure(error)) throw error;
           await this.#sleep(1_000, signal);
@@ -457,7 +459,7 @@ export class StreamSupervisor {
           continue;
         }
         const body: StreamPointer = {
-          venueId,
+          streamId,
           term,
           nodeId,
           generation,
@@ -507,7 +509,7 @@ export class StreamSupervisor {
   }
 
   async #waitForFullCopy(generation: string, signal: AbortSignal): Promise<void> {
-    const prefix = generationPrefix(this.#deps.venueId, generation);
+    const prefix = generationPrefix(generation);
     for (;;) {
       let listed: ListedObject[] = [];
       try {
@@ -545,7 +547,7 @@ export class StreamSupervisor {
       try {
         const retryAgainst = await writePointer(
           this.#store,
-          this.#deps.venueId,
+          this.#deps.streamId,
           pointer,
           expected,
           this.#sentPointers,
@@ -669,10 +671,8 @@ export class StreamSupervisor {
     signal: AbortSignal,
   ): Promise<{ ok: true; newest: Date | null } | { ok: false; failure: FailureFields }> {
     try {
-      const { venueId } = this.#deps;
       let newest = await newestUpload(
         this.#store,
-        venueId,
         generation,
         { level: 0, floor: this.#newestUploadAt },
         { signal },
@@ -680,7 +680,6 @@ export class StreamSupervisor {
       if (this.#lagWith(newest).lagMs > L0_RETENTION_MS) {
         newest = await newestUpload(
           this.#store,
-          venueId,
           generation,
           { level: 1, floor: newest },
           { signal },
@@ -728,7 +727,7 @@ export class StreamSupervisor {
     const steady = (started.steady + ended.steady) / 2;
     this.#skewMs = (started.wall + ended.wall) / 2 - steady;
     this.#bucketClockRead = false;
-    const key = markerKey(this.#deps.venueId, generation);
+    const key = markerKey(generation);
     this.#markerWrite = { key, started: started.steady, ended: ended.steady };
     try {
       const offset = await bucketClockOffset(this.#store, key, started.steady, ended.steady, {
@@ -851,7 +850,6 @@ export class StreamSupervisor {
         read
           ? pruneGenerations(
               this.#store,
-              this.#deps.venueId,
               live,
               new Date(this.#monotonic() + this.#skewMs),
               PRUNE_WINDOW_MS,
@@ -952,10 +950,9 @@ export class StreamSupervisor {
     const asking = AbortSignal.any([signal, deadline.signal]);
     const listed = async () => {
       try {
-        await this.#store.list(
-          `${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`,
-          { signal: asking },
-        );
+        await this.#store.list(`${generationPrefix(generation)}${levelFolder(0)}`, {
+          signal: asking,
+        });
         return true;
       } catch (error) {
         // A refusal after the deadline or a stop answers a question nobody is still asking.
@@ -984,14 +981,14 @@ export class StreamSupervisor {
 
   /** Writes the configuration and starts Litestream; a new generation starts from no local state. */
   async #startChild(generation: string, fresh: boolean, signal: AbortSignal): Promise<void> {
-    const { bucket, configDir, venueDbPath, venueId } = this.#deps;
+    const { bucket, configDir, venueDbPath } = this.#deps;
     await mkdir(configDir, { recursive: true, mode: 0o700 });
     const configPath = join(configDir, CONFIG_FILE);
     await writeFile(
       configPath,
       litestreamConfig({
         dbPath: venueDbPath,
-        replicaUrl: replicaUrl(bucket, venueId, generation),
+        replicaUrl: replicaUrl(bucket, generation),
       }),
       { mode: 0o600 },
     );

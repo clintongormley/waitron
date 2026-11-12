@@ -17,7 +17,6 @@ export {
   isKeySegment,
   normalisePrefix,
   parseGenerationName,
-  venuePrefix,
 } from "./names.js";
 export {
   pointerKey,

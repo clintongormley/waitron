@@ -35,7 +35,6 @@ export type PartsContext = {
   /** The pack's own time, standing in for a backup key that was never changed. */
   readonly madeAt: string;
   readonly nodeId: string;
-  readonly venueId: string;
   readonly ring: KeyRing;
   readonly env: Readonly<Record<string, string | undefined>>;
 };
@@ -133,8 +132,8 @@ export function buildBucketPart(tx: Transaction, context: PartsContext): Promise
       throw new AppError("backup.stream_signer_missing", {});
     }
     const bucketCode = encodeRecoveryKit({
-      version: 1,
-      venueId: settings.venueId,
+      version: 2,
+      streamId: settings.streamId,
       bucket: settings.bucket,
       recoveryKey,
       pointerSignerPublicKey,

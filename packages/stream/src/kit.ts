@@ -4,16 +4,16 @@ import type { BucketConfig } from "./s3-store.js";
 import "./errors.js";
 
 /** Marks the kit token and its format version, so a pasted wrong thing is refused by name. */
-export const KIT_PREFIX = "WAITRON-RECOVERY-KIT-1:";
+export const KIT_PREFIX = "WAITRON-RECOVERY-KIT-2:";
 
 /**
- * Everything a rebuild asks for: where the bucket is and the key to it, which venue to look under,
+ * Everything a rebuild asks for: where the bucket is and the key to it, which stream to read,
  * the recovery key that opens the locked secrets row, and the public key that must have signed
  * `current.json`. As sensitive as the recovery key it carries.
  */
 export interface RecoveryKit {
-  version: 1;
-  venueId: string;
+  version: 2;
+  streamId: string;
   bucket: BucketConfig;
   recoveryKey: string;
   pointerSignerPublicKey: string;
@@ -44,8 +44,8 @@ export function parseRecoveryKit(input: string): RecoveryKit {
   if (typeof raw !== "object" || raw === null) refuse("shape");
   const k = raw as Record<string, unknown>;
   if (
-    k.version !== 1 ||
-    !text(k.venueId) ||
+    k.version !== 2 ||
+    !text(k.streamId) ||
     // The box's own key rules (`checkedRecoveryKey`) allow any character, and a kit must open the
     // key it was made with.
     typeof k.recoveryKey !== "string" ||
@@ -65,8 +65,8 @@ export function parseRecoveryKit(input: string): RecoveryKit {
     refuse("shape");
   }
   return {
-    version: 1,
-    venueId: k.venueId,
+    version: 2,
+    streamId: k.streamId,
     bucket,
     recoveryKey: k.recoveryKey,
     pointerSignerPublicKey: k.pointerSignerPublicKey,
