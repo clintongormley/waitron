@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { asc, sql, inArray } from "drizzle-orm";
 import "./errors.js";
@@ -36,6 +37,26 @@ export async function saveVenueFields(
     expectedRevision: current.revision,
     personId,
   });
+}
+
+export async function readCloudVenueId(tx: Transaction): Promise<string | null> {
+  return (await readVenueSettings(tx)).doc.cloudVenueId;
+}
+
+export async function saveCloudVenueId(tx: Transaction, venueId: string): Promise<void> {
+  await saveVenueFields(tx, { cloudVenueId: venueId }, null);
+}
+
+export async function readStreamId(tx: Transaction): Promise<string | null> {
+  return (await readVenueSettings(tx)).doc.streamId;
+}
+
+export async function ensureStreamId(tx: Transaction): Promise<string> {
+  const id = await readStreamId(tx);
+  if (id !== null) return id;
+  const created = randomUUID();
+  await saveVenueFields(tx, { streamId: created }, null);
+  return created;
 }
 
 export interface Venue {

@@ -11,6 +11,8 @@ import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 
 const doc = {
+  cloudVenueId: null,
+  streamId: null,
   name: "Harbour restaurant",
   fiscalTerritory: "ES-common",
   operationDescription: "Meals",
@@ -31,6 +33,8 @@ describe("the venue document", () => {
   it("declares a non-transferring core document with invalid defaults", () => {
     expect(api.VENUE_SETTINGS).toMatchObject({ module: "venue", version: 1, transfers: false });
     expect(api.VENUE_SETTINGS.defaults()).toEqual({
+      cloudVenueId: null,
+      streamId: null,
       name: "",
       fiscalTerritory: "ES-common",
       operationDescription: "Restaurant",
@@ -113,6 +117,51 @@ describe("the venue document", () => {
     expect(result).toEqual({ ok: false, field: "holidayArea" });
   });
 
+  it("stores Cloud and stream identities as nullable venue document fields", () => {
+    const identities = {
+      cloudVenueId: "11111111-1111-4111-8111-111111111111",
+      streamId: "22222222-2222-4222-8222-222222222222",
+    };
+    expect(api.VENUE_SETTINGS.parse({ ...doc, ...identities })).toEqual({
+      ok: true,
+      doc: { ...doc, ...identities },
+    });
+    for (const field of ["cloudVenueId", "streamId"])
+      for (const value of [42, [], ""])
+        expect(api.VENUE_SETTINGS.parse({ ...doc, [field]: value })).toEqual({
+          ok: false,
+          field,
+        });
+  });
+
+  it("reads an existing venue document without identities as not connected", () => {
+    const stored: Record<string, unknown> = { ...doc };
+    delete stored.cloudVenueId;
+    delete stored.streamId;
+    expect(api.VENUE_SETTINGS.parse(stored)).toEqual({ ok: true, doc });
+  });
+
+  it("makes one stream identity and keeps it across unrelated venue saves", async () => {
+    await seedVenueSettings(suite.db);
+    expect(await api.readStreamId(suite.db)).toBeNull();
+    const id = await withTransaction(suite.db, api.ensureStreamId);
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    await withTransaction(suite.db, (tx) =>
+      api.saveVenueFields(tx, { name: "Renamed venue" }, null),
+    );
+    expect(await withTransaction(suite.db, api.ensureStreamId)).toBe(id);
+    expect(await api.readStreamId(suite.db)).toBe(id);
+  });
+
+  it("reads Cloud's venue identity back from the venue document", async () => {
+    await seedVenueSettings(suite.db);
+    expect(await api.readCloudVenueId(suite.db)).toBeNull();
+    const id = "33333333-3333-4333-8333-333333333333";
+    await withTransaction(suite.db, (tx) => api.saveCloudVenueId(tx, id));
+    expect(await api.readCloudVenueId(suite.db)).toBe(id);
+    expect((await api.readVenueSettings(suite.db)).doc.cloudVenueId).toBe(id);
+  });
+
   it("keeps the interim location identity independent of the venue document", async () => {
     const [row] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(suite.db, { operationDescription: "Meals" });
@@ -180,6 +229,8 @@ describe("the venue document", () => {
     await seeds.seedVenueSettings(suite.db);
     expect(await api.readVenueSettings(suite.db)).toEqual({
       doc: {
+        cloudVenueId: null,
+        streamId: null,
         name: "Test venue",
         fiscalTerritory: "ES-common",
         operationDescription: "Restaurant",

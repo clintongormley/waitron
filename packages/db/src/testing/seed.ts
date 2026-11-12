@@ -51,6 +51,8 @@ export async function seedVenueSettings(
     await createVenueSettings(
       db,
       {
+        cloudVenueId: null,
+        streamId: null,
         name: "Test venue",
         fiscalTerritory: "ES-common",
         operationDescription: "Restaurant",
