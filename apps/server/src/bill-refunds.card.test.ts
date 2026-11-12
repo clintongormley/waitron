@@ -1,6 +1,7 @@
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { TradingAdmission } from "./trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -1651,6 +1652,104 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     ]);
   });
 
+  it("raises the alert for a refund pending over an hour whose answer cannot be recorded", async () => {
+    const { billId, paymentId, refundId, row } = await pendingRefund();
+    venue.db.run(sql`delete from incidents where code = 'payment.refund_unresolved'`);
+    venue.db.run(
+      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending' and id <> ${refundId}`,
+    );
+    const pass = (ms: number) =>
+      withProvider(
+        {
+          lookups: {
+            kind: "match",
+            providerRefundRef: randomUUID(),
+            outcome: "completed",
+            providerStatus: "SUCCESSFUL",
+          },
+        },
+        () =>
+          settlePendingBillPayments({
+            admission: testTradingAdmission(),
+            db: venue.db,
+            backend: venue.backend,
+            clock: clockPlus(ms),
+            cfg: venue.cfg,
+            refundProviderFor: (name) => venue.pool.get(name),
+            attendance: () => Promise.reject(new Error("attendance unavailable")),
+          }),
+      );
+    const alerts = () =>
+      inTx(venue, (tx) =>
+        tx.select().from(incidents).where(eq(incidents.code, "payment.refund_unresolved")),
+      );
+
+    const over = await pass(HOUR + 60_000);
+    const raised = await alerts();
+    const again = await pass(HOUR + 31 * 60_000);
+
+    expect(over.errors).toContainEqual({ refundId, error: "Error: attendance unavailable" });
+    expect(raised).toMatchObject([
+      {
+        source: "payment_check",
+        severity: "warning",
+        params: {
+          refundId,
+          billPaymentId: paymentId,
+          workingOrderId: billId,
+          amount: "5.00",
+          pendingSince: row.createdAt,
+        },
+      },
+    ]);
+    expect(over.refundsUnresolved).toBe(1);
+    expect(again.errors).toContainEqual({ refundId, error: "Error: attendance unavailable" });
+    expect(await alerts()).toHaveLength(1);
+    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending" });
+  });
+
+  it("leaves a refund under an hour old alone between lookups, even once trading is refused", async () => {
+    const { refundId } = await pendingRefund();
+    venue.db.run(
+      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending' and id <> ${refundId}`,
+    );
+    const admission = new TradingAdmission();
+    admission.admit();
+    const pass = (ms: number) =>
+      settlePendingBillPayments({
+        admission,
+        db: venue.db,
+        backend: venue.backend,
+        clock: clockPlus(ms),
+        cfg: venue.cfg,
+        refundProviderFor: (name) => venue.pool.get(name),
+      });
+    await pass(20 * 60_000);
+    const lookups = venue.card.lookupCalls.filter((query) => query.refundId === refundId).length;
+    const original = venue.backend.clockBehindLatestRecord.bind(venue.backend);
+    const closing = vi
+      .spyOn(venue.backend, "clockBehindLatestRecord")
+      .mockImplementation((tx, reading) => {
+        admission.requireRestart();
+        return original(tx, reading);
+      });
+    let refused: Awaited<ReturnType<typeof pass>>;
+    try {
+      refused = await pass(21 * 60_000);
+    } finally {
+      closing.mockRestore();
+    }
+
+    expect(admission.snapshot()).toEqual({ state: "restart_required" });
+    expect(venue.card.lookupCalls.filter((query) => query.refundId === refundId)).toHaveLength(
+      lookups,
+    );
+    expect(refused.errors.filter((error) => "refundId" in error)).toEqual([]);
+    expect(refused.pending).toBeGreaterThanOrEqual(1);
+  });
+
   it("lists the pending refunds nothing is driving, with their payment, bill and send", async () => {
     const { billId, paymentId, refundId } = await pendingRefund();
 
@@ -1713,15 +1812,11 @@ describe("how often the loop looks a pending refund up", () => {
     const over = await runLoop(clockPlus(HOUR + 60_000));
 
     expect(lookupsOf(refundId)).toBe(lookups);
-    // The case at "raises the alert for a refund pending over an hour" checks the alert itself. A
-    // refund whose lookup failed on this pass is reported as an error, not counted.
-    const failed = new Set(over.errors.map((error) => ("refundId" in error ? error.refundId : "")));
-    const pending = venue.db
-      .all<{ id: string }>(
-        sql`select id from bill_payment_refunds
-            where state = 'pending' and created_at < ${overAnHour}`,
-      )
-      .filter(({ id }) => !failed.has(id));
+    // The case at "raises the alert for a refund pending over an hour" checks the alert itself.
+    const pending = venue.db.all<{ id: string }>(
+      sql`select id from bill_payment_refunds
+          where state = 'pending' and created_at < ${overAnHour}`,
+    );
     expect(pending.map(({ id }) => id)).toContain(refundId);
     expect(over.refundsUnresolved).toBe(pending.length);
   });

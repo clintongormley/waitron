@@ -64,7 +64,6 @@ export interface BillPaymentsPass {
   failed: number;
   refundsCompleted: number;
   refundsFailed: number;
-  /** Refunds pending over an hour, counted on every pass. */
   refundsUnresolved: number;
   /** The payments and refunds this pass found pending and did not settle. */
   pending: number;
@@ -265,28 +264,35 @@ async function settlePendingBillRefunds(
   for (const { refund: found, workingOrderId } of pending) {
     if (stopSignal?.aborted) break;
     const id = found.id;
+    const now = deps.clock.now().instant;
     try {
-      let refund = found;
-      const now = deps.clock.now().instant;
       if (lookupDue(found, lastLookups.get(id), now.getTime())) {
         const resumed = await resumeCardRefund({ ...deps, stopSignal }, id, "loop", PAYMENT_CHECK);
         if (!resumed.claimed) continue;
         lastLookups.set(id, now.getTime());
-        refund = resumed.refund;
-        if (refund.state === "completed") pass.refundsCompleted += 1;
-        if (refund.state === "failed") pass.refundsFailed += 1;
+        const { state } = resumed.refund;
+        if (state === "completed") pass.refundsCompleted += 1;
+        if (state === "failed") pass.refundsFailed += 1;
+        if (state !== "pending") {
+          pass.pending -= 1;
+          continue;
+        }
       }
-      if (refund.state !== "pending") {
-        pass.pending -= 1;
-        continue;
-      }
-      if (now.getTime() - Date.parse(refund.createdAt) > REFUND_UNRESOLVED_AFTER_MS) {
+    } catch (error) {
+      pass.errors.push({ refundId: id, error: String(error) });
+    }
+    if (now.getTime() - Date.parse(found.createdAt) <= REFUND_UNRESOLVED_AFTER_MS) continue;
+    try {
+      await withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, deps.cfg, deps.admission);
+        const [refund] = await tx
+          .select()
+          .from(billPaymentRefunds)
+          .where(eq(billPaymentRefunds.id, id));
+        if (refund?.state !== "pending") return;
         pass.refundsUnresolved += 1;
-        await withTransaction(deps.db, async (tx) => {
-          await requireEconomicWrite(tx, deps.cfg, deps.admission);
-          return raiseRefundUnresolved(tx, refund, workingOrderId, now);
-        });
-      }
+        await raiseRefundUnresolved(tx, refund, workingOrderId, now);
+      });
     } catch (error) {
       pass.errors.push({ refundId: id, error: String(error) });
     }
