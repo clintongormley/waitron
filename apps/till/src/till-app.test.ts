@@ -801,8 +801,6 @@ afterEach(() => {
   cleanupWidgets();
   document.documentElement.lang = initialPageLanguage;
   if (vi.isMockFunction(history.pushState)) vi.mocked(history.pushState).mockRestore();
-  sessionStorage.removeItem("waitron.lastMenu");
-  sessionStorage.removeItem("waitron.dietFilter");
   history.replaceState(null, "", initialUrl);
 });
 
@@ -15517,9 +15515,7 @@ describe("remembered dietary filters", () => {
       expect(pressed(counter(el)!, predicate)).toBe("true");
       expect(names(el)).toEqual(["Ensalada"]);
       expect(counter(el)!.store.lines[0]!.product.id).toBe("mixed");
-      expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
-        JSON.stringify({ diets: [predicate], exclude: {} }),
-      );
+      expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
       emit(counter(el)!, "logout");
       await flush(el);
       await toCounter(el);
@@ -15594,14 +15590,10 @@ describe("remembered dietary filters", () => {
     const c = await toCounter(live);
     await pick(c, "vegetarian");
     await flush(live);
-    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
-      JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
-    );
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
     resolve(fixtureOffers({ menus: [defaultMenu], products: [salad, mixed] }));
     await flush(el);
-    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(
-      JSON.stringify({ diets: ["vegetarian"], exclude: {} }),
-    );
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
     expect(names(live)).toEqual(["Ensalada"]);
   });
 
@@ -15663,7 +15655,7 @@ describe("remembered dietary filters", () => {
     widget.shadowRoot!.querySelector<HTMLElement>("wt-dialog [slot=footer]:last-child")!.click();
     await flush(el);
     const chosen = { diets: ["vegan", "no-fish"], exclude: { nuts: ["walnuts"] } };
-    expect(sessionStorage.getItem("waitron.dietFilter")).toBe(JSON.stringify(chosen));
+    expect(sessionStorage.getItem("waitron.dietFilter")).toBeNull();
     selectTab(el, "floor");
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: freeTable.id, seated: false });

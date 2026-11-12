@@ -114,7 +114,6 @@ export class SessionActivity {
 
   #shouldRunIdleTimer(): boolean {
     return (
-      this.#active &&
       this.#config.loggedIn &&
       this.#config.kind !== "kds_station" &&
       this.#config.timeoutSeconds != null

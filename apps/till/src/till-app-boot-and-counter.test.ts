@@ -305,8 +305,6 @@ const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
   localStorage.removeItem("waitron.makeNow.till-dev");
-  sessionStorage.removeItem("waitron.lastMenu");
-  sessionStorage.removeItem("waitron.dietFilter");
   history.replaceState(null, "", initialUrl);
 });
 

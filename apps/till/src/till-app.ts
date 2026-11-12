@@ -58,7 +58,7 @@ import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
-import { EMPTY_MENU_FILTERS, activeFilterCount, type MenuFilters } from "./menu-filter.js";
+import { EMPTY_MENU_FILTERS, type MenuFilters } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -6209,12 +6209,6 @@ export class TillApp extends LitElement {
   #selectFilters(filters: MenuFilters): void {
     if (!this.isConnected) return;
     this.selectedFilters = filters;
-    try {
-      if (activeFilterCount(filters) === 0) sessionStorage.removeItem("waitron.dietFilter");
-      else sessionStorage.setItem("waitron.dietFilter", JSON.stringify(filters));
-    } catch {
-      // Filtering remains available when browser storage is blocked.
-    }
   }
 
   #selectMenu(id: string): void {

@@ -371,7 +371,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanupWidgets();
   vi.useRealTimers();
-  sessionStorage.removeItem("waitron.lastMenu");
 });
 
 describe("the till's menu-state poll", () => {

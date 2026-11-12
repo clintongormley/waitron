@@ -2318,20 +2318,12 @@ the remaining till unit and tab edges joined on 2026-11-12.
 
 ## Bundle: Remove till code nothing reaches
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **Remove the Filter's unused session-storage write.** Filter selections live in the active
-  operator's app state and reset on sign-out. `till-app.ts` writes `waitron.dietFilter` but never
-  reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
-  adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
 - **A1007. The till's adjustment window keeps a give-away and a line discount nothing opens (left
   open by A758-5).** Retire the two modes, make `kind: "comp"` mean the Comp window, and move the
   table's comp tests in `till-app-adjustments.test.ts` onto it.
   [Detail](till.md#a1007-the-tills-adjustment-window-keeps-a-give-away-and-a-line-discount-nothing-opens)
-- **The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
-  reading, not run).** `session-activity.ts`'s `#shouldRunIdleTimer` keeps the `this.#active &&` check
-  that `#shouldHoldWakeLock` lost, and its callers look the same. **Next action:** remove the check
-  with a receipt, as W24 did for `#shouldHoldWakeLock`, or keep it by decision.
 
 ## Bundle: Table screen panels that do not fit
 
