@@ -29,8 +29,11 @@ it("answers a host without radios through the executable without exposing comman
   });
   expect(result.status).toBe(0);
   expect(result.stdout).toBe(`${JSON.stringify(empty)}\n`);
-  expect(result.stderr).toContain('"permission":"system.manage"');
-  expect(result.stderr).not.toContain("ssid");
+  expect(JSON.parse(result.stderr)).toEqual({
+    verb: "network.read",
+    actor: { source: "person", person: "waiter-1" },
+    permission: "system.manage",
+  });
 });
 
 it("keeps a failed command's real stderr out of the reply and journal", () => {
