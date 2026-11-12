@@ -2272,7 +2272,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local personal-data export, staff-export, README and working-time record suites use Martha Lewis; the staff-export suite's administrator sample uses Anna Admin.
   The adjustment-download worked example uses Martha Lewis, Lewis Green, Paul Gray and Anna Smith;
   local reprint and restore-archive staff samples use Anna.
-  Spanish staff display-name samples remain, including in the shared `testing/` helpers.
+  The shared clock venue uses Anna for its staff sample and matching attendance, approver and profile-export checks.
+  Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
   Administrator, Food and Drinks for its local staff samples; its product and fiscal text remain. Current-order, order-group,

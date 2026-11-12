@@ -86,7 +86,7 @@ describe("the personal-data downloads in a real start", () => {
       expect(response.headers.get("content-type")).toBe("application/zip");
       const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
       const profile = JSON.parse(strFromU8(files["profile.json"]!)) as Record<string, unknown>;
-      expect([profile.id, profile.displayName]).toEqual([venue.personId, "Ana"]);
+      expect([profile.id, profile.displayName]).toEqual([venue.personId, "Anna"]);
       expect(strFromU8(files["README.txt"]!).split("\n")[0]).toContain("Clock venue SL");
       expect([
         Object.hasOwn(files, "time-record.csv"),
@@ -105,7 +105,7 @@ describe("the personal-data downloads in a real start", () => {
         string,
         unknown
       >;
-      expect([otherProfile.id, otherProfile.displayName]).toEqual([venue.personId, "Ana"]);
+      expect([otherProfile.id, otherProfile.displayName]).toEqual([venue.personId, "Anna"]);
 
       const refused = await fetch(url, {
         headers: { cookie: `${MANAGEMENT_COOKIE}=${managerSession.token}` },

@@ -129,7 +129,7 @@ it("provides minimal lookups, own viewer eligibility, an empty queue and a day f
     viewer: { personId: managerId, canSelfApprove: true },
     people: expect.arrayContaining([
       { personId: managerId, displayName: "Owner" },
-      { personId: venue.personId, displayName: "Ana" },
+      { personId: venue.personId, displayName: "Anna" },
     ]),
   });
   await setBuiltInRoleForTest(suite.db, managerId, "supervisor");

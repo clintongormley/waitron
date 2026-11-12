@@ -87,7 +87,7 @@ export async function createClockVenue(
       capabilities: ["clock-in"],
     });
     const [person] = await seedPersons(tx, {
-      displayName: "Ana",
+      displayName: "Anna",
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });

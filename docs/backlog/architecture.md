@@ -858,7 +858,8 @@ the helper's constant status is not evidence of the write.
   Local personal-data export, staff-export, README and working-time record suites use Martha Lewis; the staff-export suite's administrator sample uses Anna Admin.
   The adjustment-download worked example uses Martha Lewis, Lewis Green, Paul Gray and Anna Smith;
   local reprint and restore-archive staff samples use Anna.
-  Spanish staff display-name samples remain, including in the shared `testing/` helpers.
+  The shared clock venue uses Anna for its staff sample and matching attendance, approver and profile-export checks.
+  Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
