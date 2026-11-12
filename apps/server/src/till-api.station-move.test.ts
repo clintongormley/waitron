@@ -498,7 +498,7 @@ describe("station queue move attribution", () => {
     });
     expect(moved.status).toBe(200);
     await inTx(venue, async (tx) => {
-      await tx.update(persons).set({ displayName: "Luis" }).where(eq(persons.id, venue.operatorId));
+      await tx.update(persons).set({ displayName: "Lewis" }).where(eq(persons.id, venue.operatorId));
       await tx.update(devices).set({ label: "Till 2" }).where(eq(devices.id, venue.deviceId));
       await tx
         .update(ticketItemMoves)
@@ -509,7 +509,7 @@ describe("station queue move attribution", () => {
     expect(receiving.status).toBe(200);
     expect(group(receiving.json).items[0]!.lastMove).toEqual({
       fromStationName: "Bar",
-      personName: "Luis",
+      personName: "Lewis",
       deviceName: "Till 2",
       movedAt: "2026-10-10T18:12:00.000Z",
     });
@@ -527,7 +527,7 @@ describe("station queue move attribution", () => {
     const queues = await inTx(venue, (tx) => listStationQueues(tx, [bar, grill]));
     expect(queues.get(bar)!.find((g) => g.orderId === tabId)!.items[0]).toHaveProperty("lastMove", {
       fromStationName: "Grill",
-      personName: "Luis",
+      personName: "Lewis",
       deviceName: null,
       movedAt: "2026-10-10T18:12:00.000Z",
     });
@@ -546,7 +546,7 @@ describe("station queue move attribution", () => {
     const clockWentBack = await send(venue.app, venue.cookie, "GET", `/api/stations/${bar}/queue`);
     expect(group(clockWentBack.json).items[0]!.lastMove).toEqual({
       fromStationName: "Grill",
-      personName: "Luis",
+      personName: "Lewis",
       deviceName: null,
       movedAt: "2026-10-10T18:11:00.000Z",
     });
