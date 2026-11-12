@@ -155,7 +155,7 @@ async function checkInvoiceCorrectable<T>(
   const result = await read(appliedRemainingOf(refundable));
   if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
-  await backend.refuseWhileClockBehind(tx, reading);
+  await backend.refuseUntilRecordable(tx, reading);
   return result;
 }
 
