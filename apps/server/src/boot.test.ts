@@ -1217,13 +1217,13 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "production",
-          WAITRON_MIN_TICK_MS: "50",
-          WAITRON_MAX_TICK_MS: "200",
-          WAITRON_SKIP_RETRY_MS: "100",
           WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         },
         {},
-        { builtRelease: { bundled: true, version: null } },
+        {
+          timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 },
+          builtRelease: { bundled: true, version: null },
+        },
       ).then(
         async (started) => {
           await started.close();
@@ -1255,12 +1255,12 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "production",
-          WAITRON_MIN_TICK_MS: "50",
-          WAITRON_MAX_TICK_MS: "200",
-          WAITRON_SKIP_RETRY_MS: "100",
         },
         {},
-        { builtRelease: { bundled: true, version: "1.2.3" } },
+        {
+          timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 },
+          builtRelease: { bundled: true, version: "1.2.3" },
+        },
       );
       await awaitListening(httpPort());
     } finally {
