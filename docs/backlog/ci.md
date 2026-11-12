@@ -419,9 +419,10 @@ keeping every row, frame wait and assertion. The watcher’s 2026-11-12 03:30 cu
 removes the Menus structure matrix’s six save-only captures per row, retaining
 settleStructure, both animation frames, and every row, action and assertion.
 The printer pick-up-role matrix runs without its two save-only captures, keeping
-every interaction, flush, geometry and accessibility assertion. The larger axe
-cost remains to be diagnosed.
-The other product-editor, product-list and menu costs still need a demonstrated cause before another cut.
+every interaction, flush, geometry and accessibility assertion. The shared axe helper stays unchanged; reducing unused result detail did not justify a shared change.
+Dashboard packing uses refreshed complete-run file durations. Measure the current-head
+coverage-on whole jobs before claiming a speed gain or the four-minute goal; any
+remaining product-editor, product-list or menu cut still needs a demonstrated cause.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.
