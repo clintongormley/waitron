@@ -42,6 +42,7 @@ import "./screens/done-screen.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-theme-chooser.js";
 import "./problem-report.js";
+import "./about-sheet.js";
 import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import type {
   RecoveryRestoreCredentials,
@@ -700,6 +701,8 @@ export class SetupApp extends LitElement {
 
   /** Certificate setup precedes collecting credentials and business details. */
   @state() private screen: Screen = "connection";
+  /** The ⓘ that opened About Waitron, `null` while it is closed. */
+  @state() private aboutOpener: HTMLElement | null = null;
   /** Cleared while a fresh check is in flight, so an answer never outlives the check it answered. */
   @state() private connectionFailure?: ConnectionFailure;
   @state() private connectionChecking = false;
@@ -2274,6 +2277,10 @@ export class SetupApp extends LitElement {
     });
   }
 
+  #openAbout(event: Event): void {
+    this.aboutOpener = event.currentTarget as HTMLElement;
+  }
+
   override render(): TemplateResult {
     // Listening on the container lets each screen talk back without the shell knowing which is mounted.
     return html`${this.leaveConfirmation()}
@@ -2300,6 +2307,13 @@ export class SetupApp extends LitElement {
           <wt-waitron-lockup class="logo" data-test="setup-logo"></wt-waitron-lockup>
           <setup-problem-report></setup-problem-report>
           <div class="header-controls">
+            <wt-button
+              class="about"
+              variant="ghost"
+              aria-label=${t("shell.about.title")}
+              @click=${(e: Event) => this.#openAbout(e)}
+              ><span aria-hidden="true">ⓘ</span></wt-button
+            >
             <wt-theme-chooser
               data-test="theme-chooser"
               .active=${this.#theme.choice}
@@ -2312,7 +2326,12 @@ export class SetupApp extends LitElement {
           </div>
         </header>
         ${this.#renderScreen()}
-      </main>`;
+      </main>
+      <setup-about-sheet
+        .open=${this.aboutOpener !== null}
+        .opener=${this.aboutOpener}
+        @about-close=${() => (this.aboutOpener = null)}
+      ></setup-about-sheet>`;
   }
 
   #renderFirstOwner(): TemplateResult {

@@ -194,3 +194,36 @@ describe("the theme chooser in the card's header", () => {
     },
   );
 });
+
+describe("the About Waitron button in the card's header", () => {
+  const cases = (["admin", "venue", "cert", "connect", "restore-bucket", "mode"] as const).flatMap(
+    (screen) =>
+      (["en-GB", "es-ES"] as const).flatMap((locale) =>
+        ([390, 1280] as const).map((width) => ({ screen, locale, width })),
+      ),
+  );
+
+  it.each(cases)(
+    "covers nothing interactive on the $screen screen ($locale, $width wide)",
+    async ({ screen, locale, width }) => {
+      await page.viewport(width, VIEWPORT_HEIGHT);
+      const el = await mountAt(screen, [locale]);
+
+      const info = el
+        .shadowRoot!.querySelector(".header-controls > wt-button.about")!
+        .getBoundingClientRect();
+      expect(info.width).toBeGreaterThan(0);
+      const screenRoot = el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)!.shadowRoot!;
+      const covered = [
+        ...screenRoot.querySelectorAll<HTMLElement>(INTERACTIVE),
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-logo]")!,
+        el.shadowRoot!.querySelector<HTMLElement>("setup-problem-report")!,
+        themeChooserOf(el),
+        chooserOf(el),
+      ]
+        .filter((node) => overlaps(info, node.getBoundingClientRect()))
+        .map((node) => `${node.localName} "${node.textContent!.trim().slice(0, 40)}"`);
+      expect(covered).toEqual([]);
+    },
+  );
+});
