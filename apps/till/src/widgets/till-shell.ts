@@ -40,6 +40,7 @@ import { PHONE_WIDTH, chooserStyles } from "./chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
 import { aboutHeading, readLegalAbout } from "../legal-about.js";
+import type { LegalAbout } from "@waitron/shared";
 
 /** The screens a tab names: a handheld draws no Order tab. */
 type TabScreen = Exclude<BuiltInScreen, "order">;
@@ -83,8 +84,9 @@ function logoKey(state: VenueLogoState): string {
 
 /**
  * Presentational: `till-app` owns data, active screen state and the drill-in stack; the shell only emits
- * intent. While the `drill` slot has assigned nodes the body is `inert`, so nothing behind the overlay
- * is focusable or clickable.
+ * intent; the one read it makes itself is About Waitron's `/legal/about`, from the page's own server.
+ * While the `drill` slot has assigned nodes the body is `inert`, so nothing behind the overlay is
+ * focusable or clickable.
  */
 @customElement("till-shell")
 export class TillShell extends LitElement {
@@ -92,10 +94,11 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
-    // A kitchen screen never waits at the lock screen, so help and a guide left open go after two
+    // A kitchen screen never waits at the lock screen, so help and a sheet left open go after two
     // idle minutes.
     new HelpIdleController(this, {
       applies: () => this.#drawsCorner(),
+      held: () => this.guideHref !== "",
       onIdle: () => void this.#hideGuide(),
     });
     // A handheld refits with no step back, since its bar draws the logo only while no step is
@@ -108,25 +111,27 @@ export class TillShell extends LitElement {
     );
   }
 
-  /** The guide a help box's link asked for, shown over the till rather than in a new tab. */
+  /** The page the sheet shows over the till: a help box's guide link, or About Waitron's declaration. */
   @state() private guideHref = "";
-  @state() private guideHeading = "";
+  /** About Waitron's release, `null` until it is read or when the read fails; `undefined` for a
+   * help guide, which the sheet heads with its guide title. */
+  @state() private guideAbout?: LegalAbout | null;
   /** The badge, More or ⓘ that opened the sheet; its inner button takes focus back on Close. */
   #guideOpener?: HTMLElement;
   /** Counts each opening and closing, so a late version read heads only the sheet it was for. */
   #guideShowings = 0;
 
-  #showGuide(href: string, heading: string, opener: HTMLElement): void {
+  #showGuide(href: string, about: LegalAbout | null | undefined, opener: HTMLElement): void {
     this.#guideShowings++;
     this.#guideOpener = opener;
     this.guideHref = href;
-    this.guideHeading = heading;
+    this.guideAbout = about;
   }
 
   #hideGuide(): HTMLElement | undefined {
     this.#guideShowings++;
     this.guideHref = "";
-    this.guideHeading = "";
+    this.guideAbout = undefined;
     const opener = this.#guideOpener;
     this.#guideOpener = undefined;
     return opener;
@@ -134,7 +139,7 @@ export class TillShell extends LitElement {
 
   #onGuideOpen(event: CustomEvent<{ href: string }>): void {
     event.preventDefault();
-    this.#showGuide(event.detail.href, "", event.composedPath()[0] as HTMLElement);
+    this.#showGuide(event.detail.href, undefined, event.composedPath()[0] as HTMLElement);
   }
 
   #onGuideClose(): void {
@@ -142,10 +147,10 @@ export class TillShell extends LitElement {
   }
 
   #openAbout(opener: HTMLElement): void {
-    this.#showGuide("/legal/declaration", aboutHeading(null), opener);
+    this.#showGuide("/legal/declaration", null, opener);
     const showing = this.#guideShowings;
     void readLegalAbout().then((about) => {
-      if (this.#guideShowings === showing) this.guideHeading = aboutHeading(about);
+      if (this.#guideShowings === showing) this.guideAbout = about;
     });
   }
 
@@ -1515,7 +1520,7 @@ export class TillShell extends LitElement {
       </div>
       <till-guide-sheet
         .href=${this.guideHref}
-        .heading=${this.guideHeading}
+        .heading=${this.guideAbout === undefined ? "" : aboutHeading(this.guideAbout)}
         @guide-close=${() => this.#onGuideClose()}
       ></till-guide-sheet>
     `;

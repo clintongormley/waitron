@@ -1,6 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import type { LegalAbout } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { aboutHeading, readLegalAbout } from "../legal-about.js";
@@ -24,23 +25,24 @@ export class TillAboutButton extends LitElement {
   ];
 
   @state() private href = "";
-  @state() private heading = "";
+  /** The release, `null` until it is read or when the read fails. */
+  @state() private about: LegalAbout | null = null;
   /** Counts each opening and closing, so a late version read heads only the sheet it was for. */
   #showings = 0;
 
   #open(): void {
     const showing = ++this.#showings;
     this.href = "/legal/declaration";
-    this.heading = aboutHeading(null);
+    this.about = null;
     void readLegalAbout().then((about) => {
-      if (this.#showings === showing) this.heading = aboutHeading(about);
+      if (this.#showings === showing) this.about = about;
     });
   }
 
   #close(): void {
     this.#showings++;
     this.href = "";
-    this.heading = "";
+    this.about = null;
   }
 
   override render() {
@@ -53,7 +55,7 @@ export class TillAboutButton extends LitElement {
       >
       <till-guide-sheet
         .href=${this.href}
-        .heading=${this.heading}
+        .heading=${this.href === "" ? "" : aboutHeading(this.about)}
         @guide-close=${() => this.#close()}
       ></till-guide-sheet>`;
   }

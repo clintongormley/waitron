@@ -5,6 +5,7 @@ import { HelpIdleController, KITCHEN_HELP_IDLE_MS } from "./help-idle.js";
 
 class IdleHost extends LitElement {
   applies = true;
+  held = false;
   onIdle = vi.fn();
   controller?: HelpIdleController;
 
@@ -20,13 +21,16 @@ customElements.define("till-test-idle-host", IdleHost);
 
 const hosts: IdleHost[] = [];
 
-async function mounted(options: { applies?: boolean; withOnIdle?: boolean; idleMs?: number } = {}) {
+async function mounted(
+  options: { applies?: boolean; withOnIdle?: boolean; idleMs?: number; withHeld?: boolean } = {},
+) {
   const host = document.createElement("till-test-idle-host") as IdleHost;
   host.applies = options.applies ?? true;
   host.controller = new HelpIdleController(host, {
     applies: () => host.applies,
     ...(options.withOnIdle === false ? {} : { onIdle: host.onIdle }),
     ...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
+    ...(options.withHeld ? { held: () => host.held } : {}),
   });
   document.body.append(host);
   hosts.push(host);
@@ -222,5 +226,62 @@ describe("HelpIdleController", () => {
     setHelpMode(true);
     vi.advanceTimersByTime(119_999);
     expect(currentHelpMode()).toBe(true);
+  });
+
+  describe("held", () => {
+    async function hold(host: IdleHost, held: boolean): Promise<void> {
+      host.held = held;
+      host.requestUpdate();
+      await host.updateComplete;
+    }
+
+    it("while held, the two minutes run with help off, and help stays off", async () => {
+      const host = await mounted({ withHeld: true });
+      await hold(host, true);
+      vi.advanceTimersByTime(119_999);
+      expect(host.onIdle).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(host.onIdle).toHaveBeenCalledTimes(1);
+      expect(currentHelpMode()).toBe(false);
+    });
+
+    it("a touch while held starts the two minutes again", async () => {
+      const host = await mounted({ withHeld: true });
+      await hold(host, true);
+      vi.advanceTimersByTime(100_000);
+      touch(host.button);
+      vi.advanceTimersByTime(119_999);
+      expect(host.onIdle).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(host.onIdle).toHaveBeenCalledTimes(1);
+    });
+
+    it("let go with help off, the clock stops", async () => {
+      const host = await mounted({ withHeld: true });
+      await hold(host, true);
+      vi.advanceTimersByTime(60_000);
+      await hold(host, false);
+      vi.advanceTimersByTime(600_000);
+      expect(host.onIdle).not.toHaveBeenCalled();
+    });
+
+    it("where it does not apply, holding starts no clock", async () => {
+      const host = await mounted({ applies: false, withHeld: true });
+      await hold(host, true);
+      vi.advanceTimersByTime(600_000);
+      expect(host.onIdle).not.toHaveBeenCalled();
+    });
+
+    it("turning help off while held keeps the clock running", async () => {
+      const host = await mounted({ withHeld: true });
+      setHelpMode(true);
+      await hold(host, true);
+      vi.advanceTimersByTime(60_000);
+      setHelpMode(false);
+      vi.advanceTimersByTime(59_999);
+      expect(host.onIdle).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(host.onIdle).toHaveBeenCalledTimes(1);
+    });
   });
 });

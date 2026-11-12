@@ -134,3 +134,23 @@ it.each([
     expect(info.shadowRoot!.activeElement).toBe(inner(info));
   },
 );
+
+it.each([
+  ["once the read has answered", true],
+  ["while the read is still waiting", false],
+] as const)("an open heading follows a language change, %s", async (_name, answered) => {
+  const { el } = await mountWidget<TillAboutButton>("till-about-button", {});
+  const sheet = await open(el);
+  const release = answered ? RELEASED : null;
+  if (answered) {
+    answerAbout(true);
+    await vi.waitFor(() => expect(sheet.heading).toBe(aboutHeading(RELEASED)));
+  }
+  const english = aboutHeading(release);
+  setLocale("es-ES");
+  expect(aboutHeading(release)).not.toBe(english);
+  await el.updateComplete;
+  await sheet.updateComplete;
+  expect(sheet.heading).toBe(aboutHeading(release));
+  expect(heading(sheet)).toBe(aboutHeading(release));
+});

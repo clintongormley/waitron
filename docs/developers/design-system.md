@@ -2533,13 +2533,14 @@ search field's and the list headings' badges are whole
 keep their axe cases in a `*.help.a11y.test.ts` beside it), and `menu-browser.help.test.ts`.
 
 **Kitchen screens.** A kitchen screen never waits at the lock screen, so help there goes off by itself after two
-minutes without a touch, and a guide page or About Waitron left open in the shell closes with it.
+minutes without a touch, and a guide page or About Waitron left open in the shell closes with it;
+About Waitron opened with help off closes after the same two idle minutes, and help stays off.
 `HelpIdleController` (`apps/till/src/state/help-idle.ts`) runs the clock in `till-shell` while help
-is on and the shell is in kiosk mode or has the `kds` form factor and draws its corner (it is given
+is on or the shell's sheet is open (its `held` option), and the shell is in kiosk mode or has the `kds` form factor and draws its corner (it is given
 `loadLocales`, so the Help switch is there): turning help on starts it, a
 `pointerdown` or `keydown` anywhere inside the shell restarts it (heard in the capture phase, so a
-part that stops the event still counts; `till-guide-sheet` relays a same-origin guide page's own), turning help off or the shell
-leaving the page stops it, and a redraw never restarts it. On a till or a handheld help still goes
+part that stops the event still counts; `till-guide-sheet` relays a same-origin page's own), turning help off with no sheet open, closing the
+sheet with help off, or the shell leaving the page stops it, and a redraw never restarts it. On a till or a handheld help still goes
 off only at the lock screen. The station board (`till-station-queue`) marks its first card drawn,
 Columns, and the Changes to orders heading while there are changes; the station screen marks
 Merged / Stacked, drawn only on a kitchen screen with more than one station; the pass board
@@ -2555,7 +2556,7 @@ edge, so its badge hangs outward; the notices heading keeps half a badge's targe
 its words, help on or off, so its badge starts where the words end. `till-pass-board` draws its
 badges only while help is on (a `HelpModeController`), because a pass monitor is pinned to have no
 help badge, so no badge button, while help is off, and a help-mode badge's inner button is in the
-page even while the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`,
+page even while the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`, `till-shell.about.test.ts`,
 `station-queue.help.test.ts`, `till-station-screen.help.test.ts` and `till-pass-screen.help.test.ts`
 (the board and station-screen suites keep their axe cases in a `*.help.a11y.test.ts` beside each;
 the pass's are in `till-pass-screen.a11y.test.ts`).

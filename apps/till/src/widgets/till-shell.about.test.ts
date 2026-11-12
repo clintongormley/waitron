@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import { setHelpMode, type WtModal } from "@waitron/ui";
+import { currentHelpMode, setHelpMode, type WtModal } from "@waitron/ui";
 import type { LegalAbout } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
@@ -211,13 +211,34 @@ describe("About Waitron in the till's More", () => {
     expect(sheet.heading).toBe("");
     expect(modalOf(sheet).open).toBe(false);
   });
+  it.each([
+    ["once the read has answered", true],
+    ["while the read is still waiting", false],
+  ] as const)("an open heading follows a language change, %s", async (_name, answered) => {
+    const el = await mountShell(till, 1280);
+    const sheet = await openAboutFromMore(el);
+    const release = answered ? RELEASED : null;
+    if (answered) {
+      answerAbout();
+      await vi.waitFor(() => expect(sheet.heading).toBe(aboutHeading(RELEASED)));
+    }
+    const english = aboutHeading(release);
+    setLocale("es-ES");
+    expect(aboutHeading(release)).not.toBe(english);
+    await el.updateComplete;
+    await sheet.updateComplete;
+    expect(sheet.heading).toBe(aboutHeading(release));
+    expect(heading(sheet)).toBe(aboutHeading(release));
+  });
 });
 
+const corners = [
+  ["kiosk", { formFactor: "phone-portrait", kiosk: true, loadLocales }],
+  ["kitchen screen", { formFactor: "kds", loadLocales }],
+] as const;
+
 describe("About Waitron in the kiosk and kitchen corner", () => {
-  it.each([
-    ["kiosk", { formFactor: "phone-portrait", kiosk: true, loadLocales }],
-    ["kitchen screen", { formFactor: "kds", loadLocales }],
-  ] as const)(
+  it.each(corners)(
     "a %s's corner has the ⓘ, and two idle minutes close what it opened",
     async (_name, props) => {
       const el = await mountShell(props as Partial<TillShell>, 1280);
@@ -266,5 +287,72 @@ describe("About Waitron in the kiosk and kitchen corner", () => {
     await modalOf(sheet).updateComplete;
     await closeSheet(el, sheet);
     expect(info.shadowRoot!.activeElement).toBe(inner(info));
+  });
+});
+
+async function openFromCorner(props: Partial<TillShell>): Promise<[TillShell, TillGuideSheet]> {
+  const el = await mountShell(props, 1280);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await userEvent.click(
+    inner(el.shadowRoot!.querySelector<Lit>(".language-corner wt-button.about")!),
+  );
+  await el.updateComplete;
+  const sheet = sheetOf(el);
+  await sheet.updateComplete;
+  expect(sheet.href).toBe("/legal/declaration");
+  return [el, sheet];
+}
+
+describe("About Waitron from the corner with Help off", () => {
+  it.each(corners)(
+    "on a %s, two idle minutes close it and Help stays off",
+    async (_name, props) => {
+      const [el, sheet] = await openFromCorner(props as Partial<TillShell>);
+      vi.advanceTimersByTime(KITCHEN_HELP_IDLE_MS - 1);
+      await el.updateComplete;
+      expect(sheet.href).toBe("/legal/declaration");
+      vi.advanceTimersByTime(1);
+      await el.updateComplete;
+      await sheet.updateComplete;
+      expect(sheet.href).toBe("");
+      expect(sheet.heading).toBe("");
+      expect(currentHelpMode()).toBe(false);
+    },
+  );
+
+  it.each(corners)(
+    "on a %s, a touch relayed from the sheet starts the two minutes again",
+    async (_name, props) => {
+      const [el, sheet] = await openFromCorner(props as Partial<TillShell>);
+      vi.advanceTimersByTime(100_000);
+      sheet.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
+      vi.advanceTimersByTime(KITCHEN_HELP_IDLE_MS - 1);
+      await el.updateComplete;
+      expect(sheet.href).toBe("/legal/declaration");
+      sheet.dispatchEvent(new Event("keydown", { bubbles: true, composed: true }));
+      vi.advanceTimersByTime(KITCHEN_HELP_IDLE_MS - 1);
+      await el.updateComplete;
+      expect(sheet.href).toBe("/legal/declaration");
+      vi.advanceTimersByTime(1);
+      await el.updateComplete;
+      expect(sheet.href).toBe("");
+    },
+  );
+
+  it("closed by hand, the sheet leaves no clock running to close the next one early", async () => {
+    const [el, sheet] = await openFromCorner({ formFactor: "kds", loadLocales });
+    vi.advanceTimersByTime(100_000);
+    sheet.dispatchEvent(new CustomEvent("guide-close"));
+    await el.updateComplete;
+    expect(sheet.href).toBe("");
+    el.shadowRoot!.querySelector<Lit>(".language-corner wt-button.about")!.click();
+    await el.updateComplete;
+    expect(sheet.href).toBe("/legal/declaration");
+    vi.advanceTimersByTime(KITCHEN_HELP_IDLE_MS - 1);
+    await el.updateComplete;
+    expect(sheet.href).toBe("/legal/declaration");
+    vi.advanceTimersByTime(1);
+    await el.updateComplete;
+    expect(sheet.href).toBe("");
   });
 });
