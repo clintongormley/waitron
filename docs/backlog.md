@@ -1832,7 +1832,7 @@ Not in any track until the standalone primary is done.
   existing clock check, with one entered password/code retained until completion or leaving and a
   replacement code only if it expires. Its [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
   was cleared by the watcher on 12 November; real-box and Cloud qualification remain open. Reporting → Handover intervals shows committed emergency takeovers from signed
-  declarations, including unknown sale/order times and venue-zone dates. The [12a PR 1](superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md) warning beside sales/cash-up/category reports and VAT links report viewers to the handover dates; it does not identify which report periods are affected. Durable receiver completion needs its own later short plan; intervals stay unconfirmed even after a complete return.
+  declarations, including unknown sale/order times and venue-zone dates. The [12a PR 1](superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md) warning beside sales/cash-up/category reports and VAT links report viewers to the handover dates; it does not identify which report periods are affected. Durable receiver inventory completion has a [separate plan](superpowers/plans/2026-11-12-a1018-return-completion.md) and remains unbuilt; intervals stay unconfirmed even after a complete return.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
   pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read
