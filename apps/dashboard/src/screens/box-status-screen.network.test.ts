@@ -9,7 +9,7 @@ import "./box-status-screen.js";
 
 const observation = {
   wired: { connected: true, address: "192.0.2.8" },
-  wifi: { connectedSsidHex: "436166c3a92057692d4669", savedSsidHex: "426172" },
+  wifi: { connectedSsidHex: "4775657374e28099732057692d4669", savedSsidHex: "426172" },
   change: null,
   bootCopy: { state: "absent", reason: "cable-only", failure: null },
 };
@@ -37,7 +37,7 @@ it("shows wired and ordinary UTF-8 Wi-Fi names despite a failed health read", as
   setLocale("en");
   const el = await mount();
   await vi.waitFor(() => expect(card(el)?.textContent).toContain("192.0.2.8"));
-  expect(card(el)!.textContent).toContain("Café Wi-Fi");
+  expect(card(el)!.textContent).toContain("Guest’s Wi-Fi");
   expect(card(el)!.textContent).toContain("Bar");
   expect(card(el)!.querySelector("a")?.getAttribute("href")).toBe("/help/en/box-status#network");
 });
