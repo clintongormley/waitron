@@ -132,7 +132,7 @@ describe("createPairingMode", () => {
     const clock = atClock();
     const mode = createPairingMode({ now: clock.now, newId: ids() });
     const { holdId } = mode.open();
-    const claim = { holdId, sessionKey: "k", personName: "Ana" };
+    const claim = { holdId, sessionKey: "k", personName: "Anna" };
     mode.claim("r1", claim);
     expect(mode.claimOf("r1")).toEqual(claim);
     expect(mode.orphanedClaims()).toEqual([]);
@@ -147,7 +147,7 @@ describe("createPairingMode", () => {
     const clock = atClock();
     const mode = createPairingMode({ now: clock.now, newId: ids() });
     const { holdId } = mode.open();
-    mode.claim("r1", { holdId, sessionKey: "k", personName: "Ana" });
+    mode.claim("r1", { holdId, sessionKey: "k", personName: "Anna" });
     clock.advance(PAIRING_HOLD_MS);
     expect(mode.orphanedClaims()).toEqual(["r1"]);
   });
@@ -164,7 +164,7 @@ describe("createPairingMode", () => {
     const clock = atClock();
     const mode = createPairingMode({ now: clock.now, newId: ids() });
     const { holdId } = mode.open();
-    mode.claim("r1", { holdId, sessionKey: "k", personName: "Ana" });
+    mode.claim("r1", { holdId, sessionKey: "k", personName: "Anna" });
     clock.advance(-400 * 24 * 60 * 60 * 1000);
     expect(mode.isOpen()).toBe(false);
     expect(mode.hasHold(holdId)).toBe(false);

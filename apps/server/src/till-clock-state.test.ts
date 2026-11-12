@@ -41,8 +41,8 @@ beforeEach(async () => {
   const people = await suite.db
     .insert(persons)
     .values([
-      { displayName: "Ana", pinHash: "seed", role: "staff" },
-      { displayName: "Luis", pinHash: "seed", role: "manager" },
+      { displayName: "Anna", pinHash: "seed", role: "staff" },
+      { displayName: "Lewis", pinHash: "seed", role: "manager" },
     ])
     .returning({ id: persons.id });
   personId = people[0]!.id;
