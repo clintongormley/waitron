@@ -111,7 +111,7 @@ anything"). Before **Proceed**, **Edit these details** sends nothing and goes ba
 backup (the same file's "Edit these details sends nothing and asks to go back to choosing the
 backup", and `apps/setup/src/screens/recovery-copy.test.ts`, "Edit these details from the restore
 page goes back to choosing the backup and sends nothing"). Once the series are made the page shows
-"We've created these series"; the key and statements stay on the page, hidden, for the restore to
+"We've created these invoice series:"; the key and statements stay on the page, hidden, for the restore to
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and

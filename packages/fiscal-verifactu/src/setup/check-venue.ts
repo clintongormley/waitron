@@ -16,7 +16,7 @@ export const checkVenueStrings = {
     compareAgain: "Compare the clocks again",
     tryAgain: "Try again",
     failed: "Could not complete this step.",
-    chosen: "We've created these series",
+    chosen: "We've created these invoice series:",
     blocked: "The server time is earlier than this Waitron release.",
     rangeBlocked:
       "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
@@ -35,7 +35,7 @@ export const checkVenueStrings = {
     compareAgain: "Volver a comparar los relojes",
     tryAgain: "Volver a intentarlo",
     failed: "No se pudo completar este paso.",
-    chosen: "Hemos creado estas series",
+    chosen: "Hemos creado estas series de facturas:",
     blocked: "La hora del servidor es anterior a esta versión de Waitron.",
     rangeBlocked:
       "Waitron no puede crear series de facturas para esta fecha: está fuera del rango que cubren los códigos de serie.",

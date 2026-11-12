@@ -175,7 +175,7 @@ correctos.», y elige **Continuar**. La serie de facturas es el código al princ
 nuevas para que el servidor nunca repita los números del servidor anterior. Después de **Continuar**, la
 página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
 muestre; no hay ningún código de instalación que escribir. Después muestra **Hemos creado estas
-series** con las nuevas series de facturas. Si cambias la clave o desmarcas una casilla, la página se
+series de facturas:** con las nuevas series de facturas. Si cambias la clave o desmarcas una casilla, la página se
 detiene hasta que vuelvas a elegir **Continuar**. Antes de **Continuar**, **Editar estos datos**
 vuelve a la elección de la copia.
 

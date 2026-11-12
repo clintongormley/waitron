@@ -2117,8 +2117,8 @@ it("Compare the clocks again after Proceed carries on to the series once the clo
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
 });
 it.each([
-  ["en", "We've created these series"],
-  ["es", "Hemos creado estas series"],
+  ["en", "We've created these invoice series:"],
+  ["es", "Hemos creado estas series de facturas:"],
 ] as const)(
   "%s: the made series are listed by code under the invoice series heading, with no bare name",
   async (locale, heading) => {
@@ -2279,7 +2279,7 @@ it("after Proceed the second screen says which series were created, and the rest
   const { el } = await pressed();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=selected-hour] h4")?.textContent?.trim()).toBe(
-      "We've created these series",
+      "We've created these invoice series:",
     ),
   );
   expect(

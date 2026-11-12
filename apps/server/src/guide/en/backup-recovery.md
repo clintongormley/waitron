@@ -160,7 +160,7 @@ Enter the node recovery key, tick both statements and "These details are correct
 the code at the start of every invoice number; recovery creates new ones so the box never repeats
 the old box's numbers. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. It then shows
-**We've created these series** with the new invoice series. If you change the key or untick a box,
+**We've created these invoice series:** with the new invoice series. If you change the key or untick a box,
 the page stops until you choose **Proceed** again. Before **Proceed**, **Edit these details** goes
 back to choosing the backup.
 

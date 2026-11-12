@@ -1699,12 +1699,12 @@ it("an answer it cannot read while waiting for a second clock shows the failure"
 it.each([
   [
     "en",
-    "We've created these series",
+    "We've created these invoice series:",
     "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
   ],
   [
     "es",
-    "Hemos creado estas series",
+    "Hemos creado estas series de facturas:",
     "Waitron no puede crear series de facturas para esta fecha: está fuera del rango que cubren los códigos de serie.",
   ],
 ] as const)(
@@ -2468,8 +2468,8 @@ it.each(["en", "es"] as const)(
   },
 );
 it.each([
-  ["en", "We've created these series", "Download recovery pack"],
-  ["es", "Hemos creado estas series", "Descargar el paquete de recuperación"],
+  ["en", "We've created these invoice series:", "Download recovery pack"],
+  ["es", "Hemos creado estas series de facturas:", "Descargar el paquete de recuperación"],
 ] as const)(
   "%s: after Proceed the second screen lists the series, explains the pack and offers to download it",
   async (locale, heading, download) => {

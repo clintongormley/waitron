@@ -53,7 +53,7 @@ anything"). **Edit these details** sends nothing and asks the setup app for the 
 the attempt is claimed the app shows its page saying the details are frozen, with **Start again**
 (`apps/setup/src/setup-app-first-fiscal.test.ts`, "Edit these details on the series page asks for
 the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are
-made the page shows "We've created these series", explains the recovery pack and offers
+made the page shows "We've created these invoice series:", explains the recovery pack and offers
 **Download recovery pack**, which makes the pack and starts the download.
 
 After **Proceed** the page carries on by itself through its waits. It stops for a press only when it
