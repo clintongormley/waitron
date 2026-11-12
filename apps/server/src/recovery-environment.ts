@@ -1,6 +1,6 @@
 import type { Logger } from "./logger.js";
 import type { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { readRestoreAdminVerifiers } from "./restore-request.js";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
@@ -111,12 +111,9 @@ async function chooseEnvironmentMove(
   try {
     if ((await mismatch(roots, deps.baseEnv)) === undefined)
       throw new AppError("setup.not_ready", {});
-    const hashes = await readDatabase(roots, async (db) => {
-      const result = await db.execute<{ password_hash: string | null }>(
-        sql`select password_hash from persons where role = 'admin' and status = 'active'`,
-      );
-      return result.rows.flatMap((row) => (row.password_hash === null ? [] : [row.password_hash]));
-    }).catch(() => []);
+    const hashes = await readRestoreAdminVerifiers(join(roots.venueDir, VENUE_FILE)).catch(
+      () => [],
+    );
     await authorize(hashes);
     const result = await beginEnvironmentMove(roots);
     try {

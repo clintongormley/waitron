@@ -23,12 +23,10 @@ import {
 import {
   VENUE_FILE,
   NODE_FILE,
-  SIDE_FILE_SUFFIXES,
   TRADING_ENV_FILE,
   TRADING_ENV_REPLACED_SUFFIX,
 } from "@waitron/store";
-import { litestreamMetaDir } from "@waitron/stream/litestream.js";
-import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { wipeVenueDatabases } from "./db-wipe.js";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -645,13 +643,9 @@ export async function readRestoreAdminVerifiers(databasePath: string): Promise<r
 export async function clearRestorePlacement(
   deps: Pick<StagedRestoreDeps, "stateDir" | "venueDir">,
 ): Promise<void> {
-  await deleteBackupRoomNote(deps.stateDir);
-  for (const name of [VENUE_FILE, NODE_FILE]) {
-    const target = join(deps.venueDir, name);
-    for (const suffix of ["", ...SIDE_FILE_SUFFIXES, INCOMING_SUFFIX])
-      await rm(`${target}${suffix}`, { force: true });
-  }
-  await rm(litestreamMetaDir(join(deps.venueDir, VENUE_FILE)), { recursive: true, force: true });
+  await wipeVenueDatabases(deps.venueDir, deps.stateDir);
+  for (const name of [VENUE_FILE, NODE_FILE])
+    await rm(join(deps.venueDir, `${name}${INCOMING_SUFFIX}`), { force: true });
   await syncFolderHolding(join(deps.venueDir, VENUE_FILE));
   await restorePreviousIdentity(deps.stateDir);
 }
