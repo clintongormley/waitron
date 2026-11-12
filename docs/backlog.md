@@ -2012,7 +2012,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   five-second limit on A790's first run; retain phase timings before changing its fixture or deadline.
   [Receipt and next check](backlog/ci.md#store-bound-value-test-timeout).
 
-- **Add a control to each check that cannot fail** (bundle of 3, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
+- **Add a control to each check that cannot fail** (bundle of 4, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
 
 - **The logo retry checks' deadline and counting** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-the-logo-retry-checks-deadline-and-counting)
 

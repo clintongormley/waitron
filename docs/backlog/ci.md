@@ -571,7 +571,7 @@ A1424's live qualification was added on 7 November 2026.
 
 ## Bundle: Add a control to each check that cannot fail
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S. The first 3 are unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Three adjustment-portion refusal checks also pass with shortened ID lists.** Qualify the
   intended mixed-row, note and course refusals with accepting controls, without weakening the
@@ -583,6 +583,11 @@ A1424's live qualification was added on 7 November 2026.
   [Observed control](ci.md#spanish-separately-installed-certificate-test-checks-mapping-only).
 - **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
   [Detail](ci.md#appsserversrcbootmirrortesttss-adoption-pending-case-no-longer-has-a-negative-control).
+- **`apps/server/src/receipt-ticket.test.ts`'s line-length checks cannot fail** (found in A444's
+  review, 2026-11-12). `drawTextBand` (`packages/printing/src/raster-text.ts`) draws only the
+  characters that fit the paper, and the test reads the text back from the drawing, so
+  `line.length <= columnsFor(...)` holds even when a line was cut off. Assert each row's whole
+  text instead, as the F1 heading-and-date case in that file does.
 
 ## Bundle: The nightly mutation run: downloads, shard layout and repeated jobs
 

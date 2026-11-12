@@ -1,8 +1,9 @@
 # A444 — a full invoice carries one date: when it was created
 
-Status: approved by the watcher's 2026-11-12 11:10 instruction (lane L questions.md, "A444: the owner
-chose the creation date everywhere; replan as one small fix"); fresh Claude plan read 2026-11-12
-(0 critical, 3 important, 2 minor; all taken below).
+Status: the watcher's 2026-11-12 11:10 instruction (lane L questions.md, "A444: the owner chose the
+creation date everywhere; replan as one small fix") asked for a short plan, the usual Claude read,
+"then build"; fresh Claude plan read 2026-11-12 (0 critical, 3 important, 2 minor; all taken
+below).
 
 **Owner, 2026-11-12 (watcher window, 11:0x):** "I think we should use the creation date. That way our
 invoices and AEAT and our reports will all use the same dates and times." Asked whether lane L should
@@ -47,9 +48,9 @@ in the A4/email document and in the accountant export. AEAT already receives onl
    languages with its type.
 4. **Dead code the deletion exposes goes too.** A simplified receipt never carried an operation
    date (only a full invoice did), so `receipt-document.ts:246–249`'s simplified heading inside the
-   `else` branch never runs; delete it, and the `simplifiedInvoice` / `simplifiedInvoiceShort`
-   labels in `packages/country-es/src/receipt-labels.ts` and their type in
-   `packages/country/src/country.ts:82–83`, after grepping that nothing else reads them.
+   `else` branch never runs; delete it, and the `simplifiedInvoiceShort`
+   label in `packages/country-es/src/receipt-labels.ts` and its type in
+   `packages/country/src/country.ts:83`, after grepping that nothing else reads it.
    `receiptDay` stays (`box-alert-email.ts:97` uses it).
 5. **Tests.** Red first, through the real path: `recordSale` with a working order opened before
    midnight and issued after it, then the transaction-receipt answer has no `operationDate`
@@ -73,7 +74,7 @@ in the A4/email document and in the accountant export. AEAT already receives onl
    Spanish (:452) copies (the owner chose the creation date pending the adviser's answer), and dated
    pointers under the A231 note (:85, :89) and the 2026-10-27 research update (:13–23); Status lines on `docs/superpowers/specs/2026-10-27-a444-meal-completion-date-design.md`
    and `docs/superpowers/plans/2026-10-27-a444-meal-completion-date.md` pointing to the decision
-   (the 2026-11-12 revised plan exists only on the parked branches); delete A444's entry from
+   (the 2026-11-12 revised plan is on the `docs/a444-revised-plan` branch); delete A444's entry from
    `docs/backlog.md` and its detail in `docs/backlog/fiscal.md`, drop "A444" wherever the backlog still names it as open
    (`docs/backlog.md:281`; `docs/backlog/fiscal.md:122, 159, 270 ("the operation day is the owner's
    provisional service-start rule"), 287, 307, 1121, 1194`), and add the decision with the owner's words under fiscal's "Decisions and

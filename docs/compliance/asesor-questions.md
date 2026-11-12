@@ -26,7 +26,8 @@ changes neither S4 nor the earlier dated owner decision.
 
 **2026-11-12, A444:** The owner chose the creation date, pending the adviser's answer to S4: a
 full invoice shows only the date it was created, the same date AEAT receives, with no separate
-operation date. This replaces the meal-completion proposal above and A444 is closed.
+operation date. This replaces the meal-completion proposal above and A444 is closed. This note
+sends no enquiry.
 [Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
 
 **Owner, 2026-10-22 (what has been sent):** The [shortened list (2026-10-09)](#the-shortened-list-2026-10-09) went to the adviser about a week before this note, around 2026-10-15. That date is the owner's estimate, not a recorded one. Everything added after the shortened list, from [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31)(d) and [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) onward, is the next batch. The owner will send it later. No lane sends questions.

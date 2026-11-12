@@ -790,9 +790,6 @@ Hardware and inbox checks to complete in the owner session.
     numbers on 58 mm paper (`18/08/2026 11:21`).
   - **A full invoice**, on every paper, prints «FACTURA» and its number on one row and «Fecha» and
     the date in words on the next, never merged.
-  - _2026-11-12, A444:_ no receipt prints a separate operation date any more, so the captioned
-    simplified layout and «Fecha de operación» row are gone
-    ([decision](fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12)).
   - **A long invoice number on 58 mm paper (owner, 2026-10-19, left as built).** A number longer
     than 12 characters (a restored series such as `T-S123456/123`) puts the date on its own line
     under the number; an emergency-length number (31 characters) wraps inside itself with the date

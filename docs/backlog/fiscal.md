@@ -1081,7 +1081,8 @@ simplified, carries a separate operation date: paper, the till, the A4/email doc
 accountant export show the creation date, which is the only date AEAT receives. This also answers
 "Can a simplified invoice carry an operation date different from its issue date?", left open by
 A663 Part 2: no. The work built for the bill-close date stays parked on
-`feat/a444-fiscal-operation-day` and `feat/a444-close-day-capture`.
+`feat/a444-fiscal-operation-day` and `feat/a444-close-day-capture`, branches in lane L's local
+worktrees that were never pushed, and its plan on `docs/a444-revised-plan`.
 [Plan](../superpowers/plans/2026-11-12-a444-creation-date-only.md).
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
