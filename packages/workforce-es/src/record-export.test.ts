@@ -4,16 +4,19 @@ import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+import { persons, registerModulePermissions } from "@waitron/identity";
 import { jobOrigin, type RecordExportDocument, type RecordExportInput } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
+  WORKFORCE_PERMISSIONS,
   WorkforceBackend,
   closePayPeriod,
   employments,
   type TimeRecord,
 } from "@waitron/workforce";
 import * as api from "./index.js";
+
+registerModulePermissions(WORKFORCE_PERMISSIONS);
 
 const prepare = (
   api as typeof api & {

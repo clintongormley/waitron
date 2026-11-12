@@ -1,3 +1,4 @@
+import { roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin, type Origin } from "@waitron/shared";
@@ -31,12 +32,29 @@ export interface CorrectionDecisionInput {
   origin: Origin;
   reason?: string;
 }
-export const MANAGER_ROLES = new Set(["supervisor", "manager", "admin"]);
-export async function roleOf(tx: Transaction, personId: string): Promise<string | undefined> {
-  const { rows } = await tx.execute<{ role: string }>(
+export async function roleOf(
+  tx: Transaction,
+  personId: string,
+): Promise<PersonRoleValue | undefined> {
+  const { rows } = await tx.execute<{ role: PersonRoleValue }>(
     sql`select role from persons where id=${personId}`,
   );
   return rows[0]?.role;
+}
+export async function maySelfApproveAttendance(
+  tx: Transaction,
+  personId: string,
+): Promise<boolean> {
+  const role = await roleOf(tx, personId);
+  return (
+    role !== undefined &&
+    roleHasPermission(role, "workforce.self_approve") &&
+    roleHasPermission(role, "workforce.correct")
+  );
+}
+async function mayCorrectAttendance(tx: Transaction, personId: string): Promise<boolean> {
+  const role = await roleOf(tx, personId);
+  return role !== undefined && roleHasPermission(role, "workforce.correct");
 }
 export async function authorKindFor(
   tx: Transaction,
@@ -46,7 +64,7 @@ export async function authorKindFor(
   await assertPersonExists(tx, recorder, "recordedByPersonId");
   return recorder === subject
     ? "worker"
-    : MANAGER_ROLES.has((await roleOf(tx, recorder))!)
+    : (await mayCorrectAttendance(tx, recorder))
       ? "manager"
       : "worker";
 }
@@ -242,7 +260,7 @@ async function prepareRequest(
   const eventAt = recordInstant(input.at, input.offsetMinutes, "correction");
   const reason = reasonFor(input.reason);
   await assertPersonExists(tx, input.actorPersonId, "actorPersonId");
-  const isManager = MANAGER_ROLES.has((await roleOf(tx, input.actorPersonId))!);
+  const isManager = await mayCorrectAttendance(tx, input.actorPersonId);
   if (explicitProposal && !isManager)
     throw new AppError("correction.not_permitted", { personId: input.actorPersonId });
   let personId: string, correctsEntryId: string | null, missingEntryKind: ClockEntryKind | null;
@@ -342,15 +360,14 @@ async function prepareDecision(
   )
     throw new AppError("correction.not_pending", { correctionId: input.correctionId });
   const managerAction = action === "approve" || action === "decline";
-  const role = managerAction ? await roleOf(tx, input.actorPersonId) : undefined;
   const selfApproved =
     action === "approve" &&
-    role === "admin" &&
+    (await maySelfApproveAttendance(tx, input.actorPersonId)) &&
     input.actorPersonId === request.personId &&
     input.actorPersonId === request.recordedByPersonId;
   const permitted = managerAction
     ? request.extension?.direction === "worker_request" &&
-      MANAGER_ROLES.has(role!) &&
+      (await mayCorrectAttendance(tx, input.actorPersonId)) &&
       (input.actorPersonId !== request.recordedByPersonId || selfApproved)
     : request.extension?.direction === "manager_proposal" &&
       input.actorPersonId === request.personId &&

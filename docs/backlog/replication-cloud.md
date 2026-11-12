@@ -120,7 +120,7 @@ M2 alone handles AEAT after either takeover, preserving old originals' generatin
 returning M1 transfers missing fiscal originals and all received outcomes without AEAT contact.
 
 Cloud account, venue and operation authority must explicitly bind to the proposed
-venue `node.promote` actor. Organisation ownership, support, purchase, matching email or a
+venue `node.manage` actor. Organisation ownership, support, purchase, matching email or a
 provider-resource stop alone grants no venue declaration/activation permission; missing binding
 waits. Local-to-local has no Cloud binding dependency. The authentication bridge's format,
 expiry/revocation/replay checks remain unbuilt and require joint specification and qualification.
@@ -141,7 +141,7 @@ the emergency screen warns about business divergence; only fiscal records return
 recommended reconciliation list rather than imported payment totals; **M2 alone handles all
 AEAT communication after either takeover**, filing old originals it already holds or receives
 later in their original generating identities, and new sales in its own identity; and the
-recommended declarant holds `node.promote` with fresh passkey or password plus enrolled TOTP,
+recommended declarant holds `node.manage` with fresh passkey or password plus enrolled TOTP,
 never a till PIN alone. The other proposed defaults remain as presented; the M2 assignment is
 the owner's direction. Audit the actor, declaration, reason, machines, last copy, time and operation.
 
@@ -691,7 +691,7 @@ account". Left open by A1185.
 Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
 show the emergency link to an administrator when the box disappears. The locked copy Cloud
 restores after a valid emergency code offers only an administrator sign-in; a manager
-holding `node.promote`, signing in with password and authenticator code, makes A1018's
+holding `node.manage`, signing in with password and authenticator code, makes A1018's
 declaration that the box is off, and only if the Cloud owner agreed in advance.
 [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
 Design approved 2026-10-29: administrators by default, and other roles once A1002 lets a venue

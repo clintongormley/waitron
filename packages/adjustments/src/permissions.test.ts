@@ -5,7 +5,7 @@ import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
 describe("ADJUSTMENTS_PERMISSIONS", () => {
   it("grants adjustment.manage to manager and admin once registered, never to supervisor or staff", () => {
     expect(ADJUSTMENTS_PERMISSIONS).toEqual([
-      { permission: "adjustment.manage", grantedFrom: "manager" },
+      { permission: "adjustment.manage", defaultHolders: ["manager"] },
     ]);
     registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
     expect(roleHasPermission("manager", "adjustment.manage")).toBe(true);

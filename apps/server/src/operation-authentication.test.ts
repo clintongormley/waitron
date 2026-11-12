@@ -38,7 +38,7 @@ async function perform<T>(
   run: (authority: OperationAuthority) => Promise<T>,
   credentials: unknown = { personId: ADMIN, password: PASSWORD },
   scope = binding,
-  permission: "node.promote" | "mirror.create" = "node.promote",
+  permission: "node.manage" = "node.manage",
 ) {
   return withAuthenticatedOperation(
     { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
@@ -56,7 +56,7 @@ beforeEach(async () => {
 });
 
 describe("host-issued authority after fresh operator authentication", () => {
-  it.each(["node.promote", "mirror.create"] as const)(
+  it.each(["node.manage"] as const)(
     "authenticates and authorises %s before handing out scoped authority",
     async (permission) => {
       let retained: unknown;
@@ -121,7 +121,7 @@ describe("host-issued authority after fresh operator authentication", () => {
         ),
       ).rejects.toMatchObject({
         code: "authorization.not_permitted",
-        params: { permission: "node.promote" },
+        params: { permission: "node.manage" },
       });
       expect(entered).toBe(false);
       expect(await suite.db.select().from(managementSessions)).toEqual([]);

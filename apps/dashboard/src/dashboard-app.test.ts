@@ -3568,7 +3568,7 @@ describe("dashboard-app", () => {
     const admin = stubApi({
       getMe: vi
         .fn()
-        .mockResolvedValue({ ...meResponse, role: "admin", permissions: ["mirror.create"] }),
+        .mockResolvedValue({ ...meResponse, role: "admin", permissions: ["node.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),
     });
     const { el: adm } = await mountWidget<DashboardApp>("dashboard-app", { api: admin });
@@ -3580,7 +3580,7 @@ describe("dashboard-app", () => {
     expect(order.indexOf("nav-servers")).toBe(order.indexOf("nav-backup") + 1);
     adm.remove();
 
-    // A manager holds no `mirror.create`, so the item that would only answer "not permitted" is not
+    // A manager holds no `node.manage`, so the item that would only answer "not permitted" is not
     // offered; an admin whose permissions somehow lack it is not offered it either.
     const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
@@ -3600,7 +3600,7 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    ["admin", ["mirror.create"], "dashboard-servers-screen", "/manage/servers"],
+    ["admin", ["node.manage"], "dashboard-servers-screen", "/manage/servers"],
     ["manager", ["booking.manage"], "dashboard-overview-screen", "/manage/overview"],
   ])(
     "opens /manage/servers for the %s role only when the session holds the permission",
@@ -7538,7 +7538,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       const api = Object.assign(faceApi(), {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          permissions: ["system.manage", ...(admin ? ["person.admin"] : [])],
+          permissions: ["system.manage", ...(admin ? ["system.box_admin"] : [])],
         }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -7552,7 +7552,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   );
 
   it.each([false, true])(
-    "lets Box status restart the box only for an administrator (%s)",
+    "lets Box status restart the box for holders of system.manage (%s)",
     async (admin) => {
       history.replaceState(null, "", "/manage/box-status");
       const api = Object.assign(faceApi(), {
@@ -7567,7 +7567,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       });
       await flush(el);
       const face = el.shadowRoot!.querySelector("dashboard-box-status-screen")!;
-      expect(face.canRestart).toBe(admin);
+      expect(face.canRestart).toBe(true);
     },
   );
 

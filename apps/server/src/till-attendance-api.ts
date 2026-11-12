@@ -14,7 +14,6 @@ import {
   authorizeByPin,
   canUseDeviceProfile,
   listActivePersonsWithPermission,
-  persons,
   type Override,
   type PinAttempts,
 } from "@waitron/identity";
@@ -22,6 +21,7 @@ import { AppError, deviceOrigin } from "@waitron/shared";
 import { createErrorBoundary, readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import {
   executeAttendanceCommand,
+  maySelfApproveAttendance,
   readAttendanceCommand,
   readAttendanceDay,
   readAttendanceInbox,
@@ -212,16 +212,11 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
           if (item.direction !== "worker_request" || item.status !== "waiting-manager")
             throw new AppError("correction.not_pending", { correctionId: itemId });
           const eligible = await listActivePersonsWithPermission(tx, "workforce.correct");
-          const [operator] = await tx
-            .select({ role: persons.role })
-            .from(persons)
-            .where(eq(persons.id, session.personId));
+          const canSelfApprove = await maySelfApproveAttendance(tx, session.personId);
           return eligible.filter(
             (p) =>
               p.personId !== item.requestedByPersonId ||
-              (action === "approve" &&
-                p.personId === session.personId &&
-                operator!.role === "admin"),
+              (action === "approve" && p.personId === session.personId && canSelfApprove),
           );
         }),
       );

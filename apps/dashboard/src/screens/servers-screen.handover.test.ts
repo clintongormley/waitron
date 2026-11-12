@@ -125,7 +125,7 @@ it("recovers a lost start answer through the public status with the original ope
   expect(status).toHaveBeenCalledWith(start.mock.calls[0]![0].operationId);
   expect(start).toHaveBeenCalledTimes(1);
 });
-it("offers no handover action without node.promote", async () => {
+it("offers no handover action without node.manage", async () => {
   const { el } = await mount({ permission: false });
   expect(q(el, "wt-data-table").shadowRoot!.querySelector('[data-test="handover-new"]')).toBeNull();
 });

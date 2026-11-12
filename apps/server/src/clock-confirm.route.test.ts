@@ -408,13 +408,13 @@ it("lets only an administrator with a management session ask and confirm", async
     expect(asked.status).toBe(403);
     expect(asked.json).toEqual({
       code: "authorization.not_permitted",
-      params: { permission: "person.admin" },
+      params: { permission: "system.box_admin" },
     });
     const answered = await answerChallenge(stop, person.cookie, body);
     expect(answered.status).toBe(403);
     expect(answered.json).toEqual({
       code: "authorization.not_permitted",
-      params: { permission: "person.admin" },
+      params: { permission: "system.box_admin" },
     });
   }
 

@@ -113,7 +113,7 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     vi.clearAllMocks();
   });
 
-  it("an admin login with node.promote authorizes and promotes", async () => {
+  it("an admin login with node.manage authorizes and promotes", async () => {
     const { app, run } = appWith();
     const res = await post(app, {
       oldNodeNeutralised: true,
@@ -126,7 +126,7 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     expect(loginManagerById).toHaveBeenCalled();
     expect(authorizeManager).toHaveBeenCalledWith(expect.anything(), {
       managementSessionId: SESSION_ID,
-      permission: "node.promote",
+      permission: "node.manage",
     });
     expect(endManagementSession).toHaveBeenCalledWith(expect.anything(), SESSION_ID);
     expect(verifyBreakGlass).not.toHaveBeenCalled();
@@ -190,14 +190,17 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false });
   });
 
-  it("a non-admin credential (authorization.not_permitted) is refused 403 and never calls run", async () => {
+  it("a Manager is refused node.manage and never promotes", async () => {
     authorizeManager.mockRejectedValueOnce(
-      new AppError("authorization.not_permitted", { permission: "node.promote" }),
+      new AppError("authorization.not_permitted", { permission: "node.manage" }),
     );
     const { app, run } = appWith();
     const res = await post(app, { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
     expect(res.status).toBe(403);
-    expect((await res.json()).error.code).toBe("authorization.not_permitted");
+    expect((await res.json()).error).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "node.manage" },
+    });
     expect(run).not.toHaveBeenCalled();
   });
 

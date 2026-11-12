@@ -52,7 +52,7 @@ describe("listActivePersonsWithPermission", () => {
 });
 
 it("lists active managers for a registered module permission, excluding staff and suspended managers", async () => {
-  registerModulePermissions([{ permission: "test.active_manager", grantedFrom: "manager" }]);
+  registerModulePermissions([{ permission: "test.active_manager", defaultHolders: ["manager"] }]);
   await seedTenant(suite.db);
   const managerId = await seedPerson(suite.db, "Manager", "manager");
   await seedPerson(suite.db, "Staff", "staff");

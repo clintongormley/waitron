@@ -23,7 +23,7 @@ export type {
   RecoveryPackPageResult,
   ModuleRoutes,
   ModuleRouteContext,
-  ModuleRole,
+  ModuleDefaultHolder,
   ModulePermission,
   FloorAnnotator,
   TableRemoval,

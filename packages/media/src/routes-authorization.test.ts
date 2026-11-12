@@ -5,13 +5,7 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, type Database, mediaImageData, mediaImages } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  hashPin,
-  managementSessions,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { MEDIA_ROUTES } from "./routes.js";
 import { sampleImage } from "./testing/sample-image.js";
@@ -21,7 +15,6 @@ import { sampleImage } from "./testing/sample-image.js";
  * untouched. The accepting control in the other direction is inside `fixture` below, where the
  * manager's own upload must answer 201.
  */
-registerModulePermissions([{ permission: "catalogue.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });

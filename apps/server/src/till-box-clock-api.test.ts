@@ -614,7 +614,7 @@ it("refuses an override naming someone who is not an administrator", async () =>
       box,
       check(box, staffCookie, offsetMs, { override: { personId: managerId, pin: "1234" } }),
       403,
-      { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
     );
   expect(box.host.statusAsks).toBe(0);
 });
@@ -1488,3 +1488,21 @@ it.each([
     await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
   },
 );
+
+it("a Manager with no approver still confirms as a staff member during start-up", async () => {
+  const box = await stoppedBox(DAY);
+  const till = await enrolDeviceForTest(venue.db, venue.cfg, { name: "Manager clock", profileId });
+  const cookie = await signIn(till, managerId, "1234");
+  const answer = await check(box, cookie, DAY);
+  expect(answer.status).toBe(200);
+  expect(box.host.sets).toHaveLength(1);
+  expect(box.host.sets[0]!.requester).toEqual({
+    source: "staff",
+    person: managerId,
+    device: till.deviceId,
+  });
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    source: "staff",
+    person_id: managerId,
+  });
+});

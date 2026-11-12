@@ -512,7 +512,7 @@ describe("the waiting start", () => {
       ]);
     });
 
-    it("a person without `node.promote` is refused with the role sentence", async () => {
+    it("a person without `node.manage` is refused with the role sentence", async () => {
       await seedPersons(suite.db, {
         displayName: "Signed-in Manager",
         role: "manager",

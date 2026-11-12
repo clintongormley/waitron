@@ -85,7 +85,7 @@ describe("authenticated opaque restore seat", () => {
     });
     const result = await withAuthenticatedOperation(
       { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
-      { binding, permission: "node.promote" },
+      { binding, permission: "node.manage" },
       { personId: ADMIN, password: PASSWORD },
       async (authority) =>
         runRestoreHooks({

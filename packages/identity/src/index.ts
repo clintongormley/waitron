@@ -65,11 +65,20 @@ export {
 export { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
 export {
   PERMISSIONS,
+  CORE_PERMISSIONS,
+  declaredPermissions,
+  defaultPermissionsFor,
+  isDeclaredPermission,
   permissionsForRole,
   registerModulePermissions,
   roleHasPermission,
 } from "./permissions.js";
-export type { Permission } from "./permissions.js";
+export type {
+  Permission,
+  PermissionDeclaration,
+  BuiltInRoleKey,
+  DefaultHolder,
+} from "./permissions.js";
 export type { PersonRoleValue } from "@waitron/shared";
 export {
   readOwnProfile,

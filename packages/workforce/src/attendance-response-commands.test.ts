@@ -1,3 +1,4 @@
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
@@ -936,4 +937,37 @@ it("approval after a frozen 480-minute period adds a live 60-minute impact witho
   ]);
   expect(await suite.db.select().from(api.payPeriodClosures)).toEqual(stored);
   await intact();
+});
+
+it("self-approval follows workforce.self_approve, not the Admin name", async () => {
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
+  const value = await command(pair());
+  await send(value);
+  const decision = await command({ action: "approve", itemId: value.commandId });
+  await refused(() => send(decision), "correction.not_permitted");
+  registerModulePermissions([
+    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
+  ]);
+  registerModulePermissions([{ permission: "workforce.correct", defaultHolders: [] }]);
+  try {
+    await refused(() => send(decision), "correction.not_permitted");
+  } finally {
+    registerModulePermissions([
+      { permission: "workforce.correct", defaultHolders: ["supervisor", "manager"] },
+    ]);
+  }
+  try {
+    const result = await send(decision);
+    expect(
+      (await snapshot()).entries
+        .filter((e) => result.entryIds.includes(e.id))
+        .map((e) => [e.selfApproved, e.recordedByPersonId]),
+    ).toEqual([
+      [true, personId],
+      [true, personId],
+    ]);
+    await intact();
+  } finally {
+    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
+  }
 });

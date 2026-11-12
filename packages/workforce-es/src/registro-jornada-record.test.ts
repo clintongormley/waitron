@@ -1,3 +1,4 @@
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, expect, it, vi, afterEach } from "vitest";
 
@@ -8,11 +9,14 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
+  WORKFORCE_PERMISSIONS,
   WorkforceBackend,
   closePayPeriod,
   type TimeRecord,
 } from "@waitron/workforce";
 import { exportTimeRecord } from "./registro-jornada.js";
+registerModulePermissions(WORKFORCE_PERMISSIONS);
+
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });

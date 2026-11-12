@@ -941,8 +941,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   route and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule. **The box's
   internet time service keeps its clock; Waitron sets it only through the host service, from a till's
   time (a staff member's while the start waits for its time, or during a stop until the internet
-  confirms that start or during start-up; an administrator's at any time), an administrator's own
-  device, or AEAT only inside the clock-behind stop — never from devices alone and never while it
+  confirms that start or during start-up; a Box administration holder's at any time), a Box
+  administration holder's own device, or AEAT only inside the clock-behind stop — never from devices alone and never while it
   keeps time over the internet — and every step it verifies, or sees move the clock by over a second,
   is alerted and emailed** (owner, 2026-11-10: "we rely on NTP only, we don't bother about AEAT").
   Guards:

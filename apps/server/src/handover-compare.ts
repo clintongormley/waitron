@@ -394,7 +394,7 @@ async function authoriserRefused(
       if (
         row.status === "active" &&
         (personRole.enumValues as readonly string[]).includes(role) &&
-        roleHasPermission(role as PersonRoleValue, "node.promote")
+        roleHasPermission(role as PersonRoleValue, "node.manage")
       ) {
         return null;
       }

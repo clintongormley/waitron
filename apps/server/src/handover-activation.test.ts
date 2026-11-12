@@ -699,7 +699,7 @@ describe("when the operation is not ready", () => {
 });
 
 describe("signing in against the placed copy", () => {
-  it("a person without node.promote there is refused", async () => {
+  it("a person without node.manage there is refused", async () => {
     const store = await placedSpare();
     const { app } = spareOn(store);
     const { input } = await selectName(app);
@@ -763,7 +763,7 @@ describe("signing in against the placed copy", () => {
     });
     expect([plain.status, await plain.json()]).toEqual([
       403,
-      { error: { code: "authorization.not_permitted", params: { permission: "node.promote" } } },
+      { error: { code: "authorization.not_permitted", params: { permission: "node.manage" } } },
     ]);
     for (const headers of [
       { Origin: "https://elsewhere.test" },

@@ -196,9 +196,7 @@ export function createNodeOperationPreparation(options: {
       { db: options.db, credentialKeyRing: options.credentialKeyRing },
       {
         binding,
-        permission: ["reserve", "establish"].includes(binding.action)
-          ? "mirror.create"
-          : "node.promote",
+        permission: "node.manage",
       },
       heldCredentials,
       (authority) => authenticated(authority, (body) => withTransaction(options.db, body)),

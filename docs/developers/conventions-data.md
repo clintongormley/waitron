@@ -4466,7 +4466,7 @@ devices that disagree (owner FYI 6); a group of devices disagreeing is contrary;
 ready; otherwise none.
 
 **An administrator's own device** (owner FYI 7, 8, 13, 14). `POST /api/box/clock-challenge` and then
-`POST /api/box/clock-confirm` (`apps/server/src/box-health-api.ts`), both `person.admin`. Each is
+`POST /api/box/clock-confirm` (`apps/server/src/box-health-api.ts`), both `system.box_admin`. Each is
 refused `409 clock.confirm_refused` with `reason: "same_machine"` when the request comes from the box
 (`requestFromBox`), unless the server runs in development mode. A challenge belongs to the
 management session that asked for it, is taken once, and holds for 5 000 ms on the steady clock
@@ -4760,7 +4760,7 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 - the clock watch, from AEAT's time, by itself, when AEAT disagrees during the clock-behind stop
   (`setFromAuthority`, `apps/server/src/clock-watch.ts`); `clock.unusable` has no automatic set;
 - an administrator, from their own device, at any time during either stop:
-  `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `person.admin`), after the same
+  `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after the same
   challenge as slice 9's confirmation;
 - on a till, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while
@@ -6394,16 +6394,16 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   under it, readings stay within a minute of the latest record written since.** Sources: the box's
   time service; during the stop, AEAT and two agreeing devices at different addresses (not while the
   stop found at start-up lasts); while a start waits, two devices at different addresses within 5
-  seconds, signed in, which confirm and set nothing; an administrator's own device; or a till's time
-  confirmed on it by an administrator at any time or, by a staff member signed in on it, while the
+  seconds, signed in, which confirm and set nothing; a Box administration holder's own device; or a till's time
+  confirmed on it by a holder of Box administration at any time or, by a staff member signed in on it, while the
   start waits for its time, during a stop before the internet confirms that start, or during a stop
   found at start-up once AEAT has not answered or cannot be asked (owner, 2026-10-31; 2026-11-10); never a box device outside development. Guards:
   clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm route
   and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: only named routes/readings/requests; new money routes
   unguarded. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
-  until the internet confirms that start or during start-up; an administrator's at any time), an
-  administrator's own device, or AEAT only inside the clock-behind stop — never from devices alone
+  until the internet confirms that start or during start-up; a Box administration holder's at any time), a
+  Box administration holder's own device, or AEAT only inside the clock-behind stop — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
   clock by over a second, is alerted and emailed** (owner, 2026-11-10: "we rely on NTP only, we
   don't bother about AEAT"). Guards:

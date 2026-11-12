@@ -92,7 +92,7 @@ export async function withAuthenticatedOperation<T>(
   deps: { readonly db: Database; readonly credentialKeyRing: TotpKeyRing },
   operation: {
     readonly binding: OperationBinding;
-    readonly permission: "node.promote" | "mirror.create";
+    readonly permission: "node.manage";
   },
   credentials: unknown,
   run: (authority: OperationAuthority) => Promise<T>,

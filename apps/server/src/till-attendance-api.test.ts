@@ -961,3 +961,23 @@ it("delivers paid totals through every attendance read route", async () => {
     ).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
   }
 });
+
+it("lists a Manager holding workforce.self_approve as their own approver", async () => {
+  const itemId = await pending();
+  await setBuiltInRoleForTest(suite.db, venue.personId, "manager");
+  registerModulePermissions([
+    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
+  ]);
+  try {
+    const response = await request(`items/${itemId}/approvers?action=approve`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toContainEqual({ personId: venue.personId, displayName: "Ana" });
+    const declined = await request(`items/${itemId}/approvers?action=decline`);
+    expect(declined.status).toBe(200);
+    expect(
+      (await declined.json()).some((p: { personId: string }) => p.personId === venue.personId),
+    ).toBe(false);
+  } finally {
+    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
+  }
+});

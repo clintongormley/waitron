@@ -2,7 +2,7 @@ import { defineSettingsDocument } from "@waitron/db";
 import type { ModulePermission } from "@waitron/module";
 
 export const PAYMENTS_PERMISSIONS: readonly ModulePermission[] = [
-  { permission: "payments.providers.manage", grantedFrom: "admin" },
+  { permission: "payments.providers.manage", defaultHolders: [] },
 ];
 export const PAYMENTS_SETTINGS = defineSettingsDocument<{ providers: Record<string, boolean> }>({
   module: "payments",

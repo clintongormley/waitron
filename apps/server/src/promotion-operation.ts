@@ -79,7 +79,7 @@ export async function withPromotionModuleOperation<T>(
 
   return withAuthenticatedOperation(
     { db, credentialKeyRing },
-    { binding, permission: "node.promote" },
+    { binding, permission: "node.manage" },
     credentials,
     (authority) => scopedRun(authority, (consume) => withTransaction(db, consume)),
     afterSignIn,

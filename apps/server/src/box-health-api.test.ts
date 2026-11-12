@@ -238,6 +238,16 @@ describe.each([
     expect(deps.restart).toHaveBeenCalledTimes(1);
   });
 
+  it("a Manager may restart the box", async () => {
+    const { app, deps } = mount(db());
+    const outgoing = responseOutgoing();
+    const response = await restartRequest(app, outgoing, manager.cookie);
+    expect(response.status).toBe(202);
+    expect(deps.restart).not.toHaveBeenCalled();
+    outgoing.emit("finish");
+    expect(deps.restart).toHaveBeenCalledTimes(1);
+  });
+
   it("a restart that throws is logged and the answer still stands", async () => {
     const { app, deps, logs } = mount(db());
     deps.restart.mockImplementation(() => {
@@ -257,10 +267,10 @@ describe.each([
 
   it.each([
     [
-      "a manager, who is not an administrator",
-      () => manager.cookie,
+      "a supervisor without system.manage",
+      () => supervisor.cookie,
       403,
-      { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      { code: "authorization.not_permitted", params: { permission: "system.manage" } },
     ],
     ["a request with no session", () => undefined, 401, { code: "management_session.required" }],
   ])("refuses %s and does not restart", async (_who, cookie, status, error) => {

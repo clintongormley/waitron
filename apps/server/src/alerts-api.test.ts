@@ -260,7 +260,7 @@ describe("alert routes", () => {
     // fiscal. under an admin-only permission: the manager still sees payments and diagnostics.
     const registry = createAlertRegistry({
       claims: [
-        { prefix: "fiscal.", area: "fiscal", permission: "node.promote" },
+        { prefix: "fiscal.", area: "fiscal", permission: "node.manage" },
         { prefix: "payment.", area: "payments", permission: "hardware.manage" },
       ],
       sources: [],
@@ -271,7 +271,7 @@ describe("alert routes", () => {
     const refused = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "node.promote" } },
+      error: { code: "authorization.not_permitted", params: { permission: "node.manage" } },
     });
     expect(
       (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.admin)).status,

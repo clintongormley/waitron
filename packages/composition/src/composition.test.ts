@@ -93,7 +93,8 @@ it("declares merged permissions once and retains their default holders", () => {
 it("only workforce grants correction decisions to supervisors and higher", () => {
   const workforce = ALL_MODULES.find((m) => m.name === "workforce")!;
   expect(workforce.permissions).toEqual([
-    { permission: "workforce.correct", grantedFrom: "supervisor" },
+    { permission: "workforce.correct", defaultHolders: ["supervisor", "manager"] },
+    { permission: "workforce.self_approve", defaultHolders: [] },
   ]);
   expect(
     ALL_MODULES.filter((m) => m.permissions?.some((p) => p.permission === "workforce.correct")),

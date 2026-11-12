@@ -12,6 +12,7 @@ import {
 } from "@waitron/server-kit";
 import {
   executeAttendanceCommand,
+  maySelfApproveAttendance,
   readAttendanceCommand,
   readAttendanceDay,
   readAttendanceManagerQueue,
@@ -174,7 +175,10 @@ export function mountManagementAttendanceApi(
             .from(persons)
             .orderBy(asc(persons.displayName), asc(persons.id));
           return {
-            viewer: { personId: viewer.authorizedBy, canSelfApprove: viewer.role === "admin" },
+            viewer: {
+              personId: viewer.authorizedBy,
+              canSelfApprove: await maySelfApproveAttendance(tx, viewer.authorizedBy),
+            },
             people,
           };
         }),

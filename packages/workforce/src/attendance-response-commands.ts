@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
-import { persons } from "@waitron/identity";
+import { persons, roleHasPermission } from "@waitron/identity";
 import { AppError, type Origin } from "@waitron/shared";
 import type {
   AttendanceCommand,
@@ -13,7 +13,7 @@ import { attendanceQuestions } from "./schema/attendance.js";
 import { confirmAutomaticEntry } from "./automatic-entries.js";
 import {
   decideCorrectionGroup,
-  MANAGER_ROLES,
+  maySelfApproveAttendance,
   recordInstant,
   requestCorrectionGroup,
 } from "./corrections.js";
@@ -133,7 +133,7 @@ async function authority(
     payload.action === "approve" ||
     payload.action === "decline"
   ) {
-    if (!MANAGER_ROLES.has(actor!.role)) refuse();
+    if (!roleHasPermission(actor!.role, "workforce.correct")) refuse();
     if (payload.action === "propose") {
       if (requester !== authorizer || authorizer === personId) refuse();
     } else if (
@@ -141,7 +141,11 @@ async function authority(
       (requester !== personId && requester !== authorizer) ||
       item.direction !== "worker_request" ||
       (authorizer === item.requestedByPersonId &&
-        !(payload.action === "approve" && actor!.role === "admin" && authorizer === personId))
+        !(
+          payload.action === "approve" &&
+          (await maySelfApproveAttendance(tx, authorizer)) &&
+          authorizer === personId
+        ))
     )
       refuse();
   } else {

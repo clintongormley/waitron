@@ -11,7 +11,8 @@ import {
 } from "@waitron/db";
 import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { hashPin } from "@waitron/identity";
+import { WORKFORCE_PERMISSIONS } from "../src/permissions.js";
+import { hashPin, registerModulePermissions } from "@waitron/identity";
 import { appendToChain } from "../src/chain.js";
 import type { WorkforceEntryKind } from "../src/projection.js";
 import type { WorkTimeRuleset } from "../src/ruleset.js";
@@ -25,6 +26,8 @@ import type { ShiftSwapStatus } from "../src/schema/shift-swaps.js";
 import { shiftTemplates } from "../src/schema/shift-templates.js";
 import { shifts } from "../src/schema/shifts.js";
 import { seedVenue, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+
+registerModulePermissions(WORKFORCE_PERMISSIONS);
 
 /**
  * A `WorkTimeRuleset` at what a default `convenio_config` row resolves to

@@ -449,7 +449,7 @@ it("refuses a manager's correct password before collecting reservation evidence"
   expect(response.status).toBe(403);
   expect((await response.json()).error).toEqual({
     code: "authorization.not_permitted",
-    params: { permission: "mirror.create" },
+    params: { permission: "node.manage" },
   });
   expect(collected).toEqual([]);
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);

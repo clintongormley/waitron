@@ -108,18 +108,11 @@ export interface ModuleRoutes {
   mount(app: Hono, ctx: ModuleRouteContext, log: Logger): void;
 }
 
-/**
- * The person roles, lowest-to-highest on identity's ladder. Declared here because this contract
- * package must not depend on identity; `@waitron/composition`'s `role-parity.ts` fails to compile if
- * it diverges from identity's `PersonRoleValue`.
- */
-export type ModuleRole = "staff" | "supervisor" | "manager" | "admin";
-
-/**
- * A permission a module contributes, and the LOWEST role that holds it; identity grants it to that
- * role and every role above it, so the ladder stays identity's.
- */
-export type ModulePermission = { readonly permission: string; readonly grantedFrom: ModuleRole };
+export type ModuleDefaultHolder = "staff" | "supervisor" | "manager";
+export type ModulePermission = {
+  readonly permission: string;
+  readonly defaultHolders: readonly ModuleDefaultHolder[];
+};
 
 /**
  * Each floor table's next reservation time. The returned Map carries one entry PER input `tableId`
@@ -1554,7 +1547,6 @@ export interface WaitronModule {
    * separately, nothing stemmed. Read only by the root english-only suite. Omit the seat rather than
    * declare `[]`. */
   readonly vocabulary?: readonly string[];
-  /** Folded into identity's ladder once at boot (`registerModulePermissions`), before route auth. */
   readonly permissions?: readonly ModulePermission[];
   readonly duties?: unknown; // cronjobs
   readonly theme?: unknown;

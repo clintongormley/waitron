@@ -450,7 +450,7 @@ describe("a full start's stepdown, through its test seam", () => {
     );
   }, 60_000);
 
-  it("a full start refuses a handover from a person without node.promote", async () => {
+  it("a full start refuses a handover from a person without node.manage", async () => {
     const { port, venue } = await boot(suite, { restricted: false, tls: true });
     expect(await startHandoverSecurely(port, venue.managerCookie)).toEqual({
       status: 403,

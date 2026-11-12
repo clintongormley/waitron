@@ -170,7 +170,7 @@ export function mountTillBoxClockApi(
       .from(persons)
       .where(eq(persons.id, personId));
     return (
-      person !== undefined && roleHasPermission(person.role as PersonRoleValue, "person.admin")
+      person !== undefined && roleHasPermission(person.role as PersonRoleValue, "system.box_admin")
     );
   }
 
@@ -252,7 +252,7 @@ export function mountTillBoxClockApi(
       const attempts = deps.attemptsFor(session.deviceId);
       const toCheck = await overrideToCheck(
         db,
-        { sessionId: session.sessionId, permission: "person.admin" },
+        { sessionId: session.sessionId, permission: "system.box_admin" },
         override,
       );
       const authorizeAdmin = (tx: Transaction, checked: Parameters<typeof withCheck>[1]) =>
@@ -260,7 +260,7 @@ export function mountTillBoxClockApi(
           tx,
           {
             sessionId: session.sessionId,
-            permission: "person.admin",
+            permission: "system.box_admin",
             override: withCheck(override, checked),
           },
           attempts,
@@ -403,7 +403,7 @@ export function mountTillBoxClockApi(
 
       // A commented decision: the administrator is authorized in a transaction of its own, before
       // the set and outside the correction's turn, because the set holds no transaction while the
-      // host moves the clock. An administrator whose `person.admin` is withdrawn between the two is
+      // host moves the clock. An administrator whose `system.box_admin` is withdrawn between the two is
       // still served; the stop is judged again inside the set's own turn either way.
       const personId = asAdmin
         ? (

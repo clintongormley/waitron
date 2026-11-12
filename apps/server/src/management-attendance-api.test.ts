@@ -389,3 +389,19 @@ it("delivers paid totals through every attendance read route", async () => {
     );
   }
 });
+
+it("offers self-approval to a Manager holding workforce.self_approve", async () => {
+  await setBuiltInRoleForTest(suite.db, managerId, "manager");
+  registerModulePermissions([
+    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
+  ]);
+  try {
+    const response = await request("lookups");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      viewer: { personId: managerId, canSelfApprove: true },
+    });
+  } finally {
+    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
+  }
+});

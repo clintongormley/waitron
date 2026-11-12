@@ -10874,7 +10874,7 @@ describe("till-app", () => {
       recordSale: vi.fn().mockRejectedValue({
         code: "authorization.not_permitted",
         status: 403,
-        permission: "sale.discount",
+        permission: "sale.void",
       }),
     });
     const c = await toCounter(el);

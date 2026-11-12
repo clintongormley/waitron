@@ -6384,7 +6384,7 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   record was waiting to be tried again." stays until the next press. The Tax agency row's detail is
   "Last accepted {time}" or "None accepted yet", and nothing while `outbox` is `null`.
 - **Check with this device's time.** On the Clock row, a `secondary` "Check with this device's
-  time" button, drawn only for a person with `person.admin` and only while a stop holds that no
+  time" button, drawn only for a person with `system.box_admin` and only while a stop holds that no
   confirmation covers (the stop's proof is not `confirmed`) or a check of the clock waits. It opens a
   dialog headed with the same words that asks the box for its time and shows "The box's clock says
   {box}. This device says {device}.", to the second. When the two agree within a minute, counting
@@ -6441,7 +6441,7 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   bottom, and none disables the button. The bell's and the Alerts screen's Mark handled take no
   note.
 - **Restart the box.** At the end of the page, after everything under the rows, a section headed
-  "Restart the box", drawn whether or not the box's read has answered. For a person with `person.admin` it holds a `secondary` "Restart the
+  "Restart the box", drawn whether or not the box's read has answered. For a person with `system.manage` it holds a `secondary` "Restart the
   box" button with a help-mode "?" that opens the guide's `box-status#restart` section. It opens a
   dialog headed "Restart the box?" that says every till stops selling until Waitron has started
   again, with Stop (`secondary`) and Restart (`primary`, with `loading` while it is sent; both
@@ -6450,9 +6450,7 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   the box answers, the dialog closes and "The box is restarting. This page catches up by itself
   once it is back." is announced in the section; the first successful box read after one that
   failed since the answer, or any successful read 30 seconds or more after the answer, takes it
-  away. Anyone else sees "Only an administrator can
-  restart the box. Signing in as one signs you out here first." and a `secondary` "Sign in as an
-  administrator", which signs them out and returns to Box status after sign-in.
+  away.
 - **Errors.** A refused Free shows its message above the rows, and a refused Retry now under the
   Tax agency row's words; a failed box read shows the read error above the rows, never replacing a
   press's refusal.
