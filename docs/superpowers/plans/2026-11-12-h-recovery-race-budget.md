@@ -2,38 +2,48 @@
 
 Lane H's `CI-recovery-race` queue item asks to investigate CI 43228135671 attempt 2,
 reproduce its busy failure under load, and fix the lock or the four-start test's wait;
-no retry loop or skip. This plan is written by Codex; no owner approval of its design
-is claimed. The watcher clears the plan after Claude's read.
+no retry loop or skip. Codex wrote this plan. Claude reviewed its first version in
+`~/waitron-campaign-h/receipts/ci-recovery-race/plan-review.md` (148 seconds).
+The watcher clears it before building; no owner approval of this design is claimed.
 
-**Finish line:** the four child processes complete all 100 recovery updates during
-a slow run, and the unlocked control still demonstrates lost updates. The production
-lock keeps its existing 10-second refusal and nonblocking polling.
+**Finish line:** four children complete all 100 recovery updates in the controlled
+slow schedule, and the unlocked control still demonstrates lost updates. Production
+keeps its existing 10-second refusal and nonblocking polling.
 
-**Evidence:** the existing lock and race files pass all 11 cases. Temporarily holding
-each many-role read for 175 ms instead of 10 ms reproduces errcode 5 at
-`recovery-lock.ts:31` and the existing stderr assertion, in 15.38 seconds. The retained
-CI failure has the same error in a 15.527-second case, but has no individual lock timings;
-the diagnosis of that CI run's slow I/O remains an inference.
+**Cause and history:** `withRecoveryLock` polls every 25 ms; the child that releases
+it can immediately reacquire it for its next update before another child polls.
+One waiter can therefore wait behind many of the other children's 75 updates.
+A 175 ms hold per update reproduced errcode 5 at `recovery-lock.ts:31` and the
+existing stderr assertion, in 15.38 seconds. At that rate, 75 updates exceed 10 seconds.
+Thirty seconds gives this finite workload headroom, roughly 400 ms per competing
+update; this is a budget, not a guarantee about host scheduling. The real start does
+not run this test's loop of 25 counted failures. No production fairness change is asked.
+The CI case has the same error after 15.527 seconds but no per-lock timings, so its
+specific timing cause remains an inference. Retained history: 24 recent runs, attempt
+1/2 of the named run, and failed logs from 43215712748, 43208119577 and 43203880502;
+none of those older failed logs names this race. The baseline lock/race files pass
+all 11 cases. A traced run at ambient load 12.77 passed: each child acquired 25 times in a row;
+the longest wait was 1,557 ms. This observes unfair reacquisition under real ambient
+load, but only the injected 175 ms hold reproduced the timeout.
 
-**Reuse and scope:** reuse `withRecoveryLock`'s existing `waitMs` argument and the
-race fixture's child deadline. Change only `apps/server/src/recovery-race.test.ts`:
-pass a 30,000 ms wait through a child-local wrapper, both for whole updates and
-for the unlocked control's write-only lock; set its child deadline to 45,000 ms
-and each test's deadline to 120,000 ms. Keep every original behavioral assertion.
-No production changes, fairness queue, new helper file, retry, skip or new test case.
-Audit the backlog for this queue-only failure; remove an entry only if one exists.
+**Scope:** change only `apps/server/src/recovery-race.test.ts`. Give the `many` role
+an explicit 30,000 ms wait through a child-local wrapper around `withRecoveryLock`,
+covering whole updates and the unlocked control's write-only lock. Only that role's
+child deadline becomes 45,000 ms, and only the hundred-update test gets 120,000 ms.
+Keep every original assertion and the other cases' existing budgets. No production
+change, fairness queue, helper file, retry, skip, new test case or permanent slowdown.
+The backlog grep found no entry for this queue-only failure, so no backlog edit.
 
-**Build and checks:** run the original case with the 175 ms diagnostic hold and
-observe the expected busy failure (already retained). Apply the test budget and
-run the same slowed schedule; all 100 updates must survive and the unlocked
-control must still lose updates. Restore the 10 ms hold and run both complete
-`recovery-lock.test.ts` and `recovery-race.test.ts` files. Repeat the slowed schedule
-in a disposable checkout with the wait correction removed, then restore it:
-the existing stderr/count assertions must distinguish them. Do not commit the
-slowdown or add a test of the numeric constants. Existing lock tests own production
-timeout, invalid-file, release and event-loop behavior. The normal hook and current-head
-CI provide repository checks. Two run-it reviews apply because this tests concurrency.
+**Build and checks:** the expected failure with a 175 ms hold is retained. Apply
+the budget and run the identical slowed schedule: assert 100 counted updates and
+lost updates in the unlocked control. Restore the 10 ms hold and run both complete
+`recovery-lock.test.ts` and `recovery-race.test.ts` files. The first failing run already
+supplies the negative control; do not repeat it just for ceremony. The lock suite
+owns timeout, invalid-file, release and event-loop behavior. Write the requested two
+progress.log lines, cause and fix. The normal hook and current-head CI supply repository
+checks. RUNNER H8 and finish-branch require two run-it reviews for concurrency, including
+concurrency tests; they are required workflow, not extra product scope.
 
-**Expected diff:** production 0 lines; tests about 12 additions / 5 removals;
-this plan about 35 lines. If the slowed run needs more than these budgets, retain
-the result and return to diagnosis rather than increase the timeout again.
+**Expected diff:** production 0; tests about 20 additions / 6 removals; plan about
+45 lines, no generated files. If the slowed run exceeds these budgets, retain it and
+return to diagnosis rather than raise the timeout again.
