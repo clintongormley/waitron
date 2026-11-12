@@ -114,9 +114,10 @@ de declaración y activación, y el motivo indicado al tomar el relevo. Todas la
 horaria del local. **Desconocida** significa que la copia no tenía ventas ni pedidos fechados; no significa
 que no falte dinero.
 
-Abre esta lista por tu cuenta: el arqueo y los demás informes no muestran ningún aviso junto a sus
-cifras. Aquí, la integridad y los importes siguen sin confirmar incluso tras una devolución
-completa. Si vuelve el equipo anterior, comprueba el estado de la devolución en su página antes
+Ventas, el arqueo, los informes por categorías y el IVA muestran un aviso de traspaso con un enlace
+a esta lista. Comprueba las fechas del traspaso antes de decidir si las cifras cubren el período que
+necesitas. Pulsa **Actualizar el estado del traspaso** para comprobarlo de nuevo. Aquí, la integridad
+y los importes siguen sin confirmar incluso tras una devolución completa. Si vuelve el equipo anterior, comprueba el estado de la devolución en su página antes
 de decidir si lo restableces.
 
 ## Cuando un equipo espera a otro equipo {#waiting}

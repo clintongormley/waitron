@@ -270,3 +270,17 @@ describe("dashboard-vat-return-screen", () => {
     expect(field(el, "declarationType").options[3]!.label).toBe("I — Ingreso");
   });
 });
+
+it("places the handover status beside VAT controls with the report-view permission", async () => {
+  const api = stubApi();
+  const el = await mount(api);
+  const notice = el.shadowRoot!.querySelector<
+    HTMLElement & { api: DashboardApi; canViewReports: boolean }
+  >("dashboard-handover-report-warning");
+  expect(notice).not.toBeNull();
+  expect(notice!.api).toBe(api);
+  expect(notice!.canViewReports).toBe(false);
+  Object.assign(el, { canViewReports: true });
+  await el.updateComplete;
+  expect(notice!.canViewReports).toBe(true);
+});

@@ -3017,6 +3017,7 @@ export class DashboardApp extends LitElement {
         ></dashboard-my-schedule-screen>`;
       case "sales":
         return html`<dashboard-sales-screen
+          .canViewReports=${this.#sessionPermissions.includes("report.view")}
           .api=${this.api}
           .canExport=${this.#sessionPermissions.includes("report.export")}
         ></dashboard-sales-screen>`;
@@ -3025,7 +3026,10 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
         ></dashboard-handover-intervals-screen>`;
       case "vat-return":
-        return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
+        return html`<dashboard-vat-return-screen
+          .api=${this.api}
+          .canViewReports=${this.#sessionPermissions.includes("report.view")}
+        ></dashboard-vat-return-screen>`;
       case "orders":
         return html`<dashboard-orders-screen
           .api=${this.api}

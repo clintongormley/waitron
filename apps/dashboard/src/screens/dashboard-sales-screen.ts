@@ -1,3 +1,4 @@
+import "../widgets/handover-report-warning.js";
 import {
   renderDepartmentTakings,
   departmentTakingsStyles,
@@ -203,6 +204,7 @@ export class SalesScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) canViewReports = false;
   @property({ attribute: false }) canExport = false;
   readonly #queries = new DashboardQueries(
     this,
@@ -462,6 +464,10 @@ export class SalesScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("sales.title")}</h1>
+      <dashboard-handover-report-warning
+        .api=${this.api}
+        .canViewReports=${this.canViewReports}
+      ></dashboard-handover-report-warning>
       <div class="pickers">
         <wt-input
           type="date"

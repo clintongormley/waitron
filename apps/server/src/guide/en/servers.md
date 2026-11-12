@@ -102,8 +102,10 @@ and new main boxes, the latest sale or order time in the copy, the declaration a
 the reason entered at takeover. All times use the venue's time zone. **Unknown** means the copy
 held no dated sale or order; it does not mean that no money is missing.
 
-Open this list yourself: cash-up and the other reports show no warning beside their figures.
-Completeness and amounts stay unconfirmed in this list even after a complete return. If the old
+Sales, cash-up, category reports and VAT show a handover warning with a link to this list. Check
+the handover dates before deciding whether the figures cover the period you need. Use **Refresh
+handover status** to check again. Completeness and amounts stay unconfirmed here, even after a
+complete return. If the old
 box returns, check the return status on its page before deciding whether to reset it.
 
 ## When a box is waiting for another box {#waiting}
