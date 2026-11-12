@@ -65,7 +65,7 @@ describe("Catalan practice restaurant", () => {
       "17.50",
       "4.50",
     ]);
-    expect(added.map((p) => p.vatClass)).toEqual([...Array(7).fill("reduced"), "general"]);
+    expect(added.map((p) => p.vatClass)).toEqual(Array(8).fill("reduced"));
     for (const p of added) {
       expect(Object.keys(p.customerName).sort()).toEqual(["ca", "en", "es"]);
       expect(p.pricingUnit).toBe("each");
@@ -197,7 +197,7 @@ describe("Valencian practice restaurant", () => {
       "5.50",
       "4.00",
     ]);
-    expect(added.map((p) => p.vatClass)).toEqual([...Array(7).fill("reduced"), "general"]);
+    expect(added.map((p) => p.vatClass)).toEqual(Array(8).fill("reduced"));
     const section = set.menus.restaurant.categories.at(-1)!;
     expect(section.name["ca-ES-valencia"]).toBe("Especialitats de l'Horta");
     expect(section.station).toBe("kitchen");
@@ -330,7 +330,7 @@ describe("Galician practice restaurant", () => {
       "5.50",
       "4.50",
     ]);
-    expect(added.map((p) => p.vatClass)).toEqual([...Array(7).fill("reduced"), "general"]);
+    expect(added.map((p) => p.vatClass)).toEqual(Array(8).fill("reduced"));
     const section = set.menus.restaurant.categories.at(-1)!;
     expect(section.name["gl"]).toBe("Especialidades da casa");
     expect(section.station).toBe("kitchen");

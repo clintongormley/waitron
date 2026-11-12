@@ -1,5 +1,10 @@
 import type { CountryDemoData } from "@waitron/country";
-import { CASA_DELGADO_ES } from "./index.js";
+import {
+  CASA_DELGADO_CA,
+  CASA_DELGADO_ES,
+  CASA_DELGADO_GL,
+  CASA_DELGADO_VALENCIA,
+} from "./index.js";
 import { readFileSync, existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -301,5 +306,27 @@ describe("Casa Delgado customer text", () => {
       list.map((value) => `${language}:${value}`),
     );
     expect(allowed.filter((entry) => !values.includes(entry))).toEqual([]);
+  });
+});
+
+describe("Casa Delgado VAT classes", () => {
+  // LIVA art. 91.Uno.2.2.º: food and drink served to consume on the spot is taxed at the reduced rate.
+  it("puts no product sold to eat or drink in at the general rate, in every regional variant", () => {
+    const sets: CountryDemoData[] = [
+      CASA_DELGADO_ES,
+      CASA_DELGADO_CA,
+      CASA_DELGADO_VALENCIA,
+      CASA_DELGADO_GL,
+    ];
+    const general = sets.flatMap((set) =>
+      [set.menus.restaurant, set.menus.lunch].flatMap((menu) =>
+        menu.categories.flatMap((category) =>
+          category.products
+            .filter((product) => product.vatClass === "general")
+            .map((product) => `${set.id}: ${product.staffName?.en}`),
+        ),
+      ),
+    );
+    expect(general).toEqual([]);
   });
 });

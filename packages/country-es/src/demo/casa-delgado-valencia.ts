@@ -168,7 +168,7 @@ const WINE = {
   },
   image: "valencia-wine.png",
   unitPrice: "4.00",
-  vatClass: "general",
+  vatClass: "reduced",
   pricingUnit: "each",
 } as const;
 const REGIONAL_SECTION = {
