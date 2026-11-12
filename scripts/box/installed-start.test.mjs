@@ -262,6 +262,30 @@ describe("installed startup", () => {
     expect(result.status).toBe(code);
     expect(readFileSync(writes, "utf8")).toBe(calls);
   });
+  it("holds an interrupted upgrade before AppArmor or Compose starts", () => {
+    const box = mkdtempSync(join(scratch, "held-box-"));
+    mkdirSync(`${box}.upgrades/interrupted`, { recursive: true });
+    writeFileSync(`${box}.upgrades/interrupted/partial`, "retain for recovery");
+    const writes = join(box, "calls");
+    writeFileSync(writes, "");
+    const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
+      env: {
+        ...process.env,
+        PATH: `${scratch}:${process.env.PATH}`,
+        ROOT_UUID: "installed-root",
+        BASH_ENV: bashEnv,
+        B3_TEST_CWD: box,
+        WRITES: writes,
+        DOCKER_EXIT: "0",
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("start.refused:upgrade-pending");
+    expect(readFileSync(writes, "utf8")).toBe("");
+    expect(readFileSync(`${box}.upgrades/interrupted/partial`, "utf8")).toBe("retain for recovery");
+  });
   it("starts an already set-up server without waiting for the absent setup route", () => {
     const writes = join(scratch, "set-up-start-calls");
     writeFileSync(writes, "");
