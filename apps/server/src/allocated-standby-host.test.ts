@@ -493,7 +493,7 @@ it("a refused public adoption retains its independently signed reservation witho
       { beforeFirstWrite: async () => {} },
     ),
   ).rejects.toMatchObject({
-    code: "module.operation_invalid",
+    code: "mirror.standby_series_unsupported",
     params: { module: "fiscal-verifactu" },
   });
   expect(target).not.toBe("");
