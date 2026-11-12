@@ -1033,3 +1033,59 @@ it("offers an initially off slip only with a printer and forgets it on reopening
   await pick(el, "cash");
   expect(box()).toBeNull();
 });
+
+describe("till-presented-pay-dialog: Close as deferred payment", () => {
+  const deferred = (el: TillPresentedPayDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>("[data-pay-deferred]");
+
+  it("offers Close as deferred payment and emits presented-pay-deferred", async () => {
+    const el = await mount({ deferredOffered: { state: "offered" } });
+    const pressed = capture<unknown>(el, "presented-pay-deferred");
+
+    expect(text(deferred(el))).toBe("Cerrar como pago aplazado");
+    expect(deferred(el)!.disabled).toBe(false);
+    expect(root(el).querySelector("[data-pay-deferred-reason]")).toBeNull();
+    deferred(el)!.click();
+    await el.updateComplete;
+    expect(pressed).toEqual([{}]);
+  });
+
+  it("offers it with no cash or card method", async () => {
+    const el = await mount({
+      takesReaderCard: false,
+      takesCash: false,
+      takesManualCard: false,
+      deferredOffered: { state: "offered" },
+    });
+    const pressed = capture<unknown>(el, "presented-pay-deferred");
+    deferred(el)!.click();
+    await el.updateComplete;
+    expect(pressed).toEqual([{}]);
+  });
+
+  it("shows it switched off with the reason, and emits nothing", async () => {
+    const el = await mount({
+      deferredOffered: { state: "off", reason: "deferred_close.payment_unconfirmed" },
+    });
+    const pressed = capture<unknown>(el, "presented-pay-deferred");
+    const said = t("deferred_close.payment_unconfirmed");
+
+    expect(deferred(el)!.disabled).toBe(true);
+    expect(text(root(el).querySelector("[data-pay-deferred-reason]"))).toBe(said);
+    expect(deferred(el)!.getAttribute("aria-description")).toBe(said);
+    deferred(el)!.click();
+    await el.updateComplete;
+    expect(pressed).toEqual([]);
+  });
+
+  it("is not shown when hidden, and is switched off while a payment is being taken", async () => {
+    expect(deferred(await mount())).toBeNull();
+    expect(deferred(await mount({ deferredOffered: { state: "hidden" } }))).toBeNull();
+    const busy = await mount({ deferredOffered: { state: "offered" }, busy: true });
+    const pressed = capture<unknown>(busy, "presented-pay-deferred");
+    expect(deferred(busy)!.disabled).toBe(true);
+    deferred(busy)!.click();
+    await busy.updateComplete;
+    expect(pressed).toEqual([]);
+  });
+});

@@ -573,3 +573,47 @@ it("switches the button off when Current orders could not be read, saying so", a
   await openDialog(el, "rest");
   expect(deferredReason(el)).toBe(t("deferred_close.orders_unread"));
 });
+
+const presentedPay = (el: TillApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("till-presented-pay-dialog");
+
+async function openPresentedClosing(el: TillApp): Promise<void> {
+  await openTable(el);
+  tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+  const pay = presentedPay(el);
+  expect(pay).not.toBeNull();
+  pay!.shadowRoot!.querySelector<HTMLElement>("[data-pay-deferred]")!.click();
+  await flush(el);
+  expect(presentedPay(el)).toBeNull();
+  expect(closing(el)?.open).toBe(true);
+}
+
+it("closes a presented bill from its Pay window, sending the same close", async () => {
+  const api = deferredApi({
+    getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openPresentedClosing(el);
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledExactlyOnceWith(
+    "wo-4",
+    expect.objectContaining({ expectedRevision: 0, expectedTotal: "120.00", invoiceType: "F2" }),
+  );
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).not.toBeNull();
+});
+
+it("Cancel on a presented bill's close returns to the presented bill's Pay window", async () => {
+  const api = deferredApi({
+    getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openPresentedClosing(el);
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+  expect(closing(el)).toBeNull();
+  expect(presentedPay(el)).not.toBeNull();
+  expect(payDialog(el)).toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});

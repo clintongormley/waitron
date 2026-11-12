@@ -1350,6 +1350,8 @@ interface BillPaying extends PayingOrder {
  * when it opened or again after a refusal, from which every confirm builds a new request. */
 interface DeferredClosing {
   id: number;
+  /** The Pay window it was opened from, which Cancel returns to. */
+  from: "bill" | "presented";
   billId: string;
   visit: number;
   bill: PartyBill;
@@ -11238,6 +11240,7 @@ export class TillApp extends LitElement {
     this.deferredClosing = null;
     if (this.#hasLeftOrder(open.billId, open.visit)) return;
     if (open.reread) void this.#loadPartyBills();
+    else if (open.from === "presented") this.#openPresented(open.billId);
     else
       void this.#openBillPaying("whole", this.#payLinesOnScreen(), undefined, {
         surface: "table",
@@ -11253,10 +11256,25 @@ export class TillApp extends LitElement {
     if (open === null || bill === undefined || this.#deferredOfferFor(open).state !== "offered")
       return;
     this.#closeBillPaying();
+    this.#openDeferred("bill", bill, open.visit);
+  }
+
+  /** The presented bill's Pay window's Close as deferred payment, as {@link #onBillPayDeferred}. */
+  #onPresentedPayDeferred(): void {
+    const open = this.#presentedNow();
+    const bill = this.partyBills.find((row) => row.workingOrderId === open?.billId);
+    if (open === null || bill === undefined || this.#deferredOfferOn(bill).state !== "offered")
+      return;
+    this.#closePresented(open.id);
+    this.#openDeferred("presented", bill, open.visit);
+  }
+
+  #openDeferred(from: DeferredClosing["from"], bill: PartyBill, visit: number): void {
     this.deferredClosing = {
       id: ++this.#deferredCloses,
+      from,
       billId: bill.workingOrderId,
-      visit: open.visit,
+      visit,
       bill,
       busy: false,
       refusal: "",
@@ -11543,6 +11561,7 @@ export class TillApp extends LitElement {
       .busy=${this.submitting}
       .refusal=${open.refusal}
       .confirmation=${this.#unansweredWholePayments.get(open.billId)}
+      .deferredOffered=${this.#deferredOfferOn(bill)}
       @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
         void this.#onPayEquipmentPick(event.detail)}
       @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
@@ -11550,6 +11569,7 @@ export class TillApp extends LitElement {
       @pay-equipment-nfc=${() => this.#askNfc()}
       @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
       @presented-pay-resend=${() => void this.#onPresentedResend()}
+      @presented-pay-deferred=${() => this.#onPresentedPayDeferred()}
       @presented-pay-close=${() => this.#closePresented(open.id)}
     ></till-presented-pay-dialog>`;
   }
@@ -19448,6 +19468,10 @@ export class TillApp extends LitElement {
       void this.#openBillPaying("whole", this.#payLinesOnScreen());
       return;
     }
+    this.#openPresented(workingOrderId);
+  }
+
+  #openPresented(workingOrderId: string): void {
     this.presentedPaying = {
       id: ++this.#presentedPays,
       billId: workingOrderId,

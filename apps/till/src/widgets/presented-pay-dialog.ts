@@ -31,6 +31,7 @@ import { refusalText, type PayRefusal } from "./pay-refusal.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { DeviceEquipment } from "../api/client.js";
 import { typedAmount, typedMoney } from "../state/bill-payment.js";
+import type { DeferredOffer } from "../state/deferred-close.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -139,6 +140,18 @@ export class TillPresentedPayDialog extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
+
+      .deferred {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .deferred p {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
@@ -177,6 +190,7 @@ export class TillPresentedPayDialog extends LitElement {
   @property({ attribute: false }) refusal: PayRefusal | null = null;
   /** A whole payment sent with no answer: the sheet shows it, fixed, and only sends it again. */
   @property({ attribute: false }) confirmation: RetainedTender | undefined = undefined;
+  @property({ attribute: false }) deferredOffered: DeferredOffer = { state: "hidden" };
 
   @state() private method: Method = "card";
   @state() private tendered = "";
@@ -435,7 +449,7 @@ export class TillPresentedPayDialog extends LitElement {
         <dd>${this.#money(this.amount)}</dd>
       </dl>
       <p class="whole" data-presented-pay-whole>${t("presented_pay.whole_only")}</p>
-      ${this.#methodFields(errors)}
+      ${this.#deferred()} ${this.#methodFields(errors)}
       ${this.asksGuests ? this.#guests(errors.get("guests")) : nothing}
       ${this.#methods().length === 0 ? payNotice(this.notice) : nothing}`;
     const actions = html`<wt-form-actions slot="footer" .error=${this.#bottomMessage(errors)}
@@ -468,6 +482,26 @@ export class TillPresentedPayDialog extends LitElement {
       </wt-button>
     </wt-form-actions>`;
     return { body, actions };
+  }
+
+  #deferred(): TemplateResult | typeof nothing {
+    const offer = this.deferredOffered;
+    if (offer.state === "hidden") return nothing;
+    const reason = offer.state === "off" ? t(offer.reason) : null;
+    return html`<div class="deferred">
+      <wt-button
+        variant="secondary"
+        data-pay-deferred
+        aria-description=${reason ?? nothing}
+        .disabled=${this.busy || reason !== null}
+        @click=${() => {
+          if (this.open && !this.busy && reason === null) this.#emit("presented-pay-deferred");
+        }}
+      >
+        ${t("deferred_close.title")}
+      </wt-button>
+      ${reason === null ? nothing : html`<p data-pay-deferred-reason>${reason}</p>`}
+    </div>`;
   }
 
   /** The payment sent with no answer, as it was sent; nothing in it can change. */
