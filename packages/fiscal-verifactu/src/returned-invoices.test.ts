@@ -183,10 +183,12 @@ it("keeps cancellations separate and orders receipt time before chain position",
   const read = (offset: number, limit: number) =>
     withTransaction(receiver.db, (tx) => returnedInvoices(tx, { offset, limit }));
   const rows = await read(0, 3);
-  expect(rows.map((row) => [row.sequence, row.kind, row.taxable, row.gross, row.tax])).toEqual([
-    [2, "cancellation", null, null, null],
-    [3, "F2", "102.02", "123.45", "21.43"],
-    [1, "F2", "102.02", "123.45", "21.43"],
+  expect(
+    rows.map((row) => [row.sequence, row.kind, row.category, row.taxable, row.gross, row.tax]),
+  ).toEqual([
+    [2, "cancellation", "cancellation", null, null, null],
+    [3, "F2", "simplified", "102.02", "123.45", "21.43"],
+    [1, "F2", "simplified", "102.02", "123.45", "21.43"],
   ]);
   expect(rows.map((row) => row.recordId)).toEqual([expect.any(String), second, id]);
   expect(await read(1, 1)).toEqual([rows[1]]);

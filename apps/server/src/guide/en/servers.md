@@ -126,12 +126,14 @@ to resend. If the old box returns, check the return status on its page before de
 to reset it.
 
 Below the intervals, **Returned invoices** shows each newly received invoice with its source
-box, generating installation, original issue date and recorded amounts. You see a readable kind beside the original invoice
-type code. Corrections and
-cancellations appear separately. **Not recorded** means that amount is absent from the record.
-Use **Next** and **Previous** to read more; **Refresh invoices** returns to the first page.
-The list tracks newly received originals; records already held in a copy are not added. It does
-not identify duplicates or mark invoices in other reports.
+box, generating installation, original issue date and recorded amounts. Invoice rows show a
+readable kind beside their original type code. Corrections and cancellations appear separately.
+**Not recorded** means that amount is absent from the record. Use **Next** and **Previous** to
+read more; **Refresh invoices** returns to the first page.
+
+Tracking starts with this feature. Invoices already held in a copy are not added, so an empty
+list is not a complete history of earlier returns. The list does not identify duplicates or
+mark invoices in other reports.
 
 ## When a box is waiting for another box {#waiting}
 
