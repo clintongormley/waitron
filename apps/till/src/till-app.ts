@@ -20463,11 +20463,20 @@ export class TillApp extends LitElement {
     };
   }
 
+  #optionAvailabilityFor(zoneId: string) {
+    if (!this.operatorPersonId || !this.capabilities.includes("take-orders")) return undefined;
+    return async (listId: string, labelId: string, available: boolean) => {
+      await this.api.setOptionAvailability(zoneId, listId, labelId, available);
+      await this.#menuPoll.readNow(zoneId);
+    };
+  }
+
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
       // `embedded`: the shell owns the header.
       return html`<till-counter-screen
         .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}
+        .changeOptionAvailability=${this.#optionAvailabilityFor(this.counterServiceZoneId)}
         embedded
         .api=${this.api}
         .store=${this.#store}
@@ -20571,6 +20580,7 @@ export class TillApp extends LitElement {
     const draft = this.tableOpening ? null : this.#tableDraft();
     return html`<till-table-order-screen
       .changeAvailability=${this.#availabilityFor(this.#tableZoneId ?? "")}
+      .changeOptionAvailability=${this.#optionAvailabilityFor(this.#tableZoneId ?? "")}
       .api=${this.api}
       .zoneId=${this.#tableZoneId ?? ""}
       .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
@@ -20753,6 +20763,7 @@ export class TillApp extends LitElement {
         const draft = this.tableOpening ? null : this.#tableDraft();
         return html`<till-table-order-screen
           .changeAvailability=${this.#availabilityFor(this.#tableZoneId ?? "")}
+          .changeOptionAvailability=${this.#optionAvailabilityFor(this.#tableZoneId ?? "")}
           .api=${this.api}
           .zoneId=${this.#tableZoneId ?? ""}
           .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}

@@ -72,9 +72,14 @@ disponible. Te pide que añadas uno (o, para las opciones, que añadas o habilit
 deshabilites la lista.
 
 Una opción **Predeterminada** rellena una selección nueva una sola vez. Cambiarla no cambia un pedido
-que ya has empezado. Desactivar la opción predeterminada, o eliminarla, convierte en predeterminada a
-la primera opción disponible. Un elemento de extras está preseleccionado o no: no hay una cantidad
+que ya has empezado. Mientras tu opción preferida está agotada, se preselecciona la primera opción
+disponible. Vuelve a poner la preferida a la venta para usarla de nuevo. Si la eliminas, queda
+preseleccionada la primera opción disponible. Un elemento de extras está preseleccionado o no: no hay una cantidad
 inicial que fijar.
+
+Si quieres que la opción de sustitución sea la preferida mientras la anterior está agotada,
+primero vuelve a poner la preferida anterior a la venta y guarda. Después elige la nueva opción
+predeterminada y vuelve a guardar. Por último, marca la preferida anterior como agotada y guarda.
 
 ## Asigna una lista a un producto {#attach}
 

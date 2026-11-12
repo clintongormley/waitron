@@ -61,10 +61,20 @@ An **options list** must be answerable while it is active: an active list with n
 whose every label is withdrawn, is refused. `defaultLabelId` names a label of THIS list and is the
 one preselected when the list is asked. `parseOptionListInput` (`option-contract.ts`) keeps a named
 default that is available; where the body names none, or names an unavailable label, it returns the
-first available label as the default instead, and the write stores that. Of what the parser
+first available label as the default instead. Create stores that result. On update, if the stored
+default still belongs to the list and the submitted default is the effective fallback from either
+the stored or submitted labels, the stored preference is kept. Removing it or choosing another
+available label uses the parser's result. Of what the parser
 returns, only a list with no available label, which only an inactive list may be, has no default.
 Configuration transfer copies rows without going through that parser, so a stored null default is
 still possible, and a reader of `defaultLabelId` has to accept one.
+
+Till dish information keeps every published modifier row in `modifierAvailability`; the ordering
+picker uses the filtered `offeredModifiers`. Its availability routes admit published extras and
+choices, including unavailable rows, and apply the change across menus. The option setter changes
+only availability, keeps the preferred default and refuses the stored list's last choice even if
+the list was disabled after publication. Ordinary inactive-list management can still withdraw every choice.
+Older published versions may contain fewer choices; this is not a published-version guarantee.
 
 An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes
 it required, `maxPicks` null leaves it uncapped; the request check refuses a `maxPicks` of 0, but

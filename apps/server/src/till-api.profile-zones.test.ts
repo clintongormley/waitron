@@ -528,6 +528,13 @@ const saleLines = (x: Fixtures) => [{ menuItemId: x.deliItem, quantity: "1" }];
 
 const ROUTES: readonly Row[] = [
   [
+    "PUT option availability",
+    "PUT",
+    (x) => `/api/service-zones/${x.deliCounter}/options/${id}/labels/${id}/availability`,
+    () => ({ available: false }),
+    deliOrderZone,
+  ],
+  [
     "PUT availability",
     "PUT",
     (x) => `/api/service-zones/${x.deliCounter}/products/${id}/availability`,

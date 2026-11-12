@@ -358,6 +358,8 @@ export interface TillProduct {
    * as "offers nothing" rather than "not loaded yet".
    */
   offeredModifiers?: OfferedModifier[];
+  /** Includes sold-out rows so dish information can put them back on sale. */
+  modifierAvailability?: TillMenuOffer["offeredModifiers"];
   /** The PUBLISHED diet profile. Null/absent reads as an unreviewed dish (never vegan/vegetarian), so
    * the diet filters exclude it. */
   diet?: DietProfile | null;
@@ -492,6 +494,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
       };
     }),
     offeredModifiers: sellableModifiers(offer.offeredModifiers),
+    modifierAvailability: offer.offeredModifiers,
     dietaryDeclarations: offer.dietaryDeclarations,
     diet: offer.diet,
     dietOverride: offer.dietOverride,
@@ -2891,6 +2894,19 @@ export class TillApi {
   setAvailability(zoneId: string, productId: string, available: boolean): Promise<void> {
     return this.#request<void>(
       `/api/service-zones/${encodeURIComponent(zoneId)}/products/${encodeURIComponent(productId)}/availability`,
+      "PUT",
+      { available },
+    );
+  }
+
+  setOptionAvailability(
+    zoneId: string,
+    listId: string,
+    labelId: string,
+    available: boolean,
+  ): Promise<void> {
+    return this.#request<void>(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/options/${encodeURIComponent(listId)}/labels/${encodeURIComponent(labelId)}/availability`,
       "PUT",
       { available },
     );

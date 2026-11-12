@@ -1,4 +1,4 @@
-import type { ChangeAvailability } from "../widgets/product-info.js";
+import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { MenuState } from "../api/client.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
@@ -207,6 +207,7 @@ export class TillCounterScreen extends LitElement {
   ];
 
   @property({ attribute: false }) changeAvailability?: ChangeAvailability;
+  @property({ attribute: false }) changeOptionAvailability?: ChangeOptionAvailability;
   @property({ attribute: false }) api!: TillApi;
   /** Set before the element connects. */
   @property({ attribute: false }) store!: WorkingOrderStore;
@@ -338,6 +339,7 @@ export class TillCounterScreen extends LitElement {
     );
     return html`<till-menu-browser
       .changeAvailability=${this.changeAvailability}
+      .changeOptionAvailability=${this.changeOptionAvailability}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu.id, this.selectedFilters)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, EMPTY_MENU_FILTERS)}

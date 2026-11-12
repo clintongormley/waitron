@@ -484,10 +484,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   including how VAT is worked out on the one price (a question for the adviser).
   [Detail](backlog/catalogue.md#a1515-set-lunch-menus-the-menú-del-día)
 
-- **A1516. Sold-out controls for extras and option choices (delivery 2): go-live.** Add these to
-  the till's dish/variant availability controls, for anyone signed in on a take-orders device.
-  Keep manual restoration and stored defaults/last-choice refusals.
-  [Delivery plan](superpowers/plans/2026-11-11-a1516-till-sold-out.md).
+- **A1516 follow-ups: go-live.** Protect till-marked option choices from a stale dashboard save
+  (A1516-3), and let portions already on a bill be sent after sold-out (A1516-4).
   [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted

@@ -930,6 +930,9 @@ Product buttons open `till-product-info` on a held pointer press through the sha
 recogniser. Their `allergies` mark appears for declared allergens or diet labels and is part of the
 same button: clicking it selects the dish. The information window uses staff names, localized
 allergen kinds and diet labels, and the existing product selection path for Add to order.
+On a signed-in take-orders device, it also stops and restores dishes, sizes, published extras and
+option choices. Extras appear when the dish or an available variant takes whole-portion extras.
+Changes refresh the menu immediately; restoration stays manual.
 
 `nutritionIcons` draws allergen and positive diet icons beside counter and table-order line names.
 A null allergen declaration draws no icons. Counter lines keep their existing `asServedAllergens`
