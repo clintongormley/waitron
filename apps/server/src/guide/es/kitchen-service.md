@@ -94,7 +94,7 @@ envía el plato a preparar.
 Una estación con **Imprimir por adelantado los grupos en espera** activado al poner un grupo en
 espera recibe su ticket anticipado de espera; otra estación con el ajuste activado puede empezar a
 recibir más tarde lo que se imprime en espera del grupo: un ticket anticipado de espera cuando se le
-mueve un plato en espera, o una comanda HOLD CHANGED cuando se añade al grupo un plato en espera en
+mueve un plato en espera, o una comanda EN ESPERA CAMBIADO cuando se añade al grupo un plato en espera en
 ella. Una estación que tiene lo impreso en espera del grupo sigue recibiéndolo, junto con sus
 correcciones y la comanda marcada MARCHAR, aunque se desactive su ajuste. Cualquier otra estación
 imprime su parte sin marca cuando se envía el grupo a preparar, también si comparte impresora:
@@ -116,7 +116,7 @@ comprueba por separado los avisos pendientes de la estación. Dividir los platos
 conserva las copias con el trabajo de cocina resultante; no sustituye las instrucciones de la
 persona.
 
-La cabecera de una reimpresión indica cuándo se reimprimió (`*** REPRINT 15:20 ***`). La hora
+La cabecera de una reimpresión indica cuándo se reimprimió (`*** REIMPRESIÓN 15:20 ***`). La hora
 bajo el número de pedido sigue siendo la hora a la que se envió el primero de sus platos. Lee ambas
 horas en la zona horaria de tu establecimiento.
 
@@ -346,7 +346,7 @@ junto** y **Por estación**; allí la ayuda se desactiva cuando el terminal se b
 Un pedido de 2 × Hamburguesa, de una mesa o del mostrador, llega a cocina como dos platos, para que en una mesa el terminal pueda
 servir o mover cada uno por separado. La cocina los sigue viendo juntos: la comanda de la estación,
 la pantalla de cocina y el pase los muestran como una fila de 2 mientras son iguales, y la lista
-**También en este pedido** de la comanda y las comandas de corrección como **HOLD CHANGED** los
+**También en este pedido** de la comanda y las comandas de corrección como **EN ESPERA CAMBIADO** los
 imprimen una sola vez. Los platos quedan en filas distintas cuando cambian sus extras o sus notas, o
 cuando uno va más avanzado que el otro. En la pantalla de cocina, tocar una fila, o moverla a otra
 estación, lleva todos sus platos. Los platos al peso siempre se muestran e imprimen uno a uno, porque

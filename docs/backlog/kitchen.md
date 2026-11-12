@@ -226,25 +226,6 @@ listing only the burger.
 The owner chose to fix it (2026-11-06): a cook is not left with two tickets for one dish. It lands
 in A1308's orders and sales slice, which rebuilds the table anyway.
 
-## A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print
-
-**A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print (seen in A803 slice 4b's look; predates it).** On Spanish kitchen paper the fire ticket
-prints `*** MARCHAR ***` (decoded print jobs, not paper:
-`~/waitron-campaign-c/a803-4b-look/es-58mm-3-fire-copy-at-Mesa8-grill.txt` and the `es-80mm` twin)
-and the word table has `fire: "MARCHAR"` and `holdChanged: "EN ESPERA CAMBIADO"`
-(`apps/server/src/i18n/kitchen-ticket.ts:63`, `:66`). `EN ESPERA CAMBIADO` was read in that table and
-not seen on a decoded ticket. The guide `apps/server/src/guide/es/kitchen-service.md` still says:
-
-- `:71` «una comanda HOLD CHANGED cuando se añade al grupo un plato en espera»;
-- `:324` «las comandas de corrección como **HOLD CHANGED**».
-
-By `git blame`, `:71`, `:73` and `:75` come from `c072fd5db6` (2026-10-24) and `:324` from
-`78339a68ca` (2026-10-30). The question was put to the owner in lane C's ~15:50 entry of 2026-11-04 in
-`~/waitron-campaign-c/questions.md`: use the paper's words (recommended), or keep these because a
-guide's language and a kitchen's can differ. 4b's own new text names no marker, so the question stayed
-open for these older lines only. A1378 replaces the shared-printer explanation; the remaining
-older HOLD CHANGED words above still await that separate answer.
-
 ## Bundle: What a kitchen card draws
 
 3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

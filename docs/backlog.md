@@ -775,10 +775,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (2026-10-15; open, owner decision).**
   [Detail](backlog/kitchen.md#a692--editing-a-sent-dish-decides-its-extras-made-here-again-by-the-device-that-edits)
 
-- **A1328. Older lines of the Spanish kitchen guide name markers Spanish kitchen paper does not print (seen in A803 slice 4b's look; predates it).** They say «marcada FIRE» and «HOLD CHANGED»
-  where the paper prints `*** MARCHAR ***` and `EN ESPERA CAMBIADO`.
-  [Detail](backlog/kitchen.md#a1328-older-lines-of-the-spanish-kitchen-guide-name-markers-spanish-kitchen-paper-does-not-print)
-
 ### The till, devices and table service
 
 - **Service steps after a bill moves or tables combine** (bundle of 4, 2 important, size S). Holds A1330, A1331, A1333, A1005. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves-or-tables-combine)
