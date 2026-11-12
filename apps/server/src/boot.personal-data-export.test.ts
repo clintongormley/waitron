@@ -3,10 +3,10 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { stampDeployment, withTransaction } from "@waitron/db";
+import { personStaffRoles, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startManagementSession } from "@waitron/identity";
@@ -37,6 +37,7 @@ describe("the personal-data downloads in a real start", () => {
   it("answers a signed-in person with their own profile, gives an administrator another person's, and refuses a manager, in primary mode", async () => {
     beforeServerStarts();
     const venue = await createClockVenue(suite.db, () => new Date(), modules);
+    await suite.db.delete(personStaffRoles).where(eq(personStaffRoles.personId, venue.personId));
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: venue.personId }),
     );
