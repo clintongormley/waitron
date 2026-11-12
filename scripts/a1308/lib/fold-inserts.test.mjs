@@ -51,6 +51,23 @@ describe("foldInserts", () => {
     expect(foldInserts(out.text, path, [rule])).toEqual(out);
   });
 
+  it("keeps side-effect, default and namespace imports while folding a fixture", () => {
+    const source =
+      'import "./setup.js";\nimport setup from "./default.js";\nimport * as helpers from "./helpers.js";\n';
+    const result = foldInserts(
+      source + "await db.insert(policies).values({ zoneId: Z, enabled: true });",
+      path,
+      [rule],
+    );
+    expect(result).toEqual({
+      text:
+        imports +
+        source +
+        "await db.update(floorZones).set({ active: true }).where(eq(floorZones.id, Z));",
+      reports: [],
+    });
+  });
+
   it("adds a constant and uses the named parent key", () => {
     const out = foldInserts(imports + "db.insert(policies).values({ zoneId });", path, [
       { ...rule, parentKey: "key", constants: { active: "false" } },

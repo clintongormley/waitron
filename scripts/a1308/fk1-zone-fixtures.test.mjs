@@ -11,8 +11,8 @@ it.each([
   ],
   [
     "sale",
-    "db.insert(zoneSalePolicies).values({ zoneId: Z, orderStart: 'counter', paidWhen: 'prepay', collectionNumber: true, receiptPrintMode: 'always' });",
-    "db.update(floorZones).set({ orderStart: 'counter', paidWhen: 'prepay', collectionNumber: true, receiptPrintMode: 'always' }).where(eq(floorZones.id, Z));",
+    "db.insert(zoneSalePolicies).values({ zoneId: Z, orderStart: 'counter', paidWhen: 'prepay', collectionNumber: 'numbered' });",
+    "db.update(floorZones).set({ orderStart: 'counter', paidWhen: 'prepay', collectionNumber: 'numbered' }).where(eq(floorZones.id, Z));",
   ],
   ["empty sale", "await db.insert(zoneSalePolicies).values({ zoneId: Z });", ""],
   [
@@ -22,8 +22,8 @@ it.each([
   ],
   [
     "raw sale",
-    "tx.execute(sql`insert into zone_sale_policies (zone_id, order_start, paid_when, collection_number, receipt_print_mode) values (${Z}, 'counter', 'prepay', 1, 'always')`);",
-    "tx.execute(sql`update floor_zones set order_start = 'counter', paid_when = 'prepay', collection_number = 1, receipt_print_mode = 'always' where id = ${Z}`);",
+    "tx.execute(sql`insert into zone_sale_policies (zone_id, order_start, paid_when, collection_number) values (${Z}, 'counter', 'prepay', 'numbered')`);",
+    "tx.execute(sql`update floor_zones set order_start = 'counter', paid_when = 'prepay', collection_number = 'numbered' where id = ${Z}`);",
   ],
   [
     "raw empty sale",

@@ -16,7 +16,8 @@ export function addNamedImport(text, moduleName, name) {
     imports.some(
       (node) =>
         node.importClause?.name?.text === name ||
-        (ts.isNamedImports(node.importClause?.namedBindings) &&
+        (node.importClause?.namedBindings &&
+          ts.isNamedImports(node.importClause.namedBindings) &&
           node.importClause.namedBindings.elements.some((item) => item.name.text === name)),
     )
   )
@@ -25,7 +26,8 @@ export function addNamedImport(text, moduleName, name) {
     (node) =>
       node.moduleSpecifier.text === moduleName &&
       !node.importClause?.isTypeOnly &&
-      ts.isNamedImports(node.importClause?.namedBindings),
+      node.importClause?.namedBindings &&
+      ts.isNamedImports(node.importClause.namedBindings),
   );
   if (statement) {
     const bindings = statement.importClause.namedBindings;
@@ -133,7 +135,7 @@ export function foldInserts(source, path, rules) {
   const typeImports = tree.statements
     .filter(ts.isImportDeclaration)
     .flatMap(({ importClause: clause }) =>
-      ts.isNamedImports(clause?.namedBindings)
+      clause?.namedBindings && ts.isNamedImports(clause.namedBindings)
         ? clause.namedBindings.elements
             .filter((item) => clause.isTypeOnly || item.isTypeOnly)
             .map((item) => item.name.text)

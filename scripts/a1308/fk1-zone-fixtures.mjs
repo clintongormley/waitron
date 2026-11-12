@@ -31,7 +31,6 @@ export const rules = [
       orderStart: "orderStart",
       paidWhen: "paidWhen",
       collectionNumber: "collectionNumber",
-      receiptPrintMode: "receiptPrintMode",
     },
     raw: {
       childTable: "zone_sale_policies",
@@ -41,7 +40,6 @@ export const rules = [
         order_start: "order_start",
         paid_when: "paid_when",
         collection_number: "collection_number",
-        receipt_print_mode: "receipt_print_mode",
       },
     },
   },

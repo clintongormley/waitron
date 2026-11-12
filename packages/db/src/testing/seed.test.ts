@@ -22,7 +22,11 @@ import {
   seedTenant,
   seedVenue,
   seedWorkingOrder,
+  seedZone,
 } from "./seed.js";
+
+import { departments } from "../schema/venue-service/service.js";
+import { floorZones } from "../schema/floor-zones.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -333,4 +337,68 @@ it("seeds multiple device profiles inside the caller's transaction", async () =>
     ["Kitchen", "kds", ["prepare-orders"]],
   ]);
   expect(await suite.db.select().from(deviceProfiles)).toHaveLength(2);
+});
+
+describe("seedZone", () => {
+  it("uses the first active department by creation time", async () => {
+    const rows = await suite.db
+      .insert(departments)
+      .values([
+        {
+          name: "Deleted",
+          tradingName: "Deleted",
+          active: false,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        { name: "First", tradingName: "First", createdAt: "2026-02-01T00:00:00.000Z" },
+        { name: "Last", tradingName: "Last", createdAt: "2026-03-01T00:00:00.000Z" },
+      ])
+      .returning({ id: departments.id });
+    const zone = await seedZone(suite.db, { name: "Terrace", displayOrder: 4 });
+    expect(zone.departmentId).toBe(rows[1]!.id);
+    expect(
+      await suite.db
+        .select({
+          name: floorZones.name,
+          displayOrder: floorZones.displayOrder,
+          departmentId: floorZones.departmentId,
+        })
+        .from(floorZones),
+    ).toEqual([{ name: "Terrace", displayOrder: 4, departmentId: rows[1]!.id }]);
+  });
+  it("creates one department when none is active and reuses it", async () => {
+    await suite.db
+      .insert(departments)
+      .values({ name: "Retired", tradingName: "Retired", active: false, isDefault: true });
+    const first = await seedZone(suite.db, { name: "Terrace" });
+    const second = await seedZone(suite.db, { name: "Counter", isCounterDefault: true });
+    expect(second.departmentId).toBe(first.departmentId);
+    expect(
+      await suite.db
+        .select({ name: departments.name, isDefault: departments.isDefault })
+        .from(departments)
+        .where(eq(departments.active, true)),
+    ).toEqual([{ name: "Test floor department", isDefault: false }]);
+    expect(
+      await suite.db
+        .select({ counter: floorZones.isCounterDefault })
+        .from(floorZones)
+        .where(eq(floorZones.id, second.id)),
+    ).toEqual([{ counter: true }]);
+  });
+  it("uses the department supplied and defaults the new department once", async () => {
+    const first = await seedZone(suite.db, { name: "Bar" });
+    const [other] = await suite.db
+      .insert(departments)
+      .values({ name: "Kitchen", tradingName: "Kitchen" })
+      .returning({ id: departments.id });
+    const second = await seedZone(suite.db, { name: "Pass", departmentId: other!.id });
+    expect(second.departmentId).toBe(other!.id);
+    expect(
+      await suite.db
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.isDefault, true)),
+    ).toEqual([{ id: first.departmentId }]);
+  });
 });

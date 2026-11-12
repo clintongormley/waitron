@@ -623,9 +623,19 @@ CREATE TABLE `floor_zones` (
 	`name` text NOT NULL,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
-	`created_at` text NOT NULL
+	`created_at` text NOT NULL,
+	`department_id` text NOT NULL,
+	`is_counter_default` integer DEFAULT false NOT NULL,
+	`order_start` text,
+	`paid_when` text,
+	`collection_number` text,
+	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "floor_zones_order_start_ck" CHECK("floor_zones"."order_start" in ('table', 'counter')),
+	CONSTRAINT "floor_zones_paid_when_ck" CHECK("floor_zones"."paid_when" in ('prepay', 'ticket_then_pay')),
+	CONSTRAINT "floor_zones_collection_number_ck" CHECK("floor_zones"."collection_number" in ('none', 'numbered'))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `floor_zones_one_counter_default_key` ON `floor_zones` (`is_counter_default`) WHERE "floor_zones"."is_counter_default" = 1 and "floor_zones"."active" = 1;--> statement-breakpoint
 CREATE UNIQUE INDEX `floor_zones_name_key` ON `floor_zones` (`name`) WHERE "floor_zones"."active" = 1;--> statement-breakpoint
 CREATE TABLE `kitchen_stations` (
 	`id` text PRIMARY KEY NOT NULL,

@@ -6,7 +6,6 @@ import { menuVersions } from "../catalogue/publication.js";
 import {
   count,
   enumCheck,
-  enumType,
   flag,
   id,
   json,
@@ -20,6 +19,7 @@ import { deviceProfiles } from "../device-profiles.js";
 import { floorZones } from "../floor-zones.js";
 import { workingOrderLines, workingOrders } from "../orders.js";
 import { sales } from "../sales.js";
+import { orderStart, paidWhen, collectionNumber } from "../sale-rule-types.js";
 
 export const departments = table(
   "departments",
@@ -70,10 +70,6 @@ export const zoneServicePolicies = table(
       .where(sql`${t.isCounterDefault}`),
   ],
 );
-
-const orderStart = enumType(["table", "counter"]);
-const paidWhen = enumType(["prepay", "ticket_then_pay"]);
-const collectionNumber = enumType(["none", "numbered"]);
 
 export const departmentSalePolicies = table(
   "department_sale_policies",
