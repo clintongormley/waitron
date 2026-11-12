@@ -189,19 +189,19 @@ describe("boxEmailMessage for payments restarted", () => {
     const params = {
       ...RESTARTED,
       confirmedBy: "staff",
-      person: "Ana",
+      person: "Anna",
       byStaff: true,
       device: "Bar",
     };
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
     ).toBe(
-      "The box's clock was confirmed by Ana, a staff member, on till Bar, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+      "The box's clock was confirmed by Anna, a staff member, on till Bar, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
     );
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
     ).toBe(
-      "La hora del equipo la confirmó Ana, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+      "La hora del equipo la confirmó Anna, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
     );
   });
 
@@ -209,29 +209,29 @@ describe("boxEmailMessage for payments restarted", () => {
     const params = {
       ...RESTARTED,
       confirmedBy: "staff",
-      person: "Ana {till} $&",
+      person: "Anna {till} $&",
       byStaff: true,
       device: "Bar",
     };
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
-    ).toContain("confirmed by Ana {till} $&, a staff member, on till Bar, and payments");
+    ).toContain("confirmed by Anna {till} $&, a staff member, on till Bar, and payments");
   });
 
   it("names a till without a label as a till", () => {
     const params = {
       ...RESTARTED,
       confirmedBy: "staff",
-      person: "Ana",
+      person: "Anna",
       byStaff: true,
       device: null,
     };
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
-    ).toContain("confirmed by Ana, a staff member, on a till, and payments");
+    ).toContain("confirmed by Anna, a staff member, on a till, and payments");
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
-    ).toContain("la confirmó Ana, miembro del personal, en una caja, y se volvió");
+    ).toContain("la confirmó Anna, miembro del personal, en una caja, y se volvió");
   });
 
   it("words a source it does not know as a check recorded on the box", () => {
@@ -393,7 +393,7 @@ describe("boxEmailMessage for the box setting its clock", () => {
     const params = {
       ...STEP,
       source: "staff",
-      person: "Ana",
+      person: "Anna",
       deviceId: "d-bar",
       device: "Bar",
       byStaff: true,
@@ -401,12 +401,12 @@ describe("boxEmailMessage for the box setting its clock", () => {
       stepMs: -DAY,
     };
     expect(message("en", params).text).toBe(
-      "The box's clock was set from the time on till Bar, confirmed by Ana, a staff member: moved back 1 day, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+      "The box's clock was set from the time on till Bar, confirmed by Anna, a staff member: moved back 1 day, from 14/03/2025 09:12 to 18/10/2026 23:40.",
     );
     expect(message("es", params).text).toBe(
       ES.staff
         .replaceAll("{till}", ES.namedTill.replaceAll("{device}", "Bar"))
-        .replaceAll("{person}", "Ana")
+        .replaceAll("{person}", "Anna")
         .replaceAll("{step}", ES.back.replaceAll("{duration}", formatDuration(-DAY, "es-ES")))
         .replaceAll("{before}", "14/03/2025 09:12")
         .replaceAll("{after}", "18/10/2026 23:40"),
@@ -415,8 +415,8 @@ describe("boxEmailMessage for the box setting its clock", () => {
   });
 
   it("names a till without a label as a till", () => {
-    const params = { ...STEP, source: "staff", person: "Ana", byStaff: true };
-    expect(message("en", params).text).toContain("from the time on a till, confirmed by Ana,");
+    const params = { ...STEP, source: "staff", person: "Anna", byStaff: true };
+    expect(message("en", params).text).toContain("from the time on a till, confirmed by Anna,");
     expect(message("es", params).text).toContain(
       ES.staff.split("{till}")[0]!.concat(ES.unnamedTill),
     );
@@ -426,12 +426,12 @@ describe("boxEmailMessage for the box setting its clock", () => {
     const params = {
       ...STEP,
       source: "staff",
-      person: "Ana",
+      person: "Anna",
       device: "Bar {person}",
       byStaff: true,
     };
     expect(message("en", params).text).toContain(
-      "from the time on till Bar {person}, confirmed by Ana, a staff member:",
+      "from the time on till Bar {person}, confirmed by Anna, a staff member:",
     );
   });
 
@@ -540,8 +540,8 @@ describe("every clock email", () => {
     ...[
       { source: "authority", person: null, device: null },
       { source: "admin", person: "Ben", device: null, byAdmin: true },
-      { source: "staff", person: "Ana", device: "Bar", byStaff: true },
-      { source: "staff", person: "Ana", device: null, byStaff: true },
+      { source: "staff", person: "Anna", device: "Bar", byStaff: true },
+      { source: "staff", person: "Anna", device: null, byStaff: true },
       { source: "authority", person: null, device: null, unverified: true },
     ].map(
       (who) =>
