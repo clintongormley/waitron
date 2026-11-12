@@ -2,6 +2,8 @@
 
 > 2026-11-12, watcher 09:14: #2804 retired receipt_print_mode; fold only the three remaining sale overrides (five new zone columns total). Every receipt-mode enum, column, CHECK, reader/validator and test expectation below, including the protection prediction, is void. Carry fk0’s finished library and build its still-unbuilt seedZone rewrite here. Watcher 09:18 clears removing only the missing-policy readiness element at operations.test.ts:582; keep all subsequent assertions and let the schema refuse a missing department.
 
+> 2026-11-12, watcher 09:50: fk1 carries fk0; use the combined forecast of about 1,420 counted lines and a 1.5× stop at about 2,130. Count at every checkpoint; keep generated files and committed script output separate under the slice rules.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to build this plan task by task. Steps use checkbox
 > (`- [ ]`) syntax. Every step also follows
