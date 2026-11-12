@@ -186,8 +186,8 @@ button is gone"). What the page shows when it cannot go ahead, and what it asks 
   internet, or open the page on a phone or laptop on the venue's network that has the backup. It
   checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
   "with no second clock it explains itself and carries on when the internet arrives").
-- **The clocks differ by more than 30 seconds**: the page shows the server's time and this device's
-  and asks which is correct; either answer says to correct this device's time and reconnect to the box. It does not
+- **The clocks differ by more than 30 seconds**: the page shows the server's time, this device's
+  and, when it was read, the internet's, and asks which is correct; either answer says to correct this device's time and reconnect to the box. It does not
   retry by itself; press **Compare the clocks again**, which
   carries on to the invoice series once the clocks agree (`recovery-hour.browser.test.ts`, "a clock
   refusal shows each clock's reading and no countdown, and waits for Compare the clocks again" and

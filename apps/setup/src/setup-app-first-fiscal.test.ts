@@ -912,7 +912,7 @@ it("Edit these details on the series page asks for the venue step, which a claim
   const allocation = await screen(app, "first-setup");
   const sent = requests.length;
   allocation.dispatchEvent(
-    new CustomEvent("initial-change-details", { bubbles: true, composed: true }),
+    new CustomEvent("initial-edit-details", { bubbles: true, composed: true }),
   );
   const owner = await screen(app, "first-owner");
   expect(

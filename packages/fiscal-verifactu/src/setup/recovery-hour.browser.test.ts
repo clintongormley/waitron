@@ -773,7 +773,7 @@ it("a box clock before this release shows only the release line", async () => {
   const { el } = await mount(prepare);
   await ready(el);
   await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
-  expect(text(el)).toContain("Box time precedes this Waitron release.");
+  expect(text(el)).toContain("The server time is earlier than this Waitron release.");
   expect(formError(el)).toBe("");
 });
 it("sends no installation code", async () => {
@@ -1950,7 +1950,9 @@ it.each<[string, string | undefined, boolean, () => Promise<Entry>]>([
     false,
     async () => {
       const { el } = await pressed(undefined, { ...clock, releaseBlocked: true });
-      await vi.waitFor(() => expect(text(el)).toContain("Box time precedes this Waitron release."));
+      await vi.waitFor(() =>
+        expect(text(el)).toContain("The server time is earlier than this Waitron release."),
+      );
       return el;
     },
   ],
@@ -2264,8 +2266,8 @@ it("Edit these details sends nothing and asks to go back to choosing the backup"
   const { el, prepare, host } = await mount();
   await fill(el);
   const asked: Event[] = [];
-  host.addEventListener("recovery-change-details", (event) => asked.push(event));
-  const change = button(el, "change-details");
+  host.addEventListener("recovery-edit-details", (event) => asked.push(event));
+  const change = button(el, "edit-details");
   expect(change.textContent?.trim()).toBe("Edit these details");
   expect(change.getAttribute("variant")).toBe("secondary");
   await userEvent.click(change);
@@ -2286,7 +2288,7 @@ it("after Proceed the second screen says which series were created, and the rest
     ),
   ).toEqual(["A-0CSQW", "FF-0CSQW", "R-0CSQW"]);
   expect(el.shadowRoot!.querySelector<HTMLElement>("[data-test=check-venue]")?.hidden).toBe(true);
-  expect(el.shadowRoot!.querySelector("[data-test=change-details]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
   expect(el.readCredentials()).not.toBeNull();
 });
 it("in Spanish the restore page asks which clock is correct and offers Editar estos datos, never pide ayuda", async () => {
@@ -2305,7 +2307,7 @@ it("in Spanish the restore page asks which clock is correct and offers Editar es
   host.append(el);
   await el.updateComplete;
   await fill(el);
-  expect(button(el, "change-details").textContent?.trim()).toBe("Editar estos datos");
+  expect(button(el, "edit-details").textContent?.trim()).toBe("Editar estos datos");
   await proceed(el);
   await vi.waitFor(() =>
     expect(text(el)).toContain(
@@ -2328,9 +2330,9 @@ it("a handover start offers Edit these details, which sends nothing", async () =
   check(el, "recovery-details-confirmed");
   await el.updateComplete;
   const asked: Event[] = [];
-  el.addEventListener("recovery-change-details", (event) => asked.push(event));
-  expect(button(el, "change-details").textContent?.trim()).toBe("Edit these details");
-  await userEvent.click(button(el, "change-details"));
+  el.addEventListener("recovery-edit-details", (event) => asked.push(event));
+  expect(button(el, "edit-details").textContent?.trim()).toBe("Edit these details");
+  await userEvent.click(button(el, "edit-details"));
   expect(asked).toHaveLength(1);
   expect(prepare).not.toHaveBeenCalled();
   expect(detailRows(el, "venue-review")).toEqual([["Time zone", "America/New_York"]]);

@@ -335,7 +335,7 @@ it("Edit these details from the restore page goes back to choosing the backup an
   const { el, calls } = await mounted();
   const sent = calls.length;
   el.shadowRoot!.querySelector("setup-recovery-allocation")!.dispatchEvent(
-    new CustomEvent("recovery-change-details", { bubbles: true, composed: true }),
+    new CustomEvent("recovery-edit-details", { bubbles: true, composed: true }),
   );
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=selected-copy]")).toBeNull();

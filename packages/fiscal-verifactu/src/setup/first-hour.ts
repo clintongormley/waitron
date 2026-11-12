@@ -491,13 +491,13 @@ export class FirstSetupHour extends LitElement {
           ? nothing
           : html`<wt-button
               slot="secondary"
-              data-test="change-details"
+              data-test="edit-details"
               variant="secondary"
               @click=${() =>
                 this.dispatchEvent(
-                  new CustomEvent("initial-change-details", { bubbles: true, composed: true }),
+                  new CustomEvent("initial-edit-details", { bubbles: true, composed: true }),
                 )}
-              >${t.changeDetails}</wt-button
+              >${t.editDetails}</wt-button
             >`
       }
     </wt-form-actions>`;

@@ -581,13 +581,13 @@ export class RecoveryHourEntry extends LitElement {
           editable
             ? html`<wt-button
                 slot="secondary"
-                data-test="change-details"
+                data-test="edit-details"
                 variant="secondary"
                 @click=${() =>
                   this.dispatchEvent(
-                    new CustomEvent("recovery-change-details", { bubbles: true, composed: true }),
+                    new CustomEvent("recovery-edit-details", { bubbles: true, composed: true }),
                   )}
-                >${words.changeDetails}</wt-button
+                >${words.editDetails}</wt-button
               >`
             : nothing
         }

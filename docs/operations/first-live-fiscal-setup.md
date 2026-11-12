@@ -40,8 +40,9 @@ differ are explained only after **Proceed** (the same file's "%s found on load s
 until Proceed, then explain it with no failure"). Beside **Edit these details** the page has one main button; what it reads in each
 state is the same file's "while %s the page's one button reads %s".
 
-Each detail sits on its own row, its value beside its label, and the list shows no clock time
-(`first-hour.browser.test.ts`, "when only the %s agrees, Check this venue shows no clock rows").
+Each detail sits on its own row, its value beside its label (`first-hour.browser.test.ts`, "Check
+this venue puts each detail on a row of its own, label then value"), and the list shows no clock time
+(the same file's "when only the %s agrees, Check this venue shows no clock rows").
 When the clocks differ, after **Proceed** the page says "It is very important that the server time
 is set correctly. Which time is correct:", then shows a "Server time" row and a "This device" row (and
 an "Internet" row when the internet was read), each one time to the minute (with seconds on every
@@ -89,8 +90,8 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
   (`first-hour.browser.test.ts`, "with no second clock it explains itself and carries on when the
   internet arrives" and "with no second clock on load it explains itself before the tick, and makes
   the series once Proceed is pressed and a clock answers").
-- **The clocks differ by more than 30 seconds**: after **Proceed** the page shows the server's time
-  and this device's and asks which is correct; either answer says to correct this device's time and reconnect to the box.
+- **The clocks differ by more than 30 seconds**: after **Proceed** the page shows the server's time,
+  this device's and, when it was read, the internet's, and asks which is correct; either answer says to correct this device's time and reconnect to the box.
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
   to the series once the clocks agree (`first-hour.browser.test.ts`, "a clock refusal shows each
   clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again

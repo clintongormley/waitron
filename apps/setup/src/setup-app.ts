@@ -2525,7 +2525,7 @@ export class SetupApp extends LitElement {
           .contributions=${SETUP_MODULES}
           .locale=${setupLocale()}
           @initial-reconnect=${() => void this.#reconnectFirstSetup()}
-          @initial-change-details=${(event: Event) => {
+          @initial-edit-details=${(event: Event) => {
             event.stopPropagation();
             this.#navigateTo("venue");
           }}

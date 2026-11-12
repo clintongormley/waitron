@@ -189,7 +189,7 @@ const SETUP_DO =
   "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.";
 const SETUP_ENDS =
   "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.";
-const OLD_WHY_REFUSED = "No invoice series is created without a confirmed time";
+const WHY_REFUSED = "No invoice series is created without a confirmed time";
 const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
 const fakeClock = () =>
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
@@ -821,7 +821,7 @@ it("a clock refusal shows each clock's reading and no countdown, and waits for C
     expect(text(el)).not.toContain(DIFFER);
     await proceed(el);
     await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
-    expect(text(el)).not.toContain(OLD_WHY_REFUSED);
+    expect(text(el)).not.toContain(WHY_REFUSED);
     expect(text(el)).not.toMatch(/ask for help/);
     expect(detailRows(el, "clock-times")).toEqual([
       ["Server time", "18 October 2026 at 14:30:00"],
@@ -1784,11 +1784,10 @@ it.each([["second_clock_missing", { ...noSecondClock }]] as const)(
       if (action === "compare-clocks") return { id: "comparison", clock: decision };
       throw { code: "sif.allocation_invalid", params: { reason } };
     };
-    const missing = reason === "second_clock_missing";
     fakeClock();
     try {
       const { el, calls } = await mount({ prepare });
-      await vi.waitFor(() => expect(text(el)).toContain(missing ? WHY_SECOND : DIFFER));
+      await vi.waitFor(() => expect(text(el)).toContain(WHY_SECOND));
       expect(actionsOf(calls)).toEqual(["clock-challenge", "compare-clocks"]);
       expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
@@ -1797,10 +1796,9 @@ it.each([["second_clock_missing", { ...noSecondClock }]] as const)(
       for (const checks of [1, 2, 3]) {
         vi.advanceTimersByTime(15_000);
         await new Promise((resolve) => setTimeout(resolve, 0));
-        if (missing) await vi.waitFor(() => expect(calls).toHaveLength(2 + 2 * checks));
-        else expect(calls).toHaveLength(2);
+        await vi.waitFor(() => expect(calls).toHaveLength(2 + 2 * checks));
       }
-      expect(text(el)).toContain(missing ? WHY_SECOND : DIFFER);
+      expect(text(el)).toContain(WHY_SECOND);
     } finally {
       vi.useRealTimers();
     }
@@ -1878,7 +1876,7 @@ it("a box clock before this release shows only the release line", async () => {
   });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull());
   await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
-  expect(text(el)).toContain("Box time precedes this Waitron release.");
+  expect(text(el)).toContain("The server time is earlier than this Waitron release.");
   expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
     "false",
   );
@@ -1960,7 +1958,9 @@ it.each<[string, string | undefined, boolean, () => Promise<LitElement>]>([
     false,
     async () => {
       const { el } = await mount({ decision: { ...clock, releaseBlocked: true } });
-      await vi.waitFor(() => expect(text(el)).toContain("Box time precedes this Waitron release."));
+      await vi.waitFor(() =>
+        expect(text(el)).toContain("The server time is earlier than this Waitron release."),
+      );
       return el;
     },
   ],
@@ -2454,9 +2454,9 @@ it.each(["en", "es"] as const)(
     const { el, calls, host } = await mount({ locale });
     await ready(el);
     const asked: Event[] = [];
-    host.addEventListener("initial-change-details", (event) => asked.push(event));
+    host.addEventListener("initial-edit-details", (event) => asked.push(event));
     const before = calls.length;
-    const change = button(el, "change-details");
+    const change = button(el, "edit-details");
     expect(change.textContent?.trim()).toBe(
       locale === "en" ? "Edit these details" : "Editar estos datos",
     );
@@ -2480,7 +2480,7 @@ it.each([
     );
     expect(el.shadowRoot!.querySelector("[data-test=venue-review]")).toBeNull();
     expect(el.shadowRoot!.querySelector('input[name="setup-details-confirmed"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=change-details]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=pack-why]")).not.toBeNull();
     expect(button(el, "prepare-pdf").textContent?.trim()).toBe(download);
   },
