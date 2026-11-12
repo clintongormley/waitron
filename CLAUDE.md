@@ -997,10 +997,15 @@ before treating an implementation as a rule violation.
 - **Every commit needs `git commit -s`.** **A PR that goes `BEHIND` is not rebased for that alone**
   (owner decision 2026-09-05): if what `main` gained is documentation, or code only in files this
   branch did not touch, land it with `gh pr merge --squash --admin` — which bypasses the up-to-date
-  requirement and NOTHING else, never a failing check or an open review. Rebase only for `CONFLICTING`,
-  or when `main` touched a code file this branch also changed. Package-level failures caused only
-  by combining branches are checked at the next full run, not at merge; the owner accepted this
-  delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
+  requirement and NOTHING else, never a failing check or an open review. Where `main` changed a code
+  file this branch also changed, it lands that way only when three checks pass, with their results
+  in a PR comment before merging (owner, 2026-11-12, A1520): a clean `git merge-tree --write-tree`,
+  no identifier or error code `main` removed or renamed in those files on any line the branch adds,
+  and a typecheck of the merged tree for every package both sides changed. Rebase only for
+  `CONFLICTING` or a failed check. Procedure:
+  [workflow-guide.md](docs/developers/workflow-guide.md#commits-pull-requests-and-merging).
+  Package-level failures caused only by combining branches are checked at the next full run, not at
+  merge; the owner accepted this delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
   merge commit carries no sign-off and fails DCO.
 - **Treat Dependabot PRs like any other, including strict sign-off** (owner, 2026-09-27).
   Check version-pinning guards and front-end qualification for npm-only bumps.

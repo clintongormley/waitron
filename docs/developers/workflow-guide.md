@@ -54,10 +54,29 @@ the up-to-date requirement and nothing else — never a failing check or an open
 post-merge `main` run checks lint, types, root guards and builds as selected, but runs no package
 tests in `ci.yml`. Two branches that break each other only when combined are checked by the next
 full package run, not at merge. The owner accepted this delay on 8 November 2026 (A1452), retaining
-the BEHIND rule; `/land-branch` step 2 still classifies the changed paths. Rebase in the worktree only for
-`CONFLICTING`, or when `main` touched a code file this branch also changed — `pnpm install`, then
-push through the hook, never `--no-verify`. **Never `gh pr update-branch`**, whose merge commit
-carries no sign-off and fails DCO (#160).
+the BEHIND rule; `/land-branch` step 2 still classifies the changed paths.
+
+**A code overlap lands without a rebase when three checks pass** (owner, 2026-11-12, A1520). When
+`main` changed a code file this branch also changed, a `BEHIND` PR that meets the conditions above
+(every check green on the current head, every conversation resolved, `MERGEABLE`) still lands with
+`--admin` if all three hold, and their results go in a PR comment before the merge:
+
+1. It merges cleanly: `git merge-tree --write-tree origin/main origin/<branch>` exits 0.
+2. It uses nothing `main` removed: for each shared file, no identifier or error code that `main`
+   removed or renamed there (the `-` lines of `git diff <merge-base>..origin/main -- <file>`)
+   appears on a line the branch adds (the `+` lines of `git diff <merge-base>..origin/<branch>`).
+   Searching the branch's whole changed files instead also finds the name in the branch's own copy
+   of the shared file, which still holds the lines `main` changed, so it fails a branch that never
+   uses the name.
+3. The merged tree typechecks: in a throwaway checkout of `origin/main` with the branch merged in,
+   `pnpm install --frozen-lockfile`, then `pnpm --filter "...<package>" typecheck` for every package
+   both sides changed. "No projects matched" is a failure, since pnpm exits 0 when it selects
+   nothing.
+
+The post-merge `main` run and the next full run then check it, with the same delay as above.
+Rebase in the worktree only for `CONFLICTING` or a failed check — `pnpm install`, then push through
+the hook, never `--no-verify`. **Never `gh pr update-branch`**, whose merge commit carries no
+sign-off and fails DCO (#160).
 
 **Dependabot pull requests** (owner decision 2026-09-27). `.github/dependabot.yml` asks for weekly
 version updates for npm (the pnpm workspace at the root), GitHub Actions, the base images in
