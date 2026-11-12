@@ -96,6 +96,7 @@ async function imageFixture({
   inUse = false,
   reopenFailure = false,
   serviceChange = false,
+  prepareCandidate,
 } = {}) {
   const fs = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -223,6 +224,7 @@ async function imageFixture({
     boxDirectory: root,
     directory,
     candidate: realCompose ? shipped : candidate,
+    prepareCandidate: prepareCandidate && (() => prepareCandidate({ candidate, calls })),
     run,
     checkCandidate: async () => [{ name: "sale", ok: true }],
   });
@@ -299,6 +301,42 @@ it("pins all old images before pulling any candidate, and resumes only recorded 
   await f.host.cleanup(images);
   await expect(fs.access(directory)).rejects.toMatchObject({ code: "ENOENT" });
   expect(calls.filter((args) => args[1] === "image" && args[2] === "rm")).toHaveLength(6);
+});
+
+it("pins the stopped source before building local candidates and saves the refreshed candidate configuration", async () => {
+  const { f, root, directory, fs, join, images, calls } = await imageFixture({
+    stage: false,
+    activeTunnel: true,
+    prepareCandidate: async ({ candidate, calls }) => {
+      expect(calls.filter((args) => args[2] === "tag")).toHaveLength(4);
+      return {
+        compose: JSON.stringify({
+          ...candidate,
+          services: {
+            ...candidate.services,
+            app: { image: "local:new", environment: { UPGRADE_SETTING: "built" } },
+          },
+        }),
+        images: { app: "sha256:local", "print-agent": "sha256:agent", mailpit: "sha256:mail" },
+      };
+    },
+  });
+  expect(images.old.app).toBe("sha256:app:old");
+  expect(images.candidate).toEqual({
+    app: "sha256:local",
+    "print-agent": "sha256:agent",
+    mailpit: "sha256:mail",
+    tunnel: "sha256:running-tunnel",
+  });
+  expect(calls.some((args) => ["pull", "manifest"].includes(args[1]))).toBe(false);
+  await f.host.stop();
+  const saved = JSON.parse(await fs.readFile(join(directory, "candidate-compose.json"), "utf8"));
+  expect(JSON.parse(saved.compose).services.app.environment).toEqual({ UPGRADE_SETTING: "built" });
+  await f.host.installCandidate(images.candidate);
+  const installed = JSON.parse(await fs.readFile(join(root, "compose.yml"), "utf8"));
+  expect(installed.services.app.image).toBe("sha256:local");
+  expect(installed.services.app.environment).toEqual({ UPGRADE_SETTING: "built" });
+  await f.host.resume(images.old);
 });
 
 it("boot recovery holds a failed manual attempt without Docker, and pins a committed target without removing its copies", async () => {
@@ -440,19 +478,19 @@ it("a fresh Keep retries the saved candidate configuration when installation fai
   expect(kept.services.app.environment).toEqual({ UPGRADE_SETTING: "new" });
 });
 
-it("requires measured copy size plus a reserve in the attempt filesystem", async () => {
+it("requires room for the intact and disposable copies plus a reserve in the attempt filesystem", async () => {
   const { assertCopyRoom } = await import("./host.mjs");
   const run = async () => ({ stdout: "4 /volumes/state\n8 /box/compose.yml\n" });
   await expect(
     assertCopyRoom(["/volumes/state", "/box/compose.yml"], "/attempts", {
       run,
-      statfs: async () => ({ bavail: 4098n, bsize: 4096n }),
+      statfs: async () => ({ bavail: 4099n, bsize: 4096n }),
     }),
   ).rejects.toThrow("not enough room for the upgrade copy");
   await expect(
     assertCopyRoom(["/volumes/state", "/box/compose.yml"], "/attempts", {
       run,
-      statfs: async () => ({ bavail: 4099n, bsize: 4096n }),
+      statfs: async () => ({ bavail: 4102n, bsize: 4096n }),
     }),
   ).resolves.toBeUndefined();
 });

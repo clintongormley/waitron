@@ -54,6 +54,7 @@ export async function createUpgradeHost({
   candidate,
   directory,
   checkCandidate,
+  prepareCandidate,
   run = command,
 }) {
   const compose = [
@@ -64,8 +65,7 @@ export async function createUpgradeHost({
     join(boxDirectory, "compose.yml"),
   ];
   const config = await composeConfig(boxDirectory, run);
-  const rawCandidate = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
-  const candidateConfig = await composeConfig(boxDirectory, run, rawCandidate);
+  let rawCandidate = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
   const paths = [];
   for (const key of COPIED_VOLUMES) {
     const name = config.volumes[key].name;
@@ -136,11 +136,16 @@ export async function createUpgradeHost({
             await run("docker", ["image", "tag", id, tag]);
             tags.push(tag);
           }
+          const prepared = await prepareCandidate?.();
+          if (prepared) rawCandidate = prepared.compose;
+          const candidateConfig = await composeConfig(boxDirectory, run, rawCandidate);
           const next = {};
           for (const [key, service] of Object.entries(candidateConfig.services)) {
             if (service.profiles?.length && old[key] === undefined) continue;
-            if (key === "tunnel" && service.image === config.services[key]?.image) {
+            if (key === "tunnel" && old[key] !== undefined) {
               next[key] = old[key];
+            } else if (prepared?.images?.[key]) {
+              next[key] = prepared.images[key];
             } else {
               const reference = await candidateReference(service.image, run);
               await run("docker", ["pull", reference]);
@@ -509,6 +514,6 @@ export async function assertCopyRoom(paths, directory, { run = command, statfs =
     .split("\n")
     .reduce((total, line) => total + BigInt(line.trim().split(/\s+/)[0]) * 1024n, 0n);
   const available = await statfs(directory, { bigint: true });
-  if (available.bavail * available.bsize < bytes + 16n * 1024n * 1024n)
+  if (available.bavail * available.bsize < 2n * bytes + 16n * 1024n * 1024n)
     throw new Error("not enough room for the upgrade copy");
 }
