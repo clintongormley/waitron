@@ -13,6 +13,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import * as workbook from "./accountant-export.js";
+import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { mountReportApi } from "./report-api.js";
 
 describe("accountant export download", () => {
@@ -85,7 +86,9 @@ describe("accountant export download", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
-    expect(strFromU8(files["xl/workbook.xml"]!)).toContain('name="Facturas emitidas"');
+    expect(strFromU8(files["xl/workbook.xml"]!)).toContain(
+      `name="${ACCOUNTANT_EXPORT_WORDS.es.invoiceSheet}"`,
+    );
     expect(strFromU8(files["xl/worksheets/sheet1.xml"]!)).toContain('xml:space="preserve">A/1</t>');
     expect(strFromU8(files["xl/worksheets/sheet2.xml"]!)).toContain(
       'xml:space="preserve">S-42</t>',

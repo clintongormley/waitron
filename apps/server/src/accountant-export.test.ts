@@ -14,6 +14,7 @@ import {
 } from "@waitron/reporting/test/fixtures.js";
 import { decimal } from "@waitron/shared";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
+import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 
 function row(xml: string, number: number): string[] {
   const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
@@ -107,15 +108,21 @@ describe("accountant workbook", () => {
       const workbook = strFromU8(files["xl/workbook.xml"]!);
       expect(workbook.match(/<sheet /g)).toHaveLength(2);
       expect(workbook).toContain(
-        language === "en" ? 'name="Issued invoices"' : 'name="Facturas emitidas"',
+        language === "en"
+          ? 'name="Issued invoices"'
+          : `name="${ACCOUNTANT_EXPORT_WORDS.es.invoiceSheet}"`,
       );
       expect(workbook).toContain(
-        language === "en" ? 'name="Recorded purchases"' : 'name="Compras registradas"',
+        language === "en"
+          ? 'name="Recorded purchases"'
+          : `name="${ACCOUNTANT_EXPORT_WORDS.es.purchaseSheet}"`,
       );
       for (const name of ["xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml"]) {
         const sheet = strFromU8(files[name]!);
         expect(sheet.match(/<row /g)).toHaveLength(1);
-        expect(sheet).toContain(language === "en" ? "Invoice number" : "Número de factura");
+        expect(sheet).toContain(
+          language === "en" ? "Invoice number" : ACCOUNTANT_EXPORT_WORDS.es.purchaseColumns[0],
+        );
       }
       expect(strFromU8(files["[Content_Types].xml"]!)).toContain("spreadsheetml.sheet.main+xml");
       expect(strFromU8(files["xl/_rels/workbook.xml.rels"]!)).toContain("worksheets/sheet2.xml");
@@ -274,10 +281,10 @@ describe("accountant workbook", () => {
     expect(sales).toContain('<c r="H2" t="inlineStr"><is><t xml:space="preserve">+00123</t>');
     expect(sales).toContain("@SUM(A1:A2)\tRoad\nFlat 1&#13;");
     expect(purchases).toContain("A&amp;B &lt;supplier&gt;");
-    expect(row(purchases, 2)[6]).toBe("Recargo de equivalencia");
-    expect(row(sales, 2)[8]).toBe("Pasaporte");
-    expect(row(purchases, 2)[8]).toBe("Bienes corrientes");
-    expect(row(purchases, 3)[8]).toBe("Bienes de inversión");
+    expect(row(purchases, 2)[6]).toBe(ACCOUNTANT_EXPORT_WORDS.es.regimes.equivalence_surcharge);
+    expect(row(sales, 2)[8]).toBe(ACCOUNTANT_EXPORT_WORDS.es.identifierTypes.passport);
+    expect(row(purchases, 2)[8]).toBe(ACCOUNTANT_EXPORT_WORDS.es.vatKinds.ordinary);
+    expect(row(purchases, 3)[8]).toBe(ACCOUNTANT_EXPORT_WORDS.es.vatKinds.capital);
     expect(purchases).toContain('xml:space="preserve">-0042</t>');
     for (const sheet of [sales, purchases]) {
       expect(sheet).not.toMatch(/<f(?:\s|>)/);
