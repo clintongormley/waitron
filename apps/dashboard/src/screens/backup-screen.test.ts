@@ -24,7 +24,6 @@ useLocale("es-ES");
 afterEach(cleanupWidgets);
 
 const OFF: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -61,7 +60,6 @@ it("does not offer key replacement without system.manage", async () => {
 });
 
 const ENABLED: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
@@ -548,7 +546,7 @@ describe("backup-screen", () => {
           bucket: "owner-bucket",
           prefix: "waitron",
           accessKeyId: "AKIAOWNER",
-          namespace: "waitron/archives/c0000000-0000-4000-8000-000000000002/",
+          namespace: "waitron/",
           credentialPresent: true,
         },
       ],
@@ -557,9 +555,7 @@ describe("backup-screen", () => {
       api: stubApi({}, bucket),
     });
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain(
-      "owner-bucket/waitron/archives/c0000000-0000-4000-8000-000000000002/",
-    );
+    expect(el.shadowRoot!.textContent).toContain("owner-bucket/waitron/");
     expect((q(el, "[data-test=destination]") as { value?: string } | null)?.value ?? "").toBe("");
   });
 

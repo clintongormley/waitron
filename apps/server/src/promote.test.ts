@@ -923,37 +923,6 @@ describe("promoteMirrorToPrimary", () => {
     });
   });
 
-  it("refuses a database holding two venue rows with provisioning.second_venue before minting, activating or persisting anything", async () => {
-    const { db, deps, nodeId } = await mirror();
-    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
-    await db.execute(
-      sql`insert into locations (id) values ('e0000000-0000-4000-8000-000000000099')`,
-    );
-    const persist = vi.fn(async () => {});
-    const activate = vi.fn(async () => {});
-    const activating = fakeModule("activating-regime", {
-      provisioning: {
-        standby: { reserve: async () => ({ state: {} }), establish: async () => {}, activate },
-      },
-    });
-
-    const error = await captureError(() =>
-      promoteMirrorToPrimary(
-        { ...deps(noopLog, persist), modules: [activating] },
-        { oldNodeNeutralised: true },
-      ),
-    );
-
-    expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
-    expect(activate).not.toHaveBeenCalled();
-    expect(persist).not.toHaveBeenCalled();
-    expect((await readNodeMembership(db))?.body.term).toBe(3);
-    expect(await readNodeMode(suite.node, nodeId)).toEqual({
-      mode: "mirror",
-      singletonRole: "secondary",
-    });
-  });
-
   it("mints a first chart naming only itself, with no endorsement, when the mirror holds neither", async () => {
     const { db, deps, nodeId } = await mirror();
     await db.execute(sql`update nodes set endorsement = null where id = ${nodeId}`);

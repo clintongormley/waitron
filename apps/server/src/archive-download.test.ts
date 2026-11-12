@@ -19,7 +19,7 @@ const BODY = Buffer.from("WBK1 archive bytes");
 const PACK: ArchiveRecoveryPack = {
   version: 1,
   format: "WBK1",
-  venueId: "venue-1",
+
   bucket: {
     region: "eu-west-1",
     bucket: "owner-bucket",
@@ -27,7 +27,7 @@ const PACK: ArchiveRecoveryPack = {
     accessKeyId: "AKIDEXAMPLE",
     secretAccessKey: "secret-access-key-value",
   },
-  archivePrefix: "waitron/archives/venue-1/",
+  archivePrefix: "waitron/",
   recoveryKey: "recovery-key-value",
 };
 

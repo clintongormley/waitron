@@ -181,7 +181,7 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
   for (const node of [NODE_A, NODE_B]) {
     await db
       .insert(nodes)
-      .values({ id: node, locationId: LOCATION, name: "Node" })
+      .values({ id: node, name: "Node" })
       .onConflictDoNothing({ target: nodes.id });
   }
   await db

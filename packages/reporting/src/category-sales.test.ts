@@ -720,7 +720,7 @@ describe("computeCategorySales at time of sale", () => {
   });
 
   it("counts only the node asked for, and every node when none is", async () => {
-    const other = await seedNodeAndSeries(suite.db, venue);
+    const other = await seedNodeAndSeries(suite.db);
     await sell("2026-08-04", [{ net: "1.00", gross: "1.10", cls: classified(chain(DRINKS)) }]);
     await sellLines(suite.db, { ...venue, ...other }, at("2026-08-04"), [
       { net: "2.00", gross: "2.20", cls: classified(chain(DRINKS)) },

@@ -214,10 +214,7 @@ describe("the void caller's original writing location", () => {
 });
 
 it("an active emergency identity uses the caller's issue instant rather than allocation time", async () => {
-  const [freshNode] = await suite.db
-    .insert(nodes)
-    .values({ locationId: seededNode.locationId, name: "Emergency node" })
-    .returning();
+  const [freshNode] = await suite.db.insert(nodes).values({ name: "Emergency node" }).returning();
   const node = { nodeId: nodeId(freshNode!.id) };
   await suite.db.insert(invoiceSeries).values({ nodeId: node.nodeId, code: "A" });
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });

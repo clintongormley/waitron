@@ -11,7 +11,6 @@ import {
   nodes,
   readNodeMembership,
   stampDeployment,
-  venueLocationId,
   withNodeTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -114,7 +113,6 @@ async function boxes(
   // M1's own copy of M2's row, which the route's trust set reads (`readMembershipTrustSetTx`).
   await oldBox.db.insert(nodes).values({
     id: m2,
-    locationId: await venueLocationId(oldBox.db),
     name: "M2",
     publicKey: nodeSigningPublicKey(m2Key),
   });

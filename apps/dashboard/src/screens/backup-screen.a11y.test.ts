@@ -15,7 +15,6 @@ import { t } from "../i18n/t.js";
  */
 
 const OFF: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -31,7 +30,6 @@ const OFF: BackupStatusView = {
 };
 
 const ENABLED: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
@@ -77,7 +75,7 @@ const FAILING: BackupWriteAnswer = {
       bucket: "owner-bucket",
       prefix: "waitron",
       accessKeyId: "AKIAOWNER",
-      namespace: `waitron/archives/${ENABLED.venueId}/`,
+      namespace: "waitron/",
       credentialPresent: true,
     },
   ],
@@ -156,7 +154,7 @@ const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLEl
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (theme) => {
-  it("renders the destination choice with the bucket copy unavailable accessibly", async () => {
+  it("renders only usable archive destination choices accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       { api: stubApi(OFF) },
@@ -164,78 +162,7 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     );
     await flush(el);
     const box = q(el, "[data-test=archive-destination]") as HTMLElementTagNameMap["wt-combobox"];
-    expect(box.options.find((o) => o.value === "stream-bucket")?.disabled).toBe(true);
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders a chosen bucket-copy bucket that has gone, marked after Save, accessibly", async () => {
-    const getStreamSettings = vi.fn().mockResolvedValue({
-      isPrimary: true,
-      configured: true,
-      bucket: {
-        endpoint: null,
-        region: "eu-north-1",
-        bucket: "stream-bucket",
-        prefix: "venues",
-        accessKeyId: "AKIASTREAM",
-      },
-      status: { state: "streaming" },
-      recoveryKeySet: true,
-      keyFingerprint: "ab12cd34",
-      revision: "11111111-2222-4333-8444-555555555555",
-    });
-    const api = stubApi({ ...OFF, recoveryKeySet: true }, { getStreamSettings });
-    const { el, host } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api }, theme);
-    await flush(el);
-    await setFolder(el, false);
-    await chooseOption(q(el, "[data-test=archive-destination]")!, "stream-bucket");
-    getStreamSettings.mockResolvedValue({
-      isPrimary: true,
-      configured: false,
-      bucket: null,
-      status: { state: "off" },
-      recoveryKeySet: true,
-      keyFingerprint: "ab12cd34",
-      revision: null,
-    });
-    api.liveData.invalidate([{ type: "backup_status" }]);
-    await flush(el);
-    q(el, "[data-test=apply]")!.click();
-    await flush(el);
-    expect(q(el, "[data-test=stream-unavailable]")).toBeNull();
-    const box = q(el, "[data-test=archive-destination]") as HTMLElementTagNameMap["wt-combobox"];
-    expect(box.error).not.toBe("");
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders the bucket copy's bucket chosen, with its location, accessibly", async () => {
-    const { el, host } = await mountWidget<BackupScreen>(
-      "dashboard-backup-screen",
-      {
-        api: stubApi(OFF, {
-          getStreamSettings: vi.fn().mockResolvedValue({
-            isPrimary: true,
-            configured: true,
-            bucket: {
-              endpoint: null,
-              region: "eu-north-1",
-              bucket: "stream-bucket",
-              prefix: "venues",
-              accessKeyId: "AKIASTREAM",
-            },
-            status: { state: "streaming" },
-            recoveryKeySet: true,
-            keyFingerprint: "ab12cd34",
-            revision: "11111111-2222-4333-8444-555555555555",
-          }),
-        }),
-      },
-      theme,
-    );
-    await flush(el);
-    await chooseOption(q(el, "[data-test=archive-destination]")!, "stream-bucket");
-    await el.updateComplete;
-    expect(q(el, "[data-test=stream-location]")).not.toBeNull();
+    expect(box.options.map((o) => o.value)).toEqual(["none", "custom-s3"]);
     await expectNoA11yViolations(host);
   });
 

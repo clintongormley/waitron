@@ -2,11 +2,11 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { venueLocationId } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
-import { readOperationalVenueIds, readTenantIdentities } from "./tenant-guard.js";
+import { hasOperationalVenue, readTenantIdentities } from "./tenant-guard.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -51,29 +51,29 @@ describe("readTenantIdentities", () => {
   });
 });
 
-describe("readOperationalVenueIds", () => {
-  it("reads nothing from an unprovisioned database", async () => {
-    expect(await readOperationalVenueIds(suite.db)).toEqual([]);
+describe("hasOperationalVenue", () => {
+  it("recognizes the saved venue document with no location row", async () => {
+    await seedVenueSettings(suite.db);
+    expect(await hasOperationalVenue(suite.db)).toBe(true);
   });
 
-  it("reads the provisioned venue's id", async () => {
+  it("reads nothing from an unprovisioned database", async () => {
+    expect(await hasOperationalVenue(suite.db)).toBe(false);
+  });
+
+  it("recognizes the provisioned venue document", async () => {
     await applyVenue(planVenue(request(), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
-    expect(await readOperationalVenueIds(suite.db)).toEqual([await venueLocationId(suite.db)]);
+    expect(await hasOperationalVenue(suite.db)).toBe(true);
   });
 
-  it("reads every venue row, so a second venue is visible to the guard", async () => {
-    await suite.db.execute(sql`
-      insert into locations (id) values
-        ('00000000-0000-4000-8000-00000000000a'),
-        ('00000000-0000-4000-8000-00000000000b')`);
-
-    expect([...(await readOperationalVenueIds(suite.db))].sort()).toEqual([
-      "00000000-0000-4000-8000-00000000000a",
-      "00000000-0000-4000-8000-00000000000b",
-    ]);
+  it("does not count location rows as a saved venue", async () => {
+    await suite.db.execute(
+      sql`insert into locations (id) values ('00000000-0000-4000-8000-00000000000a')`,
+    );
+    expect(await hasOperationalVenue(suite.db)).toBe(false);
   });
 });

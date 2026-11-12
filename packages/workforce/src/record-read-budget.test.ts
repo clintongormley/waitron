@@ -15,7 +15,7 @@ import { recordEntryById } from "./corrections.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 const backend = new WorkforceBackend(),
   origin = jobOrigin("dashboard");
-let personId: string, other: string, locationId: string, nodeId: string, target: string;
+let personId: string, other: string, nodeId: string, target: string;
 const event = (subject: string, at: string) => ({
   personId: subject,
   nodeId,
@@ -28,8 +28,8 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
-    nodeId = await seedNode(db, locationId);
+    await seedLocation(db);
+    nodeId = await seedNode(db);
     personId = await seedPerson(db, "Worker");
     other = await seedPerson(db, "Other");
     await withTransaction(db, async (tx) => {

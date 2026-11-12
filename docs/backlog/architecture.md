@@ -1151,8 +1151,7 @@ the helper's constant status is not evidence of the write.
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: 5f–5h of A1308's slice 5; the backup screen's folder wording goes with
-  the venue-id work.
+  slices. Still open: 5f-ii, 5g and 5h of A1308's slice 5.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue`, `seedVenueSettings`, `seedBusinessDay` and `seedWorkingOrder`.
@@ -1175,19 +1174,15 @@ the helper's constant status is not evidence of the write.
     `node` and `staged-hour-crash.ts`'s (an assertion in
     `restore-emergency-crash.e2e.test.ts`) (S18f).
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387).
-    S25 still needs to drop the node's venue foreign key (S4, #2388). Calendar rows still written
+    Calendar rows still written
     with a `location_id` take `venueLocationId` (S8, #2405). The export no longer carries
     `fire_control`, whose column goes with `locations` in S28 rather than in A773-2, since dropping
     it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
     that still set it, listed in D113 and in [kitchen.md](kitchen.md). Server test helpers take the venue row's
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
     stays in fixtures that still read the venue row, including node, Cloud, backup, kitchen-setting
-    and menu-name fixtures. `verifyCoreBackupData`
-    (`packages/db/src/backup-evidence.ts`) still reads `locations` and `nodes.location_id` (S18f).
-    Until `venueLocationId` goes, boot takes the venue row's id for backup settings, recovery
-    packs, the bucket stream and the Cloud connection, and `backup-data-placement.ts` and
-    `backup-verification.ts` read it from a backup copy (`readCopyNodeAndVenue`) for backup
-    settings, which `backup-verification-secrets.ts` is handed; S18e or S28 removes them (S18f).
+    and menu-name fixtures. Until `venueLocationId` goes, boot takes the venue row's id for the
+    bucket stream, its recovery kit and the Cloud connection; 5g removes those uses.
     The `locationId` brand remains in `packages/shared/src/ids.ts` (S18f).
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)

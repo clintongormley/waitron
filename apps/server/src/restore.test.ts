@@ -29,6 +29,7 @@ import {
   invoiceSeries,
   locations,
   nodes,
+  settings,
   stampDeployment,
   openVenueDatabase,
   tenants,
@@ -55,6 +56,7 @@ import {
   type RestoreDeps,
   readArtifactIdentity,
   readArtifactNode,
+  resolveArtifactNode,
   clearReplacedDatabases,
   putIdentityBack,
   restoreDatabase as placeDatabaseFile,
@@ -116,7 +118,7 @@ beforeAll(async () => {
     operationDescription: "Venta",
   });
   await seedBusinessDay(db, {});
-  await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
+  await db.insert(nodes).values({ id: T.nodeId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db
     .insert(invoiceSeries)
@@ -2175,7 +2177,7 @@ describe("transactional series restore identity", () => {
   });
 });
 
-it("resolves an archive node's own location through the read-only source database", async () => {
+it("resolves an archive node through the read-only source database", async () => {
   const otherLocation = "c0000000-0000-4000-8000-000000000001";
   const otherNode = "c0000000-0000-4000-8000-000000000009";
   await suite.db.insert(locations).values({
@@ -2183,9 +2185,7 @@ it("resolves an archive node's own location through the read-only source databas
   });
   await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(suite.db, {});
-  await suite.db
-    .insert(nodes)
-    .values({ id: otherNode, locationId: otherLocation, name: "Other node" });
+  await suite.db.insert(nodes).values({ id: otherNode, name: "Other node" });
   try {
     const path = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const copy = (id: string) => ({
@@ -2208,5 +2208,25 @@ it("resolves an archive node's own location through the read-only source databas
   } finally {
     await suite.db.delete(nodes).where(eq(nodes.id, otherNode));
     await suite.db.delete(locations).where(eq(locations.id, otherLocation));
+  }
+});
+
+it("refuses an archive node when its venue document is missing", async () => {
+  const entries = [
+    {
+      name: "secrets/trading.env",
+      bytes: Buffer.from(formatEnvFile({ WAITRON_NODE_ID: T.nodeId })),
+    },
+  ];
+  await expect(resolveArtifactNode(suite.db, entries)).resolves.toEqual({ nodeId: T.nodeId });
+  const [venue] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
+  expect(venue).toBeDefined();
+  await suite.db.delete(settings).where(eq(settings.module, "venue"));
+  try {
+    await expect(resolveArtifactNode(suite.db, entries)).rejects.toMatchObject({
+      code: "venue.not_found",
+    });
+  } finally {
+    await suite.db.insert(settings).values(venue!);
   }
 });

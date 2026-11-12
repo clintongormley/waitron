@@ -18,7 +18,6 @@ import { invoiceSeries } from "./schema/series.js";
 import { captureError } from "./testing/errors.js";
 import { seedNode, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { venueLocationId } from "./venue.js";
 
 const ENDORSEMENT: Endorsement = {
   nodeId: "22222222-2222-2222-2222-222222222222",
@@ -35,18 +34,24 @@ describe("reserved-identity accessors", () => {
     resetPerTest: false,
   });
 
-  let locationId: string;
-
   beforeAll(async () => {
     await seedVenue(suite.db);
-    locationId = await venueLocationId(suite.db);
+  });
+
+  it("stores a node without linking it to a location", async () => {
+    await suite.db.run(sql`insert into nodes (id, name, created_at)
+      values ('55555555-5555-4555-8555-555555555555', 'Independent node', '2026-11-12T08:00:00Z')`);
+    expect(
+      await suite.db.all(
+        sql`select name from nodes where id = '55555555-5555-4555-8555-555555555555'`,
+      ),
+    ).toEqual([{ name: "Independent node" }]);
   });
 
   it("insertReservedNodeTx persists a dormant node with its public key + endorsement", async () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedNodeTx(tx, {
         id: CLOUD_NODE,
-        locationId,
         name: "cloud",
         filingModule: null,
         taxModule: null,

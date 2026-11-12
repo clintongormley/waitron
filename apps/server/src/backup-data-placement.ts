@@ -7,7 +7,7 @@ import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
 import { OPTIONAL_BACKUP_STATE } from "./backup-optional-state.js";
 import type { Logger } from "./logger.js";
 import {
-  readCopyNodeAndVenue,
+  readCopyNode,
   restoreDatabase,
   restoreSecrets,
   type ValidatedArtifact,
@@ -57,9 +57,7 @@ export async function placeBackupData(
       throw new AppError("restore.unexpected_entry", { name: entry.name });
   }
   const copy = await openBackupQuery(validated.databasePath);
-  const { venueId } = await readCopyNodeAndVenue(copy.query, validated.secretEntries).finally(() =>
-    copy.close(),
-  );
+  await readCopyNode(copy.query, validated.secretEntries).finally(() => copy.close());
   const read = (name: string) =>
     validated.secretEntries.find((entry) => entry.name === "secrets/" + name)?.bytes;
   const secretsEnv = read("secrets.env");
@@ -71,8 +69,7 @@ export async function placeBackupData(
     backupEnv: read("backup.env") ?? null,
   });
   loadRecoveryKey(env);
-  // Interim: the copy's venue row id; removed by S18e or S28.
-  loadBackupConfig(env, venueId);
+  loadBackupConfig(env);
   await placeBackupDatabase(validated.databasePath, input, validated.nodeDump);
   await restoreSecrets({
     entries: validated.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),

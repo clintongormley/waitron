@@ -92,7 +92,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
+  await suite.db.insert(nodes).values({ id: NODE, name: "Old node" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   oldName = await readRecoveryKeyName(suite.node, NODE);
   artifact = await packSelected();

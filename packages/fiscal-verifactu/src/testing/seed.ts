@@ -1,3 +1,4 @@
+import { venueLocationId } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "../../test/sif-fixture.js";
 import { eq } from "drizzle-orm";
 import { invoiceSeries, locations, nodes, sales, tenants } from "@waitron/db";
@@ -82,11 +83,10 @@ async function insertLocation(tx: Transaction, label: string): Promise<string> {
   return locationRow.id;
 }
 
-/** Inserts one node under an existing location and returns its id — the SIF/chain/series owner. */
-async function insertNode(tx: Transaction, location: string, label: string): Promise<NodeId> {
+async function insertNode(tx: Transaction, label: string): Promise<NodeId> {
   const [nodeRow] = await tx
     .insert(nodes)
-    .values({ locationId: location, name: "Node " + label })
+    .values({ name: "Node " + label })
     .returning({ id: nodes.id });
   if (nodeRow === undefined) throw new Error("seedNode: node insert returned no row");
   return brandNodeId(nodeRow.id);
@@ -98,7 +98,7 @@ async function addNode(
   label: string,
 ): Promise<Omit<SeededNode, "deviceId"> & { locationId: string }> {
   const location = await insertLocation(tx, label);
-  const node = await insertNode(tx, location, label);
+  const node = await insertNode(tx, label);
 
   const [seriesRow] = await tx
     .insert(invoiceSeries)
@@ -137,12 +137,12 @@ export async function seedNode(db: Database, label = "A"): Promise<SeededNode> {
 export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<SeededNode> {
   const added = await db.transaction(async (tx) => {
     const [locationRow] = await tx
-      .select({ locationId: nodes.locationId })
+      .select({ id: nodes.id })
       .from(nodes)
       .where(eq(nodes.id, seed.nodeId));
     if (locationRow === undefined) throw new Error("addDeviceToNode: node not found");
     return {
-      locationId: locationRow.locationId,
+      locationId: await venueLocationId(tx),
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       sifId: seed.sifId,
@@ -154,8 +154,8 @@ export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<S
 }
 
 async function addBareNode(tx: Transaction, label: string): Promise<NodeId> {
-  const location = await insertLocation(tx, label);
-  return insertNode(tx, location, label);
+  await insertLocation(tx, label);
+  return insertNode(tx, label);
 }
 
 export interface SifContentionFixture {

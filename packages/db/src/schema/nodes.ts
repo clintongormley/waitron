@@ -1,6 +1,5 @@
 import { id, json, label, newId, now, table, ts } from "./columns.js";
 import type { Endorsement } from "@waitron/membership";
-import { locations } from "./tenants.js";
 
 /**
  * A compute node that runs a venue's POS and operates as its SIF (called `node` here because in
@@ -13,17 +12,12 @@ import { locations } from "./tenants.js";
  * regime-neutral: the Veri*Factu SIF identity lives in the module-owned `registro_sif` table, keyed
  * by node.
  *
- * `filing_module`/`tax_module` are stamped at provision time from the location's territory; the
+ * `filing_module`/`tax_module` are stamped at provision time from the venue's territory; the
  * authoritative per-sale value stays `sales.fiscal_backend` — these are the node's recorded
  * modules, so the running SIF knows its backend without re-resolving.
  */
 export const nodes = table("nodes", {
   id: id("id").primaryKey().$defaultFn(newId),
-  locationId: id("location_id")
-    .notNull()
-    /* v8 ignore start */
-    .references(() => locations.id),
-  /* v8 ignore stop */
   name: label("name").notNull(),
   filingModule: label("filing_module"),
   taxModule: label("tax_module"),

@@ -179,7 +179,6 @@ async function currentArchives(
     managedByEnvironment,
     env,
     sealed,
-    venueId: deps.venueId,
   });
   return destinations.length === 0 ? null : { revision: archivesRevision(sealed, destinations) };
 }

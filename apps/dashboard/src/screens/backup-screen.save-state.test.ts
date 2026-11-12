@@ -10,7 +10,6 @@ import type { BackupScreen } from "./backup-screen.js";
 afterEach(cleanupWidgets);
 
 const OFF_WITH_KEY: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -28,7 +27,6 @@ const OFF_WITH_KEY: BackupStatusView = {
 // Every field the settings editor shows holds something other than its default, in the shapes the
 // status read returns, so a field that rewrites its value on first draw would show as a change.
 const ENABLED: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,

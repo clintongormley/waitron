@@ -542,7 +542,7 @@ describe("selected-hour admission before archive placement", () => {
       encodeArchiveRecoveryPack({
         version: 1,
         format: "WBK1",
-        venueId: "olivo",
+
         bucket: {
           region: "eu-west-1",
           bucket: "synthetic-bucket",
@@ -550,7 +550,7 @@ describe("selected-hour admission before archive placement", () => {
           accessKeyId: "synthetic-access",
           secretAccessKey: "synthetic-secret",
         },
-        archivePrefix: "archives/olivo/",
+        archivePrefix: "",
         recoveryKey: "archive password",
       }),
     );
@@ -582,7 +582,7 @@ describe("selected-hour admission before archive placement", () => {
       ],
       out: (line) => output.push(line),
       openArchiveFiles: (bucket) => {
-        expect(bucket.prefix).toBe("archives/olivo/");
+        expect(bucket.prefix).toBe("");
         return {
           putFile: unexpected,
           putBytes: unexpected,

@@ -230,7 +230,7 @@ describe("core backup source binding", () => {
         "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
       );
       db.run(
-        sql`insert into nodes (id, location_id, name, created_at) values ('source', 'venue', 'Source node', '2026-10-20T00:00:00Z')`,
+        sql`insert into nodes (id, name, created_at) values ('source', 'Source node', '2026-10-20T00:00:00Z')`,
       );
       db.run(
         sql`insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,
@@ -293,23 +293,16 @@ describe("core backup source binding", () => {
     expect(await verify({ environment: "preproduction", [field]: "other" })).toBe(false);
   });
 
-  it("refuses a copy with no venue row", async () => {
+  it("refuses a copy with no venue document", async () => {
     seed();
     for (const db of [before.db, after.db]) {
       db.run(sql`pragma foreign_keys = off`);
       try {
-        db.run(sql`delete from locations`);
+        db.run(sql`delete from settings where module = 'venue'`);
       } finally {
         db.run(sql`pragma foreign_keys = on`);
       }
     }
-    expect(await verify()).toBe(false);
-  });
-
-  it("refuses a copy with two venue rows", async () => {
-    seed();
-    for (const db of [before.db, after.db])
-      db.run(sql`insert into locations (id) values ('second-venue')`);
     expect(await verify()).toBe(false);
   });
 
@@ -678,7 +671,7 @@ describe("backup membership private/public identity", () => {
         "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
       );
       suite.db.run(
-        sql`insert into nodes (id,location_id,name,public_key,created_at) values ('source','venue','Source',${key},'2026-10-20T00:00:00Z')`,
+        sql`insert into nodes (id,name,public_key,created_at) values ('source','Source',${key},'2026-10-20T00:00:00Z')`,
       );
     }
   }
@@ -802,7 +795,7 @@ describe("backup membership private/public identity", () => {
       };
       for (const suite of [before, after]) {
         suite.db.run(
-          sql`insert into nodes (id,location_id,name,public_key,created_at) values ('other','venue','Other',${keys.publicKey},'2026-10-20T00:00:00Z')`,
+          sql`insert into nodes (id,name,public_key,created_at) values ('other','Other',${keys.publicKey},'2026-10-20T00:00:00Z')`,
         );
         suite.db.run(
           sql`insert into node_membership (id,term,document,updated_at) values (1,1,${JSON.stringify(document)},'2026-10-20T00:00:00Z')`,
@@ -828,7 +821,7 @@ describe("backup membership private/public identity", () => {
       const keys = generateNodeKeyPair();
       const endorsement = endorseKey("other", keys.publicKey, endorser, privateKey);
       before.db.run(
-        sql`insert into nodes (id,location_id,name,public_key,endorsement,created_at) values ('other','venue','Other',${keys.publicKey},${JSON.stringify(endorsement)},'2026-10-20T00:00:00Z')`,
+        sql`insert into nodes (id,name,public_key,endorsement,created_at) values ('other','Other',${keys.publicKey},${JSON.stringify(endorsement)},'2026-10-20T00:00:00Z')`,
       );
       expect(await verify(null)).toBe(endorser !== "source");
     },
@@ -838,7 +831,7 @@ describe("backup membership private/public identity", () => {
     async (endorsement) => {
       seed(null);
       before.db.run(
-        sql`insert into nodes (id,location_id,name,endorsement,created_at) values ('other','venue','Other',${endorsement},'2026-10-20T00:00:00Z')`,
+        sql`insert into nodes (id,name,endorsement,created_at) values ('other','Other',${endorsement},'2026-10-20T00:00:00Z')`,
       );
       expect(await verify(null)).toBe(false);
     },

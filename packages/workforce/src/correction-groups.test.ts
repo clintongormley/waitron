@@ -21,12 +21,12 @@ const suite = useVenueDb({
 });
 const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
-let personId: string, manager: string, locationId: string, nodeId: string;
+let personId: string, manager: string, nodeId: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  await seedLocation(suite.db);
+  nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
@@ -173,7 +173,7 @@ it.each([
   if (shape === "empty") inputs.length = 0;
   if (shape === "three") inputs.push({ ...inputs[1]! });
   if (shape === "reverse") inputs.reverse();
-  if (shape === "different-node") inputs[1]!.nodeId = await seedNode(suite.db, locationId);
+  if (shape === "different-node") inputs[1]!.nodeId = await seedNode(suite.db);
   if (shape === "different-actor") {
     await setBuiltInRoleForTest(suite.db, personId, "manager");
     inputs[1]!.actorPersonId = manager;
@@ -444,7 +444,7 @@ it("records a worker's disagreement on both manager proposals and leaves actual 
 it("answers an earlier node's pair on a new node without changing its chain", async () => {
   const ids = await run((tx) => corrections.requestCorrectionGroup(tx, pair(), "request"));
   const oldChain = await readChain(suite.db, { nodeId });
-  const nextNode = await seedNode(suite.db, locationId);
+  const nextNode = await seedNode(suite.db);
   await run((tx) =>
     corrections.decideCorrectionGroup(
       tx,

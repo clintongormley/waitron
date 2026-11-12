@@ -19,7 +19,6 @@ const DEFAULT_RULESET = {
   dailyTargetMinutes: null,
 } as const;
 
-let locationId: string;
 let nodeId: string;
 
 const suite = useVenueDb({
@@ -27,8 +26,8 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
-    nodeId = await seedNode(db, locationId);
+    await seedLocation(db);
+    nodeId = await seedNode(db);
   },
 });
 

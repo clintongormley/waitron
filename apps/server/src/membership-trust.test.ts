@@ -119,14 +119,14 @@ describe("the held document's check against the keys this box stores", () => {
 
   it("refuses a document signed by a key only venue.db names, with reason untrusted_signer", async () => {
     const { db, nodeId } = await box();
-    const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+    await db.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(db, {
       name: "Terraza",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta",
     });
     await seedBusinessDay(db, {});
-    const otherId = await seedNode(db, loc!.id);
+    const otherId = await seedNode(db);
     const other = generateNodeKeyPair();
     await setNodePublicKey(db, otherId, other.publicKey);
     expect((await readMembershipTrustSet(db))[otherId]).toBe(other.publicKey);
@@ -151,10 +151,10 @@ describe("the held document's check against the keys this box stores", () => {
     "refuses a document signed with a key venue.db names for %s, with reason bad_signature",
     async (whose) => {
       const { db, nodeId } = await box();
-      const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+      await db.insert(locations).values({}).returning({ id: locations.id });
       await seedVenueSettings(db, { operationDescription: "Venta" });
       await seedBusinessDay(db, {});
-      const mainId = await seedNode(db, loc!.id);
+      const mainId = await seedNode(db);
       await pinMainBoxKey(suite.node, nodeId, { nodeId: mainId, publicKey: MAIN.publicKey });
       const signerId = whose === "this box" ? nodeId : mainId;
       const attacker = generateNodeKeyPair();

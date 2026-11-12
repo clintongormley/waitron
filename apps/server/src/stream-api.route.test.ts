@@ -1047,13 +1047,17 @@ describe("stream settings routes", () => {
   });
 
   describe("with archives held in a bucket", () => {
-    const archiveBucket: BucketConfig = { ...BUCKET, secretAccessKey: "archive-secret-0123456789" };
+    const archiveBucket: BucketConfig = {
+      ...BUCKET,
+      prefix: "archives/",
+      secretAccessKey: "archive-secret-0123456789",
+    };
 
     async function holdArchive(): Promise<void> {
       await withTransaction(suite.db, (tx) =>
         writeArchiveSettings(tx, RING, {
           enabled: true,
-          destinations: [{ kind: "s3", id: "bucket", bucket: archiveBucket, venueId: VENUE_ID }],
+          destinations: [{ kind: "s3", id: "bucket", bucket: archiveBucket }],
           schedule: { kind: "interval", ms: 3_600_000 },
           retention: { count: 7, days: 30 },
           destinationTimeoutMs: 900_000,
@@ -1084,10 +1088,9 @@ describe("stream settings routes", () => {
         expect(reload).not.toHaveBeenCalled();
         expect(await storedBucket()).toBeNull();
 
-        // Control: the same bucket at its root streams under `venues/`, apart from `archives/`.
         const apart = await app.request("/api/backup/stream", {
           method: "PUT",
-          ...json(cookie, BODY),
+          ...json(cookie, { ...BODY, prefix: "stream/" }),
         });
         expect(apart.status).toBe(200);
       } finally {
@@ -1165,7 +1168,6 @@ describe("stream settings routes", () => {
                 kind: "s3",
                 id: "bucket",
                 bucket: archiveBucket,
-                venueId: VENUE_ID,
               }),
             ],
           },
@@ -1181,10 +1183,10 @@ describe("stream settings routes", () => {
           error: { code: "backup.archive_namespace_overlap" },
         });
         expect(deps.probe).not.toHaveBeenCalled();
-        // Control: the same bucket at its root streams under `venues/`, apart from `archives/`.
+
         const apart = await app.request("/api/backup/stream", {
           method: "PUT",
-          ...json(cookie, BODY),
+          ...json(cookie, { ...BODY, prefix: "stream/" }),
         });
         expect(apart.status).toBe(200);
       } finally {

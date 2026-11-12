@@ -18,18 +18,17 @@ describe("buildBackupBackend", () => {
       bucket: {
         region: "eu-north-1",
         bucket: "archives",
-        prefix: "venue/archives/v1",
+        prefix: "nightly",
         accessKeyId: "AKIAEXAMPLE",
         secretAccessKey: "secret",
       },
-      venueId: "v1",
     });
     expect(backend).toBeInstanceOf(S3Backend);
     expect(backend.id).toBe("offsite");
     (backend as S3Backend).close();
   });
 
-  it("keeps a bucket destination's objects under its venue's archive folder", async () => {
+  it("keeps a bucket destination's objects under the selected archive folder", async () => {
     const asked: { method: string; path: string; prefix: unknown }[] = [];
     const backend = buildBackupBackend(
       {
@@ -43,7 +42,6 @@ describe("buildBackupBackend", () => {
           accessKeyId: "AKIAEXAMPLE",
           secretAccessKey: "secret",
         },
-        venueId: "v1",
       },
       {
         requestHandler: {
@@ -73,7 +71,7 @@ describe("buildBackupBackend", () => {
     await backend.list("waitron-", call);
     backend.close();
     expect(asked[0]).toMatchObject({ method: "PUT" });
-    expect(asked[0]!.path).toMatch(/box\/archives\/v1\/probe$/);
-    expect(asked[1]).toMatchObject({ method: "GET", prefix: "box/archives/v1/waitron-" });
+    expect(asked[0]!.path).toMatch(/box\/probe$/);
+    expect(asked[1]).toMatchObject({ method: "GET", prefix: "box/waitron-" });
   });
 });

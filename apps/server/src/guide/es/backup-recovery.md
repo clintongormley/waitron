@@ -2,6 +2,10 @@
 
 Conserva el paquete de recuperación anterior cuando cambies la clave de recuperación. Hasta que la nueva copia del bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
 
+Las copias programadas en un bucket usan la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
+
+Usa una carpeta de copias distinta para cada instalación. Una caja restaurada que conserva los ajustes anteriores puede eliminar las copias de la caja anterior. Elige una carpeta nueva para conservarlas.
+
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
 Recargar la pestaña que estaba haciendo la configuración sigue con ella, hasta que la configuración

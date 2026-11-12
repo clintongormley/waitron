@@ -1,13 +1,7 @@
-import type {
-  ArchiveChoice,
-  BackupDestinationView,
-  BackupStatusView,
-  StreamSettingsView,
-} from "../api/client.js";
+import type { ArchiveChoice, BackupDestinationView, BackupStatusView } from "../api/client.js";
 
-export type BucketChoice = "none" | "stream-bucket" | "custom-s3";
+export type BucketChoice = "none" | "custom-s3";
 
-type StreamBucket = NonNullable<StreamSettingsView["bucket"]>;
 type HeldBucket = Extract<BackupDestinationView, { kind: "s3" }>;
 
 /** The fields of another bucket, as typed; `secretAccessKey` is write-only and never prefilled. */
@@ -51,8 +45,8 @@ export function hasUnusableFolder(prefix: string): boolean {
 }
 
 /** Where the server's `archiveNamespace` puts archives in a bucket. */
-export function streamLocation(place: { bucket: string; prefix: string }, venueId: string): string {
-  return `${place.bucket}/${normalisePrefix(place.prefix)}archives/${venueId}/`;
+export function streamLocation(place: { bucket: string; prefix: string }): string {
+  return `${place.bucket}/${normalisePrefix(place.prefix)}`;
 }
 
 export function heldBucket(status: BackupStatusView | undefined): HeldBucket | null {
@@ -93,26 +87,17 @@ export function keepsHeldSecret(custom: CustomBucket, held: HeldBucket | null): 
   );
 }
 
-export function matchesStream(d: BackupDestinationView, stream: StreamBucket | null): boolean {
-  return stream !== null && d.kind === "s3" && samePlace(d, stream);
-}
-
-export function sameStreamBucket(a: StreamBucket | null, b: StreamBucket | null): boolean {
-  if (a === null || b === null) return a === b;
-  return samePlace(a, b);
-}
-
-export function openingDestinations(
-  status: BackupStatusView,
-  stream: StreamBucket | null,
-): { folderOn: boolean; folder: string; bucket: BucketChoice; custom: CustomBucket } {
+export function openingDestinations(status: BackupStatusView): {
+  folderOn: boolean;
+  folder: string;
+  bucket: BucketChoice;
+  custom: CustomBucket;
+} {
   const stored = status.destinations.find((d) => d.kind === "local-fs");
   const held = heldBucket(status);
   const folderOn = stored !== undefined || held === null;
   const folder = stored?.dir ?? "";
   if (held === null) return { folderOn, folder, bucket: "none", custom: { ...EMPTY_CUSTOM } };
-  if (matchesStream(held, stream))
-    return { folderOn, folder, bucket: "stream-bucket", custom: { ...EMPTY_CUSTOM } };
   return {
     folderOn,
     folder,
@@ -136,7 +121,6 @@ export function destinationsBody(
   custom: CustomBucket,
 ): ArchiveChoice[] {
   const list: ArchiveChoice[] = folderOn ? [{ kind: "local-fs", dir: folder.trim() }] : [];
-  if (bucket === "stream-bucket") list.push({ kind: "stream-bucket" });
   if (bucket === "custom-s3") list.push(customBody(custom));
   return list;
 }

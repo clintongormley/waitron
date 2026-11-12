@@ -30,7 +30,7 @@ import {
   assertNoForeignTenant,
   assertNoOperationalVenue,
   readTenantIdentities,
-  readOperationalVenueIds,
+  hasOperationalVenue,
 } from "@waitron/provisioning";
 import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -193,7 +193,7 @@ export async function adoptFromPrimary(
     { country: bundle.tenant.country, taxId: bundle.tenant.taxId },
     deps.database,
   );
-  assertNoOperationalVenue(await readOperationalVenueIds(deps.ownerDb));
+  assertNoOperationalVenue(await hasOperationalVenue(deps.ownerDb));
 
   // `stampDeployment` refuses this too, but only after `hooks.beforeFirstWrite`; every refusal
   // belongs before it.

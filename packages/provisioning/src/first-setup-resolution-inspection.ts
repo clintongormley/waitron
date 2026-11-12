@@ -23,7 +23,7 @@ import { executeTarget } from "./read-only-database.js";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
-import { readOperationalVenueIds, readTenantIdentities } from "./tenant-guard.js";
+import { hasOperationalVenue, readTenantIdentities } from "./tenant-guard.js";
 import { type FirstSetupStore } from "./first-setup-state.js";
 export interface FirstSetupRoots {
   stateDir: string;
@@ -100,8 +100,8 @@ async function inspectDatabase(
     connection.exec("begin");
     const target = executeTarget(connection);
     const tenants = await readTenantIdentities(target);
-    const venues = await readOperationalVenueIds(target);
-    const database = tenants.length === 0 && venues.length === 0 ? "no-venue-rows" : "occupied";
+    const venues = await hasOperationalVenue(target);
+    const database = tenants.length === 0 && !venues ? "no-venue-rows" : "occupied";
     return {
       database,
       emptyDatabase:

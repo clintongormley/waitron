@@ -227,7 +227,6 @@ async function seedIdentity(admin: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_LOCATION_ID,
       name: "Node",
     })
     .onConflictDoNothing();

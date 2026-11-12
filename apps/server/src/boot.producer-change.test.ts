@@ -95,7 +95,7 @@ beforeAll(async () => {
     operationDescription: "Hospitality",
   });
   await seedBusinessDay(db, {});
-  await db.insert(nodes).values({ id: NODE_ID, locationId: LOCATION_ID, name: "Node" });
+  await db.insert(nodes).values({ id: NODE_ID, name: "Node" });
   await db.insert(invoiceSeries).values({ id: SERIES_ID, nodeId: NODE_ID, code: "A" });
   await establishNodeIdentity({ ownerDb: db, node, ring: RING }, NODE_ID);
   const ids = await seedFiscalParents(db, {

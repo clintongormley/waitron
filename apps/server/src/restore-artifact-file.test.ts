@@ -63,7 +63,7 @@ beforeAll(async () => {
       operationDescription: "Venta",
     });
     await seedBusinessDay(tx, {});
-    await tx.insert(nodes).values({ id: ids.node, locationId: ids.location, name: "File node" });
+    await tx.insert(nodes).values({ id: ids.node, name: "File node" });
     await tx.insert(invoiceSeries).values({ id: ids.series, nodeId: ids.node, code: "FILE" });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "FULL", purpose: "full" });
   });

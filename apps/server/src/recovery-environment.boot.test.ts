@@ -365,9 +365,7 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
   await suite.db.insert(locations).values({ id: sourceLocation });
   await seedBusinessDay(suite.db, {});
   await seedVenueSettings(suite.db, { name: "Selected venue", invoiceLocales: ["en-GB"] });
-  await suite.db
-    .insert(nodes)
-    .values({ id: sourceNode, locationId: sourceLocation, name: "Selected box" });
+  await suite.db.insert(nodes).values({ id: sourceNode, name: "Selected box" });
   const sourceCopy = join(f.stateDir, "selected.db");
   await suite.db.archiveTo(sourceCopy);
   const archiveKey = "synthetic-archive-key";

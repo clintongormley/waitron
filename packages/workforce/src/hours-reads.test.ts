@@ -363,7 +363,7 @@ it("follows late other-node corrections moving a whole shift across a closed mon
   const { start, end } = await shift();
   const closed = await freeze();
   vi.setSystemTime(new Date("2026-03-10T12:00:00Z"));
-  const second = await seedNode(f.suite.db, f.locationId);
+  const second = await seedNode(f.suite.db);
   for (const [target, at] of [
     [end, "2026-02-05T17:00:00Z"],
     [start, "2026-02-05T09:00:00Z"],
@@ -419,7 +419,7 @@ it("never leaks another person through own open/pending/history/closures", async
   expect(value.openShifts).toEqual([]);
 });
 it("counts a shift clocked in on one node and out on another once", async () => {
-  const second = await seedNode(f.suite.db, f.locationId);
+  const second = await seedNode(f.suite.db);
   await f.run((tx) => f.backend.clockIn(tx, f.event("2026-01-05T09:00:00Z")));
   await f.run((tx) =>
     f.backend.clockOut(tx, { ...f.event("2026-01-05T17:00:00Z"), nodeId: second }),

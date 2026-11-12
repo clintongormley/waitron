@@ -175,8 +175,7 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
     const request = await counterRequest(billId);
     const otherNode = randomUUID();
     await inTx(t.venue, async (tx) => {
-      const [own] = await tx.select().from(nodes).where(eq(nodes.id, t.venue.cfg.nodeId));
-      await tx.insert(nodes).values({ id: otherNode, locationId: own!.locationId, name: "Spare" });
+      await tx.insert(nodes).values({ id: otherNode, name: "Spare" });
       await tx.update(workingOrders).set({ nodeId: otherNode }).where(eq(workingOrders.id, billId));
     });
 

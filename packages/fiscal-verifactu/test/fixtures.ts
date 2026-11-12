@@ -50,7 +50,7 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
   const existing = await db.select({ id: locations.id }).from(locations).limit(2);
-  let venueId = existing.length === 1 ? existing[0]!.id : undefined;
+  const venueId = existing.length === 1 ? existing[0]!.id : undefined;
   if (venueId === undefined) {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
@@ -61,9 +61,8 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
       operationDescription: "Venta en establecimiento",
     });
     await seedBusinessDay(db, {});
-    venueId = TENANT_A.locationId;
   }
-  await db.insert(nodes).values({ id: TENANT_A.nodeId, locationId: venueId, name: "Node 1" });
+  await db.insert(nodes).values({ id: TENANT_A.nodeId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
     .values({ id: TENANT_A.seriesId, nodeId: TENANT_A.nodeId, code: "A" });
@@ -110,7 +109,7 @@ export async function seedTenants(db: Database): Promise<void> {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
   const existing = await db.select({ id: locations.id }).from(locations).limit(2);
-  let venueId = existing.length === 1 ? existing[0]!.id : undefined;
+  const venueId = existing.length === 1 ? existing[0]!.id : undefined;
   if (venueId === undefined) {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
@@ -120,12 +119,11 @@ export async function seedTenants(db: Database): Promise<void> {
       operationDescription: "Venta en establecimiento",
     });
     await seedBusinessDay(db, {});
-    venueId = TENANT_A.locationId;
   }
   await db.insert(nodes).values([
-    { id: TENANT_A.nodeId, locationId: venueId, name: "Node 1" },
-    { id: TENANT_A.nodeId2, locationId: venueId, name: "Node 2" },
-    { id: TENANT_B.nodeId, locationId: venueId, name: "Node 1" },
+    { id: TENANT_A.nodeId, name: "Node 1" },
+    { id: TENANT_A.nodeId2, name: "Node 2" },
+    { id: TENANT_B.nodeId, name: "Node 1" },
   ]);
 }
 
@@ -143,9 +141,9 @@ export async function seedVenueNodes(db: Database): Promise<void> {
   });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values([
-    { id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
-    { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
-    { id: TENANT_B.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
+    { id: TENANT_A.nodeId, name: "Node 1" },
+    { id: TENANT_A.nodeId2, name: "Node 2" },
+    { id: TENANT_B.nodeId, name: "Node 1" },
   ]);
 }
 
@@ -264,10 +262,7 @@ async function insertLocationNodeSeries(
     });
     await seedBusinessDay(tx);
   }
-  const [node] = await tx
-    .insert(nodes)
-    .values({ locationId: location!.id, name: "Node 1" })
-    .returning({ id: nodes.id });
+  const [node] = await tx.insert(nodes).values({ name: "Node 1" }).returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   const [series] = await tx
     .insert(invoiceSeries)

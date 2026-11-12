@@ -135,8 +135,6 @@ async function checks(
         managedByEnvironment: true,
         env: merged,
         sealed: null,
-        // Bucket namespaces are discarded below; use the checked node id without opening venue.db.
-        venueId: note.nodeId,
       }).flatMap((d) => (d.kind === "local-fs" ? [{ id: d.id, localDir: d.dir }] : []));
     } catch {
       return { skipped: "destinations_invalid" };

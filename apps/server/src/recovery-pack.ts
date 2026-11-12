@@ -33,7 +33,6 @@ export async function createRecoveryPack(
     readonly db: Database;
     readonly nodeDb: NodeDatabase;
     readonly node: ProvisionedNode;
-    readonly venueId: string;
     readonly modules: readonly WaitronModule[];
     readonly now: Date;
     readonly authorize?: (tx: Transaction) => Promise<void>;
@@ -51,7 +50,7 @@ export async function createRecoveryPack(
   )
     return refuse("shape");
   const secret = request.nodeRecoveryKey;
-  const node = { ...deps.node, venueId: deps.venueId };
+  const node = deps.node;
   const modules = [...deps.modules];
   const createdAt = deps.now.toISOString();
   const inputs = structuredClone(request.modules);

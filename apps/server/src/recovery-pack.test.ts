@@ -32,7 +32,7 @@ async function create(
   input: unknown = { block: "input" },
 ) {
   return createRecoveryPack(
-    { db: suite.db, nodeDb: suite.node, node, venueId: "venue-one", modules, now },
+    { db: suite.db, nodeDb: suite.node, node, modules, now },
     { nodeRecoveryKey: secret, modules: { "test-regime": input } },
   );
 }
@@ -102,7 +102,6 @@ it("refuses a missing contribution input rather than silently printing an incomp
         db: suite.db,
         nodeDb: suite.node,
         node,
-        venueId: "venue-one",
         modules: [contribution],
         now,
       },

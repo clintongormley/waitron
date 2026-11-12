@@ -69,17 +69,23 @@ describe("paper pack's public allocation snapshot", () => {
     expect(JSON.stringify(verify(signed))).not.toContain("consumptionConfirmed");
   });
 
-  it.each([
-    { taxpayerNif: "A58818501" },
-    { softwareId: "W2" },
-    { environment: "production" },
-    { recipientVenueId: "venue-two" },
-  ])("refuses a signed block belonging to a different scope: %j", (changed) => {
-    expect(verify(block(), custodian, { ...scope, ...changed })).toEqual({
-      ok: false,
-      reason: "scope_mismatch",
-    });
+  it("accepts a signed block regardless of the venue value it names", () => {
+    const signed = paper.signPaperBlock(
+      { ...block().payload, recipientVenueId: "venue-two" },
+      privateKey,
+    );
+    expect(verify(signed)).toEqual({ ok: true, block: signed, custodian });
   });
+
+  it.each([{ taxpayerNif: "A58818501" }, { softwareId: "W2" }, { environment: "production" }])(
+    "refuses a signed block belonging to a different scope: %j",
+    (changed) => {
+      expect(verify(block(), custodian, { ...scope, ...changed })).toEqual({
+        ok: false,
+        reason: "scope_mismatch",
+      });
+    },
+  );
 
   it("refuses a block missing the full invoice series the venue needs", () => {
     const signed = block();

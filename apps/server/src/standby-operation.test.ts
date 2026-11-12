@@ -12,7 +12,6 @@ import {
   nodes,
   stampDeployment,
   type Transaction,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
@@ -43,7 +42,6 @@ vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
-let LOCATION: string;
 const PRIMARY = "e0000000-0000-4000-8000-000000000002";
 const TARGET = "e0000000-0000-4000-8000-000000000003";
 const RING = loadKeyRing({
@@ -76,8 +74,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  LOCATION = await venueLocationId(suite.db);
-  await suite.db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
+  await suite.db.insert(nodes).values({ id: PRIMARY, name: "Primary" });
   await stampDeployment(suite.db, "preproduction");
 });
 
@@ -195,7 +192,7 @@ it("does not promote or open series after the standby's outside source refuses",
 });
 
 async function mirror(activate: StandbyProvisioning["activate"]) {
-  await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
+  await suite.db.insert(nodes).values({ id: TARGET, name: "Standby" });
   await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
   return {
@@ -341,7 +338,7 @@ describe("opaque authenticated standby carriers", () => {
   });
 
   it("activates a dormant module before reading series and commits with the role change", async () => {
-    await suite.db.insert(nodes).values({ id: TARGET, locationId: LOCATION, name: "Standby" });
+    await suite.db.insert(nodes).values({ id: TARGET, name: "Standby" });
     await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror");
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
     const scope = { ...binding, action: "promote" };
@@ -875,7 +872,6 @@ it("keeps a standby established during preparation when the venue row is subsequ
       async prepare(operation, run) {
         await suite.db.insert(nodes).values({
           id: args.standby.nodeId,
-          locationId: LOCATION,
           name: "Already established",
           publicKey: args.standby.publicKey,
         });

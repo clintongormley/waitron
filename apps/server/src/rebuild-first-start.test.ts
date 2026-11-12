@@ -88,7 +88,7 @@ beforeAll(async () => {
     operationDescription: "Venta",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Node 1" });
+  await suite.db.insert(nodes).values({ id: NODE, name: "Node 1" });
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, NODE);
 });
 

@@ -259,7 +259,6 @@ export function verifyPaperBlockSnapshot(
     readonly taxpayerNif: string;
     readonly softwareId: string;
     readonly environment: string;
-    readonly recipientVenueId: string;
     readonly requiredBases: readonly { readonly code: string; readonly purpose: string }[];
   },
 ): PaperBlockSnapshot {
@@ -277,7 +276,6 @@ export function verifyPaperBlockSnapshot(
   )
     return { ok: false, reason: "untrusted" };
   if (
-    block.recipientVenueId !== context.recipientVenueId ||
     block.allocations.some(
       (allocation) =>
         allocation.taxpayerNif !== context.taxpayerNif ||

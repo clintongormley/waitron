@@ -1,4 +1,3 @@
-import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
@@ -34,7 +33,6 @@ import type {
   BackupStatusView,
   BackupWriteAnswer,
   DashboardApi,
-  StreamSettingsView,
 } from "../api/client.js";
 import {
   EMPTY_CUSTOM,
@@ -43,7 +41,6 @@ import {
   heldBucket,
   keepsHeldSecret,
   openingDestinations,
-  sameStreamBucket,
   streamLocation,
   type BucketChoice,
   type CustomBucket,
@@ -307,18 +304,6 @@ export class BackupScreen extends LitElement {
   #writeAnswers = 0;
 
   @state() private status?: BackupStatusView;
-  /** It never rewrites a changed draft. */
-  @state() private stream?: StreamSettingsView;
-  @state() private streamUnread = false;
-  /** Settles once the stream's first read has answered or failed, so Edit prefills from it. */
-  #streamRead: Promise<void> = Promise.resolve();
-  readonly #streamQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    () => {
-      if (this.stream === undefined) this.streamUnread = true;
-    },
-  );
   @state() private errorKey: string | null = null;
   /** Kept apart from `errorKey` so a later good read clears its own failure and never an action's. */
   @state() private refreshErrorKey: string | null = null;
@@ -516,15 +501,6 @@ export class BackupScreen extends LitElement {
     });
     this.#trackArchive();
     void this.#load();
-    this.#streamRead = this.#streamQueries
-      .watch("getStreamSettings", [], (value) => {
-        const before = this.stream;
-        this.stream = value;
-        this.streamUnread = false;
-        if (before !== undefined && !sameStreamBucket(before.bucket, value.bucket))
-          this.#reopenUnchanged();
-      })
-      .catch(() => undefined);
   }
 
   override disconnectedCallback(): void {
@@ -664,10 +640,6 @@ export class BackupScreen extends LitElement {
     return this.bucket === "custom-s3" && endpoint !== "" && !isPlainWebAddress(endpoint);
   }
 
-  get #streamGone(): boolean {
-    return this.bucket === "stream-bucket" && (this.stream?.bucket ?? null) === null;
-  }
-
   get #nothingChosen(): boolean {
     return !this.folderOn && this.bucket === "none";
   }
@@ -676,7 +648,6 @@ export class BackupScreen extends LitElement {
     return (
       this.#nothingChosen ||
       this.#folderMissing ||
-      this.#streamGone ||
       this.#endpointInvalid ||
       CUSTOM_FIELDS.some((f) => this.#customMissing(f))
     );
@@ -758,12 +729,6 @@ export class BackupScreen extends LitElement {
         this.folderRefusalReason = typeof params?.reason === "string" ? params.reason : "";
         this.folderScratchRoot = typeof params?.scratchRoot === "string" ? params.scratchRoot : "";
         this.#focusFirstInvalidBox();
-      } else if (field === "prefix" && sent.some((d) => d.kind === "stream-bucket")) {
-        this.formRefusal = {
-          code,
-          reason: null,
-          sentence: "backup.destination.stream_prefix_refused",
-        };
       } else this.formRefusal = { code, reason: null };
     } else if (FORM_REFUSALS.has(code)) {
       const reason = (error as { params?: { reason?: unknown } }).params?.reason;
@@ -927,7 +892,6 @@ export class BackupScreen extends LitElement {
   /** Fills the turn-on form from the switched-off stored settings, unless the form holds a change. */
   async #openStoredOff(afterTurnOff: boolean): Promise<void> {
     const generation = this.#generation;
-    await this.#streamRead;
     const s = this.status;
     if (generation !== this.#generation || s === undefined) return;
     if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
@@ -940,18 +904,6 @@ export class BackupScreen extends LitElement {
         return;
     }
     this.#prefillAndCommit(s, !afterTurnOff);
-  }
-
-  /** The stream's bucket changed under a prefilled form nobody has changed: open it again as a fresh
-   * load would, so a stored bucket no longer the stream's shows as another bucket. */
-  #reopenUnchanged(): void {
-    const s = this.status;
-    if (s === undefined || this.submitting || this.#archiveScope?.isDirty()) return;
-    if (!this.editSettings) {
-      void this.#openStoredOff(false);
-      return;
-    }
-    this.#prefillAndCommit(s, true);
   }
 
   /** An automatic refill keeps a switched-off folder's text when the refilled folder is off too:
@@ -1016,7 +968,7 @@ export class BackupScreen extends LitElement {
     const opening = archivePayload(this.#archiveValue());
     this.errorKey = null;
     try {
-      const [{ key }] = await Promise.all([this.api.getBackupRecoveryKey(), this.#streamRead]);
+      const { key } = await this.api.getBackupRecoveryKey();
       if (
         generation !== this.#generation ||
         openings !== this.#editOpenings ||
@@ -1101,7 +1053,7 @@ export class BackupScreen extends LitElement {
   /** What the form holds once filled from `s`. A non-`wall-clock` running schedule (the box-image
    * `interval` form the UI cannot author) leaves the schedule controls as they are. */
   #fieldsFrom(s: BackupStatusView): FormFields {
-    const opened = openingDestinations(s, this.stream?.bucket ?? null);
+    const opened = openingDestinations(s);
     const fields: FormFields = {
       ...this.#fields(),
       folderOn: opened.folderOn,
@@ -1499,13 +1451,6 @@ export class BackupScreen extends LitElement {
   }
 
   #renderDestinationField(): TemplateResult {
-    const bucket = this.stream?.bucket ?? null;
-    const unavailable = this.streamUnread
-      ? t("backup.destination.stream_unread")
-      : this.stream !== undefined && bucket === null
-        ? t("backup.destination.stream_unavailable")
-        : null;
-    const streamMarked = this.attempted && this.#streamGone;
     const folderMessage = this.folderRefused
       ? this.folderRefusalReason === "scratch"
         ? fill("backup.destination.folder_scratch_refused", { folder: this.folderScratchRoot })
@@ -1550,59 +1495,17 @@ export class BackupScreen extends LitElement {
         label=${t("backup.destination.bucket")}
         .options=${[
           { value: "none", fixed: true, label: t("backup.destination.bucket_none") },
-          {
-            value: "stream-bucket",
-            label: t("backup.destination.choice_stream"),
-            disabled: bucket === null,
-            ...(unavailable === null ? {} : { description: unavailable }),
-          },
           { value: "custom-s3", label: t("backup.destination.choice_custom") },
         ]}
         .value=${this.bucket}
-        .error=${
-          streamMarked
-            ? (unavailable ?? t("backup.destination.stream_unavailable"))
-            : this.attempted && this.#nothingChosen
-              ? t("backup.destination.nothing_chosen")
-              : ""
-        }
+        .error=${this.attempted && this.#nothingChosen ? t("backup.destination.nothing_chosen") : ""}
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           this.bucket = e.detail.value as BucketChoice;
           this.customRefused = null;
         }}
       ></wt-combobox>
-      ${
-        unavailable === null || this.bucket !== "stream-bucket" || streamMarked
-          ? nothing
-          : html`<p
-              class="hint"
-              data-test=${this.streamUnread ? "stream-unread" : "stream-unavailable"}
-            >
-              ${unavailable}
-            </p>`
-      }
-      ${
-        this.bucket === "stream-bucket"
-          ? this.#renderStreamChoice(bucket)
-          : this.bucket === "custom-s3"
-            ? this.#renderCustomChoice()
-            : nothing
-      }
-    `;
-  }
-
-  #renderStreamChoice(bucket: NonNullable<StreamSettingsView["bucket"]> | null): TemplateResult {
-    return html`
-      <p class="hint" data-test="stream-snapshot">${t("backup.destination.stream_snapshot")}</p>
-      ${
-        bucket === null || this.status === undefined
-          ? nothing
-          : html`<p data-test="stream-location">
-              <span class="field-label">${t("backup.destination.stream_location")}</span>
-              <span class="location">${streamLocation(bucket, this.status.venueId)}</span>
-            </p>`
-      }
+      ${this.bucket === "custom-s3" ? this.#renderCustomChoice() : nothing}
     `;
   }
 
@@ -1659,7 +1562,9 @@ export class BackupScreen extends LitElement {
       hint=${
         secret && !required && this.customRefused !== "secretAccessKey"
           ? t("backup.destination.secret_keep")
-          : ""
+          : f.field === "prefix"
+            ? t("backup.destination.prefix_hint")
+            : ""
       }
       .value=${this.custom[f.field]}
       .error=${this.#customMessage(f)}
@@ -1703,7 +1608,7 @@ export class BackupScreen extends LitElement {
           : html`<p data-test="custom-location">
               <span class="field-label">${t("backup.destination.stream_location")}</span>
               <span class="location"
-                >${streamLocation({ bucket, prefix: this.custom.prefix.trim() }, this.status.venueId)}</span
+                >${streamLocation({ bucket, prefix: this.custom.prefix.trim() })}</span
               >
             </p>`
       }

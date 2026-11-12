@@ -23,17 +23,14 @@ const recipient = {
 
 async function bill(full = false) {
   return withTransaction(suite.db, async (tx) => {
-    const [location] = await tx.insert(locations).values({}).returning();
+    await tx.insert(locations).values({}).returning();
     await seedVenueSettings(tx, {
       name: "Selector",
       invoiceLocales: ["es-ES"],
       operationDescription: "Restaurant",
     });
     await seedBusinessDay(tx, {});
-    const [node] = await tx
-      .insert(nodes)
-      .values({ locationId: location!.id, name: "Selector" })
-      .returning();
+    const [node] = await tx.insert(nodes).values({ name: "Selector" }).returning();
     const [standard, fullSeries] = await tx
       .insert(invoiceSeries)
       .values([

@@ -72,7 +72,7 @@ it("previews a backup with an older venue schema by migrating only its private s
     operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Earlier node" });
+  await suite.db.insert(nodes).values({ id: nodeId, name: "Earlier node" });
   const scratch = await mkdtemp(join(tmpdir(), "preview-old-archive-"));
   try {
     const source = join(scratch, "source.db");
@@ -154,7 +154,7 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Earlier node" });
+  await suite.db.insert(nodes).values({ id: nodeId, name: "Earlier node" });
   const scratch = await mkdtemp(join(tmpdir(), "preview-old-stream-"));
   try {
     const entries = [

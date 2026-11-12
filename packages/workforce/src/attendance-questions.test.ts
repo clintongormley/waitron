@@ -28,7 +28,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
-let locationId: string, personId: string, other: string, nodeId: string;
+let personId: string, other: string, nodeId: string;
 const now = new Date("2026-01-08T04:01:00.000Z");
 const day = (businessDay = "2026-01-05") => ({
   businessDay,
@@ -47,8 +47,8 @@ const question = () => ({
 });
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  await seedLocation(suite.db);
+  nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },

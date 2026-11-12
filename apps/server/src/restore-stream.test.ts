@@ -146,7 +146,7 @@ beforeAll(async () => {
     operationDescription: "Venta",
   });
   await seedBusinessDay(db, {});
-  await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
+  await db.insert(nodes).values({ id: T.nodeId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FF", purpose: "full" });
   suite.node.run(
@@ -1027,7 +1027,9 @@ describe("checkIntegrity", () => {
         await copyFile(fixtureDb, args.outPath);
         const db = new DatabaseSync(args.outPath);
         try {
-          db.exec("pragma foreign_keys = off; delete from locations");
+          db.exec(
+            "pragma foreign_keys = off; update settings set updated_by='missing' where module='venue'",
+          );
         } finally {
           db.close();
         }

@@ -1759,7 +1759,6 @@ export type BackupDestinationView =
       endpoint: string | null;
       region: string;
       bucket: string;
-      /** The folder chosen inside the bucket; archives live under `namespace`, beneath it. */
       prefix: string;
       accessKeyId: string;
       namespace: string;
@@ -1769,7 +1768,6 @@ export type BackupDestinationView =
 /** Never carries the recovery key: the server strips it (`projectStatus`,
  * `apps/server/src/backup-api.ts`). */
 export interface BackupStatusView {
-  venueId: string;
   enabled: boolean;
   isPrimary: boolean;
   managedByEnvironment: boolean;

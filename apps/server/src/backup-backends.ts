@@ -15,7 +15,7 @@ export function buildBackupBackend(
       return new S3Backend(
         dest.id,
         createS3FileStore(
-          { ...dest.bucket, prefix: archiveNamespace(dest.bucket.prefix, dest.venueId) },
+          { ...dest.bucket, prefix: archiveNamespace(dest.bucket.prefix) },
           s3Options,
         ),
       );

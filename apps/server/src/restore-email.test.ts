@@ -76,9 +76,7 @@ const suite = useVenueDb({
       operationDescription: "Venta",
     });
     await seedBusinessDay(db, {});
-    await db
-      .insert(nodes)
-      .values({ id: T.nodeId, locationId: T.locationId, name: "Original node" });
+    await db.insert(nodes).values({ id: T.nodeId, name: "Original node" });
     await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
     await db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FF", purpose: "full" });
   },

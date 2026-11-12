@@ -27,7 +27,7 @@ it.each([
   { name: "seedTenantNodeSif", seed: seedTenantNodeSif },
   { name: "seedTenants", seed: seedTenants },
 ])("reuses an existing venue for fixed-id parents: $name", async ({ seed }) => {
-  const [venue] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
+  await suite.db.insert(locations).values({});
   await seedVenueSettings(suite.db, {
     name: "Retained venue",
     invoiceLocales: ["es"],
@@ -39,7 +39,7 @@ it.each([
   expect(await readVenue(suite.db)).toEqual(before);
   expect(
     (await suite.db.select().from(nodes)).find((row) => row.id === TENANT_A.nodeId),
-  ).toMatchObject({ locationId: venue!.id });
+  ).toMatchObject({ id: TENANT_A.nodeId });
 });
 
 it("adds independent fiscal chains at the existing venue", async () => {

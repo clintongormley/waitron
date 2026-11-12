@@ -156,7 +156,7 @@ describe("currentSif resolves per node", () => {
     return suite.db.transaction(async (tx) => {
       // Through the tables, not raw SQL: `id` and `created_at` are builder-side `$defaultFn`
       // generators a raw insert never reaches.
-      const [loc] = await tx.insert(locations).values({}).returning({ id: locations.id });
+      await tx.insert(locations).values({}).returning({ id: locations.id });
       await seedVenueSettings(tx, {
         name: "Sala sib",
         invoiceLocales: ["es"],
@@ -165,7 +165,7 @@ describe("currentSif resolves per node", () => {
       await seedBusinessDay(tx, {});
       const [nodeRow] = await tx
         .insert(nodes)
-        .values({ locationId: loc!.id, name: "Node sib" })
+        .values({ name: "Node sib" })
         .returning({ id: nodes.id });
       const sibling = brandNodeId(nodeRow!.id);
       // Register a SIF for the sibling under the same NIF as the fixture (one obligado, two nodes)

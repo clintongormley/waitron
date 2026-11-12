@@ -24,7 +24,6 @@ import {
 
 const source = {
   nodeId: "20000000-0000-4000-8000-000000000002",
-  venueId: "10000000-0000-4000-8000-000000000001",
 };
 const now = new Date("2026-10-20T10:00:00.000Z");
 const key = Buffer.alloc(32, 19).toString("base64");
@@ -221,11 +220,7 @@ describe("private host recovery material", () => {
     expect(await readdir(dir)).not.toContain("backup.env");
     expect(await verifyBackupKeyPlacement(input, dir)).toBe("passed");
   });
-  it("checks the captured backup settings against the copy's venue id", async () => {
-    const load = vi.spyOn(configReaders, "loadBackupConfig");
-    expect(await verifyBackupStateSecrets(entries(), source, now)).toEqual(pass);
-    expect(load.mock.calls.map(([, venueId]) => venueId)).toEqual([source.venueId]);
-  });
+
   it.each([
     "WAITRON_BACKUP_RECOVERY_KEY=short\n",
     "WAITRON_BACKUP_DIR=/old\n",

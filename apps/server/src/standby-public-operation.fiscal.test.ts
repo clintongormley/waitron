@@ -140,7 +140,7 @@ beforeEach(async () => {
       operationDescription: "Venta",
     });
     await seedBusinessDay(db, {});
-    await db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
+    await db.insert(nodes).values({ id: PRIMARY, name: "Primary" });
     await db.insert(deployment).values({ id: 1, environment: "preproduction" });
     await withTransaction(db, (tx) =>
       registerSif(tx, {

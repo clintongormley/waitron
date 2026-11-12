@@ -256,9 +256,8 @@ export async function verifyCoreBackupData(input: {
     return false;
   for (const query of [input.before, input.after]) {
     const deployment = await first(query, "select environment from deployment where id = 1");
-    // The `nodes.location_id` and `locations` reads go with the A1301 schema slices.
-    const node = await first(query, "select location_id from nodes where id = ?", [input.nodeId]);
-    const venues = await first(query, "select count(*) as n from locations");
+    const node = await first(query, "select id from nodes where id = ?", [input.nodeId]);
+    const venues = await first(query, "select count(*) as n from settings where module = 'venue'");
     const tenant = await first(
       query,
       "select country, tax_id, legal_name from tenants where id = 1",

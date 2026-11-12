@@ -2078,18 +2078,14 @@ export const en = {
   "backup.destination.bucket_none": "No bucket",
   "backup.destination.nothing_chosen": "Choose a folder on this box, a bucket, or both.",
   "backup.destination.choice_local": "A folder on this box",
-  "backup.destination.choice_stream": "The bucket copy's bucket",
-  "backup.destination.choice_custom": "Another S3-compatible bucket",
+  "backup.destination.choice_custom": "An S3-compatible bucket",
+  "backup.destination.prefix_hint":
+    "Use a separate folder for each installation. After a restore, choose a new folder to keep the old box’s backups.",
   "backup.destination.secret_keep": "Leave empty to keep the saved secret.",
   "backup.destination.secret_needed":
     "The bucket or access key changed, so enter the secret access key.",
   "backup.destination.secret_characters":
     "Use only unaccented letters, digits, spaces and basic keyboard symbols, with no space at the start or end. A single quote (') cannot be used.",
-  "backup.destination.stream_unavailable": "Set up the bucket copy below to use its bucket.",
-  "backup.destination.stream_unread":
-    "The bucket copy's settings could not be read, so its bucket cannot be chosen now.",
-  "backup.destination.stream_snapshot":
-    "Saving copies the bucket copy's current bucket settings. Changing or removing the bucket copy later does not move these backups; save this choice again to follow a change.",
   "backup.destination.stream_location": "Backups will be stored in",
   "backup.destination.folder_required": "Enter the folder to save backups in.",
   "backup.destination.folder_scratch_refused":
@@ -2098,8 +2094,6 @@ export const en = {
     "The box could not read this folder. Choose a folder the box can access.",
   "backup.destination.folder_refused":
     "The box cannot use this folder. Remove any tab, line break or other control character.",
-  "backup.destination.stream_prefix_refused":
-    "Backups cannot use the bucket copy's folder inside its bucket. Choose a folder on this box.",
   "backup.archive_test.timed_out": "The bucket took too long to answer.",
   "backup.archive_test.read_mismatch": "The test file read back was not the one written.",
   "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
@@ -6027,19 +6021,14 @@ export const es: Record<StringKey, string> = {
   "backup.destination.bucket_none": "Sin bucket",
   "backup.destination.nothing_chosen": "Elige una carpeta de esta caja, un bucket o los dos.",
   "backup.destination.choice_local": "Una carpeta de esta caja",
-  "backup.destination.choice_stream": "El bucket de la copia continua",
-  "backup.destination.choice_custom": "Otro bucket compatible con S3",
+  "backup.destination.choice_custom": "Un bucket compatible con S3",
+  "backup.destination.prefix_hint":
+    "Usa una carpeta distinta para cada instalación. Tras una restauración, elige una carpeta nueva para conservar las copias de la caja anterior.",
   "backup.destination.secret_keep": "Déjala vacía para conservar la clave guardada.",
   "backup.destination.secret_needed":
     "El bucket o la clave de acceso han cambiado: escribe la clave de acceso secreta.",
   "backup.destination.secret_characters":
     "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado, sin espacios al principio ni al final. No se puede usar la comilla simple (').",
-  "backup.destination.stream_unavailable":
-    "Configura abajo la copia en el bucket para usar su bucket.",
-  "backup.destination.stream_unread":
-    "No se han podido leer los ajustes de la copia en el bucket, así que ahora no se puede elegir su bucket.",
-  "backup.destination.stream_snapshot":
-    "Al guardar se copian los ajustes actuales del bucket de la copia en el bucket. Si después cambias o quitas la copia en el bucket, estas copias no se mueven; vuelve a guardar esta opción para seguir el cambio.",
   "backup.destination.stream_location": "Las copias se guardarán en",
   "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
   "backup.destination.folder_scratch_refused":
@@ -6048,8 +6037,6 @@ export const es: Record<StringKey, string> = {
     "La caja no ha podido leer esta carpeta. Elige una carpeta a la que pueda acceder.",
   "backup.destination.folder_refused":
     "La caja no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
-  "backup.destination.stream_prefix_refused":
-    "Las copias no pueden usar la carpeta de la copia en el bucket dentro de su bucket. Elige una carpeta de esta caja.",
   "backup.archive_test.timed_out": "El bucket ha tardado demasiado en responder.",
   "backup.archive_test.read_mismatch": "El archivo de prueba leído no era el que se escribió.",
   "backup.archive_test.not_listed":

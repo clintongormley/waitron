@@ -35,9 +35,7 @@ export async function establishDormantContract(args: {
   ];
   await sealAdoptedStandbyKey(args.node, args.ring, args.standby);
   await stampDeployment(args.db, "production");
-  await args.db
-    .insert(nodes)
-    .values({ id: primary.nodeId, locationId: args.locationId, name: "Original primary" });
+  await args.db.insert(nodes).values({ id: primary.nodeId, name: "Original primary" });
   await args.db
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: primary.nodeId })));

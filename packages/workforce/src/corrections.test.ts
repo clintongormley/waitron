@@ -13,7 +13,6 @@ import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
 
-let locationId: string;
 let nodeId: string;
 
 const suite = useVenueDb({
@@ -21,8 +20,8 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
-    nodeId = await seedNode(db, locationId);
+    await seedLocation(db);
+    nodeId = await seedNode(db);
   },
 });
 
@@ -284,8 +283,8 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
     // would give 540, not 570.
     const { personId, outEntryId } = await nineToFive("xnode-1");
     // Two chains, neither the setup node's: a correction chains under its own recording node.
-    const boxNode = await seedNode(suite.db, locationId);
-    const cloudNode = await seedNode(suite.db, locationId);
+    const boxNode = await seedNode(suite.db);
+    const cloudNode = await seedNode(suite.db);
     const actor = await supervisor("xnode-1-sup");
     await insertApprovedCorrection({
       node: boxNode, // "the box"

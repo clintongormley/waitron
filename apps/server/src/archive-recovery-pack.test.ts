@@ -13,7 +13,6 @@ function pack(): ArchiveRecoveryPack {
   return {
     version: 1,
     format: "WBK1",
-    venueId: "venue-1",
     bucket: {
       endpoint: "https://s3.example.test",
       region: "eu-west-1",
@@ -22,7 +21,7 @@ function pack(): ArchiveRecoveryPack {
       accessKeyId: "AKIDEXAMPLE",
       secretAccessKey: SECRET,
     },
-    archivePrefix: "waitron/archives/venue-1/",
+    archivePrefix: "waitron/",
     recoveryKey: RECOVERY,
   };
 }
@@ -86,7 +85,7 @@ describe("archive recovery pack", () => {
     const root = {
       ...pack(),
       bucket: { ...bucket, prefix: "" },
-      archivePrefix: "archives/venue-1/",
+      archivePrefix: "",
     };
     expect(decodeArchiveRecoveryPack(token(root))).toEqual(root);
   });
@@ -96,7 +95,7 @@ describe("archive recovery pack", () => {
     const hyphen = {
       ...pack(),
       bucket: { ...pack().bucket, prefix: "-" },
-      archivePrefix: "-/archives/venue-1/",
+      archivePrefix: "-/",
     };
     expect(decodeArchiveRecoveryPack(encodeArchiveRecoveryPack(hyphen))).toEqual(hyphen);
   });
@@ -114,8 +113,8 @@ describe("archive recovery pack", () => {
   it("refuses a file holding two packs", () => {
     const other: ArchiveRecoveryPack = {
       ...pack(),
-      venueId: "venue-2",
-      archivePrefix: "waitron/archives/venue-2/",
+      bucket: { ...pack().bucket, prefix: "another-folder" },
+      archivePrefix: "another-folder/",
     };
     const text = `${encodeArchiveRecoveryPack(pack())}\n${encodeArchiveRecoveryPack(other)}`;
     expectRefused(() => decodeArchiveRecoveryPack(text), "several");

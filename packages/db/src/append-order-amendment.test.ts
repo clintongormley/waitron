@@ -69,7 +69,7 @@ describe("order_amendments append helper", () => {
       operationDescription: "Hostelería",
     });
     await seedBusinessDay(admin, {});
-    nodeB = await seedNode(admin, LOCATION_B);
+    nodeB = await seedNode(admin);
   });
 
   /** Seeds one fresh open working order and returns its id. A fresh chain per test so sequence

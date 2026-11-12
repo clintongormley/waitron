@@ -167,7 +167,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
     }
     return (read.settings?.destinations ?? []).flatMap((d) =>
-      d.kind === "s3" ? [archivePlace(d.bucket, d.venueId)] : [],
+      d.kind === "s3" ? [archivePlace(d.bucket)] : [],
     );
   };
 

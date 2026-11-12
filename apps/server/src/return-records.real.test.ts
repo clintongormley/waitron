@@ -463,9 +463,6 @@ it("counts returned VAT and settled payments without changing the new main's own
       manual: false,
     },
   ]);
-  old.db.all<{ location_id: string }>(
-    sql`select location_id from nodes where id = ${source.nodeId}`,
-  );
   await old.db.insert(tenderRefunds).values({
     id: "returned-refund",
     saleId: sale!.id,

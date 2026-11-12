@@ -25,15 +25,14 @@ const backend = new WorkforceBackend();
 
 let personId: string;
 let otherPersonId: string;
-let locationId: string;
 let nodeId: string;
 
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db, "Ana");
   otherPersonId = await seedPerson(suite.db, "Ben");
-  locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  await seedLocation(suite.db);
+  nodeId = await seedNode(suite.db);
 });
 
 function event(at: string): ClockEventInput {

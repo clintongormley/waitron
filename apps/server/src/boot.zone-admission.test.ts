@@ -158,9 +158,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant service",
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "06:00:00" });
-  await suite.db
-    .insert(nodes)
-    .values({ id: NODE, locationId: LOCATION, name: "Node", filingModule: "verifactu" });
+  await suite.db.insert(nodes).values({ id: NODE, name: "Node", filingModule: "verifactu" });
   await stampDeployment(suite.db, "preproduction");
   const people = await seedPersons(suite.db, [
     {

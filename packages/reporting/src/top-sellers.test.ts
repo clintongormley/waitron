@@ -549,7 +549,7 @@ describe("computeTopSellers", () => {
         },
       ],
     });
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     await seedSale(
       suite.db,
       { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },
@@ -588,7 +588,7 @@ describe("computeTopSellers", () => {
         },
       ],
     });
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     await seedSale(
       suite.db,
       { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },
@@ -672,7 +672,7 @@ describe("computeTopSellers", () => {
   });
 
   it("reverses a later void only at the voided sale's own node", async () => {
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     const voided = await seedSale(
       suite.db,
       { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },

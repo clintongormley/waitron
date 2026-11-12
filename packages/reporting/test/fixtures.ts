@@ -68,7 +68,7 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
   if (existing === undefined) await seedVenue(db, venue);
   const locationId = existing?.id ?? (await venueLocationId(db));
   const { deviceId } = await seedDevice(db, {});
-  const nodeId = await seedNode(db, locationId);
+  const nodeId = await seedNode(db);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
@@ -76,16 +76,11 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
   return { locationId, deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
-/**
- * A SECOND node (with its own series) under an existing venue's location, so a test can tell a
- * node-grain aggregate from a venue-wide one.
- */
 export async function seedNodeAndSeries(
   db: Database,
-  venue: { locationId: string },
   seriesCode = "B",
 ): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
-  const nodeId = await seedNode(db, venue.locationId);
+  const nodeId = await seedNode(db);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: seriesCode })

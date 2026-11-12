@@ -41,7 +41,6 @@ async function interruptedCompletion(f: Held): Promise<void> {
   }
 }
 
-/** Deletes the venue's tenant and location rows, the rows that tell the inspection a venue is set up. */
 function removeVenueRows(f: Pick<Held, "roots">) {
   const db = new DatabaseSync(venueDb(f));
   try {
@@ -53,6 +52,7 @@ function removeVenueRows(f: Pick<Held, "roots">) {
       for (const { name } of triggers) db.exec(`drop trigger "${name}"`);
       db.exec(`delete from ${table}`);
     }
+    db.prepare("delete from settings where module = ?").run("venue");
   } finally {
     db.close();
   }

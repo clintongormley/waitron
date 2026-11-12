@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   nodes,
@@ -79,13 +79,8 @@ async function box(
   // Stands in for A947 3b's join step, which must make the chart vouch for a joined box's key.
   await pinMainBoxKey(suite.node, nodeId, PEER);
   if (options.joined !== false) {
-    const [own] = await suite.db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, nodeId));
     await suite.db.insert(nodes).values({
       id: PEER.nodeId,
-      locationId: own!.locationId,
       name: "Spare",
       publicKey: PEER.publicKey,
     });
@@ -334,14 +329,9 @@ describe("a destination whose activation committed and whose node.db record was 
 
   /** A joined box that is neither end of the operation: `handover_activations` keys into `nodes`. */
   const THIRD_BOX = "00000000-0000-4000-8000-0000000000dd";
-  async function joinThirdBox(nodeId: string): Promise<void> {
-    const [own] = await suite.db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, nodeId));
+  async function joinThirdBox(): Promise<void> {
     await suite.db.insert(nodes).values({
       id: THIRD_BOX,
-      locationId: own!.locationId,
       name: "Third",
       publicKey: generateNodeKeyPair().publicKey,
     });
@@ -397,7 +387,7 @@ describe("a destination whose activation committed and whose node.db record was 
 
   it("a row naming another destination leaves the operation unrecorded", async () => {
     const b = await box(suite);
-    await joinThirdBox(b.nodeId);
+    await joinThirdBox();
     await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
     await holdActivationRow(b.nodeId, { destinationNodeId: THIRD_BOX });
     await repair(b.nodeId);
@@ -406,7 +396,7 @@ describe("a destination whose activation committed and whose node.db record was 
 
   it("a row naming another source leaves the operation unrecorded", async () => {
     const b = await box(suite);
-    await joinThirdBox(b.nodeId);
+    await joinThirdBox();
     await insertOperation(suite, b.nodeId, { role: "destination", state: "filing_assumed" });
     await holdActivationRow(b.nodeId, { sourceNodeId: THIRD_BOX });
     await repair(b.nodeId);
@@ -423,7 +413,7 @@ describe("a destination whose activation committed and whose node.db record was 
 
   it("a row agreeing with an operation that names another destination leaves it unrecorded", async () => {
     const b = await box(suite);
-    await joinThirdBox(b.nodeId);
+    await joinThirdBox();
     await insertOperation(suite, b.nodeId, {
       role: "destination",
       state: "filing_assumed",
@@ -436,7 +426,7 @@ describe("a destination whose activation committed and whose node.db record was 
 
   it("a row naming this box under an operation that names another destination leaves it unrecorded", async () => {
     const b = await box(suite);
-    await joinThirdBox(b.nodeId);
+    await joinThirdBox();
     await insertOperation(suite, b.nodeId, {
       role: "destination",
       state: "filing_assumed",
@@ -496,7 +486,7 @@ describe("a destination whose activation committed and whose node.db record was 
       ["another source", { sourceNodeId: THIRD_BOX }],
     ])("with a row naming %s, the same box waits on that source", async (_name, row) => {
       const b = await onThatChart();
-      await joinThirdBox(b.nodeId);
+      await joinThirdBox();
       await holdActivationRow(b.nodeId, row);
       await repair(b.nodeId);
       expect((await check(suite, b, peerFetch("silent"))).result).toBe("wait");

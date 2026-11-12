@@ -957,7 +957,7 @@ describe("roster warnings while planning", () => {
 });
 
 it("uses the enabled provider for planned-versus-actual paid time", async () => {
-  const nodeId = await seedNode(suite.db, locationId);
+  const nodeId = await seedNode(suite.db);
   await suite.db.delete(convenioConfig);
   await suite.db.insert(convenioConfig).values({
     breakThresholdMinutes: 300,

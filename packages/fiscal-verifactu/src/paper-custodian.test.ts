@@ -94,7 +94,6 @@ describe("the paper custodian's separate command", () => {
             taxpayerNif: "B12345678",
             softwareId: "WT",
             environment: "preproduction",
-            recipientVenueId: "venue-madrid",
             requiredBases: [{ code: "A", purpose: "standard" }],
           },
         ),

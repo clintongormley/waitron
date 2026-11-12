@@ -206,7 +206,7 @@ function evidenceDestinations(
         region: d.bucket.region,
         bucket: d.bucket.bucket,
         accessKeyId: d.bucket.accessKeyId,
-        archiveFolder: archiveNamespace(d.bucket.prefix, d.venueId),
+        archiveFolder: archiveNamespace(d.bucket.prefix),
       };
     }),
   );

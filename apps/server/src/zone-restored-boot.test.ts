@@ -69,7 +69,7 @@ it.each(["archive", "bucket"] as const)(
   "%s restores an invalid zone before real entry/boot repair and restart",
   async (kind) => {
     await withTransaction(suite.db, async (tx) => {
-      await tx.delete(nodes).where(ne(nodes.locationId, node.locationId));
+      await tx.delete(nodes).where(ne(nodes.id, node.nodeId));
       await tx.delete(locations).where(ne(locations.id, node.locationId));
     });
     await recoveryInvoices();

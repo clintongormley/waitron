@@ -121,7 +121,7 @@ describe("computeCashUp — settled-tender refunds", () => {
 
   it("uses the refund's recorded node even when the original sale belongs to another node", async () => {
     const paid = await target();
-    const other = { ...venue, ...(await seedNodeAndSeries(suite.db, venue)) };
+    const other = { ...venue, ...(await seedNodeAndSeries(suite.db)) };
     await seedTenderRefund(suite.db, paid, {
       applied: "20.00",
       tip: "0.00",

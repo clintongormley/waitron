@@ -190,7 +190,6 @@ export function archivesRevision(
       ? { kind: d.kind, dir: d.dir }
       : {
           kind: d.kind,
-          venueId: d.venueId,
           endpoint: d.bucket.endpoint ?? null,
           region: d.bucket.region,
           bucket: d.bucket.bucket,
@@ -215,7 +214,6 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
       managedByEnvironment: context.managedByEnvironment,
       env: context.env,
       sealed,
-      venueId: context.venueId,
     });
     const bucket = destinations.find((d) => d.kind === "s3");
     const folder = destinations.find((d) => d.kind === "local-fs");
@@ -238,11 +236,10 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
       check: facts.check,
     } as const;
     if (bucket !== undefined) {
-      const archivePrefix = archiveNamespace(bucket.bucket.prefix, bucket.venueId);
+      const archivePrefix = archiveNamespace(bucket.bucket.prefix);
       const archiveCode = encodeArchiveRecoveryPack({
         version: 1,
         format: "WBK1",
-        venueId: bucket.venueId,
         bucket: bucket.bucket,
         archivePrefix,
         recoveryKey,

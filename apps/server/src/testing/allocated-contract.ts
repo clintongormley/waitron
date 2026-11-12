@@ -111,8 +111,7 @@ export async function takenOverSeries(
   state: unknown,
 ) {
   const target = { nodeId: nodeId(targetNodeId) };
-  const venueId = (await db.select().from(locations))[0]!.id;
-  await db.insert(nodes).values({ id: target.nodeId, locationId: venueId, name: "Standby" });
+  await db.insert(nodes).values({ id: target.nodeId, name: "Standby" });
   await fixture.transaction(db, "establish", (tx, operation) =>
     ALLOCATED_FISCAL_STANDBY.establish(tx, target, state, operation),
   );

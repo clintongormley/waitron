@@ -1259,7 +1259,7 @@ describe("waitron-restore restore, the venue folder", () => {
       encodeArchiveRecoveryPack({
         version: 1,
         format: "WBK1",
-        venueId: "venue-1",
+
         bucket: {
           region: "eu-west-1",
           bucket: "owner-bucket",
@@ -1267,7 +1267,7 @@ describe("waitron-restore restore, the venue folder", () => {
           accessKeyId: "AKIDEXAMPLE",
           secretAccessKey: "synthetic-secret",
         },
-        archivePrefix: archiveNamespace("waitron", "venue-1"),
+        archivePrefix: archiveNamespace("waitron"),
         recoveryKey: "synthetic-backup-key",
       }),
     );

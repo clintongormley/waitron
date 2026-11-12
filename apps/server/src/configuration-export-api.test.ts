@@ -230,7 +230,6 @@ describe("configuration export API", () => {
             kind: "s3",
             id: "bucket",
             bucket: { ...bucket, bucket: "archives", secretAccessKey: archiveSecret },
-            venueId,
           },
         ],
         schedule: { kind: "interval", ms: 3_600_000 },

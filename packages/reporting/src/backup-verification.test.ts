@@ -23,9 +23,9 @@ beforeEach(() => {
     db.run(
       "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
     );
-    db.run(sql`insert into nodes (id, location_id, name, created_at)
-      values ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000001', 'Source node', '2026-10-20T00:00:00Z'),
-             ('aaaaaaaa-0000-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000001', 'Other node', '2026-10-20T00:00:00Z')`);
+    db.run(sql`insert into nodes (id, name, created_at)
+      values ('aaaaaaaa-0000-4000-8000-000000000001', 'Source node', '2026-10-20T00:00:00Z'),
+             ('aaaaaaaa-0000-4000-8000-000000000002', 'Other node', '2026-10-20T00:00:00Z')`);
   }
 });
 

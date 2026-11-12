@@ -20,12 +20,12 @@ const suite = useVenueDb({
 });
 const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
-let personId: string, manager: string, other: string, locationId: string, nodeId: string;
+let personId: string, manager: string, other: string, nodeId: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  await seedLocation(suite.db);
+  nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },

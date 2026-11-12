@@ -52,7 +52,7 @@ beforeEach(async () => {
     fiscalTerritory: "ES-common",
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });
-  await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected box" });
+  await suite.db.insert(nodes).values({ id: NODE, name: "Selected box" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
 afterEach(async () => {

@@ -183,7 +183,7 @@ export async function inspectVenues(
     // `exists(...)` answers 0 or 1 on this engine, not a boolean, so each is compared rather than
     // returned: handing a caller `0` where it expects `false` would make every `if` read true.
     const { rows } = await store.venue.execute<{ has_expected: number; has_any: number }>(
-      sql`select exists(select 1 from nodes n join locations l on l.id = n.location_id where n.id = ${expectedNodeId}) as has_expected,
+      sql`select exists(select 1 from nodes n where n.id = ${expectedNodeId}) as has_expected,
                  exists(select 1 from tenants) as has_any`,
     );
     return { hasExpected: rows[0]?.has_expected === 1, hasAny: rows[0]?.has_any === 1 };

@@ -18,7 +18,6 @@ import {
   tenderRefunds,
   tenders,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -196,7 +195,7 @@ const COLLEAGUE_VALUES = [
 ];
 
 const logger = vi.fn();
-let locationId: string, martaId: string, colleagueId: string, managerId: string, cookie: string;
+let martaId: string, colleagueId: string, managerId: string, cookie: string;
 let adminCookie: string;
 
 beforeEach(async () => {
@@ -206,8 +205,7 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
-  locationId = await venueLocationId(suite.db);
-  await suite.db.insert(nodes).values({ id: NODE_ID, locationId, name: "Box" });
+  await suite.db.insert(nodes).values({ id: NODE_ID, name: "Box" });
   const [marta, colleague, manager, admin] = await seedPersons(suite.db, [
     {
       displayName: MARTA.name,

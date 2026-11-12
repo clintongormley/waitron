@@ -307,7 +307,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
 
     it("refuses a standby this database holds a node row for as membership.standby_joined (409)", async () => {
       const p = await primary();
-      const joinedId = await seedNode(p.db, p.locationId);
+      const joinedId = await seedNode(p.db);
       await holdChart(p, [self(p), standby(joinedId)]);
       await expectRefused(p, joinedId, 409, "membership.standby_joined");
     });
@@ -430,8 +430,8 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
         sql.raw(
           `create trigger test_standby_joins before update on node_membership
            begin
-             insert into nodes (id, location_id, name, created_at)
-               select '${late.nodeId}', location_id, 'Joined late', created_at
+             insert into nodes (id, name, created_at)
+               select '${late.nodeId}', 'Joined late', created_at
                from nodes where id = '${p.nodeId}';
            end`,
         ),
@@ -583,7 +583,7 @@ describe("removing the standby this box's pair link names", () => {
 
   it("a standby with a nodes row is still refused removal, and its pair link stays", async () => {
     const p = await primary();
-    const joinedId = await seedNode(p.db, p.locationId);
+    const joinedId = await seedNode(p.db);
     await holdChart(p, [self(p), standby(joinedId)]);
     await linkTo(p, joinedId);
 
@@ -929,7 +929,7 @@ describe("GET /management-api/servers", () => {
   it("lists the held chart with removable set by the same rule the removal applies", async () => {
     const p = await primary();
     const neverJoined = standby();
-    const joinedId = await seedNode(p.db, p.locationId);
+    const joinedId = await seedNode(p.db);
     const joined = standby(joinedId, "https://joined.deli.test");
     const former: MembershipNode = {
       nodeId: randomUUID(),

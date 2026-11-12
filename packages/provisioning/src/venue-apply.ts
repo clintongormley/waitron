@@ -333,7 +333,6 @@ export async function applyVenue(
                 taxModule: nodes.taxModule,
               })
               .from(nodes)
-              .where(eq(nodes.locationId, locationId))
               .orderBy(nodes.id)
               .limit(1);
             if (
@@ -350,7 +349,6 @@ export async function applyVenue(
           nodeId = initialNodeId;
           await tx.insert(nodes).values({
             id: nodeId,
-            locationId,
             name: action.name,
             filingModule: action.filingModule,
             taxModule: action.taxModule,

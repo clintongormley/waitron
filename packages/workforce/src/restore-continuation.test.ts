@@ -25,14 +25,13 @@ const suite = useVenueDb({
 });
 
 let personId: string;
-let locationId: string;
 let nodeId: string;
 
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
-  locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  await seedLocation(suite.db);
+  nodeId = await seedNode(suite.db);
 });
 
 /** The chain key for this suite's node. */

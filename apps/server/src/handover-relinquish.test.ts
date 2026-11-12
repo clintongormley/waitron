@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { copyFile, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
@@ -681,13 +681,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     await stampDeployment(mainBox.db, "preproduction");
     await stampDeployment(spareBox.db, "preproduction");
 
-    const [own] = await mainBox.db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, mainId));
-    await mainBox.db
-      .insert(nodes)
-      .values({ id: spareId, locationId: own!.locationId, name: "Spare", publicKey: sparePublic });
+    await mainBox.db.insert(nodes).values({ id: spareId, name: "Spare", publicKey: sparePublic });
     const [owner] = await seedPersons(mainBox.db, {
       displayName: "Owner",
       role: "admin",

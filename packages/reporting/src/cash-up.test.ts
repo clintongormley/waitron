@@ -289,8 +289,8 @@ describe("computeCashUp", () => {
   });
 
   it("a report for two boxes counts both boxes' sales", async () => {
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
-    const nodeC = await seedNodeAndSeries(suite.db, venue, "C");
+    const nodeB = await seedNodeAndSeries(suite.db);
+    const nodeC = await seedNodeAndSeries(suite.db, "C");
     const amounts: Array<[{ nodeId: NodeId; seriesId: SeriesId }, string]> = [
       [venue, "10.00"],
       [nodeB, "20.00"],

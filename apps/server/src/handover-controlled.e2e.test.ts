@@ -602,7 +602,6 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
   await withTransaction(m1Files.db, (tx) =>
     insertReservedNodeTx(tx, {
       id: m2Id,
-      locationId: venue.cfg.locationId,
       name: `${m1Row!.name} (standby)`,
       filingModule: m1Row!.filingModule,
       taxModule: m1Row!.taxModule,

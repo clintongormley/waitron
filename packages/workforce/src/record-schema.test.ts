@@ -9,13 +9,13 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
-let personId: string, otherPersonId: string, locationId: string, nodeId: string;
+let personId: string, otherPersonId: string, nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   otherPersonId = await seedPerson(suite.db, "Other");
-  locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  await seedLocation(suite.db);
+  nodeId = await seedNode(suite.db);
 });
 interface Shape {
   kind: string;
