@@ -13,7 +13,6 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { stationDayStates } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
@@ -209,11 +208,7 @@ describe("station output status", () => {
         stationScreensDark(tx, new Date("2026-10-02T18:02:00Z")),
       ),
     ).toEqual([]);
-    await suite.db.insert(stationDayStates).values({
-      stationId: f.bar,
-      businessDay: "2026-10-02",
-      open: false,
-    });
+    await suite.db.update(kitchenStations).set({ closedOnDay: "2026-10-02" }).where(eq(kitchenStations.id, f.bar));
     expect(
       (await withTransaction(suite.db, (tx) => VENUE_SERVICE.stationStates(tx, at))).get(f.bar)
         ?.open,

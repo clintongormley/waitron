@@ -490,9 +490,7 @@ it.each([
         })),
         1,
       );
-      await tx
-        .insert(zoneExtensions)
-        .values({ zoneId: f.zoneId, businessDay: "2026-10-09", startsAt, endsAt });
+      await tx.update(floorZones).set({ keptOpenDay: "2026-10-09", keptOpenFrom: startsAt, keptOpenUntil: endsAt }).where(eq(floorZones.id, f.zoneId));
     });
     const instant = at("01:30", "2026-10-10");
     expect((await run((tx) => readKeepOpen(tx, f.zoneId, instant))).zone).toMatchObject({

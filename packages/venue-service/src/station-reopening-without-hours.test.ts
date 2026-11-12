@@ -110,12 +110,7 @@ describe("station reopening without hours", () => {
     async (read) => {
       await withTransaction(suite.db, async (tx) => {
         const f = await fixture(tx);
-        await tx.insert(stationDayStates).values({
-          stationId: f.bar,
-          businessDay: "2026-10-09",
-          open: true,
-          sendsToStationId: f.grill,
-        });
+        await tx.update(kitchenStations).set({ closedOnDay: "2026-10-09", closedSendsToStationId: f.grill }).where(eq(kitchenStations.id, f.bar));
         await setStationToday(tx, f.grill, "closed", at, f.kitchen);
         if (read === "rules") {
           const rules = await loadRoutingRules(tx, "2026-10-09");
