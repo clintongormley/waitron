@@ -498,7 +498,10 @@ describe("station queue move attribution", () => {
     });
     expect(moved.status).toBe(200);
     await inTx(venue, async (tx) => {
-      await tx.update(persons).set({ displayName: "Lewis" }).where(eq(persons.id, venue.operatorId));
+      await tx
+        .update(persons)
+        .set({ displayName: "Lewis" })
+        .where(eq(persons.id, venue.operatorId));
       await tx.update(devices).set({ label: "Till 2" }).where(eq(devices.id, venue.deviceId));
       await tx
         .update(ticketItemMoves)
