@@ -723,7 +723,7 @@ describe("the Opening hours month read", () => {
     ).toEqual([...CALENDAR_MONTH_PLAN_READS].sort());
   });
 
-  it("reads the location once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
+  it("reads the location and the taxpayer record once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
     await venue();
     const easterWeek = await special({
       name: "Easter week",
@@ -757,6 +757,7 @@ describe("the Opening hours month read", () => {
     expect(day("2026-04-03").specialDay).toEqual({ id: easterWeek.id, name: "Easter week" });
     expect(day("2026-04-18").specialDay).toBeNull();
     expect(tables.filter((table) => table === "locations")).toHaveLength(1);
+    expect(tables.filter((table) => table === "tenants")).toHaveLength(1);
   });
 
   it("sends the same statements for one department as for several, not one per day or department", async () => {

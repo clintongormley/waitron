@@ -17,6 +17,7 @@ import {
   type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
+import type { HolidayReads } from "./holidays.js";
 import { specialDayOccurrences, specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
 
 export interface ResolvedDepartmentDay {
@@ -79,11 +80,12 @@ export async function readDayPlan(
   businessDays: readonly LocalDate[],
   venueSeasons?: readonly Season[],
   place?: VenuePlace,
+  readDates?: HolidayReads["dates"],
 ): Promise<DayPlan> {
   const seasons = venueSeasons ?? (await readSeasons(tx));
   return {
     seasonIdOn: new Map(businessDays.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
-    special: await specialDaysOn(tx, businessDays, place),
+    special: await specialDaysOn(tx, businessDays, place, readDates),
   };
 }
 

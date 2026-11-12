@@ -14,7 +14,7 @@ import {
   type DayPlan,
 } from "./day-resolver.js";
 import type { HolidayCoverage, SpecialDaysModel } from "./holiday-types.js";
-import { readHolidayFacts, readHolidayYear } from "./holidays.js";
+import { holidayReadsAt, readHolidayYear, type HolidayReads } from "./holidays.js";
 import { isReadableZone, venueLocalMoment } from "./hours-clock.js";
 import { addDays, rangeDates, weekdayOf } from "./hours-rules.js";
 import type { CalendarTone, HolidayFact, LocalDate } from "./hours-types.js";
@@ -151,6 +151,8 @@ export interface CalendarMonthPlan {
   /** `clock`, with a zone this runtime cannot place read as UTC, as the days' changeovers are. */
   wallClock: BusinessDayClock;
   place: VenuePlace;
+  /** The holiday reads at `place`, sharing the address read the plan's special days made. */
+  holidays: HolidayReads;
   plan: DayPlan;
   /** The whole Monday-to-Sunday weeks that cover `month`. */
   days: readonly {
@@ -182,7 +184,8 @@ export async function readCalendarMonthPlan(
   const { clock: stored, place } = await readVenueClockAndPlace(tx);
   const clock = wallClock(stored);
   const seasons = await readSeasons(tx);
-  const plan = await readDayPlan(tx, dates, seasons, place);
+  const holidays = holidayReadsAt(tx, place);
+  const plan = await readDayPlan(tx, dates, seasons, place, holidays.dates);
   const touched = new Map<string, Season & { lastDay: string }>();
   for (const date of dates) {
     const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
@@ -196,6 +199,7 @@ export async function readCalendarMonthPlan(
     clock: stored,
     wallClock: clock,
     place,
+    holidays,
     plan,
     days: dates.map((date) => {
       const special = plan.special.get(date) ?? null;
@@ -241,7 +245,7 @@ export async function readOpeningHoursMonth(
     cut,
   );
   const factsOn = new Map<LocalDate, HolidayFact[]>();
-  for (const fact of await readHolidayFacts(tx, dates[0]!, dates.at(-1)!, frame.place))
+  for (const fact of await frame.holidays.facts(dates[0]!, dates.at(-1)!))
     factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
   return {
     ...status,
