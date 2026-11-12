@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
-import { setNodePublicKey, withTransaction, type Transaction } from "@waitron/db";
+import { saveVenueFields, setNodePublicKey, withTransaction, type Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -54,6 +54,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
+  await withTransaction(suite.db, (tx) => saveVenueFields(tx, { streamId: VENUE }, null));
   nodeId = await seedNode(suite.db);
   await setNodePublicKey(suite.db, nodeId, "SIGNER_PUBLIC_KEY");
   context = {
@@ -61,7 +62,6 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
     madeAt: "2026-10-30T09:00:00.000Z",
     nodeId,
-    venueId: VENUE,
     ring: RING,
     env: {
       WAITRON_BACKUP_RECOVERY_KEY: KEY,
@@ -75,7 +75,7 @@ const storeStream = () =>
   inTx((tx) =>
     putCredential(tx, RING, {
       purpose: STREAM_PURPOSE,
-      value: streamSettingsPayload({ venueId: VENUE, bucket: BUCKET }),
+      value: streamSettingsPayload({ bucket: BUCKET }),
     }),
   );
 const storeArchives = (settings: Omit<ArchiveSettings, "revision"> = ARCHIVES) =>
@@ -86,8 +86,8 @@ describe("the bucket part", () => {
     await storeStream();
     const built = await inTx((tx) => buildBucketPart(tx, context));
     expect(parseRecoveryKit(built.file.bucketCode!)).toEqual({
-      version: 1,
-      venueId: VENUE,
+      version: 2 as const,
+      streamId: VENUE,
       bucket: BUCKET,
       recoveryKey: KEY,
       pointerSignerPublicKey: "SIGNER_PUBLIC_KEY",
@@ -134,7 +134,6 @@ describe("the bucket part", () => {
       putCredential(tx, RING, {
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
-          venueId: VENUE,
           bucket: { ...BUCKET, endpoint: "https://s3.example.net:9000" },
         }),
       }),

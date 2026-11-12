@@ -1,3 +1,4 @@
+import { saveVenueFields } from "@waitron/db";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { createHook } from "node:async_hooks";
 import { X509Certificate, createPrivateKey } from "node:crypto";
@@ -87,6 +88,7 @@ beforeAll(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
+  await withTransaction(suite.db, (tx) => saveVenueFields(tx, { streamId: LOCATION }, null));
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, name: "Node 1" });
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, NODE);
@@ -536,7 +538,7 @@ describe("the term after a restore", () => {
 
 describe("readBucketPointerTerm", () => {
   const SETTINGS: StreamSettings = {
-    venueId: LOCATION,
+    streamId: LOCATION,
     bucket: {
       region: "eu-west-1",
       bucket: "venue-copy",
@@ -569,7 +571,7 @@ describe("readBucketPointerTerm", () => {
       LOCATION,
       signPointer(
         {
-          venueId: LOCATION,
+          streamId: LOCATION,
           term: 2,
           nodeId: NODE,
           generation: generationName(2, NODE, NOW),
@@ -657,7 +659,7 @@ describe("readBucketPointerTerm", () => {
   it("refuses when the pointer in the bucket cannot be read", async () => {
     await storeSettings(SETTINGS);
     const store = createMemoryObjectStore();
-    await store.put(pointerKey(LOCATION), new TextEncoder().encode("not json"), undefined);
+    await store.put(pointerKey(), new TextEncoder().encode("not json"), undefined);
     await expect(
       readBucketPointerTerm(suite.db, RING, { openStore: () => store }),
     ).rejects.toMatchObject({ code: "backup.stream_pointer_invalid" });
@@ -712,7 +714,6 @@ describe("runFirstStart", () => {
       putCredential(tx, RING, {
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
-          venueId: LOCATION,
           bucket: {
             region: "eu-west-1",
             bucket: "venue-copy",
@@ -746,7 +747,6 @@ describe("runFirstStart", () => {
         putCredential(tx, RING, {
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({
-            venueId: LOCATION,
             bucket: {
               region: "eu-west-1",
               bucket: "venue-copy",
@@ -792,7 +792,6 @@ describe("runFirstStart", () => {
       putCredential(tx, RING, {
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
-          venueId: LOCATION,
           bucket: {
             region: "eu-west-1",
             bucket: "venue-copy",

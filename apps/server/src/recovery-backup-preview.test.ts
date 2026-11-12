@@ -295,7 +295,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
     LOCATION,
     signPointer(
       {
-        venueId: LOCATION,
+        streamId: LOCATION,
         term: 0,
         nodeId: NODE,
         generation,
@@ -325,8 +325,8 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   expect(typeof preview).toBe("function");
   const selection = {
     kit: {
-      version: 1,
-      venueId: LOCATION,
+      version: 2 as const,
+      streamId: LOCATION,
       bucket: {
         region: "local",
         bucket: "copy",

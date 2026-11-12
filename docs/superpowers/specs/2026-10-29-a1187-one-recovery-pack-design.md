@@ -1,5 +1,10 @@
 # A1187: one recovery pack
 
+> **2026-11-12:** The current pairing and bucket formats are specified in
+> [A1308 slice 5g](../plans/2026-11-08-a1308-5g-cloud-venue-id.md): Cloud assigns the
+> venue id, bucket paths use the chosen prefix, and v2 recovery kits carry a stream id.
+> Earlier path and format descriptions below record the design at its original date.
+
 **Approved by the owner on 2026-10-29 (~10:30 CET): "Approve."** Every §11 default stands except
 item 4: the authenticator code is asked for only when the person has one set up (owner, ~10:20 CET:
 "No, authenticator is optional."), which is what B3 already says. Nothing is built yet. Revised the same day after a

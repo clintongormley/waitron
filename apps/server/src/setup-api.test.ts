@@ -1995,13 +1995,13 @@ describe("POST /setup-api/restore-bucket", () => {
         noopLog,
       );
       const response = await postBucketRestore(app, {
-        kit: "WAITRON-RECOVERY-KIT-1:abc",
+        kit: "WAITRON-RECOVERY-KIT-2:abc",
         environment: "production",
       });
       expect(response.status).toBe(202);
       expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
       expect(stageBucketRestore).toHaveBeenCalledWith({
-        kit: "WAITRON-RECOVERY-KIT-1:abc",
+        kit: "WAITRON-RECOVERY-KIT-2:abc",
         environment: "production",
         oldBoxGone: false,
         venueConfirmed: null,

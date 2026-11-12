@@ -1,5 +1,10 @@
 # SQLite + Litestream: storage engine, replication and failover topologies — design
 
+> **2026-11-12:** The current pairing and bucket formats are specified in
+> [A1308 slice 5g](../plans/2026-11-08-a1308-5g-cloud-venue-id.md): Cloud assigns the
+> venue id, bucket paths use the chosen prefix, and v2 recovery kits carry a stream id.
+> Earlier path and format descriptions below record the design at its original date.
+
 **Date:** 2026-09-16. **Status:** design, awaiting owner review. This is the architecture that
 replaces PostgreSQL: the owner decided on 2026-09-16 to make the switch on the strength of the
 infrastructure simplification alone, which retired the density measurement that used to gate it. One

@@ -1,5 +1,10 @@
 # A1301 — The venue's id towards the outside world (design)
 
+> **2026-11-12:** The current pairing and bucket formats are specified in
+> [A1308 slice 5g](../plans/2026-11-08-a1308-5g-cloud-venue-id.md): Cloud assigns the
+> venue id, bucket paths use the chosen prefix, and v2 recovery kits carry a stream id.
+> Earlier path and format descriptions below record the design at its original date.
+
 **Status:** Approved by the owner on 2026-11-04. It is built as S18e, which A1308 holds because
 it adds a table.
 

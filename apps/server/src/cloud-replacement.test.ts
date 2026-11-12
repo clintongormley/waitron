@@ -750,7 +750,6 @@ it("reads a version-one replacement file as absent and starts with new keys", as
   const path = join(f.stateDir, "cloud/replacement.json");
   const saved = JSON.parse(await readFile(path, "utf8"));
   expect(saved.version).toBe(2);
-  expect(saved).not.toHaveProperty("localVenueId");
   await writeFile(path, JSON.stringify({ ...saved, version: 1 }));
   expect(await client.status()).toBeNull();
   expect(await client.hasProposal()).toBe(false);

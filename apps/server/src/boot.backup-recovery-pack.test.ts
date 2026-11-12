@@ -1,4 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { readStreamId } from "@waitron/db";
+import { ensureStreamId } from "@waitron/db";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -97,9 +99,10 @@ async function seedVenueWithBackupSettings(): Promise<void> {
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const ring = loadKeyRing(KEY_ENV);
   await withTransaction(suite.db, async (tx) => {
+    await ensureStreamId(tx);
     await putCredential(tx, ring, {
       purpose: STREAM_PURPOSE,
-      value: streamSettingsPayload({ venueId: node.locationId, bucket: BUCKET }),
+      value: streamSettingsPayload({ bucket: BUCKET }),
     });
     await writeArchiveSettings(tx, ring, {
       enabled: true,
@@ -166,7 +169,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
       expect(made.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
       const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
       expect(parseRecoveryKit(file.bucketCode!)).toMatchObject({
-        venueId: node.locationId,
+        streamId: await readStreamId(suite.db),
         recoveryKey: KEY,
         pointerSignerPublicKey: "SIGNER_PUBLIC_KEY",
       });

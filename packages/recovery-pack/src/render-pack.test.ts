@@ -13,7 +13,7 @@ const fontBytes = new Uint8Array(
 );
 const loadFont = async () => fontBytes;
 
-const bucketCode = "WAITRON-RECOVERY-KIT-1:" + "Ab9_-".repeat(124);
+const bucketCode = "WAITRON-RECOVERY-KIT-2:" + "Ab9_-".repeat(124);
 const archiveCode = "WAITRON-ARCHIVE-PACK-1:" + "Zx7-_".repeat(80);
 
 const file: RecoveryPackFile = {

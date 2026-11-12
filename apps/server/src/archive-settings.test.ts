@@ -4,7 +4,6 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isAppError } from "@waitron/shared";
-import { venuePrefix } from "@waitron/stream";
 import {
   ARCHIVE_PURPOSE,
   archiveNamespace,
@@ -27,7 +26,7 @@ const ring = loadKeyRing({
 
 const originalStreamSecret = "stream-secret-original";
 const stream: StreamSettings = {
-  venueId: VENUE,
+  streamId: VENUE,
   bucket: {
     endpoint: "https://s3.example.test",
     region: "eu-north-1",
@@ -277,7 +276,7 @@ describe("resolveArchiveChoice", () => {
   it.each([
     ["the stream's venues folder itself", "waitron/venues"],
     ["another venue's stream folder", "waitron/venues/d0000000-0000-4000-8000-000000000009"],
-    ["the folder @waitron/stream names for this venue", `waitron/${venuePrefix(VENUE)}x`],
+    ["a folder inside the stream prefix", "waitron/generation/x"],
   ])("refuses an archive prefix inside %s", (_name, prefix) => {
     const body = { ...inStreamVenue, endpoint: stream.bucket.endpoint, prefix };
     expect(refusal(() => resolveArchiveChoice(body, ctx)).code).toBe(

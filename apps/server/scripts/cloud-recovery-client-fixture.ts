@@ -12,7 +12,14 @@ import assert from "node:assert/strict";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { nodes, openVenueDatabase, readVenue, venueLocationId } from "@waitron/db";
+import {
+  nodes,
+  openVenueDatabase,
+  readVenue,
+  readCloudVenueId,
+  saveCloudVenueId,
+  withTransaction,
+} from "@waitron/db";
 import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { createCloudReplacement } from "../src/cloud-replacement.js";
@@ -154,31 +161,29 @@ else if (request.command === "stage") {
   assert(nodeId);
   if (request.expectedSourceNodeId) assert.equal(nodeId, request.expectedSourceNodeId);
   const store = await openVenueDatabase(venueDir);
-  let localVenueId: string;
   try {
-    localVenueId = await venueLocationId(store.venue);
     const source = await store.venue.select({ id: nodes.id }).from(nodes);
     assert(source.some((row) => row.id === nodeId));
+    const connection = createCloudConnection({
+      stateDir,
+      origin: request.origin,
+      readVenueId: () => readCloudVenueId(store.venue),
+      recordVenueId: (id) => withTransaction(store.venue, (tx) => saveCloudVenueId(tx, id)),
+      environment: "test",
+    });
+    const replacement = createCloudReplacement({
+      stateDir,
+      origin: request.origin,
+      nodeId,
+      connection,
+    });
+    const view =
+      request.command === "prepareReplacement"
+        ? await replacement.prepare()
+        : await replacement.check();
+    result = { ...view, cloudConnection: await connection.status() };
   } finally {
     await store.close();
   }
-  const connection = createCloudConnection({
-    stateDir,
-    origin: request.origin,
-    localVenueId,
-    environment: "test",
-  });
-  const replacement = createCloudReplacement({
-    stateDir,
-    origin: request.origin,
-    localVenueId,
-    nodeId,
-    connection,
-  });
-  const view =
-    request.command === "prepareReplacement"
-      ? await replacement.prepare()
-      : await replacement.check();
-  result = { ...view, cloudConnection: await connection.status() };
 } else throw Error("Unknown recovery command");
 console.log(JSON.stringify(result));

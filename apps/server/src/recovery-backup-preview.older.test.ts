@@ -200,15 +200,21 @@ it("binds a bucket copy with an older venue schema before private preview migrat
       store,
       locationId,
       signPointer(
-        { venueId: locationId, term: 0, nodeId, generation, writtenAt: "2026-10-01T08:00:00.000Z" },
+        {
+          streamId: locationId,
+          term: 0,
+          nodeId,
+          generation,
+          writtenAt: "2026-10-01T08:00:00.000Z",
+        },
         signer.privateKey,
       ),
       null,
     );
     const preview = await previewRecoveryStream({
       kit: {
-        version: 1,
-        venueId: locationId,
+        version: 2 as const,
+        streamId: locationId,
         bucket: {
           region: "local",
           bucket: "copy",

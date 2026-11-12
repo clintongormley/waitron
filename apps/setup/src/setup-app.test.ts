@@ -4262,18 +4262,18 @@ describe("restore from my bucket", () => {
       status: 409,
     });
     const el = await mountSetupApp(stubApi({ restoreFromBucket }));
-    bucketRequest(el, { kit: "WAITRON-RECOVERY-KIT-1:abc", environment: "preproduction" });
+    bucketRequest(el, { kit: "WAITRON-RECOVERY-KIT-2:abc", environment: "preproduction" });
     await flush(el);
     await flush(el);
     const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
     expect(screen.request).toEqual({
-      kit: "WAITRON-RECOVERY-KIT-1:abc",
+      kit: "WAITRON-RECOVERY-KIT-2:abc",
       environment: "preproduction",
       oldBoxGone: false,
       venueConfirmed: null,
     });
     expect(screen.shadowRoot!.querySelector<HTMLTextAreaElement>("[data-test=kit]")!.value).toBe(
-      "WAITRON-RECOVERY-KIT-1:abc",
+      "WAITRON-RECOVERY-KIT-2:abc",
     );
   });
 
@@ -4370,7 +4370,7 @@ describe("restore from my bucket", () => {
     [
       "restore.stream_pointer_unverified",
       { reason: "venue_mismatch" },
-      "The bucket's record of its newest copy names a different restaurant from this kit. Nothing was changed.",
+      "This recovery kit belongs to a different bucket copy. Choose the recovery pack or kit made for this copy and try again. Nothing was changed.",
     ],
     [
       "restore.stream_pointer_unverified",

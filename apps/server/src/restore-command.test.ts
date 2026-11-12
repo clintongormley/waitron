@@ -1,3 +1,5 @@
+import { ensureStreamId } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
@@ -486,8 +488,8 @@ describe("waitron-restore restore", () => {
 });
 
 const KIT: RecoveryKit = {
-  version: 1,
-  venueId: "c0000000-0000-4000-8000-000000000002",
+  version: 2 as const,
+  streamId: "c0000000-0000-4000-8000-000000000002",
   bucket: {
     endpoint: "https://s3.example.net",
     region: "eu-west-1",
@@ -501,7 +503,7 @@ const KIT: RecoveryKit = {
 };
 
 /** Where the kit's encoded body starts, after its fixed prefix. */
-const KIT_TOKEN_START = "WAITRON-RECOVERY-KIT-1:".length;
+const KIT_TOKEN_START = "WAITRON-RECOVERY-KIT-2:".length;
 
 const BUCKET_NOTICE =
   "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled";
@@ -956,10 +958,16 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
         WAITRON_CREDENTIALS_KEY: VAULT_KEY,
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
       });
+      await seedVenueSettings(copy.venue, {
+        name: "Archive venue",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurant",
+      });
+      await withTransaction(copy.venue, ensureStreamId);
       await withTransaction(copy.venue, (tx) =>
         putCredential(tx, ring, {
           purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({ venueId: KIT.venueId, bucket: KIT.bucket }),
+          value: streamSettingsPayload({ bucket: KIT.bucket }),
         }),
       );
     } finally {

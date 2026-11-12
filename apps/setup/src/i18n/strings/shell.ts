@@ -157,7 +157,7 @@ export const shellEn = {
   "shell.bucket.key_or_access":
     "The recovery pack does not match this copy, or the bucket login cannot read it. Use the pack matching this copy, or correct the bucket access and try again.",
   "shell.bucket.venue_mismatch":
-    "The bucket's record of its newest copy names a different restaurant from this kit. Nothing was changed.",
+    "This recovery kit belongs to a different bucket copy. Choose the recovery pack or kit made for this copy and try again. Nothing was changed.",
   "shell.bucket.venue_unconfirmed":
     "The copy in the bucket names no business tax id, so it cannot be confirmed or restored.",
   "shell.bucket.pointer_invalid":
@@ -381,7 +381,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.key_or_access":
     "El paquete de recuperación no corresponde a esta copia, o el acceso al bucket no permite leerla. Usa el paquete que corresponda a esta copia, o corrige el acceso al bucket y vuelve a intentarlo.",
   "shell.bucket.venue_mismatch":
-    "El registro del bucket de su copia más reciente nombra un restaurante distinto al de este kit. No se ha cambiado nada.",
+    "Este kit de recuperación corresponde a otra copia del bucket. Elige el paquete o kit de recuperación creado para esta copia y vuelve a intentarlo. No se ha cambiado nada.",
   "shell.bucket.venue_unconfirmed":
     "La copia del bucket no indica ningún NIF del negocio, así que no se puede confirmar ni restaurar.",
   "shell.bucket.pointer_invalid":

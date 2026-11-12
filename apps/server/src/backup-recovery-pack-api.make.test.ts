@@ -1,3 +1,4 @@
+import { ensureStreamId } from "@waitron/db";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mountMeApi } from "./me-api.js";
@@ -57,7 +58,6 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const KEY = "recovery-key-recognisable-SECRET";
-const VENUE = "c0000000-0000-4000-8000-000000000002";
 const BUCKET = {
   region: "eu-west-1",
   bucket: "venue-bucket",
@@ -114,9 +114,10 @@ beforeEach(async () => {
   await setNodePublicKey(suite.db, nodeId, "SIGNER_PUBLIC_KEY");
   keyInForce = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, nodeId);
   await withTransaction(suite.db, async (tx) => {
+    await ensureStreamId(tx);
     await putCredential(tx, RING, {
       purpose: STREAM_PURPOSE,
-      value: streamSettingsPayload({ venueId: VENUE, bucket: BUCKET }),
+      value: streamSettingsPayload({ bucket: BUCKET }),
     });
     await writeArchiveSettings(tx, RING, ARCHIVES);
   });
@@ -173,7 +174,6 @@ function fixture(
       nodeDb: suite.node,
       ring: RING,
       node,
-      venueId: VENUE,
       modules,
       turns: options.turns ?? createTurns(),
       readBoxEnv: options.readBoxEnv ?? (async () => ({ ...boxEnv })),

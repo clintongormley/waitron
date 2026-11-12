@@ -425,8 +425,8 @@ it.each(["archive", "bucket"] as const)(
     );
     const file = join(f.deps.stagingDir, "command-input");
     const kit = {
-      version: 1 as const,
-      venueId: "c0000000-0000-4000-8000-000000000002",
+      version: 2 as const,
+      streamId: "c0000000-0000-4000-8000-000000000002",
       bucket: {
         endpoint: "https://s3.example.net",
         region: "eu-west-1",

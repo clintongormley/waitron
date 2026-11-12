@@ -83,7 +83,7 @@ export const restoreEn = {
     "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
   "restore_bucket.kit": "Recovery kit",
   "restore_bucket.kit_hint":
-    "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-1",
+    "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-2",
   "restore_bucket.kit_missing": "Choose your recovery pack or kit file, or paste the kit.",
   "restore_bucket.environment": "Environment",
   "restore_bucket.environment_help_label": "Help with environment",
@@ -266,7 +266,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el código.",
   "restore_bucket.kit": "Kit de recuperación",
   "restore_bucket.kit_hint":
-    "O pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-1",
+    "O pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-2",
   "restore_bucket.kit_missing":
     "Elige tu paquete de recuperación o el archivo del kit, o pega el kit.",
   "restore_bucket.environment": "Entorno",

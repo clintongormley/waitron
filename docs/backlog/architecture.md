@@ -1027,7 +1027,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: 5g and 5h of A1308's slice 5.
+  slices. Still open: 5h of A1308's slice 5.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue`, `seedVenueSettings`, `seedBusinessDay` and `seedWorkingOrder`.
@@ -1036,14 +1036,12 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   S18a (#2447), S18b (#2450), S18d (#2451, #2453) and S18f (#2467) have landed. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup
   folder becomes: Cloud assigns the id, and a box not connected to Cloud backs up where its owner
   says. The owner approved the [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md)
-  that writes this up, with its defaults, on 2026-11-04. S18e builds it, and is held by A1308: it
-  adds a table, and no lane starts table work until A760's squash lands. S18f did not wait for
-  S18e: the owner chose the plan's cheaper schedule, so the places that need the old id read it
-  from one temporary function until S18e replaces it. The schema slices S20–S28 get a plan of their own.
+  that writes this up, with its defaults, on 2026-11-04. A1308 slice 5g builds S18e with the identities in the venue settings document. S18f used the
+  owner's cheaper schedule and landed before that cutover. The schema slices S20–S28 get a plan of their own.
 
   What the landed slices left, by owner:
 
-  - **S18:** S18e, held by A1308 (above). Two test helpers still hand out a node value
+  - **S18:** Two test helpers still hand out a node value
     holding the venue row's id, because test files read it from there: `hour-recovery-host.ts`'s
     `node` and `staged-hour-crash.ts`'s (an assertion in
     `restore-emergency-crash.e2e.test.ts`) (S18f).
@@ -1055,8 +1053,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
     that still set it, listed in D113 and in [kitchen.md](kitchen.md). Server test helpers take the venue row's
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
     stays in fixtures that still read the venue row, including node, Cloud, backup, kitchen-setting
-    and menu-name fixtures. Until `venueLocationId` goes, boot takes the venue row's id for the
-    bucket stream, its recovery kit and the Cloud connection; 5g removes those uses.
+    and menu-name fixtures.
     The `locationId` brand remains in `packages/shared/src/ids.ts` (S18f).
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)

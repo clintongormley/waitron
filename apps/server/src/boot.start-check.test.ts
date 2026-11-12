@@ -1,4 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { saveVenueFields } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
@@ -24,7 +26,7 @@ import { persons, startManagementSession } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
-import { readPointer, venuePrefix } from "@waitron/stream";
+import { readPointer } from "@waitron/stream";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -379,7 +381,6 @@ describe("the start check on a real start", () => {
           },
           beforeStart: async (nodeId) => {
             const settings = {
-              venueId: "returning-main",
               endpoint: "-",
               region: "eu-west-1",
               bucket: "copies",
@@ -388,9 +389,20 @@ describe("the start check on a real start", () => {
               secretAccessKey: "test-secret",
             };
             await withTransaction(suite.db, (tx) =>
+              saveVenueFields(tx, { streamId: "c0000000-0000-4000-8000-000000000002" }, null),
+            );
+            await withTransaction(suite.db, (tx) =>
               putCredential(tx, loadKeyRing(KEY_ENV), { purpose: STREAM_PURPOSE, value: settings }),
             );
             const held = (await readNodeMembership(suite.db))!;
+            await seedVenueSettings(spareSuite.db, {
+              name: "Standby venue",
+              invoiceLocales: ["es"],
+              operationDescription: "Restaurant",
+            });
+            await withTransaction(spareSuite.db, (tx) =>
+              saveVenueFields(tx, { streamId: "c0000000-0000-4000-8000-000000000002" }, null),
+            );
             await writeNodeMembership(
               spareSuite.db,
               buildNextMembershipDocument({
@@ -448,7 +460,6 @@ describe("the start check on a real start", () => {
                 nodeId: SPARE.nodeId,
                 ring: loadKeyRing(KEY_ENV),
                 stream: publisher,
-                venueId: "returning-main",
                 isPrimary: () => true,
 
                 readRecoveryKey: async () => recoveryKey,
@@ -483,14 +494,13 @@ describe("the start check on a real start", () => {
             await vi.waitFor(() => expect(litestream.running()).toBeDefined());
             publishCopy = async () => {
               const generation = (publisher!.status() as { generation: string }).generation;
-              bucket.upload(
-                `${venuePrefix("returning-main")}${generation}/0000/0000000000000001-0000000000000001.ltx`,
-              );
+              bucket.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
               await vi.waitFor(
                 async () =>
-                  expect((await readPointer(bucket, "returning-main"))?.pointer.body).toMatchObject(
-                    { nodeId: SPARE.nodeId, term: 3 },
-                  ),
+                  expect(
+                    (await readPointer(bucket, "c0000000-0000-4000-8000-000000000002"))?.pointer
+                      .body,
+                  ).toMatchObject({ nodeId: SPARE.nodeId, term: 3 }),
                 { timeout: 10_000 },
               );
             };

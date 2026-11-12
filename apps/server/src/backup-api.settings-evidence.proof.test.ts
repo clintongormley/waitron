@@ -486,7 +486,6 @@ describe("GET /api/backup/settings-evidence proofs", () => {
           nodeId: "00000000-0000-0000-0000-000000000000",
           ring: RING,
           stream: { reload: async () => {}, status: () => ({ state: "off" }) },
-          venueId: VENUE,
           isPrimary: () => true,
 
           readRecoveryKey: readKey(sc),
@@ -559,7 +558,6 @@ describe("GET /api/backup/settings-evidence proofs", () => {
       putCredential(tx, RING, {
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
-          venueId: VENUE,
           bucket: {
             region: "eu-west-1",
             bucket: "venue-copy",

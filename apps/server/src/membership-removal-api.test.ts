@@ -527,7 +527,6 @@ describe("removing the standby this box's pair link names", () => {
         nodeId: p.nodeId,
         ring: RING,
         stream: { reload: async () => {}, status: () => ({ state: "off" }) },
-        venueId: "venue",
         isPrimary: () => true,
 
         readRecoveryKey: async () => "recovery-key-one-strong",

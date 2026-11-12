@@ -34,10 +34,10 @@ describe("pauseListingPrefix", () => {
   const generation = "gen-0-node-a-20261014T000000Z";
 
   it("puts the bucket's prefix, normalised, in front of the generation's level-0 folder", () => {
-    const bare = pauseListingPrefix({ prefix: "" }, "venue-1", generation);
+    const bare = pauseListingPrefix({ prefix: "" }, generation);
     expect(bare.endsWith("/0000/")).toBe(true);
-    expect(bare.startsWith("venues/venue-1/")).toBe(true);
-    expect(pauseListingPrefix({ prefix: "pause/" }, "venue-1", generation)).toBe(`pause/${bare}`);
-    expect(pauseListingPrefix({ prefix: "/pause" }, "venue-1", generation)).toBe(`pause/${bare}`);
+    expect(bare).toBe(`${generation}/0000/`);
+    expect(pauseListingPrefix({ prefix: "pause/" }, generation)).toBe(`pause/${bare}`);
+    expect(pauseListingPrefix({ prefix: "/pause" }, generation)).toBe(`pause/${bare}`);
   });
 });

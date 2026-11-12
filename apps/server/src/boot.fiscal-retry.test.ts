@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { saveCloudVenueId, withTransaction } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -79,9 +80,10 @@ it("hands the configured tunnel folder to the real Cloud worker and publishes it
     await boot({
       modules: VERIFACTU,
       testSubmissions: false,
-      beforeStart: async (venue, directory, env) => {
-        saved.localVenueId = venue.cfg.locationId;
-        saved.view.localVenueId = venue.cfg.locationId;
+      beforeStart: async (_venue, directory, env) => {
+        await withTransaction(suite.db, (tx) =>
+          saveCloudVenueId(tx, saved.view.registration.venueId),
+        );
         await mkdir(join(directory, "cloud"), { recursive: true });
         const destination = join(directory, "cloud/connection.json");
         await writeFile(destination, JSON.stringify(saved), { mode: 0o600 });
@@ -216,9 +218,10 @@ it("submits the container's public key through boot's real Cloud worker", async 
     await boot({
       modules: VERIFACTU,
       testSubmissions: false,
-      beforeStart: async (venue, directory, env) => {
-        saved.localVenueId = venue.cfg.locationId;
-        saved.view.localVenueId = venue.cfg.locationId;
+      beforeStart: async (_venue, directory, env) => {
+        await withTransaction(suite.db, (tx) =>
+          saveCloudVenueId(tx, saved.view.registration.venueId),
+        );
         await mkdir(join(directory, "cloud"), { recursive: true });
         const destination = join(directory, "cloud/connection.json");
         await writeFile(destination, JSON.stringify(saved), { mode: 0o600 });
