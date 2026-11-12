@@ -210,12 +210,11 @@ puede vender hasta que Waitron vuelva a arrancar, así que la página lo pregunt
 **Reiniciar** para seguir o **Parar** para dejarlo. Úsalo cuando una alerta lo indique. La página
 se pone al día sola cuando vuelve el equipo.
 
-Puedes pulsarlo con **Gestionar el sistema**, que tienen los gerentes y administradores de forma predeterminada. Los demás ven **Iniciar sesión como administrador**, que
-cierra su sesión y vuelve a esta página cuando el administrador inicia sesión.
+Los gerentes y administradores pueden reiniciar el equipo.
 
 ## Cuando se paran los cobros por la hora {#clock-behind}
 
-**Administración del equipo**, que tiene Admin de forma predeterminada, te permite confirmar o poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
+El permiso de administración del equipo, que tiene Admin de forma predeterminada, te permite confirmar o poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
 
 Cuando el reloj del equipo marca más de un minuto antes que la última venta registrada en el equipo,
 el equipo deja de cobrar y de devolver dinero. Una venta registrada en ese momento llevaría una hora

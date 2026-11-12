@@ -2,7 +2,12 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
-import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  loginWithPin,
+  persons,
+  startManagementSession,
+  registerModulePermissions,
+} from "@waitron/identity";
 import { createDeviceProfile } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
@@ -32,6 +37,7 @@ export async function createClockVenue(
   now: () => Date,
   modules: readonly WaitronModule[] = ALL_MODULES,
 ): Promise<ClockVenue> {
+  registerModulePermissions(modules.flatMap((module) => module.permissions ?? []));
   const venue = await applyVenue(
     planVenue(
       {

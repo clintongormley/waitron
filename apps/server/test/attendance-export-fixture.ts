@@ -3,13 +3,15 @@ import { jobOrigin } from "@waitron/shared";
 import { venueLocationId, withTransaction, type Database } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { WorkforceBackend, closePayPeriod } from "@waitron/workforce";
+import { registerModulePermissions } from "@waitron/identity";
+import { WorkforceBackend, closePayPeriod, WORKFORCE_PERMISSIONS } from "@waitron/workforce";
 import { prepareTimeRecordExport } from "@waitron/workforce-es";
 
 export const longReason = `${Array.from({ length: 90 }, (_, i) => `Paragraph ${i}: María Muñoz — José, niñez; an explanation of the recorded change.`).join("\n")}\nREASON-FINAL-MARKER`;
 export const longToken = "LONGTOKEN".repeat(100);
 
 export async function seedAttendanceExport(db: Database) {
+  registerModulePermissions(WORKFORCE_PERMISSIONS);
   await seedVenue(db, {
     name: "Charcutería",
     invoiceLocales: ["es"],

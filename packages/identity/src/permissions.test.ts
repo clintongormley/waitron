@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   PERMISSIONS,
   CORE_PERMISSIONS,
@@ -249,6 +249,9 @@ it("grants hardware.manage for resending to manager and admin", () => {
 });
 
 describe("explicit permission declarations", () => {
+  it("exposes a read-only core catalogue", () => {
+    expectTypeOf(PERMISSIONS).toEqualTypeOf<readonly Permission[]>();
+  });
   it("declares each core permission's default holders", () => {
     const all = ["staff", "supervisor", "manager"];
     const supervisors = ["supervisor", "manager"];

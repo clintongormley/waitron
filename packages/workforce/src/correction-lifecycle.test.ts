@@ -1,3 +1,4 @@
+import { maySelfApproveAttendance } from "./corrections.js";
 import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -638,21 +639,22 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
   registerModulePermissions([
     { permission: "workforce.self_approve", defaultHolders: ["manager"] },
   ]);
-  registerModulePermissions([{ permission: "workforce.correct", defaultHolders: [] }]);
   try {
-    await unchangedRefusal(
-      () =>
-        run((tx) =>
-          backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
-        ),
-      "correction.not_permitted",
-    );
-  } finally {
-    registerModulePermissions([
-      { permission: "workforce.correct", defaultHolders: ["supervisor", "manager"] },
-    ]);
-  }
-  try {
+    registerModulePermissions([{ permission: "workforce.correct", defaultHolders: [] }]);
+    try {
+      expect(await run((tx) => maySelfApproveAttendance(tx, personId))).toBe(false);
+      await unchangedRefusal(
+        () =>
+          run((tx) =>
+            backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
+          ),
+        "correction.not_permitted",
+      );
+    } finally {
+      registerModulePermissions([
+        { permission: "workforce.correct", defaultHolders: ["supervisor", "manager"] },
+      ]);
+    }
     const approved = await run((tx) =>
       backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
     );

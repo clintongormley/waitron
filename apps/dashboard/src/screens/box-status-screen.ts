@@ -1282,35 +1282,25 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
-  #renderRestart(): TemplateResult {
-    const action = this.canRestart
-      ? html`<span class="restart-action">
-          <wt-button
-            variant="secondary"
-            data-test="box-restart"
-            @click=${() => {
-              this.restartError = "";
-              this.restartOpen = true;
-            }}
-            >${t("box_status.restart.title")}</wt-button
-          ><wt-help-tooltip
-            mode="help-mode"
-            aria-label=${t("box_status.restart_help_label")}
-            guide-href=${guideHref("box-status.restart")}
-            guide-label=${t("box_status.restart_help_guide")}
-            >${t("box_status.restart_help")}</wt-help-tooltip
-          >
-        </span>`
-      : html`<p data-test="box-restart-hint">${t("box_status.restart.sign_in_hint")}</p>
-          <wt-button
-            variant="secondary"
-            data-test="box-restart-sign-in"
-            @click=${() =>
-              this.dispatchEvent(
-                new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
-              )}
-            >${t("staff.sign_in_as_admin")}</wt-button
-          >`;
+  #renderRestart(): TemplateResult | typeof nothing {
+    if (!this.canRestart) return nothing;
+    const action = html`<span class="restart-action">
+      <wt-button
+        variant="secondary"
+        data-test="box-restart"
+        @click=${() => {
+          this.restartError = "";
+          this.restartOpen = true;
+        }}
+        >${t("box_status.restart.title")}</wt-button
+      ><wt-help-tooltip
+        mode="help-mode"
+        aria-label=${t("box_status.restart_help_label")}
+        guide-href=${guideHref("box-status.restart")}
+        guide-label=${t("box_status.restart_help_guide")}
+        >${t("box_status.restart_help")}</wt-help-tooltip
+      >
+    </span>`;
     return html`<section class="box-restart" data-test="box-restart-section">
       <h2>${t("box_status.restart.title")}</h2>
       ${

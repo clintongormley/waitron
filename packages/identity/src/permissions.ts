@@ -32,13 +32,17 @@ export const CORE_PERMISSIONS = [
 ] as const satisfies readonly PermissionDeclaration[];
 
 export type Permission = (typeof CORE_PERMISSIONS)[number]["permission"];
-export const PERMISSIONS = CORE_PERMISSIONS.map(({ permission }) => permission);
-const CORE_IDS: ReadonlySet<string> = new Set(PERMISSIONS);
+export const PERMISSIONS: readonly Permission[] = CORE_PERMISSIONS.map(
+  ({ permission }) => permission,
+);
+const CORE_HOLDERS = new Map<string, readonly DefaultHolder[]>(
+  CORE_PERMISSIONS.map(({ permission, defaultHolders }) => [permission, defaultHolders]),
+);
 const MODULE_PERMISSIONS = new Map<string, readonly DefaultHolder[]>();
 
 export function registerModulePermissions(perms: readonly ModulePermission[]): void {
   for (const { permission, defaultHolders } of perms) {
-    if (CORE_IDS.has(permission)) throw new Error(`permission declared twice: ${permission}`);
+    if (CORE_HOLDERS.has(permission)) throw new Error(`permission declared twice: ${permission}`);
     MODULE_PERMISSIONS.set(permission, defaultHolders);
   }
 }
@@ -48,7 +52,7 @@ export function declaredPermissions(): string[] {
 }
 
 export function isDeclaredPermission(id: string): boolean {
-  return CORE_IDS.has(id) || MODULE_PERMISSIONS.has(id);
+  return CORE_HOLDERS.has(id) || MODULE_PERMISSIONS.has(id);
 }
 
 export function defaultPermissionsFor(holder: DefaultHolder): string[] {
@@ -64,10 +68,7 @@ export function roleHasPermission(
   permission: Permission | (string & {}),
 ): boolean {
   if (role === "admin") return isDeclaredPermission(permission);
-  const declaration: PermissionDeclaration | undefined = CORE_PERMISSIONS.find(
-    (entry) => entry.permission === permission,
-  );
   return (
-    (declaration?.defaultHolders ?? MODULE_PERMISSIONS.get(permission))?.includes(role) ?? false
+    (CORE_HOLDERS.get(permission) ?? MODULE_PERMISSIONS.get(permission))?.includes(role) ?? false
   );
 }

@@ -1746,21 +1746,11 @@ describe("dashboard-box-status-screen's restart of the box", () => {
     expect(q(el, "[data-test=box-restart-done]")).toBeNull();
   });
 
-  it("offers anyone else an administrator sign-in in place, which asks the app to sign out", async () => {
+  it("omits restart controls when the screen is mounted without restart permission", async () => {
     const el = await mountRestart(restartApi(), false);
     expect(q(el, "[data-test=box-restart]")).toBeNull();
-    expect(text(q(el, "[data-test=box-restart-section] h2"))).toBe(t("box_status.restart.title"));
-    expect(text(q(el, "[data-test=box-restart-hint]"))).toBe(t("box_status.restart.sign_in_hint"));
-    const signIn = q(el, "[data-test=box-restart-sign-in]")!;
-    expect(text(signIn)).toBe(t("staff.sign_in_as_admin"));
-    const asked = vi.fn();
-    document.body.addEventListener("admin-sign-in", asked);
-    try {
-      await userEvent.click(signIn);
-    } finally {
-      document.body.removeEventListener("admin-sign-in", asked);
-    }
-    expect(asked).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=box-restart-section]")).toBeNull();
+    expect(q(el, "[data-test=box-restart-dialog]")).toBeNull();
   });
 
   it("is offered while the box's own read fails", async () => {

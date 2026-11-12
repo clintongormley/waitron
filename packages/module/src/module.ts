@@ -1553,7 +1553,6 @@ export interface WaitronModule {
    * separately, nothing stemmed. Read only by the root english-only suite. Omit the seat rather than
    * declare `[]`. */
   readonly vocabulary?: readonly string[];
-  /** Folded into identity's ladder once at boot (`registerModulePermissions`), before route auth. */
   readonly permissions?: readonly ModulePermission[];
   readonly duties?: unknown; // cronjobs
   readonly theme?: unknown;

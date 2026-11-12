@@ -22,10 +22,11 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { sessions, hashSessionToken } from "@waitron/identity";
+import { sessions, hashSessionToken, registerModulePermissions } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
+  WORKFORCE_PERMISSIONS,
   WorkforceBackend,
   attendanceDayWork,
   attendanceSourceState,
@@ -34,6 +35,8 @@ import {
   timeEntries,
 } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
+
+registerModulePermissions(WORKFORCE_PERMISSIONS);
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],

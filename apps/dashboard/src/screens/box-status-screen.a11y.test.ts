@@ -524,9 +524,9 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       await flush(el);
     };
 
-    it("renders the administrator sign-in for anyone else accessibly", async () => {
+    it("omits the restart section without permission accessibly", async () => {
       const { el, host } = await mountRestart(false, vi.fn());
-      expect(el.shadowRoot!.querySelector("[data-test=box-restart-sign-in]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=box-restart-section]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 

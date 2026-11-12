@@ -6448,8 +6448,7 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   the box answers, the dialog closes and "The box is restarting. This page catches up by itself
   once it is back." is announced in the section; the first successful box read after one that
   failed since the answer, or any successful read 30 seconds or more after the answer, takes it
-  away. Anyone else sees "Restarting needs Manage system, held by Managers and Admins by default. Signing in as an administrator signs you out here first." and a `secondary` "Sign in as an
-  administrator", which signs them out and returns to Box status after sign-in.
+  away.
 - **Errors.** A refused Free shows its message above the rows, and a refused Retry now under the
   Tax agency row's words; a failed box read shows the read error above the rows, never replacing a
   press's refusal.

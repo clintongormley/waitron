@@ -196,12 +196,11 @@ until Waitron has started again, so the page asks first: choose **Restart** to g
 **Stop** to leave it. Use it when an alert says to. The page catches up by itself once the box is
 back.
 
-You can press it with **Manage system**, held by Managers and Admins by default. Anyone else sees **Sign in as an administrator** instead,
-which signs them out and comes back to this page after the administrator signs in.
+Managers and Admins can restart the box.
 
 ## When payments stop because of the clock {#clock-behind}
 
-**Box administration**, held by Admin by default, lets you confirm or set the clock from your own device or approve it on a till. Staff can still confirm it on a till while startup waits.
+Box administration, held by Admin by default, lets you confirm or set the clock from your own device or approve it on a till. Staff can still confirm it on a till while startup waits.
 
 When the box's clock reads more than a minute earlier than the latest sale recorded on the box, the
 box stops taking payments and refunds. A sale recorded then would carry a time before that latest
