@@ -37,6 +37,8 @@ const allowed = {
   "packages/store/src/venue-holder.ts": "unflushed heartbeat, by design",
   "packages/stream/src/s3-file-store.ts": "download into scratch",
   "packages/fiscal-verifactu/src/emergency-attempt.ts": "flushes; environment slice retires it",
+  "packages/fiscal-verifactu/src/declaration/folder.ts":
+    "a release's declaration folder, written when the image is built, never box state",
 };
 function renames(source: string): boolean {
   const code = blankComments(source);
