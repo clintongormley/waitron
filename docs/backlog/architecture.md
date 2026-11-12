@@ -518,8 +518,8 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
   `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. The alert,
   configuration-import and print-agent suites keep their es-ES locales; the alert and print-agent
-  suites keep the operation description "Venta en establecimiento", the alert suite its staff first
-  names, the configuration-import suite its legal name, Madrid street addresses and the drink
+  suites keep the operation description "Venta en establecimiento", the configuration-import
+  suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
@@ -1007,8 +1007,8 @@ the helper's constant status is not evidence of the write.
   `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
   `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. The alert,
   configuration-import and print-agent suites keep their es-ES locales; the alert and print-agent
-  suites keep the operation description "Venta en establecimiento", the alert suite its staff first
-  names, the configuration-import suite its legal name, Madrid street addresses and the drink
+  suites keep the operation description "Venta en establecimiento", the configuration-import
+  suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
