@@ -69,6 +69,9 @@ export interface AllocationConfig {
 export const ZERO = decimal("0.00");
 const CENT = decimal("0.01");
 
+/** A money amount as a request spells it: up to two decimals, no leading zeros. */
+export const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
+
 export function invalid(field: string): AppError {
   return new AppError("management.request_invalid", { field });
 }

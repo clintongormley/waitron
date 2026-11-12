@@ -1,5 +1,9 @@
 # A802: Correct part of a paid invoice
 
+> **2026-11-12:** the owner replaced "file when opened" with "When all money is back"
+> ([decision](../../backlog/fiscal.md#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12));
+> the build now follows the [reshape plan](../plans/2026-11-12-a802-reshape.md).
+
 **Approval update, 2026-10-22:** the owner approved this design and all three policies on
 2026-10-21: issue the correction before a connected-card refund, require both permissions and
 explicit refund links, and apply the proposed source-history gates. The original proposal below

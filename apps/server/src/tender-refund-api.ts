@@ -55,7 +55,11 @@ export function pathId(value: string, kind: "sale" | "refund"): string {
   return value.toLowerCase();
 }
 
-export async function checkAccess(tx: Transaction, session: Session, saleId: string) {
+export async function checkAccess(
+  tx: Transaction,
+  session: Pick<Session, "deviceId" | "personId" | "sessionId">,
+  saleId: string,
+) {
   await assertStillSignedIn(tx, session);
   const [row] = await tx
     .select(deviceBindingColumns)
@@ -74,6 +78,7 @@ export async function checkAccess(tx: Transaction, session: Session, saleId: str
     device.deviceProfileId,
     scope.workingOrderIds.map((orderId) => ({ orderId })),
   );
+  return device;
 }
 async function readRefund(tx: Transaction, id: string) {
   const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
@@ -121,6 +126,7 @@ export function mountTenderRefundApi(
       "tender.refund_exceeds_payment": 409,
       "tender.refund_exceeds_cancelled": 409,
       "tender.refund_unavailable": 409,
+      "invoice_correction.already_open": 409,
     },
     "tender_refund.failed",
   );

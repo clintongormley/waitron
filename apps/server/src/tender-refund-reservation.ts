@@ -20,6 +20,12 @@ import {
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
+import {
+  checkCorrectionLeg,
+  linkRefundToCorrection,
+  refuseWhileCorrectionOpen,
+  type CorrectionRead,
+} from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
@@ -132,6 +138,9 @@ export async function reserveTenderRefund(
   request: TenderRefundRequest,
   actor: RefundActor,
   createdAt: string,
+  /** The correction `request.invoiceCorrection` names, as the caller read it in this transaction;
+   * set only by server code, never from a request body. */
+  correctionRead?: CorrectionRead,
 ): Promise<{
   refund: typeof tenderRefunds.$inferSelect;
   replayed: boolean;
@@ -156,6 +165,14 @@ export async function reserveTenderRefund(
   if (request.manualConfirmed !== undefined && typeof request.manualConfirmed !== "boolean")
     throw invalid("manualConfirmed");
   const cancellationIds = cancellationIdsOf(request.cancellationIds);
+  const correctionLink =
+    request.invoiceCorrection === undefined
+      ? undefined
+      : {
+          id: uuid(request.invoiceCorrection.id, "invoiceCorrection"),
+          requestId: uuid(request.invoiceCorrection.requestId, "invoiceCorrection"),
+          ...(request.invoiceCorrection.cashRoute === true ? { cashRoute: true as const } : {}),
+        };
   const reason = request.reason.trim();
   const print = fingerprint({
     saleId,
@@ -165,6 +182,7 @@ export async function reserveTenderRefund(
     reason,
     manualConfirmed: request.manualConfirmed === true,
     ...(cancellationIds === undefined ? {} : { cancellationIds: [...cancellationIds].sort() }),
+    ...(correctionLink === undefined ? {} : { invoiceCorrectionId: correctionLink.id }),
   });
   await resolveTransactionScope(tx, saleId);
   const [earlier] = await tx
@@ -176,6 +194,7 @@ export async function reserveTenderRefund(
     if ("authorize" in actor) await authorizeStoredTenderRefund(tx, earlier, actor.authorize);
     return { refund: earlier, replayed: true };
   }
+  if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
 
   const refundable = (await readRefundableTenders(tx, saleId)).find(
     (row) => row.tenderId === tenderId,
@@ -253,6 +272,21 @@ export async function reserveTenderRefund(
       });
     }
   }
+  const correction =
+    correctionLink === undefined
+      ? undefined
+      : await checkCorrectionLeg(
+          tx,
+          saleId,
+          correctionLink,
+          {
+            method: refundable.method as "cash" | "card",
+            appliedCents: appliedAmount,
+            tipCents: tipAmount,
+            cancellationIds,
+          },
+          correctionRead,
+        );
   const allocation =
     cancellationIds === undefined
       ? undefined
@@ -288,7 +322,7 @@ export async function reserveTenderRefund(
       fingerprint: print,
       appliedAmount,
       tipAmount,
-      reason,
+      reason: correction?.reason ?? reason,
       requestedBy: actor.requestedBy,
       authorizedBy,
       source: cfg.origin.source,
@@ -304,6 +338,13 @@ export async function reserveTenderRefund(
     .returning();
   if (allocation !== undefined)
     await linkRefundToCancels(tx, { tenderRefundId: refund!.id, links: allocation.links });
+  if (correctionLink !== undefined)
+    await linkRefundToCorrection(tx, {
+      invoiceCorrectionId: correctionLink.id,
+      tenderRefundId: refund!.id,
+      requestId: correctionLink.requestId,
+      createdAt,
+    });
   return {
     refund: refund!,
     replayed: false,

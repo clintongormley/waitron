@@ -135,9 +135,8 @@ stays in one area.
 them only when a lane has nothing better.
 
 **Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, A646 the
-Modules page, A664 archiving or deleting old data, and A802 correcting part of a paid invoice, whose
-[build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) has had its
-protected-writer approval since 2026-10-22.
+Modules page, A664 archiving or deleting old data, and A802 correcting part of a paid invoice
+([reshape plan](superpowers/plans/2026-11-12-a802-reshape.md)).
 
 **Remote access unblocks the customer-facing features, so it comes first among them (owner,
 2026-10-22).** Online booking (A1013), the table's QR code (A508), online ordering for collection
@@ -354,9 +353,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **2026-11-10:** Slice 3 ([plan](superpowers/plans/2026-11-10-a802-correction-history.md)): `previewCorrectionAmounts` reads an invoice's correction history, asks the regime whether its filing admits a correction, and refuses an invoice whose filed figures differ from the stored ones; staff get nothing yet. An AEAT preproduction run of the final-cent shape comes before the slice staff can use.
   **2026-11-11:** The owner chose option A (a fix of a refused invoice never changes its amounts, [A1481](backlog/fiscal.md#a1481-a-fix-never-changes-an-invoices-amounts-owner-2026-11-11)), so slice 3b, filing at the figures the agency accepted after a fix, is dropped and #2775 closed; slices 4–5 are re-planned against the figures stored at sale time ([plan](superpowers/plans/2026-11-11-a802-slices-4-5.md)).
   **2026-11-11:** Slice 4 (server only): two till routes preview and make a part corrective invoice of a paid all-cash simplified invoice, giving that cash back in the same transaction with one drawer job; a repeat of the same request returns the first answer, and a different request reusing its submission id is refused (new ledger table `invoice_corrections`). Staff get nothing until slice 5. The verifactu library's AEAT test-service run of the final-cent corrective passed on 2026-11-11 (run 43110422275: all seven records accepted).
+  **2026-11-12:** The owner chose to run a correction like a bill in reverse ([decision](backlog/fiscal.md#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)); the [reshape plan](superpowers/plans/2026-11-12-a802-reshape.md) replaces slice 4's one-step route in five pull requests. PR 1a (cash, server only): a correction is opened after the filing checks, with nothing filed; its cash goes back in one or more steps, and the last step files the corrective in the same transaction; a manager can file for the money back so far, discard one with nothing back, or close one keeping its refunds when its filing can never happen. Tickets with a card payment are still refused until PR 1b. Staff get nothing on the till until slice 5.
 
-  Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md), including its separate protected-writer approval
-  and exact-gross qualification. The fiscal PR waits for the owner to land it.
+  Follow the [reshape plan](superpowers/plans/2026-11-12-a802-reshape.md). The fiscal PR waits for the owner to land it.
   After A760, rebase onto the squashed base and regenerate its migrations there; its tables go in core's set (`packages/db`). Before landing, show its new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
@@ -1873,6 +1872,9 @@ Not in any track until the standalone primary is done.
   is an internal API; sale lines, reprints, the returned-invoices reporting marker and real-box
   qualification remain open. A filing result held only by the old box is not applied to a record
   already on the new main; a late payment on an older box's chain is not included in this return.
+  An A802 correction's row and refund links do not travel (`invoice_corrections` and
+  `invoice_correction_refunds` are not in the return), so cash an unfinished correction gave back
+  arrives as ordinary refunds, and no correction on the new main can cover it.
   [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
 
 - **A third box's chart can leave another box serving-secondary and filing.** The remaining

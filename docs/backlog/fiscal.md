@@ -930,11 +930,14 @@ asesor Q31 (2026-09-30), not decided.
 - **A802: design approved 2026-10-21; implementation remains open.** The
   [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
   covers paid-receipt corrections, their money-back workflow and A758's same-step correction.
-  The owner approved correction before connected refund, both permissions with explicit refund
-  links, and the proposed source-history gates. The
+  The owner approved both permissions with explicit refund links and the proposed source-history
+  gates; the 2026-10-21 order, correction before connected refund, was replaced on 2026-11-12 by
+  filing once all money is back ([decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). The
   [build plan](../superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) identifies
   the protected-writer approval (granted 2026-10-22) and the exact-gross qualification
   required before the dependent money workflow.
+  **2026-11-12:** the [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md) replaces it
+  for the remaining work.
   The owner's 2026-10-18 scope follows:
   - A server route that issues a partial correction through `recordCorrection`
     (`packages/core/src/record-correction.ts`), filing by differences as today.
@@ -1075,6 +1078,22 @@ from **Print on {printer}** in the window that follows it. Direct `POST /api/sal
 `sale.full_invoice_unavailable`. Pinned by the full-invoice cases in
 `apps/server/src/counter-bill-payments.test.ts`. Relayed by the watcher in lane L's
 `questions.md` (2026-11-12 11:31) and the watcher handoff (2026-11-12 11:58).
+
+### A802: a correction runs like a bill in reverse (owner, 2026-11-12)
+
+A correction of a paid invoice is opened first (every filing check up front, nothing filed, no money
+moved), money goes back through Refund a payment as legs linked to it, and the corrective invoice is
+filed **"When all money is back"**: once every refund in it has gone through. This replaces the
+2026-10-21 "file when opened". **"Opening approval counts"**: when a card refund is confirmed later
+with nobody signed in, the approval given at opening counts and Waitron files the corrective
+automatically, falling back to an alert and a manager's Record correction whenever that filing is
+refused; this authorises a small change to the protected fiscal core (`recordCorrection`'s session
+check). Recorded in the campaign's `questions.md`, 2026-11-12 12:37; the shape and its card cases
+are in [the note](../superpowers/plans/2026-11-12-a802-correction-primitives.md).
+
+**2026-11-12, as built in PR 1a:** cash goes back through the correction's own cash route, not
+Refund a payment ([reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md), decision 13), and
+Open does not check the corrective series, which the last cash step does.
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 

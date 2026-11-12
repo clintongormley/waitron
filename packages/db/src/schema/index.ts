@@ -28,6 +28,7 @@ export * from "./receipt-reprints.js";
 export * from "./sale-receipt-guests.js";
 export * from "./invoice-pdf-downloads.js";
 export * from "./invoice-corrections.js";
+export * from "./invoice-correction-refunds.js";
 export * from "./kitchen-print-job-lines.js";
 export * from "./kitchen-print-jobs.js";
 export * from "./station-printers.js";

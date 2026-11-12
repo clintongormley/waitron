@@ -1,37 +1,45 @@
-import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
-import { previewCorrectionAmounts, recordCorrection, type CorrectionPreview } from "@waitron/core";
+import {
+  previewCorrectionAmounts,
+  recordCorrection,
+  type CorrectionPreview,
+  type RecordCorrectionInput,
+} from "@waitron/core";
 import {
   invoiceCorrections,
   readLiveSeriesIdTx,
   saleSettlements,
-  tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
-import { prepareIssueClock, type FiscalBackend } from "@waitron/fiscal";
-import type { AuthzInput } from "@waitron/identity";
+import { prepareIssueClock, type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
+import type { Authorization, AuthzInput } from "@waitron/identity";
 import {
   AppError,
   centsToDecimal,
   compareDecimal,
   decimal,
   decimalToCents,
+  hasCode,
   isUuid,
   negateDecimal,
-  sumDecimals,
   seriesId as brandSeriesId,
+  sumDecimals,
   type Decimal,
+  type ErrorParams,
   type SaleId,
 } from "@waitron/shared";
-import { invalid } from "./bill-allocation.js";
+import { invalid, MONEY } from "./bill-allocation.js";
+import {
+  readCorrectionLegs,
+  readCorrectionMoney,
+  readCorrectionRow,
+  refuseWhileCorrectionOpen,
+} from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
-import { enqueueTenderRefundDrawer } from "./receipt-print.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
-import { carryNewTenderRefund } from "./tender-refund-completion.js";
-import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
 import { canonicaliseUuid } from "./till-session.js";
@@ -55,94 +63,43 @@ export interface InvoiceCorrectionRequest {
   expectedSplit: SplitLine[];
 }
 
-export interface InvoiceCorrectionResult {
-  correctiveSaleId: string;
-  /** One per cash payment money went back to, oldest first. */
-  refunds: TenderRefundView[];
-  replayed: boolean;
+export interface InvoiceCorrectionView {
+  id: string;
+  saleId: string;
+  state: "open" | "filed" | "discarded" | "closed";
+  gross: string;
+  moneyBack: string;
+  pending: string;
+  /** gross − moneyBack − pending. */
+  left: string;
+  reason: string;
+  openedAt: string;
+  correctiveSaleId: string | null;
+  legs: TenderRefundView[];
+  /** What /file would file now: `previewCorrectionAmounts` for the money back over the
+   * correction's lineIds, or the code it refused with and whether /close may end the correction
+   * keeping its refunds; null while a leg is pending, nothing is back, or the correction has ended. */
+  fileNow:
+    { gross: string; vatBreakdown: SplitLine[] } | { refusal: string; closable: boolean } | null;
 }
 
 export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
 
-const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
+const ZERO = decimal("0.00");
 
-/** What correcting `selection.gross` off the invoice would file, and the cash still refundable on it. */
-export async function previewInvoiceCorrection(
+/**
+ * The checks both the preview and Open run, in order, so the preview refuses what Open refuses
+ * about the invoice with the same code. Answers what correcting `selection.gross` would file and
+ * the money still refundable over every payment on the invoice.
+ */
+async function checkCorrectionOpenable(
   tx: Transaction,
   backend: FiscalBackend,
   cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
   saleId: SaleId,
-  selection: { gross: string; lineIds?: readonly string[] },
-): Promise<CorrectionPreview & { cashRefundable: Decimal }> {
-  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, {
-    gross: moneyOf(selection.gross, "gross"),
-    ...(selection.lineIds === undefined ? {} : { lineIds: selection.lineIds }),
-  });
-  const cash = (await readRefundableTenders(tx, saleId)).filter((row) => row.method === "cash");
-  return {
-    ...preview,
-    cashRefundable: sumDecimals([
-      decimal("0.00"),
-      ...cash.map((row) => decimal(row.appliedRemaining)),
-    ]),
-  };
-}
-
-/**
- * Files a corrective invoice for `request.gross` off a paid cash invoice and gives that cash back
- * over the invoice's cash payments, oldest first, opening the drawer once. A repeat of the same
- * submission answers the first result and changes nothing. The caller has authorized the
- * operator for `sale.refund`; `recordCorrection` checks `sale.rectify` against `actor.authz`.
- */
-export async function acceptInvoiceCorrection(
-  tx: Transaction,
-  deps: InvoiceCorrectionDeps,
-  cfg: DeviceRequestConfig,
-  saleId: SaleId,
-  request: InvoiceCorrectionRequest,
-  actor: {
-    personId: string;
-    authz: AuthzInput;
-    authorization: { authorizedBy: string; viaOverride: boolean };
-  },
-): Promise<InvoiceCorrectionResult> {
-  const ask = parseInvoiceCorrection(request);
-  const print = fingerprint({
-    gross: ask.gross,
-    lineIds: ask.lineIds === undefined ? null : [...ask.lineIds].sort(),
-    reasonId: ask.reasonId,
-    note: ask.note,
-    expectedSplit: [...ask.expectedSplit].sort((a, b) => compareDecimal(a.rate, b.rate)),
-  });
-  const earlier = await tx
-    .select({
-      correctiveSaleId: invoiceCorrections.correctiveSaleId,
-      fingerprint: invoiceCorrections.fingerprint,
-      refund: tenderRefunds,
-    })
-    .from(invoiceCorrections)
-    .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrections.tenderRefundId))
-    .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
-    .where(
-      and(
-        eq(invoiceCorrections.originalSaleId, saleId),
-        eq(invoiceCorrections.submissionId, ask.submissionId),
-      ),
-    )
-    .orderBy(asc(tenders.settledAt), asc(tenders.id));
-  if (earlier.length > 0) {
-    if (earlier[0]!.fingerprint !== print)
-      throw new AppError("submission.id_reused", { submissionId: ask.submissionId });
-    return {
-      correctiveSaleId: earlier[0]!.correctiveSaleId,
-      refunds: earlier.map((row) => toTenderRefundView(row.refund)),
-      replayed: true,
-    };
-  }
-  const reason = await findAdjustmentReason(tx, ask.reasonId);
-  if (reason.kind !== "void") throw new AppError("adjustment.action_not_allowed", {});
-  if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
-
+  selection: { gross: Decimal; lineIds?: readonly string[] },
+): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
   const [settled] = await tx
     .select({ id: saleSettlements.id })
     .from(saleSettlements)
@@ -154,42 +111,169 @@ export async function acceptInvoiceCorrection(
     .where(eq(tenders.saleId, saleId));
   if (paid.some((row) => row.method !== "cash"))
     throw new AppError("invoice_correction.not_cash", { saleId });
-  const refundable = await readRefundableTenders(tx, saleId);
-  const pending = refundable.find((row) => row.pendingRefundId !== null);
-  if (pending !== undefined)
-    throw new AppError("invoice_correction.refund_pending", {
+  await refuseWhileCorrectionOpen(tx, saleId);
+  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
+  const moneyRefundable = appliedRemainingOf(await readRefundableTenders(tx, saleId));
+  if (compareDecimal(moneyRefundable, preview.gross) < 0)
+    throw new AppError("invoice_correction.money_short", {
       saleId,
-      refundId: pending.pendingRefundId!,
+      moneyLeft: moneyRefundable,
+      gross: preview.gross,
     });
-  const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
+  if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
+    throw new AppError("invoice_correction.chain_unsound", { saleId });
+  await backend.refuseWhileClockBehind(tx, reading);
+  return { ...preview, moneyRefundable };
+}
+
+/** What correcting `selection.gross` off the invoice would file, and the money still refundable on it. */
+export async function previewInvoiceCorrection(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
+  saleId: SaleId,
+  selection: { gross: string; lineIds?: readonly string[] },
+): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
+  return checkCorrectionOpenable(tx, backend, cfg, reading, saleId, {
+    gross: moneyOf(selection.gross, "gross"),
+    ...(selection.lineIds === undefined ? {} : { lineIds: selection.lineIds }),
+  });
+}
+
+/**
+ * Opens a correction of `request.gross` off a paid invoice once `checkCorrectionOpenable` and the
+ * reason and split checks pass; nothing is filed and no money moves. A repeat of the same
+ * submission answers the first correction and changes nothing.
+ */
+export async function openInvoiceCorrection(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  saleId: SaleId,
+  ask: InvoiceCorrectionAsk,
+  actor: { personId: string; authorization: Authorization },
+): Promise<{ correction: InvoiceCorrectionView; replayed: boolean }> {
+  const print = fingerprint({
+    gross: ask.gross,
+    lineIds: ask.lineIds === undefined ? null : [...ask.lineIds].sort(),
+    reasonId: ask.reasonId,
+    note: ask.note,
+    expectedSplit: splitKey(ask.expectedSplit),
+  });
+  const [earlier] = await tx
+    .select({ id: invoiceCorrections.id, fingerprint: invoiceCorrections.fingerprint })
+    .from(invoiceCorrections)
+    .where(
+      and(
+        eq(invoiceCorrections.originalSaleId, saleId),
+        eq(invoiceCorrections.submissionId, ask.submissionId),
+      ),
+    );
+  if (earlier !== undefined) {
+    if (earlier.fingerprint !== print)
+      throw new AppError("submission.id_reused", { submissionId: ask.submissionId });
+    return {
+      correction: await readInvoiceCorrection(tx, deps.backend, cfg, earlier.id),
+      replayed: true,
+    };
+  }
+  const reason = await findAdjustmentReason(tx, ask.reasonId);
+  if (reason.kind !== "void") throw new AppError("adjustment.action_not_allowed", {});
+  if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
+
+  const reading = deps.clock.now();
+  const preview = await checkCorrectionOpenable(tx, deps.backend, cfg, reading, saleId, {
     gross: ask.gross,
     ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }),
   });
-  const cashLeft = sumDecimals([
-    decimal("0.00"),
-    ...refundable.map((row) => decimal(row.appliedRemaining)),
-  ]);
-  if (compareDecimal(cashLeft, preview.gross) < 0)
-    throw new AppError("invoice_correction.cash_short", {
-      saleId,
-      cashLeft,
-      gross: preview.gross,
-    });
-  const split = preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
-  if (splitKey(split) !== splitKey(ask.expectedSplit))
-    throw new AppError("invoice_correction.split_changed", {
-      saleId,
-      gross: preview.gross,
-      vatBreakdown: split,
-      cashRefundable: cashLeft,
-    });
+  await refuseChangedSplit(tx, saleId, preview, ask.expectedSplit, preview.moneyRefundable);
+
+  const [row] = await tx
+    .insert(invoiceCorrections)
+    .values({
+      originalSaleId: saleId,
+      submissionId: ask.submissionId,
+      fingerprint: print,
+      gross: decimalToCents(preview.gross),
+      lineIds: ask.lineIds ?? null,
+      reason: (ask.note === null ? reason.name : `${reason.name}: ${ask.note}`).slice(0, 500),
+      requestedBy: actor.personId,
+      authorizedBy: actor.authorization.authorizedBy,
+      viaOverride: actor.authorization.viaOverride,
+      source: cfg.origin.source,
+      deviceId: cfg.origin.deviceId,
+      nodeId: cfg.nodeId,
+      state: "open",
+      createdAt: reading.instant.toISOString(),
+    })
+    .returning({ id: invoiceCorrections.id });
+  return {
+    correction: await readInvoiceCorrection(tx, deps.backend, cfg, row!.id),
+    replayed: false,
+  };
+}
+
+/** The correction `correctionId`, its refunds and what filing it would file now. */
+export async function readInvoiceCorrection(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  correctionId: string,
+): Promise<InvoiceCorrectionView> {
+  const row = await readCorrectionRow(tx, correctionId);
+  const {
+    refunds,
+    money: { completed: back, pending },
+  } = await readCorrectionLegs(tx, correctionId);
+  return {
+    id: row.id,
+    saleId: row.originalSaleId,
+    state: row.state,
+    gross: centsToDecimal(row.gross),
+    moneyBack: centsToDecimal(back),
+    pending: centsToDecimal(pending),
+    left: centsToDecimal(row.gross - back - pending),
+    reason: row.reason,
+    openedAt: row.createdAt,
+    correctiveSaleId: row.correctiveSaleId,
+    legs: refunds.map(toTenderRefundView),
+    fileNow:
+      row.state !== "open" || pending > 0 || back === 0
+        ? null
+        : await fileNowFor(tx, backend, cfg, row.originalSaleId, {
+            gross: centsToDecimal(back),
+            ...(row.lineIds === null ? {} : { lineIds: row.lineIds }),
+          }),
+  };
+}
+
+/**
+ * Files the R5 of the open correction `correctionId` for the money its refunds have given back,
+ * after the filing checks run again, and marks the correction filed. The one place a correction's
+ * R5 is filed.
+ */
+export async function fileCorrectionIn(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  correctionId: string,
+  authz: RecordCorrectionInput["authz"],
+  endedBy: string,
+  expectedSplit?: readonly SplitLine[],
+): Promise<SaleId> {
+  const correction = await openCorrection(tx, correctionId);
+  const { completed } = await readCorrectionMoney(tx, correctionId);
+  if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
+  const saleId = correction.originalSaleId as SaleId;
+  const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
+    gross: centsToDecimal(completed),
+    ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+  });
+  if (expectedSplit !== undefined) await refuseChangedSplit(tx, saleId, preview, expectedSplit);
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
-  const reasonText = (ask.note === null ? reason.name : `${reason.name}: ${ask.note}`).slice(
-    0,
-    500,
-  );
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
   const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
   const { saleId: correctiveSaleId } = await recordCorrection(tx, deps.backend, {
@@ -200,61 +284,172 @@ export async function acceptInvoiceCorrection(
     correctsSaleId: saleId,
     total: negateDecimal(preview.gross),
     lines: preview.lines,
-    partialVatBreakdown: preview.vatBreakdown.map(({ rate, base, tax }) => ({
+    partialVatBreakdown: splitOf(preview).map(({ rate, base, tax }) => ({
       rate,
       base: negateDecimal(base),
       tax: negateDecimal(tax),
     })),
-    authz: actor.authz,
+    authz,
     clock,
   });
 
-  const reading = deps.clock.now();
-  const createdAt = reading.instant.toISOString();
-  let left = decimalToCents(preview.gross);
-  const refunds: TenderRefundView[] = [];
-  for (const tender of refundable) {
-    if (left === 0) break;
-    const leg = Math.min(left, decimalToCents(decimal(tender.appliedRemaining)));
-    if (leg === 0) continue;
-    left -= leg;
-    const { refund: reserved } = await reserveTenderRefund(
-      tx,
-      cfg,
-      saleId,
-      {
-        submissionId: randomUUID(),
-        tenderId: tender.tenderId,
-        appliedAmount: centsToDecimal(leg),
-        tipAmount: "0.00",
-        reason: reasonText,
-      },
-      {
-        requestedBy: actor.personId,
-        authorizedBy: actor.authorization.authorizedBy,
-      },
-      createdAt,
-    );
-    const first = refunds.length === 0;
-    const refund = await carryNewTenderRefund(tx, deps, cfg.nodeId, reading, reserved, {
-      ...(first
-        ? {
-            openDrawer: (done) =>
-              enqueueTenderRefundDrawer(tx, cfg, done.id, actor.personId, actor.authorization),
-          }
-        : {}),
-    });
-    await tx.insert(invoiceCorrections).values({
-      originalSaleId: saleId,
+  const filed = await tx
+    .update(invoiceCorrections)
+    .set({
+      state: "filed",
       correctiveSaleId,
-      tenderRefundId: refund.id,
-      submissionId: ask.submissionId,
-      fingerprint: print,
-      createdAt,
+      endedAt: clock.now().instant.toISOString(),
+      endedBy,
+    })
+    .where(and(eq(invoiceCorrections.id, correctionId), eq(invoiceCorrections.state, "open")))
+    .returning({ id: invoiceCorrections.id });
+  if (filed.length !== 1)
+    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  return correctiveSaleId;
+}
+
+/**
+ * Files the R5 of the open correction `correctionId` for the money its refunds have given back so
+ * far. Refuses nothing back (`invoice_correction.nothing_back`) and a split other than the one the
+ * till showed (`invoice_correction.split_changed`, with the fresh one).
+ */
+export async function fileInvoiceCorrectionNow(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  correctionId: string,
+  request: { expectedSplit: readonly SplitLine[] },
+  actor: { personId: string; authz: AuthzInput },
+): Promise<InvoiceCorrectionView> {
+  await fileCorrectionIn(
+    tx,
+    deps,
+    cfg,
+    correctionId,
+    actor.authz,
+    actor.personId,
+    request.expectedSplit,
+  );
+  return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
+}
+
+/** The refusals of a filing that no later attempt on this box can get past. */
+type NotAdmitted = ErrorParams["sale.correction_not_admitted"];
+const NEVER_FILEABLE = new Set<NotAdmitted["reason"]>([
+  "replaced",
+  "voided",
+  "wrong_node",
+  "not_simplified",
+]);
+
+/**
+ * Ends the open correction `correctionId` without filing: discarded when nothing has gone back;
+ * with money back, closed keeping its refunds only when filing it is refused for good
+ * (`sale.correction_not_admitted` for a reason in `NEVER_FILEABLE`), and otherwise refused
+ * `invoice_correction.still_correctable`.
+ */
+export async function closeInvoiceCorrection(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  correctionId: string,
+  actor: { personId: string },
+): Promise<InvoiceCorrectionView> {
+  const correction = await openCorrection(tx, correctionId);
+  const { completed } = await readCorrectionMoney(tx, correctionId);
+  if (completed > 0) {
+    const filing = await previewOrRefusal(tx, deps.backend, cfg, correction.originalSaleId, {
+      gross: centsToDecimal(completed),
+      ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
     });
-    refunds.push(toTenderRefundView(refund));
+    if (!("refusal" in filing) || !filing.closable)
+      throw new AppError("invoice_correction.still_correctable", { correctionId });
   }
-  return { correctiveSaleId, refunds, replayed: false };
+  const ended = await tx
+    .update(invoiceCorrections)
+    .set({
+      state: completed === 0 ? "discarded" : "closed",
+      endedAt: deps.clock.now().instant.toISOString(),
+      endedBy: actor.personId,
+    })
+    .where(and(eq(invoiceCorrections.id, correctionId), eq(invoiceCorrections.state, "open")))
+    .returning({ id: invoiceCorrections.id });
+  if (ended.length !== 1)
+    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
+}
+
+/** The correction `correctionId`, refused unless it exists and is open. */
+async function openCorrection(tx: Transaction, correctionId: string) {
+  const correction = await readCorrectionRow(tx, correctionId);
+  if (correction.state !== "open")
+    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  return correction;
+}
+
+/**
+ * What filing `selection` off the sale would file, or the refusal it meets and whether that refusal
+ * is one in `NEVER_FILEABLE`, which Close may end the correction over.
+ */
+async function previewOrRefusal(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  saleId: string,
+  selection: { gross: Decimal; lineIds?: readonly string[] },
+): Promise<CorrectionPreview | { refusal: AppError; closable: boolean }> {
+  try {
+    return await previewCorrectionAmounts(tx, backend, saleId as SaleId, cfg.nodeId, selection);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    return {
+      refusal: error,
+      closable:
+        hasCode(error, "sale.correction_not_admitted") && NEVER_FILEABLE.has(error.params.reason),
+    };
+  }
+}
+
+async function fileNowFor(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  saleId: string,
+  selection: { gross: Decimal; lineIds?: readonly string[] },
+): Promise<InvoiceCorrectionView["fileNow"]> {
+  const filing = await previewOrRefusal(tx, backend, cfg, saleId, selection);
+  if ("refusal" in filing) return { refusal: filing.refusal.code, closable: filing.closable };
+  return { gross: filing.gross, vatBreakdown: splitOf(filing) };
+}
+
+/** The money a sale's payments still hold, tips aside. */
+export function appliedRemainingOf(rows: readonly { appliedRemaining: string }[]): Decimal {
+  return sumDecimals([ZERO, ...rows.map((row) => decimal(row.appliedRemaining))]);
+}
+
+function splitOf(preview: Pick<CorrectionPreview, "vatBreakdown">) {
+  return preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
+}
+
+/**
+ * Refuses `invoice_correction.split_changed`, with the fresh split and the money still refundable
+ * (read here unless handed in), when `preview` splits other than the till showed.
+ */
+async function refuseChangedSplit(
+  tx: Transaction,
+  saleId: SaleId,
+  preview: CorrectionPreview,
+  expectedSplit: readonly SplitLine[],
+  moneyRefundable?: Decimal,
+): Promise<void> {
+  const split = splitOf(preview);
+  if (splitKey(split) === splitKey(expectedSplit)) return;
+  throw new AppError("invoice_correction.split_changed", {
+    saleId,
+    gross: preview.gross,
+    vatBreakdown: split,
+    moneyRefundable: moneyRefundable ?? appliedRemainingOf(await readRefundableTenders(tx, saleId)),
+  });
 }
 
 /** The line ids a request names, canonical; refused `lineIds` unless absent or a list of ids. */
@@ -265,35 +460,42 @@ export function lineIdsOf(lineIds: unknown): string[] | undefined {
   return lineIds.map((id: string) => canonicaliseUuid(id)!);
 }
 
+export type InvoiceCorrectionAsk = ReturnType<typeof parseInvoiceCorrection>;
+
 export function parseInvoiceCorrection(request: InvoiceCorrectionRequest) {
-  if (typeof request.submissionId !== "string" || !isUuid(request.submissionId))
-    throw invalid("submissionId");
-  if (typeof request.reasonId !== "string" || !isUuid(request.reasonId)) throw invalid("reasonId");
+  const submissionId = uuidOf(request.submissionId, "submissionId");
+  const reasonId = uuidOf(request.reasonId, "reasonId");
   const lineIds = lineIdsOf(request.lineIds);
   const note = request.note ?? null;
   if (note !== null && typeof note !== "string") throw invalid("note");
-  const split = request.expectedSplit;
+  return {
+    submissionId,
+    gross: moneyOf(request.gross, "gross"),
+    ...(lineIds === undefined ? {} : { lineIds }),
+    reasonId,
+    note: note === null || note.trim() === "" ? null : note.trim(),
+    expectedSplit: expectedSplitOf(request.expectedSplit),
+  };
+}
+
+/** A request's id, canonical; refused by `field` unless it is one. */
+export function uuidOf(value: unknown, field: string): string {
+  if (typeof value !== "string" || !isUuid(value)) throw invalid(field);
+  return canonicaliseUuid(value)!;
+}
+
+/** The split a request says the till showed; refused `expectedSplit` when malformed. */
+export function expectedSplitOf(split: unknown): SplitLine[] {
   if (
     !Array.isArray(split) ||
-    split.some((line) =>
+    split.some((line: Partial<SplitLine> | null) =>
       [line?.rate, line?.base, line?.tax].some(
         (value) => typeof value !== "string" || !MONEY.test(value),
       ),
     )
   )
     throw invalid("expectedSplit");
-  return {
-    submissionId: canonicaliseUuid(request.submissionId)!,
-    gross: moneyOf(request.gross, "gross"),
-    ...(lineIds === undefined ? {} : { lineIds }),
-    reasonId: canonicaliseUuid(request.reasonId)!,
-    note: note === null || note.trim() === "" ? null : note.trim(),
-    expectedSplit: split.map(({ rate, base, tax }) => ({
-      rate: centsToDecimal(decimalToCents(decimal(rate))),
-      base: centsToDecimal(decimalToCents(decimal(base))),
-      tax: centsToDecimal(decimalToCents(decimal(tax))),
-    })),
-  };
+  return (split as SplitLine[]).map(({ rate, base, tax }) => ({ rate, base, tax }));
 }
 
 /** The split compared by value, in rate order, whatever order or spelling the till sent. */
@@ -304,7 +506,8 @@ function splitKey(split: readonly SplitLine[]): string {
     .join(";");
 }
 
-function moneyOf(value: unknown, field: string): Decimal {
+/** A request's amount at money scale; refused by `field` when malformed. */
+export function moneyOf(value: unknown, field: string): Decimal {
   if (typeof value !== "string" || !MONEY.test(value)) throw invalid(field);
   return centsToDecimal(decimalToCents(decimal(value)));
 }

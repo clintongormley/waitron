@@ -12,6 +12,9 @@ export interface TenderRefundRequest {
   /** The cancels this refund pays back, in the order their dishes are shown. */
   cancellationIds?: string[];
   override?: Override;
+  /** The correction this refund gives money back for; `requestId` groups the refunds one request
+   * makes. */
+  invoiceCorrection?: { id: string; requestId: string; cashRoute?: true };
 }
 
 export interface RefundableTender {

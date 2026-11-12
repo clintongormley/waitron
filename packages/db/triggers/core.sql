@@ -340,6 +340,38 @@ BEGIN
   SELECT raise(abort, 'a tender refund is never deleted');
 END;
 --> statement-breakpoint
+CREATE TRIGGER invoice_corrections_guard_update
+BEFORE UPDATE ON invoice_corrections
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'invoice correction cannot make that change')
+  WHERE NOT (
+    new.id IS old.id
+    AND new.original_sale_id IS old.original_sale_id
+    AND new.submission_id IS old.submission_id
+    AND new.fingerprint IS old.fingerprint
+    AND new.gross IS old.gross
+    AND new.line_ids IS old.line_ids
+    AND new.reason IS old.reason
+    AND new.requested_by IS old.requested_by
+    AND new.authorized_by IS old.authorized_by
+    AND new.via_override IS old.via_override
+    AND new.source IS old.source
+    AND new.device_id IS old.device_id
+    AND new.node_id IS old.node_id
+    AND new.created_at IS old.created_at
+    AND old.state = 'open'
+    AND new.state IN ('filed', 'discarded', 'closed')
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER invoice_corrections_no_delete
+BEFORE DELETE ON invoice_corrections
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'an invoice correction is never deleted');
+END;
+--> statement-breakpoint
 CREATE TRIGGER working_order_lines_require_open_parent_update
 BEFORE UPDATE ON working_order_lines
 FOR EACH ROW

@@ -4,10 +4,9 @@ import { eq, sql } from "drizzle-orm";
 import {
   deviceProfiles,
   devices,
-  invoiceCorrections,
   floorZones,
+  invoiceCorrections,
   sales,
-  tenderRefunds,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -26,7 +25,6 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
-import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -144,8 +142,10 @@ const body = (patch: Record<string, unknown> = {}) => ({
 });
 const preview = (saleId: string, payload: unknown, cookie = venue.cookie) =>
   send(venue.app, cookie, "POST", `/api/transactions/${saleId}/corrections/preview`, payload);
-const correct = (saleId: string, payload: unknown, cookie = venue.cookie) =>
+const open = (saleId: string, payload: unknown, cookie = venue.cookie) =>
   send(venue.app, cookie, "POST", `/api/transactions/${saleId}/corrections`, payload);
+const read = (correctionId: string, cookie = venue.cookie) =>
+  send(venue.app, cookie, "GET", `/api/invoice-corrections/${correctionId}`);
 
 function counts() {
   return venue.db.all<{
@@ -160,17 +160,24 @@ function counts() {
            (select count(*) from invoice_corrections) as corrections`)[0]!;
 }
 
+/** The id of a correction of €5.00 opened on `saleId` through the main till. */
+async function opened(saleId: string): Promise<string> {
+  const answer = await open(saleId, body());
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  return (answer.json as { correction: { id: string } }).correction.id;
+}
+
 const ZONE_REFUSED = () => ({
   status: 403,
   json: { code: "service_zone.not_allowed", params: { zoneId: venue.zoneId } },
 });
 
 describe("POST /api/transactions/:saleId/corrections/preview", () => {
-  it("answers the split and the cash still refundable, and refuses malformed line ids", async () => {
+  it("answers the split and the money still refundable, and refuses malformed line ids", async () => {
     const saleId = await sold(["10.00"]);
     expect(await preview(saleId, { gross: "5.00" })).toMatchObject({
       status: 200,
-      json: { gross: "5.00", vatBreakdown: SPLIT, cashRefundable: "10.00" },
+      json: { gross: "5.00", vatBreakdown: SPLIT, moneyRefundable: "10.00" },
     });
     for (const lineIds of [null, "x", ["not-a-uuid"]])
       expect(await preview(saleId, { gross: "5.00", lineIds })).toEqual({
@@ -190,12 +197,25 @@ describe("POST /api/transactions/:saleId/corrections/preview", () => {
 
   it("refuses a till outside the invoice's zone, and answers it once the zone is its own", async () => {
     const saleId = await sold(["10.00"]);
+    const readable = await opened(await sold(["10.00"]));
     await serveOnly(otherZone);
+    const before = counts();
     expect(await preview(saleId, { gross: "5.00" }, zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(await open(saleId, body(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(await read(readable, zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(counts()).toEqual(before);
     await serveOnly(venue.zoneId);
     expect(await preview(saleId, { gross: "5.00" }, zonedTill.cookie)).toMatchObject({
       status: 200,
-      json: { gross: "5.00", vatBreakdown: SPLIT, cashRefundable: "10.00" },
+      json: { gross: "5.00", vatBreakdown: SPLIT, moneyRefundable: "10.00" },
+    });
+    expect(await open(saleId, body(), zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { replayed: false, correction: { saleId, state: "open", gross: "5.00" } },
+    });
+    expect(await read(readable, zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { id: readable, state: "open" },
     });
   });
 });
@@ -214,43 +234,57 @@ describe("POST /api/transactions/:saleId/corrections", () => {
   ])("refuses a malformed %s, naming it and writing nothing", async (field, patch) => {
     const saleId = await sold(["10.00"]);
     const before = counts();
-    expect(await correct(saleId, body(patch))).toEqual({
+    expect(await open(saleId, body(patch))).toEqual({
       status: 400,
       json: { code: "management.request_invalid", params: { field } },
     });
     expect(counts()).toEqual(before);
   });
 
-  it("refuses staff without sale.refund, then corrects with a supervisor's PIN, and answers a repeat the same", async () => {
+  it("opens a correction, refusing staff without sale.rectify, then opening with a supervisor's PIN", async () => {
     const saleId = await sold(["10.00"]);
     const before = counts();
-    expect(await correct(saleId, body({ override: undefined }))).toMatchObject({
+    expect(await open(saleId, body({ override: undefined }))).toEqual({
       status: 403,
-      json: { code: "authorization.not_permitted" },
+      json: { code: "authorization.not_permitted", params: { permission: "sale.rectify" } },
     });
     expect(
-      await correct(saleId, body({ override: { personId: venue.adminId, pin: "0000" } })),
+      await open(saleId, body({ override: { personId: venue.adminId, pin: "0000" } })),
     ).toMatchObject({ status: 401, json: { code: "pin.invalid" } });
     expect(counts()).toEqual(before);
 
     const ask = body();
-    const first = await correct(saleId, ask);
+    const first = await open(saleId, ask);
     expect(first).toMatchObject({
       status: 200,
-      json: { replayed: false, refunds: [{ state: "completed", appliedAmount: "5.00" }] },
+      json: {
+        replayed: false,
+        correction: {
+          saleId,
+          state: "open",
+          gross: "5.00",
+          moneyBack: "0.00",
+          pending: "0.00",
+          left: "5.00",
+          legs: [],
+          fileNow: null,
+        },
+      },
     });
     expect(
-      await venue.db.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, saleId)),
-    ).toMatchObject([{ requestedBy: venue.operatorId, authorizedBy: venue.adminId }]);
+      await venue.db
+        .select({
+          requestedBy: invoiceCorrections.requestedBy,
+          authorizedBy: invoiceCorrections.authorizedBy,
+          viaOverride: invoiceCorrections.viaOverride,
+        })
+        .from(invoiceCorrections)
+        .where(eq(invoiceCorrections.originalSaleId, saleId)),
+    ).toEqual([{ requestedBy: venue.operatorId, authorizedBy: venue.adminId, viaOverride: true }]);
     const after = counts();
-    expect(after).toEqual({
-      invoices: before.invoices + 1,
-      refunds: before.refunds + 1,
-      drawers: before.drawers + 1,
-      corrections: before.corrections + 1,
-    });
+    expect(after).toEqual({ ...before, corrections: before.corrections + 1 });
 
-    expect(await correct(saleId, ask)).toEqual({
+    expect(await open(saleId, ask)).toEqual({
       status: 200,
       json: { ...first.json, replayed: true },
     });
@@ -262,103 +296,43 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     watchDerivationsAndLock(venue.db, supervisor().pin, () =>
       withTransaction(venue.db, (tx) => tx.execute(sql`select 1`)),
     );
-    const answer = await correct(saleId, body());
+    const answer = await open(saleId, body());
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
     expect(watchedDerivationCount()).toBe(1);
   });
 
-  it("refuses a till whose profile cannot take cash, writing nothing, and corrects once it can", async () => {
-    const saleId = await sold(["10.00"]);
-    const [till] = await venue.db
-      .select({ profileId: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
-      .from(devices)
-      .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-      .where(eq(devices.id, venue.deviceId));
-    const capabilities = till!.capabilities as string[];
-    const setCapabilities = (to: string[]) =>
-      venue.db
-        .update(deviceProfiles)
-        .set({ capabilities: to })
-        .where(eq(deviceProfiles.id, till!.profileId));
-    const corrections = () => venue.db.select().from(invoiceCorrections).all().length;
-    const before = { ...counts(), corrections: corrections() };
-    await setCapabilities(capabilities.filter((entry) => entry !== "take-cash"));
-    try {
-      expect(await correct(saleId, body())).toEqual({
-        status: 403,
-        json: { code: "device.cash_not_allowed", params: {} },
-      });
-      expect({ ...counts(), corrections: corrections() }).toEqual(before);
-    } finally {
-      await setCapabilities(capabilities);
-    }
-    expect(await correct(saleId, body())).toMatchObject({
-      status: 200,
-      json: { replayed: false, refunds: [{ appliedAmount: "5.00" }] },
-    });
-  });
-
   it("refuses a reused submission id and an unknown sale", async () => {
     const saleId = await sold(["10.00"]);
     const ask = body();
-    expect((await correct(saleId, ask)).status).toBe(200);
-    expect(await correct(saleId, { ...ask, note: "Burnt" })).toMatchObject({
+    expect((await open(saleId, ask)).status).toBe(200);
+    expect(await open(saleId, { ...ask, note: "Burnt" })).toMatchObject({
       status: 409,
       json: { code: "submission.id_reused" },
     });
-    expect(await correct(randomUUID(), body())).toMatchObject({
+    expect(await open(randomUUID(), body())).toMatchObject({
       status: 404,
       json: { code: "sale.not_found" },
     });
   });
-
-  it("refuses a till outside a cash invoice's zone, writing nothing, and corrects once the zone is its own", async () => {
-    const saleId = await sold(["10.00"]);
-    await serveOnly(otherZone);
-    const before = counts();
-    expect(await correct(saleId, body(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
-    expect(counts()).toEqual(before);
-    await serveOnly(venue.zoneId);
-    expect(await correct(saleId, body(), zonedTill.cookie)).toMatchObject({
-      status: 200,
-      json: { replayed: false, refunds: [{ state: "completed", appliedAmount: "5.00" }] },
-    });
-  });
-
-  it.each([[[{ card: "10.00" }]], [["4.00", { card: "6.00" }]]])(
-    "refuses a till outside the zone of an invoice paid by card (%j) before saying how it was paid",
-    async (parts) => {
-      const saleId = await sold(parts);
-      await serveOnly(otherZone);
-      const before = counts();
-      expect(await correct(saleId, body(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
-      expect(counts()).toEqual(before);
-      await serveOnly(venue.zoneId);
-      expect(await correct(saleId, body(), zonedTill.cookie)).toEqual({
-        status: 409,
-        json: { code: "invoice_correction.not_cash", params: { saleId } },
-      });
-    },
-  );
 
   it("refuses a reason that is not a Void reason, and one asking for a note without it, writing nothing", async () => {
     const saleId = await sold(["10.00"]);
     const comp = reasons.find((reason) => reason.kind === "comp")!;
     const other = reasons.find((reason) => reason.kind === "void" && reason.noteRequired)!;
     const before = counts();
-    expect(await correct(saleId, body({ reasonId: comp.id }))).toEqual({
+    expect(await open(saleId, body({ reasonId: comp.id }))).toEqual({
       status: 409,
       json: { code: "adjustment.action_not_allowed", params: {} },
     });
-    expect(await correct(saleId, body({ reasonId: other.id, note: null }))).toEqual({
+    expect(await open(saleId, body({ reasonId: other.id, note: null }))).toEqual({
       status: 400,
       json: { code: "adjustment.note_required", params: {} },
     });
     expect(counts()).toEqual(before);
-    expect(await correct(saleId, body({ reasonId: other.id, note: "Wrong table" }))).toMatchObject({
+    expect(await open(saleId, body({ reasonId: other.id, note: "Wrong table" }))).toMatchObject({
       status: 200,
-      json: { replayed: false, refunds: [{ appliedAmount: "5.00" }] },
+      json: { replayed: false, correction: { state: "open", gross: "5.00" } },
     });
   });
 
@@ -370,7 +344,15 @@ describe("POST /api/transactions/:saleId/corrections", () => {
       async () => ({ saleId: await sold(["4.00", { card: "6.00" }]) }),
     ],
     [
-      "invoice_correction.cash_short",
+      "invoice_correction.already_open",
+      async () => {
+        const saleId = await sold(["10.00"]);
+        await opened(saleId);
+        return { saleId };
+      },
+    ],
+    [
+      "invoice_correction.money_short",
       async () => {
         const saleId = await sold(["10.00"]);
         const [cash] = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
@@ -411,35 +393,335 @@ describe("POST /api/transactions/:saleId/corrections", () => {
         return { saleId };
       },
     ],
-    [
-      "invoice_correction.refund_pending",
-      async () => {
-        const saleId = await sold(["10.00"]);
-        await inTx(venue, async (tx) => {
-          const [cash] = await readRefundableTenders(tx, saleId);
-          await reserveTenderRefund(
-            tx,
-            venue.cfg,
-            saleId,
-            {
-              submissionId: randomUUID(),
-              tenderId: cash!.tenderId,
-              appliedAmount: "1.00",
-              tipAmount: "0.00",
-              reason: "Goodwill",
-            },
-            { requestedBy: venue.adminId, authorizedBy: venue.adminId },
-            venue.clock.now().instant.toISOString(),
-          );
-        });
-        return { saleId };
-      },
-    ],
   ];
   it.each(refusals)("answers %s with 409, writing nothing", async (code, arrange) => {
     const { saleId, patch } = await arrange();
     const before = counts();
-    expect(await correct(saleId, body(patch))).toMatchObject({ status: 409, json: { code } });
+    expect(await open(saleId, body(patch))).toMatchObject({ status: 409, json: { code } });
+    expect(counts()).toEqual(before);
+  });
+});
+
+describe("GET /api/invoice-corrections/:id", () => {
+  it("answers an open correction, and refuses an unknown or malformed id", async () => {
+    const saleId = await sold(["10.00"]);
+    const id = await opened(saleId);
+    expect(await read(id)).toMatchObject({
+      status: 200,
+      json: { id, saleId, state: "open", gross: "5.00", left: "5.00", legs: [] },
+    });
+    const unknown = randomUUID();
+    expect(await read(unknown)).toEqual({
+      status: 404,
+      json: { code: "invoice_correction.not_found", params: { correctionId: unknown } },
+    });
+    expect(await read("not-an-id")).toEqual({
+      status: 404,
+      json: { code: "invoice_correction.not_found", params: { correctionId: "not-an-id" } },
+    });
+  });
+});
+
+const giveCash = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/cash`, payload);
+const cashBody = (patch: Record<string, unknown> = {}) => ({
+  submissionId: randomUUID(),
+  amount: "5.00",
+  override: supervisor(),
+  ...patch,
+});
+
+describe("POST /api/invoice-corrections/:id/cash", () => {
+  it("refuses staff without sale.refund, then gives the cash with a supervisor's PIN and files the corrective", async () => {
+    const saleId = await sold(["10.00"]);
+    const id = await opened(saleId);
+    const before = counts();
+    expect(await giveCash(id, cashBody({ override: undefined }))).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
+    });
+    expect(counts()).toEqual(before);
+
+    const ask = cashBody();
+    const first = await giveCash(id, ask);
+    expect(first).toMatchObject({
+      status: 200,
+      json: {
+        replayed: false,
+        refunds: [{ state: "completed", appliedAmount: "5.00" }],
+        correction: { id, state: "filed", moneyBack: "5.00", left: "0.00" },
+      },
+    });
+    expect(counts()).toEqual({
+      ...before,
+      invoices: before.invoices + 1,
+      refunds: before.refunds + 1,
+      drawers: before.drawers + 1,
+    });
+    const after = counts();
+    expect(await giveCash(id, ask)).toEqual({
+      status: 200,
+      json: { ...first.json, replayed: true },
+    });
+    expect(counts()).toEqual(after);
+  });
+
+  it("answers a repeat of the last cash leg after every cash payment has been given back", async () => {
+    const saleId = await sold(["10.00"]);
+    const split = (await preview(saleId, { gross: "10.00" })).json.vatBreakdown;
+    const answer = await open(saleId, body({ gross: "10.00", expectedSplit: split }));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const id = (answer.json as { correction: { id: string } }).correction.id;
+    const ask = cashBody({ amount: "10.00" });
+    const first = await giveCash(id, ask);
+    expect(first).toMatchObject({ status: 200, json: { correction: { state: "filed" } } });
+    const after = counts();
+
+    expect(await giveCash(id, ask)).toEqual({
+      status: 200,
+      json: { ...first.json, replayed: true },
+    });
+    expect(counts()).toEqual(after);
+  });
+
+  it("refuses a till whose profile cannot take cash, writing nothing, and gives cash once it can", async () => {
+    const id = await opened(await sold(["10.00"]));
+    const [till] = await venue.db
+      .select({ profileId: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+      .from(devices)
+      .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+      .where(eq(devices.id, venue.deviceId));
+    const capabilities = till!.capabilities as string[];
+    const setCapabilities = (to: string[]) =>
+      venue.db
+        .update(deviceProfiles)
+        .set({ capabilities: to })
+        .where(eq(deviceProfiles.id, till!.profileId));
+    const before = counts();
+    await setCapabilities(capabilities.filter((entry) => entry !== "take-cash"));
+    try {
+      expect(await giveCash(id, cashBody())).toEqual({
+        status: 403,
+        json: { code: "device.cash_not_allowed", params: {} },
+      });
+      expect(counts()).toEqual(before);
+    } finally {
+      await setCapabilities(capabilities);
+    }
+    expect(await giveCash(id, cashBody())).toMatchObject({
+      status: 200,
+      json: { replayed: false, refunds: [{ appliedAmount: "5.00" }] },
+    });
+  });
+
+  it("refuses a till outside the invoice's zone, writing nothing, and gives cash once the zone is its own", async () => {
+    const id = await opened(await sold(["10.00"]));
+    await serveOnly(otherZone);
+    const before = counts();
+    expect(await giveCash(id, cashBody(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(counts()).toEqual(before);
+    await serveOnly(venue.zoneId);
+    expect(await giveCash(id, cashBody(), zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { refunds: [{ appliedAmount: "5.00" }], correction: { state: "filed" } },
+    });
+  });
+
+  it.each([
+    ["submissionId", { submissionId: 1 }],
+    ["amount", { amount: 5 }],
+    ["amount", { amount: "05.00" }],
+    ["override", { override: null }],
+  ])("refuses a malformed %s, naming it and writing nothing", async (field, patch) => {
+    const id = await opened(await sold(["10.00"]));
+    const before = counts();
+    expect(await giveCash(id, cashBody(patch))).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field } },
+    });
+    expect(counts()).toEqual(before);
+  });
+
+  it("refuses an unknown or malformed correction id", async () => {
+    const unknown = randomUUID();
+    expect(await giveCash(unknown, cashBody())).toEqual({
+      status: 404,
+      json: { code: "invoice_correction.not_found", params: { correctionId: unknown } },
+    });
+    expect(await giveCash("not-an-id", cashBody())).toEqual({
+      status: 404,
+      json: { code: "invoice_correction.not_found", params: { correctionId: "not-an-id" } },
+    });
+  });
+
+  const cashRefusals: [string, () => Promise<{ id: string; patch?: Record<string, unknown> }>][] = [
+    [
+      "invoice_correction.not_open",
+      async () => {
+        const id = await opened(await sold(["10.00"]));
+        expect((await giveCash(id, cashBody())).status).toBe(200);
+        return { id, patch: { amount: "1.00" } };
+      },
+    ],
+    [
+      "invoice_correction.leg_too_large",
+      async () => ({ id: await opened(await sold(["10.00"])), patch: { amount: "5.01" } }),
+    ],
+    [
+      "invoice_correction.cash_short",
+      async () => ({ id: await opened(await sold(["10.00"])), patch: { amount: "10.01" } }),
+    ],
+    [
+      "invoice_correction.chain_unsound",
+      async () => {
+        const id = await opened(await sold(["10.00"]));
+        vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValueOnce({
+          ok: false,
+          checked: 1,
+          issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+        } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+        return { id };
+      },
+    ],
+  ];
+  it.each(cashRefusals)("answers %s with 409, writing nothing", async (code, arrange) => {
+    const { id, patch } = await arrange();
+    const before = counts();
+    expect(await giveCash(id, cashBody(patch))).toMatchObject({ status: 409, json: { code } });
+    expect(counts()).toEqual(before);
+  });
+});
+
+const fileNow = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/file`, payload);
+const closeIt = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/close`, payload);
+const THREE_BACK = [{ rate: "21.00", base: "2.48", tax: "0.52" }];
+const fileBody = (patch: Record<string, unknown> = {}) => ({
+  expectedSplit: THREE_BACK,
+  override: supervisor(),
+  ...patch,
+});
+
+/** A €5.00 correction of a fresh €10.00 cash ticket with €3.00 of it given back in cash. */
+async function threeBack(): Promise<string> {
+  const id = await opened(await sold(["10.00"]));
+  expect((await giveCash(id, cashBody({ amount: "3.00" }))).status).toBe(200);
+  return id;
+}
+
+describe("POST /api/invoice-corrections/:id/file and /close", () => {
+  it("files and closes only with sale.rectify, or a supervisor's PIN", async () => {
+    const id = await threeBack();
+    const before = counts();
+    expect(await fileNow(id, fileBody({ override: undefined }))).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.rectify" } },
+    });
+    expect(
+      await fileNow(id, fileBody({ override: { personId: venue.adminId, pin: "0000" } })),
+    ).toMatchObject({ status: 401, json: { code: "pin.invalid" } });
+    expect(counts()).toEqual(before);
+    expect(await fileNow(id, fileBody())).toMatchObject({
+      status: 200,
+      json: { id, state: "filed", moneyBack: "3.00", left: "2.00" },
+    });
+    expect(counts()).toEqual({ ...before, invoices: before.invoices + 1 });
+
+    const empty = await opened(await sold(["10.00"]));
+    const was = counts();
+    expect(await closeIt(empty, { override: undefined })).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.rectify" } },
+    });
+    expect(await read(empty)).toMatchObject({ status: 200, json: { state: "open" } });
+    expect(await closeIt(empty, { override: supervisor() })).toMatchObject({
+      status: 200,
+      json: { id: empty, state: "discarded" },
+    });
+    expect(counts()).toEqual(was);
+  });
+
+  it("refuses a till outside the invoice's zone, writing nothing, and files and closes once the zone is its own", async () => {
+    const id = await threeBack();
+    const empty = await opened(await sold(["10.00"]));
+    await serveOnly(otherZone);
+    const before = counts();
+    expect(await fileNow(id, fileBody(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(await closeIt(empty, { override: supervisor() }, zonedTill.cookie)).toEqual(
+      ZONE_REFUSED(),
+    );
+    expect(counts()).toEqual(before);
+    expect(await read(empty)).toMatchObject({ json: { state: "open" } });
+    await serveOnly(venue.zoneId);
+    expect(await fileNow(id, fileBody(), zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { state: "filed" },
+    });
+    expect(await closeIt(empty, { override: supervisor() }, zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { state: "discarded" },
+    });
+  });
+
+  it.each([
+    ["expectedSplit", { expectedSplit: [{ rate: "21.00", base: 2.48, tax: "0.52" }] }],
+    ["expectedSplit", { expectedSplit: null }],
+    ["override", { override: null }],
+  ])("File now refuses a malformed %s, naming it and writing nothing", async (field, patch) => {
+    const id = await threeBack();
+    const before = counts();
+    expect(await fileNow(id, fileBody(patch))).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field } },
+    });
+    expect(counts()).toEqual(before);
+  });
+
+  it("refuses an unknown or malformed correction id", async () => {
+    const unknown = randomUUID();
+    for (const call of [fileNow, closeIt]) {
+      expect(await call(unknown, fileBody())).toEqual({
+        status: 404,
+        json: { code: "invoice_correction.not_found", params: { correctionId: unknown } },
+      });
+      expect(await call("not-an-id", fileBody())).toEqual({
+        status: 404,
+        json: { code: "invoice_correction.not_found", params: { correctionId: "not-an-id" } },
+      });
+    }
+  });
+
+  const refusals: [string, () => Promise<{ call: typeof fileNow; id: string; patch?: object }>][] =
+    [
+      [
+        "invoice_correction.nothing_back",
+        async () => ({ call: fileNow, id: await opened(await sold(["10.00"])) }),
+      ],
+      [
+        "invoice_correction.split_changed",
+        async () => ({ call: fileNow, id: await threeBack(), patch: { expectedSplit: SPLIT } }),
+      ],
+      [
+        "invoice_correction.still_correctable",
+        async () => ({ call: closeIt, id: await threeBack() }),
+      ],
+      [
+        "invoice_correction.not_open",
+        async () => {
+          const id = await opened(await sold(["10.00"]));
+          expect((await closeIt(id, { override: supervisor() })).status).toBe(200);
+          return { call: fileNow, id };
+        },
+      ],
+    ];
+  it.each(refusals)("answers %s with 409, writing nothing", async (code, arrange) => {
+    const { call, id, patch } = await arrange();
+    const before = counts();
+    expect(await call(id, fileBody(patch as Record<string, unknown>))).toMatchObject({
+      status: 409,
+      json: { code },
+    });
     expect(counts()).toEqual(before);
   });
 });

@@ -646,16 +646,33 @@ declare module "@waitron/shared" {
     "submission.id_reused": { submissionId: string };
     "invoice_correction.not_settled": { saleId: string };
     "invoice_correction.not_cash": { saleId: string };
-    "invoice_correction.cash_short": { saleId: string; cashLeft: string; gross: string };
+    /** The cash a correction's cash request asks for is more than the invoice's cash payments still
+     * hold for the sale, tips not counted. */
+    "invoice_correction.cash_short": { correctionId: string; cashLeft: string; amount: string };
+    /** The invoice already has a correction that is still open. */
+    "invoice_correction.already_open": { saleId: string; correctionId: string };
+    /** The invoice's payments hold less money still refundable than the correction would give back. */
+    "invoice_correction.money_short": { saleId: string; moneyLeft: string; gross: string };
+    "invoice_correction.not_found": { correctionId: string };
+    /** The correction belongs to another invoice, or has ended. */
+    "invoice_correction.not_open": {
+      correctionId: string;
+      state: "open" | "filed" | "discarded" | "closed";
+    };
+    /** The refund would give back more than the correction has left; what it has left. */
+    "invoice_correction.leg_too_large": { correctionId: string; left: string };
+    /** None of the correction's refunds has given money back yet, so there is nothing to file. */
+    "invoice_correction.nothing_back": { correctionId: string };
+    /** Close refused: money has gone back and the correction can still be filed on this box. */
+    "invoice_correction.still_correctable": { correctionId: string };
     /** The split the till showed is no longer what this correction would file; the fresh one. */
     "invoice_correction.split_changed": {
       saleId: string;
       gross: string;
       vatBreakdown: Array<{ rate: string; base: string; tax: string }>;
-      cashRefundable: string;
+      moneyRefundable: string;
     };
     "invoice_correction.chain_unsound": { saleId: string };
-    "invoice_correction.refund_pending": { saleId: string; refundId: string };
     /** The bill cannot be closed by transfer: it is not one whole, positive, untouched bill. */
     "transfer_close.ineligible": {
       workingOrderId: string;
