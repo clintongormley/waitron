@@ -919,7 +919,10 @@ it also copies ui-core's `package.json` and its two token files, `src/tokens/col
 `src/tokens/structure.css`, under `dist/node_modules/@waitron/ui-core/`) and then bundles
 `src/bin.ts` to `dist/server.js` with esbuild. Run the bundle directly: `node dist/server.js`.
 `node dist/server.js check-producer` runs each fiscal module's check of the producer settings and
-exits without starting a server; any other argument is refused.
+exits without starting a server. `node dist/server.js check-release <version>` exits 0 only when the
+bundle is stamped with that release version and the declaration folder beside it (`declaration/`,
+which the image renders for a release build) is that release's; otherwise it prints which of the two
+differs and exits 1. Any other argument is refused.
 
 `scripts/copy-migrations.mjs` also writes `dist/package.json` (`{"type":"module"}`), so `dist/` is
 portable as a directory on its own — copied into a Docker image with nothing else from this
