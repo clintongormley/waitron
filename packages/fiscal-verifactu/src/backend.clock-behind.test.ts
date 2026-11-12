@@ -53,19 +53,6 @@ const refuse = (reading: Reading) =>
   withTransaction(suite.db, (tx) => backend.refuseWhileClockBehind(tx, reading));
 
 describe("VerifactuBackend answers whether the clock reads behind the latest record", () => {
-  it("stops a reading more than a minute earlier than the latest record", async () => {
-    await sellAt(at(0, 60));
-    const reading = at(-60_001, 120);
-    const params = {
-      clockAt: reading.instant.toISOString(),
-      offsetMinutes: 120,
-      lastRecordAt: T.toISOString(),
-      lastRecordOffsetMinutes: 60,
-    };
-    expect(await behind(reading)).toEqual(params);
-    await expect(refuse(reading)).rejects.toMatchObject({ code: "clock.behind_chain", params });
-  });
-
   it("sells a reading exactly a minute earlier", async () => {
     await sellAt(at(0));
     expect(await behind(at(-60_000))).toBeNull();

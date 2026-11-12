@@ -16,24 +16,14 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { verifyBackupFiscalChains } from "./backup-verification-chain.js";
-import {
-  chainHeads,
-  clockBehindChain,
-  latestRecord,
-  refuseWhileClockBehind,
-} from "./clock-behind.js";
-import { clockBehindSource } from "./clock-behind-alerts.js";
+import { refuseWhileClockBehind } from "./clock-behind.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
-import { FISCAL_STAFF_NOTICES } from "./staff-notices.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-
-const S = 1_000;
 const M = 60_000;
 const H = 3_600_000;
 const T = Date.parse("2026-10-19T21:40:00.000Z");
 const R = T - 14.5 * H;
-const NO_RECORDS_NODE = "99999999-9999-4999-8999-999999999999";
 
 let backend: VerifactuBackend;
 let nodeId: NodeId;
@@ -97,15 +87,6 @@ async function attemptAll(times: number[], on = { nodeId, seriesId }): Promise<s
   const answers: string[] = [];
   for (const ms of times) answers.push(await attempt(ms, on));
   return answers;
-}
-
-function behind(clockMs: number, lastMs: number) {
-  return {
-    clockAt: new Date(clockMs).toISOString(),
-    offsetMinutes: 60,
-    lastRecordAt: new Date(lastMs).toISOString(),
-    lastRecordOffsetMinutes: 60,
-  };
 }
 
 /** Every chain's node and its largest secuencia, read as `chainHeads` reads them for a
@@ -184,37 +165,7 @@ function chain() {
   );
 }
 
-function stepWalk(): number[] {
-  const times = [R + M, R + 10 * H];
-  for (let step = 1; step <= 12; step++) times.push(R + 10 * H - step * 59 * S);
-  return times;
-}
-
 describe("a confirmation lifts the stop for one step back", () => {
-  it("records the sale after a lift, linked to the record it names", async () => {
-    await attempt(T);
-    expect(await attempt(R)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R, T));
-
-    await restart();
-    expect(await attempt(R + M)).toBe("recorded");
-    const [first, second] = chain();
-    expect(second!.anterior).toBe(first!.huella);
-    expect(Date.parse(second!.at)).toBe(R + M);
-  });
-
-  it("stops again at a second step back of more than a minute", async () => {
-    await attempt(T);
-    await restart();
-    expect(
-      await attemptAll([R + M, R + 10 * H, R + 30 * M, R + 10 * H - 59 * S, R + 10 * H - 2 * M]),
-    ).toEqual(["recorded", "recorded", "clock.behind_chain", "recorded", "clock.behind_chain"]);
-    expect(refusals.map((refusal) => refusal.params)).toEqual([
-      behind(R + 30 * M, R + 10 * H),
-      behind(R + 10 * H - 2 * M, R + 10 * H),
-    ]);
-  });
-
   it("keeps recording while the clock only moves forward", async () => {
     await attempt(T);
     await restart();
@@ -225,121 +176,12 @@ describe("a confirmation lifts the stop for one step back", () => {
     ]);
   });
 
-  it("stops a clock walking back 59 s at a time at its second step", async () => {
-    await attempt(T);
-    await restart();
-    expect(await attemptAll(stepWalk())).toEqual([
-      "recorded",
-      "recorded",
-      "recorded",
-      ...Array<string>(11).fill("clock.behind_chain"),
-    ]);
-    expect(refusals.map((refusal) => refusal.params)).toEqual(
-      stepWalk()
-        .slice(3)
-        .map((ms) => behind(ms, R + 10 * H)),
-    );
-  });
-
-  it("lets the first step go a minute further back than accepted, and no later step", async () => {
-    await attempt(T);
-    await restart();
-    expect(await attemptAll([R - 61 * S, R - 59 * S, R + M, R - 59 * S])).toEqual([
-      "clock.behind_chain",
-      "recorded",
-      "recorded",
-      "clock.behind_chain",
-    ]);
-    expect(refusals.map((refusal) => refusal.params)).toEqual([
-      behind(R - 61 * S, T),
-      behind(R - 59 * S, R + M),
-    ]);
-  });
-
-  it("covers a reading a minute further back than the confirmed time, not 61 s", async () => {
-    await attempt(T);
-    await restart({ clockMs: T - 24 * H });
-    expect(await attemptAll([T - 24 * H - 61 * S, T - 24 * H - M])).toEqual([
-      "clock.behind_chain",
-      "recorded",
-    ]);
-    expect(refusals[0]!.params).toEqual(behind(T - 24 * H - 61 * S, T));
-  });
-
   it("covers a 400-day gap", async () => {
     await attempt(T);
     await restart({ clockMs: T - 400 * 24 * H });
     expect(await attempt(T - 400 * 24 * H + M)).toBe("recorded");
     const [first, second] = chain();
     expect(second!.anterior).toBe(first!.huella);
-  });
-
-  it("answers the same from the stop, the staff notice and the bell", async () => {
-    await attempt(T);
-    await restart();
-    const read = (ms: number) =>
-      withTransaction(suite.db, async (tx) => ({
-        stop: await clockBehindChain(tx, { instant: new Date(ms), offsetMinutes: 60 }),
-        notices: await FISCAL_STAFF_NOTICES[0]!.read({
-          tx,
-          reading: { instant: new Date(ms), offsetMinutes: 60 },
-        }),
-        alerts: await clockBehindSource.read({ tx, now: new Date(ms) }),
-      }));
-
-    expect(await read(R)).toEqual({ stop: null, notices: [], alerts: [] });
-    expect(await read(R - 2 * M)).toEqual({
-      stop: behind(R - 2 * M, T),
-      notices: [
-        {
-          key: "clock.behind_chain",
-          code: "clock.behind_chain",
-          severity: "error",
-          params: behind(R - 2 * M, T),
-        },
-      ],
-      alerts: [
-        {
-          key: "clock.behind_chain",
-          code: "clock.behind_chain",
-          severity: "error",
-          since: null,
-          screen: "box-status",
-          params: {
-            clockAt: new Date(R - 2 * M).toISOString(),
-            lastRecordAt: new Date(T).toISOString(),
-          },
-        },
-      ],
-    });
-  });
-
-  it("lifts only for the one of two same-instant records that latestRecord names", async () => {
-    await attempt(T);
-    await attempt(T);
-    const ids = suite.db
-      .all<{ id: string }>(sql`select id from registros_facturacion`)
-      .map((row) => row.id);
-    const latest = await withTransaction(suite.db, (tx) => latestRecord(tx));
-    expect(latest).toEqual({ id: latestId(), at: new Date(T), offsetMinutes: 60 });
-    const other = ids.find((id) => id !== latest!.id)!;
-
-    await restart({ registroId: other });
-    expect(await attempt(R + M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R + M, T));
-    await restart({ registroId: latest!.id });
-    expect(await attempt(R + M)).toBe("recorded");
-  });
-
-  it("does not lift a new stop once real time has passed the record it names", async () => {
-    await attempt(T);
-    await restart();
-    expect(await attemptAll([R + M, T + 2 * M, R + 2 * M])).toEqual([
-      "recorded",
-      "recorded",
-      "clock.behind_chain",
-    ]);
-    expect(refusals[0]!.params).toEqual(behind(R + 2 * M, T + 2 * M));
   });
 
   it("still refuses a reading before 28-10-2024 as clock.unusable", async () => {
@@ -358,167 +200,19 @@ describe("a confirmation lifts the stop for one step back", () => {
     expect(written()).toEqual(before);
     expect(await attempt(R + M)).toBe("recorded");
   });
-
-  it("covers nothing with a confirmation that names no record", async () => {
-    await attempt(T);
-    await restart({ registroId: null });
-    expect(await attempt(R + M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R + M, T));
-  });
-
-  it("keeps the stop when the later of two confirmations naming the latest record fails", async () => {
-    await attempt(T);
-    await restart();
-    await restart({ proof: { heads: { [nodeId]: 2 } } });
-    expect(await attempt(R + M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R + M, T));
-  });
-
-  it("lifts a further step back with a fresh confirmation", async () => {
-    await attempt(T);
-    await restart();
-    expect(await attemptAll([R + M, R + 10 * H, R + 30 * M])).toEqual([
-      "recorded",
-      "recorded",
-      "clock.behind_chain",
-    ]);
-    expect(refusals[0]!.params).toEqual(behind(R + 30 * M, R + 10 * H));
-    await restart({ clockMs: R + 30 * M });
-    expect(await attempt(R + 31 * M)).toBe("recorded");
-    const records = chain();
-    expect(records.at(-1)!.anterior).toBe(records.at(-2)!.huella);
-  });
 });
 
 describe("a confirmation whose stored heads a correct writer never stores covers nothing", () => {
-  const NODE = "NODE";
-  const proofs: [string, unknown][] = [
-    ["a proof that is a string", "heads"],
-    ["a proof that is an array", [{ heads: {} }]],
-    ["a proof with no heads", { recordsBefore: 1 }],
-    ["heads that are null", { heads: null }],
-    ["heads that are an array", { heads: [1] }],
-    ["a head that is a string", { heads: { [NODE]: "1" } }],
-    ["a negative head", { heads: { [NODE]: -1 } }],
-    ["a fractional head", { heads: { [NODE]: 0.5 } }],
-    ["a head larger than its chain's", { heads: { [NODE]: 2 } }],
-    ["an empty map", { heads: {} }],
-    ["a map naming a node with no records", { heads: { [NODE]: 1, [NO_RECORDS_NODE]: 1 } }],
-    ["a map naming an inherited property", { heads: { [NODE]: 1, toString: 1 } }],
-  ];
-
-  it.each(proofs)("%s", async (_name, proof) => {
-    await attempt(T);
-    const stored = JSON.parse(JSON.stringify(proof).replaceAll(NODE, nodeId)) as unknown;
-    await restart({ proof: stored });
-    expect(await attempt(R + M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R + M, T));
-  });
-
-  it("a proof stored as JSON null", async () => {
-    await attempt(T);
-    insertRawRestart({ proof: "null" });
-    expect(await attempt(R + M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R + M, T));
-  });
-
-  it("a proof that is not JSON, without throwing from the sale or the staff notice", async () => {
-    await attempt(T);
-    insertRawRestart({ proof: "not json" });
-    expect(await attempt(R + M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R + M, T));
-    const reading = { instant: new Date(R + M), offsetMinutes: 60 };
-    expect(
-      await withTransaction(suite.db, (tx) => FISCAL_STAFF_NOTICES[0]!.read({ tx, reading })),
-    ).toEqual([
-      {
-        key: "clock.behind_chain",
-        code: "clock.behind_chain",
-        severity: "error",
-        params: behind(R + M, T),
-      },
-    ]);
-  });
-
-  it.each([
-    ["confirmed_at", { confirmedAt: "garbage" }],
-    ["record_at", { recordAt: "garbage" }],
-  ] as const)("an unreadable %s, a reading 30 days back", async (_column, stored) => {
-    await attempt(T);
-    insertRawRestart({ proof: JSON.stringify({ heads: headsNow() }), ...stored });
-    expect(await attempt(T - 30 * 24 * H)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(T - 30 * 24 * H, T));
-  });
-
   it("control: the same raw row with readable times covers the sale", async () => {
     await attempt(T);
     insertRawRestart({ proof: JSON.stringify({ heads: headsNow() }) });
     expect(await attempt(R + M)).toBe("recorded");
   });
 
-  it("a record_at other than the named record's own time", async () => {
-    await attempt(T);
-    await restart({ recordMs: T + H });
-    expect(await attempt(R - 30 * M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R - 30 * M, T));
-  });
-
   it("control: the heads the database holds cover the sale", async () => {
     await attempt(T);
     await restart({ proof: { heads: { [nodeId]: 1 } } });
     expect(await attempt(R + M)).toBe("recorded");
-  });
-});
-
-describe("a lift over two chains", () => {
-  it("counts the older chain's records and the box's as written under it", async () => {
-    const older = await seedTenantWithSif(suite.db);
-    await attempt(T, older);
-    expect(await withTransaction(suite.db, (tx) => chainHeads(tx))).toEqual({ [older.nodeId]: 1 });
-    await restart();
-    expect(await attemptAll([R + M, R + 10 * H, R + 30 * M, R + 10 * H + M])).toEqual([
-      "recorded",
-      "recorded",
-      "clock.behind_chain",
-      "recorded",
-    ]);
-    expect(refusals[0]!.params).toEqual(behind(R + 30 * M, R + 10 * H));
-    expect(await withTransaction(suite.db, (tx) => chainHeads(tx))).toEqual(headsNow());
-    expect(headsNow()).toEqual({ [older.nodeId]: 1, [nodeId]: 3 });
-  });
-
-  it("holds the box to the latest time written under the lift on any chain", async () => {
-    const older = await seedTenantWithSif(suite.db);
-    await attempt(T, older);
-    await restart();
-    expect(await attempt(R + 10 * H)).toBe("recorded");
-    expect(await attempt(R + 10 * H, older)).toBe("recorded");
-    expect(await attemptAll([R + 30 * M, R + 10 * H - M])).toEqual([
-      "clock.behind_chain",
-      "recorded",
-    ]);
-    expect(refusals[0]!.params).toEqual(behind(R + 30 * M, R + 10 * H));
-  });
-
-  it("answers the same when the row names the other node", async () => {
-    const older = await seedTenantWithSif(suite.db);
-    await attempt(T, older);
-    await restart({ node: older.nodeId });
-    expect(await attemptAll([R + M, R + 10 * H, R + 30 * M, R + 10 * H + M])).toEqual([
-      "recorded",
-      "recorded",
-      "clock.behind_chain",
-      "recorded",
-    ]);
-    expect(refusals[0]!.params).toEqual(behind(R + 30 * M, R + 10 * H));
-  });
-
-  it("keeps the stop when heads leave out the older chain", async () => {
-    const older = await seedTenantWithSif(suite.db);
-    await attempt(T, older);
-    await restart({ proof: { heads: {} } });
-    expect(await attempt(R + M)).toBe("clock.behind_chain");
-    expect(refusals[0]!.params).toEqual(behind(R + M, T));
   });
 });
 

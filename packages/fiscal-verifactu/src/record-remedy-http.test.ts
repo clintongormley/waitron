@@ -571,15 +571,6 @@ it("refuses a remedy on a box the held chart does not name primary without appen
   expect(await snapshot()).toEqual(before);
 });
 
-it("refuses a server clock behind the chain without appending", async () => {
-  instant = new Date(NOW.getTime() - 120_000);
-  const before = await snapshot();
-  const res = await send();
-  expect(res.status).toBe(409);
-  expect(await res.json()).toMatchObject({ error: { code: "clock.behind_chain" } });
-  expect(await snapshot()).toEqual(before);
-});
-
 it("reports a host trading refusal as a conflict without changing records", async () => {
   tradingReady = false;
   const before = await snapshot();

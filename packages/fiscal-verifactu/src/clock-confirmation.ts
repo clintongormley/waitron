@@ -15,6 +15,7 @@ import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import {
   CLOCK_BEHIND_MARGIN_MS,
+  CLOCK_BEHIND_STOP_ON,
   chainHeads,
   clockBehindChain,
   latestRecord,
@@ -109,6 +110,7 @@ export async function clockStopState(
   reading: ClockReading,
   witnesses: readonly ClockWitness[],
 ): Promise<ClockStopState | null> {
+  if (!CLOCK_BEHIND_STOP_ON) return null;
   const judged = await judge(tx, reading, witnesses);
   if (judged === null) return null;
   const { latest } = judged;

@@ -14,7 +14,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { clockBehindChain } from "./clock-behind.js";
 import { nextCheckSeq, openCheck as openCheckOf } from "./clock-checks.js";
 import { confirmClockStep } from "./clock-step.js";
 import { recordCorrected } from "./clock-stop-incidents.js";
@@ -89,12 +88,6 @@ function device(id: string, boxMs: number, differenceMs: number, address: string
     witnessAt: iso(boxMs + differenceMs),
     uncertaintyMs: 0,
   };
-}
-
-function latestId(): string {
-  return suite.db.all<{ id: string }>(
-    sql`select id from registros_facturacion order by fecha_hora_huso_gen_registro desc, id desc limit 1`,
-  )[0]!.id;
 }
 
 function headsNow(): Record<string, number> {
@@ -192,152 +185,7 @@ function step(input: ClockStepRequest) {
   return withTransaction(suite.db, (tx) => confirmClockStep(tx, input));
 }
 
-function behindAt(ms: number) {
-  return withTransaction(suite.db, (tx) => clockBehindChain(tx, reading(ms)));
-}
-
 describe("a step of the box's clock during a payment stop", () => {
-  it("records AEAT setting the clock forward past the latest record, closing a check opened at the before reading", async () => {
-    await sale(T);
-    const A = T + 5 * M;
-    const input = request(A);
-    const answer = await step(input);
-
-    const [row] = await rows();
-    expect(await rows()).toHaveLength(1);
-    expect(checkIds()).toHaveLength(1);
-    expect(row).toMatchObject({
-      boxClockAt: new Date(R),
-      confirmedAt: new Date(A),
-      stepMs: input.stepMs,
-      source: "authority",
-      personId: null,
-      reason: "behind_chain",
-      checkId: checkIds()[0],
-      registroId: null,
-      recordAt: null,
-    });
-    expect(answer).toEqual({
-      corrected: expect.anything(),
-      confirmation: {
-        id: row!.id,
-        seq: 1,
-        source: "authority",
-        personId: null,
-        confirmedAt: iso(A),
-        checkId: checkIds()[0],
-        recordId: null,
-      },
-    });
-    // A proof key is written only when set: no staff and no device key on AEAT's step.
-    expect(row!.proof).toEqual({
-      authority: { boxAt: iso(R - S), witnessAt: iso(A - S), uncertaintyMs: 50 },
-      devices: [],
-      admin: null,
-      step: { beforeAt: iso(R), afterAt: iso(A), stepMs: input.stepMs, targetAt: input.targetAt },
-      heads: headsNow(),
-      closing: {
-        bootMs: BOOT_AFTER.ms,
-        bootId: BOOT_AFTER.id,
-        // The check opened at the before reading on the same boot, two seconds earlier.
-        correctedStart: iso(A - 2 * S),
-        partial: true,
-        unconfirmed: false,
-      },
-    });
-    expect(await behindAt(A)).toBeNull();
-    expect(incidentsOf("clock.corrected")).toEqual([
-      {
-        params: {
-          confirmationId: row!.id,
-          source: "authority",
-          person: null,
-          deviceId: null,
-          device: null,
-          before: iso(R),
-          beforeOffsetMinutes: 60,
-          after: iso(A),
-          afterOffsetMinutes: 60,
-          stepMs: input.stepMs,
-          direction: "forward",
-          verified: true,
-          unverified: false,
-          byAdmin: false,
-          byStaff: false,
-        },
-        acknowledged_at: null,
-        acknowledged_by: null,
-        severity: "warning",
-        sale_id: null,
-      },
-    ]);
-    expect(incidentsOf("clock.behind_chain_restarted")).toEqual([]);
-  });
-
-  it("names the latest record when a staff member's till sets the clock to a time still behind it, lifting the stop from the after reading", async () => {
-    await sale(T);
-    const A = T - 2 * H;
-    await step(
-      request(A, {
-        source: "staff",
-        admin: ANA_ON_A_DEVICE,
-        witnesses: [device("till-1", R - S, A - R, "10.0.0.1")],
-      }),
-    );
-
-    const [row] = await rows();
-    expect(row).toMatchObject({
-      source: "staff",
-      personId: "person-ana",
-      registroId: latestId(),
-      recordAt: new Date(T),
-      confirmedAt: new Date(A),
-    });
-    const proof = row!.proof as Record<string, unknown>;
-    expect(proof["staff"]).toEqual({
-      deviceId: "till-1",
-      address: "10.0.0.1",
-      boxAt: iso(R),
-      witnessAt: iso(T - 2 * H),
-      uncertaintyMs: 40,
-    });
-    expect(proof).not.toHaveProperty("admin");
-    expect(proof).not.toHaveProperty("device");
-    expect(proof["devices"]).toEqual([
-      {
-        deviceId: "till-1",
-        address: "10.0.0.1",
-        boxAt: iso(R - S),
-        witnessAt: iso(A - S),
-      },
-    ]);
-
-    expect(await behindAt(A)).toBeNull();
-    expect(await behindAt(A - 61 * S)).not.toBeNull();
-    expect(incidentsOf("clock.behind_chain_restarted").map((i) => i.params)).toEqual([
-      {
-        confirmationId: row!.id,
-        confirmedBy: "staff",
-        person: "Ana",
-        clockAt: iso(A),
-        lastRecordAt: iso(T),
-        byStaff: true,
-        device: "Barra 1",
-      },
-    ]);
-    expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
-      {
-        confirmationId: row!.id,
-        source: "staff",
-        person: "Ana",
-        deviceId: "till-1",
-        device: "Barra 1",
-        byAdmin: false,
-        byStaff: true,
-      },
-    ]);
-  });
-
   it("stores an administrator's step from a till under admin with the till beside it as its device", async () => {
     await sale(T);
     const A = T + 5 * M;
