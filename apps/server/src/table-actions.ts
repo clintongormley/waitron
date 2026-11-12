@@ -379,15 +379,13 @@ export async function splitTable(
   await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
   for (const { billId } of leaving) await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
   const arriving = [...leaving];
-  const carved: { billId: string; splitFrom: ReadonlyMap<string, string> }[] = [];
   let newBill: string | null = null;
   if (looseMoves.length > 0) {
     newBill = await insertPartyBill(tx, cfg, newParty);
     for (const { billId, transfers } of looseMoves) {
-      const splitFrom = await moveCheckedDishes(tx, cfg, billId, newBill, transfers, {
+      await moveCheckedDishes(tx, cfg, billId, newBill, transfers, {
         actorId: options.operatorId,
       });
-      carved.push({ billId, splitFrom });
     }
     await assertBillInvariant(tx, looseSourceIds);
     const left = await leaveParty(tx, newBill, "keep", { keepWaiting: true });
@@ -447,10 +445,7 @@ export async function splitTable(
       tx,
       cfg,
       newBill,
-      carved.map(({ billId, splitFrom }) => ({
-        before: sentWork.get(billId) ?? null,
-        splitFrom,
-      })),
+      looseMoves.map(({ billId }) => sentWork.get(billId) ?? null),
     );
   await enqueueMovedSlipsForNamesGone(tx, cfg, notWhole, namesOnPaper);
   return {

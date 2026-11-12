@@ -1781,17 +1781,15 @@ async function readWaitingOnHoldPaper(tx: Transaction, orderIds: readonly string
  * Tell the kitchen of sent work that moved; nothing when `before` is null. When the kitchen is to
  * be told ({@link kitchenToBeTold}), each of `before`'s items on paper now on `toOrderId` gets a
  * `moved` notice, at the quantity its ticket asks for, and each station with an active printer that
- * prints MOVED slips ({@link readMovedSlipPrinting}) gets one listing those items. `splitFrom` maps
- * a ticket item a split made to the one it copied.
+ * prints MOVED slips ({@link readMovedSlipPrinting}) gets one listing those items.
  */
 export async function enqueueMovedSlips(
   tx: Transaction,
   cfg: TradingContext,
   before: SentWork | null,
   toOrderId: string,
-  splitFrom: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
-  await enqueueMovedSlipsOnto(tx, cfg, toOrderId, [{ before, splitFrom }]);
+  await enqueueMovedSlipsOnto(tx, cfg, toOrderId, [before]);
 }
 
 /**
@@ -1802,20 +1800,18 @@ export async function enqueueMovedSlipsOnto(
   tx: Transaction,
   cfg: TradingContext,
   toOrderId: string,
-  sources: readonly { before: SentWork | null; splitFrom: ReadonlyMap<string, string> }[],
+  sources: readonly (SentWork | null)[],
 ): Promise<void> {
-  const sent = sources.flatMap(({ before, splitFrom }) =>
-    before === null ? [] : [{ before, splitFrom }],
-  );
+  const sent = sources.filter((before) => before !== null);
   if (sent.length === 0) return;
   const after = (await readPlacedOrders(tx, [toOrderId])).get(toOrderId)!;
-  const told = sent.filter(({ before }) => kitchenToBeTold(before, after.places));
+  const told = sent.filter((before) => kitchenToBeTold(before, after.places));
   if (told.length === 0) return;
   const onOrder = (await readTicketItemsOn(tx, [toOrderId])).get(toOrderId) ?? [];
   await notifyMoved(
     tx,
     cfg,
-    told.map(({ before, splitFrom }) => ({ before, to: toOrderId, after, onOrder, splitFrom })),
+    told.map((before) => ({ before, to: toOrderId, after, onOrder })),
   );
 }
 
@@ -1905,8 +1901,6 @@ interface MovedWork {
   to: string;
   after: PlacedOrder;
   onOrder: readonly ItemOnOrder[];
-  /** A ticket item a split made, mapped to the one it copied. */
-  splitFrom: ReadonlyMap<string, string>;
 }
 
 /**
@@ -1960,16 +1954,15 @@ async function notifyMoved(
 }
 
 /** The items of `move.before` on paper that are now on its order, excluding those made here. */
-function movedItems({ before, onOrder, splitFrom }: MovedWork): MovedItem[] {
+function movedItems({ before, onOrder }: MovedWork): MovedItem[] {
   return onOrder.flatMap((item) => {
-    const was = splitFrom.get(item.id) ?? item.id;
-    if (item.madeHere || !before.ticketItemIds.has(was)) return [];
+    if (item.madeHere || !before.ticketItemIds.has(item.id)) return [];
     return {
       workingOrderLineId: item.workingOrderLineId,
       stationId: item.stationId!,
       quantity: item.quantity,
       wasStarted: isStarted(item.state),
-      held: before.heldItemIds.has(was),
+      held: before.heldItemIds.has(item.id),
     };
   });
 }
@@ -2369,7 +2362,6 @@ async function notifyOwnBillsWhere(
       to: billId,
       after: now.get(billId)!,
       onOrder: onOrders.get(billId) ?? [],
-      splitFrom: new Map(),
     })),
   );
 }

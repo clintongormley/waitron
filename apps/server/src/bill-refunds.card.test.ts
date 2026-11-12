@@ -260,6 +260,13 @@ async function withProvider<T>(
   }
 }
 
+function lineIdOf(billId: string, lineNo: number): string {
+  const [row] = venue.db.all<{ id: string }>(
+    sql`select id from working_order_lines where working_order_id = ${billId} and line_no = ${lineNo}`,
+  );
+  return row!.id;
+}
+
 /** Every refusal of design §8 test 17's list while a refund on the bill is pending. */
 async function lockedWrites(billId: string, paymentId: string) {
   const lines = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/lines`);
@@ -275,9 +282,10 @@ async function lockedWrites(billId: string, paymentId: string) {
       venue.app,
       venue.cookie,
       "POST",
-      `/api/bills/${billId}/split`,
-      await observedBillActionBody(venue.db, `/api/bills/${billId}/split`, {
-        transfers: [{ lineNo: 3 }],
+      `/api/bills/${billId}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${billId}/move-dishes`, {
+        lineIds: [lineIdOf(billId, 3)],
+        toBillId: null,
         expectedPartyRevision: await partyRevisionOf(venue, billId),
       }),
     ),
@@ -594,9 +602,10 @@ describe("design §8 test 18: a new id while a refund is pending", () => {
       venue.app,
       venue.cookie,
       "POST",
-      `/api/bills/${billId}/split`,
-      await observedBillActionBody(venue.db, `/api/bills/${billId}/split`, {
-        transfers: [{ lineNo: 4 }],
+      `/api/bills/${billId}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${billId}/move-dishes`, {
+        lineIds: [lineIdOf(billId, 4)],
+        toBillId: null,
         expectedPartyRevision: await partyRevisionOf(venue, billId),
       }),
     );

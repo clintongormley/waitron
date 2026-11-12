@@ -6,7 +6,7 @@ import { parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { splitBill, transferItems } from "./bill-actions.js";
+import { moveDishes } from "./bill-actions.js";
 import { readBillEditState } from "./bill-editing.js";
 
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
@@ -117,29 +117,27 @@ function conflict(e: BillEditState, multiple = false) {
 function stale(e: BillEditState) {
   return { billId: e.billId, draftId: e.draftId, revision: e.draftRevision, edit: e };
 }
-async function split(p: Fixture, expectedEdit: BillEditExpected, quantity?: string) {
-  const ask = { ...(await command(p)), expectedEdit };
+/** Moves the fixture's dish to a new bill, sending `expectedEdit` as the only expectation. */
+async function split(p: Fixture, expectedEdit: BillEditExpected | undefined) {
+  const ask = {
+    ...(await command(p)),
+    expectedEdits: (expectedEdit === undefined ? undefined : [expectedEdit]) as BillEditExpected[],
+  };
   return inTx(venue, (tx) =>
-    splitBill(
-      tx,
-      venue.cfg,
-      p.tabId,
-      [{ lineNo: p.dish.lineNo, ...(quantity === undefined ? {} : { quantity }) }],
-      { ...ask, admission: testTradingAdmission() },
-    ),
+    moveDishes(tx, venue.cfg, p.tabId, null, [p.dish.id], {
+      ...ask,
+      admission: testTradingAdmission(),
+    }),
   );
 }
-async function transfer(p: Fixture, expectedEdits: BillEditExpected[], quantity?: string) {
+/** Moves the fixture's dish to the party's other bill. */
+async function transfer(p: Fixture, expectedEdits: BillEditExpected[]) {
   const ask = { ...(await command(p)), expectedEdits };
   return inTx(venue, (tx) =>
-    transferItems(
-      tx,
-      venue.cfg,
-      p.tabId,
-      p.otherId,
-      [{ lineNo: p.dish.lineNo, ...(quantity === undefined ? {} : { quantity }) }],
-      ask,
-    ),
+    moveDishes(tx, venue.cfg, p.tabId, p.otherId, [p.dish.id], {
+      ...ask,
+      admission: testTradingAdmission(),
+    }),
   );
 }
 
@@ -158,9 +156,9 @@ describe("splitting a bill requires its current editor before creating a destina
   it.each(["absent", "wrong-bill"] as const)("refuses %s expectation", async (kind) => {
     const p = await fixture();
     await refused(
-      () => split(p, (kind === "absent" ? undefined : wrongBill(p)) as BillEditExpected),
+      () => split(p, kind === "absent" ? undefined : wrongBill(p)),
       "management.request_invalid",
-      { field: kind === "absent" ? "expectedEdit" : "expectedEdit.billId" },
+      { field: "expectedEdits" },
     );
   });
   it("splits sent food while unrelated colleague work and both outboxes stay unchanged", async () => {
@@ -168,7 +166,7 @@ describe("splitting a bill requires its current editor before creating a destina
       saved = await save(p, p.tabId);
     const other = await save(p, p.otherId, venue.adminId);
     const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
-    const result = await split(p, saved.edit, "1");
+    const result = await split(p, saved.edit);
     expect(await edit(p.tabId)).toEqual(saved.edit);
     expect(await edit(p.otherId)).toEqual(other.edit);
     expect(await edit(result.billId)).toEqual({
@@ -180,16 +178,18 @@ describe("splitting a bill requires its current editor before creating a destina
       draftRevision: null,
     });
     expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
-    const source = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.id, p.dish.id));
     const moved = await venue.db
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, result.billId));
-    expect(source[0]).toMatchObject({ quantity: 1000, unitPriceGross: 1800, lineTotal: 1800 });
-    expect(moved[0]).toMatchObject({ quantity: 1000, unitPriceGross: 1800, lineTotal: 1800 });
+    expect(moved).toEqual([
+      expect.objectContaining({
+        id: p.dish.id,
+        quantity: 2000,
+        unitPriceGross: 1800,
+        lineTotal: 3600,
+      }),
+    ]);
   });
 });
 function wrongBill(p: Fixture): BillEditExpected {
@@ -249,7 +249,7 @@ describe("transferring dishes compares both bills including an empty destination
       a = await save(p, p.tabId),
       b = await save(p, p.otherId);
     const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
-    await transfer(p, await edits(p), "1");
+    await transfer(p, await edits(p));
     expect(await edit(p.tabId)).toEqual(a.edit);
     expect(await edit(p.otherId)).toEqual(b.edit);
     expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
@@ -257,98 +257,71 @@ describe("transferring dishes compares both bills including an empty destination
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, p.otherId));
-    expect(moved).toHaveLength(1);
-    expect(moved[0]).toMatchObject({ quantity: 1000, unitPriceGross: 1800, lineTotal: 1800 });
-    expect(
-      (
-        await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, p.dish.id))
-      )[0],
-    ).toMatchObject({ quantity: 1000, unitPriceGross: 1800, lineTotal: 1800 });
+    expect(moved).toEqual([
+      expect.objectContaining({
+        id: p.dish.id,
+        quantity: 2000,
+        unitPriceGross: 1800,
+        lineTotal: 3600,
+      }),
+    ]);
   });
 });
 
-describe("split and transfer HTTP contracts", () => {
-  it.each(["split", "transfer"] as const)("refuses absent expectations on %s", async (action) => {
-    const p = await fixture(),
-      before = await rows(true);
-    const response = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/bills/${p.tabId}/${action}`,
-      {
-        ...(await command(p)),
-        transfers: [{ lineNo: p.dish.lineNo }],
-        toBillId: p.otherId,
-      },
-    );
-    expect(response.status).toBe(400);
-    expect(response.json).toMatchObject({
-      code: "management.request_invalid",
-      params: {
-        field: action === "split" ? "expectedEdit" : "expectedEdits",
-      },
-    });
-    expect(await rows(true)).toEqual(before);
-  });
-  it.each(["split", "transfer"] as const)(
-    "%s uses the session person instead of a body operator",
-    async (action) => {
+describe("Move dishes HTTP contracts", () => {
+  /** The destination a move to `to` sends, and the bills whose edits it names. */
+  function target(p: Fixture, to: "a new bill" | "another bill") {
+    return to === "a new bill"
+      ? { toBillId: null, billIds: [p.tabId] }
+      : { toBillId: p.otherId, billIds: [p.tabId, p.otherId] };
+  }
+  it.each(["a new bill", "another bill"] as const)(
+    "refuses absent expectations on a move to %s",
+    async (to) => {
       const p = await fixture(),
-        saved = await save(p, p.tabId, venue.adminId);
-      const expectedEdits = await edits(p),
         before = await rows(true);
       const response = await send(
         venue.app,
         venue.cookie,
         "POST",
-        `/api/bills/${p.tabId}/${action}`,
+        `/api/bills/${p.tabId}/move-dishes`,
+        { ...(await command(p)), lineIds: [p.dish.id], toBillId: target(p, to).toBillId },
+      );
+      expect(response.status).toBe(400);
+      expect(response.json).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "expectedEdits" },
+      });
+      expect(await rows(true)).toEqual(before);
+    },
+  );
+  it.each(["a new bill", "another bill"] as const)(
+    "a move to %s uses the session person instead of a body operator",
+    async (to) => {
+      const p = await fixture(),
+        saved = await save(p, p.tabId, venue.adminId);
+      const { toBillId, billIds } = target(p, to);
+      const expectedEdits = (await edits(p)).filter((e) => billIds.includes(e.billId)),
+        before = await rows(true);
+      const response = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/bills/${p.tabId}/move-dishes`,
         {
           ...(await command(p)),
           operatorId: venue.adminId,
-          transfers: [{ lineNo: p.dish.lineNo }],
-          toBillId: p.otherId,
-          expectedEdit: saved.edit,
+          lineIds: [p.dish.id],
+          toBillId,
           expectedEdits,
         },
       );
       expect(response.status).toBe(409);
       expect(response.json).toMatchObject({
         code: "draft.taken_over",
-        params: conflict(saved.edit, action === "transfer"),
+        params: conflict(saved.edit, true),
       });
       expect(await rows(true)).toEqual(before);
-    },
-  );
-  it.each(["split", "transfer"] as const)(
-    "%s forwards a valid explicit expectation",
-    async (action) => {
-      const p = await fixture(),
-        expectedEdit = await edit(p.tabId),
-        expectedEdits = await edits(p);
-      const response = await send(
-        venue.app,
-        venue.cookie,
-        "POST",
-        `/api/bills/${p.tabId}/${action}`,
-        {
-          ...(await command(p)),
-          transfers: [{ lineNo: p.dish.lineNo, quantity: "1" }],
-          toBillId: p.otherId,
-          expectedEdit,
-          expectedEdits,
-        },
-      );
-      expect(response.status).toBe(action === "split" ? 200 : 204);
-      const destination = action === "split" ? (response.json.billId as string) : p.otherId;
-      expect(
-        (
-          await venue.db
-            .select()
-            .from(workingOrderLines)
-            .where(eq(workingOrderLines.workingOrderId, destination))
-        )[0],
-      ).toMatchObject({ quantity: 1000, unitPriceGross: 1800, lineTotal: 1800 });
     },
   );
 });

@@ -28,7 +28,7 @@ import {
   type PortionBinding,
   type ProjectedLine,
 } from "./portion-sale-projection.js";
-import { transferItems } from "./testing/bill-action-fixture.js";
+import { cutParts, transferItems } from "./testing/bill-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addPortionRound, portionBill as registeredPortionBill } from "./testing/portion-bill.js";
@@ -702,7 +702,12 @@ describe("A803 monetary comparison: operations on portions through the real path
   it("A803 monetary comparison: one of three €3.33 dishes moved to another bill", async () => {
     await withTransaction(db, async (tx) => {
       const todayBill = await groupedBill(tx, [croquettes(3)]);
-      const todayMoved = await splitPartyBill(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]);
+      const todayMoved = await splitPartyBill(
+        tx,
+        cfg,
+        todayBill,
+        await cutParts(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]),
+      );
       const bill = await portionBill(tx, [croquettes(3)]);
       const moved = await splitPartyBill(tx, cfg, bill.billId, [{ lineNo: 3 }]);
 
@@ -821,7 +826,12 @@ describe("A803 monetary comparison: operations on portions through the real path
   it("A803 monetary comparison: today, a dish moved out and back stays a row of its own", async () => {
     await withTransaction(db, async (tx) => {
       const todayBill = await groupedBill(tx, [croquettes(2)]);
-      const moved = await splitPartyBill(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]);
+      const moved = await splitPartyBill(
+        tx,
+        cfg,
+        todayBill,
+        await cutParts(tx, cfg, todayBill, [{ lineNo: 1, quantity: "1" }]),
+      );
       await moveBack(tx, moved.billId, todayBill);
 
       const today = await fileBill(tx, todayBill);
@@ -1106,7 +1116,12 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
         many(ids.steak, 2),
         many(ids.bread, 2),
       ]);
-      await splitPartyBill(tx, cfg, today, [{ lineNo: 1, quantity: "1" }]);
+      await splitPartyBill(
+        tx,
+        cfg,
+        today,
+        await cutParts(tx, cfg, today, [{ lineNo: 1, quantity: "1" }]),
+      );
       const { billId: bill } = await registeredPortionBill(
         tx,
         cfg,

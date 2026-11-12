@@ -939,6 +939,7 @@ describe("A803 race replay: Split a table against another command, from one read
       const table = await joinFree(ana.partyId);
       const beerLineId = lineNamed(ana.tabId, "Caña").id;
       const moving = {
+        admission: testTradingAdmission(),
         partyId: ana.partyId,
         operatorId: venue.operatorId,
         expectedPartyRevision: revisionOf(ana.partyId),

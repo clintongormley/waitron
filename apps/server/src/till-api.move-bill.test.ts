@@ -119,13 +119,24 @@ function revisionOf(partyId: string): number {
   return row!.revision;
 }
 
+function lineIdsAt(billId: string, lineNos: number[]): string[] {
+  return lineNos.map(
+    (lineNo) =>
+      venue.db.all<{ id: string }>(
+        sql`select id from working_order_lines
+            where working_order_id = ${billId} and line_no = ${lineNo}`,
+      )[0]!.id,
+  );
+}
+
 async function splitAtTwoParties(names: string[], lineNos: number[]) {
   const firstParty = await seatedWith(venue, ...names);
   const secondParty = await seatedWith(venue, "Caña");
   const split = await post(
-    `/api/bills/${firstParty.tabId}/split`,
-    await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/split`, {
-      transfers: lineNos.map((lineNo) => ({ lineNo })),
+    `/api/bills/${firstParty.tabId}/move-dishes`,
+    await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/move-dishes`, {
+      lineIds: lineIdsAt(firstParty.tabId, lineNos),
+      toBillId: null,
       expectedPartyRevision: firstParty.revision,
     }),
   );
@@ -372,9 +383,10 @@ describe("money on a moved bill", () => {
       venue.app,
       venue.cookie,
       "POST",
-      `/api/bills/${firstParty.tabId}/split`,
-      await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/split`, {
-        transfers: [{ lineNo: 2 }],
+      `/api/bills/${firstParty.tabId}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/move-dishes`, {
+        lineIds: lineIdsAt(firstParty.tabId, [2]),
+        toBillId: null,
         expectedPartyRevision: firstParty.revision,
       }),
     );
@@ -759,9 +771,10 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     const firstParty = await seatedWith(venue, "Tarta", "Octopus");
     const secondParty = await seatedWith(venue, "Croquettes");
     const split = await post(
-      `/api/bills/${firstParty.tabId}/split`,
-      await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/split`, {
-        transfers: [{ lineNo: 2 }],
+      `/api/bills/${firstParty.tabId}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/move-dishes`, {
+        lineIds: lineIdsAt(firstParty.tabId, [2]),
+        toBillId: null,
         expectedPartyRevision: firstParty.revision,
       }),
     );

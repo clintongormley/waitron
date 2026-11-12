@@ -182,6 +182,45 @@ describe("financial splits with charged service cancellations", () => {
     },
   );
 
+  it("refuses a line the order does not hold, and an extra named on its own", async () => {
+    const order = await fixture();
+    const carve = (lineNo: number) =>
+      inTx(venue, (tx) =>
+        carveOffLines(tx, venue.cfg, order.billId, order.billId, [{ lineNo, quantity: "1" }], {
+          splitExtras: true,
+        }),
+      );
+    await expect(carve(99)).rejects.toMatchObject({
+      code: "tab.line_not_found",
+      params: { tabId: order.billId, lineNo: 99 },
+    });
+    const extra = order.rows.find((row) => row.parentLineId !== null)!;
+    await expect(carve(extra.lineNo)).rejects.toMatchObject({
+      code: "tab.transfer_modifier_line",
+      params: { tabId: order.billId, lineNo: extra.lineNo },
+    });
+    expect((await projection(order.billId)).map(({ quantity }) => quantity)).toEqual([3000, 6000]);
+  });
+
+  it("cuts part of a line only within its order", async () => {
+    const order = await fixture();
+    const billId = await emptyBill(order.partyId);
+    await expect(
+      inTx(venue, (tx) =>
+        carveOffLines(
+          tx,
+          venue.cfg,
+          order.billId,
+          billId,
+          [{ lineNo: order.parent.lineNo, quantity: "2" }],
+          { splitExtras: true },
+        ),
+      ),
+    ).rejects.toThrow("a part of a line is cut only within its order");
+    expect(await projection(billId)).toEqual([]);
+    expect((await projection(order.billId)).map(({ quantity }) => quantity)).toEqual([3000, 6000]);
+  });
+
   it("moves the cancelled financial portion to another bill without moving active kitchen work", async () => {
     const order = await fixture();
     const billId = await emptyBill(order.partyId);
@@ -190,12 +229,34 @@ describe("financial splits with charged service cancellations", () => {
         tx,
         venue.cfg,
         order.billId,
-        billId,
+        order.billId,
         [{ lineNo: order.parent.lineNo, quantity: "2" }],
         { splitExtras: true },
       ),
     );
-    expect(moved.splitFrom.size).toBe(0);
+    await inTx(venue, (tx) =>
+      carveOffLines(
+        tx,
+        venue.cfg,
+        order.billId,
+        billId,
+        [{ lineNo: [...moved.splitLines.values()][0]!.lineNo }],
+        {},
+      ),
+    );
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ id: ticketItems.id })
+          .from(ticketItems)
+          .where(
+            inArray(
+              ticketItems.workingOrderLineId,
+              [...moved.splitLines.values()].map(({ id }) => id),
+            ),
+          ),
+      ),
+    ).toEqual([]);
     const source = await projection(order.billId);
     const target = await projection(billId);
     expect(

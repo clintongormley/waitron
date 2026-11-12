@@ -198,10 +198,8 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/department-transfers/:id/withdraw               | request's source tab    | department-transfer-api.test.ts: refuses withdrawal outside the sender zone |
  * | POST /api/department-transfers/:id/accept                 | body destination zone   | department-transfer-api.test.ts: refuses a receiving zone outside the designated profile |
  * | POST /api/department-transfers/:id/decline                | designated desk's department | department-transfer-api.test.ts: refuses decline from an undesignated profile in the destination |
- * | POST /api/bills/:id/split                               | order                  | refuses POST /api/bills/:id/split                    |
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
  * | PUT  /api/bills/:id/name | numbering party; order when it has none | refuses PUT /api/bills/:id/name, (no number); "naming a paid bill a merged party kept" |
- * | POST /api/bills/:id/transfer                            | order; body order      | refuses POST /api/bills/:id/transfer (from), (to)    |
  * | POST /api/bills/:id/move-dishes                         | order; body order      | refuses POST /api/bills/:id/move-dishes (from), (to) |
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
  * | GET  /api/working-orders/:id/payments                   | order                  | refuses GET /api/working-orders/:id/payments         |
@@ -1238,13 +1236,6 @@ const ROUTES: readonly Row[] = [
     deliTableZone,
   ]),
   [
-    "POST /api/bills/:id/split",
-    "POST",
-    (x) => `/api/bills/${x.deliTab}/split`,
-    () => ({ transfers: [] }),
-    deliTableZone,
-  ],
-  [
     "POST /api/bills/:id/merge (into)",
     "POST",
     (x) => `/api/bills/${x.deliTab}/merge`,
@@ -1266,20 +1257,6 @@ const ROUTES: readonly Row[] = [
         .sort()
         .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
     }),
-    deliTableZone,
-  ],
-  [
-    "POST /api/bills/:id/transfer (from)",
-    "POST",
-    (x) => `/api/bills/${x.deliTab}/transfer`,
-    (x) => ({ toBillId: x.restTab, transfers: [] }),
-    deliTableZone,
-  ],
-  [
-    "POST /api/bills/:id/transfer (to)",
-    "POST",
-    (x) => `/api/bills/${x.restTab}/transfer`,
-    (x) => ({ toBillId: x.deliTab, transfers: [] }),
     deliTableZone,
   ],
   [

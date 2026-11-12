@@ -8,6 +8,12 @@ import { withTransaction, workingOrderLines, billPayments } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCategory, createProduct } from "@waitron/catalogue";
+import {
+  createServiceZone,
+  readProfileServiceScopes,
+  setProfileServiceAccess,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { decimal, deviceOrigin } from "@waitron/shared";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
@@ -24,7 +30,7 @@ import {
   cancelPlacedOrder,
   markOrderPlaced,
 } from "./working-order.js";
-import { splitBill } from "./bill-actions.js";
+import { moveDishes } from "./bill-actions.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
@@ -83,18 +89,25 @@ function closed(state: (typeof closedStates)[number]) {
 function fiscal(admission: TradingAdmission) {
   return { ...venue, admission, log: quiet };
 }
-async function held() {
+async function held(dishes: "one" | "two" = "one") {
   const id: string = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, {
     id,
     operatorId: venue.operatorId,
-    lines: [{ menuItemId: offer, quantity: "2" }],
+    lines:
+      dishes === "one"
+        ? [{ menuItemId: offer, quantity: "2" }]
+        : [
+            { menuItemId: offer, quantity: "1" },
+            { menuItemId: offer, quantity: "1" },
+          ],
   });
-  const [line] = await venue.db
+  const lines = await venue.db
     .select()
     .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, id));
-  return { id, line: line! };
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+  return { id, line: lines[0]!, lines };
 }
 
 async function tableBill() {
@@ -183,7 +196,7 @@ describe("direct economic orchestration before startup admission", () => {
     it.each([
       "save",
       "line",
-      "split",
+      "move-dishes",
       "adjustment",
       "departure",
       "cancel",
@@ -247,10 +260,10 @@ describe("direct economic orchestration before startup admission", () => {
               0,
               authority,
             );
-          if (operation === "split")
-            return splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
+          if (operation === "move-dishes")
+            return moveDishes(tx, venue.cfg, id, null, [line.id], {
               ...authority,
-              expectedEdit: await readBillEditState(tx, id),
+              expectedEdits: [await readBillEditState(tx, id)],
             });
           if (operation === "adjustment") return applyAdjustment(tx, venue.cfg, command, "en-GB");
           if (operation === "departure")
@@ -306,7 +319,7 @@ it.each(closedStates)(
     for (const [method, path] of [
       ["PUT", "/api/working-orders/example"],
       ["GET", "/management-api/future-write"],
-      ["POST", "/api/bills/example/split"],
+      ["POST", "/api/bills/example/move-dishes"],
       ["POST", "/management-api/payments/resolve"],
     ]) {
       let writes = 0;
@@ -389,10 +402,10 @@ it("returns an authenticated settled replay without reading a current issue cloc
   expect(snapshot()).toEqual(before);
 });
 
-it.each(["save", "line", "split", "adjustment"] as const)(
+it.each(["save", "line", "move-dishes", "adjustment"] as const)(
   "the actual closed till route refuses %s and changes no economic rows",
   async (operation) => {
-    const { id } = await held();
+    const { id, line } = await held();
     const admission = closed("invalid");
     const app = new Hono();
     mountTillApi(
@@ -412,8 +425,8 @@ it.each(["save", "line", "split", "adjustment"] as const)(
         ? { revision: 0, expectedEdit, lines: [{ menuItemId: offer, quantity: "1" }] }
         : operation === "line"
           ? { revision: 0, expectedEdit, quantity: "1", portionLineNos: [] }
-          : operation === "split"
-            ? { expectedEdit, transfers: [{ lineNo: 1, quantity: "1" }] }
+          : operation === "move-dishes"
+            ? { expectedEdits: [expectedEdit], lineIds: [line.id], toBillId: null }
             : {
                 expectedEdit,
                 expectedRevision: 0,
@@ -429,8 +442,8 @@ it.each(["save", "line", "split", "adjustment"] as const)(
         ? `/api/working-orders/${id}`
         : operation === "line"
           ? `/api/working-orders/${id}/lines/1`
-          : operation === "split"
-            ? `/api/bills/${id}/split`
+          : operation === "move-dishes"
+            ? `/api/bills/${id}/move-dishes`
             : `/api/working-orders/${id}/adjustments`;
     const before = snapshot();
     const response = await app.request(path, {
@@ -446,17 +459,95 @@ it.each(["save", "line", "split", "adjustment"] as const)(
   },
 );
 
+it("the move-dishes route refuses before admission ahead of a zone the till may not serve", async () => {
+  const { partyId, tabId } = await tableBill();
+  const cashTill = /=([0-9a-f-]{36})\./.exec(venue.cookieNoCard)![1]!;
+  const [{ profileId }] = venue.db.all<{ profileId: string }>(
+    sql`select device_profile_id as profileId from devices where id = ${cashTill}`,
+  );
+  const [previous] = await withTransaction(venue.db, (tx) =>
+    readProfileServiceScopes(tx, [profileId]),
+  );
+  try {
+    await withTransaction(venue.db, async (tx) => {
+      const [policy] = await tx
+        .select({ departmentId: zoneServicePolicies.departmentId })
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
+      const other = await createServiceZone(tx, {
+        name: `Other ${randomUUID()}`,
+        departmentId: policy!.departmentId,
+      });
+      await setProfileServiceAccess(tx, profileId, {
+        departmentId: policy!.departmentId,
+        allowedZoneIds: [other.id],
+        startingZoneId: other.id,
+      });
+    });
+    const answer = async (admission: TradingAdmission) => {
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          ...fiscal(admission),
+          cfg: venue.cfg,
+          secureCookies: false,
+          venueLocale: "en-GB",
+          pool: venue.pool,
+        },
+        quiet,
+      );
+      const expectedEdit = await withTransaction(venue.db, (tx) => readBillEditState(tx, tabId));
+      const lines = await venue.db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId));
+      const response = await app.request(`/api/bills/${tabId}/move-dishes`, {
+        method: "POST",
+        headers: { cookie: venue.cookieNoCard, "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedEdits: [expectedEdit],
+          partyId,
+          expectedPartyRevision: venue.db.all<{ revision: number }>(
+            sql`select revision from parties where id = ${partyId}`,
+          )[0]!.revision,
+          lineIds: [lines[0]!.id],
+          toBillId: null,
+        }),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    const before = snapshot();
+    expect((await answer(ready)).body).toMatchObject({
+      error: { code: "service_zone.not_allowed" },
+    });
+    expect(await answer(closed("invalid"))).toEqual({
+      status: 409,
+      body: { error: { code: "venue.time_zone_not_ready", params: { reason: "invalid" } } },
+    });
+    expect(snapshot()).toEqual(before);
+  } finally {
+    await withTransaction(venue.db, (tx) =>
+      setProfileServiceAccess(tx, profileId, {
+        departmentId: previous!.departmentId,
+        allowedZoneIds: previous!.allowedZoneIds,
+        startingZoneId: previous!.startingZoneId,
+      }),
+    );
+  }
+});
+
 it.each([
   "save",
   "cancel",
   "line",
-  "split",
+  "move-dishes",
   "adjustment",
   "auto-issue",
   "departure",
   "credit",
 ] as const)("%s dates one new fiscal record in the venue zone at night", async (operation) => {
-  const { id: originalId, line } = await held();
+  const { id: originalId, line, lines } = await held(operation === "move-dishes" ? "two" : "one");
   let id = originalId;
   const reading = venue.clock.now();
   const clock = {
@@ -543,10 +634,10 @@ it.each([
           0,
           authority,
         );
-      if (operation === "split")
-        await splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
+      if (operation === "move-dishes")
+        await moveDishes(tx, venue.cfg, id, null, [lines[1]!.id], {
           ...authority,
-          expectedEdit: await readBillEditState(tx, id),
+          expectedEdits: [await readBillEditState(tx, id)],
         });
       if (operation === "adjustment")
         await applyAdjustment(

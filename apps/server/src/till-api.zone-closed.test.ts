@@ -250,39 +250,6 @@ describe("existing service in a closed zone", () => {
     ).toEqual([{ status: "settled" }]);
   });
 
-  it("splits a stored party bill", async () => {
-    const v = await venue();
-    const seated = await seat(v);
-    const added = await request(v, "POST", `/api/parties/${seated.partyId}/groups`, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: seated.revision,
-      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      groups: [
-        { lines: [line(v), { menuItemId: v.offerFor("Tarta"), quantity: "1" }], release: "fire" },
-      ],
-    });
-    expect(added.status).toBe(200);
-    const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
-    at("23:45");
-    const answer = await request(
-      v,
-      "POST",
-      `/api/bills/${seated.tabId}/split`,
-      await observedBillActionBody(v.db, `/api/bills/${seated.tabId}/split`, {
-        partyId: seated.partyId,
-        expectedPartyRevision: party!.revision,
-        transfers: [{ lineNo: 2 }],
-      }),
-    );
-    expect(answer.status).toBe(200);
-    expect(
-      await suite.db
-        .select({ status: workingOrders.status })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, answer.json.billId as string)),
-    ).toEqual([{ status: "open" }]);
-  });
-
   it("moves a stored party bill's dishes to a new bill", async () => {
     const v = await venue();
     const seated = await seat(v);

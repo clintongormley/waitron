@@ -9,7 +9,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { afterEach, describe, expect, it } from "vitest";
-import { mergeCheckedBills, splitBill, transferItems } from "./bill-actions.js";
+import { mergeCheckedBills } from "./bill-actions.js";
+import { splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
@@ -844,113 +845,6 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
     return { ...p, weighed: weighed!, lineNo };
   }
 
-  /** Every row of every table, in insertion order. */
-  function moveTables() {
-    const tables = venue.db.all<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not like '_litestream%' order by name`,
-    );
-    return Object.fromEntries(
-      tables.map(({ name }) => [
-        name,
-        venue.db.all(sql`select * from ${sql.identifier(name)} order by rowid`),
-      ]),
-    );
-  }
-
-  it("A803 A1195: Split by item of 0.100 kg of a bound weighed portion is refused and changes nothing", async () => {
-    const p = await withHam();
-    expect(p.weighed.measured).toBe(true);
-    const ask = {
-      admission: testTradingAdmission(),
-      ...(await command(p)),
-      expectedEdit: await edit(p.billId),
-    };
-    const before = moveTables();
-    await expect(
-      inTx(venue, (tx) =>
-        splitBill(tx, venue.cfg, p.billId, [{ lineNo: p.lineNo, quantity: "0.100" }], ask),
-      ),
-    ).rejects.toMatchObject({
-      code: "tab.transfer_quantity_invalid",
-      params: { tabId: p.billId, lineNo: p.lineNo, quantity: "0.100" },
-    });
-    expect(moveTables()).toEqual(before);
-  });
-
-  it("A803 A1195: Transfer items of 0.100 kg of a bound weighed portion is refused and changes nothing", async () => {
-    const p = await withHam();
-    const ask = { ...(await command(p)), expectedEdits: await bothEdits(p) };
-    const before = moveTables();
-    await expect(
-      inTx(venue, (tx) =>
-        transferItems(
-          tx,
-          venue.cfg,
-          p.billId,
-          p.otherId,
-          [{ lineNo: p.lineNo, quantity: "0.100" }],
-          ask,
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "tab.transfer_quantity_invalid",
-      params: { tabId: p.billId, lineNo: p.lineNo, quantity: "0.100" },
-    });
-    expect(moveTables()).toEqual(before);
-  });
-
-  it("A803 A1195: of two weighed portions cut in one transfer, the refusal names the lower line", async () => {
-    const p = await withHam();
-    const [second] = await inTx(venue, (tx) =>
-      addPortionRound(tx, venue.cfg, p.billId, ham("0.400"), { fire: true }),
-    );
-    const secondNo = (await linesOf(p.billId)).find((line) => line.id === second!.lineId)!.lineNo;
-    expect(secondNo).toBeGreaterThan(p.lineNo);
-    const ask = { ...(await command(p)), expectedEdits: await bothEdits(p) };
-    await expect(
-      inTx(venue, (tx) =>
-        transferItems(
-          tx,
-          venue.cfg,
-          p.billId,
-          p.otherId,
-          [
-            { lineNo: secondNo, quantity: "0.200" },
-            { lineNo: p.lineNo, quantity: "0.100" },
-          ],
-          ask,
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "tab.transfer_quantity_invalid",
-      params: { tabId: p.billId, lineNo: p.lineNo, quantity: "0.100" },
-    });
-  });
-
-  it("A803 A1195: a bound dish that is not measured, held as a line of two, still splits part of itself onto another bill", async () => {
-    const p = await fixture();
-    const [first] = p.portions;
-    const firstNo = (await linesOf(p.billId)).find((line) => line.id === first!.lineId)!.lineNo;
-    // No product path stores a bound unit dish as a line of two; by hand, as
-    // simplified-limit.test.ts does, to show the refusal reads the portion's measure.
-    await inTx(venue, async (tx) => {
-      await tx.delete(workingOrderLines).where(eq(workingOrderLines.parentLineId, first!.lineId));
-      await tx
-        .update(workingOrderLines)
-        .set({ quantity: 2000 })
-        .where(eq(workingOrderLines.id, first!.lineId));
-    });
-    const ask = {
-      admission: testTradingAdmission(),
-      ...(await command(p)),
-      expectedEdit: await edit(p.billId),
-    };
-    const split = await inTx(venue, (tx) =>
-      splitBill(tx, venue.cfg, p.billId, [{ lineNo: firstNo, quantity: "1" }], ask),
-    );
-    expect((await linesOf(split.billId)).map((line) => line.lineNo)).toHaveLength(1);
-  });
-
   it("A803 A1195: the whole 0.350 kg still moves, keeping its portion and writing one moved event", async () => {
     const p = await withHam();
     const ask = { ...(await command(p)), expectedEdits: await bothEdits(p) };
@@ -975,31 +869,6 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
         actor_id: venue.adminId,
       },
     ]);
-  });
-
-  it("A803 A1195: an unbound weighed line still splits off part of itself onto a new bill", async () => {
-    const p = await fixture();
-    const lineNo = await inTx(venue, async (tx) => {
-      const round = await priceTabRound(tx, venue.cfg, p.billId, ham("0.320"), "checked");
-      await insertTabRound(tx, venue.cfg, round, round.rows);
-      return round.rows[0]!.lineNo;
-    });
-    const ask = {
-      admission: testTradingAdmission(),
-      ...(await command(p)),
-      expectedEdit: await edit(p.billId),
-    };
-    const split = await inTx(venue, (tx) =>
-      splitBill(tx, venue.cfg, p.billId, [{ lineNo, quantity: "0.120" }], ask),
-    );
-    const quantities = (billId: string) =>
-      venue.db
-        .select({ quantity: workingOrderLines.quantity })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, billId))
-        .then((rows) => rows.map((row) => row.quantity));
-    expect(await quantities(split.billId)).toEqual([120]);
-    expect(await quantities(p.billId)).toContain(200);
   });
 
   it("A803 A1195: inside its own bill, 0.100 kg of a bound weighed portion still splits off, the binding staying on the source line", async () => {

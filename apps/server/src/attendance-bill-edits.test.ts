@@ -29,9 +29,10 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-const actions = ["split", "merge", "transfer", "move-dishes"] as const;
+const actions = ["merge", "move-dishes", "move-dishes-to-bill"] as const;
 type Action = (typeof actions)[number];
-const opensBill = (action: Action) => action === "split" || action === "move-dishes";
+const opensBill = (action: Action) => action === "move-dishes";
+const answersBill = (action: Action) => action !== "merge";
 function api(attendance?: AttendanceRecorder) {
   const app = new Hono();
   mountTillApi(
@@ -52,29 +53,37 @@ function api(attendance?: AttendanceRecorder) {
 }
 async function prepare(action: Action) {
   const party = await seatedWith(v, "House salad", "Tarta");
+  const [firstLine, secondLine] = suite.db.all<{ id: string }>(
+    sql`select id from working_order_lines where working_order_id = ${party.tabId} order by line_no`,
+  );
   let otherBillId: string | undefined;
   if (!opensBill(action)) {
+    const path = `/api/bills/${party.tabId}/move-dishes`;
     const answer = await send(
       v.app,
       v.cookie,
       "POST",
-      `/api/bills/${party.tabId}/split`,
-      await observedBillActionBody(v.db, `/api/bills/${party.tabId}/split`, {
+      path,
+      await observedBillActionBody(v.db, path, {
         expectedPartyRevision: party.revision,
-        transfers: [{ lineNo: 2 }],
+        lineIds: [secondLine!.id],
+        toBillId: null,
       }),
     );
     expect(answer.status).toBe(200);
     otherBillId = answer.json.billId as string;
   }
   const [stored] = await suite.db.select().from(parties).where(eq(parties.id, party.partyId));
-  const [secondLine] = suite.db.all<{ id: string }>(
-    sql`select id from working_order_lines where working_order_id = ${party.tabId} and line_no = 2`,
-  );
-  return { ...party, otherBillId, revision: stored!.revision, secondLineId: secondLine?.id };
+  return {
+    ...party,
+    otherBillId,
+    revision: stored!.revision,
+    firstLineId: firstLine!.id,
+    secondLineId: secondLine!.id,
+  };
 }
 async function command(app: Hono, action: Action, p: Awaited<ReturnType<typeof prepare>>) {
-  const path = `/api/bills/${p.tabId}/${action}`;
+  const path = `/api/bills/${p.tabId}/${action === "merge" ? "merge" : "move-dishes"}`;
   return send(
     app,
     v.cookie,
@@ -88,10 +97,7 @@ async function command(app: Hono, action: Action, p: Awaited<ReturnType<typeof p
         ? { fromBillId: p.otherBillId }
         : action === "move-dishes"
           ? { lineIds: [p.secondLineId], toBillId: null }
-          : {
-              transfers: [{ lineNo: action === "split" ? 2 : 1 }],
-              ...(action === "transfer" ? { toBillId: p.otherBillId } : {}),
-            }),
+          : { lineIds: [p.firstLineId], toBillId: p.otherBillId }),
     }),
   );
 }
@@ -112,8 +118,9 @@ describe("accepted bill edits as order activity", () => {
         .mockReturnValueOnce(reading)
         .mockReturnValue({ ...reading, instant: new Date("2026-01-05T18:00:00Z") });
       const answer = await command(api(recordAttendanceFact), action, p);
-      expect(answer.status).toBe(opensBill(action) ? 200 : 204);
+      expect(answer.status).toBe(answersBill(action) ? 200 : 204);
       const otherBill = opensBill(action) ? (answer.json.billId as string) : p.otherBillId!;
+      if (action === "move-dishes-to-bill") expect(answer.json.billId).toBe(p.otherBillId);
       const saved = await state();
       expect(saved.facts.map((f) => [f.source, f.personId, f.at, f.outcome])).toEqual([
         ["order", v.operatorId, "2026-01-05T16:40:00.000Z", "qualifying"],
@@ -151,7 +158,7 @@ describe("accepted bill edits as order activity", () => {
     "%s without workforce capture keeps its normal result without attendance writes",
     async (action) => {
       const p = await prepare(action);
-      expect((await command(api(), action, p)).status).toBe(opensBill(action) ? 200 : 204);
+      expect((await command(api(), action, p)).status).toBe(answersBill(action) ? 200 : 204);
       const saved = await state();
       expect(saved.facts).toEqual([]);
       expect(saved.days).toEqual([]);

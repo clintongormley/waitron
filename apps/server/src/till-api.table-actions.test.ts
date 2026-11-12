@@ -65,6 +65,14 @@ function tablesOf(partyId: string): string[] {
     .map((row) => row.table_id);
 }
 
+function lineIdsOf(billId: string): string[] {
+  return venue.db
+    .all<{ id: string }>(
+      sql`select id from working_order_lines where working_order_id = ${billId} order by line_no`,
+    )
+    .map((row) => row.id);
+}
+
 async function freeTable(): Promise<string> {
   const { id } = await withTransaction(venue.db, (tx) =>
     createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
@@ -92,9 +100,10 @@ async function anaAtTwo() {
   });
   expect(joined.status).toBe(200);
   const split = await post(
-    `/api/bills/${ana.tabId}/split`,
-    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
+    `/api/bills/${ana.tabId}/move-dishes`,
+    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/move-dishes`, {
+      lineIds: [lineIdsOf(ana.tabId)[1]],
+      toBillId: null,
       expectedPartyRevision: revisionOf(ana.partyId),
     }),
   );
@@ -1061,22 +1070,15 @@ describe("A803 split: the route", () => {
     });
     expect(joined.status).toBe(200);
     const split = await post(
-      `/api/bills/${ana.tabId}/split`,
-      await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
-        transfers: [{ lineNo: names.length + 1 }],
+      `/api/bills/${ana.tabId}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/move-dishes`, {
+        lineIds: [lineIdsOf(ana.tabId)[names.length]],
+        toBillId: null,
         expectedPartyRevision: revisionOf(ana.partyId),
       }),
     );
     expect(split.status).toBe(200);
     return { ana, second, octopusBill: split.json.billId as string };
-  }
-
-  function lineIdsOf(billId: string): string[] {
-    return venue.db
-      .all<{ id: string }>(
-        sql`select id from working_order_lines where working_order_id = ${billId} order by line_no`,
-      )
-      .map((row) => row.id);
   }
 
   function pay(billId: string, body: Record<string, unknown>) {
@@ -1605,11 +1607,17 @@ describe("A803 split: the panel's read", () => {
   }
 
   async function splitOff(billId: string, partyId: string, lineNo: number): Promise<string> {
-    const path = `/api/bills/${billId}/split`;
+    const path = `/api/bills/${billId}/move-dishes`;
     const split = await post(
       path,
       await observedBillActionBody(venue.db, path, {
-        transfers: [{ lineNo }],
+        lineIds: venue.db
+          .all<{ id: string }>(
+            sql`select id from working_order_lines
+                where working_order_id = ${billId} and line_no = ${lineNo}`,
+          )
+          .map((row) => row.id),
+        toBillId: null,
         expectedPartyRevision: revisionOf(partyId),
       }),
     );

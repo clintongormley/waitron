@@ -56,7 +56,7 @@ import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { markGroupServed, markServed, unmarkServed } from "./working-order.js";
 import "./errors.js";
-import { splitBill } from "./testing/bill-action-fixture.js";
+import { cutParts, splitBill } from "./testing/bill-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -434,10 +434,16 @@ async function croquetas(v: Venue) {
  * after checking Current orders leaves it out. */
 async function abandonedSplitRow(v: Venue, s: Awaited<ReturnType<typeof croquetas>>) {
   const { billId: checkId } = await inTx(async (tx) =>
-    splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
-      expectedPartyRevision: await revisionOf(s.partyId),
-      operatorId: ALEX,
-    }),
+    splitBill(
+      tx,
+      v.cfg,
+      s.tabId,
+      await cutParts(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }]),
+      {
+        expectedPartyRevision: await revisionOf(s.partyId),
+        operatorId: ALEX,
+      },
+    ),
   );
   const row = (await linesOf(s.partyId)).find((r) => r.workingOrderId === checkId)!;
   await suite.db
@@ -520,10 +526,16 @@ describe("served by quantity (§12 item 5)", () => {
     ]);
     const croq = await lineNamed(s.partyId, "croquetas");
     const { billId: checkId } = await inTx(async (tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croq.lineNo, quantity: "1" }], {
-        expectedPartyRevision: await revisionOf(s.partyId),
-        operatorId: MIA,
-      }),
+      splitBill(
+        tx,
+        v.cfg,
+        s.tabId,
+        await cutParts(tx, v.cfg, s.tabId, [{ lineNo: croq.lineNo, quantity: "1" }]),
+        {
+          expectedPartyRevision: await revisionOf(s.partyId),
+          operatorId: MIA,
+        },
+      ),
     );
     await serve(v, s.partyId, [{ lineId: croq.id, quantity: "1" }]);
     const inGroup = (await linesOf(s.partyId)).filter((row) => row.groupId === groupId);
@@ -1174,10 +1186,16 @@ describe("a partly served line split or cut", () => {
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "3" }]);
 
     const { billId: checkId } = await inTx(async (tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "2" }], {
-        expectedPartyRevision: await revisionOf(s.partyId),
-        operatorId: ALEX,
-      }),
+      splitBill(
+        tx,
+        v.cfg,
+        s.tabId,
+        await cutParts(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "2" }]),
+        {
+          expectedPartyRevision: await revisionOf(s.partyId),
+          operatorId: ALEX,
+        },
+      ),
     );
 
     const rows = (await linesOf(s.partyId)).filter((row) => row.name === "croquetas");
@@ -1195,10 +1213,16 @@ describe("a partly served line split or cut", () => {
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
 
     await inTx(async (tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
-        expectedPartyRevision: await revisionOf(s.partyId),
-        operatorId: ALEX,
-      }),
+      splitBill(
+        tx,
+        v.cfg,
+        s.tabId,
+        await cutParts(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }]),
+        {
+          expectedPartyRevision: await revisionOf(s.partyId),
+          operatorId: ALEX,
+        },
+      ),
     );
 
     const rows = (await linesOf(s.partyId)).filter((row) => row.name === "croquetas");
@@ -1215,10 +1239,16 @@ describe("a partly served line split or cut", () => {
     const servedAt = await backdateServed(s.croq.id);
 
     await inTx(async (tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
-        expectedPartyRevision: await revisionOf(s.partyId),
-        operatorId: ALEX,
-      }),
+      splitBill(
+        tx,
+        v.cfg,
+        s.tabId,
+        await cutParts(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }]),
+        {
+          expectedPartyRevision: await revisionOf(s.partyId),
+          operatorId: ALEX,
+        },
+      ),
     );
 
     const rows = (await linesOf(s.partyId)).filter((row) => row.name === "croquetas");

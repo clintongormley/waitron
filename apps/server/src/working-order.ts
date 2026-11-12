@@ -4441,15 +4441,14 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
 }
 
 /**
- * Carry whole lines and partial splits between two orders, keeping each unit's LOCKED prices and
- * CONSERVING quantity. It makes no open-order check and no service-mode check of its own: the
- * CALLER makes the first, and ensures the second by {@link assertServiceModesMatch} or by copying the
- * source's context onto a new order. Every transfer is validated before anything moves. A partial
+ * Carry whole lines between two orders, or cut part of a line off into a new row of its own order,
+ * keeping each unit's LOCKED prices and CONSERVING quantity. It makes no open-order check and no
+ * service-mode check of its own: the CALLER makes the first, and ensures the second by
+ * {@link assertServiceModesMatch} or by copying the source's context onto a new order. Every transfer is validated before anything moves. A partial
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
  * the part split, and refused the same when an extra is not a whole count a dish. Returns each
- * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
- * by the row it came from, a dish before its extras.
+ * row a split made, keyed by the row it came from, a dish before its extras.
  */
 export async function carveOffLines(
   tx: Transaction,
@@ -4458,7 +4457,7 @@ export async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
   opts: { splitExtras?: boolean; actorId?: string },
-): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
+): Promise<{ splitLines: Map<string, SplitRow> }> {
   return carveLines(tx, cfg, fromTabId, toTabId, transfers, opts);
 }
 
@@ -4469,7 +4468,7 @@ async function carveLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
   opts: { splitExtras?: boolean; splitIntoUnits?: boolean; actorId?: string },
-): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
+): Promise<{ splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
@@ -4503,10 +4502,8 @@ async function carveLines(
       creditedTo: workingOrderLines.creditedTo,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       ticketItemId: ticketItems.id,
-      orderNumber: workingOrders.orderNumber,
     })
     .from(workingOrderLines)
-    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
@@ -4604,23 +4601,8 @@ async function carveLines(
       partials.push({ line, quantity: t.quantity, children });
     }
   }
-  // A measured (weighed) portion is one dish and leaves its bill whole (spec §3.1); A1196 keeps
-  // the in-bill splits.
   if (fromTabId !== toTabId && partials.length > 0) {
-    const portionOf = await readGrowingPortions(
-      tx,
-      partials.map(({ line }) => line.id),
-    );
-    const cut = partials
-      .filter(({ line }) => portionOf.get(line.id)?.measured === true)
-      .sort((a, b) => a.line.lineNo - b.line.lineNo)[0];
-    if (cut !== undefined) {
-      throw new AppError("tab.transfer_quantity_invalid", {
-        tabId: fromTabId,
-        lineNo: cut.line.lineNo,
-        quantity: cut.quantity,
-      });
-    }
+    throw new Error("a part of a line is cut only within its order");
   }
   // A split keeps the source row, so its paid quantity may stay there while unpaid units move.
   await refusePaidLines(
@@ -4635,16 +4617,12 @@ async function carveLines(
     })),
   );
 
-  const before =
-    partials.length > 0 && fromTabId !== toTabId ? await totalBeforeEdit(tx, cfg, toTabId) : null;
   const movedLineIds =
     wholeLineNos.length > 0
       ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { actorId: opts.actorId })
       : [];
 
-  const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, SplitRow>();
-  const copiedLineIds: string[] = [];
   const carried: { from: string; to: string }[] = [];
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
@@ -4735,12 +4713,7 @@ async function carveLines(
               splitChildId,
               child.moved,
             );
-            if (splitTicketId !== null) {
-              splitFrom.set(splitTicketId, child.row.ticketItemId);
-              copiedLineIds.push(splitChildId);
-              await copyKitchenJobLines(tx, child.row.id, splitChildId);
-              movedLineIds.push(child.row.id);
-            }
+            if (splitTicketId !== null) await copyKitchenJobLines(tx, child.row.id, splitChildId);
           }
         }
         if (line.ticketItemId !== null) {
@@ -4752,12 +4725,7 @@ async function carveLines(
             splitLineId,
             quantity,
           );
-          if (splitTicketId !== null) {
-            splitFrom.set(splitTicketId, line.ticketItemId);
-            copiedLineIds.push(splitLineId);
-            await copyKitchenJobLines(tx, line.id, splitLineId);
-            movedLineIds.push(line.id);
-          }
+          if (splitTicketId !== null) await copyKitchenJobLines(tx, line.id, splitLineId);
         }
 
         line = {
@@ -4770,15 +4738,8 @@ async function carveLines(
     }
     await carryLineReductions(tx, carried);
   }
-  if (fromTabId !== toTabId) {
-    if (partials.length > 0) {
-      await stampSentOrderNumber(tx, copiedLineIds, partials[0]!.line.orderNumber);
-    }
-    await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
-    // Whole lines were checked as they moved (`moveOrderLines`); the parts split off were not.
-    if (partials.length > 0) await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
-  }
-  return { splitFrom, splitLines };
+  if (fromTabId !== toTabId) await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
+  return { splitLines };
 }
 
 /**

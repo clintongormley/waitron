@@ -935,36 +935,6 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
     ]);
   });
 
-  it("Transfer items prints only the dishes moved, at the part moved (row 16b)", async () => {
-    const v = await setupPartyVenue(db);
-    const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 91"));
-    await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, tabId, [
-        { menuItemId: v.item("Burger"), quantity: "2" },
-        { menuItemId: v.item("Paella"), quantity: "1" },
-      ]),
-    );
-    const second = await split(v, partyId, tabId, [2]);
-    const numbers = await numbersOf([tabId, second]);
-    const before = (await printedBy(grill)).length;
-    const command = await commandFor(v, partyId);
-
-    await inTx(v, (tx) =>
-      transferItems(tx, v.cfg, tabId, second, [{ lineNo: 1, quantity: "1" }], command),
-    );
-
-    expect(await slipsSince(grill, before)).toEqual([
-      movedSlip(
-        "Grill",
-        `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
-        "Mesa 91",
-        "Mesa 91",
-        ["1 x BURG"],
-      ),
-    ]);
-  });
-
   it("Split the bill prints one slip of the dishes split off, at their station, onto the new order (row 16c)", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);

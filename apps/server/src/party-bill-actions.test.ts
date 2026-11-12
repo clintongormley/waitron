@@ -978,7 +978,7 @@ describe("transfer items", () => {
   });
 
   const SIDES = ["from", "to"] as const;
-  const TOUCHES: Touch[] = ["presented", "partly paid", "paid", "refunded in full"];
+  const TOUCHES: Touch[] = ["presented", "paid"];
   const EACH_SIDE = SIDES.flatMap((side) => TOUCHES.map((how) => [side, how] as const));
 
   it.each(EACH_SIDE)(
@@ -1213,16 +1213,14 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     ]);
   });
 
-  it("tells the kitchen of part of a sent line transferred, whose bills share the party's tables, that the part moved is on another order", async () => {
-    const { partyId, main, second, printerId } = await atTwoTables("Table 51", "2", "main");
+  it("tells the kitchen of a sent dish transferred, whose bills share the party's tables, that the dish moved is on another order", async () => {
+    const { partyId, main, second, printerId } = await atTwoTables("Table 51", "1", "main");
     const printed = await printedBy(printerId);
     const notices = noticesOn([main, second]);
     const [mainNumber, secondNumber] = [await numberOf(main), await numberOf(second)];
     const command = await commandFor(v, partyId);
 
-    await inTx(v, (tx) =>
-      transferItems(tx, v.cfg, main, second, [{ lineNo: 1, quantity: "1" }], command),
-    );
+    await inTx(v, (tx) => transferItems(tx, v.cfg, main, second, [{ lineNo: 1 }], command));
 
     expect((await lineRows(second)).map((l) => [l.name, l.quantity])).toEqual([
       ["Red wine bottle", 1000],

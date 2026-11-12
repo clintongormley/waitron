@@ -742,7 +742,7 @@ before resolving the request or changing its bill (`acceptDepartmentTransfer` in
 `packages/venue-service/src/department-transfers.test.ts`). Notes, decreases, payment and splitting
 existing bills (moving dishes to a new bill included) or joined tables remain possible. Bills and
 guests can move within the closed zone or out to an open zone (`moveGuests` in `table-actions.ts`,
-`adoptZone` in `move-bill.ts`, and the split, move-dishes-to-a-new-bill and same-zone/outbound
+`adoptZone` in `move-bill.ts`, and the move-dishes-to-a-new-bill and same-zone/outbound
 cases in `till-api.zone-closed.test.ts`). A presented bill moved on its own into another party or
 to a free table in the closed zone takes its service context, because `adoptZone` refuses a closed
 zone only for an open bill. Printing existing orders remains
@@ -1057,7 +1057,7 @@ all. Measured 2026-09-22 on Node v26.7.0, `select count(*)::int` is
 **A test asserting the stored COUNT is not reading an amount, and several cast to int.** The shape is
 `select cast(unit_price_gross as int) as unit_price_gross` followed by
 `expect(...).toEqual([{ unit_price_gross: 325 }])` (`apps/server/src/working-order.test.ts`);
-`till-api.test.ts` and `till-api.transfer.test.ts` carry the same shape. Nothing converts, so there
+`till-api.test.ts` carries the same shape. Nothing converts, so there
 is no amount to get wrong, and the cast is there only to give the assertion a number.
 
 **That cast refuses nothing.** `cast(x as int)` on SQLite raises nothing at all: the declared type

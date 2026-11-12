@@ -1,17 +1,19 @@
+import { randomUUID } from "node:crypto";
+import { and, eq, inArray } from "drizzle-orm";
 import { testTradingAdmission } from "./trading-admission.js";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, workingOrderLines, type Database, type Transaction } from "@waitron/db";
+import { decimal, decimalToThousandths } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import {
   mergeBills as merge,
   mergeCheckedBills as checked,
   moveDishes as moveLines,
-  splitBill as split,
-  transferItems as transfer,
   type BillCommand,
 } from "../bill-actions.js";
 import type { BillEditExpected } from "../order-drafts.js";
+import type { TradingAdmission } from "../trading-admission.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
-import type { OrderAttendance } from "../working-order.js";
+import { splitLinesWithinOrder, type OrderAttendance } from "../working-order.js";
 export * from "../bill-actions.js";
 
 export async function observedBillActionBody(
@@ -28,12 +30,11 @@ export async function billActionBody(
   path: string,
   body: unknown,
 ): Promise<unknown> {
-  const route = /^\/api\/bills\/([^/]+)\/(split|merge|transfer|move-dishes)$/.exec(path);
+  const route = /^\/api\/bills\/([^/]+)\/(merge|move-dishes)$/.exec(path);
   if (route === null || body === null || typeof body !== "object" || Array.isArray(body))
     return body;
   const ask = body as Record<string, unknown>;
   const billId = route[1]!;
-  if (route[2] === "split") return { expectedEdit: await readBillEditState(tx, billId), ...ask };
   const other = route[2] === "merge" ? ask.fromBillId : ask.toBillId;
   return {
     expectedEdits: await editsFor(tx, [billId, ...(typeof other === "string" ? [other] : [])]),
@@ -47,29 +48,105 @@ async function editsFor(tx: Transaction, billIds: string[]): Promise<BillEditExp
   return edits;
 }
 
+type Transfers = { lineNo: number; quantity?: string }[];
+
+// A line number naming no line resolves to a fresh id, so Move dishes refuses `tab.line_not_found`.
+async function wholeDishIds(
+  tx: Transaction,
+  billId: string,
+  transfers: Transfers,
+): Promise<string[]> {
+  const rows =
+    transfers.length === 0
+      ? []
+      : await tx
+          .select({
+            id: workingOrderLines.id,
+            lineNo: workingOrderLines.lineNo,
+            quantity: workingOrderLines.quantity,
+          })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, billId),
+              inArray(
+                workingOrderLines.lineNo,
+                transfers.map((entry) => entry.lineNo),
+              ),
+            ),
+          );
+  const byLineNo = new Map(rows.map((row) => [row.lineNo, row]));
+  return transfers.map((entry) => {
+    const row = byLineNo.get(entry.lineNo);
+    if (row === undefined) return randomUUID();
+    if (
+      entry.quantity !== undefined &&
+      decimalToThousandths(decimal(entry.quantity)) !== row.quantity
+    ) {
+      throw new Error("A1196: part-of-a-line moves were retired; move whole dishes");
+    }
+    return row.id;
+  });
+}
+
+/**
+ * Cuts each entry's part off its line inside the bill and names the row each part now is, so the
+ * parts can move as whole dishes.
+ */
+export async function cutParts(
+  tx: Transaction,
+  cfg: TradingContext,
+  billId: string,
+  transfers: Transfers,
+): Promise<{ lineNo: number }[]> {
+  const lines = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, billId));
+  const byLineNo = new Map(lines.map((row) => [row.lineNo, row]));
+  const isPart = (entry: Transfers[number]): entry is { lineNo: number; quantity: string } =>
+    entry.quantity !== undefined &&
+    decimalToThousandths(decimal(entry.quantity)) !== byLineNo.get(entry.lineNo)?.quantity;
+  const parts = transfers.filter(isPart);
+  const cut = parts.length ? await splitLinesWithinOrder(tx, cfg, billId, parts) : new Map();
+  return transfers.map((entry) =>
+    isPart(entry)
+      ? { lineNo: cut.get(byLineNo.get(entry.lineNo)!.id)!.lineNo }
+      : { lineNo: entry.lineNo },
+  );
+}
+
+/** Moves whole dishes to a new bill, through Move dishes. */
 export async function splitBill(
   tx: Transaction,
   cfg: OriginConfig,
   billId: string,
-  transfers: Parameters<typeof split>[3],
-  command: BillCommand & { expectedEdit?: BillEditExpected },
-) {
-  return split(tx, cfg, billId, transfers, {
+  transfers: Transfers,
+  command: BillCommand & { expectedEdit?: BillEditExpected; admission?: TradingAdmission },
+): Promise<{ billId: string }> {
+  const { expectedEdit, ...rest } = command;
+  return moveLines(tx, cfg, billId, null, await wholeDishIds(tx, billId, transfers), {
     admission: testTradingAdmission(),
-    ...command,
-    expectedEdit: command.expectedEdit ?? (await readBillEditState(tx, billId)),
+    ...rest,
+    expectedEdits: [expectedEdit ?? (await readBillEditState(tx, billId))],
   });
 }
 
+/** Moves whole dishes to another bill, through Move dishes. */
 export async function transferItems(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: OriginConfig,
   from: string,
   into: string,
-  transfers: Parameters<typeof transfer>[4],
-  command: BillCommand & { expectedEdits?: BillEditExpected[] },
-) {
-  return transfer(tx, cfg, from, into, transfers, {
+  transfers: Transfers,
+  command: BillCommand & { expectedEdits?: BillEditExpected[]; admission?: TradingAdmission },
+): Promise<void> {
+  await moveLines(tx, cfg, from, into, await wholeDishIds(tx, from, transfers), {
+    admission: testTradingAdmission(),
     ...command,
     expectedEdits: command.expectedEdits ?? (await editsFor(tx, [from, into])),
   });
@@ -81,9 +158,10 @@ export async function moveDishes(
   from: string,
   to: string | null,
   lineIds: readonly string[],
-  command: BillCommand & { expectedEdits?: BillEditExpected[] },
+  command: BillCommand & { expectedEdits?: BillEditExpected[]; admission?: TradingAdmission },
 ) {
   return moveLines(tx, cfg, from, to, lineIds, {
+    admission: testTradingAdmission(),
     ...command,
     expectedEdits: command.expectedEdits ?? (await editsFor(tx, to === null ? [from] : [from, to])),
   });

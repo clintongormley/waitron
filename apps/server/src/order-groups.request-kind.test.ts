@@ -339,6 +339,7 @@ describe("A773 request kind", () => {
     await inTx(async (tx) =>
       moveDishes(tx, split.cfg, split.party.tabId, null, [submitted.groups[0]!.lineIds[0]!], {
         ...moveArgs,
+        admission: testTradingAdmission(),
         partyId,
         expectedEdits: [await readBillEditState(tx, split.party.tabId)],
       }),
@@ -398,14 +399,21 @@ describe("A773 request kind of arriving dishes", () => {
 
   async function splitOff() {
     const source = await seatedWith(v, "House salad", "Tarta");
-    const path = `/api/bills/${source.tabId}/split`;
+    const [secondDish] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(eq(workingOrderLines.workingOrderId, source.tabId), eq(workingOrderLines.lineNo, 2)),
+      );
+    const path = `/api/bills/${source.tabId}/move-dishes`;
     const splitBill = await send(
       v.app,
       v.cookie,
       "POST",
       path,
       await observedBillActionBody(v.db, path, {
-        transfers: [{ lineNo: 2 }],
+        lineIds: [secondDish!.id],
+        toBillId: null,
         expectedPartyRevision: await revisionOf(source.partyId),
       }),
     );

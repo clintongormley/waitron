@@ -329,6 +329,37 @@ describe("A803 move dishes route:", () => {
     expect(lineIdsOf(tabId)).toHaveLength(2);
   });
 
+  it("the bill as its own destination is 400 tab.transfer_self", async () => {
+    const { partyId, first } = await twoBills();
+    const [riceLine] = lineIdsOf(first);
+
+    const body = await wellFormed(partyId, first, [riceLine!], null);
+
+    const answer = await post(first, { ...body, toBillId: first });
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({ code: "tab.transfer_self", params: { tabId: first } });
+    expect(lineIdsOf(first)).toEqual([riceLine]);
+  });
+
+  it("the same dish named twice is 400 tab.transfer_duplicate_line", async () => {
+    const { partyId, first, second } = await twoBills();
+    const [riceLine] = lineIdsOf(first);
+
+    const answer = await post(
+      first,
+      await wellFormed(partyId, first, [riceLine!, riceLine!], second),
+    );
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "tab.transfer_duplicate_line",
+      params: { tabId: first, lineNo: 1 },
+    });
+    expect(lineIdsOf(first)).toEqual([riceLine]);
+    expect(lineIdsOf(second)).toHaveLength(1);
+  });
+
   it("a dish the bill does not hold is 404 tab.line_not_found", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     const missing = randomUUID();

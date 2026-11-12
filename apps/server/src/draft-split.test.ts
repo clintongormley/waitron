@@ -1,5 +1,4 @@
 import { cancelItemHttp } from "./testing/cancel-line.js";
-import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -358,17 +357,17 @@ describe("splitting a saved outbox to a new bill", () => {
           });
       });
       const before = await frozen();
-      const path = `/api/bills/${p.billId}/split`;
       const result = await send(
         venue.app,
         venue.cookie,
         "POST",
-        path,
-        await observedBillActionBody(venue.db, path, {
-          expectedEdit: snapshot.edit,
+        `/api/bills/${p.billId}/move-dishes`,
+        {
+          expectedEdits: [snapshot.edit],
           expectedPartyRevision: snapshot.revision,
-          transfers: [{ lineNo: source.lineNo }],
-        }),
+          lineIds: [source.id],
+          toBillId: null,
+        },
       );
       expect(result.status).toBe(409);
       expect(result.json).toMatchObject({

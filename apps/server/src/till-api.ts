@@ -150,7 +150,7 @@ import {
 } from "./parties.js";
 import { finishPartyService } from "./finish-party-service.js";
 import { parseFinishCancellations } from "./finish-party-input.js";
-import { mergeBills, moveDishes, splitBill, transferItems } from "./bill-actions.js";
+import { mergeBills, moveDishes } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
@@ -1022,25 +1022,6 @@ function selectionId(value: unknown): string {
 function requireLineIds(value: unknown): string[] {
   if (!Array.isArray(value)) throw invalid("lineIds");
   return value.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
-}
-
-/**
- * A list of objects, each with a numeric `lineNo`. A line number naming no line, and a bad quantity,
- * are left to the verb's domain codes.
- */
-function requireTransfers(value: unknown): { lineNo: number; quantity?: string }[] {
-  if (!Array.isArray(value)) throw invalid("transfers");
-  for (const entry of value) {
-    if (
-      typeof entry !== "object" ||
-      entry === null ||
-      Array.isArray(entry) ||
-      typeof (entry as { lineNo?: unknown }).lineNo !== "number"
-    ) {
-      throw invalid("transfers");
-    }
-  }
-  return value as { lineNo: number; quantity?: string }[];
 }
 
 /** What every group command carries: its submission id, the party revision read, and who acts —
@@ -4182,43 +4163,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/bills/:id/split", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
-      const billId = requireTabParam(c.req.param("id"));
-      const body = asObject(await readRawJsonBody<unknown>(c));
-      const transfers = requireTransfers(body.transfers);
-      const command = billCommand(personId, body);
-      const saleCfg = sendingCfg(cfg, c, session.device);
-      const result = await withIssuanceTransaction(
-        deps.db,
-        async (tx) => {
-          await requireEconomicWrite(tx, deps.cfg, deps.admission);
-          await checkZones(tx, session, [{ orderId: billId }]);
-          const split = await splitBill(tx, cfg, billId, transfers, {
-            admission: deps.admission,
-            ...command,
-            expectedEdit: parseBillEditExpected(body.expectedEdit),
-          });
-          await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
-          await captureKitchenActivity(
-            tx,
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-            personId,
-            [billId, split.billId],
-          );
-          return split;
-        },
-        log,
-      );
-      return c.json(result);
-    }),
-  );
-
   // The path is the bill the dishes leave.
   app.post("/api/bills/:id/move-dishes", (c) =>
     run(c, log, async () => {
@@ -4234,11 +4178,13 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
           await checkZones(tx, session, [
             { orderId: fromBillId },
             ...(toBillId === null ? [] : [{ orderId: toBillId }]),
           ]);
           const moved = await moveDishes(tx, cfg, fromBillId, toBillId, lineIds, {
+            admission: deps.admission,
             ...command,
             expectedEdits: parseBillEditExpecteds(body.expectedEdits),
           });
@@ -4311,36 +4257,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           attendance,
         );
         await captureKitchenActivity(tx, attendance, personId, [intoBillId, fromBillId]);
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  // The path is the bill the items leave.
-  app.post("/api/bills/:id/transfer", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
-      const fromBillId = requireTabParam(c.req.param("id"));
-      const body = asObject(await readRawJsonBody<unknown>(c));
-      const toBillId = requireOtherBill(body.toBillId, "toBillId");
-      const transfers = requireTransfers(body.transfers);
-      const command = billCommand(personId, body);
-      await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, session, [{ orderId: fromBillId }, { orderId: toBillId }]);
-        await transferItems(tx, cfg, fromBillId, toBillId, transfers, {
-          ...command,
-          expectedEdits: parseBillEditExpecteds(body.expectedEdits),
-        });
-        await captureKitchenActivity(
-          tx,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-          personId,
-          [fromBillId, toBillId],
-        );
       });
       return c.body(null, 204);
     }),

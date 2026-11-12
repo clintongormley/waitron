@@ -188,22 +188,46 @@ function partyRevision(partyId: string): number {
   )[0]!.revision;
 }
 
+/** The ids of the order's stored lines, in line order. */
+function lineIdsOf(id: string): string[] {
+  return venue.db
+    .all<{ id: string }>(
+      sql`select id from working_order_lines where working_order_id = ${id} order by line_no`,
+    )
+    .map((row) => row.id);
+}
+
+/** Moves `lineIds`, whole, from `fromBill` to `toBill` (null: a new bill) through `app`. */
+async function moved(
+  app: Hono,
+  partyId: string,
+  fromBill: string,
+  toBill: string | null,
+  lineIds: string[],
+) {
+  return send(
+    app,
+    venue.cookie,
+    "POST",
+    `/api/bills/${fromBill}/move-dishes`,
+    await observedBillActionBody(venue.db, `/api/bills/${fromBill}/move-dishes`, {
+      lineIds,
+      toBillId: toBill,
+      expectedPartyRevision: partyRevision(partyId),
+    }),
+  );
+}
+
 /** A party whose main bill holds `main` and whose second bill holds `second`, made through the
  * unlimited routes, since either or both may be over the limit. */
 async function twoBills(main: Basket, second: Basket) {
   const { partyId, tabId } = await seated(venue.app, { ...main, ...second });
-  const secondLines = storedLines(tabId)
-    .slice(Object.keys(main).length)
-    .map((entry) => ({ lineNo: Number(entry.split(":")[0]) }));
-  const split = await send(
+  const split = await moved(
     venue.app,
-    venue.cookie,
-    "POST",
-    `/api/bills/${tabId}/split`,
-    await observedBillActionBody(venue.db, `/api/bills/${tabId}/split`, {
-      transfers: secondLines,
-      expectedPartyRevision: partyRevision(partyId),
-    }),
+    partyId,
+    tabId,
+    null,
+    lineIdsOf(tabId).slice(Object.keys(main).length),
   );
   expect(split.status).toBe(200);
   return { partyId, mainBill: tabId, secondBill: split.json.billId as string };
@@ -732,49 +756,6 @@ describe("an edit that grows an order", () => {
     expect(storedLines(secondBill)).toHaveLength(1);
   });
 
-  it("moving a whole line onto a bill that would go over the limit is refused", async () => {
-    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
-    const answer = await send(
-      limited,
-      venue.cookie,
-      "POST",
-      `/api/bills/${secondBill}/transfer`,
-      await observedBillActionBody(venue.db, `/api/bills/${secondBill}/transfer`, {
-        toBillId: mainBill,
-        transfers: [{ lineNo: 1 }],
-        expectedPartyRevision: partyRevision(partyId),
-      }),
-    );
-    expect(answer.status).toBe(409);
-    expect(answer.json.code).toBe(REFUSED.code);
-    expect(storedLines(mainBill)).toHaveLength(1);
-    expect(storedLines(secondBill)).toHaveLength(1);
-  });
-
-  it("moving part of a line onto a bill that would go over the limit is refused", async () => {
-    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
-    // The second bill's one line grows to two, as an order that grew before the limit existed,
-    // so a part of it can move.
-    venue.db.run(
-      sql`update working_order_lines set quantity = 2000, line_total = 600000 where working_order_id = ${secondBill}`,
-    );
-    const answer = await send(
-      limited,
-      venue.cookie,
-      "POST",
-      `/api/bills/${secondBill}/transfer`,
-      await observedBillActionBody(venue.db, `/api/bills/${secondBill}/transfer`, {
-        toBillId: mainBill,
-        transfers: [{ lineNo: 1, quantity: "1" }],
-        expectedPartyRevision: partyRevision(partyId),
-      }),
-    );
-    expect(answer.status).toBe(409);
-    expect(answer.json.code).toBe(REFUSED.code);
-    expect(storedLines(mainBill)).toEqual(["1:1000"]);
-    expect(storedLines(secondBill)).toEqual(["1:2000"]);
-  });
-
   it("moving dishes onto a bill that would go over the limit is refused, and both keep their lines", async () => {
     const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
     const lineIds = venue.db
@@ -957,56 +938,31 @@ describe("growing a bill with a saved full-invoice choice", () => {
     expect(written()).toEqual(before);
   });
 
-  it.each([undefined, "1"])(
-    "transfers a line quantity %s into a saved F1 destination above the ceiling",
-    async (quantity) => {
-      const { partyId, mainBill, secondBill } = await twoBills(
-        { Céntimo: 1 },
-        { Lote: quantity === undefined ? 1 : 2 },
-      );
-      await chooseFull(mainBill);
-      const before = written();
-      const choice = savedChoice(mainBill);
+  it("moves a whole dish into a saved F1 destination above the ceiling", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
+    await chooseFull(mainBill);
+    const before = written();
+    const choice = savedChoice(mainBill);
 
-      const transferred = await send(
-        limited,
-        venue.cookie,
-        "POST",
-        `/api/bills/${secondBill}/transfer`,
-        await observedBillActionBody(venue.db, `/api/bills/${secondBill}/transfer`, {
-          toBillId: mainBill,
-          transfers: [{ lineNo: 1, ...(quantity === undefined ? {} : { quantity }) }],
-          expectedPartyRevision: partyRevision(partyId),
-        }),
-      );
+    const answer = await moved(limited, partyId, secondBill, mainBill, lineIdsOf(secondBill));
 
-      expect(transferred.json.code).toBeUndefined();
-      expect(transferred.status).toBe(204);
-      expect(storedLines(mainBill)).toEqual(["1:1000", "2:1000"]);
-      expect(storedLines(secondBill)).toEqual(quantity === undefined ? [] : ["1:1000"]);
-      expect(savedChoice(mainBill)).toEqual(choice);
-      expect(written()).toEqual(before);
-    },
-  );
+    expect(answer.json.code).toBeUndefined();
+    expect(answer.status).toBe(200);
+    expect(storedLines(mainBill)).toEqual(["1:1000", "2:1000"]);
+    expect(storedLines(secondBill)).toEqual([]);
+    expect(savedChoice(mainBill)).toEqual(choice);
+    expect(written()).toEqual(before);
+  });
+
   it("keeps the F2 destination ceiling when the source selected F1", async () => {
     const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
     await chooseFull(secondBill);
     const before = written();
     const choice = savedChoice(secondBill);
-    const transferred = await send(
-      limited,
-      venue.cookie,
-      "POST",
-      `/api/bills/${secondBill}/transfer`,
-      await observedBillActionBody(venue.db, `/api/bills/${secondBill}/transfer`, {
-        toBillId: mainBill,
-        transfers: [{ lineNo: 1 }],
-        expectedPartyRevision: partyRevision(partyId),
-      }),
-    );
+    const answer = await moved(limited, partyId, secondBill, mainBill, lineIdsOf(secondBill));
 
-    expect(transferred.status).toBe(409);
-    expect(transferred.json.code).toBe(REFUSED.code);
+    expect(answer.status).toBe(409);
+    expect(answer.json.code).toBe(REFUSED.code);
     expect(storedLines(mainBill)).toEqual(["1:1000"]);
     expect(storedLines(secondBill)).toEqual(["1:1000"]);
     expect(savedChoice(secondBill)).toEqual(choice);
@@ -1080,56 +1036,19 @@ describe("an edit that does not raise an order already over the limit", () => {
 
   it("moving a free whole line onto a bill already over is done", async () => {
     const { partyId, mainBill, secondBill } = await twoBills({ Mitad: 2 }, { Gratis: 1 });
-    const answer = await send(
-      limited,
-      venue.cookie,
-      "POST",
-      `/api/bills/${secondBill}/transfer`,
-      await observedBillActionBody(venue.db, `/api/bills/${secondBill}/transfer`, {
-        toBillId: mainBill,
-        transfers: [{ lineNo: 1 }],
-        expectedPartyRevision: partyRevision(partyId),
-      }),
-    );
-    expect(answer.status).toBe(204);
+    const answer = await moved(limited, partyId, secondBill, mainBill, lineIdsOf(secondBill));
+    expect(answer.status).toBe(200);
     expect(storedLines(mainBill)).toEqual(["1:2000", "2:1000"]);
     expect(storedLines(secondBill)).toEqual([]);
   });
 
-  it("moving part of a free line onto a bill already over is done", async () => {
-    const { partyId, mainBill, secondBill } = await twoBills({ Mitad: 2 }, { Gratis: 2 });
-    const answer = await send(
-      limited,
-      venue.cookie,
-      "POST",
-      `/api/bills/${secondBill}/transfer`,
-      await observedBillActionBody(venue.db, `/api/bills/${secondBill}/transfer`, {
-        toBillId: mainBill,
-        transfers: [{ lineNo: 1, quantity: "1" }],
-        expectedPartyRevision: partyRevision(partyId),
-      }),
-    );
-    expect(answer.status).toBe(204);
-    expect(storedLines(mainBill)).toEqual(["1:2000", "2:1000"]);
-    expect(storedLines(secondBill)).toEqual(["1:1000"]);
-  });
-
-  it("moving part of a line off a bill over the limit is done, the bill it leaves staying over", async () => {
-    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Mitad: 3 });
-    const answer = await send(
-      limited,
-      venue.cookie,
-      "POST",
-      `/api/bills/${secondBill}/transfer`,
-      await observedBillActionBody(venue.db, `/api/bills/${secondBill}/transfer`, {
-        toBillId: mainBill,
-        transfers: [{ lineNo: 1, quantity: "1" }],
-        expectedPartyRevision: partyRevision(partyId),
-      }),
-    );
-    expect(answer.status).toBe(204);
+  it("moving a dish off a bill over the limit is done, the bill it leaves staying over", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Mitad: 1, Lote: 2 });
+    const [mitad] = lineIdsOf(secondBill);
+    const answer = await moved(limited, partyId, secondBill, mainBill, [mitad!]);
+    expect(answer.status).toBe(200);
     expect(storedLines(mainBill)).toEqual(["1:1000", "2:1000"]);
-    expect(storedLines(secondBill)).toEqual(["1:2000"]);
+    expect(storedLines(secondBill)).toEqual(["2:2000"]);
   });
 });
 

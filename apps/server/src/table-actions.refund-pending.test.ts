@@ -61,6 +61,14 @@ function partyOfBill(billId: string): string {
   return row!.party_id;
 }
 
+function lineIdsOf(billId: string): string[] {
+  return venue.db
+    .all<{ id: string }>(
+      sql`select id from working_order_lines where working_order_id = ${billId} order by line_no`,
+    )
+    .map((row) => row.id);
+}
+
 async function freeTable(): Promise<string> {
   const { id } = await withTransaction(venue.db, (tx) =>
     createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
@@ -247,8 +255,9 @@ describe("a pending card refund and the table actions", () => {
 
   it("has its table joined while another bill holds the refund: every bill stays its own, the refund's bill does not change", async () => {
     const ana = await seatedWith(venue, "Caña", "Octopus", "Croquettes", "Croquettes");
-    const splitBill = await post(`/api/bills/${ana.tabId}/split`, {
-      transfers: [{ lineNo: 2 }, { lineNo: 3 }, { lineNo: 4 }],
+    const splitBill = await post(`/api/bills/${ana.tabId}/move-dishes`, {
+      lineIds: lineIdsOf(ana.tabId).slice(1),
+      toBillId: null,
       expectedPartyRevision: revisionOf(ana.partyId),
     });
     expect(splitBill.status).toBe(200);
@@ -316,8 +325,9 @@ describe("a pending card refund and the table actions", () => {
       expectedPartyRevision: revisionOf(ana.partyId),
     });
     expect(joined.status).toBe(200);
-    const splitBill = await post(`/api/bills/${ana.tabId}/split`, {
-      transfers: [{ lineNo: 2 }, { lineNo: 3 }, { lineNo: 4 }],
+    const splitBill = await post(`/api/bills/${ana.tabId}/move-dishes`, {
+      lineIds: lineIdsOf(ana.tabId).slice(1),
+      toBillId: null,
       expectedPartyRevision: revisionOf(ana.partyId),
     });
     expect(splitBill.status).toBe(200);

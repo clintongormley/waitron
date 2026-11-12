@@ -13,7 +13,7 @@ import {
 } from "./kitchen-print.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { requireBillEditor, requireBillEditors } from "./bill-editing.js";
+import { requireBillEditors } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
@@ -31,10 +31,10 @@ import {
 import "./errors.js";
 
 /**
- * Split, merge and transfer between the bills of one party. When the path bill belongs to a party,
- * each checks that party's revision before either bill's own state, so of two tills acting from one
- * read the second is refused `party.out_of_date` whichever ran first, never a code describing what
- * the first did.
+ * Merge bills and move dishes between the bills of one party. When the path bill belongs to a
+ * party, each checks that party's revision before either bill's own state, so of two tills acting
+ * from one read the second is refused `party.out_of_date` whichever ran first, never a code
+ * describing what the first did.
  */
 
 export interface BillCommand {
@@ -44,7 +44,7 @@ export interface BillCommand {
   operatorId: string;
 }
 
-type Transfers = { lineNo: number; quantity?: string }[];
+type Transfers = { lineNo: number }[];
 
 type BillStatus = (typeof workingOrders.$inferSelect)["status"];
 
@@ -101,68 +101,6 @@ export async function guardPathParty(
   }
   if (bill.partyId !== null) await guardParty(tx, bill.partyId, command);
   return bill;
-}
-
-/**
- * Refuse unless the other bill and the path bill, in that order, are untouched bills of the path
- * bill's party: not paid, abandoned or presented, and holding no payment, one given back in full
- * included. A counter order belongs to no party. Returns the party.
- */
-async function requireUntouchedPair(
-  tx: Transaction,
-  pathBillId: string,
-  path: PathBill,
-  otherBillId: string,
-): Promise<string> {
-  if (path.partyId === null) {
-    throw new AppError("bill.other_party", { workingOrderId: otherBillId });
-  }
-  await requireBillOfParty(tx, path.partyId, otherBillId);
-  await refuseBillWithPayments(tx, otherBillId);
-  await refuseTouched(tx, pathBillId, path.status);
-  return path.partyId;
-}
-
-/**
- * Put the chosen items of an open bill on a new bill of the same party, or a new counter order when
- * the bill has none. A partly paid bill may be split; the items paid for stay (`bill.line_paid`).
- */
-export async function splitBill(
-  tx: Transaction,
-  cfg: OriginConfig,
-  billId: string,
-  transfers: Transfers,
-  command: BillCommand & { expectedEdit: BillEditExpected; admission: TradingAdmission },
-): Promise<{ billId: string }> {
-  await requireEconomicWrite(tx, cfg, command.admission);
-  if (transfers.length === 0) throw new AppError("sale.empty_basket", {});
-  assertDistinctTransferLines(billId, transfers);
-  const path = await guardPathParty(tx, billId, command);
-  refuseClosedBill(billId, path.status);
-  await requireBillEditor(tx, billId, command.operatorId, command.expectedEdit);
-
-  const newBillId = randomUUID();
-  await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, billId), {
-    partyId: path.partyId,
-    existingService: true,
-    copyServiceContextFrom: billId,
-  });
-  if (path.partyId === null)
-    await inheritKitchenNote(
-      tx,
-      cfg,
-      { workingOrderId: billId },
-      { workingOrderId: newBillId },
-      "copy",
-    );
-  const before = await readSentWork(tx, billId);
-  const { splitFrom } = await carveOffLines(tx, cfg, billId, newBillId, transfers, {
-    actorId: command.operatorId,
-  });
-  await bumpRevision(tx, [billId, newBillId]);
-  await assertBillInvariant(tx, [billId]);
-  await enqueueMovedSlips(tx, cfg, before, newBillId, splitFrom);
-  return { billId: newBillId };
 }
 
 /**
@@ -241,35 +179,6 @@ export async function mergeCheckedBills(
 }
 
 /**
- * Move the chosen items from one untouched bill of a party to another. Whole lines move; a part of
- * a line splits it, keeping its unit prices.
- */
-export async function transferItems(
-  tx: Transaction,
-  cfg: TradingContext,
-  fromBillId: string,
-  toBillId: string,
-  transfers: Transfers,
-  command: BillCommand & { expectedEdits: BillEditExpected[] },
-): Promise<void> {
-  if (fromBillId === toBillId) throw new AppError("tab.transfer_self", { tabId: fromBillId });
-  if (transfers.length === 0) throw new AppError("sale.empty_basket", {});
-  const path = await guardPathParty(tx, fromBillId, command);
-  await requireUntouchedPair(tx, fromBillId, path, toBillId);
-  assertDistinctTransferLines(fromBillId, transfers);
-  await assertServiceModesMatch(tx, fromBillId, toBillId);
-  await requireBillEditors(tx, [fromBillId, toBillId], command.operatorId, command.expectedEdits);
-
-  const before = await readSentWork(tx, fromBillId);
-  const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {
-    actorId: command.operatorId,
-  });
-  await bumpRevision(tx, [fromBillId, toBillId]);
-  await assertBillInvariant(tx, [fromBillId]);
-  await enqueueMovedSlips(tx, cfg, before, toBillId, splitFrom);
-}
-
-/**
  * The ids travel as one JSON value, so they take one bound value however many are named.
  */
 export async function resolveMoveLines(
@@ -318,8 +227,9 @@ export async function moveDishes(
   fromBillId: string,
   toBillId: string | null,
   lineIds: readonly string[],
-  command: BillCommand & { expectedEdits: BillEditExpected[] },
+  command: BillCommand & { expectedEdits: BillEditExpected[]; admission: TradingAdmission },
 ): Promise<{ billId: string }> {
+  await requireEconomicWrite(tx, cfg, command.admission);
   if (lineIds.length === 0) throw new AppError("sale.empty_basket", {});
   if (toBillId === fromBillId) throw new AppError("tab.transfer_self", { tabId: fromBillId });
   const path = await guardPathParty(tx, fromBillId, command);
@@ -357,11 +267,11 @@ export async function moveDishes(
       );
   }
   const before = await readSentWork(tx, fromBillId);
-  const splitFrom = await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
+  await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     actorId: command.operatorId,
   });
   await assertBillInvariant(tx, [fromBillId]);
-  await enqueueMovedSlips(tx, cfg, before, destinationId, splitFrom);
+  await enqueueMovedSlips(tx, cfg, before, destinationId);
   return { billId: destinationId };
 }
 
@@ -377,8 +287,7 @@ export async function moveCheckedDishes(
   toBillId: string,
   transfers: Transfers,
   options: { actorId: string },
-): Promise<Map<string, string>> {
-  const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
+): Promise<void> {
+  await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
   await bumpRevision(tx, [fromBillId, toBillId]);
-  return splitFrom;
 }

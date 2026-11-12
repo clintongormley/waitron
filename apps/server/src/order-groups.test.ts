@@ -98,7 +98,7 @@ import {
 } from "./testing/group-composition-fixture.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { splitBill, mergeBills, transferItems } from "./testing/bill-action-fixture.js";
+import { cutParts, splitBill, mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
@@ -2391,7 +2391,7 @@ async function onSecondBill(
       existingService: true,
       copyServiceContextFrom: s.tabId,
     });
-    await transferItems(tx, v.cfg, s.tabId, billId, transfers, {
+    await transferItems(tx, v.cfg, s.tabId, billId, await cutParts(tx, v.cfg, s.tabId, transfers), {
       expectedPartyRevision: revision,
       operatorId,
     });
@@ -2452,40 +2452,34 @@ describe("a line leaving its party", () => {
     expect(landed.map((row) => row.groupId)).toEqual([null, null]);
   });
 
-  it.each([
-    ["whole", undefined],
-    ["part", "1"],
-  ] as const)(
-    "keeps the group of a held line (%s) transferred to another bill of the same party",
-    async (_, quantity) => {
-      const v = await setupVenue();
-      const s = await specExample(v, quantity === undefined ? undefined : "grouped");
-      const secondTab = randomUUID();
-      await inTx(async (tx) => {
-        await createOpenOrder(tx, v.cfg, secondTab, [], null, {
-          partyId: s.partyId,
-          existingService: true,
-          copyServiceContextFrom: s.tabId,
-        });
+  it("keeps the group of a held line transferred to another bill of the same party", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const secondTab = randomUUID();
+    await inTx(async (tx) => {
+      await createOpenOrder(tx, v.cfg, secondTab, [], null, {
+        partyId: s.partyId,
+        existingService: true,
+        copyServiceContextFrom: s.tabId,
       });
-      const [steak] = await linesIn(s.partyId, s.mains);
-      const revision = await revisionOf(s.partyId);
+    });
+    const [steak] = await linesIn(s.partyId, s.mains);
+    const revision = await revisionOf(s.partyId);
 
-      await inTx(async (tx) =>
-        transferItems(
-          tx,
-          v.cfg,
-          s.tabId,
-          secondTab,
-          [{ lineNo: steak!.lineNo, quantity }],
-          await billCommand(s.partyId),
-        ),
-      );
+    await inTx(async (tx) =>
+      transferItems(
+        tx,
+        v.cfg,
+        s.tabId,
+        secondTab,
+        [{ lineNo: steak!.lineNo }],
+        await billCommand(s.partyId),
+      ),
+    );
 
-      expect(await linesOfBill(secondTab)).toMatchObject([{ groupId: s.mains }]);
-      expect(await revisionOf(s.partyId)).toBe(revision + 1);
-    },
-  );
+    expect(await linesOfBill(secondTab)).toMatchObject([{ groupId: s.mains }]);
+    expect(await revisionOf(s.partyId)).toBe(revision + 1);
+  });
 });
 
 describe("merging two bills (D2)", () => {
@@ -2619,11 +2613,12 @@ describe("a group split across bills of its party", () => {
     const [croquettes] = await linesIn(s.partyId, s.cold);
     const revision = await revisionOf(s.partyId);
 
-    const { billId: checkId } = await inTx((tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
-        expectedPartyRevision: revision,
-        operatorId: MIA,
-      }),
+    const checkId = await splitToCheck(
+      v,
+      s,
+      [{ lineNo: croquettes!.lineNo, quantity: "1" }],
+      revision,
+      MIA,
     );
 
     expect(await linesOfBill(checkId)).toMatchObject([
@@ -2777,7 +2772,10 @@ describe("a group split across bills of its party", () => {
   });
 });
 
-/** The chosen items of the party's tab split onto a new check, sent at `revision` by `operatorId`. */
+/**
+ * The chosen items of the party's tab moved onto a new check, sent at `revision` by `operatorId`;
+ * a part is first cut off its line inside the tab.
+ */
 async function splitToCheck(
   v: Venue,
   s: Seated,
@@ -2786,8 +2784,11 @@ async function splitToCheck(
   operatorId = ALEX,
 ): Promise<string> {
   const expectedPartyRevision = revision ?? (await revisionOf(s.partyId));
-  const { billId } = await inTx((tx) =>
-    splitBill(tx, v.cfg, s.tabId, transfers, { expectedPartyRevision, operatorId }),
+  const { billId } = await inTx(async (tx) =>
+    splitBill(tx, v.cfg, s.tabId, await cutParts(tx, v.cfg, s.tabId, transfers), {
+      expectedPartyRevision,
+      operatorId,
+    }),
   );
   return billId;
 }
