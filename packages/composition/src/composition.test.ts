@@ -33,6 +33,7 @@ import {
 } from "@waitron/identity";
 import { manifestSets } from "@waitron/migrations";
 import {
+  parseModuleOverrides,
   modulesWithSets,
   orderedMigrationSets,
   personalDataParts,
@@ -419,9 +420,9 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     expect(adjustments?.provisioning).toBe(ADJUSTMENTS_PROVISIONING);
   });
 
-  it("staffing is toggleable, needs identity, venue-service and workforce, and declares its seats", () => {
+  it("staffing is mandatory, needs identity, venue-service and workforce, and declares its seats", () => {
     const staffing = ALL_MODULES.find((module) => module.name === "staffing");
-    expect(staffing?.tier).toBe("toggleable");
+    expect(staffing?.tier).toBe("mandatory");
     expect(staffing?.requires).toEqual({
       core: "*",
       modules: { identity: "*", "venue-service": "*", workforce: "*" },
@@ -551,4 +552,24 @@ it("Start again may discard only activity history and the fiscal activation", ()
     ["fiscal-verifactu", ["fiscal_allocations", "fiscal_certificate_installs"]],
   ]);
   expect(() => orderedMigrationSets(ALL_MODULES)).not.toThrow();
+});
+
+it("staffing and workforce cannot be switched off", () => {
+  for (const name of ["staffing", "workforce"]) {
+    expect(() => parseModuleOverrides({ [name]: false }, ALL_MODULES)).toThrowError(
+      expect.objectContaining({ code: "module.mandatory_not_disableable" }),
+    );
+  }
+});
+
+it("transfers job roles and holders under identity rather than staffing", () => {
+  const identity = ALL_MODULES.find((module) => module.name === "identity")!;
+  expect(identity.configurationTransfer).toMatchObject({
+    kind: "tables",
+    tables: expect.arrayContaining([{ name: "staff_roles" }, { name: "person_staff_roles" }]),
+  });
+  expect(STAFFING_CONFIGURATION_TRANSFER.tables.map((table) => table.name)).toEqual([
+    "staffing_days",
+    "staffing_blocks",
+  ]);
 });

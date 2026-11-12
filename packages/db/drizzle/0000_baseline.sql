@@ -1690,6 +1690,14 @@ CREATE TABLE `management_sessions` (
 --> statement-breakpoint
 CREATE INDEX `management_sessions_open_idx` ON `management_sessions` (`person_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `management_sessions_token_hash_uq` ON `management_sessions` (`token_hash`);--> statement-breakpoint
+CREATE TABLE `person_staff_roles` (
+	`person_id` text NOT NULL,
+	`staff_role_id` text NOT NULL,
+	PRIMARY KEY(`person_id`, `staff_role_id`),
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`staff_role_id`) REFERENCES `staff_roles`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `persons` (
 	`id` text PRIMARY KEY NOT NULL,
 	`display_name` text NOT NULL,
@@ -1752,6 +1760,17 @@ CREATE TABLE `sessions` (
 --> statement-breakpoint
 CREATE INDEX `sessions_open_idx` ON `sessions` (`device_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `sessions_token_hash_uq` ON `sessions` (`token_hash`);--> statement-breakpoint
+CREATE TABLE `staff_roles` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`colour` text DEFAULT 'grey' NOT NULL,
+	`position` integer DEFAULT 0 NOT NULL,
+	`hidden_at` text,
+	CONSTRAINT "staff_roles_name_ck" CHECK(trim("staff_roles"."name") <> ''),
+	CONSTRAINT "staff_roles_colour_ck" CHECK("staff_roles"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey'))
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `staff_roles_name_key` ON `staff_roles` (`name`) WHERE "staff_roles"."hidden_at" is null;--> statement-breakpoint
 CREATE TABLE `totp_enrollments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`person_id` text NOT NULL,

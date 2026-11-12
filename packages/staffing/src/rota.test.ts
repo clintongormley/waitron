@@ -1,3 +1,4 @@
+import { personStaffRoles, staffRoles } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -23,12 +24,10 @@ import {
   WorkforceBackend,
   absences,
   employments,
-  personStaffRoles,
   shiftAssignments,
   shifts,
   shiftSwaps,
   listShiftsForPerson,
-  staffRoles,
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";

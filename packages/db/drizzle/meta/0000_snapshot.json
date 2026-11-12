@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d8f41797-fe14-4dd1-8c5d-b86e5aa4b846",
+  "id": "3b1514df-5aab-435a-bbb4-d2dd41f33c87",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11441,6 +11441,65 @@
         }
       }
     },
+    "person_staff_roles": {
+      "name": "person_staff_roles",
+      "columns": {
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "staff_role_id": {
+          "name": "staff_role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "person_staff_roles_person_fk": {
+          "name": "person_staff_roles_person_fk",
+          "tableFrom": "person_staff_roles",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "person_staff_roles_role_fk": {
+          "name": "person_staff_roles_role_fk",
+          "tableFrom": "person_staff_roles",
+          "tableTo": "staff_roles",
+          "columnsFrom": [
+            "staff_role_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "person_staff_roles_pk": {
+          "columns": [
+            "person_id",
+            "staff_role_id"
+          ],
+          "name": "person_staff_roles_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "persons": {
       "name": "persons",
       "columns": {
@@ -11826,6 +11885,71 @@
         "sessions_token_hash_ck": {
           "name": "sessions_token_hash_ck",
           "value": "length(\"sessions\".\"token_hash\") = 64"
+        }
+      }
+    },
+    "staff_roles": {
+      "name": "staff_roles",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "colour": {
+          "name": "colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'grey'"
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "hidden_at": {
+          "name": "hidden_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "staff_roles_name_key": {
+          "name": "staff_roles_name_key",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true,
+          "where": "\"staff_roles\".\"hidden_at\" is null"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "staff_roles_name_ck": {
+          "name": "staff_roles_name_ck",
+          "value": "trim(\"staff_roles\".\"name\") <> ''"
+        },
+        "staff_roles_colour_ck": {
+          "name": "staff_roles_colour_ck",
+          "value": "\"staff_roles\".\"colour\" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')"
         }
       }
     },

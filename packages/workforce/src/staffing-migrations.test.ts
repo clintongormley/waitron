@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, type Database } from "@waitron/db";
+import { CORE_CLASSIFICATION, CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { WORKFORCE_CLASSIFICATION } from "./classification.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -23,15 +23,12 @@ async function columnsOf(table: string) {
 
 describe("the staffing tables in workforce's set", () => {
   it("keeps its tables in workforce's set, which classifies them", () => {
+    expect(CORE_CLASSIFICATION.map(({ table }) => table)).toEqual(
+      expect.arrayContaining(["staff_roles", "person_staff_roles"]),
+    );
     expect(WORKFORCE_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_workforce");
     expect(WORKFORCE_CLASSIFICATION.map(({ table }) => table)).toEqual(
-      expect.arrayContaining([
-        "staff_roles",
-        "person_staff_roles",
-        "staffing_days",
-        "staffing_blocks",
-        "shift_assignments",
-      ]),
+      expect.arrayContaining(["staffing_days", "staffing_blocks", "shift_assignments"]),
     );
   });
 
@@ -41,6 +38,7 @@ describe("the staffing tables in workforce's set", () => {
       name: { notNull: 1, pk: 0 },
       colour: { notNull: 1, pk: 0 },
       position: { notNull: 1, pk: 0 },
+      hidden_at: { notNull: 0, pk: 0 },
     });
   });
 

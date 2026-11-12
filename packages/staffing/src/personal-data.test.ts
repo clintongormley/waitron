@@ -1,14 +1,9 @@
+import { personStaffRoles, staffRoles } from "@waitron/db";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments } from "@waitron/venue-service";
-import {
-  WORKFORCE_MIGRATIONS,
-  personStaffRoles,
-  shiftAssignments,
-  shifts,
-  staffRoles,
-} from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shiftAssignments, shifts } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_PERSONAL_DATA } from "./personal-data.js";
 import * as staffing from "./index.js";

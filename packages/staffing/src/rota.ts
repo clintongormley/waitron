@@ -1,3 +1,4 @@
+import { staffRoles } from "@waitron/db";
 import { and, asc, eq, gte, lte, inArray, or } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -18,7 +19,6 @@ import {
   shiftAssignments,
   shifts,
   shiftSwaps,
-  staffRoles,
 } from "@waitron/workforce";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
 import { parseArea } from "./paint-rules.js";

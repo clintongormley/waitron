@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8e79f25e-8e77-4582-939c-4245fab1ba5f",
+  "id": "28f427ad-5920-4149-a3aa-304c0b3ff697",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -2207,65 +2207,6 @@
         }
       }
     },
-    "person_staff_roles": {
-      "name": "person_staff_roles",
-      "columns": {
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "staff_role_id": {
-          "name": "staff_role_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "person_staff_roles_person_fk": {
-          "name": "person_staff_roles_person_fk",
-          "tableFrom": "person_staff_roles",
-          "tableTo": "persons",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "person_staff_roles_role_fk": {
-          "name": "person_staff_roles_role_fk",
-          "tableFrom": "person_staff_roles",
-          "tableTo": "staff_roles",
-          "columnsFrom": [
-            "staff_role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "person_staff_roles_pk": {
-          "columns": [
-            "person_id",
-            "staff_role_id"
-          ],
-          "name": "person_staff_roles_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "shift_assignments": {
       "name": "shift_assignments",
       "columns": {
@@ -2359,63 +2300,6 @@
         "shift_assignments_one_area_ck": {
           "name": "shift_assignments_one_area_ck",
           "value": "(\"shift_assignments\".\"department_id\" is null) <> (\"shift_assignments\".\"station_id\" is null)"
-        }
-      }
-    },
-    "staff_roles": {
-      "name": "staff_roles",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "colour": {
-          "name": "colour",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'grey'"
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        }
-      },
-      "indexes": {
-        "staff_roles_name_key": {
-          "name": "staff_roles_name_key",
-          "columns": [
-            "name"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "staff_roles_name_ck": {
-          "name": "staff_roles_name_ck",
-          "value": "trim(\"staff_roles\".\"name\") <> ''"
-        },
-        "staff_roles_colour_ck": {
-          "name": "staff_roles_colour_ck",
-          "value": "\"staff_roles\".\"colour\" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')"
         }
       }
     },

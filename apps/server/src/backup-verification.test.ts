@@ -913,9 +913,14 @@ function withRequired(names: readonly string[]) {
   return ALL_MODULES.filter((m) => wanted.has(m.name));
 }
 
-describe("a venue with workforce, with staffing on and off", () => {
-  // A box switches staffing off in modules.json, which its backup carries; it migrates the same sets.
-  const withStaffing = withRequired([...modules.map((m) => m.name), "workforce", "staffing"]);
+describe("a venue with workforce-es on and off", () => {
+  // A box can switch workforce-es off while its backup still carries the same migration sets.
+  const withStaffing = withRequired([
+    ...modules.map((m) => m.name),
+    "workforce",
+    "staffing",
+    "workforce-es",
+  ]);
   const off = useVenueDb({
     migrations: migrationOptionsFor(orderedMigrationSets(withStaffing), null),
     resetPerTest: false,
@@ -933,22 +938,28 @@ describe("a venue with workforce, with staffing on and off", () => {
   });
 
   it.each([
-    ["off", off, { modules: { staffing: false } }],
+    ["off", off, { modules: { "workforce-es": false } }],
     ["on", on, undefined],
-  ] as const)("the full verifier accepts the backup with staffing %s", async (_, venue, config) => {
-    const f = await fixture({ db: venue.db, node: venue.node, modules: withStaffing });
-    if (config !== undefined)
-      f.entries.push({ name: "secrets/modules.json", bytes: Buffer.from(JSON.stringify(config)) });
-    await seal(f);
-    const result = await verify(f);
-    expect(result.status).toBe("passed");
-    expect(result.reason).toBe("none");
-    expect(result.modules.map((m) => [m.name, m.status])).toEqual(
-      withStaffing
-        .filter((m) => shippedSetNames.has(m.name) && m.backup?.verification !== undefined)
-        .map((m) => [m.name, "passed"])
-        .sort(([a], [b]) => a!.localeCompare(b!)),
-    );
-    expect(result.modules.some((m) => m.name === "staffing")).toBe(false);
-  });
+  ] as const)(
+    "the full verifier accepts the backup with workforce-es %s",
+    async (_, venue, config) => {
+      const f = await fixture({ db: venue.db, node: venue.node, modules: withStaffing });
+      if (config !== undefined)
+        f.entries.push({
+          name: "secrets/modules.json",
+          bytes: Buffer.from(JSON.stringify(config)),
+        });
+      await seal(f);
+      const result = await verify(f);
+      expect(result.status).toBe("passed");
+      expect(result.reason).toBe("none");
+      expect(result.modules.map((m) => [m.name, m.status])).toEqual(
+        withStaffing
+          .filter((m) => shippedSetNames.has(m.name) && m.backup?.verification !== undefined)
+          .map((m) => [m.name, "passed"])
+          .sort(([a], [b]) => a!.localeCompare(b!)),
+      );
+      expect(result.modules.some((m) => m.name === "staffing")).toBe(false);
+    },
+  );
 });

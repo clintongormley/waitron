@@ -61,7 +61,7 @@ test-fixture preparation, now ready: ordinary server, package and device-profile
 the shared helpers. SQL constraint, trigger and pinned-hash probes retain their direct writes
 until PR11. Legacy raw SQL role reads remain for PR11. Permission declarations list their default
 holders; Managers can restart the box. Clock and mail-server changes use Box administration
-(Admin by default). Comp reasons and the bill limit now use Apply comps and Approve comps, without role lists; zero limits require approval. Editable access roles and job-role behavior remain unbuilt.
+(Admin by default). Comp reasons and the bill limit now use Apply comps and Approve comps, without role lists; zero limits require approval. Job roles and their holders now live in core under identity; staffing and workforce are permanent. Editable access roles and the remaining job-role behavior remain unbuilt.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 

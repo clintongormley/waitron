@@ -1426,7 +1426,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   Comp reasons and the bill limit use Apply comps and Approve comps without role lists.
   Legacy raw SQL role reads remain for PR11. Permission declarations now list their default
   holders; Managers can restart the box, while clock and email changes use Box administration
-  (Admin by default). Editable access roles and job-role behavior remain to be built.
+  (Admin by default). Job roles and their holders now live in core under identity; staffing and workforce are permanent. Editable access roles and the remaining job-role behavior remain to be built.
   Cut 1's permission names (#2578) have landed.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 

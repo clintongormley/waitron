@@ -354,14 +354,6 @@ CREATE TABLE `workforce_chains` (
           and ("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_recorded_at" is null))
 );
 --> statement-breakpoint
-CREATE TABLE `person_staff_roles` (
-	`person_id` text NOT NULL,
-	`staff_role_id` text NOT NULL,
-	PRIMARY KEY(`person_id`, `staff_role_id`),
-	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`staff_role_id`) REFERENCES `staff_roles`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `shift_assignments` (
 	`shift_id` text PRIMARY KEY NOT NULL,
 	`department_id` text,
@@ -374,16 +366,6 @@ CREATE TABLE `shift_assignments` (
 	CONSTRAINT "shift_assignments_one_area_ck" CHECK(("shift_assignments"."department_id" is null) <> ("shift_assignments"."station_id" is null))
 );
 --> statement-breakpoint
-CREATE TABLE `staff_roles` (
-	`id` text PRIMARY KEY NOT NULL,
-	`name` text NOT NULL,
-	`colour` text DEFAULT 'grey' NOT NULL,
-	`position` integer DEFAULT 0 NOT NULL,
-	CONSTRAINT "staff_roles_name_ck" CHECK(trim("staff_roles"."name") <> ''),
-	CONSTRAINT "staff_roles_colour_ck" CHECK("staff_roles"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `staff_roles_name_key` ON `staff_roles` (`name`);--> statement-breakpoint
 CREATE TABLE `staffing_blocks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`day_id` text NOT NULL,

@@ -1,3 +1,4 @@
+import { staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -11,7 +12,6 @@ import {
   WORKFORCE_MIGRATIONS,
   shiftAssignments,
   shifts,
-  staffRoles,
   staffingBlocks,
   staffingDays,
 } from "@waitron/workforce";

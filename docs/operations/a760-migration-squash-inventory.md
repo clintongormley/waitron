@@ -1,3 +1,7 @@
+> 2026-11-12, A1002 PR3: `staff_roles` and `person_staff_roles` moved from workforce’s set
+> to core’s, owned by identity (`packages/identity/src/classification.ts`). The inventory below
+> records the A760 layout before that move.
+
 # A760 migration inventory appendix
 
 > **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were

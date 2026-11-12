@@ -102,6 +102,12 @@ beforeEach(async () => {
       },
       { id: second, displayName: "Second", role: "manager", status: "suspended", createdAt: now },
     ]);
+    suite.db.run(
+      sql`insert into staff_roles (id, name, colour, position) values ('job', 'Cook', 'blue', 2)`,
+    );
+    suite.db.run(
+      sql`insert into person_staff_roles (person_id, staff_role_id) values (${person}, 'job')`,
+    );
     await suite.db.insert(schema.totpEnrollments).values({
       id: person,
       personId: second,
@@ -350,6 +356,8 @@ describe("identity offline backup owner", () => {
     ).rejects.toMatchObject({ reason: "decryption_unavailable" });
   });
   it.each([
+    ["staff_roles", "name='Changed role'"],
+    ["staff_roles", "hidden_at='2026-11-12T12:00:00.000Z'"],
     ["persons", "display_name='Changed'"],
     ["totp_enrollments", "expires_at='2026-10-21T00:00:00.000Z'"],
     ["management_account_actions", "code_attempts=3"],
@@ -403,7 +411,9 @@ describe("identity offline backup owner", () => {
     expect(await run()).toEqual(verdict("invalid", "passed"));
   });
   it("accepts explicitly absent optional authenticators and empty ceremony tables", async () => {
-    for (const table of IDENTITY_CLASSIFICATION.map((c) => c.table).filter((t) => t !== "persons"))
+    for (const table of IDENTITY_CLASSIFICATION.map((c) => c.table)
+      .reverse()
+      .filter((t) => t !== "persons"))
       damage(`delete from ${table}`);
     damage("update persons set pin_hash=null,password_hash=null,totp_secret=null");
     expect(await run()).toEqual(passed);
@@ -580,3 +590,30 @@ it.each(["A", "AAA", "AAAAAA", "AB"])(
     expect(await run()).toEqual(verdict("passed", "invalid"));
   },
 );
+
+it.each([
+  "update staff_roles set name=''",
+  "update staff_roles set colour='unknown'",
+  "update staff_roles set position=1.5",
+  "update staff_roles set hidden_at=x'00'",
+  "update person_staff_roles set person_id='missing'",
+  "update person_staff_roles set staff_role_id='missing'",
+])("checks stored job-role data on both copies: %s", async (statement) => {
+  for (const suite of [original, restored]) {
+    suite.db.run(sql`pragma foreign_keys=off`);
+    suite.db.run(sql`pragma ignore_check_constraints=on`);
+    try {
+      suite.db.run(sql.raw(statement));
+    } finally {
+      suite.db.run(sql`pragma ignore_check_constraints=off`);
+      suite.db.run(sql`pragma foreign_keys=on`);
+    }
+  }
+  expect(await run()).toEqual(verdict("invalid", "passed"));
+});
+
+it("preserves captured job-role memberships", async () => {
+  expect(await run()).toEqual(passed);
+  damage("delete from person_staff_roles", "after");
+  expect((await run()).checks).toContainEqual({ code: "data", status: "invalid" });
+});

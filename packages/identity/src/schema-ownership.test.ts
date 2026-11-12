@@ -8,6 +8,8 @@ import * as schema from "@waitron/db/schema/identity.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = [
+  "staff_roles",
+  "person_staff_roles",
   "persons",
   "sessions",
   "management_sessions",

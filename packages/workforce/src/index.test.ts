@@ -1,3 +1,4 @@
+import { staffRoles, personStaffRoles } from "@waitron/db";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as api from "./index.js";
@@ -47,11 +48,9 @@ describe("the public surface", () => {
         "shiftTemplates",
         "shiftSwaps",
         "shiftSwapStatus",
-        "personStaffRoles",
         "shiftAssignments",
         "staffingBlocks",
         "staffingDays",
-        "staffRoles",
         "createAbsence",
         "setAbsenceStatus",
         "listPendingAbsences",
@@ -268,13 +267,13 @@ describe("staffing's tables' constraint declarations (forces the lazy extraConfi
       };
     };
 
-    expect(names(api.staffRoles)).toEqual({
+    expect(names(staffRoles)).toEqual({
       foreignKeys: [],
       primaryKeys: [],
       checks: ["staff_roles_colour_ck", "staff_roles_name_ck"],
       indexes: ["staff_roles_name_key"],
     });
-    expect(names(api.personStaffRoles)).toEqual({
+    expect(names(personStaffRoles)).toEqual({
       foreignKeys: ["person_staff_roles_person_fk", "person_staff_roles_role_fk"],
       primaryKeys: ["person_staff_roles_pk"],
       checks: [],

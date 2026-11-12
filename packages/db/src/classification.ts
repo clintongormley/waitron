@@ -402,6 +402,8 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   // stored only as its hash, so neither that session's row id nor its stored hash, read from a copy
   // of the database, signs anybody in.
   classify("persons", "state", STATE),
+  classify("staff_roles", "state", "the venue's job positions, which an owner edits"),
+  classify("person_staff_roles", "state", "which staff roles a person can fill"),
   classify(
     "management_account_actions",
     "state",

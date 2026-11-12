@@ -417,9 +417,9 @@ name forbidden sits beside the derived one, and it is empty.
 
 Since A760 (November 2026), a module that can be switched off or swapped keeps its own migration
 set (`migrations.from`); every other module adds its tables to core's set and names core in
-`tablesIn`. Two exceptions are stated. Staffing can be switched off, but its tables live in
-workforce's set (`tablesIn: "workforce"`, `packages/composition/src/modules.ts`), so they are
-present whenever workforce's are. `node` cannot be switched off and keeps its own set, because that
+`tablesIn`. Staffing and workforce became permanent in A1002; staffing’s remaining tables stay in
+workforce’s set (`tablesIn: "workforce"`, `packages/composition/src/modules.ts`), while job roles
+and their holders live in core under identity. Workforce keeps its existing set. `node` cannot be switched off and keeps its own set, because that
 set is applied to `node.db` rather than `venue.db` (`database: "node"` on its descriptor). Either way the
 append-only declaration travels with the set that holds the table — the table is declared with
 `appendOnly()` in that set's classification, and `MigrationSet.appendOnlyTables` carries the names

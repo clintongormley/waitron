@@ -11,3 +11,5 @@ export { managementSessions } from "./management-sessions.js";
 export { managementAccountActions } from "./management-account-actions.js";
 export { webauthnCredentials, webauthnChallenges } from "./webauthn.js";
 export { deviceProfileAdmissionRoles, deviceProfileAdmissionPersons } from "./profile-admission.js";
+
+export { staffRoles, personStaffRoles } from "./staff-roles.js";

@@ -1,3 +1,4 @@
+import { staffRoles } from "@waitron/db";
 import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -30,7 +31,7 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
-import { WORKFORCE_MIGRATIONS, staffingBlocks, staffingDays, staffRoles } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, staffingBlocks, staffingDays } from "@waitron/workforce";
 import { AppError } from "@waitron/shared";
 import { seedVenueWithStaff } from "../test/seed.js";
 import {

@@ -1,3 +1,4 @@
+import { personStaffRoles, staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -6,12 +7,10 @@ import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db"
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   WORKFORCE_MIGRATIONS,
-  personStaffRoles,
   shiftAssignments,
   shifts,
   staffingBlocks,
   staffingDays,
-  staffRoles,
 } from "@waitron/workforce";
 import { persons } from "@waitron/identity";
 import { createLabelComparator } from "@waitron/shared";

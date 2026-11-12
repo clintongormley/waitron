@@ -1782,10 +1782,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       { venue: { taxId: "60000011A" } },
     ],
     [
-      "imports an export with workforce-es and staffing off, leaving both on and empty",
+      "imports an export with workforce-es off, leaving it on and empty",
       () =>
         venueModuleConfig(
-          parseModuleConfig({ modules: { "workforce-es": false, staffing: false } }, ALL_MODULES),
+          parseModuleConfig({ modules: { "workforce-es": false } }, ALL_MODULES),
           "ES-common",
         ),
       200,

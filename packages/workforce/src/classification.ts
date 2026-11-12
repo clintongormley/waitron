@@ -43,8 +43,6 @@ export const WORKFORCE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
 /** Every table in workforce's set: workforce's own and staffing's, which lives in it. */
 export const WORKFORCE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ...WORKFORCE_OWN_CLASSIFICATION,
-  classify("staff_roles", "state", "the venue's job positions, which an owner edits"),
-  classify("person_staff_roles", "state", "which staff roles a person can fill"),
   classify("staffing_days", "state", "an area's painted staffing day"),
   classify("staffing_blocks", "state", "one painted staffing need"),
   classify("shift_assignments", "state", "the area and staff role a shift fills"),

@@ -33,7 +33,6 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
   describe(`actual export boot ${state}`, () => {
     const disabled = new Set([
       "fiscal-none",
-      "staffing",
       ...(state === "provider" ? [] : ["workforce-es"]),
       ...(state === "disabled" ? ["workforce"] : []),
     ]);
@@ -98,7 +97,7 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
-          server = await startServer({
+          const starting = startServer({
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_HTTP_PORT: String(port),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -109,6 +108,21 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });
+          if (state === "disabled") {
+            await expect(starting).rejects.toMatchObject({
+              code: "module.mandatory_not_disableable",
+              params: { module: "workforce" },
+            });
+            expect(
+              statements.filter((q) =>
+                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|pay_period_\w*)\b/i.test(
+                  q,
+                ),
+              ),
+            ).toEqual([]);
+            return;
+          }
+          server = await starting;
           await awaitListening(httpPort());
           if (mode === "setup") tls = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
           const origin = `${mode === "setup" ? "https" : "http"}://127.0.0.1:${httpPort()}`;
@@ -122,7 +136,7 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
           const manager = `/management-api/attendance/export?${selection}`;
           const optionsPath = "/management-api/me/attendance/export-options";
           const options = await get(optionsPath);
-          if (state !== "disabled" && mode === "primary") {
+          if (mode === "primary") {
             expect(options.status).toBe(200);
             expect(await options.json()).toEqual({
               available: state === "provider",
@@ -154,14 +168,6 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
             expect((await get(own)).status).toBe(404);
             expect((await get(manager)).status).toBe(404);
           }
-          if (state === "disabled")
-            expect(
-              statements.filter((q) =>
-                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|pay_period_\w*)\b/i.test(
-                  q,
-                ),
-              ),
-            ).toEqual([]);
         } finally {
           await server?.close();
           await tls?.close();
