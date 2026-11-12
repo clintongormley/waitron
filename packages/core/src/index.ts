@@ -14,7 +14,6 @@ export type { RecordSubstitutionInput } from "./record-substitution.js";
 export { listOutstandingSales } from "./list-outstanding-sales.js";
 export type { OutstandingSale } from "./list-outstanding-sales.js";
 export {
-  addIncidentNote,
   currentIncidentsOf,
   findIncident,
   listHandledIncidents,
@@ -26,5 +25,5 @@ export {
   IssuanceRefusal,
   withIssuanceTransaction,
 } from "./incidents.js";
-export type { AddIncidentNoteResult, TenantIncident } from "./incidents.js";
+export type { TenantIncident } from "./incidents.js";
 export type { Incident, IncidentSeverity, RecordIncidentInput } from "./incidents.js";
