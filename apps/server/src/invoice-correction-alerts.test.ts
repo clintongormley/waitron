@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { markIncidentHandled, previewCorrectionAmounts } from "@waitron/core";
 import { hashPin, persons } from "@waitron/identity";
+import type { Logger } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -312,10 +313,11 @@ function cardLeg(
   correctionId: string,
   amount: string,
   backend = v.backend,
+  log?: Logger,
 ) {
   const submissionId = randomUUID();
   return refundSettledTender(
-    { ...v.deps, backend },
+    { ...v.deps, backend, ...(log === undefined ? {} : { log }) },
     v.cfg,
     t.saleId,
     {
@@ -464,5 +466,55 @@ describe("automatic filing of a correction whose money is all back", () => {
       total: -1000,
       authorizedBy: v.adminId,
     });
+  });
+  it("answers a saved card leg as completed when its automatic filing throws, and the next pass files it", async () => {
+    const t = await paidOnTheReader();
+    const correctionId = await open(t.saleId, "10.00");
+    const throwing = Object.create(v.backend, {
+      checkIntegrity: {
+        value: () => Promise.reject(new Error("disk went away")),
+      },
+    }) as typeof v.backend;
+    const logged: unknown[][] = [];
+    const before = salesCount();
+
+    const leg = await cardLeg(t, correctionId, "10.00", throwing, (...line) => {
+      logged.push(line);
+    });
+
+    expect(leg).toMatchObject({ state: "completed", appliedAmount: "10.00" });
+    expect(logged).toEqual([
+      [
+        "error",
+        "invoice_correction.automatic_filing_failed",
+        { correctionId, refundId: leg.id, errorCode: "unknown" },
+      ],
+    ]);
+    expect(salesCount()).toBe(before);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "open" });
+
+    at(1);
+    await recoverTenderRefunds(v.deps);
+    expect(salesCount()).toBe(before + 1);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
+  });
+
+  it("files nothing while refunds are paused, and files on the first pass after", async () => {
+    const t = await paidOnTheReader();
+    const correctionId = await open(t.saleId, "10.00");
+    expect(await cardLeg(t, correctionId, "10.00", standIn(true).backend)).toMatchObject({
+      state: "completed",
+    });
+    const before = salesCount();
+
+    at(1);
+    await recoverTenderRefunds({ ...v.deps, clockUnconfirmed: () => true });
+    expect(salesCount()).toBe(before);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "open" });
+
+    at(2);
+    await recoverTenderRefunds(v.deps);
+    expect(salesCount()).toBe(before + 1);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
   });
 });

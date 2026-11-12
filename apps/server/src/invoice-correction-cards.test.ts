@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sales, tenderRefunds, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { previewCorrectionAmounts } from "@waitron/core";
-import { endSession, loginWithPin } from "@waitron/identity";
+import { endDeviceSessions, endSession, loginWithPin, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -202,6 +202,13 @@ describe("a correction's connected card legs", () => {
     expect(leg.state).toBe("pending");
     expect(await read(correction.id)).toMatchObject({ pending: "10.00", fileNow: null });
     expect(await inTx(v, (tx) => endSession(tx, session.token))).toBe(true);
+    await inTx(v, (tx) => endDeviceSessions(tx, v.deviceId));
+    expect(
+      await v.db
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(and(eq(sessions.personId, v.adminId), isNull(sessions.endedAt))),
+    ).toEqual([]);
     const before = salesCount();
 
     // Control: a pass while the card company still answers pending files nothing.
@@ -229,6 +236,12 @@ describe("a correction's connected card legs", () => {
       total: -2420,
       authorizedBy: v.adminId,
     });
+    // Later cases sign in through the venue's operator session.
+    v.operator.sessionId = (
+      await inTx(v, (tx) =>
+        loginWithPin(tx, { deviceId: v.deviceId, personId: v.adminId, pin: "1234" }),
+      )
+    ).id;
   });
 
   it("files for the money back when a card leg failed", async () => {

@@ -3,6 +3,7 @@ import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { tenderRefunds, tenders, type Transaction } from "@waitron/db";
 import type { PinAttempts } from "@waitron/identity";
+import { codeOf, type Logger } from "@waitron/server-kit";
 import { payments, recordManualRefund } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import type { BillRefundDeps } from "./bill-refunds.js";
@@ -22,7 +23,7 @@ import "./errors.js";
 
 /** Once `stopSignal` is aborted the recovery pass looks up no further refund; each sent one it did
  * not ask about stays pending for a later pass. */
-export type TenderRefundDeps = BillRefundDeps & { stopSignal?: AbortSignal };
+export type TenderRefundDeps = BillRefundDeps & { stopSignal?: AbortSignal; log?: Logger };
 type RefundRow = typeof tenderRefunds.$inferSelect;
 
 export function toTenderRefundView(row: RefundRow): TenderRefundView {
@@ -130,7 +131,8 @@ export async function beginSettledTenderRefund(
 }
 
 /** Gives a payment's money back; once a leg of a correction completes, files that correction if
- * its money is now all back (`fileCorrectionAutomatically`), never undoing the refund. */
+ * its money is now all back (`fileCorrectionAutomatically`), never undoing the refund. A filing
+ * that throws is logged and left to the background pass, so the saved refund is still answered. */
 export async function refundSettledTender(
   deps: TenderRefundDeps,
   cfg: DeviceRequestConfig,
@@ -139,8 +141,15 @@ export async function refundSettledTender(
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
 ): Promise<TenderRefundView> {
   const refund = await settleTenderRefund(deps, cfg, saleId, request, operator);
-  if (refund.state === "completed" && request.invoiceCorrection !== undefined)
-    await fileCorrectionAutomatically(deps, request.invoiceCorrection.id);
+  const correctionId = request.invoiceCorrection?.id;
+  if (refund.state === "completed" && correctionId !== undefined)
+    await fileCorrectionAutomatically(deps, correctionId).catch((error: unknown) => {
+      deps.log?.("error", "invoice_correction.automatic_filing_failed", {
+        correctionId,
+        refundId: refund.id,
+        errorCode: codeOf(error),
+      });
+    });
   return refund;
 }
 
