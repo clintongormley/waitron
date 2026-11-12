@@ -169,9 +169,16 @@ async function indoorContext() {
 async function presentedSplit(...names: string[]) {
   const ana = await seatedWith(venue, "Caña", ...names);
   const split = await post(
-    `/api/bills/${ana.tabId}/split`,
-    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
-      transfers: names.map((_, i) => ({ lineNo: i + 2 })),
+    `/api/bills/${ana.tabId}/move-dishes`,
+    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/move-dishes`, {
+      lineIds: venue.db
+        .all<{ id: string }>(
+          sql`select id from working_order_lines where working_order_id = ${ana.tabId}
+              order by line_no`,
+        )
+        .slice(1)
+        .map((row) => row.id),
+      toBillId: null,
       expectedPartyRevision: ana.revision,
     }),
   );

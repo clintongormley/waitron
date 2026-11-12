@@ -26,9 +26,9 @@ import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import "./errors.js";
 import { billActionBody, splitBill } from "./testing/bill-action-fixture.js";
 
-// The HTTP surface of split, merge and transfer between a party's bills: the session guard, the id
-// and body screens, the answers and the status of each code. Move-dishes joins the shared session
-// and screen rows; its own cases are in `till-api.move-dishes.test.ts`.
+// The HTTP surface of merge and move dishes between a party's bills: the session guard, the id
+// and body screens, the answers and the status of each code. Move dishes' own cases are in
+// `till-api.move-dishes.test.ts`.
 // The verbs themselves are tested in `party-bill-actions.test.ts`.
 let venue: BillVenue;
 /** The operator's open session on `venue.cfg`'s device, which a bill payment is taken under. */
@@ -105,7 +105,7 @@ async function post(path: string, body: unknown, cookie = venue.cookie) {
   );
 }
 
-const ROUTES = ["split", "merge", "transfer", "move-dishes"] as const;
+const ROUTES = ["merge", "move-dishes"] as const;
 type Route = (typeof ROUTES)[number];
 
 /** The id of the first line on the party's bill that is not `other`. */
@@ -122,11 +122,17 @@ function firstLineBeside(other: string): string {
 
 /** A well-formed body for the route, between the two bills. */
 function bodyFor(route: Route, other: string, extra: Record<string, unknown> = {}) {
-  if (route === "split") return { transfers: [{ lineNo: 1 }], ...extra };
   if (route === "merge") return { fromBillId: other, ...extra };
-  if (route === "move-dishes")
-    return { toBillId: other, lineIds: [firstLineBeside(other)], ...extra };
-  return { toBillId: other, transfers: [{ lineNo: 1 }], ...extra };
+  return { toBillId: other, lineIds: [firstLineBeside(other)], ...extra };
+}
+
+/** The id of the bill's dish at `lineNo`. */
+function lineIdAt(billId: string, lineNo: number): string {
+  const [row] = venue.db.all<{ id: string }>(
+    sql`select id from working_order_lines
+        where working_order_id = ${billId} and line_no = ${lineNo}`,
+  );
+  return row!.id;
 }
 
 describe("the bill action routes", () => {
@@ -148,7 +154,7 @@ describe("the bill action routes", () => {
     expect(answer.json).toMatchObject({ code: "tab.not_open", params: { tabId: NOT_A_UUID } });
   });
 
-  it.each(["merge", "transfer"] as const)(
+  it.each(["merge"] as const)(
     "%s: a malformed other bill id is 409 tab.not_open",
     async (route) => {
       const { partyId, main } = await twoBills();
@@ -201,34 +207,15 @@ describe("the bill action routes", () => {
     },
   );
 
-  it.each(["split", "transfer"] as const)(
-    "%s: transfers that are not a list are 400 management.request_invalid",
+  it.each(["move-dishes"] as const)(
+    "%s: an empty lineIds list is 400 sale.empty_basket, changing nothing",
     async (route) => {
       const { partyId, main, second } = await twoBills();
       const expectedPartyRevision = await revisionOf(partyId);
 
       const answer = await post(
         `/api/bills/${main}/${route}`,
-        bodyFor(route, second, { expectedPartyRevision, transfers: { lineNo: 1 } }),
-      );
-
-      expect(answer.status).toBe(400);
-      expect(answer.json).toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "transfers" },
-      });
-    },
-  );
-
-  it.each(["split", "transfer"] as const)(
-    "%s: an empty transfers list is 400 sale.empty_basket, changing nothing",
-    async (route) => {
-      const { partyId, main, second } = await twoBills();
-      const expectedPartyRevision = await revisionOf(partyId);
-
-      const answer = await post(
-        `/api/bills/${main}/${route}`,
-        bodyFor(route, second, { expectedPartyRevision, partyId, transfers: [] }),
+        bodyFor(route, second, { expectedPartyRevision, partyId, lineIds: [] }),
       );
 
       expect(answer.status).toBe(400);
@@ -241,39 +228,7 @@ describe("the bill action routes", () => {
     },
   );
 
-  const MALFORMED_ENTRIES = [
-    ["split", null],
-    ["transfer", null],
-    ["split", [{ lineNo: 1 }]],
-    ["transfer", { lineNo: true }],
-    ["split", { lineNo: "1" }],
-    ["transfer", { quantity: "1" }],
-  ] as const;
-
-  it.each(MALFORMED_ENTRIES)(
-    "%s: a transfer entry %j is 400 management.request_invalid, changing nothing",
-    async (route, entry) => {
-      const { partyId, main, second } = await twoBills();
-      const expectedPartyRevision = await revisionOf(partyId);
-
-      const answer = await post(
-        `/api/bills/${main}/${route}`,
-        bodyFor(route, second, { expectedPartyRevision, transfers: [entry] }),
-      );
-
-      expect(answer.status).toBe(400);
-      expect(answer.json).toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "transfers" },
-      });
-      expect(await revisionOf(partyId)).toBe(expectedPartyRevision);
-    },
-  );
-
-  it.each([
-    ["merge", "fromBillId"],
-    ["transfer", "toBillId"],
-  ] as const)(
+  it.each([["merge", "fromBillId"]] as const)(
     "%s: a body without %s is 400 management.request_invalid, changing nothing",
     async (route, field) => {
       const { partyId, main, second } = await twoBills();
@@ -304,12 +259,13 @@ describe("the bill action routes", () => {
     },
   );
 
-  it("split answers the new bill's id", async () => {
+  it("move-dishes to a new bill answers the new bill's id and moves the party's revision once", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     const expectedPartyRevision = await revisionOf(partyId);
 
-    const answer = await post(`/api/bills/${tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
+    const answer = await post(`/api/bills/${tabId}/move-dishes`, {
+      lineIds: [lineIdAt(tabId, 2)],
+      toBillId: null,
       expectedPartyRevision,
       partyId,
     });
@@ -321,20 +277,15 @@ describe("the bill action routes", () => {
     expect(await revisionOf(partyId)).toBe(expectedPartyRevision + 1);
   });
 
-  it("merge and transfer answer 204", async () => {
+  it("merge answers 204", async () => {
     const { partyId, main, second } = await twoBills();
 
-    const transferred = await post(`/api/bills/${main}/transfer`, {
-      toBillId: second,
-      transfers: [{ lineNo: 1 }],
-      expectedPartyRevision: await revisionOf(partyId),
-    });
     const merged = await post(`/api/bills/${main}/merge`, {
       fromBillId: second,
       expectedPartyRevision: await revisionOf(partyId),
     });
 
-    expect([transferred.status, merged.status]).toEqual([204, 204]);
+    expect(merged.status).toBe(204);
     expect(await statusOf(venue, second)).toBe("abandoned");
   });
 
@@ -344,8 +295,9 @@ describe("the bill action routes", () => {
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, second)),
     );
 
-    const answer = await post(`/api/bills/${second}/split`, {
-      transfers: [{ lineNo: 1 }],
+    const answer = await post(`/api/bills/${second}/move-dishes`, {
+      lineIds: [lineIdAt(second, 1)],
+      toBillId: null,
       expectedPartyRevision: await revisionOf(partyId),
     });
 
@@ -393,9 +345,9 @@ describe("the bill action routes", () => {
     const a = await twoBills();
     const b = await twoBills();
 
-    const answer = await post(`/api/bills/${a.main}/transfer`, {
+    const answer = await post(`/api/bills/${a.main}/move-dishes`, {
       toBillId: b.main,
-      transfers: [{ lineNo: 1 }],
+      lineIds: [lineIdAt(a.main, 1)],
       expectedPartyRevision: await revisionOf(a.partyId),
     });
 
@@ -418,7 +370,7 @@ describe("the bill action routes", () => {
     expect(answer.json).toMatchObject({ code: "party.out_of_date" });
   });
 
-  it.each(["split", "move-dishes"] as const)(
+  it.each(["move-dishes"] as const)(
     "a %s that leaves the source fully paid issues its invoice",
     async (route) => {
       const { partyId, tabId } = await seated("Paella", "Caña");
@@ -448,16 +400,14 @@ describe("the bill action routes", () => {
         sql`select id from working_order_lines where working_order_id = ${tabId} and line_no = 2`,
       );
       const answer = await post(`/api/bills/${tabId}/${route}`, {
-        ...(route === "split"
-          ? { transfers: [{ lineNo: 2 }] }
-          : { lineIds: [line!.id], toBillId: null }),
+        lineIds: [line!.id],
+        toBillId: null,
         expectedPartyRevision: await revisionOf(partyId),
       });
 
       expect(answer.status).toBe(200);
       expect(fiscalRecordCount(venue, tabId)).toBe(1);
-      if (route === "move-dishes")
-        expect(answer.json).toMatchObject({ invoice: { total: "35.00", invoiceType: "F2" } });
+      expect(answer.json).toMatchObject({ invoice: { total: "35.00", invoiceType: "F2" } });
       expect(await statusOf(venue, tabId)).toBe("settled");
       expect(fiscalRecordCount(venue, answer.json.billId as string)).toBe(0);
     },
