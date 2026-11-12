@@ -469,13 +469,6 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
 
-## Bundle: Contrast pass
-
-1 entry remains, size S.
-
-- The prep stations screen's contrast remains unmeasured, left open by A319
-  (hover contrast after A306, #1347).
-
 ## Bundle: Design system doc truth
 
 1 entry, size S.

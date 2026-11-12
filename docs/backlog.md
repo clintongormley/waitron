@@ -1398,7 +1398,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Reorder controller** (bundle of 1, size S). [Detail](backlog/dashboard.md#bundle-reorder-controller)
 
-- **Contrast pass** (bundle of 1, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 
 
 - **A1069. Venue settings keeps a `kitchen` tab key with no panel (owner question).** The key in
