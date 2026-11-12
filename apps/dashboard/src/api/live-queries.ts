@@ -546,9 +546,6 @@ export const QUERY_DEPENDENCIES = {
   // refreshes it; its sales, printer and reader rows wait for the timer too.
   getBoxHealth: [],
   getBoxNetwork: [],
-  // Each list is read from stored records that never change; which lists exist follows the alerts.
-  clockMisdated: ["incidents"],
-  clockMisdatedHandled: ["incidents", "persons"],
   listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions"],
   listHandledAlerts: ["incidents", "persons"],
   // The stop is process state no table reports, so the timer reads it; `incidents` holds the
@@ -614,8 +611,6 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "getVenueDefaults",
   "getVenuePrivacy",
   "listPurchaseInvoices",
-  "clockMisdated",
-  "clockMisdatedHandled",
   "getContentLanguages",
   "getContentTranslationGaps",
   "getContentTranslationTargets",

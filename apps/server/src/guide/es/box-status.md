@@ -213,7 +213,7 @@ Los gerentes y administradores pueden reiniciar el servidor.
 
 ## Pon la hora desde tu propio dispositivo {#clock-own-device}
 
-El permiso de administración del servidor, que tiene Admin de forma predeterminada, te permite confirmar o poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
+El permiso de administración del servidor, que tiene Admin de forma predeterminada, te permite poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
 
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran
 **No se pueden registrar ventas: la hora del servidor es incorrecta**, y la campana también lo dice,
