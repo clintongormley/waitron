@@ -1,3 +1,4 @@
+import { todaySet } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -14,7 +15,7 @@ import {
   tableNames,
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
+import { floorTodayJoins, floorTodayJoinTables } from "./schema/floor-plans.js";
 import { parties, partyTables } from "./schema/parties.js";
 import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -386,7 +387,9 @@ describe("party table labels", () => {
   });
 
   async function nameToday(tableId: string, name: string | null): Promise<void> {
-    await inTx((tx) => tx.insert(floorTodayTables).values({ tableId, name }));
+    await inTx((tx) =>
+      tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId)),
+    );
   }
 
   async function group(tableIds: readonly string[], name: string | null = null): Promise<void> {

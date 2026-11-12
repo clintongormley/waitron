@@ -1,14 +1,10 @@
+import { todaySet } from "@waitron/db";
 import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { needsMoving } from "./joined-parts.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
-import {
-  floorResetTables,
-  floorTodayJoinTables,
-  floorTodayJoins,
-  floorTodayTables,
-} from "./schema/floor-plans.js";
+import { floorResetTables, floorTodayJoinTables, floorTodayJoins } from "./schema/floor-plans.js";
 import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
@@ -64,7 +60,10 @@ describe("needs moving", () => {
       .update(floorResetTables)
       .set({ ...place, pending: true, readyToMove: true })
       .where(eq(floorResetTables.id, PLAIN_ROW));
-    await suite.db.insert(floorTodayTables).values({ tableId: PLAIN, seats: 4, ...place });
+    await suite.db
+      .update(diningTables)
+      .set(todaySet({ seats: 4, ...place }))
+      .where(eq(diningTables.id, PLAIN));
   });
 
   async function plain(): Promise<number | null> {
@@ -76,8 +75,8 @@ describe("needs moving", () => {
 
   const target = (values: Partial<typeof floorResetTables.$inferInsert>) =>
     suite.db.update(floorResetTables).set(values).where(eq(floorResetTables.id, PLAIN_ROW));
-  const today = (values: Partial<typeof floorTodayTables.$inferInsert>) =>
-    suite.db.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, PLAIN));
+  const today = (values: Partial<import("@waitron/db").TodayRow>) =>
+    suite.db.update(diningTables).set(todaySet(values)).where(eq(diningTables.id, PLAIN));
 
   it("is false for a marked table standing exactly at its row's place", async () => {
     expect(await plain()).toBe(0);

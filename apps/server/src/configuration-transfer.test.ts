@@ -8,7 +8,6 @@ import {
   seedActivityActor,
 } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { deleteStation } from "./station-delete.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
@@ -400,7 +399,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 24,
+  version: 25,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -938,7 +937,10 @@ describe("configuration transfer database path", () => {
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         label: "T1",
       });
-      await tx.insert(floorTodayTables).values({ tableId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" });
+      await tx
+        .update(diningTables)
+        .set({ onFloor: true })
+        .where(eq(diningTables.id, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
       await tx.insert(payments).values({
         id: "cccccccc-bbbb-bbbb-bbbb-cccccccccccc",
         workingOrderId: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
@@ -3500,7 +3502,10 @@ it("leaves a table's clearing state behind", async () => {
       id: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee",
       label: "T9",
     });
-    await tx.insert(floorTodayTables).values({ tableId: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee" });
+    await tx
+      .update(diningTables)
+      .set({ onFloor: true })
+      .where(eq(diningTables.id, "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee"));
     await tx.execute(sql`
       update dining_tables set needs_clearing_since = '2026-09-29T10:00:00.000Z'
       where id = 'eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee'`);
@@ -5534,7 +5539,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(24);
+  expect(exported.version).toBe(25);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

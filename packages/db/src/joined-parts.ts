@@ -1,6 +1,8 @@
 import { sql, type AnyColumn, type SQL, type SQLWrapper } from "drizzle-orm";
+import { diningTables } from "./schema/dining-tables.js";
+import { todayColumns } from "./floor-today-columns.js";
 import { alias } from "drizzle-orm/sqlite-core";
-import { floorResetTables, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
+import { floorResetTables, floorTodayJoinTables } from "./schema/floor-plans.js";
 
 type ResetRowColumns = Record<
   "tableId" | "x" | "y" | "width" | "height" | "shape" | "rotation",
@@ -9,14 +11,14 @@ type ResetRowColumns = Record<
 
 /**
  * `movesTable`'s rule (apps/server/src/floor-reset-plan.ts) in SQL, for reset row `row`: its table
- * has a today's row, drawn and not taken off, and is in a merge, split off, or not exactly at the
+ * is on today's map, drawn and not taken off, and is in a merge, split off, or not exactly at the
  * row's placement.
  */
 export function resetRowMoves(row: ResetRowColumns): SQL {
-  const t = floorTodayTables;
+  const t = todayColumns;
   return sql`exists (
-    select 1 from ${t}
-    where ${t.tableId} = ${row.tableId} and ${t.takenOff} = 0 and ${t.x} is not null and (
+    select 1 from ${diningTables}
+    where ${diningTables.onFloor} = 1 and ${t.tableId} = ${row.tableId} and ${t.takenOff} = 0 and ${t.x} is not null and (
       ${t.x} is not ${row.x} or ${t.y} is not ${row.y} or ${t.width} is not ${row.width}
       or ${t.height} is not ${row.height} or ${t.shape} is not ${row.shape}
       or ${t.rotation} is not ${row.rotation}

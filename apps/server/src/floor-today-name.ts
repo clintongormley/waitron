@@ -5,7 +5,7 @@ import {
   floorPlanTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
+  todaySet,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, normalisePartyName } from "@waitron/shared";
@@ -64,9 +64,9 @@ export async function nameToday(
   if (wanted !== null) await refuseInUse(tx, wanted, { tableId });
   await withMovedSlips(tx, cfg, { tables: [tableId] }, async () => {
     await tx
-      .update(floorTodayTables)
-      .set({ name: wanted })
-      .where(eq(floorTodayTables.id, today.row.id));
+      .update(diningTables)
+      .set(todaySet({ name: wanted }))
+      .where(eq(diningTables.id, today.row.tableId));
   });
 }
 
@@ -96,10 +96,9 @@ async function refuseInUse(
     throw taken;
 
   const todays = await tx
-    .select({ tableId: floorTodayTables.tableId, name: floorTodayTables.name })
-    .from(floorTodayTables)
-    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .where(isNotNull(floorTodayTables.name));
+    .select({ tableId: diningTables.id, name: diningTables.todayName })
+    .from(diningTables)
+    .where(isNotNull(diningTables.todayName));
   if (todays.some((t) => t.tableId !== selfTable && sameName(t.name!, name))) throw taken;
 
   const groups = await tx

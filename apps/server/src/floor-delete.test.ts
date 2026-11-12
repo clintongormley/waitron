@@ -8,15 +8,14 @@ import { describe, expect, it } from "vitest";
 import { BOOKINGS_TABLE_REMOVAL, bookings } from "@waitron/bookings";
 import {
   diningTables,
+  todayColumns,
   floorPlanPlacements,
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodaySplitParts,
-  floorTodayZones,
   floorZones,
   locations,
   parties,
@@ -24,6 +23,7 @@ import {
   workingOrders,
   ticketItems,
   type Transaction,
+  OFF_FLOOR,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -86,11 +86,9 @@ const floorRows = {
   floorPlanTables,
   floorPlanPlacements,
   floorResetTables,
-  floorTodayTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodaySplitParts,
-  floorTodayZones,
 };
 async function snapshot(tx: Transaction) {
   const result: Record<string, unknown[]> = {};
@@ -154,9 +152,15 @@ async function planned(z: string, prefix: string) {
       .values({ zoneId: z, label: `${prefix} pending`, pending: true, planTableId: masters[0]!.id })
       .returning();
     const today = await tx
-      .insert(floorTodayTables)
-      .values(live.map((table) => ({ tableId: table.id })))
-      .returning();
+      .update(diningTables)
+      .set({ onFloor: true })
+      .where(
+        inArray(
+          diningTables.id,
+          live.map((table) => table.id),
+        ),
+      )
+      .returning(todayColumns);
     const [todayJoin] = await tx
       .insert(floorTodayJoins)
       .values({ zoneId: z, seats: 12 })
@@ -174,9 +178,17 @@ async function planned(z: string, prefix: string) {
       )
       .returning();
     const [todayZone] = await tx
-      .insert(floorTodayZones)
-      .values({ zoneId: z, businessDay: "2026-10-11", revision: 7 })
-      .returning();
+      .update(floorZones)
+      .set({ todayBusinessDay: "2026-10-11", todayRevision: 7 })
+      .where(eq(floorZones.id, z))
+      .returning({
+        zoneId: floorZones.id,
+        businessDay: floorZones.todayBusinessDay,
+        revision: floorZones.todayRevision,
+        setId: floorZones.todaySetId,
+        layoutRevision: floorZones.todayLayoutRevision,
+        occurrence: floorZones.todayOccurrence,
+      });
     const [noToday] = await tx
       .insert(diningTables)
       .values({ zoneId: z, label: `${prefix} no today` })
@@ -212,7 +224,7 @@ describe("floor hierarchy deletion", () => {
     );
     await join(v, partyId, other);
     await inTx(v, (tx) => leaveTables(tx, [first]));
-    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, first)));
+    await inTx(v, (tx) => tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, first)));
     const before = await inTx(v, snapshot);
     const result = await impact([v.tables.zoneId]);
     expect(result.refusals).toEqual(
@@ -393,10 +405,8 @@ describe("floor hierarchy deletion", () => {
       floorPlans: [own.plan],
       floorPlanTables: own.masters,
       floorResetTables: [...own.resets, own.pending],
-      floorTodayTables: own.today,
       floorTodayJoins: [own.todayJoin],
       floorTodayJoinTables: own.todayMembers,
-      floorTodayZones: [own.todayZone],
     };
     for (const [key, rows] of Object.entries(removed)) {
       const ids = new Set(rows.map((row) => row.id));
@@ -423,7 +433,20 @@ describe("floor hierarchy deletion", () => {
           : row,
       ),
     );
-    expect(after.zones).toEqual(before.zones);
+    expect(after.zones).toEqual(
+      (before.zones as { id: string }[]).map((row) =>
+        row.id === z
+          ? {
+              ...row,
+              todayBusinessDay: null,
+              todayRevision: 0,
+              todaySetId: null,
+              todayLayoutRevision: 0,
+              todayOccurrence: null,
+            }
+          : row,
+      ),
+    );
     expect(after.locations).toEqual(before.locations);
     expect(after.tickets).toEqual(before.tickets);
     expect(after.parties).toEqual(before.parties);
@@ -551,7 +574,17 @@ describe("floor hierarchy deletion", () => {
     ).toEqual([]);
     expect(
       await inTx(v, (tx) =>
-        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+        tx
+          .select({
+            zoneId: floorZones.id,
+            businessDay: floorZones.todayBusinessDay,
+            revision: floorZones.todayRevision,
+            setId: floorZones.todaySetId,
+            layoutRevision: floorZones.todayLayoutRevision,
+            occurrence: floorZones.todayOccurrence,
+          })
+          .from(floorZones)
+          .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zoneId))),
       ),
     ).toEqual([]);
   });

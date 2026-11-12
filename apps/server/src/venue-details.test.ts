@@ -3,7 +3,6 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
 import { stampDeployment } from "@waitron/db";
-import { floorTodayTables } from "@waitron/db";
 import { Hono } from "hono";
 import { WorkforceBackend, employments } from "@waitron/workforce";
 import { startManagementSession } from "@waitron/identity";
@@ -1150,7 +1149,10 @@ describe("venue detail consumer reads", () => {
         zoneId: [await seedZone(suite.db, { name: "Booking tables" })][0]!.id,
       })
       .returning({ id: diningTables.id });
-    await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
+    await suite.db
+      .update(diningTables)
+      .set({ onFloor: true })
+      .where(eq(diningTables.id, table!.id));
     await suite.db.insert(bookings).values([
       {
         tableId: table!.id,

@@ -253,7 +253,10 @@ describe("the venue-service tables carry no tenant column", () => {
       },
       floor_zones: {
         primaryKey: ["id"],
-        foreignKeys: ["(department_id) -> departments(id)"],
+        foreignKeys: [
+          "(department_id) -> departments(id)",
+          "(today_set_id) -> floor_plan_sets(id)",
+        ],
       },
       menu_period_staff_menus: {
         primaryKey: ["period_id", "menu_id"],

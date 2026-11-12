@@ -5,7 +5,7 @@ import { writePartyAllergy } from "@waitron/venue-service";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { asc, sql, eq } from "drizzle-orm";
+import { asc, sql, eq, and, isNotNull } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,13 +17,12 @@ import {
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodaySplitParts,
-  floorTodayTables,
-  floorTodayZones,
   partyTables,
   parties,
   ticketItems,
   workingOrders,
   floorZones,
+  todayColumns,
 } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import {
@@ -180,7 +179,11 @@ async function refusal(answer: Promise<Response>): Promise<{ status: number; bod
 /** Every today's row, split row, group row and party table, to show a refusal wrote nothing. */
 async function everything() {
   const today = await inTx(v, (tx) =>
-    tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
+    tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(eq(diningTables.onFloor, true))
+      .orderBy(asc(diningTables.id)),
   );
   const split = await inTx(v, (tx) =>
     tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
@@ -1231,7 +1234,17 @@ describe("resetting a zone onto a layout", () => {
     await expectRevision(v, resetZoneToday(zone.zoneId), zone.zoneId, 0);
 
     const [row] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zone.zoneId)),
+      tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zone.zoneId))),
     );
     expect(row).toBeUndefined();
   });
@@ -1260,7 +1273,17 @@ describe("resetting a zone onto a layout", () => {
 
     expect(
       await inTx(v, (tx) =>
-        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+        tx
+          .select({
+            zoneId: floorZones.id,
+            businessDay: floorZones.todayBusinessDay,
+            revision: floorZones.todayRevision,
+            setId: floorZones.todaySetId,
+            layoutRevision: floorZones.todayLayoutRevision,
+            occurrence: floorZones.todayOccurrence,
+          })
+          .from(floorZones)
+          .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zoneId))),
       ),
     ).toEqual([]);
   });
@@ -1294,7 +1317,17 @@ describe("Reset to … plan", () => {
 
   async function recordOf(zoneId: string) {
     const [row] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+      tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zoneId))),
     );
     return row;
   }
@@ -1453,13 +1486,15 @@ describe("Reset to … plan", () => {
       await tx
         .insert(floorPlans)
         .values({ zoneId: d.zoneId, setId: d.dinner, savedAt: LUNCH.toISOString() });
-      await tx.insert(floorTodayZones).values({
-        zoneId: d.zoneId,
-        businessDay: "2026-10-11",
-        revision: 1,
-        setId: d.standard,
-        occurrence: null,
-      });
+      await tx
+        .update(floorZones)
+        .set({
+          todayBusinessDay: "2026-10-11",
+          todayRevision: 1,
+          todaySetId: d.standard,
+          todayOccurrence: null,
+        })
+        .where(eq(floorZones.id, d.zoneId));
     });
 
     await expectRevision(v, resetZoneToday(d.zoneId, { zoneRevision: 1 }), d.zoneId, 1);
@@ -1535,7 +1570,17 @@ describe("Update layout", () => {
 
   async function recordOf(zoneId: string) {
     const [row] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+      tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zoneId))),
     );
     return row;
   }

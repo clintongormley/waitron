@@ -36,7 +36,6 @@ import {
   diningTables,
   products,
   floorZones,
-  floorTodayTables,
   invoiceSeries,
   kitchenCourses,
   kitchenStations,
@@ -49,6 +48,7 @@ import {
   workingLineContexts,
   workingOrderLines,
   workingOrders,
+  todayColumns,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -1744,7 +1744,7 @@ describe("departments", () => {
         .insert(diningTables)
         .values({ label: "T12", zoneId: terrace })
         .returning({ id: diningTables.id });
-      await tx.insert(floorTodayTables).values({ tableId: table!.id });
+      await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table!.id));
       return { restaurant, bar, tableId: table!.id };
     });
 
@@ -2048,7 +2048,7 @@ describe("retired and moved zones", () => {
       })
       .returning({ id: diningTables.id });
 
-    await db.insert(floorTodayTables).values({ tableId: table!.id });
+    await db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table!.id));
 
     await scoped((tx) =>
       configureZone(tx, {
@@ -3574,18 +3574,24 @@ it("keeps a switched-off zone's table rows and today's rows unchanged", async ()
         label: "Present",
       })
       .returning();
-    await tx.insert(floorTodayTables).values({ tableId: table!.id, takenOff: true, seats: 3 });
+    await tx
+      .update(diningTables)
+      .set({ takenOff: true, todaySeats: 3, onFloor: true })
+      .where(eq(diningTables.id, table!.id));
     const before = await tx.select().from(diningTables).where(eq(diningTables.id, table!.id));
     const todayBefore = await tx
-      .select()
-      .from(floorTodayTables)
-      .where(eq(floorTodayTables.tableId, table!.id));
+      .select(todayColumns)
+      .from(diningTables)
+      .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, table!.id)));
     await tx.execute(sql`update floor_zones set active = false where id = ${zone.id}`);
     expect(await tx.select().from(diningTables).where(eq(diningTables.id, table!.id))).toEqual(
       before,
     );
     expect(
-      await tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, table!.id)),
+      await tx
+        .select(todayColumns)
+        .from(diningTables)
+        .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, table!.id))),
     ).toEqual(todayBefore);
     expect(
       await tx

@@ -1,4 +1,4 @@
-import { inArray, sql } from "drizzle-orm";
+import { inArray, sql, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -7,8 +7,9 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
   needsMoving,
+  OFF_FLOOR,
+  todaySet,
 } from "@waitron/db";
 import { movesTable, type Placement } from "./floor-reset-plan.js";
 import { placementColumns } from "./floor-today-store.js";
@@ -79,7 +80,7 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
     ]);
     const ids = keys.map((key) => table[key]!);
     await inTx(v, async (tx) => {
-      await tx.delete(floorTodayTables).where(inArray(floorTodayTables.tableId, ids));
+      await tx.update(diningTables).set(OFF_FLOOR).where(inArray(diningTables.id, ids));
       await tx.delete(floorResetTables).where(inArray(floorResetTables.tableId, ids));
       const [join] = await tx
         .insert(floorTodayJoins)
@@ -88,12 +89,16 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
       for (const [i, c] of CASES.entries()) {
         const tableId = ids[i]!;
         if (c.today !== null) {
-          await tx.insert(floorTodayTables).values({
-            tableId,
-            seats: c.today.seats ?? 4,
-            takenOff: c.today.takenOff ?? false,
-            ...placementColumns(c.today.placement),
-          });
+          await tx
+            .update(diningTables)
+            .set(
+              todaySet({
+                seats: c.today.seats ?? 4,
+                takenOff: c.today.takenOff ?? false,
+                ...placementColumns(c.today.placement),
+              }),
+            )
+            .where(eq(diningTables.id, tableId));
         }
         await tx.insert(floorResetTables).values({
           zoneId,

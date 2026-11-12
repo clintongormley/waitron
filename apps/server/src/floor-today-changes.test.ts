@@ -10,8 +10,9 @@ import {
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodayTables,
   workingOrders,
+  todayColumns,
+  todaySet,
 } from "@waitron/db";
 import { foodOnItsWay } from "./delivery-release.js";
 import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
@@ -60,10 +61,10 @@ const reset = (zoneId: string) => inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId
 
 async function setToday(
   tableId: string,
-  values: Partial<typeof floorTodayTables.$inferInsert>,
+  values: Partial<import("@waitron/db").TodayRow>,
 ): Promise<void> {
   await inTx(v, (tx) =>
-    tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+    tx.update(diningTables).set(todaySet(values)).where(eq(diningTables.id, tableId)),
   );
 }
 
@@ -135,7 +136,11 @@ function place(x: number, y: number) {
 /** Every today's row and merge, to show a refusal wrote nothing. */
 async function everything() {
   return inTx(v, async (tx) => ({
-    today: await tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
+    today: await tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(eq(diningTables.onFloor, true))
+      .orderBy(asc(diningTables.id)),
     joins: await tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
     joinTables: await tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
   }));
@@ -434,7 +439,10 @@ describe("today's changes", () => {
 
     const never = await v.table(`Never ${floorLabelSuffix()}`, zoneId, { today: false });
     await inTx(v, (tx) =>
-      tx.insert(floorTodayTables).values({ tableId: never, seats: 4, ...place(40, 0) }),
+      tx
+        .update(diningTables)
+        .set(todaySet({ seats: 4, ...place(40, 0) }))
+        .where(eq(diningTables.id, never)),
     );
     expect(await resetRow(never)).toBeUndefined();
     await expect(back(never)).rejects.toMatchObject({

@@ -13,10 +13,11 @@ import {
   diningTables,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodayTables,
   parties,
   partyTables,
   workingOrders,
+  todayColumns,
+  todaySet,
 } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { partyTablesName } from "@waitron/shared";
@@ -244,7 +245,11 @@ async function longApart() {
 
 async function everything() {
   return inTx(v, async (tx) => ({
-    today: await tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
+    today: await tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(eq(diningTables.onFloor, true))
+      .orderBy(asc(diningTables.id)),
     joins: await tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
     joinTables: await tx
       .select()
@@ -469,9 +474,9 @@ describe("Split tables… on a group with nobody seated", () => {
     await merge(table.bar!, table.c3!, "left", 8);
     await inTx(v, (tx) =>
       tx
-        .update(floorTodayTables)
-        .set({ rotation: 45 })
-        .where(eq(floorTodayTables.tableId, table.c4!)),
+        .update(diningTables)
+        .set(todaySet({ rotation: 45 }))
+        .where(eq(diningTables.id, table.c4!)),
     );
 
     await settles(() => splitOff(table.bar!, [table.bar!], 6), zoneId);

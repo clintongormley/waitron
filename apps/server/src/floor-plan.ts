@@ -6,7 +6,6 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayZones,
   floorZones,
   newId,
   statementChunks,
@@ -435,10 +434,10 @@ async function firstSaveReset(
   now: Date,
 ): Promise<void> {
   const [today] = await tx
-    .select({ id: floorTodayZones.id })
-    .from(floorTodayZones)
-    .where(eq(floorTodayZones.zoneId, zoneId));
-  if (today === undefined) await resetZone(tx, removals, zoneId, now, "due");
+    .select({ businessDay: floorZones.todayBusinessDay })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
+  if (today?.businessDay == null) await resetZone(tx, removals, zoneId, now, "due");
 }
 
 /**

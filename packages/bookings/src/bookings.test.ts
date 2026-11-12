@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { inArray, sql } from "drizzle-orm";
+import { inArray, sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   floorPlanSets,
   floorPlanTables,
   floorPlans,
-  floorTodayTables,
   newId,
   nowIso,
   venueLocationId,
   withTransaction,
+  diningTables,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
@@ -59,7 +59,11 @@ async function insertDiningTable(label: string, active = true): Promise<string> 
     insert into dining_tables (id, created_at, zone_id, label)
     values (${newId()}, ${nowIso()}, ${zone!.id}, ${label})
     returning id`);
-  if (active) await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
+  if (active)
+    await db
+      .update(diningTables)
+      .set({ onFloor: true })
+      .where(eq(diningTables.id, row.rows[0]!.id));
   return row.rows[0]!.id;
 }
 
@@ -733,7 +737,7 @@ describe("a part of a joined table on a layout", () => {
         values (${newId()}, ${nowIso()}, ${zone!.id}, ${labels[key]}, ${row!.id})
         returning id`);
       live[key] = table.rows[0]!.id;
-      await db.insert(floorTodayTables).values({ tableId: live[key] });
+      await db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, live[key]));
     }
     await db
       .update(floorPlanTables)

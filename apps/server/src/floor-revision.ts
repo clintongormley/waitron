@@ -1,12 +1,11 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   diningTables,
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
-  floorTodayZones,
   type Transaction,
+  floorZones,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
@@ -47,9 +46,9 @@ export async function roomRevisions(
   zoneIds: readonly string[],
 ): Promise<Map<string, number>> {
   const rows = await tx
-    .select({ zoneId: floorTodayZones.zoneId, revision: floorTodayZones.revision })
-    .from(floorTodayZones)
-    .where(inArray(floorTodayZones.zoneId, [...zoneIds]));
+    .select({ zoneId: floorZones.id, revision: floorZones.todayRevision })
+    .from(floorZones)
+    .where(inArray(floorZones.id, [...zoneIds]));
   const found = new Map(rows.map((row) => [row.zoneId, row.revision]));
   return new Map(zoneIds.map((zoneId) => [zoneId, found.get(zoneId) ?? 0]));
 }
@@ -68,16 +67,17 @@ export async function roomPrints(
       id: diningTables.id,
       label: diningTables.label,
       shortName: diningTables.shortName,
-      seats: floorTodayTables.seats,
-      fixed: floorTodayTables.fixed,
-      x: floorTodayTables.x,
-      y: floorTodayTables.y,
-      width: floorTodayTables.width,
-      height: floorTodayTables.height,
-      shape: floorTodayTables.shape,
-      rotation: floorTodayTables.rotation,
-      takenOff: floorTodayTables.takenOff,
-      name: floorTodayTables.name,
+      onFloor: diningTables.onFloor,
+      seats: diningTables.todaySeats,
+      fixed: diningTables.todayFixed,
+      x: diningTables.todayX,
+      y: diningTables.todayY,
+      width: diningTables.todayWidth,
+      height: diningTables.todayHeight,
+      shape: diningTables.todayShape,
+      rotation: diningTables.todayRotation,
+      takenOff: diningTables.takenOff,
+      name: diningTables.todayName,
       joinId: floorTodayJoinTables.joinId,
       beforeX: floorTodayJoinTables.beforeX,
       beforeY: floorTodayJoinTables.beforeY,
@@ -87,7 +87,6 @@ export async function roomPrints(
       readyToMove: floorResetTables.readyToMove,
     })
     .from(diningTables)
-    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .leftJoin(floorResetTables, eq(floorResetTables.tableId, diningTables.id))
@@ -100,13 +99,13 @@ export async function roomPrints(
   return new Map([...byZone].map(([zoneId, zoneRows]) => [zoneId, JSON.stringify(zoneRows)]));
 }
 
-/** Sets the room's revision to `from + 1` and answers it; a room with no row answers `from`. */
+/** Sets the room's revision to `from + 1` and answers it; a room with no recorded business day answers `from`. */
 export async function moveRoom(tx: Transaction, zoneId: string, from: number): Promise<number> {
   const moved = await tx
-    .update(floorTodayZones)
-    .set({ revision: from + 1 })
-    .where(eq(floorTodayZones.zoneId, zoneId))
-    .returning({ revision: floorTodayZones.revision });
+    .update(floorZones)
+    .set({ todayRevision: from + 1 })
+    .where(and(eq(floorZones.id, zoneId), isNotNull(floorZones.todayBusinessDay)))
+    .returning({ revision: floorZones.todayRevision });
   return moved.length === 0 ? from : from + 1;
 }
 

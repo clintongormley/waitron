@@ -289,7 +289,21 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
       CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "dining_tables"),
     ).toEqual({
       name: "dining_tables",
-      omit: ["needs_clearing_since", "short_name_key"],
+      omit: [
+        "needs_clearing_since",
+        "short_name_key",
+        "on_floor",
+        "today_seats",
+        "today_fixed",
+        "today_x",
+        "today_y",
+        "today_width",
+        "today_height",
+        "today_shape",
+        "today_rotation",
+        "taken_off",
+        "today_name",
+      ],
     });
     expect(CORE_CONFIGURATION_TRANSFER.afterImport).toBe(storeTableShortNameKeys);
   });

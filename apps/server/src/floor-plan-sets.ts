@@ -4,7 +4,6 @@ import {
   floorPlans,
   floorPlanSets,
   floorPlanTables,
-  floorTodayZones,
   floorZones,
   type Transaction,
 } from "@waitron/db";
@@ -223,10 +222,9 @@ async function readLayouts(
 
 async function zonesShowing(tx: Transaction, setId: string): Promise<string[]> {
   const rows = await tx
-    .select({ zoneId: floorTodayZones.zoneId })
-    .from(floorTodayZones)
-    .innerJoin(floorZones, eq(floorZones.id, floorTodayZones.zoneId))
-    .where(eq(floorTodayZones.setId, setId))
+    .select({ zoneId: floorZones.id })
+    .from(floorZones)
+    .where(eq(floorZones.todaySetId, setId))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
   return rows.map((row) => row.zoneId);
 }
@@ -251,9 +249,9 @@ export async function removeSets(tx: Transaction, requested: readonly string[]):
     plans.map((plan) => plan.id),
   );
   await tx
-    .update(floorTodayZones)
-    .set({ setId: null })
-    .where(inArray(floorTodayZones.setId, setIds));
+    .update(floorZones)
+    .set({ todaySetId: null })
+    .where(inArray(floorZones.todaySetId, setIds));
   await tx.delete(floorPlanSets).where(inArray(floorPlanSets.id, setIds));
 }
 

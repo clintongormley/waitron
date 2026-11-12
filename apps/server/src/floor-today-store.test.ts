@@ -17,13 +17,14 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
-  floorTodayZones,
   floorZones,
   dayCutoverChanges,
   shortNameColumns,
   workingOrders,
   type Transaction,
+  todayColumns,
+  OFF_FLOOR,
+  todaySet,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -35,6 +36,7 @@ import {
   catchUpZone,
   ensureToday,
   moveToday,
+  putBackToday,
   resetZone,
   todayBusinessDay,
 } from "./floor-today-store.js";
@@ -207,14 +209,27 @@ async function deleteFromMaster(masterId: string): Promise<void> {
 
 async function todayRow(tableId: string) {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+    tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, tableId))),
   );
   return row;
 }
 
 async function todayZone(zoneId: string) {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+    tx
+      .select({
+        zoneId: floorZones.id,
+        businessDay: floorZones.todayBusinessDay,
+        revision: floorZones.todayRevision,
+        setId: floorZones.todaySetId,
+        layoutRevision: floorZones.todayLayoutRevision,
+        occurrence: floorZones.todayOccurrence,
+      })
+      .from(floorZones)
+      .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zoneId))),
   );
   return row;
 }
@@ -545,7 +560,7 @@ describe("building today's plan from a zone's layout", () => {
     const z = await zone();
     const t1 = await v.table("Back 1", z);
     await masterOf(z, [{ label: "Back 1", live: t1 }]);
-    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t1)));
+    await inTx(v, (tx) => tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, t1)));
 
     await reset(z);
 
@@ -557,7 +572,7 @@ describe("building today's plan from a zone's layout", () => {
     const t1 = await v.table("Seed 1", z);
     await masterOf(z, [{ label: "Seed 1b", seats: 6, place: place(5, 5), live: t1 }]);
     const { partyId } = await seat(v, t1);
-    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t1)));
+    await inTx(v, (tx) => tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, t1)));
 
     await reset(z);
 
@@ -742,9 +757,9 @@ describe("building today's plan from a zone's layout", () => {
     await reset(z);
     await inTx(v, async (tx) => {
       await tx
-        .update(floorTodayTables)
-        .set({ x: 70, takenOff: true })
-        .where(eq(floorTodayTables.tableId, t1));
+        .update(diningTables)
+        .set(todaySet({ x: 70, takenOff: true }))
+        .where(eq(diningTables.id, t1));
       const [merge] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId: z, seats: 8 })
@@ -773,7 +788,10 @@ describe("building today's plan from a zone's layout", () => {
     ]);
     await reset(z);
     await inTx(v, async (tx) => {
-      await tx.update(floorTodayTables).set({ x: 9 }).where(eq(floorTodayTables.tableId, u1));
+      await tx
+        .update(diningTables)
+        .set(todaySet({ x: 9 }))
+        .where(eq(diningTables.id, u1));
       const [merge] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId: z, seats: 8 })
@@ -808,7 +826,10 @@ describe("building today's plan from a zone's layout", () => {
     ]);
     await reset(z);
     await inTx(v, async (tx) => {
-      await tx.update(floorTodayTables).set({ x: 9 }).where(eq(floorTodayTables.tableId, u1));
+      await tx
+        .update(diningTables)
+        .set(todaySet({ x: 9 }))
+        .where(eq(diningTables.id, u1));
       const [merge] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId: z, seats: 8 })
@@ -1100,7 +1121,7 @@ describe("a deleted zone", () => {
     // A pending removal has no row on today's plan.
     await deleteFromMaster(master.get("Reopen 2")!);
     await inTx(v, async (tx) => {
-      await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, hidden));
+      await tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, hidden));
     });
     await inTx(v, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${z}`),
@@ -2209,4 +2230,14 @@ it("late saved-group formation restores a contained manual group's reset slots",
   expect((await mergeOf(v, table.b!))!.members.map((m) => m.tableId).sort()).toEqual(
     [table.a!, table.b!, table.c!].sort(),
   );
+});
+
+it("refuses putting a table outside today's map back on it", async () => {
+  const id = await v.table(`Off map ${floorLabelSuffix()}`, v.tables.zoneId, { today: false });
+  await expect(inTx(v, (tx) => putBackToday(tx, id))).rejects.toMatchObject({
+    code: "table.not_on_today_plan",
+    params: { tableId: id },
+  });
+  expect((await tableRow(v, id)).onFloor).toBe(false);
+  expect(await todayRow(id)).toBeUndefined();
 });

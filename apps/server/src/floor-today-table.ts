@@ -3,8 +3,9 @@ import {
   diningTables,
   floorZones,
   floorTodayJoinTables,
-  floorTodayTables,
   needsMoving,
+  todayColumns,
+  type TodayRow,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -14,9 +15,9 @@ import "./errors.js";
 export interface Today {
   tableId: string;
   zoneId: string;
-  row: typeof floorTodayTables.$inferSelect;
-  /** Every member's today's row, this table's included, by table id; null when the table is in no merge. */
-  merge: { joinId: string; members: (typeof floorTodayTables.$inferSelect)[] } | null;
+  row: TodayRow;
+  /** Every member's today values, this table's included, by table id; null when the table is in no merge. */
+  merge: { joinId: string; members: TodayRow[] } | null;
 }
 
 /** The table, with its today's row and its merge. */
@@ -24,22 +25,25 @@ export async function todayOf(tx: Transaction, tableId: string): Promise<Today> 
   const [table] = await tx
     .select({
       zoneId: diningTables.zoneId,
-      row: floorTodayTables,
+      onFloor: diningTables.onFloor,
+      row: todayColumns,
       joinId: floorTodayJoinTables.joinId,
     })
     .from(diningTables)
     .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
-    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
     .where(and(eq(diningTables.id, tableId), eq(floorZones.active, true)));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   const { zoneId, row, joinId } = table;
-  if (row === null) throw new AppError("table.not_on_today_plan", { tableId });
+  if (!table.onFloor) throw new AppError("table.not_on_today_plan", { tableId });
   if (joinId === null) return { tableId, zoneId, row, merge: null };
   const members = await tx
-    .select({ row: floorTodayTables })
+    .select({ row: todayColumns })
     .from(floorTodayJoinTables)
-    .innerJoin(floorTodayTables, eq(floorTodayTables.tableId, floorTodayJoinTables.tableId))
+    .innerJoin(
+      diningTables,
+      and(eq(diningTables.id, floorTodayJoinTables.tableId), eq(diningTables.onFloor, true)),
+    )
     .where(eq(floorTodayJoinTables.joinId, joinId))
     .orderBy(asc(floorTodayJoinTables.tableId));
   return { tableId, zoneId, row, merge: { joinId, members: members.map((m) => m.row) } };
@@ -106,14 +110,12 @@ export async function refuseNeedsMoving(
   if (first !== undefined) throw new AppError("table.needs_moving", { tableId: first });
 }
 
-/** Any of the tables taken off today, the first in the caller's order named; a table with no today's row never is. */
+/** Any of the tables taken off today, the first in the caller's order named; a table outside today's map never is. */
 export async function refuseTakenOff(tx: Transaction, tableIds: readonly string[]): Promise<void> {
   const rows = await tx
-    .select({ tableId: floorTodayTables.tableId })
-    .from(floorTodayTables)
-    .where(
-      and(inArray(floorTodayTables.tableId, [...tableIds]), eq(floorTodayTables.takenOff, true)),
-    );
+    .select({ tableId: diningTables.id })
+    .from(diningTables)
+    .where(and(inArray(diningTables.id, [...tableIds]), eq(diningTables.takenOff, true)));
   const off = new Set(rows.map((row) => row.tableId));
   const first = tableIds.find((tableId) => off.has(tableId));
   if (first !== undefined) throw new AppError("table.taken_off", { tableId: first });

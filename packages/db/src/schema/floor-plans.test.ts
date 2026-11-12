@@ -1,4 +1,6 @@
-import { eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { todaySet } from "@waitron/db";
+import { todayColumns } from "../floor-today-columns.js";
+import { eq, inArray, isNotNull, sql, and } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import type { Transaction } from "../client.js";
@@ -21,8 +23,6 @@ import {
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
-  floorTodayTables,
-  floorTodayZones,
   rangeCheck,
 } from "./floor-plans.js";
 import { floorZones } from "./floor-zones.js";
@@ -247,7 +247,7 @@ describe("floor plan tables", () => {
     ).toBe(true);
   });
 
-  it("keeps one plan per zone in a set, and one today's row per zone", async () => {
+  it("keeps one plan per zone in a set", async () => {
     const setId = await insertSet();
     await inTx((tx) => tx.update(floorPlans).set({ setId }).where(eq(floorPlans.id, PLAN)));
     const plan = await captureError(() =>
@@ -258,21 +258,9 @@ describe("floor plan tables", () => {
     expect(
       refusalOn(plan, UNIQUE_VIOLATION, { table: "floor_plans", columns: ["set_id", "zone_id"] }),
     ).toBe(true);
-
-    await inTx((tx) =>
-      tx.insert(floorTodayZones).values({ zoneId: OTHER_ZONE, businessDay: "2026-10-08" }),
-    );
-    const today = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(floorTodayZones).values({ zoneId: OTHER_ZONE, businessDay: "2026-10-09" }),
-      ),
-    );
-    expect(
-      refusalOn(today, UNIQUE_VIOLATION, { table: "floor_today_zones", columns: ["zone_id"] }),
-    ).toBe(true);
   });
 
-  it("keeps one today's row and one reset row per live table, and a table in one merge at a time", async () => {
+  it("keeps one reset row per live table, and a table in one merge at a time", async () => {
     const extra = await inTx(async (tx) => {
       const [row] = await tx
         .insert(diningTables)
@@ -280,14 +268,6 @@ describe("floor plan tables", () => {
         .returning({ id: diningTables.id });
       return row!.id;
     });
-    await inTx((tx) => tx.insert(floorTodayTables).values({ tableId: extra, ...PLACED }));
-    const today = await captureError(() =>
-      inTx((tx) => tx.insert(floorTodayTables).values({ tableId: extra, ...NO_PLACE })),
-    );
-    expect(
-      refusalOn(today, UNIQUE_VIOLATION, { table: "floor_today_tables", columns: ["table_id"] }),
-    ).toBe(true);
-
     await inTx((tx) =>
       tx.insert(floorResetTables).values({ zoneId: OTHER_ZONE, tableId: extra, label: "U1" }),
     );
@@ -359,16 +339,24 @@ describe("floor plan tables", () => {
     [
       "a today's table at x 1000",
       () =>
-        inTx((tx) => tx.insert(floorTodayTables).values({ tableId: TABLE_2, ...PLACED, x: 1000 })),
-      "floor_today_tables_x_ck",
+        inTx((tx) =>
+          tx
+            .update(diningTables)
+            .set(todaySet({ ...PLACED, x: 1000 }))
+            .where(eq(diningTables.id, TABLE_2)),
+        ),
+      "dining_tables_today_x_ck",
     ],
     [
       "a today's table with no shape",
       () =>
         inTx((tx) =>
-          tx.insert(floorTodayTables).values({ tableId: TABLE_2, ...PLACED, shape: null }),
+          tx
+            .update(diningTables)
+            .set(todaySet({ ...PLACED, shape: null }))
+            .where(eq(diningTables.id, TABLE_2)),
         ),
-      "floor_today_tables_placement_ck",
+      "dining_tables_today_placement_ck",
     ],
     [
       "a merged table that was turned 20",
@@ -437,9 +425,13 @@ describe("floor plan tables", () => {
         .insert(floorResetTables)
         .values({ zoneId: ZONE, tableId: null, label: "T5", ...NO_PLACE, pending: true });
       await tx
-        .insert(floorTodayZones)
-        .values({ zoneId: ZONE, businessDay: "2026-10-08", revision: 3 });
-      await tx.insert(floorTodayTables).values({ tableId: TABLE_1, seats: 4, ...PLACED });
+        .update(floorZones)
+        .set({ todayBusinessDay: "2026-10-08", todayRevision: 3 })
+        .where(eq(floorZones.id, ZONE));
+      await tx
+        .update(diningTables)
+        .set(todaySet({ seats: 4, ...PLACED }))
+        .where(eq(diningTables.id, TABLE_1));
       await tx.insert(parties).values({ openedBy: PERSON, tableNames: ["T1", "T2"] });
     });
     const [plan] = await inTx((tx) => tx.select().from(floorPlans).where(eq(floorPlans.id, PLAN)));
@@ -505,11 +497,24 @@ describe("floor plan tables", () => {
       }),
     ]);
     const [todayZone] = await inTx((tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, ZONE)),
+      tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, ZONE))),
     );
     expect(todayZone).toMatchObject({ businessDay: "2026-10-08", revision: 3 });
     const [todayTable] = await inTx((tx) =>
-      tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, TABLE_1)),
+      tx
+        .select(todayColumns)
+        .from(diningTables)
+        .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, TABLE_1))),
     );
     expect(todayTable).toMatchObject({ seats: 4, fixed: false, takenOff: false, ...PLACED });
     const [party] = await inTx((tx) =>
@@ -1052,10 +1057,20 @@ describe("floor plan tables", () => {
       return row!.id;
     });
     await inTx((tx) =>
-      tx.insert(floorTodayZones).values({ zoneId: zone, businessDay: "2026-10-08" }),
+      tx.update(floorZones).set({ todayBusinessDay: "2026-10-08" }).where(eq(floorZones.id, zone)),
     );
     const [row] = await inTx((tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zone)),
+      tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zone))),
     );
     expect(row!.revision).toBe(0);
   });

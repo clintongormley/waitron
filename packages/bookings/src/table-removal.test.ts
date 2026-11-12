@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorTodayTables, newId, nowIso, venueLocationId, withTransaction } from "@waitron/db";
+import { newId, nowIso, venueLocationId, withTransaction, diningTables } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -38,7 +38,7 @@ async function makeTable(label: string): Promise<string> {
     insert into dining_tables (id, created_at, zone_id, label)
     values (${newId()}, ${nowIso()}, ${zone!.id}, ${label})
     returning id`);
-  await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
+  await db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, row.rows[0]!.id));
   return row.rows[0]!.id;
 }
 

@@ -14,7 +14,6 @@ import {
 import {
   billPayments,
   diningTables,
-  floorTodayTables,
   parties,
   partyTables,
   withTransaction,
@@ -190,7 +189,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
 export async function tableAt(v: PartyVenue, id: string, label: string): Promise<string> {
   await inTx(v, async (tx) => {
     await tx.insert(diningTables).values({ id, label, zoneId: v.tables.zoneId });
-    await tx.insert(floorTodayTables).values({ tableId: id });
+    await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, id));
   });
   return id;
 }

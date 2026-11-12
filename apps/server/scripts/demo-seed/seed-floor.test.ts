@@ -284,12 +284,12 @@ describe("seedFloor", () => {
         shape: string | null;
         rotation: number | null;
       }>(
-        sql`select d.label, d.zone_id, t.fixed, t.x, t.y, t.width, t.height, t.shape, t.rotation
-            from dining_tables d join floor_today_tables t on t.table_id = d.id
+        sql`select d.label, d.zone_id, d.today_fixed as fixed, d.today_x as x, d.today_y as y, d.today_width as width, d.today_height as height, d.today_shape as shape, d.today_rotation as rotation
+            from dining_tables d where d.on_floor = 1
             `,
       );
       const { rows: todayZones } = await tx.execute<{ zone_id: string }>(
-        sql`select zone_id from floor_today_zones`,
+        sql`select id as zone_id from floor_zones where today_business_day is not null`,
       );
       return { plans, today, todayZones };
     });

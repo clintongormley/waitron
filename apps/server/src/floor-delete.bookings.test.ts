@@ -1,15 +1,9 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  diningTables,
-  floorTodayTables,
-  withTransaction,
-  installChangeFeed,
-  subscribeToChanges,
-} from "@waitron/db";
+import { diningTables, withTransaction, installChangeFeed, subscribeToChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { bookings } from "@waitron/bookings";
@@ -55,7 +49,10 @@ for (const enabled of [true, false]) {
         .insert(diningTables)
         .values({ zoneId: zone!.id, label: "T1" })
         .returning();
-      await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
+      await suite.db
+        .update(diningTables)
+        .set({ onFloor: true })
+        .where(eq(diningTables.id, table!.id));
       const sources = modules.flatMap((module) => module.changes ?? []);
       await installChangeFeed(suite.db, sources);
       const bus = new LiveEvents();
@@ -68,8 +65,6 @@ for (const enabled of [true, false]) {
         "floor_plans",
         "floor_plan_tables",
         "floor_reset_tables",
-        "floor_today_zones",
-        "floor_today_tables",
         "floor_today_joins",
         "floor_today_join_tables",
         "parties",

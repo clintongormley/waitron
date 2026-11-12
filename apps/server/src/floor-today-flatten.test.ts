@@ -7,9 +7,9 @@ import {
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodayTables,
   partyTables,
   workingOrders,
+  todayColumns,
 } from "@waitron/db";
 import type { AppError, JoinSide } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
@@ -130,7 +130,11 @@ async function refusalOf(work: Promise<unknown>): Promise<AppError | null> {
 
 async function everything() {
   return inTx(v, async (tx) => ({
-    today: await tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
+    today: await tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(eq(diningTables.onFloor, true))
+      .orderBy(asc(diningTables.id)),
     joins: await tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
     joinTables: await tx
       .select()

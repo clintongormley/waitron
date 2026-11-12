@@ -1,13 +1,8 @@
+import { eq } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import {
-  floorTodayTables,
-  diningTables,
-  withTransaction,
-  type Database,
-  venueLocationId,
-} from "@waitron/db";
+import { diningTables, withTransaction, type Database, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -83,7 +78,7 @@ async function seedTable(label = "12"): Promise<string> {
     .insert(diningTables)
     .values({ label, zoneId: zone!.id })
     .returning({ id: diningTables.id });
-  await suite.db.insert(floorTodayTables).values({ tableId: row!.id });
+  await suite.db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, row!.id));
   return row!.id;
 }
 

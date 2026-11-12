@@ -233,12 +233,6 @@ export async function canonicalMadridSemantics(
       case "floor_plan_placements":
         key = parts("plan_id", "plan_table_id");
         break;
-      case "floor_today_zones":
-        key = parts("zone_id", "business_day");
-        break;
-      case "floor_today_tables":
-        key = parts("table_id");
-        break;
       case "floor_reset_tables":
         key = parts("zone_id", "table_id");
         break;

@@ -1,12 +1,11 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { bookings } from "@waitron/bookings";
 import {
   diningTables,
-  floorTodayTables,
   floorPlanPlacements,
   floorPlanSets,
   floorPlans,
@@ -15,6 +14,7 @@ import {
   withTransaction,
   workingOrders,
   type Transaction,
+  todayColumns,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -393,7 +393,7 @@ it.each([
         .values({ zoneId: f.zoneId, label: "Garden table" })
         .returning();
       if (code === "zone.table_in_use")
-        await tx.insert(floorTodayTables).values({ tableId: table!.id });
+        await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table!.id));
       if (code === "zone.table_in_use")
         await moduleCoreServices(v.cfg, enabledTableRemovals(ALL_MODULES)).seatTable(tx, {
           tableId: table!.id,
@@ -445,15 +445,18 @@ describe("stale floor identifiers", () => {
         .insert(diningTables)
         .values({ zoneId: f.zoneId, label: randomUUID() })
         .returning();
-      await tx.insert(floorTodayTables).values({
-        tableId: table!.id,
-        x: 1,
-        y: 1,
-        width: 2,
-        height: 2,
-        shape: "rect",
-        rotation: 0,
-      });
+      await tx
+        .update(diningTables)
+        .set({
+          todayX: 1,
+          todayY: 1,
+          todayWidth: 2,
+          todayHeight: 2,
+          todayShape: "rect",
+          todayRotation: 0,
+          onFloor: true,
+        })
+        .where(eq(diningTables.id, table!.id));
       const [set] = await tx
         .insert(floorPlanSets)
         .values({ departmentId: f.departmentId, name: randomUUID() })
@@ -563,7 +566,10 @@ describe("stale floor identifiers", () => {
     expect(
       (
         await run((tx) =>
-          tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, live.tableId)),
+          tx
+            .select(todayColumns)
+            .from(diningTables)
+            .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, live.tableId))),
         )
       )[0],
     ).toMatchObject({ x: 3, y: 3, takenOff: false });

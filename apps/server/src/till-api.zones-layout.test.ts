@@ -4,11 +4,11 @@ import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, floorPlans, floorTodayZones } from "@waitron/db";
+import { departments, floorPlans, floorZones } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   createDepartment,
@@ -243,7 +243,17 @@ describe("GET /api/zones offers the due layout", () => {
     const { d } = await twoSets();
     const rows = () =>
       inTx(v, (tx) =>
-        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, d.zoneId)),
+        tx
+          .select({
+            zoneId: floorZones.id,
+            businessDay: floorZones.todayBusinessDay,
+            revision: floorZones.todayRevision,
+            setId: floorZones.todaySetId,
+            layoutRevision: floorZones.todayLayoutRevision,
+            occurrence: floorZones.todayOccurrence,
+          })
+          .from(floorZones)
+          .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, d.zoneId))),
       );
     const before = await rows();
 

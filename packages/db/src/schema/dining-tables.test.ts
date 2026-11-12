@@ -113,9 +113,20 @@ describe("dining_tables columns", () => {
       "id",
       "label",
       "needs_clearing_since",
+      "on_floor",
       "plan_table_id",
       "short_name",
       "short_name_key",
+      "taken_off",
+      "today_fixed",
+      "today_height",
+      "today_name",
+      "today_rotation",
+      "today_seats",
+      "today_shape",
+      "today_width",
+      "today_x",
+      "today_y",
       "zone_id",
     ]);
   });
@@ -182,5 +193,50 @@ describe("dining_tables columns", () => {
     expect(columns.map((column) => column.name)).not.toContain("tab_id");
     // Control: the read sees the table's columns at all.
     expect(columns.map((column) => column.name)).toContain("needs_clearing_since");
+  });
+});
+
+describe("today's map on dining_tables", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  async function table() {
+    const zone = await seedZone(suite.db, { name: "Today" });
+    await suite.db
+      .insert(diningTables)
+      .values({ id: "today-table", label: "Today 1", zoneId: zone.id });
+  }
+  it.each([
+    [
+      "off-floor placement",
+      sql`update dining_tables set today_x=1, today_y=2, today_width=3, today_height=4, today_shape='rect', today_rotation=0 where id='today-table'`,
+      "dining_tables_off_floor_ck",
+    ],
+    [
+      "off-floor taken-off mark",
+      sql`update dining_tables set taken_off=1 where id='today-table'`,
+      "dining_tables_off_floor_ck",
+    ],
+    [
+      "five placement values",
+      sql`update dining_tables set on_floor=1, today_x=1, today_y=2, today_width=3, today_height=4, today_shape='rect' where id='today-table'`,
+      "dining_tables_today_placement_ck",
+    ],
+    [
+      "1000 seats",
+      sql`update dining_tables set on_floor=1, today_seats=1000 where id='today-table'`,
+      "dining_tables_today_seats_ck",
+    ],
+  ] as const)("refuses invalid today's values: %s", async (_name, query, constraint) => {
+    await table();
+    const error = await captureError(() => suite.db.execute(query));
+    expect(engineErrorMessage(error)).toContain(constraint);
+  });
+  it("stores a spare on the floor without a place", async () => {
+    await table();
+    await suite.db.execute(sql`update dining_tables set on_floor=1 where id='today-table'`);
+    expect(
+      suite.db.get(
+        sql`select on_floor, today_x, today_seats, taken_off from dining_tables where id='today-table'`,
+      ),
+    ).toEqual({ on_floor: 1, today_x: null, today_seats: null, taken_off: 0 });
   });
 });

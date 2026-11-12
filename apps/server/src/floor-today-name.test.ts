@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, floorTodayTables } from "@waitron/db";
+import { floorTodayJoins, todayColumns, todaySet, diningTables } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
@@ -107,7 +107,7 @@ async function refused(work: Promise<unknown>): Promise<{ code: string; params: 
 
 async function everything() {
   return inTx(v, async (tx) => ({
-    tables: await tx.select().from(floorTodayTables),
+    tables: await tx.select(todayColumns).from(diningTables).where(eq(diningTables.onFloor, true)),
     joins: await tx.select().from(floorTodayJoins),
   }));
 }
@@ -238,7 +238,7 @@ describe("nameToday", () => {
 describe("nameToday leaves a name it already has alone, even when another table shares it", () => {
   const writeName = (tableId: string, name: string) =>
     inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, tableId)),
+      tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId)),
     );
 
   it("a table", async () => {
@@ -399,7 +399,7 @@ describe("nameToday refuses a name in use, writing nothing", () => {
     const { table } = await LONG_TABLE();
     const name = suffixed("Stale");
     await inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, table.c3!)),
+      tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, table.c3!)),
     );
 
     await expect(rename(table.bar!, name)).rejects.toMatchObject({
@@ -463,7 +463,7 @@ describe("what moves, ends or keeps today's name", () => {
     inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));
   const leftOn = (tableId: string, name: string) =>
     inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, tableId)),
+      tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId)),
     );
   const push = (movingId: string, targetId: string, seats: number) =>
     inTx(v, (tx) => writeMerge(tx, v.cfg, { movingId, targetId, side: "left", seats, free: true }));
@@ -671,7 +671,7 @@ describe("a reset clears today's name", () => {
   };
   const leftOn = (tableId: string, name: string) =>
     inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, tableId)),
+      tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId)),
     );
   const joinRow = (joinId: string) =>
     inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));

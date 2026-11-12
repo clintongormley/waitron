@@ -807,7 +807,7 @@ it.each([
   },
 );
 
-it.each(["floor_today_tables", "floor_zones"])(
+it.each(["dining_tables", "floor_zones"])(
   "refreshes table choices after %s changes",
   async (type) => {
     const liveData = new LiveData();

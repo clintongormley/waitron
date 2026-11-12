@@ -12,7 +12,6 @@ import {
 import {
   departments,
   departmentSalePolicies,
-  floorTodayTables,
   CORE_MIGRATIONS,
   diningTables,
   floorZones,
@@ -1492,11 +1491,8 @@ describe("venue service management routes", () => {
           { label: "D2", zoneId: secondZone!.id },
         ])
         .returning();
-      await tx
-        .insert(floorTodayTables)
-        .values(
-          tables.filter((table) => table.label !== "T2").map((table) => ({ tableId: table.id })),
-        );
+      for (const table of tables.filter((table) => table.label !== "T2"))
+        await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table.id));
     });
 
     const response = await send(
@@ -1542,15 +1538,12 @@ describe("venue service management routes", () => {
     const tables = await db
       .insert(diningTables)
       .values([
-        { label: "T1", zoneId: fx.zoneId },
+        { label: "T1", zoneId: fx.zoneId, onFloor: true },
         { label: "T2", zoneId: fx.zoneId },
       ])
       .returning();
-    await db
-      .insert(floorTodayTables)
-      .values(
-        tables.filter((table) => table.label !== "T2").map((table) => ({ tableId: table.id })),
-      );
+    for (const table of tables.filter((table) => table.label !== "T2"))
+      await db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table.id));
     const response = await send(
       fx.app,
       "GET",

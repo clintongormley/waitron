@@ -1,7 +1,7 @@
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./floor-label.js";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   diningTables,
@@ -10,9 +10,8 @@ import {
   floorPlanPlacements,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodayTables,
-  floorTodayZones,
   floorZones,
+  todayColumns,
 } from "@waitron/db";
 import { createCatalogue } from "@waitron/catalogue";
 import {
@@ -336,9 +335,12 @@ export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
 export async function todayRow(
   v: PartyVenue,
   tableId: string,
-): Promise<typeof floorTodayTables.$inferSelect | undefined> {
+): Promise<import("@waitron/db").TodayRow | undefined> {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+    tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, tableId))),
   );
   return row;
 }
@@ -372,10 +374,20 @@ export async function mergeOf(
   });
 }
 
-/** The room's stored revision; undefined with no row. */
+/** The room's stored revision; undefined before a recorded business day. */
 export async function zoneRevisionOf(v: PartyVenue, zoneId: string): Promise<number | undefined> {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+    tx
+      .select({
+        zoneId: floorZones.id,
+        businessDay: floorZones.todayBusinessDay,
+        revision: floorZones.todayRevision,
+        setId: floorZones.todaySetId,
+        layoutRevision: floorZones.todayLayoutRevision,
+        occurrence: floorZones.todayOccurrence,
+      })
+      .from(floorZones)
+      .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zoneId))),
   );
   return row?.revision;
 }
