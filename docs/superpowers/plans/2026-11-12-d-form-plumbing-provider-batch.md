@@ -1,7 +1,9 @@
 # Lane D: provider form feedback batch
 
-**Draft, 12 November 2026.** Pending Claude approach read and watcher clearance before build.
-No owner approval claimed. Only this plan written; no implementation or tests run.
+**Draft, 12 November 2026.** Separate Sol-high author; Claude approach read complete (136 seconds).
+Driver applied its text corrections; watcher clearance is pending before build.
+No owner approval claimed. Only this plan written; no implementation or tests run. The report is
+`receipts/form-plumbing-provider/plan-review.md` in Lane D.
 
 **Original queue ask, verbatim:** "every form assembles its bottom message, waits for the render, calls focusFirstInvalid and remembers the first press and which refusals the person has since changed, in several shapes. Make one helper that the dashboard's forms use, in a package the module screens and the image library can reach (@waitron/ui or similar, never apps/dashboard, which packages/media cannot import), and move the forms onto it. Behaviour stays as design-system.md → Forms says; no visible change."
 
@@ -28,10 +30,14 @@ exported helper. No helper redesign, API expansion, dependency or framework.
 `apps/dashboard/src/widgets/product-editor.ts` still repeats feedback; defer a bounded inventory
 until active A1515 work clears. By the queue boundary, widgets `email-settings-form.ts`,
 `attendance-proposal-dialog.ts`, `invoice-email-dialog.ts` and `theme-name-dialog.ts` stay local.
-Already migrated dashboard/image-library callers stay unchanged. No till/setup.
+Venue-service also has `routing-cell-editor`, `period-dialog`, `station-editor`, `seasons-window`,
+`range-dialog`, `floor-plan-set-dialog` and `special-day-painter`; these remain uninventoried for
+later batches. Keep the backlog broad enough to retain them. Already migrated dashboard/image-library
+callers stay unchanged. No till/setup.
 
 - [ ] **Migrate only the four provider source files above.** Replace local attempt flags with a
-  per-form `FormFeedback(this)`: `press()` at submission, `reset()` at existing resets, and `focus`
+  per-form `FormFeedback(this)`: only `press()` and `reset()` write attempt state, including
+  merchant discovery; never assign `feedback.attempted` directly. Use `focus`
   on the same root instead of render-then-focus sequences. Use `bottomMessage` for the existing
   refusal followed by the translated correction when fields are marked; no synthetic error maps.
   Keep domain refusal storage/clearing local. `packages/ui/src/form-feedback.test.ts` owns helper
@@ -39,10 +45,12 @@ Already migrated dashboard/image-library callers stay unchanged. No till/setup.
 - [ ] **Preserve caller decisions.** Credential rejection stays a general bottom refusal, retryable
   with unchanged credentials; edits retain it until another press. Stripe Add maps only
   `reader.reference_unknown` carrying `field: "reference"` under Reader ID: retain the submitted-value
-  comparison, clear only on reference edit or retry, and focus after rendering. Request refusals
+  comparison, clear only on reference edit or retry, and focus after rendering. Its footer shows
+  the correction when `blocked || refusedReference !== ""`. Request refusals
   alone never disable actions; local validation still does. SumUp merchant discovery reveals its
   picker quietly; a later empty press marks/focuses it, and selecting sends the same merchant code.
-  Try again retains the reader name, clears the code and resets messages/attempt state. Keep secret
+  Try again retains the reader name, clears the code and resets attempt state. Add no message
+  clearing there. Keep secret
   clearing, Enter, opening guards, callbacks, drafts, submitted snapshots, contributed
   Save gates and busy exemptions. Leave clients, request bodies, discovery, polling, countdown,
   timeout/expiry, unpair cleanup and every provider operation untouched.
