@@ -15,6 +15,33 @@ a lost reply or a reload never closes the bill twice or issues a second invoice.
 "Deferred payment" here means the customer pays later, outside Waitron (for example by bank
 transfer); Waitron records no debt and no later receipt of the money.
 
+## Decisions in force (2026-11-12)
+
+Cleared by the watcher 2026-11-12 00:24 with three changes (lane L `questions.md`, "A275 Task 7: plan
+CLEARED with three changes"), and the owner's two answers. These win over the text below.
+
+- **Question 1, Counter bills: yes** (watcher 00:24: design §2 already includes them).
+- **Question 2, the sentence** (owner 02:06, exactly): "The customer will pay later. This closes the
+  bill now, and Waitron will not record the payment when it arrives." / «El cliente pagará más tarde.
+  Esto cierra la cuenta ahora y Waitron no registrará el pago cuando llegue.»
+- **Question 3: B, served or cancelled first** (owner 02:08). Until every dish is served or
+  cancelled the button shows switched off with "Mark every dish served or cancel it first" and a
+  Spanish twin in the same plain style; it is never hidden for this.
+- **Watcher change 1:** decisions 3 and 4 disagree. Build a fresh request from the bill on screen at
+  every confirm (the server already returns the stored result for a new id from the same person,
+  device and content, `transfer-close.ts:369–379`), and drop 7.4b's lost-answer and sign-out cases
+  with their two deletion checks, unless a case is named where a rebuilt request differs (then test
+  that one).
+- **Watcher change 2:** hide the button only when the device profile lacks the action, the bill
+  already has payments, or it owes nothing. When a card or payment outcome is unknown, or dishes are
+  unserved, show it switched off with the reason.
+- **Watcher change 3:** PR B splits in two. B1: the window, the button in the open bill's Pay
+  window, sending and refusals (7.2, 7.3, 7.4a), the served check, the sentence and the guide
+  section. B2: the presented bill's Pay window, Counter bills and the screenshot check.
+- **#2907 (A275-declined, waiting for the owner):** a declined card no longer refuses the close on
+  the server; whether `hasPayments` counts a declined card decides whether PR B hides the button for
+  such a bill. Check it when building B1.
+
 ## Authority
 
 - Design approved by the owner 2026-10-22 15:55, "A275 looks fine"
