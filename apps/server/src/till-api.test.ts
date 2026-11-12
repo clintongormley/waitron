@@ -127,7 +127,7 @@ async function sendRound(
 
 let cfg: WithVenueRowId;
 let ana: { id: string };
-// The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but
+// The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Anna" but
 // is inserted AFTER it, so `[abel, ana]` proves `listActiveStaff` sorts by name rather than by
 // insertion order; `zoe` is SUSPENDED, so its absence proves the `status = 'active'` filter. The
 // tenant's tax_id is generated (a fresh NIF each run), so `GET /api/till`'s `nif` is asserted against
@@ -150,7 +150,7 @@ let hiddenMenuId: string;
 // An enrolled `till` device's cookie, which a happy-path place/sale call carries to reach the
 // route body.
 let sessionDeviceCookie: string;
-// The device `openSession` opens Ana's shift on: at the venue, allowed every capability.
+// The device `openSession` opens Anna's shift on: at the venue, allowed every capability.
 let sessionDeviceId: string;
 
 const suite = useVenueDb({
@@ -180,13 +180,13 @@ const suite = useVenueDb({
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row).
     const nodeId = await seedNode(db);
-    // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
+    // Anna's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
     const [person] = await db
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    // Abel: ACTIVE, inserted after Ana but sorts before her. Zoe: SUSPENDED, must be excluded.
+    // Abel: ACTIVE, inserted after Anna but sorts before her. Zoe: SUSPENDED, must be excluded.
     const [abelRow] = await db
       .insert(persons)
       .values({ displayName: "Abel", pinHash: hashPin("1111"), role: "staff" })
@@ -347,7 +347,7 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
+/** Opens a real shift session for Anna — the same `withTransaction` + `loginWithPin` path the login
  * route runs — and returns its cookie token, so a test can hand `requireSession` or the logout
  * route a cookie that names a genuine row. */
 async function openSession(db: Database, deviceId: string = sessionDeviceId): Promise<string> {
@@ -424,7 +424,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    // `locale` is the operator's own UI-language preference — Ana has none, so null.
+    // `locale` is the operator's own UI-language preference — Anna has none, so null.
     const body = (await res.json()) as { permissions: string[] };
     expect(body).toEqual({
       personId: ana.id,
@@ -463,7 +463,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const [mgr] = await suite.db
       .insert(persons)
-      .values({ displayName: "Marta", pinHash: hashPin("9999"), role: "manager" })
+      .values({ displayName: "Martha", pinHash: hashPin("9999"), role: "manager" })
       .returning({ id: persons.id });
     const managerId = mgr!.id;
 
@@ -474,7 +474,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: managerId, pin: "9999" }),
     });
     expect(res.status).toBe(200);
-    // Marta carries no locale preference either.
+    // Martha carries no locale preference either.
     const body = (await res.json()) as { permissions: string[] };
     expect(body).toEqual({
       personId: managerId,
@@ -896,7 +896,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
       expect(await bad.json()).toMatchObject({ error: { code: "pin.invalid" } });
     }
 
-    // The next attempt is now inside the window. Using Ana's CORRECT PIN proves `loginWithPin` was NOT
+    // The next attempt is now inside the window. Using Anna's CORRECT PIN proves `loginWithPin` was NOT
     // reached: were it, a session would open (200). Instead it is 429 `pin.throttled` carrying
     // `retryAfterSeconds`, with NO session cookie and NO new session row.
     const before = await sessionCount(ana.id);
@@ -910,7 +910,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
   });
 
   it("keys the throttle on the CANONICAL personId, so an alternate UUID spelling shares the bucket (§5)", async () => {
-    // `canonicaliseUuid` (`till-session.ts`) folds an uppercase / dash-free spelling of Ana's id to
+    // `canonicaliseUuid` (`till-session.ts`) folds an uppercase / dash-free spelling of Anna's id to
     // the same canonical value, so both spellings name the SAME person. The throttle must therefore key
     // on the canonical value, or a brute-forcer cycles spellings to get a fresh back-off bucket per
     // spelling and evades the window.
@@ -933,7 +933,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     // Four wrong PINs on the LOWERCASE (canonical) id open the wait window on this (device, person).
     for (let i = 0; i < 4; i++) expect((await post(ana.id, "0000")).status).toBe(401);
 
-    // A DIFFERENT spelling of the SAME id — uppercase — with Ana's CORRECT PIN must ALSO be throttled
+    // A DIFFERENT spelling of the SAME id — uppercase — with Anna's CORRECT PIN must ALSO be throttled
     // (429), NOT reach `loginWithPin` (a 200 would prove it did) nor land in a fresh bucket (a 401
     // `pin.invalid`). Keyed on the raw string, uppercase is a distinct bucket and this is a 200 — the
     // bypass the canonicalisation closes.
@@ -996,9 +996,9 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
         body: JSON.stringify({ personId, pin }),
       });
 
-    // Fully throttle (device, Ana).
+    // Fully throttle (device, Anna).
     for (let i = 0; i < 4; i++) expect((await post(ana.id, "0000")).status).toBe(401);
-    expect((await post(ana.id, "5555")).status).toBe(429); // Ana is locked out on this device
+    expect((await post(ana.id, "5555")).status).toBe(429); // Anna is locked out on this device
 
     // Abel — a DIFFERENT person on the SAME device — is independent: his correct PIN logs in (200).
     const abelOk = await post(abel.id, "1111");
@@ -1413,7 +1413,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
 
 describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   // Log in a FRESH staff person rather than the shared `ana`, so the row this route MUTATES is
-  // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Ana)
+  // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Anna)
   // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
   async function loginFresh(pin: string): Promise<{ personId: string; token: string }> {
     const [row] = await suite.db
@@ -1579,10 +1579,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     const res = await app.request("/api/staff");
     expect(res.status).toBe(200);
     const staff = await res.json();
-    // Sorted by displayName (Abel before Ana, though Abel was inserted second), suspended Zoe absent.
+    // Sorted by displayName (Abel before Anna, though Abel was inserted second), suspended Zoe absent.
     expect(staff).toEqual([
       { personId: abel.id, displayName: "Abel" },
-      { personId: ana.id, displayName: "Ana" },
+      { personId: ana.id, displayName: "Anna" },
     ]);
     // The roster carries the login id + display name only — nothing a customer or a bystander at the
     // lock screen must not see (no pin material, no role, no status).
@@ -2698,8 +2698,8 @@ describe("POST /api/session refusals say nothing about the account", () => {
 });
 
 describe("a device's profile decides who may sign in on it", () => {
-  /** A device whose profile admits managers only, with Ana let in as an exception: Abel, staff
-   * like Ana, is not admitted. */
+  /** A device whose profile admits managers only, with Anna let in as an exception: Abel, staff
+   * like Anna, is not admitted. */
   async function managersAndAnaDevice(): Promise<{
     deviceId: string;
     cookie: string;
@@ -2735,10 +2735,10 @@ describe("a device's profile decides who may sign in on it", () => {
     const unrestricted = await app.request("/api/staff", { headers: { cookie: open } });
 
     expect(restricted.status).toBe(200);
-    expect(await restricted.json()).toEqual([{ personId: ana.id, displayName: "Ana" }]);
+    expect(await restricted.json()).toEqual([{ personId: ana.id, displayName: "Anna" }]);
     expect(await unrestricted.json()).toEqual([
       { personId: abel.id, displayName: "Abel" },
-      { personId: ana.id, displayName: "Ana" },
+      { personId: ana.id, displayName: "Anna" },
     ]);
   });
 
@@ -2752,7 +2752,7 @@ describe("a device's profile decides who may sign in on it", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
       { personId: abel.id, displayName: "Abel" },
-      { personId: ana.id, displayName: "Ana" },
+      { personId: ana.id, displayName: "Anna" },
     ]);
   });
 
@@ -2763,7 +2763,7 @@ describe("a device's profile decides who may sign in on it", () => {
 
     const res = await app.request("/api/staff", { headers: { [DEV_DEVICE_HEADER]: deviceId } });
 
-    expect(await res.json()).toEqual([{ personId: ana.id, displayName: "Ana" }]);
+    expect(await res.json()).toEqual([{ personId: ana.id, displayName: "Anna" }]);
   });
 
   it("POST /api/session refuses a person the profile does not admit exactly as a wrong PIN, and signs in one it does", async () => {

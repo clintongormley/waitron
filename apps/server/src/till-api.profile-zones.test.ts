@@ -292,11 +292,11 @@ let app: Hono;
 let f: Fixtures;
 let restaurantProfile: string;
 let deliProfile: string;
-/** Ana on a till whose profile is the Restaurant's, starting at the bar. */
+/** Anna on a till whose profile is the Restaurant's, starting at the bar. */
 let restaurant: string;
-/** Ana on a till whose profile has no department row. */
+/** Anna on a till whose profile has no department row. */
 let plain: string;
-/** Ana on a till whose profile is the Deli's, starting at the Deli counter. */
+/** Anna on a till whose profile is the Deli's, starting at the Deli counter. */
 let deli: string;
 let personId: string;
 
@@ -457,7 +457,7 @@ beforeAll(async () => {
   };
   const [person] = await suite.db
     .insert(persons)
-    .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "admin" })
+    .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "admin" })
     .returning({ id: persons.id });
   personId = person!.id;
   restaurantProfile = await profile();

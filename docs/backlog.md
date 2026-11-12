@@ -2285,6 +2285,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The attendance-discovery, attendance-obligations, boot.mirror, boot.clock-watch and standalone tab-person suites use Anna and Martha for their main staff sample.
   Local till table, zone-layout, zone-required, split-bill, floor-catch-up and today-names suites use Anna for their staff-role person.
   The device-join suite uses Server and Manager for its local staff-role display samples.
+  The main till API and profile-zone suites use Anna and Martha where present; local
+  delivery, published-menu sale and unroutable-dish staff samples use Cashier.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,

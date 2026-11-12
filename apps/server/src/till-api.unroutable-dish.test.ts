@@ -102,7 +102,7 @@ beforeEach(async () => {
   const operatorId = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Cashier", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     return person!.id;
   });

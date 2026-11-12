@@ -257,7 +257,7 @@ async function setupLunch(): Promise<Lunch> {
       values (${randomUUID()}, ${category.id}, (select id from kitchen_stations where is_default))`);
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Cashier", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     return {
       zoneId,
