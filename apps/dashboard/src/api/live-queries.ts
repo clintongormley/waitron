@@ -488,7 +488,6 @@ export const QUERY_DEPENDENCIES = {
   getFloorPlan: [
     "floor_plans",
     "floor_plan_sets",
-    "floor_plan_sets",
     "departments",
     "floor_zones",
     "floor_plan_placements",

@@ -122,7 +122,7 @@ describe("a department's floor plan sets", () => {
       const { restaurant, bar } = await venue(tx);
 
       const kept = await addFloorPlanSet(tx, { departmentId: restaurant, name: "Standard" });
-      const hidden = await addFloorPlanSet(tx, { departmentId: bar, name: "Standard" });
+      await addFloorPlanSet(tx, { departmentId: bar, name: "Standard" });
       await tx.update(departments).set({ active: false }).where(eq(departments.id, bar));
       expect((await readFloorPlanSets(tx)).map(({ setId }) => setId)).toEqual([kept]);
       await expect(

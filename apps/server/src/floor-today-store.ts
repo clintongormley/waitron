@@ -28,6 +28,7 @@ import {
   resetRowMoves,
   readVenueClock,
   shortNameColumns,
+  statementChunks,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -313,11 +314,21 @@ async function copyParts(
       partResetTableId: partRow,
     }));
   });
-  for (const row of copied)
+  for (const rows of statementChunks(floorResetTables, copied))
     await tx
       .update(floorResetTables)
-      .set({ partOfResetTableId: row.joinedResetTableId })
-      .where(eq(floorResetTables.id, row.partResetTableId));
+      .set({
+        partOfResetTableId: sql`case ${floorResetTables.id} ${sql.join(
+          rows.map((row) => sql`when ${row.partResetTableId} then ${row.joinedResetTableId}`),
+          sql` `,
+        )} end`,
+      })
+      .where(
+        inArray(
+          floorResetTables.id,
+          rows.map((row) => row.partResetTableId),
+        ),
+      );
 }
 
 const groupPart = alias(floorResetTables, "group_part");

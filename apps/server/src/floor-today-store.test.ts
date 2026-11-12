@@ -1,8 +1,9 @@
 import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { sql, and, eq, inArray, isNotNull } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -1332,6 +1333,16 @@ describe("the parts of joined tables in the till's copy", () => {
 
   it("copies Long table's three parts into the till's copy at the reset", async () => {
     const { zoneId, master, table } = await plannedZone(v, LONG_AND_COUNTERS, NOW);
+    const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+    try {
+      await reset(zoneId);
+      const membershipWrites = prepare.mock.calls.filter(([query]) =>
+        query.startsWith('update "floor_reset_tables" set "part_of_reset_table_id"'),
+      );
+      expect(membershipWrites).toHaveLength(1);
+    } finally {
+      prepare.mockRestore();
+    }
     expect(await copiedParts(zoneId)).toEqual(partsOf(master, "long", ["c3", "c4", "c5"]));
     expect(await stillJoined([table.c3!, table.c4!, table.c5!, table.long!])).toEqual({
       [table.c3!]: 1,

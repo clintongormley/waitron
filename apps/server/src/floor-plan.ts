@@ -9,6 +9,7 @@ import {
   floorTodayZones,
   floorZones,
   newId,
+  statementChunks,
   type Transaction,
 } from "@waitron/db";
 import type { FloorPlanSetSummary, TableRemoval } from "@waitron/module";
@@ -505,10 +506,6 @@ async function writeSave(
   }
   const planId = plan!.id;
 
-  await tx
-    .update(floorPlanTables)
-    .set({ partOfTableId: null })
-    .where(eq(floorPlanTables.zoneId, zoneId));
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
   // A deleted table may stand in another set's layout of the zone too.
@@ -519,6 +516,10 @@ async function writeSave(
     );
   const masterOf = new Map(masters.map((m) => [m.id, m]));
   if (deleted.length > 0) {
+    await tx
+      .update(floorPlanTables)
+      .set({ partOfTableId: null })
+      .where(inArray(floorPlanTables.partOfTableId, deleted));
     await tx
       .update(diningTables)
       .set({ planTableId: null })
@@ -577,17 +578,29 @@ async function writeSave(
     ];
   });
   if (placements.length > 0) await tx.insert(floorPlanPlacements).values(placements);
-  for (const table of tables) {
-    if (table.partKeys.length > 0)
-      await tx
-        .update(floorPlanTables)
-        .set({ partOfTableId: ids.get(table.key)! })
-        .where(
-          inArray(
-            floorPlanTables.id,
-            table.partKeys.map((key) => ids.get(key)!),
-          ),
-        );
+  const partOf = new Map(
+    tables.flatMap((table) => table.partKeys.map((key) => [ids.get(key)!, ids.get(table.key)!])),
+  );
+  const membership = tables.flatMap((table) => {
+    const id = ids.get(table.key)!;
+    const parent = partOf.get(id) ?? null;
+    return (masterOf.get(id)?.partOf ?? null) === parent ? [] : [{ id, parent }];
+  });
+  for (const rows of statementChunks(floorPlanTables, membership)) {
+    await tx
+      .update(floorPlanTables)
+      .set({
+        partOfTableId: sql`case ${floorPlanTables.id} ${sql.join(
+          rows.map((row) => sql`when ${row.id} then ${row.parent}`),
+          sql` `,
+        )} end`,
+      })
+      .where(
+        inArray(
+          floorPlanTables.id,
+          rows.map((row) => row.id),
+        ),
+      );
   }
 
   const revision = plan!.revision + 1;

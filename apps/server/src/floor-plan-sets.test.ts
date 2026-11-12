@@ -258,13 +258,22 @@ describe("the floor plan sets port", () => {
 
   it("reads each zone's table count and each layout's revision and counts", async () => {
     const d = await department();
-    await save(d.dinner, d.zoneId, {
+    const { ids } = await save(d.dinner, d.zoneId, {
       revision: 0,
       tables: [
         entry("a", fresh("1")),
         entry("b", fresh("2")),
         entry("c", fresh("3"), { placement: null }),
       ],
+    });
+    await inTx(v, async (tx) => {
+      const [plan] = await tx.select().from(floorPlans).where(eq(floorPlans.zoneId, d.zoneId));
+      await tx.insert(floorPlanPlacements).values({
+        planId: plan!.id,
+        planTableId: ids.c!,
+        width: 4,
+        height: 6,
+      });
     });
     const empty = await inTx(v, (tx) =>
       addFloorPlanSet(tx, { departmentId: d.departmentId, name: "Empty" }),

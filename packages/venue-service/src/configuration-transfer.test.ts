@@ -164,7 +164,7 @@ describe("the menu timetable rows of a bundle", () => {
           name: "Mañanas",
           colour: "blue",
           menu_id: "m-desayunos",
-          floor_plan_id: "s-dinner",
+          floor_plan_set_id: "s-dinner",
         },
         {
           id: MADRUGADA,

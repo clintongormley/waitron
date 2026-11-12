@@ -119,7 +119,7 @@ describe("floor plan tables", () => {
         .where(eq(floorZones.id, ZONE)),
     );
     const error = await captureError(() =>
-      inTx((tx) =>
+      inTx(async (tx) =>
         tx.execute(
           sql`insert into floor_plan_sets (id, department_id, name, is_default) values (${PERSON}, ${zone!.departmentId}, '  ', 0)`,
         ),
@@ -148,20 +148,20 @@ describe("floor plan tables", () => {
       ],
     ]) {
       const refused = await captureError(() =>
-        inTx((tx) =>
+        inTx(async (tx) =>
           tx.execute(
             sql`update ${sql.identifier(table!)} set ${sql.identifier(column!)} = ${parent!} where id = ${parent!}`,
           ),
         ),
       );
       expect(checkFailed(refused, constraint!)).toBe(true);
-      await inTx((tx) =>
+      await inTx(async (tx) =>
         tx.execute(
           sql`update ${sql.identifier(table!)} set ${sql.identifier(column!)} = ${parent!} where id = ${member!}`,
         ),
       );
       const missing = await captureError(() =>
-        inTx((tx) =>
+        inTx(async (tx) =>
           tx.execute(
             sql`update ${sql.identifier(table!)} set ${sql.identifier(column!)} = ${PERSON} where id = ${member!}`,
           ),
@@ -169,7 +169,9 @@ describe("floor plan tables", () => {
       );
       expect(isRefusal(missing, FOREIGN_KEY_VIOLATION)).toBe(true);
       const deletion = await captureError(() =>
-        inTx((tx) => tx.execute(sql`delete from ${sql.identifier(table!)} where id = ${parent!}`)),
+        inTx(async (tx) =>
+          tx.execute(sql`delete from ${sql.identifier(table!)} where id = ${parent!}`),
+        ),
       );
       expect(isRefusal(deletion, FOREIGN_KEY_VIOLATION)).toBe(true);
     }
