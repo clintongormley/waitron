@@ -228,7 +228,7 @@ Where each one surfaces:
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
 | Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
-| The floor's chip for a held dish that can no longer be sold ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
+| The floor's informational chip for a held dish that cannot be added anew ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
 | Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the kitchen screen and the pass, customer on the settled ticket, staff in the basket and the Sent dish window | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 | An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the product and any relative variant joined in parentheses | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
@@ -716,8 +716,8 @@ prices only what the edit adds (menus plan D10; `updateHeldOrder`,
 it is refused `product.variant_required`, as a raise of a line whose product has become archived or
 Unavailable is refused. Paying a held order bills its stored lines at their stored prices and
 VAT classes, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
-or extra, whose product is now archived or Unavailable is refused `product.unavailable`, while a
-sent one is billed whatever its product's availability (`priceStoredOrderForIssuance`, same file;
+or extra, whose product or parent is now archived is refused `product.unavailable`, while a
+sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;
 a card payment already captured is filed as it stands). On the till, retrieving the order keeps
 such an extra in the basket, marked "Not offered now" and counted in the total, as it keeps a
 sold-out one, because the list the pick was taken from no longer offers it (`deriveExtraSelections`,
@@ -900,9 +900,9 @@ what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
 an extra has since become archived or Unavailable (a raise is checked in `updateHeldOrder`, and a
 change to the note, options or extras of a line the kitchen already has is refused
-`product.unavailable` too, because the changed line is sent to the kitchen again in `applyLineEdits`).
-Stored-order pricing accepts such a line once it has been sent. A stored line never sent whose
-product cannot currently be sold is refused `product.unavailable`
+`product.unavailable` too: `applyLineEdits` treats that change as new work).
+Stored-order pricing ignores the sold-out flag for recorded lines. A stored line never sent whose
+product or parent is archived is refused `product.unavailable`
 (`priceStoredOrderForIssuance`, `apps/server/src/working-order.ts`).
 
 That stored-line check is separate from a table bill's **New order**. Before starting a new

@@ -494,7 +494,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
  * product's availability changes, through a split and with a line that makes no kitchen work; one that was never
  * sent does not; and the split's two Burgers are one on each check.
  */
-describe("a sent line is payable whatever its availability; an unsent one is not", () => {
+describe("a sent line is payable after archival; an archived unsent one is not", () => {
   it("pays two checks' fired Burgers and a served bottle after both sell out, and blocks the held Burger until it is removed", async () => {
     const { cfg, tables } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
@@ -549,9 +549,8 @@ describe("a sent line is payable whatever its availability; an unsent one is not
       ]);
     });
 
-    // Both products sell out.
     await suite.db.execute(sql`
-      update products set available = 0 where id in (${burgerId}, ${beerId})`);
+      update products set active = 0 where id in (${burgerId}, ${beerId})`);
 
     // One of the two fired Burgers goes to a check of its own, which pays.
     const { billId: checkId } = await withTransaction(suite.db, (tx) =>

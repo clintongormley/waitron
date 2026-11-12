@@ -440,7 +440,7 @@ stay with the work.
 ## Mark a dish sold out during service {#sold-out}
 
 When the kitchen runs out, hold the dish on Counter or a table order to open its information.
-Send or fire portions already taken before marking the dish sold out.
+You can still send or fire portions already on a bill.
 Choose **Mark sold out** for the dish, one size, an extra or an option choice. You must be signed in on a device that takes
 orders. The change applies to every menu in this venue. A sold-out dish stays visible in grey.
 

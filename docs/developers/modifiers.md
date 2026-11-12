@@ -372,7 +372,7 @@ Six things it is worth knowing about that payload:
   a new line or a new pick in an edit of a saved order. On the held-order edit path, a pick the stored
   line already holds is kept even when its product has since sold out, through an edit of a line
   the kitchen does not have, with two exceptions: a
-  CHANGE to a line the kitchen has sends the line again with the picks it keeps, so a sold-out one
+  CHANGE to a line the kitchen has is new work, so a sold-out kept pick
   is refused `product.unavailable`; and a line whose quantity rises, the kitchen's or not, is priced
   afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and
   refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:

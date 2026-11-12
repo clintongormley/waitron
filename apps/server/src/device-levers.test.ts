@@ -245,7 +245,7 @@ describe("waiter cooking authority", () => {
     },
   );
 
-  it("waiter group preflight and release roll back every bill when the later dish is unavailable", async () => {
+  it("waiter group preflight and release roll back every bill when the later dish is archived", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
     await inTx(f.v, (tx) =>
@@ -264,7 +264,7 @@ describe("waiter cooking authority", () => {
     const other = await split(f.v, held.partyId, held.tabId, [2]);
     await suite.db
       .update(products)
-      .set({ available: false })
+      .set({ active: false })
       .where(eq(products.id, f.v.productId("Flan")));
     const before = [await itemsOf(held.tabId), await itemsOf(other)];
     const revision = await revisionOf(f.v, held.partyId);

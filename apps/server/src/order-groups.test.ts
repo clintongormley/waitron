@@ -1616,10 +1616,10 @@ describe("firing", () => {
     expect(lines.map((row) => row.sentAt)).toEqual([expect.any(String), expect.any(String)]);
   });
 
-  it("refuses a group holding a sold-out Steak, firing none of it, then fires once it is removed", async () => {
+  it("refuses a group holding an archived Steak, firing none of it, then fires once it is removed", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    await db.run(sql`update products set available = 0 where id = ${v.productId.steak}`);
+    await db.run(sql`update products set active = 0 where id = ${v.productId.steak}`);
 
     await expectRefusedWithNothingWritten(v, s.partyId, () => fire(v, s.partyId, s.mains), {
       code: "product.unavailable",
@@ -1634,7 +1634,7 @@ describe("firing", () => {
     expect(await firedTicketLineIds(s.partyId)).toContain(fish!.id);
   });
 
-  it("fires nothing and prints nothing when the sold-out line is on the second of two bills", async () => {
+  it("fires nothing and prints nothing when the archived line is on the second of two bills", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const { groups } = await submit(v, s.partyId, [
@@ -1645,7 +1645,7 @@ describe("firing", () => {
     const revision = await revisionOf(s.partyId);
     // The second bill is opened after the tab, so its line is released second.
     await onSecondBill(v, s, [{ lineNo: water!.lineNo }], revision, ALEX);
-    await db.run(sql`update products set available = 0 where id = ${v.productId.water}`);
+    await db.run(sql`update products set active = 0 where id = ${v.productId.water}`);
 
     await expectRefusedWithNothingWritten(v, s.partyId, () => fire(v, s.partyId, groupId), {
       code: "product.unavailable",
@@ -3012,10 +3012,10 @@ describe("waiter group and recalled-line release", () => {
     );
   });
 
-  it("refuses a held group holding a sold-out Steak (product.unavailable), firing none of it", async () => {
+  it("refuses a held group holding an archived Steak (product.unavailable), firing none of it", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    await db.run(sql`update products set available = 0 where id = ${v.productId.steak}`);
+    await db.run(sql`update products set active = 0 where id = ${v.productId.steak}`);
 
     await expectRefusedWithNothingWritten(
       v,

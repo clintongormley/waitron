@@ -1094,7 +1094,7 @@ describe("the dishes of an open bill moved between service modes", () => {
     expect(tickets[0]!.firedAt).not.toBeNull();
   });
 
-  it("sends an invoice-first counter order's dish when it joins a party before it is placed", async () => {
+  it("sends an invoice-first counter order's sold-out dish when it joins a party before it is placed", async () => {
     const table = await v.table("Table send 5");
     await seat(v, table);
     const orderId = randomUUID();
@@ -1105,11 +1105,17 @@ describe("the dishes of an open bill moved between service modes", () => {
       operatorId: OPERATOR,
     });
 
-    await move(orderId, { tableId: table });
+    const productId = v.productId("Tarta");
+    await v.db.execute(sql`update products set available = 0 where id = ${productId}`);
+    try {
+      await move(orderId, { tableId: table });
 
-    const tickets = await ticketsOf(orderId);
-    expect(tickets).toHaveLength(1);
-    expect(tickets[0]!.firedAt).not.toBeNull();
+      const tickets = await ticketsOf(orderId);
+      expect(tickets).toHaveLength(1);
+      expect(tickets[0]!.firedAt).not.toBeNull();
+    } finally {
+      await v.db.execute(sql`update products set available = 1 where id = ${productId}`);
+    }
   });
 
   it("does not send a table bill's sent dish again when it is paid at a pay-first counter", async () => {
@@ -1125,13 +1131,13 @@ describe("the dishes of an open bill moved between service modes", () => {
     expect(await ticketsOf(ana.tabId)).toEqual(sent);
   });
 
-  it("refuses product.unavailable, changing nothing, when a pay-first counter order's dish has sold out before it joins a table-service party", async () => {
-    const table = await v.table("Table sold out 1");
+  it("refuses product.unavailable, changing nothing, when a pay-first counter order's dish was archived before it joins a table-service party", async () => {
+    const table = await v.table("Table archived 1");
     const ana = await seat(v, table);
     await order(v, ana.tabId, "Burger");
     const orderId = await counterOrder(v, "Tarta", "Paella");
     const riceDish = v.productId("Paella");
-    v.db.run(sql`update products set available = 0 where id = ${riceDish}`);
+    v.db.run(sql`update products set active = 0 where id = ${riceDish}`);
     try {
       const before = await snapshot([ana.partyId], [orderId, ana.tabId], [table]);
 
@@ -1143,7 +1149,7 @@ describe("the dishes of an open bill moved between service modes", () => {
       expect(await snapshot([ana.partyId], [orderId, ana.tabId], [table])).toEqual(before);
       expect(await ticketsOf(orderId)).toEqual([]);
     } finally {
-      v.db.run(sql`update products set available = 1 where id = ${riceDish}`);
+      v.db.run(sql`update products set active = 1 where id = ${riceDish}`);
     }
   });
 

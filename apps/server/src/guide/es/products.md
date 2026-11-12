@@ -465,7 +465,7 @@ aviso aparte que debe confirmarse. Consulta cómo las
 ## Marca un plato como agotado durante el servicio {#sold-out}
 
 Cuando se agote un plato, mantén pulsado su botón en Mostrador o en el pedido de una mesa.
-Envía o marcha las raciones ya pedidas antes de marcar el plato como agotado.
+Puedes enviar o marchar las raciones que ya estén en una cuenta.
 Elige **Marcar como agotado** para el plato, un tamaño, un extra o una opción. Debes haber iniciado sesión en un
 dispositivo que tome pedidos. El cambio afecta a todas las cartas del local. El plato sigue visible en gris.
 

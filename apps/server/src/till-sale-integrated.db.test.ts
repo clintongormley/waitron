@@ -2028,7 +2028,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await filedSaleTotal(id)).toBe("1.50");
   });
 
-  it("refuses a fresh card payment before the reader is asked when a line never sent has sold out", async () => {
+  it("refuses a fresh card payment before the reader is asked when a line never sent was archived", async () => {
     const { cfg, coffee } = await setupVenue();
     const { deps, client } = integratedDeps(suite.db);
     const id = randomUUID();
@@ -2037,7 +2037,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       zoneId: coffee.zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    suite.db.run(sql`update products set available = 0 where id = ${coffee.id}`);
+    suite.db.run(sql`update products set active = 0 where id = ${coffee.id}`);
 
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
       code: "product.unavailable",

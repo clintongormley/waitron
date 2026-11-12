@@ -1847,8 +1847,8 @@ describe("when a station does not allow changes after sending", () => {
   });
 });
 
-describe("a line with no fired ticket whose product sold out cannot be sent", () => {
-  it("refuses selected held line release when its extra sold out", async () => {
+describe("recorded lines can be sent after sold out but not archival", () => {
+  it("refuses selected held line release when its extra was archived", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, coffeeId, waterId));
     const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
@@ -1864,7 +1864,7 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
         },
       ]),
     );
-    await db.execute(sql`update products set available = 0 where id = ${waterId}`);
+    await db.execute(sql`update products set active = 0 where id = ${waterId}`);
 
     await expect(asApp(cfg, (tx) => fireTabLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
       code: "product.unavailable",
@@ -1873,18 +1873,27 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
     expect((await sentState(tabId)).map((line) => line.sentAt)).toEqual([null, null]);
   });
 
-  it("sends a held line whose product is still available", async () => {
-    const { cfg, tableId, coffeeOffer, waterId } = await setupVenue();
+  it("sends a held dish and its extra after both sell out", async () => {
+    const { cfg, tableId, coffeeOffer, coffeeId, waterId } = await setupVenue();
+    const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, coffeeId, waterId));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1", hold: true }]),
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: coffeeOffer,
+          quantity: "1",
+          hold: true,
+          extras: [{ listId, picks: [{ productId: waterId, quantity: 1 }] }],
+        },
+      ]),
     );
-    // Another product selling out does not matter.
-    await db.execute(sql`update products set available = 0 where id = ${waterId}`);
+    await db.execute(sql`update products set available = 0 where id in (${coffeeId}, ${waterId})`);
 
     await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
 
-    expect((await sentState(tabId))[0]!.ticket!.firedAt).not.toBeNull();
+    const sent = await sentState(tabId);
+    expect(sent[0]!.ticket!.firedAt).not.toBeNull();
+    expect(sent.map((line) => line.sentAt)).toEqual([expect.any(String), expect.any(String)]);
   });
 });
 
