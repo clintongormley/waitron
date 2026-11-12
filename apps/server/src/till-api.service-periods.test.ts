@@ -1499,7 +1499,7 @@ describe("a dish whose period ended earlier today", () => {
       const [manager] = await suite.db
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.displayName, "Administradora"));
+        .where(eq(persons.displayName, "Administrator"));
       return { v, manager: manager!.id };
     };
     const routes = [
@@ -1591,7 +1591,7 @@ describe("a dish whose period ended earlier today", () => {
       const [manager] = await suite.db
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.displayName, "Administradora"));
+        .where(eq(persons.displayName, "Administrator"));
       return { v, manager: manager!.id };
     };
     /** The same till signed in as `personId`, keeping its device cookie. */
@@ -1720,7 +1720,7 @@ describe("a dish whose period ended earlier today", () => {
         const [manager] = await suite.db
           .select({ id: persons.id })
           .from(persons)
-          .where(eq(persons.displayName, "Administradora"));
+          .where(eq(persons.displayName, "Administrator"));
         override = { personId: manager!.id, pin: managerPin };
       }
       const held = await park(v, v.diningZone, v.toast.midday);

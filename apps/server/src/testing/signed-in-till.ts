@@ -49,7 +49,7 @@ export interface SignedInTill {
 
 /**
  * A Madrid venue provisioned with every module, seeded by the suite, and a till whose profile
- * serves the seed's department, enrolled and signed in as staff member Ana (PIN 5555), with the
+ * serves the seed's department, enrolled and signed in with PIN 5555, with the
  * till routes mounted on a fresh app. Filing never reaches AEAT. With `simulatorCard`, the till also
  * takes cards on the practice simulator.
  */
@@ -82,7 +82,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
           passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
@@ -109,7 +109,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
         })
         .onConflictDoNothing({ target: departmentReceipts.departmentId });
     const [person] = await seedPersons(tx, {
-      displayName: "Ana",
+      displayName: "Anna",
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });
