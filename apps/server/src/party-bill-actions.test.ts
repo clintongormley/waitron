@@ -812,7 +812,60 @@ describe("merge bills", () => {
 
   const SIDES = ["from", "into"] as const;
   const TOUCHES: Touch[] = ["presented", "partly paid", "paid", "refunded in full"];
-  const EACH_SIDE = SIDES.flatMap((side) => TOUCHES.map((how) => [side, how] as const));
+  const EACH_SIDE = SIDES.flatMap((side) =>
+    TOUCHES.filter(
+      (how) => side === "from" || (how !== "partly paid" && how !== "refunded in full"),
+    ).map((how) => [side, how] as const),
+  );
+
+  it.each(["partly paid", "refunded in full"] as const)(
+    "receives an unpaid bill without moving recorded payments (%s)",
+    async (how) => {
+      const { partyId, main, second } = await twoBills(`Table merge receive ${how}`);
+      await touch(second, how, "30.00");
+      const payments = await paymentsOf(second);
+      const numbers = await numbersOf(v, partyId);
+
+      await merge(partyId, second, main);
+
+      expect((await linesOf(v, second)).map((line) => line.name)).toEqual([
+        "Red wine bottle",
+        "Burger",
+      ]);
+      expect((await billRow(v, main)).status).toBe("abandoned");
+      expect((await billRow(v, second)).status).toBe("open");
+      expect(await paymentsOf(second)).toEqual(payments);
+      expect(await paymentsOf(main)).toEqual([]);
+      expect(await numbersOf(v, partyId)).toEqual(numbers);
+    },
+  );
+
+  it("refuses receiving a merge while the destination's card contribution is pending", async () => {
+    const { partyId, main, second } = await twoBills("Table merge receiving payment");
+    await inTx(v, (tx) =>
+      tx.insert(billPayments).values({
+        workingOrderId: second,
+        submissionId: randomUUID(),
+        fingerprint: "pending-payment-fixture",
+        kind: "contribution",
+        method: "card",
+        applied: 100,
+        state: "pending",
+        requestedBy: OPERATOR,
+        source: "device",
+        deviceId: v.cfg.origin.deviceId,
+      }),
+    );
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() => merge(partyId, second, main));
+
+    expect(error).toMatchObject({
+      code: "order.payment_in_flight",
+      params: { workingOrderId: second },
+    });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
+  });
 
   it.each(EACH_SIDE)("refuses a merge whose %s bill is %s, changing nothing", async (side, how) => {
     const { partyId, main, second } = await twoBills(`Table merge ${side} ${how}`);
@@ -1339,13 +1392,36 @@ describe("A803 table actions (writers):", () => {
   }
 
   it("Move this bill to a free table", async () => {
-    const { second } = await twoBills("Table move free");
+    const { partyId: source, main, second } = await twoBills("Table move free");
     const free = await v.table("Table move free to");
 
     const { partyId } = await moveTo(second, { tableId: free });
 
     expect(partyId).not.toBeNull();
+    expect(await openingBillOfParty(v, source)).toBe(main);
+    expect(await numbersOf(v, source)).toEqual([[main, 1, null]]);
   });
+
+  it.each(["counter", "free", "seated"] as const)(
+    "moving the last bill to %s leaves a fresh empty bill at the seated party",
+    async (destination) => {
+      const { partyId, tabId } = await seat(v, await v.table(`Table last bill ${destination}`));
+      const target = await v.table(`Table last bill ${destination} to`);
+      if (destination === "seated") await seat(v, target);
+
+      await moveTo(
+        tabId,
+        destination === "counter" ? { counter: { zoneId: null } } : { tableId: target },
+      );
+
+      const replacement = await openingBillOfParty(v, partyId);
+      expect(replacement).not.toBeNull();
+      expect(replacement).not.toBe(tabId);
+      expect(await billRow(v, replacement!)).toMatchObject({ partyId, status: "open" });
+      expect(await lineRows(replacement!)).toEqual([]);
+      expect(await numbersOf(v, partyId)).toContainEqual([replacement, 2, null]);
+    },
+  );
 
   it("Move this bill onto a seated party", async () => {
     const { second } = await twoBills("Table move seated");
@@ -1372,15 +1448,17 @@ describe("A803 table actions (writers):", () => {
     expect(result.billIds).toContain(held.tabId);
   });
 
-  it("Join a free table, for a party with no bill, gives it one bill", async () => {
+  it("Join a free table reuses the replacement left when the last bill moved away", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Table join empty"));
     await moveTo(tabId, { counter: { zoneId: null } });
+    const replacement = await openingBillOfParty(v, partyId);
+    expect(replacement).not.toBeNull();
     const free = await v.table("Table join empty to");
     const joining = await commandFor(v, partyId);
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, free, joining));
 
-    expect(result.billIds).toHaveLength(1);
+    expect(result.billIds).toEqual([replacement]);
   });
 
   it("Split a table taking an open bill leaves the staying party its own bill", async () => {

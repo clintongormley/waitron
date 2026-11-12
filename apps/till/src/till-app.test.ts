@@ -10426,28 +10426,6 @@ describe("till-app", () => {
         });
       });
 
-      it("a refusal to move held kitchen work to a new bill keeps the origin open and says to send it first", async () => {
-        const moveDishes = vi.fn().mockRejectedValue({ code: "tab.split_held_line" });
-        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
-        const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([openTable]),
-          listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines,
-          moveDishes,
-          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
-        });
-        const screen = await toTableOrder(el, openTable);
-
-        emit(screen, "move-dishes", { lineIds: ["line-1"], toBillId: null });
-        await flush(el);
-
-        expect(tableOrder(el)!.orderId).toBe("wo-7");
-        expect(getTabLines).toHaveBeenCalledTimes(1);
-        expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
-          t("table.split_held_error"),
-        );
-      });
-
       it("a failed table action surfaces a non-fatal banner, leaving the screen up", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),

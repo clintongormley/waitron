@@ -20,7 +20,6 @@ import "./errors.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createTable } from "./testing/live-table.js";
 import { numbersOf } from "./testing/bill-identities.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { tableSnapshot } from "./testing/table-snapshot.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -772,7 +771,7 @@ describe("A803 action results:", () => {
     expect(revisionOf(newParty)).toBe(0);
   });
 
-  it("a party with no bill that joins a free table answers one new empty bill, not two", async () => {
+  it("joining after moving the last bill answers its replacement without adding another", async () => {
     const ana = await seatedWith(venue, "Tarta");
     const counter = await post(`/api/bills/${ana.tabId}/move`, {
       to: { counter: { zoneId: null } },
@@ -780,7 +779,9 @@ describe("A803 action results:", () => {
       expectedPartyRevision: ana.revision,
     });
     expect(counter.status).toBe(200);
-    expect(shownBillsOf(ana.partyId)).toEqual([]);
+    const replacement = shownBillsOf(ana.partyId);
+    expect(replacement).toEqual([{ id: expect.any(String), status: "open", lines: 0 }]);
+    expect(replacement[0]!.id).not.toBe(ana.tabId);
     const revision = revisionOf(ana.partyId);
 
     const answer = await post(`/api/parties/${ana.partyId}/join`, {
@@ -790,7 +791,7 @@ describe("A803 action results:", () => {
 
     expect(answer.status).toBe(200);
     const bills = shownBillsOf(ana.partyId);
-    expect(bills).toEqual([{ id: expect.any(String), status: "open", lines: 0 }]);
+    expect(bills).toEqual(replacement);
     expect(answer.json).toEqual({ partyId: ana.partyId, billIds: [bills[0]!.id] });
     expect(revisionOf(ana.partyId)).toBe(revision + 1);
   });
@@ -1150,7 +1151,7 @@ describe("A803 split: the route", () => {
     expect(lineIdsOf(billIds[0]!)).toEqual([]);
   });
 
-  it("an empty selection from a party with no bill leaves it with none, and the leaving table with one empty bill", async () => {
+  it("an empty selection after moving the last bill keeps its replacement and gives the leaving table one empty bill", async () => {
     const ana = await seatedWith(venue, "Tarta");
     const second = await freeTable();
     const joined = await post(`/api/parties/${ana.partyId}/join`, {
@@ -1169,7 +1170,10 @@ describe("A803 split: the route", () => {
       expect(read.status).toBe(200);
       return read.json as unknown as { workingOrderId: string; outstanding: string }[];
     };
-    expect(await billsOf(ana.partyId)).toEqual([]);
+    const replacement = await billsOf(ana.partyId);
+    expect(replacement).toHaveLength(1);
+    expect(replacement[0]!.workingOrderId).not.toBe(ana.tabId);
+    expect(replacement[0]!.outstanding).toBe("0.00");
 
     const answer = await post(
       `/api/parties/${ana.partyId}/split-table`,
@@ -1177,7 +1181,7 @@ describe("A803 split: the route", () => {
     );
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(await billsOf(ana.partyId)).toEqual([]);
+    expect(await billsOf(ana.partyId)).toEqual(replacement);
     const taken = await billsOf(answer.json.partyId as string);
     expect(taken.map((bill) => bill.workingOrderId)).toEqual(answer.json.billIds);
     expect(taken.map((bill) => bill.outstanding)).toEqual(["0.00"]);
@@ -1350,20 +1354,6 @@ describe("A803 split: the route", () => {
 
       expect(answer.status).toBe(409);
       expect(answer.json).toMatchObject({ code: "bill.received_exceeds_total" });
-    });
-
-    it("a dish the kitchen holds outside a held group: 400 tab.split_held_line", async () => {
-      const { ana, second } = await anaWith("Caña");
-      await withTransaction(venue.db, (tx) =>
-        addTabRound(tx, venue.cfg, ana.tabId, [
-          { menuItemId: venue.offerFor("Tarta"), quantity: "1", hold: true },
-        ]),
-      );
-
-      const answer = await refusal(ana, second, lineIdsOf(ana.tabId).at(-1)!);
-
-      expect(answer.status).toBe(400);
-      expect(answer.json).toMatchObject({ code: "tab.split_held_line" });
     });
 
     it("an extra's id: 400 tab.transfer_modifier_line", async () => {

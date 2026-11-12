@@ -1110,14 +1110,13 @@ Tab button and no side drawer.
   screen sends nothing; choosing another sends `switch-bill` with its id.
 - **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the
   lowest-numbered bill still owing, else the lowest-numbered listed bill, and a `role="status"` line
-  says "Bill 2 is no longer at this table. Now showing Bill 1." ("Bill 2 is no longer at this
-  table." when none is left, with no New order). Choosing another bill or opening another table
+  says "Bill 2 is no longer at this table. Now showing Bill 1." Choosing another bill or opening another table
   clears it. A bill paid elsewhere is not vanished: it stays on screen, with no line.
 - **The ⋮** is a `wt-row-actions` (label "Table actions", `align="end"`, `opens-below`) holding two
   `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by
   a rule. The bill section, headed with the bill on screen's short label and left out when no bill
-  is on screen, lists Name this bill, then for an open bill Move dishes… and, while it holds no
-  payment, Merge bills, then Move this bill, Comp the bill and Full invoice, in that order; Receipt
+  is on screen, lists Name this bill, then for an open bill Move dishes… and Merge bills,
+  then Move this bill, Comp the bill and Full invoice, in that order; Receipt
   copy and Cancel and credit join it where the bill offers them. Whole table lists Allergies, Name the party, Guests,
   Mark bill requested (or Cancel the bill request), Split a table (two or more tables only), Join a
   table, Move guests and Finish table. With no party it offers Merge bills under "Bill" and Join a

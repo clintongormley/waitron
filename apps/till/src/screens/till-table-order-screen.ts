@@ -6370,7 +6370,6 @@ export class TillTableOrderScreen extends LitElement {
       ...keeps.whole.map(({ bill }) => billLabel(bill)),
       ...keeps.rest.map(({ bill }) => fill(t("table.split_rest_of"), { bill: billLabel(bill) })),
     ];
-    // The server makes a staying party a bill only when one leaves it, so with none it has none.
     const keepsLine =
       sources.length === 0 || leftWithNothingToPay(sources, this.splitPicks, this.#anyBillPaid())
         ? fill(t("table.split_nothing_to_pay"), { table: kept })
@@ -6788,11 +6787,7 @@ export class TillTableOrderScreen extends LitElement {
           ? []
           : [
               action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
-              // The server refuses both on a presented or paid bill, and Merge bills on a bill
-              // holding a payment.
-              ...(shown.status !== "open"
-                ? []
-                : [moveDishes, ...(shown.hasPayments ? [] : [merge])]),
+              ...(shown.status !== "open" ? [] : [moveDishes, merge]),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
               ...this.#billDocumentItems(shown),

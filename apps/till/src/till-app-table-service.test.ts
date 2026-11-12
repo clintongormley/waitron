@@ -1473,7 +1473,6 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
     const text = banner(el)!.textContent!;
     expect(text).toContain(t("table.error"));
-    expect(text).not.toContain(t("table.split_held_error"));
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
     await flush(el);
@@ -3900,7 +3899,7 @@ describe("A803 action results: the bill on screen after a table action", () => {
     reads.splice(0, reads.length, []);
     await nameParty(el, "Ana");
     expect(tableOrder(el)!.orderId).toBeUndefined();
-    expect(tableOrder(el)!.billGone).not.toBeNull();
+    expect(tableOrder(el)!.billGone).toBeNull();
 
     reads.splice(0, reads.length, [partyBill("wo-9", "v-2", 3)]);
     await nameParty(el, "Eva");

@@ -512,9 +512,7 @@ it.each(["leave", "send", "move", "split"] as const)(
           existingService: true,
           copyServiceContextFrom: seated.tabId,
         });
-        await carveOffLines(tx, v.cfg, seated.tabId, otherBill, [{ lineNo: 1, quantity: "1" }], {
-          refuseHeld: false,
-        });
+        await carveOffLines(tx, v.cfg, seated.tabId, otherBill, [{ lineNo: 1, quantity: "1" }], {});
       });
       const split = await suite.db
         .select()

@@ -1,5 +1,8 @@
 # A803 slice 4: one dish picker — task plan, cut into three pull requests
 
+2026-11-11: [R4](2026-11-11-r4-bill-rules.md) supersedes the merge, held-dish movement and
+replacement-bill rules where this historical plan describes the earlier behavior.
+
 **Goal.** At a table, a waiter moves some of the dishes on the bill on screen to another bill of the
 table, or to a new bill, in one step: **Move dishes…** in the ⋮ opens one picker listing the bill's
 dishes, identical dishes as one row with an "n of m" count, weighed dishes as whole ticks, paid

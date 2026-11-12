@@ -14,7 +14,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { addTabRound, setLineCourse, updateOrderLine } from "./testing/order-writer-fixture.js";
+import { setLineCourse, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";
@@ -320,30 +320,6 @@ describe("A773 requested lifecycle: bill move", () => {
         firedAt: null,
       });
       expect(await jobCount(tx)).toBe(jobs);
-    });
-  });
-
-  it("still refuses to split off a dish the kitchen holds outside a held group", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
-        { ...dish(venue, "burger"), hold: true },
-      ]);
-      const [held] = await linesOf(tx, venue.party.tabId);
-      expect(await itemOf(tx, held!.id)).toMatchObject({ requestedAt: null, firedAt: null });
-
-      await expect(
-        splitBill(
-          tx,
-          venue.cfg,
-          venue.party.tabId,
-          [{ lineNo: held!.lineNo }],
-          await command(tx, venue),
-        ),
-      ).rejects.toMatchObject({
-        code: "tab.split_held_line",
-        params: { tabId: venue.party.tabId, lineNo: held!.lineNo },
-      });
     });
   });
 });

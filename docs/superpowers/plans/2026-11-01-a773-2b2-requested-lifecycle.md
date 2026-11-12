@@ -1,5 +1,8 @@
 # A773-2 PR B2: a requested dish through every service action — task plan
 
+2026-11-11: [R4](2026-11-11-r4-bill-rules.md) supersedes the merge, held-dish movement and
+replacement-bill rules where this historical plan describes the earlier behavior.
+
 > **2026-11-06, A1378:** kitchen paper now prints whole quantities without `.000` and
 > takes its hours from the venue's saved time zone. Paper examples and measured output below
 > record the earlier implementation.

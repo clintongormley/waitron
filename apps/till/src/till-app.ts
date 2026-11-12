@@ -12698,15 +12698,7 @@ export class TillApp extends LitElement {
     }
   }
 
-  /**
-   * D11 rule 3: the bills just read for the order's party no longer show the bill on screen (another
-   * till merged it away or moved it, or the floor named a bill already gone), so the screen shows
-   * {@link billToShow}'s choice and says so, or, with no bill left, says that alone and offers no
-   * New order; no bill is made. Nothing is written to the bill that went: lines typed on it and not
-   * saved are kept for the waiter to review on the bill now shown. On `opening`, a party the floor
-   * named no bill for takes the rule's choice with nothing said, as does a party waiting on
-   * {@link #billAfterSplit}.
-   */
+  /** A vanished bill's unsent lines are kept for review on the replacement, never sent to it. */
   async #followBillsRead(
     answer: ReadBills,
     before: readonly PartyBill[],
@@ -12740,18 +12732,13 @@ export class TillApp extends LitElement {
       );
       const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
-      const key =
+      this.billGone =
         shown === undefined
-          ? numbered
-            ? "table.bill_gone_none"
-            : "table.bill_gone_unnumbered_none"
-          : numbered
-            ? "table.bill_gone"
-            : "table.bill_gone_unnumbered";
-      this.billGone = fill(t(key), {
-        gone: numbered ? billLabel(was) : "",
-        shown: shown === undefined ? "" : billLabel(shown),
-      });
+          ? null
+          : fill(t(numbered ? "table.bill_gone" : "table.bill_gone_unnumbered"), {
+              gone: numbered ? billLabel(was) : "",
+              shown: billLabel(shown),
+            });
       if (sync !== undefined && sync.billId === gone) {
         this.#dropDraft();
         this.#leftBillDrafts.set(
@@ -17032,11 +17019,6 @@ export class TillApp extends LitElement {
       );
       return false;
     }
-    if (code === "tab.split_held_line") {
-      await this.#readSplitSources(partyId);
-      say("table.split_held_error");
-      return false;
-    }
     say(tableWriteError(error));
     return false;
   }
@@ -17354,7 +17336,11 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
       if (isPaymentsReceived(error)) {
-        this.errorKey = { code: "bill.payments_received" };
+        const bill = this.partyBills.find((row) => row.workingOrderId === fromBillId);
+        this.errorKey = {
+          code: "bill.payments_received",
+          ...(bill === undefined ? {} : { bill: billLabel(bill) }),
+        };
         await this.#loadPartyBills();
       } else await this.#onBillPairRefusal(error);
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
@@ -17469,8 +17455,7 @@ export class TillApp extends LitElement {
       )
         return;
       const code = (error as { code?: string } | undefined)?.code;
-      if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
-      else if (code === "tab.line_not_found" || code === "tab.not_open") {
+      if (code === "tab.line_not_found" || code === "tab.not_open") {
         await this.#loadLinesAndBills();
         // The read may have moved the screen off a bill that has gone; a bill the waiter chose
         // meanwhile clears what the screen said.

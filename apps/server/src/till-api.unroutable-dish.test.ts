@@ -1274,9 +1274,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         { zoneId: v.counter.zoneId },
       ),
     );
-    await inTx(v, (tx) =>
-      carveOffLines(tx, v.cfg, id, id, [{ lineNo: 1, quantity: "1" }], { refuseHeld: false }),
-    );
+    await inTx(v, (tx) => carveOffLines(tx, v.cfg, id, id, [{ lineNo: 1, quantity: "1" }], {}));
     const rows = await inTx(v, (tx) =>
       tx
         .select({ makeAt: workingOrderLines.makeAtStationId })

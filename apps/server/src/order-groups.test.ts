@@ -2770,22 +2770,6 @@ describe("a group split across bills of its party", () => {
     );
     expect(lines.every((row) => row.sentAt !== null)).toBe(true);
   });
-
-  it("still refuses a recalled dish of a fired group onto a check (tab.split_held_line), writing nothing", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const [croquettes] = await linesIn(s.partyId, s.cold);
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [croquettes!.lineNo]));
-
-    for (const quantity of [undefined, "1"]) {
-      await expectRefusedWithNothingWritten(
-        v,
-        s.partyId,
-        () => splitToCheck(v, s, [{ lineNo: croquettes!.lineNo, quantity }]),
-        { code: "tab.split_held_line", params: { tabId: s.tabId, lineNo: croquettes!.lineNo } },
-      );
-    }
-  });
 });
 
 /** The chosen items of the party's tab split onto a new check, sent at `revision` by `operatorId`. */
@@ -5743,7 +5727,7 @@ describe("splitting a held line into units", () => {
           const sourceReads = selects.mock.calls.filter(
             ([fields]) =>
               fields?.unitPriceGross === workingOrderLines.unitPriceGross &&
-              fields?.ticketFiredAt === ticketItems.firedAt,
+              fields?.ticketItemId === ticketItems.id,
           );
           expect(sourceReads).toHaveLength(1);
           expect(yielded).toBe(true);

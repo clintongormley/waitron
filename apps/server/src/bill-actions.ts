@@ -160,8 +160,6 @@ async function requireUntouchedPair(
 /**
  * Put the chosen items of an open bill on a new bill of the same party, or a new counter order when
  * the bill has none. A partly paid bill may be split; the items paid for stay (`bill.line_paid`).
- * A dish in a held group may be split off, keeping its group, and fires with it; a dish the kitchen
- * holds outside a held group is refused `tab.split_held_line`.
  */
 export async function splitBill(
   tx: Transaction,
@@ -194,7 +192,6 @@ export async function splitBill(
     );
   const before = await readSentWork(tx, billId);
   const { splitFrom } = await carveOffLines(tx, cfg, billId, newBillId, transfers, {
-    refuseHeld: true,
     actorId: command.operatorId,
   });
   await bumpRevision(tx, [billId, newBillId]);
@@ -205,7 +202,7 @@ export async function splitBill(
 
 /**
  * Move every line of `fromBillId` onto `intoBillId` and abandon it, which files nothing. Both must be
- * untouched bills of one party.
+ * open bills of one party; the bill merged away must hold no payment.
  */
 export async function mergeBills(
   tx: Transaction,
@@ -217,7 +214,10 @@ export async function mergeBills(
 ): Promise<void> {
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
-  await requireUntouchedPair(tx, intoBillId, path, fromBillId);
+  if (path.partyId === null) throw new AppError("bill.other_party", { workingOrderId: fromBillId });
+  await requireBillOfParty(tx, path.partyId, fromBillId);
+  await refuseBillWithPayments(tx, fromBillId);
+  refuseClosedBill(intoBillId, path.status);
   await assertServiceModesMatch(tx, fromBillId, intoBillId);
   await mergeCheckedBills(tx, cfg, intoBillId, fromBillId, {
     operatorId: command.operatorId,
@@ -235,7 +235,8 @@ export async function mergeBills(
 
 /**
  * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
- * untouched bills of one party, in one service mode. `known.kitchenTold` is set by a caller that
+ * open bills of one party, in one service mode, with no payment on the bill merged away.
+ * `known.kitchenTold` is set by a caller that
  * tells the kitchen of `fromBillId`'s sent dishes itself, from what it read before `fromBillId`
  * joined the party.
  */
@@ -307,7 +308,6 @@ export async function transferItems(
 
   const before = await readSentWork(tx, fromBillId);
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {
-    refuseHeld: false,
     actorId: command.operatorId,
   });
   await bumpRevision(tx, [fromBillId, toBillId]);
@@ -359,8 +359,7 @@ export async function resolveMoveLines(
  * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
  * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received. An
- * existing destination may hold payments and owes more afterwards. To a new bill, a dish the kitchen holds outside a held
- * group is refused `tab.split_held_line`, as `splitBill` refuses it.
+ * existing destination may hold payments and owes more afterwards.
  */
 export async function moveDishes(
   tx: Transaction,
@@ -414,7 +413,6 @@ export async function moveDishes(
   }
   const before = await readSentWork(tx, fromBillId);
   const splitFrom = await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
-    refuseHeld: toBillId === null,
     actorId: command.operatorId,
   });
   await assertBillInvariant(tx, [fromBillId]);
@@ -433,7 +431,7 @@ export async function moveCheckedDishes(
   fromBillId: string,
   toBillId: string,
   transfers: Transfers,
-  options: { refuseHeld: boolean; actorId: string },
+  options: { actorId: string },
 ): Promise<Map<string, string>> {
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
   await bumpRevision(tx, [fromBillId, toBillId]);

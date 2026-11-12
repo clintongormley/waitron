@@ -861,49 +861,6 @@ describe("splitting a line the kitchen has", () => {
   });
 });
 
-/** A held round has no group, so firing a group never reaches it. */
-describe("splitting held kitchen work onto a check", () => {
-  it.each([
-    ["whole", undefined],
-    ["part", "1"],
-  ] as const)(
-    "refuses to move a held line of no group (%s) onto a check, moving nothing, and still splits a fired one",
-    async (_, quantity) => {
-      const { cfg, waterId, tableId } = await setupVenue();
-      await withKitchen(cfg);
-      const offer = offersByCfg.get(cfg)!.offerFor(waterId);
-      const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
-      await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
-      await asApp(cfg, (tx) =>
-        addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "3", hold: true }]),
-      );
-      const before = await linesWithTickets(tabId);
-      const orderCount = async () =>
-        (await db.select({ id: workingOrders.id }).from(workingOrders)).length;
-      const ordersBefore = await orderCount();
-
-      await expect(
-        asApp(cfg, (tx) =>
-          splitPartyBill(tx, cfg, tabId, [
-            { lineNo: 1 },
-            quantity === undefined ? { lineNo: 2 } : { lineNo: 2, quantity },
-          ]),
-        ),
-      ).rejects.toMatchObject({ code: "tab.split_held_line", params: { tabId, lineNo: 2 } });
-
-      expect(await linesWithTickets(tabId)).toEqual(before);
-      expect(await orderCount()).toBe(ordersBefore);
-
-      const { billId: checkId } = await asApp(cfg, (tx) =>
-        splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
-      );
-      expect(await linesWithTickets(checkId)).toMatchObject([
-        { quantity: 1000, ticketQuantity: 1000 },
-      ]);
-    },
-  );
-});
-
 /** A station's notices, every field a cook reads, oldest first. */
 async function kitchenNoticesAt(cfg: OriginConfig, stationId: string) {
   return (await asApp(cfg, (tx) => listStationNotices(tx, stationId))).map((notice) => ({

@@ -229,10 +229,10 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     expect(codeMessage(code, "en")).not.toContain(code);
   }
   expect(codeMessage("bill.payments_received", "en")).toBe(
-    "A bill that has taken payments cannot be merged with another.",
+    "This bill has taken payments, so it cannot be merged into another bill.",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Una cuenta que ya ha recibido pagos no se puede juntar con otra.",
+    "Esta cuenta ya ha recibido pagos, por lo que no se puede añadir a otra cuenta.",
   );
 });
 

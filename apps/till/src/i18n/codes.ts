@@ -378,8 +378,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido sin enviar ya no está en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
   },
   "bill.payments_received": {
-    en: "A bill that has taken payments cannot be merged with another.",
-    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra.",
+    en: "This bill has taken payments, so it cannot be merged into another bill.",
+    es: "Esta cuenta ya ha recibido pagos, por lo que no se puede añadir a otra cuenta.",
   },
   "working_order.not_placed": {
     en: "This bill is no longer waiting for payment",

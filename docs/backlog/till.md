@@ -2273,9 +2273,9 @@ Printer identity is separate from the till route inventory.
 
 2 entries, size M.
 
-- **A1267. A dish typed on a bill another till merged or moved away is kept nowhere a waiter can see
-  when no bill is left to show (left open by A803 slice 3, #2360).** Decide where those lines go.
-  [Detail](till.md#a1267-a-dish-typed-on-a-bill-another-till-merged-or-moved-away-is-kept-nowhere-a-waiter-can-see-when-no-bill-is-left-to-show)
+- **A1267. Retained changes on a vanished bill have no place when the replacement already holds
+  changes (left open by A803 slice 3, #2360).** Decide where those lines go.
+  [Detail](till.md#a1267-retained-changes-on-a-vanished-bill-have-no-place-when-the-replacement-already-holds-changes)
 - **A1288. Move dishes… shows a dish paid on another till as tickable until the till next reads the
   bill (seen in A803 slice 4a's LOOK).** Move in that gap is refused (`bill.line_paid`) and nothing
   moves, but the waiter sees a choice the till then refuses. Decide whether the panel re-reads the
@@ -4155,19 +4155,16 @@ another till moves a bill whose card payment has no answer yet, the pay area's c
 screen moves. Decide whether the window closes or follows the screen, and keep an unanswered card
 payment's view reachable.
 
-## A1267. A dish typed on a bill another till merged or moved away is kept nowhere a waiter can see when no bill is left to show
+## A1267. Retained changes on a vanished bill have no place when the replacement already holds changes
 
-**A1267. A dish typed on a bill another till merged or moved away is kept nowhere a waiter can
-see when no bill is left to show (left open by A803 slice 3, #2360).** The till moves the screen
-off such a bill and offers its unsaved lines for review on the bill it now shows
-(`#followBillsRead` and `#carryCandidate` in `apps/till/src/till-app.ts`). With no bill left, or
-when the bill now shown already holds lines kept for review, the lines stay under the gone bill,
-which no screen shows. Since the LOOK fix reviews 2 and 3, the save's refusal is said then, also
-when it came during this till's own Move this bill: `tab.not_open` (merged away) says "Could not
-update the table, try again" and `bill.other_party` (moved away) says "That bill belongs to other
-guests" (`draftRefusalError`; the tests pin `tab.not_open`). When the 15-second check finds the
-bill gone before any save is refused, only "Bill 2 is no longer at this table." is said (by
-reading, not run). Decide where those lines go.
+**A1267. Retained changes on a vanished bill have no place when the replacement already holds
+changes (left open by A803 slice 3, #2360).** The till offers unsaved lines for review on the bill
+it now shows. When that bill already holds lines kept for review, the old lines stay under the gone
+bill, which no screen shows (`#carryCandidate` in `apps/till/src/till-app.ts`; by reading, not run).
+Decide where those lines go.
+
+2026-11-11: R4 retires the separate no-bill case: a still-seated party receives a fresh empty bill
+when its last bill leaves. The remaining case above is unchanged by R4.
 
 ## A1269. A dead-end question that replaces another keeps the first one's picks
 

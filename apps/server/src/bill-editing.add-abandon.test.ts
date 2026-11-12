@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { billPayments, workingOrderLines, workingOrders } from "@waitron/db";
+import { billPayments, parties, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -14,7 +14,7 @@ import {
   type BillEditState,
 } from "./order-drafts.js";
 import { recallToDraft } from "./draft-recall.js";
-import { partyRevisionOfOrder } from "./parties.js";
+import { createPartyBill, partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound, abandonHeldOrder, parkOrder } from "./working-order.js";
 import { fireAll } from "./testing/serve-line.js";
@@ -100,6 +100,51 @@ function run(
       )
     : abandonHeldOrder({ db: venue.db }, venue.cfg, p.id, authority);
 }
+
+it("discarding the last bill leaves its seated party one fresh empty bill", async () => {
+  const p = await fixture();
+  const [before] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId!));
+
+  await run(p, "abandon", await edit(p.id));
+
+  const bills = await venue.db
+    .select()
+    .from(workingOrders)
+    .where(and(eq(workingOrders.partyId, p.partyId!), ne(workingOrders.status, "abandoned")));
+  expect(bills).toHaveLength(1);
+  expect(bills[0]).toMatchObject({ partyId: p.partyId, status: "open" });
+  expect(bills[0]!.id).not.toBe(p.id);
+  const [after] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId!));
+  expect(after!.revision).toBe(before!.revision + 1);
+  expect(
+    await venue.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, bills[0]!.id)),
+  ).toEqual([]);
+});
+
+it("discarding a different bill keeps the remaining bill's party revision current", async () => {
+  const p = await fixture();
+  const party = await inTx(venue, (tx) => partyRevisionOfOrder(tx, p.id));
+  const second = await inTx(venue, (tx) =>
+    createPartyBill(tx, venue.cfg, p.partyId!, { expectedPartyRevision: party!.revision }),
+  );
+
+  const answer = await send(
+    venue.app,
+    venue.cookie,
+    "DELETE",
+    `/api/working-orders/${second.billId}`,
+    {
+      expectedEdit: await edit(second.billId),
+    },
+  );
+
+  expect(answer.status).toBe(200);
+  const current = await inTx(venue, (tx) => partyRevisionOfOrder(tx, p.id));
+  expect(current!.revision).toBe(second.revision);
+});
 
 for (const op of operations)
   describe(`${op} requires observed bill authority`, () => {

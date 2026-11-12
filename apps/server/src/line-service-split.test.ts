@@ -192,7 +192,7 @@ describe("financial splits with charged service cancellations", () => {
         order.billId,
         billId,
         [{ lineNo: order.parent.lineNo, quantity: "2" }],
-        { refuseHeld: false, splitExtras: true },
+        { splitExtras: true },
       ),
     );
     expect(moved.splitFrom.size).toBe(0);
@@ -258,7 +258,6 @@ describe("financial splits with charged service cancellations", () => {
     const billId = await emptyBill(order.partyId);
     await inTx(venue, (tx) =>
       carveOffLines(tx, venue.cfg, order.billId, billId, [{ lineNo: order.parent.lineNo }], {
-        refuseHeld: false,
         splitExtras: true,
       }),
     );

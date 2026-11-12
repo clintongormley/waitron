@@ -339,6 +339,8 @@ arriba en la pantalla de la mesa, indica qué cuenta está en pantalla, como **C
 cuenta, así que una segunda cuenta está siempre a un toque.
 
 En el mostrador, usa **Pedidos aparcados** para recuperar o descartar la cuenta de una mesa.
+Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. Para liberar la mesa,
+usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un
@@ -364,9 +366,13 @@ mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**. Una acción que 
 elección, como con qué cuenta juntar, se abre junto al pedido, y **Atrás** la cierra.
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
-siguientes números del grupo que las recibe. Para juntar dos cuentas, usa **Juntar cuentas**. Si
-otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla pasa,
-a otra de las cuentas de la mesa, si queda alguna, y lo indica, por
+siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe
+recibir la otra y elige **Juntar cuentas**. La cuenta que recibe puede tener un pago parcial;
+la que añades no puede tener pagos. Si mueves la última cuenta de la mesa, la caja sigue en la mesa
+con una cuenta nueva y vacía.
+
+Si otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla
+pasa a otra de las cuentas de la mesa y lo indica, por
 ejemplo **Cuenta 2 ya no está en esta mesa. Ahora se muestra Cuenta 1.** Los platos que habías
 añadido a la cuenta que se fue y no habías enviado no pasan a la cuenta que ahora se muestra:
 aparecen bajo **Tus cambios no se han guardado.**, con **Descartar cambios** y **Actualizar el
@@ -433,10 +439,9 @@ Algunas casillas salen en gris, con el motivo debajo del plato:
 En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la mesa, o **+ Cuenta
 nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
 Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
-pantalla. Cada plato conserva su curso y sigue enviado, marchado o servido como estaba. Si la caja
-dice **Envía los artículos en espera a cocina antes de pasarlos a otra cuenta**, envíalos antes, o
-pásalos a otra de las cuentas de la mesa. Si mueves los últimos platos sin pagar de una cuenta
-pagada en parte, la cuenta queda pagada del todo y se emite su factura.
+pantalla. Cada plato conserva su curso y sigue enviado, marchado o servido como estaba. Si mueves
+los últimos platos sin pagar de una cuenta pagada en parte, la cuenta queda pagada del todo y se
+emite su factura.
 
 Si alguien paga un plato en otra caja mientras el panel está abierto, su fila pasa a **Pagado**
 cuando la caja vuelve a leer la cuenta, y ese plato deja de estar entre los que elegiste. Si tocas

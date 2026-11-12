@@ -184,7 +184,7 @@ async function interleavedApp(): Promise<TillApp> {
       if (roll < 0.25) return Promise.resolve({ partyId: "v-split", billIds: [] });
       if (roll < 0.5) return Promise.reject({ code: "table.not_shared" });
       if (roll < 0.75) return Promise.reject(lost());
-      return Promise.reject({ code: "tab.split_held_line" });
+      return Promise.reject({ code: "tab.not_open", tabId: "b2" });
     }),
   });
   await flush(el);

@@ -1,5 +1,8 @@
 # Tables, parties and bills: the till's table actions — Implementation Plan
 
+2026-11-11: [R4](2026-11-11-r4-bill-rules.md) supersedes the merge, held-dish movement and
+replacement-bill rules where this historical plan describes the earlier behavior.
+
 > **2026-10-19, A773-1:** the approved
 > [bill contract](../specs/2026-10-16-a773-courses-and-groups-design.md#4-bills) replaces this plan's
 > Send to choice, New orders tag and automatic main-bill destination for new table orders.

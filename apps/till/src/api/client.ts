@@ -4862,11 +4862,7 @@ export class TillApi {
     return this.#request(`/api/bills/${billId}/name`, "PUT", { name, ...revisions });
   }
 
-  /**
-   * Move every item of `fromBillId` onto `intoBillId`, two untouched bills of one party →
-   * `POST /api/bills/:intoBillId/merge`. Rejects, among others, `bill.presented`, `bill.paid`,
-   * `bill.other_party`, `bill.payments_received`, `tab.not_open` and `party.out_of_date`.
-   */
+  /** The source has no payments; payments on the receiving open bill stay with it. */
   async mergeBills(
     intoBillId: string,
     fromBillId: string,

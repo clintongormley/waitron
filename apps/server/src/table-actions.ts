@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
@@ -40,10 +40,12 @@ import {
 } from "./order-groups.js";
 import {
   checkAndBumpParty,
+  ensureFamilyBill,
   closePartyTables,
   leaveForClearing,
   leaveTables,
   memberTables,
+  notAbandonedInFamily,
   insertPartyBill,
   openParty,
   partyFamily,
@@ -394,7 +396,6 @@ export async function splitTable(
     newBill = await insertPartyBill(tx, cfg, newParty);
     for (const { billId, transfers } of looseMoves) {
       const splitFrom = await moveCheckedDishes(tx, cfg, billId, newBill, transfers, {
-        refuseHeld: true,
         actorId: options.operatorId,
       });
       carved.push({ billId, splitFrom });
@@ -487,31 +488,6 @@ async function refuseUnsplittableBill(
   if (bill.partyId !== partyId) throw new AppError("bill.other_party", { workingOrderId: billId });
   if (bill.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
   if (bill.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
-}
-
-/**
- * Bills that are not abandoned on any party of the family: as the party's bills read lists them,
- * so a paid bill kept on a party combined into it counts.
- */
-function notAbandonedInFamily(family: string[]) {
-  return and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned"));
-}
-
-/**
- * A party whose family has no bill that is not abandoned is given one new empty bill (A803 D1);
- * its revision is the caller's to move.
- */
-async function ensureFamilyBill(
-  tx: Transaction,
-  cfg: OriginConfig,
-  partyId: string,
-): Promise<void> {
-  const [any] = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(notAbandonedInFamily(await partyFamily(tx, partyId)))
-    .limit(1);
-  if (any === undefined) await insertPartyBill(tx, cfg, partyId);
 }
 
 /**

@@ -2,7 +2,7 @@ import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   diningTables,
@@ -167,6 +167,30 @@ export async function insertPartyBill(
     existingService: true,
   });
   return billId;
+}
+
+/**
+ * Bills that are not abandoned on any party of the family: as the party's bills read lists them,
+ * so a paid bill kept on a party combined into it counts.
+ */
+export function notAbandonedInFamily(family: string[]) {
+  return and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned"));
+}
+
+/** Makes a bill only for an open party without one; returns whether it did. The caller owns the revision. */
+export async function ensureFamilyBill(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+): Promise<boolean> {
+  const [any] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(notAbandonedInFamily(await partyFamily(tx, partyId)))
+    .limit(1);
+  if (any !== undefined || (await readParty(tx, partyId))?.state !== "open") return false;
+  await insertPartyBill(tx, cfg, partyId);
+  return true;
 }
 
 /** A new empty bill at an open party, asked for by staff; a party command guarded by its revision. */
