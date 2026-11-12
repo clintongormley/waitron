@@ -37,7 +37,9 @@ function sent(fetchImpl: ReturnType<typeof vi.fn>, call = 0) {
 }
 
 const host = () =>
-  ({ addController: vi.fn() }) as unknown as ConstructorParameters<typeof QueryController>[0];
+  ({ addController: vi.fn(), requestUpdate: vi.fn() }) as unknown as ConstructorParameters<
+    typeof QueryController
+  >[0];
 
 describe("StaffingApi", () => {
   it.each(["staff_roles", "person_staff_roles", "persons"])(

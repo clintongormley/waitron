@@ -37,6 +37,67 @@ describe("query controller", () => {
     ).rejects.toEqual(error);
     controller.hostDisconnected();
   });
+  it("says which slots' latest read failed, until a later read applies", async () => {
+    const data = new LiveData();
+    const controller = new QueryController(
+      host(),
+      () => data,
+      () => {},
+    );
+    let fails = true;
+    const read = async () => {
+      if (fails) throw { code: "server.internal" };
+      return 1;
+    };
+    await controller.watch(
+      "printers",
+      { key: "printers", dependencies: [], read: async () => 1 },
+      () => {},
+    );
+    await controller
+      .watch("jobs", { key: "jobs", dependencies: [{ type: "print_jobs" }], read }, () => {})
+      .catch(() => undefined);
+    expect(controller.failing("jobs")).toBe(true);
+    expect(controller.failing("printers")).toBe(false);
+    fails = false;
+    data.invalidate([{ type: "print_jobs" }]);
+    await vi.waitFor(() => expect(controller.failing("jobs")).toBe(false));
+    controller.hostDisconnected();
+  });
+  it("asks the host to update whenever a slot's failing answer changes, even when no other slot recovers", async () => {
+    const data = new LiveData();
+    const owner = host();
+    const updates: boolean[] = [];
+    const controller: QueryController = new QueryController(
+      {
+        ...owner,
+        requestUpdate: () => {
+          updates.push(controller.failing("printers"));
+        },
+      },
+      () => data,
+      () => {},
+    );
+    let fails = true;
+    const read = async () => {
+      if (fails) throw { code: "server.internal" };
+      return 1;
+    };
+    await controller
+      .watch("jobs", { key: "jobs", dependencies: [{ type: "print_jobs" }], read }, () => {})
+      .catch(() => undefined);
+    await controller
+      .watch("printers", { key: "printers", dependencies: [{ type: "printers" }], read }, () => {})
+      .catch(() => undefined);
+    expect(updates).toEqual([false, true]);
+    updates.length = 0;
+    fails = false;
+    data.invalidate([{ type: "printers" }]);
+    await vi.waitFor(() => expect(controller.failing("printers")).toBe(false));
+    expect(controller.failing("jobs")).toBe(true);
+    expect(updates).toEqual([false]);
+    controller.hostDisconnected();
+  });
   it("applies observed snapshots without recreating the host, and stops on disconnect", async () => {
     const data = new LiveData();
     const owner = host();
@@ -290,9 +351,11 @@ describe("query controller recovery", () => {
       }),
     ).rejects.toBe(refused);
     expect(error).toHaveBeenCalledWith(refused);
+    expect(controller.failing("jobs")).toBe(true);
     refuse = false;
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledWith(refused));
+    expect(controller.failing("jobs")).toBe(false);
     controller.hostDisconnected();
   });
 
@@ -365,6 +428,7 @@ describe("query controller recovery", () => {
     next = "slow";
     data.refresh();
     await vi.waitFor(() => expect(apply).toHaveBeenCalledWith("slow"));
+    expect(controller.failing("jobs")).toBe(false);
     next = "fail";
     data.refresh();
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
@@ -372,6 +436,7 @@ describe("query controller recovery", () => {
     finishApply();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(recovered).not.toHaveBeenCalled();
+    expect(controller.failing("jobs")).toBe(true);
     next = "ok";
     data.refresh();
     await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));

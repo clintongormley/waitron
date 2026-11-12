@@ -1236,8 +1236,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small.
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
 
-- **Printers screen leftovers** (bundle of 6, 1 important, size S). [Detail](backlog/printers.md#bundle-printers-screen-leftovers)
-
 - **Since W72c an imported print agent arrives with no node; the importing box's own agent still
   enrols as a new row beside it**, as it did before (read, not run). Left open by W72c (#1237).
 

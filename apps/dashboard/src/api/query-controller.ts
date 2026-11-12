@@ -25,6 +25,10 @@ export class DashboardQueries {
     this.#queries = new QueryController(host, () => this.api().liveData, error, recovered);
   }
 
+  failing(name: DashboardQueryName): boolean {
+    return this.#queries.failing(name);
+  }
+
   release(name: DashboardQueryName): void {
     this.#queries.release(name);
   }

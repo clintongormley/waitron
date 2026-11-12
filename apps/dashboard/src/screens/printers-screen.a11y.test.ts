@@ -276,6 +276,12 @@ async function openCalibration(el: PrintersScreen): Promise<void> {
   q(el, "[data-test=calibrate-printer-details]")!.click();
   await flush(el);
 }
+/** axe looks for an open modal with `document.elementsFromPoint`, which answers with the screen,
+ * never a dialog inside its shadow root, so it grades the details dialog Calibrate covers; at phone
+ * width that dialog's scrolled-away "Used by" heading lies on its footer's red Delete. */
+function calibrationDialog(el: PrintersScreen): Element {
+  return q(el, '[data-test="edit-printer-modal"]')!;
+}
 async function openDiscovery(el: PrintersScreen): Promise<void> {
   q(el, "[data-test=open-add-printer]")!.click();
   await flush(el);
@@ -530,11 +536,11 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openDiscovery(el);
-    expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
-    expect(q(el, "[data-test=discovered-row-SN-2]")).not.toBeNull();
-    expect(q(el, "[data-test=register-SN-2]")!.textContent).toContain(t("action.add"));
+    expect(q(el, "[data-test='register-a1:SN-1']")).toBeTruthy();
+    expect(q(el, "[data-test='discovered-row-a1:SN-2']")).not.toBeNull();
+    expect(q(el, "[data-test='register-a1:SN-2']")!.textContent).toContain(t("action.add"));
     expect(q(el, "[data-test=printer-last-seen-p3]")).not.toBeNull();
-    expect(q(el, "[data-test='page-printer-10.0.0.56:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
     expect(q(el, "[data-test=new-transport]")).toBeNull();
     await expectNoA11yViolations(host);
     q(el, "[data-test=probe-printer]")!.click();
@@ -612,7 +618,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     expect(q(el, "[data-test='page-printer-added-a1:10.0.0.62:9100']")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-error-a2:10.0.0.63:9100']")).not.toBeNull();
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.64:9100']")).not.toBeNull();
-    expect(q(el, "[data-test='page-printer-10.0.0.65:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='page-printer-a1:10.0.0.65:9100']")).not.toBeNull();
     await expectNoA11yViolations(host);
     q(el, "[data-test='add-page-printer-a1:10.0.0.61:9100']")!.click();
     await flush(el);
@@ -741,7 +747,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     setLocale(locale);
     await page.viewport(width, 900);
     try {
-      const { el, host } = await mountWidget<PrintersScreen>(
+      const { el } = await mountWidget<PrintersScreen>(
         "dashboard-printers-screen",
         { api: stubApi() },
         theme,
@@ -763,7 +769,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         .getBoundingClientRect();
       expect(rect.left).toBeGreaterThanOrEqual(modal.left);
       expect(rect.right).toBeLessThanOrEqual(modal.right);
-      await expectNoA11yViolations(host);
+      await expectNoA11yViolations(calibrationDialog(el));
       await userEvent.click(field.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!);
       await flush(el);
       expect(field.shadowRoot!.querySelector<HTMLInputElement>("input.search")!.placeholder).toBe(
@@ -776,14 +782,14 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await userEvent.click(receipt);
       await flush(el);
       expect(field.values).toEqual(["payment_slip"]);
-      await expectNoA11yViolations(host);
+      await expectNoA11yViolations(calibrationDialog(el));
       const slip = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
         (row) => row.textContent!.trim() === t("devices.slip_printer_now"),
       )!;
       await userEvent.click(slip);
       await flush(el);
       expect(field.values).toEqual([]);
-      await expectNoA11yViolations(host);
+      await expectNoA11yViolations(calibrationDialog(el));
     } finally {
       setLocale(before);
       await page.viewport(1280, 900);
@@ -840,7 +846,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
           expect(Math.abs(port.bottom - connect.bottom)).toBeLessThan(2);
         }
         await expectNoA11yViolations(host);
-        q(el, '[data-test="register-SN-1"]')!.click();
+        q(el, '[data-test="register-a1:SN-1"]')!.click();
         await flush(el);
         await expectNoA11yViolations(host);
         const closed = new Promise((resolve) =>
@@ -895,14 +901,14 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         });
         q(el, '[data-test="print-ruler-p1"]')!.click();
         await flush(el);
-        await expectNoA11yViolations(host);
+        await expectNoA11yViolations(calibrationDialog(el));
         q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
-        await expectNoA11yViolations(host);
+        await expectNoA11yViolations(calibrationDialog(el));
         q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
         assertInsideDialog(["printer-cash-drawer"]);
-        await expectNoA11yViolations(host);
+        await expectNoA11yViolations(calibrationDialog(el));
         q(el, '[data-test="cancel-edit-printer"]')!.click();
         await flush(el);
         q(el, '[data-test="printer-details-close"]')!.click();
@@ -925,14 +931,14 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openDiscovery(el);
-    expect(q(el, '[data-test="discovered-row-66:77:88:99:AA:BB"]')).toBeNull();
+    expect(q(el, '[data-test="discovered-row-a1:66:77:88:99:AA:BB"]')).toBeNull();
     expect(q(el, "[data-test=bluetooth-note]")).not.toBeNull();
     await expectNoA11yViolations(host);
     q(el, "[data-test=show-all-bluetooth]")!.click();
     await flush(el);
-    expect(q(el, '[data-test="discovered-row-66:77:88:99:AA:BB"]')).not.toBeNull();
+    expect(q(el, '[data-test="discovered-row-a1:66:77:88:99:AA:BB"]')).not.toBeNull();
     await expectNoA11yViolations(host);
-    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')!.click();
     await flush(el);
     expect((q(el, "[data-test=confirm-pair]") as HTMLElementTagNameMap["wt-button"]).variant).toBe(
       "secondary",
@@ -971,7 +977,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openDiscovery(el);
-    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')!.click();
     await flush(el);
     q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "0000" }, bubbles: true, composed: true }),
@@ -980,7 +986,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     q(el, "[data-test=confirm-pair]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=pair-printer-modal]")).toBeNull());
     await flush(el);
-    expect(q(el, '[data-test="discovered-command-00:11:22:33:44:55"]')).not.toBeNull();
+    expect(q(el, '[data-test="discovered-command-a1:00:11:22:33:44:55"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -1010,7 +1016,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     try {
       await openDiscovery(el);
-      q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+      q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')!.click();
       await flush(el);
       q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
         new CustomEvent("wt-change", { detail: { value: "0000" }, bubbles: true, composed: true }),
@@ -1031,8 +1037,8 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await closed;
       await vi.waitFor(() => expect(q(el, "[data-test=name-printer-modal]")).toBeNull());
       await flush(el);
-      expect(q(el, '[data-test="register-00:11:22:33:44:55"]')).not.toBeNull();
-      expect(q(el, '[data-test="forget-device-00:11:22:33:44:55"]')).not.toBeNull();
+      expect(q(el, '[data-test="register-a1:00:11:22:33:44:55"]')).not.toBeNull();
+      expect(q(el, '[data-test="forget-device-a1:00:11:22:33:44:55"]')).not.toBeNull();
       await expectNoA11yViolations(host);
     } finally {
       vi.useRealTimers();
@@ -1053,7 +1059,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     try {
       await openDiscovery(el);
-      q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+      q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')!.click();
       await flush(el);
       q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
         new CustomEvent("wt-change", { detail: { value: "0000" }, bubbles: true, composed: true }),
@@ -1063,10 +1069,10 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await flush(el);
       await vi.advanceTimersByTimeAsync(120_000);
       await flush(el);
-      expect(q(el, '[data-test="discovered-row-00:11:22:33:44:55"]')!.textContent).toContain(
+      expect(q(el, '[data-test="discovered-row-a1:00:11:22:33:44:55"]')!.textContent).toContain(
         t("printers.bluetooth_not_seen"),
       );
-      expect(q(el, '[data-test="discovered-command-00:11:22:33:44:55"]')!.textContent).toBe(
+      expect(q(el, '[data-test="discovered-command-a1:00:11:22:33:44:55"]')!.textContent).toBe(
         t("printers.bluetooth_no_answer"),
       );
       await expectNoA11yViolations(host);
@@ -1097,7 +1103,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openDiscovery(el);
-    const pair = q(el, '[data-test="pair-22:22:22:22:22:22"]')!;
+    const pair = q(el, '[data-test="pair-a1:22:22:22:22:22:22"]')!;
     expect(pair.textContent!.trim()).toBe(t("printers.bluetooth_pair_only"));
     await expectNoA11yViolations(host);
     pair.click();

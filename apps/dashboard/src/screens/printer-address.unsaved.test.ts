@@ -158,8 +158,10 @@ it("address normalization accepts a reverted numeric port but retains invalid an
 it("closing a nested name leaves the edited address, while discovery Discard covers both", async () => {
   const { app, screen } = await mount();
   change(screen, "host", "192.168.20.247");
-  await expect.poll(() => q(screen, '[data-test="register-192.168.20.247:9100"]')).not.toBeNull();
-  q(screen, '[data-test="register-192.168.20.247:9100"]')!.click();
+  await expect
+    .poll(() => q(screen, '[data-test="register-a1:192.168.20.247:9100"]'))
+    .not.toBeNull();
+  q(screen, '[data-test="register-a1:192.168.20.247:9100"]')!.click();
   await screen.updateComplete;
   const name = q(screen, "[name=new-printer-name]") as HTMLElementTagNameMap["wt-input"];
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Changed kitchen" } }));
@@ -170,7 +172,7 @@ it("closing a nested name leaves the edited address, while discovery Discard cov
   await expect.poll(() => q(screen, "[data-test=name-printer-modal]")).toBeNull();
   expect(field(screen, "host").value).toBe("192.168.20.247");
   expect(unload()).toBe(true);
-  q(screen, '[data-test="register-192.168.20.247:9100"]')!.click();
+  q(screen, '[data-test="register-a1:192.168.20.247:9100"]')!.click();
   await screen.updateComplete;
   (q(screen, "[name=new-printer-name]") as HTMLElementTagNameMap["wt-input"]).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "New name" } }),
@@ -232,8 +234,10 @@ it("a successful address check submits normalized values and keeps the registrat
   expect(field(screen, "host").value).toBe(" 192.168.20.247 ");
 });
 async function register(screen: PrintersScreen) {
-  await expect.poll(() => q(screen, '[data-test="register-192.168.20.247:9100"]')).not.toBeNull();
-  q(screen, '[data-test="register-192.168.20.247:9100"]')!.click();
+  await expect
+    .poll(() => q(screen, '[data-test="register-a1:192.168.20.247:9100"]'))
+    .not.toBeNull();
+  q(screen, '[data-test="register-a1:192.168.20.247:9100"]')!.click();
   await screen.updateComplete;
   q(screen, "[data-test=confirm-add-printer]")!.click();
 }

@@ -416,6 +416,19 @@ async function clickAndAwaitClose(
 
 type Dropdown = HTMLElement & { value: string };
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
+/** How many times `sentence` is drawn anywhere in the screen, nested shadow trees included. */
+function timesShown(el: PrintersScreen, sentence: string): number {
+  const texts: string[] = [];
+  const walk = (root: Node): void => {
+    for (const node of root.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) texts.push(node.textContent ?? "");
+      if (node instanceof Element && node.shadowRoot) walk(node.shadowRoot);
+      walk(node);
+    }
+  };
+  walk(el.shadowRoot!);
+  return texts.join("\n").split(sentence).length - 1;
+}
 /** A sentence holding a relative time, with the time standing as `{time}`, and the moment it shows. */
 function timeSentence(sentence: Element | null): { text: string; at: string | null } {
   const copy = sentence!.cloneNode(true) as Element;
@@ -783,6 +796,33 @@ describe("guided printer calibration", () => {
     }
   });
 
+  it("ends the receipt and drawer steps' buttons where the width step's does, at a field's width", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const el = await openCalibration(stubApi());
+      const ruler = q(el, "[data-test=print-ruler-p1]")!.getBoundingClientRect();
+      const step = q(el, '[data-test="calibration-step-1"]')!.getBoundingClientRect();
+      // The step is wider than a field, so a button spanning it would end past the ruler's.
+      expect(step.right - ruler.right).toBeGreaterThan(8);
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+      const sample = q(el, "[data-test=print-sample-receipt-p1]")!.getBoundingClientRect();
+      expect(Math.abs(sample.right - ruler.right)).toBeLessThanOrEqual(1);
+      expect(sample.left).toBeGreaterThan(step.left);
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+      toggleSwitch(el, '[name="printer-cash-drawer"]', true);
+      await flush(el);
+      const drawer = q(el, "[data-test=test-printer-drawer]")!.getBoundingClientRect();
+      expect(Math.abs(drawer.right - ruler.right)).toBeLessThanOrEqual(1);
+      expect(drawer.left).toBeGreaterThan(step.left);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
   it("keeps the width step's rows inside the dialog body on a Spanish phone screen", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
@@ -1020,7 +1060,7 @@ describe("guided printer calibration", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openDiscovery(el);
-    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
     await flush(el);
     await vi.waitFor(() =>
       expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
@@ -1192,7 +1232,7 @@ describe("printer configuration tabs", () => {
     await flush(el);
     await selectTab(el, "printers");
     const button = await pressEmptyAction(el, "printers-table");
-    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
     await flush(el);
     await vi.waitFor(() =>
       expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
@@ -1220,7 +1260,7 @@ describe("printer configuration tabs", () => {
     await flush(el);
     await selectTab(el, "printers");
     const button = await pressEmptyAction(el, "printers-table");
-    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
     await flush(el);
     await vi.waitFor(() => expect(button.isConnected).toBe(false));
     await clickAndAwaitClose(el, "edit-printer-modal", "cancel-edit-printer");
@@ -1882,6 +1922,36 @@ describe("printers-screen", () => {
     expect(api.joinRequests).toHaveBeenCalledTimes(3);
   });
 
+  it("shows the tapped number as sending, and holds the other numbers, until the accept answers", async () => {
+    let answer!: () => void;
+    const api = stubApi({
+      acceptPrintAgentJoinRequest: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          answer = resolve;
+        }),
+      ),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+    const choice = (number: string) =>
+      q(el, `[data-choice="${number}"]`) as import("@waitron/ui").WtButton;
+    expect(choice(REAL_NUMBER).loading).toBe(true);
+    for (const other of CHOICES.filter((number) => number !== REAL_NUMBER)) {
+      expect(choice(other).loading).toBe(false);
+      expect(choice(other).disabled).toBe(true);
+    }
+    answer();
+    await flush(el);
+    expect(q(el, "[data-test=join-dialog]")).toBeNull();
+  });
+
   // A wrong tap has already denied the request server-side (design §1.2).
   it("treats a mismatch as terminal: the row goes, and the banner tells them to ask again", async () => {
     const api = stubApi({
@@ -2273,7 +2343,7 @@ describe("printers-screen", () => {
     expect(probePrinterAddress).toHaveBeenCalledWith({ host: "192.168.20.247", port: 9200 });
     expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_found"));
     expect(api.createPrinter).not.toHaveBeenCalled();
-    await addDiscovered(el, q(el, "[data-test='register-192.168.20.247:9200']")!);
+    await addDiscovered(el, q(el, "[data-test='register-a1:192.168.20.247:9200']")!);
     await flush(el);
     expect(api.createPrinter).toHaveBeenCalledWith({
       name: "192.168.20.247",
@@ -2318,7 +2388,7 @@ describe("printers-screen", () => {
     const status = text(el, "[data-test=probe-status]");
     expect(status).toBe(t("printers.probe_page_printer"));
     expect(status).not.toContain(t("printers.probe_found"));
-    expect(q(el, "[data-test='register-192.168.20.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='register-a1:192.168.20.56:9100']")).toBeNull();
   });
 
   it("explains invalid address and port fields once Check address is pressed, not by disabling it beforehand", async () => {
@@ -2524,7 +2594,7 @@ describe("printers-screen", () => {
       expect(text(el, "[data-test=probe-status]")).toContain(
         t(active ? "printers.probe_registered" : "printers.probe_found"),
       );
-      const add = q(el, `[data-test='register-${target.host}:${target.port}']`);
+      const add = q(el, `[data-test='register-a1:${target.host}:${target.port}']`);
       if (active) expect(add).toBeNull();
       else {
         expect(add!.textContent).toContain(t("action.add"));
@@ -2568,8 +2638,8 @@ describe("printers-screen", () => {
     await openDiscovery(el);
     const key = `${target.host}:${target.port}`;
     // The retained registration stays re-addable (conventions-ui.md): no office-printer treatment.
-    expect(q(el, `[data-test='page-printer-${key}']`)).toBeNull();
-    expect(q(el, `[data-test='discovered-row-${key}']`)!.getAttribute("part")).toBe(
+    expect(q(el, `[data-test='page-printer-a1:${key}']`)).toBeNull();
+    expect(q(el, `[data-test='discovered-row-a1:${key}']`)!.getAttribute("part")).toBe(
       "discovered-details",
     );
 
@@ -2579,7 +2649,7 @@ describe("printers-screen", () => {
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
     expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_found"));
-    const add = q(el, `[data-test='register-${key}']`);
+    const add = q(el, `[data-test='register-a1:${key}']`);
     expect(add!.textContent).toContain(t("action.add"));
     await addDiscovered(el, add!);
     await flush(el);
@@ -2631,7 +2701,7 @@ describe("printers-screen", () => {
     expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
     expect(q(el, "[data-test=new-transport]")).toBeNull();
     expect(q(el, "[data-test=new-host]")).toBeNull();
-    await addDiscovered(el, q(el, '[data-test="register-10.0.0.77:9100"]')!);
+    await addDiscovered(el, q(el, '[data-test="register-a1:10.0.0.77:9100"]')!);
     await flush(el);
     expect(api.createPrinter).toHaveBeenCalledWith({
       name: "Kitchen IP",
@@ -2800,10 +2870,10 @@ describe("printers-screen", () => {
 
     await openDiscovery(el);
     expect(api.listDiscoveredPrinters).toHaveBeenCalled();
-    expect(q(el, "[data-test=discovered-row-SN-1]")).toBeTruthy();
+    expect(q(el, "[data-test='discovered-row-a1:SN-1']")).toBeTruthy();
 
     await el.updateComplete;
-    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
     await flush(el);
 
     expect(api.createPrinter).toHaveBeenCalledWith({
@@ -2824,7 +2894,7 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openDiscovery(el);
-    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
     await flush(el);
     expect(api.createPrinter).toHaveBeenCalledWith({
       name: "Epson TM-T20",
@@ -2856,24 +2926,24 @@ describe("printers-screen", () => {
     await openDiscovery(el);
 
     // Fails if the receipt-printer path learns to hide or disable ordinary devices.
-    const receiptAdd = q(el, "[data-test='register-10.0.0.77:9100']");
+    const receiptAdd = q(el, "[data-test='register-a1:10.0.0.77:9100']");
     expect(receiptAdd).not.toBeNull();
     expect(receiptAdd!.hasAttribute("disabled")).toBe(false);
-    expect(q(el, "[data-test='page-printer-10.0.0.77:9100']")).toBeNull();
+    expect(q(el, "[data-test='page-printer-a1:10.0.0.77:9100']")).toBeNull();
 
     // Fails if #renderNewPrinter filters office printers out of the table instead of greying them.
-    const officeRow = q(el, "[data-test='discovered-row-10.0.0.56:9100']");
+    const officeRow = q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']");
     expect(officeRow).not.toBeNull();
     // Fails if the Add button is still rendered for a pagePrinter device.
-    expect(q(el, "[data-test='register-10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='register-a1:10.0.0.56:9100']")).toBeNull();
     // Fails if the explanation is not rendered beside the device.
-    expect(text(el, "[data-test='page-printer-10.0.0.56:9100']")).toBe(
+    expect(text(el, "[data-test='page-printer-a1:10.0.0.56:9100']")).toBe(
       t("printers.page_printer_no_answer"),
     );
     // Fails if the muted styling is dropped or applied through a class a table cell cannot see.
     const muted = getComputedStyle(officeRow!).color;
     expect(muted).not.toBe(
-      getComputedStyle(q(el, "[data-test='discovered-row-10.0.0.77:9100']")!).color,
+      getComputedStyle(q(el, "[data-test='discovered-row-a1:10.0.0.77:9100']")!).color,
     );
     const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
     expect((table.rows as DiscoveredPrinter[]).map((row) => row.host)).toEqual([
@@ -2894,14 +2964,14 @@ describe("printers-screen", () => {
 
     await openDiscovery(el);
 
-    expect(q(el, "[data-test=discovered-row-SN-2]")).toBeNull();
-    expect(q(el, "[data-test=register-SN-2]")).toBeNull();
+    expect(q(el, "[data-test='discovered-row-a1:SN-2']")).toBeNull();
+    expect(q(el, "[data-test='register-a1:SN-2']")).toBeNull();
     expect(text(el, "[data-test=printer-last-seen-p3]")).toBe(
       t("printers.seen_at")
         .replace("{agent}", "Kitchen agent")
         .replace("{time}", "2023-11-14 22:13"),
     );
-    expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
+    expect(q(el, "[data-test='register-a1:SN-1']")).toBeTruthy();
     expect(q(el, "[data-test=discovered-registered-SN-1]")).toBeNull();
   });
 
@@ -3144,7 +3214,7 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openDiscovery(el);
-    await addDiscovered(el, q(el, '[data-test="register-AA:BB"]')!);
+    await addDiscovered(el, q(el, '[data-test="register-a1:AA:BB"]')!);
     await flush(el);
     expect(api.createPrinter).toHaveBeenCalledWith({
       name: "Bar printer",
@@ -3163,7 +3233,7 @@ describe("printers-screen", () => {
 
     await openDiscovery(el);
     await el.updateComplete;
-    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
     await flush(el);
 
     const banner = q(el, "[role=alert]")?.textContent;
@@ -3570,7 +3640,7 @@ it("keeps a successfully added printer registered when refreshing discovery fail
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openDiscovery(el);
-    await addDiscovered(el, q(el, '[data-test="register-10.0.0.77:9100"]')!);
+    await addDiscovered(el, q(el, '[data-test="register-a1:10.0.0.77:9100"]')!);
     await flush(el);
     expect(api.createPrinter).toHaveBeenCalledOnce();
     expect(q(el, '[data-test="name-printer-modal"]')).toBeNull();
@@ -3580,15 +3650,15 @@ it("keeps a successfully added printer registered when refreshing discovery fail
       ),
     );
     expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
-    expect(q(el, '[data-test="register-10.0.0.77:9100"]')).toBeNull();
-    expect(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')).toBeNull();
+    expect(q(el, '[data-test="register-a1:10.0.0.77:9100"]')).toBeNull();
+    expect(q(el, '[data-test="discovered-row-a1:10.0.0.77:9100"]')).toBeNull();
     vi.mocked(api.listDiscoveredPrinters).mockResolvedValue(discoveredNetwork);
     vi.mocked(api.listDiscoveredPrinters).mockClear();
     await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
     await flush(el);
     expect(api.listDiscoveredPrinters).not.toHaveBeenCalled();
-    expect(q(el, '[data-test="register-10.0.0.77:9100"]')).toBeNull();
-    expect(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')).toBeNull();
+    expect(q(el, '[data-test="register-a1:10.0.0.77:9100"]')).toBeNull();
+    expect(q(el, '[data-test="discovered-row-a1:10.0.0.77:9100"]')).toBeNull();
     expect(api.createPrinter).toHaveBeenCalledOnce();
   } finally {
     vi.useRealTimers();
@@ -3725,22 +3795,22 @@ it("guards repeated Add presses while pending, allows Test Print, and permits re
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   await openDiscovery(el);
-  await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+  await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
   await flush(el);
-  await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+  await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
   expect(createPrinter).toHaveBeenCalledOnce();
   await openPrinter(el);
   q(el, "[data-test=print-ruler-p1]")!.click();
   await flush(el);
   expect(api.testPrint).toHaveBeenCalledExactlyOnceWith("p1");
-  await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+  await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
   expect(createPrinter).toHaveBeenCalledOnce();
-  expect(q(el, "[data-test=register-SN-1]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
-    true,
-  );
+  expect(
+    q(el, "[data-test='register-a1:SN-1']")!.shadowRoot!.querySelector("button")!.disabled,
+  ).toBe(true);
   reject({ code: "management.request_invalid" });
   await flush(el);
-  await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+  await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
   await flush(el);
   expect(createPrinter).toHaveBeenCalledTimes(2);
 });
@@ -3764,9 +3834,9 @@ it.each([
       const modal = q(el, "[data-test=new-printer-modal]")!;
       const bounds = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
       expect(
-        getComputedStyle(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')!).overflowWrap,
+        getComputedStyle(q(el, '[data-test="discovered-row-a1:10.0.0.77:9100"]')!).overflowWrap,
       ).toBe("anywhere");
-      const add = q(el, '[data-test="register-10.0.0.77:9100"]')!.getBoundingClientRect();
+      const add = q(el, '[data-test="register-a1:10.0.0.77:9100"]')!.getBoundingClientRect();
       expect(add.right).toBeLessThan(bounds.right);
       expect(add.left).toBeGreaterThan(bounds.left);
     } finally {
@@ -3788,7 +3858,7 @@ it("hides a scan result that is already registered and shows when it was seen ag
 
   q(el, "[data-test=open-add-printer]")!.click();
   await flush(el);
-  expect(q(el, '[data-test="discovered-row-10.0.0.5:9100"]')).toBeNull();
+  expect(q(el, '[data-test="discovered-row-a1:10.0.0.5:9100"]')).toBeNull();
   expect(q(el, "[data-test=add-result-0]")).toBeNull();
 });
 
@@ -3903,7 +3973,7 @@ it.each(["usb", "bluetooth", "network_tcp"] as const)(
     await flush(el);
     await openDiscovery(el);
     const key = stored.localKey ?? "10.0.0.88:9100";
-    const add = q(el, `[data-test="register-${key}"]`)!;
+    const add = q(el, `[data-test="register-a1:${key}"]`)!;
     expect(add).not.toBeNull();
     expect(add.textContent).toContain(t("action.add"));
     add.click();
@@ -3911,7 +3981,7 @@ it.each(["usb", "bluetooth", "network_tcp"] as const)(
     await vi.waitFor(() => expect(api.createPrinter).toHaveBeenCalledOnce());
     expect(api.updatePrinter).not.toHaveBeenCalled();
     expect(q(el, "[data-test=name-printer-modal]")).toBeNull();
-    expect(q(el, `[data-test="register-${key}"]`)).toBeNull();
+    expect(q(el, `[data-test="register-a1:${key}"]`)).toBeNull();
     await vi.waitFor(() =>
       expect(text(el, "[data-test=printer-row-p3]")).toContain("Saved kitchen name"),
     );
@@ -3927,10 +3997,10 @@ it("keeps a disabled printer available when adding it again fails", async () => 
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   await openDiscovery(el);
-  await addDiscovered(el, q(el, "[data-test=register-SN-2]")!);
+  await addDiscovered(el, q(el, "[data-test='register-a1:SN-2']")!);
   await flush(el);
   expect(api.createPrinter).toHaveBeenCalledOnce();
-  expect(q(el, "[data-test=register-SN-2]")).not.toBeNull();
+  expect(q(el, "[data-test='register-a1:SN-2']")).not.toBeNull();
   expect(text(el, "[role=alert]")).toContain(codeMessage("printer.not_found"));
   expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe(codeMessage("printer.not_found"));
   expect(topAlertOf(el, "new-printer-modal")).toBeNull();
@@ -5120,7 +5190,7 @@ it("a reprint still being sent cannot be sent again by closing and reopening its
   q(el, "[data-test=reprint-cancel]")!.click();
   await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
   const row = q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton;
-  expect(row.disabled).toBe(true);
+  expect(row.loading).toBe(true);
   row.click();
   await flush(el);
   q(el, "[data-test=reprint-send]")?.click();
@@ -5128,7 +5198,7 @@ it("a reprint still being sent cannot be sent again by closing and reopening its
   expect(api.resendPrintJob).toHaveBeenCalledOnce();
   resolve({ jobId: "resent" });
   await flush(el);
-  expect(row.disabled).toBe(false);
+  expect(row.loading).toBe(false);
   expect(text(el, "[data-test=reprint-sent]")).toBe(
     fill("printers.reprint_sent", { printer: printers[0]!.name }),
   );
@@ -5701,7 +5771,7 @@ describe("printer setup refinements", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openDiscovery(el);
-    q(el, '[data-test="register-SN-1"]')!.click();
+    q(el, '[data-test="register-a1:SN-1"]')!.click();
     await flush(el);
     expect(api.createPrinter).not.toHaveBeenCalled();
     expect(q(el, '[data-test="name-printer-modal"]')).not.toBeNull();
@@ -6158,6 +6228,190 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     }
   });
 
+  it.each([
+    {
+      read: "listPrinters",
+      tab: "printers",
+      table: "printers-table",
+      empty: "printers.no_printers",
+    },
+    {
+      read: "listPagePrinters",
+      tab: "printers",
+      table: "printers-table",
+      empty: "printers.no_printers",
+    },
+    { read: "listAgents", tab: "agents", table: "agents-table", empty: "printers.no_agents" },
+    { read: "listRecentJobs", tab: "queue", table: "jobs-table", empty: "printers.no_jobs" },
+  ] as const)(
+    "says a failed $read read once, in the page's alert, and draws no $table saying $empty",
+    async ({ read, tab, table: testId, empty }) => {
+      const api = stubApi({
+        listPrinters: vi.fn().mockResolvedValue([]),
+        listPagePrinters: vi.fn().mockResolvedValue([]),
+        listAgents: vi.fn().mockResolvedValue([]),
+        listRecentJobs: vi.fn().mockResolvedValue([]),
+        [read]: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      await selectTab(el, tab);
+      expect(text(el, "[data-test=printer-refresh-error] p.error")).toBe(
+        `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`,
+      );
+      expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+      expect(q(el, "[data-test=refresh-printer-lists]")).not.toBeNull();
+      expect(q(el, `[data-test=${testId}]`)).toBeNull();
+      expect(timesShown(el, t(empty))).toBe(0);
+    },
+  );
+
+  it("leaves out the hint about how many jobs are listed whenever the jobs table is left out", async () => {
+    const api = stubApi({
+      listRecentJobs: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "queue");
+    expect(q(el, "[data-test=jobs-table]")).toBeNull();
+    expect(timesShown(el, t("printers.jobs_limit"))).toBe(0);
+
+    q(el, "[data-test=refresh-printer-lists]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=jobs-table]")).not.toBeNull());
+    await flush(el);
+    expect(timesShown(el, t("printers.jobs_limit"))).toBe(1);
+  });
+
+  it("says the lists that did read are empty when only another list's read failed", async () => {
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([]),
+      listPagePrinters: vi.fn().mockResolvedValue([]),
+      listAgents: vi.fn().mockResolvedValue([]),
+      listRecentJobs: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "agents");
+    expect(q(el, "[data-test=agents-table]")!.shadowRoot!.textContent).toContain(
+      t("printers.no_agents"),
+    );
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+  });
+
+  it("says a later failed read of an empty printers table once, in the page's alert, and shows its rows again once a read answers", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers");
+    const api = Object.assign(stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    const table = () => q(el, "[data-test=printers-table]")?.shadowRoot!.textContent ?? null;
+    expect(table()).toContain(t("printers.no_printers"));
+
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+        codeMessage("connection.failed"),
+      ),
+    );
+    await flush(el);
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+    expect(q(el, "[data-test=refresh-printer-lists]")).not.toBeNull();
+    expect(table()).toBeNull();
+    expect(timesShown(el, t("printers.no_printers"))).toBe(0);
+
+    vi.mocked(api.listPrinters).mockResolvedValue(printers);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull());
+    expect(table()).not.toContain(codeMessage("connection.failed"));
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(0);
+  });
+
+  it("draws an empty printers table again once its read answers, while another list's read still fails", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers");
+    const api = Object.assign(stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    const table = () => q(el, "[data-test=printers-table]")?.shadowRoot!.textContent ?? null;
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    vi.mocked(api.listRecentJobs).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull());
+    await flush(el);
+    expect(table()).toBeNull();
+
+    vi.mocked(api.listPrinters).mockResolvedValue([]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    expect(table()).toContain(t("printers.no_printers"));
+  });
+
+  it("leaves out an empty printers table whose read fails with the code the alert already shows", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers");
+    const api = Object.assign(
+      stubApi({
+        listPrinters: vi.fn().mockResolvedValue([]),
+        listRecentJobs: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    expect(q(el, "[data-test=printers-table]")!.shadowRoot!.textContent).toContain(
+      t("printers.no_printers"),
+    );
+
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.invalidate([{ type: "printer_holders" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=printers-table]")).toBeNull();
+    expect(timesShown(el, t("printers.no_printers"))).toBe(0);
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+  });
+
+  it("says an empty table's read is still failing in the table while Refresh lists reads it again", async () => {
+    let answer!: (rows: Printer[]) => void;
+    const api = stubApi({
+      listPrinters: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockReturnValueOnce(
+          new Promise<Printer[]>((resolve) => {
+            answer = resolve;
+          }),
+        ),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    expect(q(el, "[data-test=printers-table]")).toBeNull();
+
+    q(el, "[data-test=refresh-printer-lists]")!.click();
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+    const table = () => q(el, "[data-test=printers-table]")!.shadowRoot!.textContent!;
+    expect(table()).toContain(t("printers.refresh_failed"));
+    expect(table()).not.toContain(t("printers.no_printers"));
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+
+    answer([]);
+    await flush(el);
+    expect(table()).toContain(t("printers.no_printers"));
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(0);
+  });
+
   it("does not switch tabs for a change event raised by a control inside a tab", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi(),
@@ -6418,6 +6672,34 @@ describe("printers-screen discovery and add edges", () => {
     expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
   });
 
+  it("says a failed read of the discovered printers once, in Add printer's alert, and draws no list saying 'No printers found'", async () => {
+    const api = Object.assign(
+      stubApi({ listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    await flush(el);
+    expect(
+      text(el, "[data-test=new-printer-modal] [data-test=printer-refresh-error] p.error"),
+    ).toBe(`${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`);
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+    expect(q(el, "[data-test=new-printer-modal] [data-test=refresh-printer-lists]")).not.toBeNull();
+    expect(q(el, "[data-test=discovered-table]")).toBeNull();
+    expect(timesShown(el, t("printers.no_discovered"))).toBe(0);
+    expect(timesShown(el, t("printers.scan_empty"))).toBe(0);
+
+    vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([]);
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=discovered-table]")!.shadowRoot!.textContent).not.toContain(
+        codeMessage("connection.failed"),
+      ),
+    );
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(0);
+  });
+
   it("ignores a listen re-read that fails after Add printer was closed", async () => {
     let failRead!: (reason: unknown) => void;
     const passive = vi.fn().mockImplementation(
@@ -6451,9 +6733,9 @@ describe("printers-screen discovery and add edges", () => {
     const device: DiscoveredPrinter = { ...discoveredNetwork[0]!, port: null };
     const { el, api } = await mountWithDiscovered([device]);
     const key = "10.0.0.77:9100";
-    expect(text(el, `[data-test='discovered-row-${key}']`)).toContain("10.0.0.77:9100");
+    expect(text(el, `[data-test='discovered-row-a1:${key}']`)).toContain("10.0.0.77:9100");
 
-    q(el, `[data-test='register-${key}']`)!.click();
+    q(el, `[data-test='register-a1:${key}']`)!.click();
     await flush(el);
     expect(text(el, "[data-test=name-printer-modal] .hint")).toBe("Kitchen IP · 10.0.0.77:9100");
     q(el, "[data-test=confirm-add-printer]")!.click();
@@ -6471,14 +6753,14 @@ describe("printers-screen discovery and add edges", () => {
   it("omits the seen-on line for a discovered device no agent name is known for", async () => {
     const { el } = await mountWithDiscovered([{ ...discovered[0]!, agentName: null }]);
 
-    const row = text(el, "[data-test=discovered-row-SN-1]")!;
+    const row = text(el, "[data-test='discovered-row-a1:SN-1']")!;
     expect(row).toContain("EPSON TM-T20");
     expect(row).not.toContain(t("printers.discovered_seen_on").replace("{agent}", "").trim());
   });
 
   it("adds the named printer when Enter is pressed in the name field", async () => {
     const { el, api } = await mountWithDiscovered(discovered);
-    q(el, "[data-test=register-SN-1]")!.click();
+    q(el, "[data-test='register-a1:SN-1']")!.click();
     await flush(el);
 
     q(el, "[data-test=discovered-name-SN-1]")!
@@ -6511,12 +6793,12 @@ describe("printers-screen discovery and add edges", () => {
     const { el, api } = await mountWithDiscovered([...discovered, ...discoveredNetwork], {
       createPrinter: create,
     });
-    q(el, "[data-test=register-SN-1]")!.click();
+    q(el, "[data-test='register-a1:SN-1']")!.click();
     await flush(el);
     q(el, "[data-test=confirm-add-printer]")!.click();
     await el.updateComplete;
 
-    q(el, "[data-test='register-10.0.0.77:9100']")!.click();
+    q(el, "[data-test='register-a1:10.0.0.77:9100']")!.click();
     await el.updateComplete;
 
     expect(q(el, "[data-test=discovered-name-SN-1]")).not.toBeNull();
@@ -6534,7 +6816,7 @@ describe("printers-screen discovery and add edges", () => {
       }),
     );
     const { el, api } = await mountWithDiscovered(discovered, { createPrinter: create });
-    q(el, "[data-test=register-SN-1]")!.click();
+    q(el, "[data-test='register-a1:SN-1']")!.click();
     await flush(el);
     q(el, "[data-test=confirm-add-printer]")!.click();
     await el.updateComplete;
@@ -7168,7 +7450,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
       listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
     });
     await openDiscovery(el);
-    q(el, '[data-test="register-SN-1"]')!.click();
+    q(el, '[data-test="register-a1:SN-1"]')!.click();
     await flush(el);
     const name = '[data-test="discovered-name-SN-1"]';
     typeField(el, name, "");
@@ -7395,7 +7677,7 @@ describe("printers-screen Bluetooth pairing", () => {
   }
 
   async function openPair(el: PrintersScreen, address = ADDRESS): Promise<void> {
-    q(el, sel(`pair-${address}`))!.click();
+    q(el, sel(`pair-a1:${address}`))!.click();
     await flush(el);
   }
 
@@ -7406,14 +7688,101 @@ describe("printers-screen Bluetooth pairing", () => {
       required: boolean;
     };
 
+  it("breaks a Bluetooth address only between its groups, at any width the details are given", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(390, 844);
+    try {
+      const { el } = await mountPairing([barPrinter]);
+      await openDiscovery(el);
+      const address = [
+        ...q(el, sel(`discovered-row-a1:${ADDRESS}`))!.querySelectorAll<HTMLElement>(
+          "[part~=printer-meta] > *",
+        ),
+      ].find((line) => line.textContent === ADDRESS)!;
+      const lineEnds = (): string[] => {
+        const chars: { ch: string; top: number }[] = [];
+        const walker = document.createTreeWalker(address, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+          const value = node.textContent ?? "";
+          for (let i = 0; i < value.length; i++) {
+            const range = document.createRange();
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            chars.push({ ch: value[i]!, top: Math.round(range.getBoundingClientRect().top) });
+          }
+        }
+        expect(chars.map(({ ch }) => ch).join("")).toBe(ADDRESS);
+        return chars
+          .filter((c, i) => i < chars.length - 1 && chars[i + 1]!.top > c.top)
+          .map(({ ch }) => ch);
+      };
+      // Where a line ends depends on the font, so every width a phone could leave is tried.
+      let wrapped = 0;
+      for (let px = 30; px <= 150; px++) {
+        address.style.width = `${px}px`;
+        const ends = lineEnds();
+        if (ends.length > 0) wrapped++;
+        expect(ends, `at ${px}px`).toEqual(ends.map(() => ":"));
+      }
+      expect(wrapped).toBeGreaterThan(0);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("names each discovered row by its agent too, so the same device seen by two agents acts on the row pressed", async () => {
+    const onBar: DiscoveredPrinter = {
+      ...barPrinter,
+      agentId: "a2",
+      agentName: "Bar agent",
+    };
+    const { el, api } = await mountPairing([barPrinter, onBar]);
+    await openDiscovery(el);
+    expect(text(el, sel(`discovered-row-a1:${ADDRESS}`))).toContain("Kitchen agent");
+    expect(text(el, sel(`discovered-row-a2:${ADDRESS}`))).toContain("Bar agent");
+    q(el, sel(`pair-a2:${ADDRESS}`))!.click();
+    await flush(el);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    expect(api.pairBluetooth).toHaveBeenCalledExactlyOnceWith("a2", ADDRESS, PIN);
+  });
+
+  it("shows the pressed Unpair as sending, and holds the other row's, until the agent takes the command", async () => {
+    let answer!: (value: { command: ReturnType<typeof pendingCommand> }) => void;
+    const kitchen: DiscoveredPrinter = { ...barPrinter, paired: true };
+    const bar: DiscoveredPrinter = { ...kitchen, agentId: "a2", agentName: "Bar agent" };
+    const { el, api } = await mountPairing([kitchen, bar], {
+      forgetBluetoothPairing: vi.fn().mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      ),
+    });
+    await openDiscovery(el);
+    const unpair = (agent: string) =>
+      q(el, sel(`forget-device-${agent}:${ADDRESS}`)) as import("@waitron/ui").WtButton;
+    unpair("a2").click();
+    await flush(el);
+    expect(api.forgetBluetoothPairing).toHaveBeenCalledExactlyOnceWith("a2", ADDRESS);
+    expect(unpair("a2").loading).toBe(true);
+    expect(unpair("a1").loading).toBe(false);
+    expect(unpair("a1").disabled).toBe(true);
+    answer({ command: pendingCommand("forget") });
+    await flush(el);
+    expect(unpair("a2").loading).toBe(false);
+  });
+
   it("offers Pair and add, not Add, for an unpaired printer-like device, and Add for a paired one", async () => {
     const paired: DiscoveredPrinter = { ...barPrinter, localKey: OTHER, paired: true };
     const { el } = await mountPairing([barPrinter, paired]);
     await openDiscovery(el);
-    expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
-    expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
-    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
-    expect(q(el, sel(`pair-${OTHER}`))).toBeNull();
+    expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
+    expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
+    expect(text(el, sel(`register-a1:${OTHER}`))).toBe(t("action.add"));
+    expect(q(el, sel(`pair-a1:${OTHER}`))).toBeNull();
     // Pressing Pair and add asks for the PIN first; no naming form until the pairing succeeds.
     expect(text(el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
     await openPair(el);
@@ -7484,9 +7853,9 @@ describe("printers-screen Bluetooth pairing", () => {
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
     await vi.waitFor(() => expect(q(el, modal)).toBeNull());
     expect(api.pairBluetooth).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS, PIN);
-    expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
+    expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
     // Pending: a second Pair waits for the outcome.
-    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(true);
+    expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(true);
     expect(api.createPrinter).not.toHaveBeenCalled();
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
@@ -7521,7 +7890,7 @@ describe("printers-screen Bluetooth pairing", () => {
       codeMessage("printer.bluetooth_not_discovered"),
     );
     expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
-    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+    expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
   });
 
   it("never keeps the PIN once the dialog closes", async () => {
@@ -7556,8 +7925,8 @@ describe("printers-screen Bluetooth pairing", () => {
     answer({ command: pendingCommand("pair") });
     await flush(el);
     expect(q(el, sel("pair-printer-modal"))).toBeNull();
-    expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
-    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(true); // Pair waits while pending
+    expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
+    expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(true); // Pair waits while pending
   });
 
   it("ignores a refusal that arrives after its dialog closed", async () => {
@@ -7586,7 +7955,7 @@ describe("printers-screen Bluetooth pairing", () => {
     typeField(el, sel("bluetooth-pin"), PIN);
     await flush(el);
     expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
-    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+    expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
   });
 
   it("tracks no pairing whose Add printer dialog closed before the request answered", async () => {
@@ -7611,8 +7980,8 @@ describe("printers-screen Bluetooth pairing", () => {
     answer({ command: pendingCommand("pair") });
     await flush(el);
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
-    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+    expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
+    expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
   });
 
   it("shows no error for a status read that fails after Add printer closed", async () => {
@@ -7677,9 +8046,11 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
-      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_paired"),
+      );
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -7706,23 +8077,25 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         `${t("printers.bluetooth_pair_failed")}: Authentication Failed`,
       );
-      expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
-      expect(cellButtons(el, `discovered-command-${ADDRESS}`)).toEqual([`pair-${ADDRESS}`]);
-      const notice = q(el, sel(`discovered-command-${ADDRESS}`)) as HTMLElement & {
+      expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
+      expect(cellButtons(el, `discovered-command-a1:${ADDRESS}`)).toEqual([`pair-a1:${ADDRESS}`]);
+      const notice = q(el, sel(`discovered-command-a1:${ADDRESS}`)) as HTMLElement & {
         duration: number;
       };
       expect(notice.tagName).toBe("WT-NOTICE");
       expect(notice.duration).toBe(0);
       await vi.advanceTimersByTimeAsync(EXPIRES_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         `${t("printers.bluetooth_pair_failed")}: Authentication Failed`,
       );
       await submitPair(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_pairing"),
+      );
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -7751,12 +8124,12 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      const status = q(el, sel(`discovered-command-${ADDRESS}`))!;
+      const status = q(el, sel(`discovered-command-a1:${ADDRESS}`))!;
       expect(status.textContent).toContain(reason);
       const scroll = q(el, sel("discovered-table"))!.shadowRoot!.querySelector(".scroll")!;
       const view = scroll.getBoundingClientRect();
       expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
-      expect(cellButtons(el, `discovered-command-${ADDRESS}`)).toEqual([`pair-${ADDRESS}`]);
+      expect(cellButtons(el, `discovered-command-a1:${ADDRESS}`)).toEqual([`pair-a1:${ADDRESS}`]);
       expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(view.right);
     } finally {
       el.remove();
@@ -7772,12 +8145,12 @@ describe("printers-screen Bluetooth pairing", () => {
     await flush(el);
     q(el, sel("confirm-pair"))!.click();
     await flush(el);
-    expect(q(el, sel(`discovered-command-${ADDRESS}`))).not.toBeNull();
+    expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).not.toBeNull();
     await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
-    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+    expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
+    expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
   });
 
   async function submitPair(el: PrintersScreen, address = ADDRESS): Promise<void> {
@@ -7797,19 +8170,21 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      const row = sel(`discovered-row-${ADDRESS}`);
+      const row = sel(`discovered-row-a1:${ADDRESS}`);
       expect(text(el, row)).toContain("Bar printer");
       expect(text(el, row)).toContain(ADDRESS);
       expect(text(el, row)).toContain(t("printers.bluetooth_not_seen"));
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_pairing"),
+      );
       // Pairing needs the device in range, so a device the scan lost offers no Pair.
-      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
       await vi.advanceTimersByTimeAsync(EXPIRES_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         t("printers.bluetooth_no_answer"),
       );
-      expect(cellButtons(el, `discovered-command-${ADDRESS}`)).toEqual([]);
+      expect(cellButtons(el, `discovered-command-a1:${ADDRESS}`)).toEqual([]);
       await vi.advanceTimersByTimeAsync(EXPIRES_MS);
       await flush(el);
       expect(text(el, row)).toContain(t("printers.bluetooth_not_seen"));
@@ -7839,18 +8214,18 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-row-${ADDRESS}`))).toContain(
+      expect(text(el, sel(`discovered-row-a1:${ADDRESS}`))).toContain(
         t("printers.bluetooth_not_seen"),
       );
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-row-${ADDRESS}`))).not.toContain(
+      expect(text(el, sel(`discovered-row-a1:${ADDRESS}`))).not.toContain(
         t("printers.bluetooth_not_seen"),
       );
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         `${t("printers.bluetooth_pair_failed")}: Busy`,
       );
-      expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+      expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -7867,7 +8242,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(EXPIRES_MS + SCAN_POLL_MS);
       await flush(el);
-      const status = q(el, sel(`discovered-command-${ADDRESS}`))!;
+      const status = q(el, sel(`discovered-command-a1:${ADDRESS}`))!;
       expect(status.textContent).toBe(t("printers.bluetooth_no_answer"));
       const scroll = q(el, sel("discovered-table"))!.shadowRoot!.querySelector(".scroll")!;
       const view = scroll.getBoundingClientRect();
@@ -7893,10 +8268,10 @@ describe("printers-screen Bluetooth pairing", () => {
     q(el, sel("show-all-bluetooth"))!.click();
     await flush(el);
     expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_show_all"));
-    expect(text(el, sel(`discovered-command-${OTHER}`))).toBe(t("printers.bluetooth_pairing"));
+    expect(text(el, sel(`discovered-command-a1:${OTHER}`))).toBe(t("printers.bluetooth_pairing"));
     // Its ordinary row, not a lost device's: Pair stays, waiting on the outcome.
-    expect(isDisabled(el, sel(`pair-${OTHER}`))).toBe(true);
-    expect(text(el, sel(`discovered-row-${OTHER}`))).not.toContain(
+    expect(isDisabled(el, sel(`pair-a1:${OTHER}`))).toBe(true);
+    expect(text(el, sel(`discovered-row-a1:${OTHER}`))).not.toContain(
       t("printers.bluetooth_not_seen"),
     );
   });
@@ -7904,17 +8279,17 @@ describe("printers-screen Bluetooth pairing", () => {
   it("hides a device that does not look like a printer until Show all devices, and hides it again on reopening", async () => {
     const { el } = await mountPairing([barPrinter, headphones]);
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).toBeNull();
     expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_show_all"));
     q(el, sel("show-all-bluetooth"))!.click();
     await flush(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
-    expect(text(el, sel(`pair-${OTHER}`))).toBe(t("printers.bluetooth_pair"));
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).not.toBeNull();
+    expect(text(el, sel(`pair-a1:${OTHER}`))).toBe(t("printers.bluetooth_pair"));
     expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_hide_others"));
     await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
     await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).toBeNull();
     expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_show_all"));
   });
 
@@ -7926,8 +8301,8 @@ describe("printers-screen Bluetooth pairing", () => {
     };
     const { el } = await mountPairing([device]);
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
-    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).not.toBeNull();
+    expect(text(el, sel(`register-a1:${OTHER}`))).toBe(t("action.add"));
   });
 
   it("lists a paired device its agent says is a printer, with no scan's mark", async () => {
@@ -7939,27 +8314,27 @@ describe("printers-screen Bluetooth pairing", () => {
     };
     const { el } = await mountPairing([device]);
     await openDiscovery(el);
-    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+    expect(text(el, sel(`register-a1:${OTHER}`))).toBe(t("action.add"));
   });
 
   it("hides a paired device its agent says is not a printer until Show all devices", async () => {
     const device: DiscoveredPrinter = { ...headphones, paired: true, printerLike: false };
     const { el } = await mountPairing([device]);
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).toBeNull();
     q(el, sel("show-all-bluetooth"))!.click();
     await flush(el);
-    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+    expect(text(el, sel(`register-a1:${OTHER}`))).toBe(t("action.add"));
   });
 
   it("hides the same Bluetooth device, not paired, until Show all devices", async () => {
     const device: DiscoveredPrinter = { ...headphones, name: "BlueTooth Printer" };
     const { el } = await mountPairing([device]);
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).toBeNull();
     q(el, sel("show-all-bluetooth"))!.click();
     await flush(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).not.toBeNull();
   });
 
   it("keeps a wrongly-described registered printer reachable in its printer row and through Show all", async () => {
@@ -7977,9 +8352,9 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel("printer-row-p4"))).not.toBeNull();
     expect(q(el, sel("forget-pairing-p4"))).not.toBeNull();
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
-    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
-    await addDiscovered(el, q(el, sel(`register-${OTHER}`))!);
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).not.toBeNull();
+    expect(text(el, sel(`register-a1:${OTHER}`))).toBe(t("action.add"));
+    await addDiscovered(el, q(el, sel(`register-a1:${OTHER}`))!);
     await flush(el);
     expect(api.createPrinter).toHaveBeenCalledWith({
       name: stored.name,
@@ -8001,11 +8376,11 @@ describe("printers-screen Bluetooth pairing", () => {
     await selectTab(el, "printers");
     expect(q(el, sel("printer-row-p4"))).not.toBeNull();
     await openDiscovery(el);
-    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    expect(q(el, sel(`discovered-row-a1:${OTHER}`))).toBeNull();
     q(el, sel("show-all-bluetooth"))!.click();
     await flush(el);
-    expect(text(el, sel(`pair-${OTHER}`))).toBe(t("printers.bluetooth_pair"));
-    expect(q(el, sel(`register-${OTHER}`))).toBeNull();
+    expect(text(el, sel(`pair-a1:${OTHER}`))).toBe(t("printers.bluetooth_pair"));
+    expect(q(el, sel(`register-a1:${OTHER}`))).toBeNull();
   });
 
   it("offers Unpair only on a Bluetooth printer its agent reports paired now, switched on or off", async () => {
@@ -8051,9 +8426,11 @@ describe("printers-screen Bluetooth pairing", () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     try {
       await openDiscovery(el);
-      expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
+      expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
       await submitPair(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_pairing"),
+      );
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(api.createPrinter).toHaveBeenCalledOnce();
@@ -8174,8 +8551,8 @@ describe("printers-screen Bluetooth pairing", () => {
         listed.mockResolvedValue([unpaired]);
         passive.mockResolvedValue([unpaired]);
         await openDiscovery(el);
-        expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair_only"));
-        expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
+        expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pair_only"));
+        expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
         await openPair(el);
         expect(text(el, sel("confirm-pair"))).toBe(t("printers.bluetooth_pair_only"));
         typeField(el, sel("bluetooth-pin"), PIN);
@@ -8183,11 +8560,11 @@ describe("printers-screen Bluetooth pairing", () => {
         q(el, sel("confirm-pair"))!.click();
         await flush(el);
         expect(api.pairBluetooth).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS, PIN);
-        expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
           t("printers.bluetooth_pairing"),
         );
-        expect(q(el, sel(`progress-discovered-command-${ADDRESS}`))?.tagName).toBe("WT-SPINNER");
-        expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(true);
+        expect(q(el, sel(`progress-discovered-command-a1:${ADDRESS}`))?.tagName).toBe("WT-SPINNER");
+        expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(true);
 
         // The outcome can arrive before the agent's own paired report does.
         passive.mockResolvedValue([
@@ -8195,16 +8572,20 @@ describe("printers-screen Bluetooth pairing", () => {
         ]);
         await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
         await flush(el);
-        expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+          t("printers.bluetooth_paired"),
+        );
         expect(q(el, sel("name-printer-modal"))).toBeNull();
-        expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
-        expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+        expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
+        expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
         passive.mockResolvedValue([reported]);
         await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
         await flush(el);
-        expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
-        expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
-        expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+          t("printers.bluetooth_paired"),
+        );
+        expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
+        expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
         await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
         await vi.waitFor(() => expect(q(el, sel("new-printer-modal"))).toBeNull());
         expect(text(el, sel("forget-pairing-p8"))).toBe(t("printers.bluetooth_forget"));
@@ -8222,16 +8603,16 @@ describe("printers-screen Bluetooth pairing", () => {
           setLocale("es-ES");
           const { el } = await mountForgotten();
           await openDiscovery(el);
-          expect(text(el, sel(`pair-${ADDRESS}`))).toBe("Emparejar");
+          expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe("Emparejar");
           await submitPair(el);
-          expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe("Emparejando…");
+          expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe("Emparejando…");
           el.remove();
           setLocale("en");
           const english = await mountForgotten();
           await openDiscovery(english.el);
-          expect(text(english.el, sel(`pair-${ADDRESS}`))).toBe("Pair");
+          expect(text(english.el, sel(`pair-a1:${ADDRESS}`))).toBe("Pair");
           await submitPair(english.el);
-          expect(text(english.el, sel(`discovered-command-${ADDRESS}`))).toBe("Pairing…");
+          expect(text(english.el, sel(`discovered-command-a1:${ADDRESS}`))).toBe("Pairing…");
         } finally {
           setLocale(before);
         }
@@ -8246,7 +8627,7 @@ describe("printers-screen Bluetooth pairing", () => {
         vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
         await openDiscovery(el);
         await submitPair(el);
-        expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
           t("printers.bluetooth_pairing"),
         );
         // The paired flag and the command's outcome are separate fields, so the paired report can
@@ -8254,7 +8635,7 @@ describe("printers-screen Bluetooth pairing", () => {
         passive.mockResolvedValue([reported]);
         await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
         await flush(el);
-        expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
           t("printers.bluetooth_pairing"),
         );
         expect(q(el, sel("name-printer-modal"))).toBeNull();
@@ -8275,13 +8656,15 @@ describe("printers-screen Bluetooth pairing", () => {
         await submitPair(el);
         await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
         await flush(el);
-        expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
-        await fadeNotice(el, `discovered-command-${ADDRESS}`);
-        expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
-        expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+          t("printers.bluetooth_paired"),
+        );
+        await fadeNotice(el, `discovered-command-a1:${ADDRESS}`);
+        expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
+        expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
         await vi.advanceTimersByTimeAsync(EXPIRES_MS + SCAN_POLL_MS);
         await flush(el);
-        expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+        expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
         await submitPair(el);
         expect(api.pairBluetooth).toHaveBeenCalledTimes(2);
         expect(q(el, sel("name-printer-modal"))).toBeNull();
@@ -8292,7 +8675,7 @@ describe("printers-screen Bluetooth pairing", () => {
           listPrinters: vi.fn().mockResolvedValue([...printers, added]),
         });
         await openDiscovery(el);
-        expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair_only"));
+        expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pair_only"));
         expect(q(el, sel("show-all-bluetooth"))).toBeNull();
       });
     });
@@ -8312,16 +8695,16 @@ describe("printers-screen Bluetooth pairing", () => {
         { listPrinters: vi.fn().mockResolvedValue([...printers, added]) },
       );
       await openDiscovery(el);
-      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
-      expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
     });
 
     it("offers no Pair, nor Add, for it in Add a printer while its agent reports it paired", async () => {
       const { el } = await mountAdded();
       await openDiscovery(el);
-      expect(q(el, sel(`discovered-row-${ADDRESS}`))).toBeNull();
-      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
-      expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`discovered-row-a1:${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
     });
   });
 
@@ -8359,12 +8742,12 @@ describe("printers-screen Bluetooth pairing", () => {
         setLocale("es-ES");
         const { el } = await mountPairing([barPrinter]);
         await openDiscovery(el);
-        expect(text(el, sel(`pair-${ADDRESS}`))).toBe("Emparejar y añadir");
+        expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe("Emparejar y añadir");
         el.remove();
         setLocale("en");
         const english = await mountPairing([barPrinter]);
         await openDiscovery(english.el);
-        expect(text(english.el, sel(`pair-${ADDRESS}`))).toBe("Pair and add");
+        expect(text(english.el, sel(`pair-a1:${ADDRESS}`))).toBe("Pair and add");
       } finally {
         setLocale(before);
       }
@@ -8375,19 +8758,23 @@ describe("printers-screen Bluetooth pairing", () => {
       passive.mockResolvedValueOnce([{ ...barPrinter, bluetoothCommand: pendingCommand("pair") }]);
       passive.mockResolvedValue([succeeded(true)]);
       await submitPair(el);
-      const status = text(el, sel(`discovered-command-${ADDRESS}`));
+      const status = text(el, sel(`discovered-command-a1:${ADDRESS}`));
       expect(status).toBe(t("printers.bluetooth_pairing"));
       expect(status).toBe("Emparejando…");
       expect(t("printers.bluetooth_pairing", "en")).toBe("Pairing…");
-      expect(q(el, sel(`progress-discovered-command-${ADDRESS}`))?.tagName).toBe("WT-SPINNER");
+      expect(q(el, sel(`progress-discovered-command-a1:${ADDRESS}`))?.tagName).toBe("WT-SPINNER");
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
-      expect(q(el, sel(`progress-discovered-command-${ADDRESS}`))).not.toBeNull();
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_pairing"),
+      );
+      expect(q(el, sel(`progress-discovered-command-a1:${ADDRESS}`))).not.toBeNull();
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
-      expect(q(el, sel(`progress-discovered-command-${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_paired"),
+      );
+      expect(q(el, sel(`progress-discovered-command-a1:${ADDRESS}`))).toBeNull();
     });
 
     it("pairs and then opens the form to add the device, which adds it with no second click on its row", async () => {
@@ -8427,9 +8814,9 @@ describe("printers-screen Bluetooth pairing", () => {
         await submitPair(el);
         await vi.advanceTimersByTimeAsync(EXPIRES_MS + SCAN_POLL_MS);
         await flush(el);
-        expect(text(el, sel(`discovered-command-${ADDRESS}`))).toContain(t(key));
+        expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toContain(t(key));
         expect(q(el, sel("name-printer-modal"))).toBeNull();
-        expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+        expect(isDisabled(el, sel(`pair-a1:${ADDRESS}`))).toBe(false);
       },
     );
 
@@ -8478,15 +8865,17 @@ describe("printers-screen Bluetooth pairing", () => {
       const { el, passive } = await mountQuiet([barPrinter, paired]);
       passive.mockResolvedValue([succeeded(), paired]);
       await submitPair(el);
-      q(el, sel(`register-${OTHER}`))!.click();
+      q(el, sel(`register-a1:${OTHER}`))!.click();
       await flush(el);
       expect(nameField(el, OTHER)).not.toBeNull();
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_paired"),
+      );
       expect(nameField(el, OTHER)).not.toBeNull();
       expect(nameField(el)).toBeNull();
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
     });
 
     it("leaves an open Pair and add dialog alone when another pairing finishes, offering Add in the paired row", async () => {
@@ -8496,10 +8885,12 @@ describe("printers-screen Bluetooth pairing", () => {
       await openPair(el, OTHER);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_paired"),
+      );
       expect(q(el, sel("pair-printer-modal"))).not.toBeNull();
       expect(q(el, sel("name-printer-modal"))).toBeNull();
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
     });
 
     it("offers Add, not Pair and add, once a pairing succeeds, before the agent reports the device paired", async () => {
@@ -8508,8 +8899,8 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
-      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
     });
 
     it("leaves the device paired when its form is cancelled, offering Add and, once reported paired, Unpair", async () => {
@@ -8522,20 +8913,20 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await clickAndAwaitClose(el, "name-printer-modal", "cancel-printer-name");
       await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
-      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
-      expect(q(el, sel(`forget-device-${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`forget-device-a1:${ADDRESS}`))).toBeNull();
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
-      expect(text(el, sel(`forget-device-${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
-      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
+      expect(text(el, sel(`forget-device-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
+      q(el, sel(`forget-device-a1:${ADDRESS}`))!.click();
       await flush(el);
       expect(api.forgetBluetoothPairing).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         t("printers.bluetooth_forgetting"),
       );
-      expect(isDisabled(el, sel(`forget-device-${ADDRESS}`))).toBe(true);
+      expect(isDisabled(el, sel(`forget-device-a1:${ADDRESS}`))).toBe(true);
     });
 
     it("offers Unpair beside Add only for a paired device with no printer row", async () => {
@@ -8549,18 +8940,18 @@ describe("printers-screen Bluetooth pairing", () => {
         listPrinters: vi.fn().mockResolvedValue([...printers, btPrinter("p4", OTHER, false)]),
       });
       await flush(el);
-      expect(text(el, sel(`forget-device-${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
-      expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
-      expect(q(el, sel(`forget-device-${OTHER}`))).toBeNull();
+      expect(text(el, sel(`forget-device-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
+      expect(text(el, sel(`register-a1:${OTHER}`))).toBe(t("action.add"));
+      expect(q(el, sel(`forget-device-a1:${OTHER}`))).toBeNull();
     });
 
     it("unpairs a listed device on one press of Unpair", async () => {
       const { el, api } = await mountQuiet([{ ...barPrinter, paired: true }]);
-      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      q(el, sel(`forget-device-a1:${ADDRESS}`))!.click();
       await flush(el);
       expect(api.forgetBluetoothPairing).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS);
-      expect(text(el, sel(`forget-device-${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`forget-device-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         t("printers.bluetooth_forgetting"),
       );
     });
@@ -8570,18 +8961,18 @@ describe("printers-screen Bluetooth pairing", () => {
       passive.mockResolvedValue([
         { ...barPrinter, paired: true, bluetoothCommand: finishedCommand("forget", "succeeded") },
       ]);
-      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      q(el, sel(`forget-device-a1:${ADDRESS}`))!.click();
       await flush(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         t("printers.bluetooth_forgotten"),
       );
-      expect(q(el, sel(`forget-device-${ADDRESS}`))).toBeNull();
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
-      await fadeNotice(el, `discovered-command-${ADDRESS}`);
-      expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
-      expect(q(el, sel(`forget-device-${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`forget-device-a1:${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
+      await fadeNotice(el, `discovered-command-a1:${ADDRESS}`);
+      expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`forget-device-a1:${ADDRESS}`))).toBeNull();
     });
 
     it("keeps Unpair hidden after its unpairing faded while the agent still lists the device paired, and offers it again once the agent has reported it unpaired and then paired", async () => {
@@ -8590,11 +8981,11 @@ describe("printers-screen Bluetooth pairing", () => {
       passive.mockResolvedValue([
         { ...device, bluetoothCommand: finishedCommand("forget", "succeeded") },
       ]);
-      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      q(el, sel(`forget-device-a1:${ADDRESS}`))!.click();
       await flush(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      await fadeNotice(el, `discovered-command-${ADDRESS}`);
+      await fadeNotice(el, `discovered-command-a1:${ADDRESS}`);
       const reopenWith = async (report: DiscoveredPrinter) => {
         await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
         await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
@@ -8603,14 +8994,14 @@ describe("printers-screen Bluetooth pairing", () => {
         await openDiscovery(el);
       };
       await reopenWith(device);
-      expect(q(el, sel(`forget-device-${ADDRESS}`))).toBeNull();
+      expect(q(el, sel(`forget-device-a1:${ADDRESS}`))).toBeNull();
       await reopenWith(barPrinter);
-      expect(q(el, sel(`pair-${ADDRESS}`))).not.toBeNull();
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).not.toBeNull();
       await reopenWith({
         ...device,
         bluetoothCommand: finishedCommand("pair", "succeeded", { id: "pair-elsewhere" }),
       });
-      expect(text(el, sel(`forget-device-${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
+      expect(text(el, sel(`forget-device-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
     });
 
     it("clears a failed unpairing's reason when Add a printer closes, though its agent still reports that outcome", async () => {
@@ -8621,11 +9012,11 @@ describe("printers-screen Bluetooth pairing", () => {
       };
       const { el, passive, api } = await mountQuiet([device]);
       passive.mockResolvedValue([failed]);
-      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      q(el, sel(`forget-device-a1:${ADDRESS}`))!.click();
       await flush(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         `${t("printers.bluetooth_forget_failed")}: Device busy`,
       );
       await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
@@ -8634,20 +9025,20 @@ describe("printers-screen Bluetooth pairing", () => {
       await openDiscovery(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
-      expect(isDisabled(el, sel(`forget-device-${ADDRESS}`))).toBe(false);
+      expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
+      expect(isDisabled(el, sel(`forget-device-a1:${ADDRESS}`))).toBe(false);
     });
 
     it("puts a row's buttons side by side, and Pairing… to their right", async () => {
       const { el, api } = await mountQuiet([{ ...barPrinter, paired: true }, second]);
-      const add = q(el, sel(`register-${ADDRESS}`))!.getBoundingClientRect();
-      const unpair = q(el, sel(`forget-device-${ADDRESS}`))!.getBoundingClientRect();
+      const add = q(el, sel(`register-a1:${ADDRESS}`))!.getBoundingClientRect();
+      const unpair = q(el, sel(`forget-device-a1:${ADDRESS}`))!.getBoundingClientRect();
       expect(unpair.top).toBe(add.top);
       expect(unpair.left).toBeGreaterThan(add.right);
       vi.mocked(api.pairBluetooth).mockResolvedValue({ command: pendingCommand("pair", OTHER) });
       await submitPair(el, OTHER);
-      const pair = q(el, sel(`pair-${OTHER}`))!.getBoundingClientRect();
-      const status = q(el, sel(`discovered-command-${OTHER}`))!.getBoundingClientRect();
+      const pair = q(el, sel(`pair-a1:${OTHER}`))!.getBoundingClientRect();
+      const status = q(el, sel(`discovered-command-a1:${OTHER}`))!.getBoundingClientRect();
       expect(status.left).toBeGreaterThan(pair.right);
       expect(status.top).toBeGreaterThanOrEqual(pair.top);
       expect(status.bottom).toBeLessThanOrEqual(pair.bottom);
@@ -8659,13 +9050,13 @@ describe("printers-screen Bluetooth pairing", () => {
       await page.viewport(390, 844);
       try {
         const { el, api } = await mountQuiet([{ ...barPrinter, paired: true }, second]);
-        const add = q(el, sel(`register-${ADDRESS}`))!.getBoundingClientRect();
-        const unpair = q(el, sel(`forget-device-${ADDRESS}`))!.getBoundingClientRect();
+        const add = q(el, sel(`register-a1:${ADDRESS}`))!.getBoundingClientRect();
+        const unpair = q(el, sel(`forget-device-a1:${ADDRESS}`))!.getBoundingClientRect();
         expect(unpair.top).toBeGreaterThanOrEqual(add.bottom);
         vi.mocked(api.pairBluetooth).mockResolvedValue({ command: pendingCommand("pair", OTHER) });
         await submitPair(el, OTHER);
-        const pair = q(el, sel(`pair-${OTHER}`))!.getBoundingClientRect();
-        const status = q(el, sel(`discovered-command-${OTHER}`))!.getBoundingClientRect();
+        const pair = q(el, sel(`pair-a1:${OTHER}`))!.getBoundingClientRect();
+        const status = q(el, sel(`discovered-command-a1:${OTHER}`))!.getBoundingClientRect();
         expect(status.top).toBeGreaterThanOrEqual(pair.bottom);
         // "Emparejar y añadir" keeps its label on one line.
         expect(pair.height).toBe(add.height);
@@ -8712,10 +9103,10 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await clickAndAwaitClose(el, "name-printer-modal", "cancel-printer-name");
       await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
-      await fadeNotice(el, `discovered-command-${ADDRESS}`);
-      expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
-      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
+      await fadeNotice(el, `discovered-command-a1:${ADDRESS}`);
+      expect(q(el, sel(`discovered-command-a1:${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
+      expect(q(el, sel(`pair-a1:${ADDRESS}`))).toBeNull();
       passive
         .mockResolvedValueOnce([barPrinter])
         .mockResolvedValue([{ ...barPrinter, paired: true }]);
@@ -8723,8 +9114,8 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
       await flush(el);
       expect(passive).toHaveBeenCalledTimes(calls + 2);
-      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
-      expect(text(el, sel(`forget-device-${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
+      expect(text(el, sel(`register-a1:${ADDRESS}`))).toBe(t("action.add"));
+      expect(text(el, sel(`forget-device-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
       expect(passive).toHaveBeenCalledTimes(calls + 2);
     });
@@ -8739,18 +9130,18 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await clickAndAwaitClose(el, "name-printer-modal", "cancel-printer-name");
       await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
-      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      q(el, sel(`forget-device-a1:${ADDRESS}`))!.click();
       await flush(el);
       passive.mockResolvedValue([
         { ...barPrinter, bluetoothCommand: finishedCommand("forget", "succeeded") },
       ]);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
         t("printers.bluetooth_forgotten"),
       );
-      expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
-      expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
+      expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
     });
 
     it("opens the form for the next device whose pairing succeeded when the first can no longer be added", async () => {
@@ -8789,7 +9180,9 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
-      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
+      expect(text(el, sel(`discovered-command-a1:${ADDRESS}`))).toBe(
+        t("printers.bluetooth_paired"),
+      );
       expect(q(el, sel("name-printer-modal"))).toBeNull();
     });
 
@@ -8829,7 +9222,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await submitPair(el, OTHER);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
       expect(passive).toHaveBeenCalledTimes(5);
-      expect(text(el, sel(`discovered-command-${OTHER}`))).toBe(t("printers.bluetooth_pairing"));
+      expect(text(el, sel(`discovered-command-a1:${OTHER}`))).toBe(t("printers.bluetooth_pairing"));
     });
 
     it("stops reading for a succeeded pairing's paired report when Add a printer closes, and offers Pair and add on reopening", async () => {
@@ -8846,8 +9239,8 @@ describe("printers-screen Bluetooth pairing", () => {
       passive.mockResolvedValue([barPrinter]);
       q(el, "[data-test=open-add-printer]")!.click();
       await flush(el);
-      expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
-      expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
+      expect(q(el, sel(`register-a1:${ADDRESS}`))).toBeNull();
     });
   });
 
@@ -10205,13 +10598,14 @@ describe("Print test page in a printer's row menu", () => {
     });
     q(el, sel("print-test-page-p1"))!.click();
     await flush(el);
-    expect(isDisabled(el, "print-test-page-p1")).toBe(true);
+    expect(q(el, sel("print-test-page-p1"))!.hasAttribute("loading")).toBe(true);
     q(el, sel("print-test-page-p1"))!.click();
     await flush(el);
     expect(api.printTestPage).toHaveBeenCalledOnce();
 
     answer({ jobId: "page-1" });
     await flush(el);
+    expect(q(el, sel("print-test-page-p1"))!.hasAttribute("loading")).toBe(false);
     expect(isDisabled(el, "print-test-page-p1")).toBe(false);
   });
 
@@ -11376,10 +11770,10 @@ describe("Deleting a printer", () => {
     expect(listDiscoveredPrinters).toHaveBeenCalledTimes(2);
 
     liveData.invalidate([{ type: "printer_discovery" }]);
-    await vi.waitFor(() => expect(q(el, "[data-test=register-SN-2]")).not.toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test='register-a1:SN-2']")).not.toBeNull());
     stale.resolve([discovered[1]!]);
     await flush(el);
-    expect(q(el, "[data-test=register-SN-2]")).not.toBeNull();
+    expect(q(el, "[data-test='register-a1:SN-2']")).not.toBeNull();
   });
 
   it.each([1280, 390])(
@@ -11429,7 +11823,7 @@ describe("Deleting a printer", () => {
       listDiscoveredPrinters: vi.fn().mockResolvedValue([found]),
     });
     await openDiscovery(el);
-    const add = q(el, "[data-test=register-SN-2]");
+    const add = q(el, "[data-test='register-a1:SN-2']");
     expect(add).not.toBeNull();
     await addDiscovered(el, add!);
     expect(api.createPrinter).toHaveBeenCalled();
@@ -11513,10 +11907,10 @@ describe("office printers in discovery", () => {
         ipp: { port: 631, resourcePath: "/ipp/print" },
       }),
     ]);
-    const details = text(el, "[data-test='discovered-row-192.168.1.31:9100']")!;
+    const details = text(el, "[data-test='discovered-row-a1:192.168.1.31:9100']")!;
     expect(details).toContain("192.168.1.31:9100");
     expect(details).not.toContain("192.168.1.31:631/ipp/print");
-    expect(q(el, "[data-test='register-192.168.1.31:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='register-a1:192.168.1.31:9100']")).not.toBeNull();
   });
 
   it("A576 gives two queues independent rows and Add payloads with their advertised server name", async () => {
@@ -11707,30 +12101,33 @@ describe("office printers in discovery", () => {
         printerId: null,
       }),
     ]);
-    expect(q(el, "[data-test='register-10.0.0.77:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='register-a1:10.0.0.77:9100']")).not.toBeNull();
     expect(text(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBe(
       t("printers.page_printer_add"),
     );
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.60:9100']")).not.toBeNull();
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.61:9100']")).not.toBeNull();
-    expect(q(el, "[data-test='register-10.0.0.61:9100']")).toBeNull();
+    expect(q(el, "[data-test='register-a1:10.0.0.61:9100']")).toBeNull();
     for (const key of ["10.0.0.56:9100", "10.0.0.57:9100", "10.0.0.58:631", "10.0.0.59:9100"]) {
       // Fails if an office printer's row falls through to the receipt Add.
-      expect(q(el, `[data-test='register-${key}']`)).toBeNull();
+      expect(q(el, `[data-test='register-a1:${key}']`)).toBeNull();
     }
-    expect(text(el, "[data-test='page-printer-10.0.0.57:9100']")).toBe(
+    expect(text(el, "[data-test='page-printer-a1:10.0.0.57:9100']")).toBe(
       t("printers.page_printer_unsupported_media"),
     );
     expect(
-      text(el, "[data-test='page-printer-ipp:%5B%2210.0.0.58%22%2C631%2C%22%2Fipp%2Fprint%22%5D']"),
+      text(
+        el,
+        "[data-test='page-printer-a1:ipp:%5B%2210.0.0.58%22%2C631%2C%22%2Fipp%2Fprint%22%5D']",
+      ),
     ).toBe(t("printers.page_printer_no_answer"));
-    expect(text(el, "[data-test='page-printer-10.0.0.59:9100']")).toBe(
+    expect(text(el, "[data-test='page-printer-a1:10.0.0.59:9100']")).toBe(
       t("printers.page_printer_no_answer"),
     );
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.57:9100']")).toBeNull();
-    const greyed = getComputedStyle(q(el, "[data-test='discovered-row-10.0.0.57:9100']")!).color;
+    const greyed = getComputedStyle(q(el, "[data-test='discovered-row-a1:10.0.0.57:9100']")!).color;
     expect(greyed).not.toBe(
-      getComputedStyle(q(el, "[data-test='discovered-row-10.0.0.56:9100']")!).color,
+      getComputedStyle(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")!).color,
     );
     const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
     // Rows that cannot be added sort after those that can.
@@ -11964,12 +12361,11 @@ describe("office printers in discovery", () => {
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
     expect(q(el, "[data-test='add-page-printer-a2:10.0.0.56:9100']")).toBeNull();
     expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
-    expect(q(el, "[data-test='register-10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='register-a1:10.0.0.56:9100']")).toBeNull();
     const rows = (q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable)
       .rows as DiscoveredPrinter[];
     expect(rows.map((row) => row.agentId)).toEqual(["a1", "a2"]);
-    // Only the lent row draws a reason, so the address's one hint is its.
-    expect(text(el, "[data-test='page-printer-10.0.0.56:9100']")).toBe(
+    expect(text(el, "[data-test='page-printer-a2:10.0.0.56:9100']")).toBe(
       t("printers.page_printer_lent"),
     );
     expect(api.registerPagePrinter).not.toHaveBeenCalled();
@@ -11981,7 +12377,7 @@ describe("office printers in discovery", () => {
       { listPagePrinters: vi.fn().mockResolvedValue([added]) },
     );
     expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
-    expect(text(el, "[data-test='page-printer-10.0.0.56:9100']")).toBe(
+    expect(text(el, "[data-test='page-printer-a2:10.0.0.56:9100']")).toBe(
       t("printers.page_printer_lent"),
     );
   });
@@ -12027,10 +12423,10 @@ describe("office printers in discovery", () => {
     const { el } = await mountWith([office()], {
       listPagePrinters: vi.fn().mockResolvedValue([{ ...added, agentId: null, agentName: null }]),
     });
-    expect(text(el, "[data-test='discovered-row-10.0.0.56:9100']")).toContain(
+    expect(text(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toContain(
       t("printers.page_printer_no_agent"),
     );
-    expect(text(el, "[data-test='discovered-row-10.0.0.56:9100']")).not.toContain(
+    expect(text(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).not.toContain(
       t("printers.page_printer_other_agent"),
     );
     expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
@@ -12048,7 +12444,7 @@ describe("office printers in discovery", () => {
     expect(text(el, "[data-test='page-printer-error-a2:10.0.0.56:9100']")).toBe(
       codeMessage("page_printer.not_found"),
     );
-    expect(q(el, "[data-test='discovered-row-10.0.0.56:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).not.toBeNull();
     expect(isDisabled(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBe(false);
     // Pressing again clears the old refusal; this time the server accepts.
     registerPagePrinter.mockResolvedValue({ id: "pp1", outcome: "repointed" });
@@ -12759,6 +13155,29 @@ describe("an A4 printer's details", () => {
     await vi.waitFor(() => expect(nameField(el)).toBeNull());
   });
 
+  it("shows the rename's Save as sending, with Cancel held, until the save answers", async () => {
+    let answer!: () => void;
+    const { el } = await openA4({
+      updatePagePrinter: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          answer = resolve;
+        }),
+      ),
+    });
+    await openEdit(el);
+    await typeName(el, "Upstairs");
+    await clickIn(el, "[data-test=save-printer-details]");
+    const cancel = inDetails(
+      el,
+      "[data-test=cancel-printer-details]",
+    ) as unknown as HTMLElementTagNameMap["wt-button"];
+    expect(saveButton(el).loading).toBe(true);
+    expect(cancel.loading).toBe(false);
+    expect(cancel.disabled).toBe(true);
+    answer();
+    await vi.waitFor(() => expect(nameField(el)).toBeNull());
+  });
+
   it("a press that reaches an untouched rename Save's handler sends nothing and marks nothing", async () => {
     const { el, api } = await openA4();
     await openEdit(el);
@@ -12907,7 +13326,7 @@ describe("literal translated printer labels", () => {
       it("keeps the discovered agent name literal", async () => {
         const el = await mounted();
         await openDiscovery(el);
-        expect(text(el, "[data-test=discovered-row-SN-1]")).toContain(`${seen} ${name}`);
+        expect(text(el, "[data-test='discovered-row-a1:SN-1']")).toContain(`${seen} ${name}`);
       });
       it("keeps the ruler answer literal in the disagreement sentence", async () => {
         const el = await mounted();
@@ -12923,7 +13342,7 @@ describe("literal translated printer labels", () => {
       it("keeps the added printer name literal", async () => {
         const el = await mounted();
         await openDiscovery(el);
-        q(el, "[data-test=register-SN-1]")!.click();
+        q(el, "[data-test='register-a1:SN-1']")!.click();
         await flush(el);
         typeField(el, "[data-test=discovered-name-SN-1]", name);
         q(el, "[data-test=confirm-add-printer]")!.click();

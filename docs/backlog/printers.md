@@ -530,11 +530,6 @@ dish to zero as one «Descuento 100%» row, where the ticket prints them as two 
 And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
 only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
-## Loose ends left by A331 batch 3b (#1415)
-
-- A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
-  2026-10-08, for the owner to confirm.
-
 ## A department's receipt logo save re-checks only the image's revision, not its id
 
 - **A department's receipt logo save re-checks only the image's revision, not its id** — found in
@@ -671,28 +666,6 @@ Hardware and inbox checks to complete in the owner session.
   [Detail](printers.md#an-unpair-outcome-that-reaches-the-server-after-it-dropped-the-command-leaves-the-printer-on)
 - **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
   port is on another channel fails each job with the connection error.
-
-## Bundle: Printers screen leftovers
-
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Printer lists that still read as empty while loading or after a failed read** — left open by
-  A428. [Detail](printers.md#printer-lists-that-still-read-as-empty-while-loading-or-after-a-failed-read)
-- Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
-  migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
-  presence light.
-- **Calibration's step 2 and step 3 buttons span the whole dialog; step 1's ends with its fields**
-  (found by A404's look, 2026-11-05). "Print sample receipt" and "Test open drawer" could end at
-  `--wt-field-max-width`, right-aligned, as "Print width test" does
-  (`apps/dashboard/src/screens/printers-screen.ts`, `#renderEditPrinter`).
-- **At phone width a Bluetooth address breaks mid-group** ("00:11:22:33:44:5" then "5"), because
-  of the width limit on the device details added on 2026-09-11.
-- **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
-  #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
-  so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
-  category warns about exactly what will go, #1196).
-- **Loose ends left by A331 batch 3b (#1415).**
-  [Detail](printers.md#loose-ends-left-by-a331-batch-3b-1415)
 
 ## Bundle: Receipt layout pass
 
@@ -980,24 +953,6 @@ construct a friendly computer name from a printer label. See the
   the poll** — left open by C117 (#955), so the job pull still waits for them. The agent puts no
   limit of its own on a scan pass; read, not run: the whole sweep across several networks and the
   USB reads have no overall limit.
-
-## Printer lists that still read as empty while loading or after a failed read
-
-- **Printer lists that still read as empty while loading or after a failed read** — left open by
-  A428, which fixed the reprint dialog, the device profile window's printer section and the
-  Printers list's loading line. Still open: the Printers screen's printers, agents and jobs tables
-  say "No printers yet.", "No print agents yet." and "No print jobs yet." after a FAILED read,
-  beside the screen's refresh-failed message (sibling tables pass `errorMessage`); the devices
-  screen's device editor is believed, from reading only, to offer just "Use default (None)" while
-  its printer list loads; the device profile window, after its first printer read failed and before
-  a later one succeeds, shows no printer section and no loading line, even while the next read is
-  under way; after an empty printer list loaded and a later refresh failed, that window shows the
-  failure but still says "Add a printer first.", because the shared query code does not say which
-  read failed; and Cancel in that window clears the
-  screen's message without putting back a read failure that is still standing (read, not run).
-  Add a printer's discovered list says "No printers found. Check that the printer is on and
-  connected, then scan again." after a failed read, beside the dialog's refresh-failed message
-  (read, not run).
 
 ## Loose ends left by C107 (#974)
 

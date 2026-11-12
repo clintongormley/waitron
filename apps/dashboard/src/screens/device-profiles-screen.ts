@@ -76,6 +76,7 @@ import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
 type PrinterDraft = ProfilePrinterLists & ProfileEquipmentDefaults;
 type PrinterListKey =
   "receiptPrinterIds" | "paymentSlipPrinterIds" | "cashDrawerPrinterIds" | "invoicePrinterIds";
+type PrinterRead = "printers" | "pages";
 type PrinterDefaultKey =
   | "receiptPrinterDefaultId"
   | "paymentSlipPrinterDefaultId"
@@ -584,9 +585,10 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private printers: Printer[] = [];
   @state() private pagePrinters: PagePrinterRow[] = [];
-  @state() private printersState: "loading" | "ready" | "failed" = "loading";
+  @state() private printersState: "loading" | "ready" = "loading";
   /** Both printer reads must answer before the lists are drawn. */
-  #printerReads = new Set<"printers" | "pages">();
+  #printerReads = new Set<PrinterRead>();
+  @state() private printerReading: ReadonlySet<PrinterRead> = new Set();
 
   @state() private stations: Station[] = [];
 
@@ -735,18 +737,24 @@ export class DeviceProfilesScreen extends LitElement {
           this.#profilesRead = true;
           this.#openLinkedProfile();
         }),
-        this.#queries
-          .watch("listPrinters", [], (value) => {
+        this.#queries.watchSent(
+          "listPrinters",
+          [],
+          (read) => this.#sendPrinterRead("printers", read),
+          (value) => {
             this.printers = value;
             this.#printersRead("printers");
-          })
-          .catch(this.#printersFailed),
-        this.#queries
-          .watch("listPagePrinters", [], (value) => {
+          },
+        ),
+        this.#queries.watchSent(
+          "listPagePrinters",
+          [],
+          (read) => this.#sendPrinterRead("pages", read),
+          (value) => {
             this.pagePrinters = value;
             this.#printersRead("pages");
-          })
-          .catch(this.#printersFailed),
+          },
+        ),
         this.#queries.watch("listStations", [], (value) => {
           this.stations = value;
         }),
@@ -762,15 +770,20 @@ export class DeviceProfilesScreen extends LitElement {
     }
   }
 
-  #printersRead(read: "printers" | "pages"): void {
+  #printersRead(read: PrinterRead): void {
     this.#printerReads.add(read);
     if (this.#printerReads.size === 2) this.printersState = "ready";
   }
 
-  readonly #printersFailed = (error: unknown): never => {
-    this.printersState = "failed";
-    throw error;
-  };
+  async #sendPrinterRead<T>(read: PrinterRead, send: () => Promise<T>): Promise<T> {
+    const others = (from: ReadonlySet<PrinterRead>) => new Set([...from].filter((r) => r !== read));
+    this.printerReading = new Set([...this.printerReading, read]);
+    try {
+      return await send();
+    } finally {
+      this.printerReading = others(this.printerReading);
+    }
+  }
 
   #clearErrorOnOpen(): void {
     this.narrowed = [];
@@ -1518,6 +1531,7 @@ export class DeviceProfilesScreen extends LitElement {
     const proceed = () => {
       this.#closeEditor();
       this.#showError(null);
+      if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
     };
     if (this.#leave) await this.#leave.request({ scopes: [this], reason: "cancel", proceed });
     else proceed();
@@ -1940,13 +1954,20 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #renderPrinterLists(errors: FieldErrors): TemplateResult | typeof nothing {
-    if (this.printersState === "failed") return nothing;
-    if (this.printersState === "loading")
+    const lists =
+      this.printersState === "ready"
+        ? PRINTER_LISTS.map((list) => ({ list, choices: this.#printerChoices(list.key) }))
+        : [];
+    const empty = lists.every(({ choices }) => choices.length === 0);
+    const unread =
+      empty && (this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters"));
+    // The failed read is the form's bottom message.
+    if (unread && this.printerReading.size === 0) return nothing;
+    if (this.printersState === "loading" || unread)
       return html`<p class="field" role="status" data-test="printers-loading">
         <wt-spinner decorative size="sm"></wt-spinner> ${t("device_profiles.printers_loading")}
       </p>`;
-    const lists = PRINTER_LISTS.map((list) => ({ list, choices: this.#printerChoices(list.key) }));
-    if (lists.every(({ choices }) => choices.length === 0))
+    if (empty)
       return html`<p class="field" data-test="no-printers">${t("device_profiles.no_printers")}</p>`;
     return html`${lists.map(({ list, choices }) => this.#renderPrinterList(list, choices, errors))}`;
   }
