@@ -1078,7 +1078,8 @@ tests. Media still validates required image names and translates its refusal to
 
 **Go-live (owner, 2026-11-11).** The [design proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md)
 records the owner’s extras, later-choice and course-send decisions. The [build plan](../superpowers/plans/2026-11-12-a1515-set-lunch-build.md)
-awaits Claude review and watcher clearance; adviser S10/VAT and the full invoice remain open.
+awaits final Claude review and watcher clearance. The owner’s table-service 10% decision removes
+the adviser wait for that scope; takeaway/delivery remain with S10 and Lane L.
 Implementation has not started. Most Spanish restaurants sell a fixed-price
 lunch menu. Waitron has no way to sell one: the demo's "Set lunch" is an ordinary menu whose dishes
 each carry their own price, sold, printed and taxed one by one. The catalogue design names this
@@ -1091,7 +1092,7 @@ What the design has to settle:
 - one price for the menu, with courses where the guest picks one dish from a list;
 - items included in the price (bread, a drink, coffee or dessert) and an extra charge for a premium
   choice;
-- how the one price is split for VAT when the items carry different rates: ask the adviser;
+- takeaway/delivery VAT treatment: ask the adviser; the owner directed table-service lunch at 10%;
 - what the receipt, the invoice and the kitchen ticket show (one menu line on the receipt; each
   dish on the kitchen ticket);
 - when it can be sold: service periods already limit a menu to its times and days.

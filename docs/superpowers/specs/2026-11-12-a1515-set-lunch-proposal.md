@@ -162,3 +162,13 @@ lunch on the menu offered by an existing service period, with no new selling sch
 These directions authorise preparing the build plan, followed by Claude review and watcher
 clearance. They choose no VAT treatment; adviser S10 and the full invoice remain open. The
 studies are local layout examples, not implemented order, printer or fiscal behaviour.
+
+## 12 November 2026, 21:37: table service proceeds
+
+The watcher relayed the owner: “a coca cola sold in the restaurant is 10%. The same coca cola
+sold to take away is 21%. If it is sold as part of a take away meal … the coca cola portion
+should be at 21% … Let's add this to the list”. The watcher directs: “At the table, the whole
+set lunch is one 10% service. Write and build the plan without waiting; the plan does not split
+a set menu's price across VAT rates.” This supersedes the earlier table-service VAT/full-invoice
+wait. Takeaway and delivery set menus remain in adviser question S10, handled by Lane L.
+The build plan still goes through Claude review and watcher clearance.
