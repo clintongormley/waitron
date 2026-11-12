@@ -529,7 +529,6 @@ const actionRoutes = [
   ["PUT", "/api/working-orders/:id/lines/:lineNo", 401],
   ["PATCH", "/api/working-orders/:id/lines/:lineNo/course", 401],
   ["POST", "/api/working-orders/:id/lines/send", 401],
-  ["POST", "/api/bills/:id/split", 401],
   ["POST", "/api/bills/:id/move-dishes", 401],
   ["PUT", "/api/bills/:id/name", 401],
   ["POST", "/api/bills/:id/merge", 401],

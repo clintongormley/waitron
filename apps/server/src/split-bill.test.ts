@@ -1,7 +1,7 @@
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { sendLines, updateOrderLine } from "./testing/order-writer-fixture.js";
+import { sendLines } from "./testing/order-writer-fixture.js";
 // The domain outcomes of un-joining a table and settling a tab, single-threaded.
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -343,14 +343,6 @@ async function ticketOf(lineId: string) {
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderLineId, lineId));
   return row;
-}
-
-async function revisionOf(orderId: string): Promise<number> {
-  const [row] = await db
-    .select({ revision: workingOrders.revision })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
-  return row!.revision;
 }
 
 /** A cloud-poll printer attached to the station, so a fire or a correction there prints. */
