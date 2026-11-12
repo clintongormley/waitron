@@ -1179,6 +1179,7 @@ export interface VenueServiceContribution {
       hardwareUnit: "kg" | "g" | "mg" | null;
       vatClass: string;
       allergens: ZoneMenuOffer["allergens"];
+      sentNutrition: { allergens: AllergenMap | null; dietaryDeclarations: string[] } | null;
       diet: unknown;
       dietOverride: unknown;
     }[]
@@ -1201,6 +1202,13 @@ export interface VenueServiceContribution {
       late?: { periodName: string; confirmedBy: string };
     }[],
     offers: ZoneOffers,
+  ): Promise<void>;
+  recordSentLineNutrition(
+    tx: Transaction,
+    rows: readonly {
+      lineId: string;
+      nutrition: { allergens: AllergenMap | null; dietaryDeclarations: string[] };
+    }[],
   ): Promise<void>;
   copyOrderContext(
     tx: Transaction,

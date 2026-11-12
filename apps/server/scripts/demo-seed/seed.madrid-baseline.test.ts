@@ -477,6 +477,18 @@ for (const locale of ["en", "es"] as const) {
       const contexts = expected[phase].tables.working_line_contexts!;
       contexts.columns = contexts.columns.filter((column) => column.name !== "diet_derivation");
       for (const row of Object.values(contexts.rows)) delete row.diet_derivation;
+      contexts.columns.splice(
+        contexts.columns.findIndex((column) => column.name === "allergens") + 1,
+        0,
+        {
+          name: "sent_nutrition",
+          type: "TEXT",
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        },
+      );
+      for (const row of Object.values(contexts.rows)) row.sent_nutrition = null;
       for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
         const document = row.document as {
           offers: Record<

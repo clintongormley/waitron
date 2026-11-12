@@ -102,6 +102,7 @@ describe("VENUE_SERVICE", () => {
       "recordLineContexts",
       "recordOrderContext",
       "recordSaleReceiptHeader",
+      "recordSentLineNutrition",
       "recordTicketAllergies",
       "releaseBillNumber",
       "requestDepartmentTransfer",

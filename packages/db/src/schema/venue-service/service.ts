@@ -248,6 +248,9 @@ export const workingLineContexts = table(
     hardwareUnit: label("hardware_unit"),
     vatClass: label("vat_class").notNull(),
     allergens: json<AllergenMap>("allergens"),
+    sentNutrition: json<{ allergens: AllergenMap | null; dietaryDeclarations: string[] }>(
+      "sent_nutrition",
+    ),
     diet: json<unknown>("diet"),
     dietOverride: json<unknown>("diet_override"),
     latePeriodName: label("late_period_name"),

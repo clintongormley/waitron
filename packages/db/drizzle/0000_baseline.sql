@@ -2249,6 +2249,7 @@ CREATE TABLE `working_line_contexts` (
 	`hardware_unit` text,
 	`vat_class` text NOT NULL,
 	`allergens` text,
+	`sent_nutrition` text,
 	`diet` text,
 	`diet_override` text,
 	`late_period_name` text,

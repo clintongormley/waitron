@@ -52,7 +52,11 @@ import {
   survivingParty,
 } from "./party-allergy.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
-import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import {
+  captureSentLineNutrition,
+  readLineNutrition,
+  type LineNutrition,
+} from "./line-nutrition.js";
 import {
   attachKitchenAllergyCopies,
   copyAllergyWorkingTicks,
@@ -2233,7 +2237,7 @@ async function stampSent(
   at: string,
 ): Promise<void> {
   if (lineIds.length === 0) return;
-  await tx
+  const stamped = await tx
     .update(workingOrderLines)
     .set({ sentAt: at })
     .where(
@@ -2251,7 +2255,12 @@ async function stampSent(
             .where(and(eq(workingOrders.id, orderId), ne(workingOrders.status, "abandoned"))),
         ),
       ),
-    );
+    )
+    .returning({ id: workingOrderLines.id });
+  await captureSentLineNutrition(
+    tx,
+    stamped.map((row) => row.id),
+  );
 }
 
 /**
@@ -4108,13 +4117,12 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     .orderBy(workingOrderLines.lineNo);
   const nutrition = await readLineNutrition(
     tx,
-    rows.map((row) => row.id),
+    rows.filter((row) => row.sentAt === null).map((row) => row.id),
   );
+  const contexts = await VENUE_SERVICE.listLineContexts(tx, tabId);
+  const contextByLine = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
   const menuItemByLine = new Map(
-    (await VENUE_SERVICE.listLineContexts(tx, tabId)).map((context) => [
-      context.workingOrderLineId,
-      context.menuItemId,
-    ]),
+    contexts.map((context) => [context.workingOrderLineId, context.menuItemId]),
   );
   // The stored `line_no` is what this read returns, so, unlike `readLockedLines`, no renumbering.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
@@ -4147,9 +4155,11 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
         },
         heldExtras.has(row.id),
       );
+    const declaration =
+      row.sentAt === null ? nutrition.get(row.id) : contextByLine.get(row.id)?.sentNutrition;
     return {
       id: row.id,
-      ...(nutrition.has(row.id) ? { nutrition: nutrition.get(row.id)! } : {}),
+      ...(declaration == null ? {} : { nutrition: declaration }),
       lineNo: row.lineNo,
       name: staffPresentationName({ name: row.name, variantName: row.variantName }),
       optionSnapshots: row.optionSnapshots,
@@ -6938,10 +6948,15 @@ export async function placeOrder(
           lines.map((line) => line.id),
         );
         // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
-        await tx
+        const stamped = await tx
           .update(workingOrderLines)
           .set({ sentAt: nowIso() })
-          .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
+          .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)))
+          .returning({ id: workingOrderLines.id });
+        await captureSentLineNutrition(
+          tx,
+          stamped.map((row) => row.id),
+        );
 
         await markOrderPlaced(tx, deps.clock, cfg, id, operatorId, deps.attendance);
 
