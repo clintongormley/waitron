@@ -10,6 +10,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import {
   deploymentTableExists,
   readDeploymentEnvironment,
+  readNodeMembership,
   stampDeployment,
   invoiceSeries,
   type VenueDatabase,
@@ -684,6 +685,9 @@ it("the real preproduction deployment adapter completes publication through the 
     });
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   expect((await f.runtime.store.read())!.status).toBe("complete");
+  expect((await readNodeMembership(venue.db))?.body.nodes[0]?.contactUrl).toBe(
+    "https://olivo.example.test:3443",
+  );
 });
 
 it("a person who answers each recovery-pack question a minute late still completes the setup", async () => {
@@ -860,6 +864,20 @@ async function realActivationFixture(environment: Record<string, string | undefi
     },
   };
 }
+
+it("the real command publishes the box's own address for the shared venue name", async () => {
+  const f = await realActivationFixture({ WAITRON_MANAGEMENT_ORIGIN: "https://waitron.local" });
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  const state = (await f.runtime.store.read())!;
+  const chart = await readNodeMembership(venue.db);
+  expect(chart?.body.nodes).toEqual([
+    {
+      nodeId: state.frozen.nodeId,
+      contactUrl: `https://box-${state.frozen.nodeId.slice(0, 4).toLowerCase()}.waitron.local`,
+      standing: "serving-primary",
+    },
+  ]);
+});
 
 it.each([
   "",

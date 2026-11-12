@@ -12,6 +12,9 @@ qualify automatic renewal or a physical reboot on the managed public demo.
 
 ## Steps exercised on 2026-10-22
 
+2026-11-12, env2: the public address now comes only from `WAITRON_MANAGEMENT_ORIGIN`. The audit
+below retains its original separate-origin configuration checks.
+
 This audit ran the existing tests at commit `2c46e869bd01d0eafab257abff3c27b54e60a229`, with
 Node `v26.11.1` and Vitest `4.1.12`. It changed no implementation, fixture or assertion.
 

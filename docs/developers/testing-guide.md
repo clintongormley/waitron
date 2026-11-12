@@ -1514,7 +1514,8 @@ fill in a second.
 
 **Where the filesystem comes from** (`apps/server/src/testing/full-disk.ts`, `openSmallDisk`):
 
-- With `WAITRON_FULL_DISK_ROOT` set, each test file uses its own folder below that root, as named below. They refuse it when its filesystem
+- Set `WAITRON_FULL_DISK_ROOT` to a parent folder holding seven separate small-filesystem mount points,
+  one per file as named below. Each test file uses its own mount point. They refuse it when its filesystem
   holds more than 64 MiB (`blocks × frsize` from `statfs`), so a typo naming a large disk is
   refused, and they work inside a fresh `wt-full-disk-*` folder there that they remove at the end.
   The limit refuses a large filesystem; it does not check that the folder is the one you meant.
@@ -3881,6 +3882,8 @@ off, pass it. Receipt:
 
 ### The full-disk start tests need a small real filesystem
 
+2026-11-12, env2: current Linux runs use `WAITRON_FULL_DISK_ROOT`, with one mount point per test file; the source excerpt below retains its old variable name.
+
 **The full-disk start tests need a small real filesystem**: on macOS they make one with
 `hdiutil`; on Linux they read `WAITRON_FULL_DISK_DIR`, are SKIPPED locally without it, and FAIL
 in CI. Cost avoided: a local Linux skip reads as a pass. An interrupted macOS run can leave its
@@ -3916,6 +3919,8 @@ under `packages/` and `apps/` — and is weaker than its name over the half it c
 TEXT and checks only the largest SINGLE wait.
 
 ### A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included
+
+2026-11-12, env2: current runs shorten the wait with `WAITRON_TEST_HEALTH_DELAY`; the source excerpt below retains its old variable name.
 
 **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included**, or it kills
 the child and returns `status: null`, which reads as a broken test. Cut the WAIT, not the retrying
@@ -4081,6 +4086,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### Separate full-disk filesystems
 
+2026-11-12, env2: current Linux runs set `WAITRON_FULL_DISK_ROOT` to the parent of seven separate mount points; the source excerpt below retains its old names.
+
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
   `WAITRON_FULL_DISK_DIR_FROM_SPARE`, `WAITRON_FULL_DISK_DIR_BACKUP_ROOM`,
@@ -4111,6 +4118,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
 
 ### Full-disk test filesystems and attached macOS images
+
+2026-11-12, env2: current Linux runs use `WAITRON_FULL_DISK_ROOT`; the source excerpt below retains its old variable name.
 
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR`, otherwise skips locally and fails CI. Interrupted macOS images

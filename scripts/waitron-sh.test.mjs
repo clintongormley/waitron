@@ -471,8 +471,6 @@ function sandbox({
       WT_RMI_FAIL: rmiFail ? "1" : "0",
       WT_GROUPS: groups,
       WT_BOX_ENABLE_FAIL: boxEnableFail ? "1" : "0",
-      // A path that does not exist: no case reads the machine's own routing table.
-      WAITRON_SH_PROC_NET_ROUTE: join(root, "no-route"),
     },
   };
 }
@@ -793,20 +791,21 @@ describe("waitron.sh install and the box's own setup address", () => {
     "If this venue already has a Waitron box, waitron.local reaches that box instead. Use";
 
   function routeFile(sb, rows) {
-    const p = join(sb.root, "route");
+    const p = join(sb.root, "proc/net/route");
+    mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, [ROUTE_HEADER, ...rows].join("\n") + "\n");
     return p;
   }
 
   it("gives the box's own setup address on the default-route interface", () => {
     const sb = sandbox();
-    const route = routeFile(sb, [
+    routeFile(sb, [
       "docker0\tAC110000\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0",
       // A zero destination with a non-zero mask (0.0.0.0/1) is not the default route.
       "wlan0\t00000000\t0100000A\t0003\t0\t0\t50\t00000080\t0\t0\t0",
       "eth0\t00000000\t010AA8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0",
     ]);
-    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(WORDS);
     expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
@@ -820,11 +819,11 @@ describe("waitron.sh install and the box's own setup address", () => {
 
   it("picks the lowest-metric default route when there are several", () => {
     const sb = sandbox();
-    const route = routeFile(sb, [
+    routeFile(sb, [
       "eth0\t00000000\t010AA8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0",
       "wlan0\t00000000\t0100000A\t0003\t0\t0\t100\t00000000\t0\t0\t0",
     ]);
-    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("http://10.0.0.7/setup/trust");
     expect(r.stdout).not.toContain("http://192.168.10.5/setup/trust");
@@ -832,8 +831,8 @@ describe("waitron.sh install and the box's own setup address", () => {
 
   it("without a default route, it skips Docker's and other virtual interfaces", () => {
     const sb = sandbox();
-    const route = routeFile(sb, ["docker0\tAC110000\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0"]);
-    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    routeFile(sb, ["docker0\tAC110000\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0"]);
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(WORDS);
     expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
@@ -853,8 +852,8 @@ describe("waitron.sh install and the box's own setup address", () => {
 
   it("when the default-route interface has no IPv4 address, it falls back to the non-virtual ones", () => {
     const sb = sandbox();
-    const route = routeFile(sb, ["ppp0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0"]);
-    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    routeFile(sb, ["ppp0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0"]);
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
     expect(r.stdout).toContain("http://10.0.0.7/setup/trust");

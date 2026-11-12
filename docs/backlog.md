@@ -1662,7 +1662,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   [Detail](backlog/box.md#backup--restore--carry-forwards-b2)
 
 - **Guide replacement address settings after a cold restore.** Replace manual configuration of
-  the advertised origin and dashboard origin/passkey domain with a recovery step that checks they
+  the public management address and passkey domain with a recovery step that checks they
   match the replacement's address.
   [Detail](backlog/box.md#guide-replacement-address-settings-after-a-cold-restore)
 

@@ -187,6 +187,23 @@ describe("waitron-box.sh clock.status", () => {
     expect(answer(sb, "clock.status").lastSyncAt).toBeNull();
   });
 
+  it.each([
+    "etc/systemd/ntp-units.d",
+    "run/systemd/ntp-units.d",
+    "usr/local/lib/systemd/ntp-units.d",
+    "usr/lib/systemd/ntp-units.d",
+  ])("reads %s inside the host root", (folder) => {
+    const sb = sandbox({ WB_ACTIVE: "fixture-only.service" });
+    rmSync(join(sb.paths.ntpUnits, "50-chrony.list"));
+    const units = join(sb.dir, folder);
+    mkdirSync(units, { recursive: true });
+    writeFileSync(join(units, "fixture.list"), "fixture-only.service\n");
+    expect(answer(sb, "clock.status")).toMatchObject({
+      service: "on",
+      unit: "fixture-only.service",
+    });
+  });
+
   it("reads a list line with whitespace around the unit's name", () => {
     const sb = sandbox();
     writeFileSync(join(sb.paths.ntpUnits, "50-chrony.list"), "  chrony.service \t\n");

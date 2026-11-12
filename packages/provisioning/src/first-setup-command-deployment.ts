@@ -179,13 +179,22 @@ export function createFirstSetupCommandDeployment(options: {
             if (!verifyBytes(challenge, signBytes(challenge, privateKey), publicKey)) conflict();
             let membership = await readNodeMembershipRow(db);
             if (membership === null) {
+              const ownAddress = new URL(contactUrl);
+              if (ownAddress.hostname === "waitron.local")
+                ownAddress.hostname = `box-${result.nodeId.slice(0, 4).toLowerCase()}.waitron.local`;
               await writeNodeMembership(
                 db,
                 buildNextMembershipDocument({
                   heldDocument: null,
                   signerNodeId: result.nodeId,
                   signerPrivateKey: privateKey,
-                  nodes: [{ nodeId: result.nodeId, contactUrl, standing: "serving-primary" }],
+                  nodes: [
+                    {
+                      nodeId: result.nodeId,
+                      contactUrl: ownAddress.origin,
+                      standing: "serving-primary",
+                    },
+                  ],
                 }),
               );
               membership = await readNodeMembershipRow(db);

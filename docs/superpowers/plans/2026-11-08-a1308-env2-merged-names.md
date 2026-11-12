@@ -42,6 +42,11 @@ removed by #2638, and update all eight current `boot.ts` readers; run the print-
 `readEnv` always supplies the hostname.
 The retired-name check uses `git grep -w` because a positive control with `git grep -E` and `\b`
 matched nothing on this Mac.
+At 23:53 the watcher cleared the CLI shared-name correction found in review: when a membership
+row uses the shared `waitron.local` origin, it records that box's own name, as the server does.
+The test root keeps its fixed-folder contract without extra filesystem-device or missing-folder recovery.
+At 00:02 on 13 November, the watcher cleared folding the newer `WAITRON_SH_PROC_NET_ROUTE`
+into that same root and checking each of the four NTP list folders with the existing fixtures.
 Historical grep exceptions are the dated retry-budget, full-disk and versitygw measurements in
 `testing-guide.md`, `conventions-data.md` and `aws-backup-rehearsal.md`; current instructions use the new names.
 
