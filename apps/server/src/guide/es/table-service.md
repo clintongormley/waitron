@@ -710,7 +710,9 @@ definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y 
 **Pago aplazado** desde entonces.
 
 El botón solo aparece en una cuenta sin ningún pago. Todos los platos de la cuenta tienen que estar
-servidos o cancelados antes. Un responsable lo permite en un dispositivo activando **Cierra cuentas
+servidos o cancelados antes. También aparece en **Cobrar** de una cuenta presentada y en **Cobrar**
+del mostrador; en el mostrador no hace falta que los platos estén servidos, pero la cuenta tiene que
+llevar factura simplificada. Un responsable lo permite en un dispositivo activando **Cierra cuentas
 como pago aplazado** en el perfil del dispositivo, en **Perfiles de dispositivo** del panel.
 
 Tu gestor obtiene la lista de estas cuentas con **Exportar pagos aplazados (CSV)**, en la página

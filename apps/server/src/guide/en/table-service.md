@@ -665,8 +665,10 @@ the invoice and the total, then confirm. Waitron issues the invoice if it has no
 records no payment for the bill, now or later, and the bill shows **Deferred payment** from then on.
 
 The button is there only on a bill with nothing paid yet. Every dish on the bill must be served or
-cancelled first. A manager allows it for a device by switching on **Closes bills as deferred
-payments** in the device's profile, under **Device profiles** on the dashboard.
+cancelled first. It also appears in a presented bill's **Pay** and in the Counter's **Pay**; at the
+Counter the dishes need not be served, but the bill must have a simplified invoice. A manager
+allows it for a device by switching on **Closes bills as deferred payments** in the device's
+profile, under **Device profiles** on the dashboard.
 
 Your accountant gets the list of these bills from **Export deferred payments (CSV)**, on the
 dashboard's **Sales & takings** page.

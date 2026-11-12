@@ -6552,13 +6552,14 @@ unsaved-input handling stays in the payment window. Presented bills keep whole-o
 retained whole-payment confirmations and zero-total completion keep their existing paths.
 Counter bills use the same window for their first and remaining payments.
 
-On an open table bill, Whole bill also offers Close as deferred payment as a secondary action,
+On an open table bill and a Counter bill, Whole bill also offers Close as deferred payment as a
+secondary action; a presented bill's Pay window offers it under its whole-amount line. It is
 hidden when the device profile lacks the action, the bill has payments or owes nothing, and
 disabled with its reason shown until it can be used. It opens a confirmation window
 (`till-deferred-close-dialog`) listing the bill, the invoice and the total above the final-close
-sentence, with Cancel, which returns to Pay (after a send that got no answer, or while the bill is
-blocked or could not be read again, it reads the bill again instead), and a primary Issue invoice
-and close (Close bill when the invoice is already issued).
+sentence, with Cancel, which returns to the Pay window it came from (after a send that got no
+answer, or while the bill is blocked or could not be read again, it reads the bill again instead),
+and a primary Issue invoice and close (Close bill when the invoice is already issued).
 
 ### Final payment documents
 
