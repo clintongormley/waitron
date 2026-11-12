@@ -49,6 +49,9 @@ export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
  * How long after a SKIPPED pass `drain` reports work is due again. Reporting `now` would pin a
  * host sleeping on `nextDueAt` at its minimum tick for as long as a certificate is missing; five
  * minutes still gives twelve retries inside art. 16.4's hour.
+ *
+ * The server supplies timings.skipRetryMs from @waitron/payments; changing this constant
+ * does not change that host default.
  */
 export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
 const MAX_CONSULTA_PAGES = 10;

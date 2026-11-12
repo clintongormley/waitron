@@ -1415,10 +1415,10 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
   the comment (a comment in a fiscal test, not the fiscal core).
 - **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
-- **`apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say** — found by
+- **Server comment pruning notes** — found by
   #656 while pruning comments. No production caller sets `skipSecrets` any more, so whether the
   option should go is open.
-  [Detail](box.md#appsserversrcerrorsts-still-cites-claudemd-5-for-things-5-does-not-say)
+  [Detail](box.md#server-comment-pruning-notes)
 
 - **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there**
   [Detail](box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
@@ -1436,7 +1436,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
   `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);
   `clock-stop-restarts.ts:6` says A760 will drop that table (A760 changed no table's shape); and
-  `src/drain.ts:54` and `:1930` name `@waitron/scheduler`, now part of `@waitron/payments`. A760
+  `src/drain.ts`'s `codeOf` comment names `@waitron/scheduler`, now part of `@waitron/payments`. A760
   left
   them because fiscal source stays unedited in that change; fix them in the next fiscal change.
 - **Remove the stale till description beside the device-delete preview fixture.**
@@ -1474,20 +1474,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
 - **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.**
   [Detail](architecture.md#comments-still-describe-a-drizzlequeryerror-wrapper-that-this-engine-does-not-produce)
-
-Earlier notes from the same pruning work remain open:
-
-The restore question A38 (#669) raised about `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
-deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
-`database is locked` in the pending-payment sweep (a candidate cause, not verified for the sweep:
-a busy wait on the server's own thread,
-[testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
-and nothing proves `startServer` itself survives a backup duty that cannot start — only
-`backup-supervisor.test.ts` covers that, at the supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
-list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
-(`background-duties.ts`), whose order `background-duties.test.ts` pins.
-Test titles #653 could not touch in `boot.test.ts` carry the history tags
-"(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 

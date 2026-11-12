@@ -479,7 +479,6 @@ import {
 } from "@waitron/stream";
 import { Server as HttpsServer } from "node:https";
 import "./errors.js";
-// `DEFAULTS` is not imported: `loadConfig` already applied the scheduler's defaults.
 
 export interface StartedServer {
   health: HealthState;
