@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { DeploymentEnvironment } from "@waitron/db";
+import type {
+  ModuleClockSetAnswer,
+  ModuleClockSetRequest,
+  ModuleOperationHost,
+  OperationBinding,
+} from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
   canSelectHour,
@@ -9,6 +15,7 @@ import {
 } from "./hour-clock.js";
 import { observeInternetHourClock } from "./hour-clock-internet.js";
 import { readHourRelease } from "./hour-release.js";
+import { chosenHourIssuedAtMs } from "./hour-selection.js";
 import "./errors.js";
 
 interface ClockDependencies {
@@ -32,6 +39,13 @@ interface Session {
   readonly challenges: Map<string, { wall: number; monotonic: number }>;
   readonly readings: Map<string, Reading>;
 }
+export type SetupClockMeasurement =
+  | {
+      readonly status: "measured";
+      readonly deviceMs: number;
+      readonly request: ModuleClockSetRequest;
+    }
+  | { readonly status: "refused"; readonly reason: "same_machine" | "challenge" };
 const PER_SESSION = 8;
 function keep<T>(map: Map<string, T>, id: string, value: T) {
   if (map.size === PER_SESSION) map.delete(map.keys().next().value!);
@@ -39,6 +53,21 @@ function keep<T>(map: Map<string, T>, id: string, value: T) {
 }
 function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
+}
+/** Asks the host to set the box's clock from a measured device, unless the device is earlier
+ * than the hour already chosen for `binding`: a name is never issued for a minute already named. */
+export async function setBoxClockFrom(
+  host: ModuleOperationHost,
+  binding: OperationBinding,
+  state: { readonly value: unknown; readonly history: readonly unknown[] },
+  measured: SetupClockMeasurement,
+): Promise<ModuleClockSetAnswer> {
+  if (measured.status === "refused") return measured;
+  const chosenMs = chosenHourIssuedAtMs(state, binding);
+  if (chosenMs !== undefined && measured.deviceMs < chosenMs)
+    return { status: "refused", reason: "later" };
+  if (host.setBoxClock === undefined) return { status: "refused", reason: "host_unavailable" };
+  return host.setBoxClock({ ...binding }, structuredClone(measured.request));
 }
 export function createSetupHourClock(deps: ClockDependencies = {}) {
   const wall = deps.wall ?? Date.now;
@@ -79,6 +108,24 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       return refuse("clock_corrected");
     return compareHourClocks([...held.observations, sample], release());
   };
+  const take = (state: Session, browser: SetupBrowserClockSample) => {
+    const challenge =
+      typeof browser.challengeId !== "string"
+        ? undefined
+        : state.challenges.get(browser.challengeId);
+    if (challenge !== undefined) state.challenges.delete(browser.challengeId);
+    const received = box();
+    const elapsed =
+      challenge === undefined ? NaN : received.monotonicFinishedMs - challenge.monotonic;
+    const timed =
+      challenge !== undefined &&
+      Number.isSafeInteger(browser.instantMs) &&
+      Number.isFinite(elapsed) &&
+      elapsed >= 0 &&
+      elapsed <= 5000 &&
+      Math.abs(received.wallFinishedMs - challenge.wall - elapsed) <= 1000;
+    return { challenge, received, elapsed, timed };
+  };
   return {
     challenge(key: string) {
       const state = session(key);
@@ -87,6 +134,31 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       keep(state.challenges, id, issued);
       return { id, boxInstantMs: issued.wall, expiresInMs: 5000 };
     },
+    setFromBrowser(
+      key: string,
+      browser: SetupBrowserClockSample,
+      client: SetupClockClient,
+    ): SetupClockMeasurement {
+      const { received, elapsed, timed } = take(session(key), browser);
+      if (client.onBox) return { status: "refused", reason: "same_machine" };
+      if (!timed) return { status: "refused", reason: "challenge" };
+      // The device read its clock at the round trip's midpoint, give or take half of it.
+      const halfMs = elapsed / 2;
+      const wallMs = received.wallFinishedMs - halfMs;
+      return {
+        status: "measured",
+        deviceMs: browser.instantMs,
+        request: {
+          offsetMs: Math.round(browser.instantMs - wallMs),
+          measuredAt: { wallMs, monoMs: received.monotonicFinishedMs - halfMs },
+          reading: {
+            boxAt: new Date(Math.round(wallMs)).toISOString(),
+            witnessAt: new Date(browser.instantMs).toISOString(),
+            uncertaintyMs: Math.ceil(halfMs),
+          },
+        },
+      };
+    },
     async compare(
       key: string,
       environment: DeploymentEnvironment,
@@ -94,26 +166,14 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
       client: SetupClockClient,
     ) {
       const state = session(key);
-      const challenge =
-        browser === null || typeof browser.challengeId !== "string"
-          ? undefined
-          : state.challenges.get(browser.challengeId);
-      if (challenge !== undefined) state.challenges.delete(browser!.challengeId);
-      const received = box();
-      const elapsed =
-        challenge === undefined ? NaN : received.monotonicFinishedMs - challenge.monotonic;
+      const { challenge, received, elapsed, timed } =
+        browser === null
+          ? { challenge: undefined, received: box(), elapsed: NaN, timed: false }
+          : take(state, browser);
       const observations: HourClockObservation[] = [];
       if (browser !== null && client.onBox)
         observations.push({ source: "browser", result: "unavailable", reason: "same_machine" });
-      else if (
-        browser !== null &&
-        challenge !== undefined &&
-        Number.isSafeInteger(browser.instantMs) &&
-        Number.isFinite(elapsed) &&
-        elapsed >= 0 &&
-        elapsed <= 5000 &&
-        Math.abs(received.wallFinishedMs - challenge.wall - elapsed) <= 1000
-      ) {
+      else if (browser !== null && challenge !== undefined && timed) {
         observations.push({
           source: "browser",
           result: "usable",

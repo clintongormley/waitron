@@ -27,6 +27,24 @@ export interface ModuleRecoveryFacts {
   readonly priorActivation: "none" | "committed";
 }
 
+/** A person's device's time against the box's, measured over one challenge round trip. */
+export interface ModuleClockSetRequest {
+  /** The device's time minus the box's wall clock at the round trip's midpoint. */
+  readonly offsetMs: number;
+  /** The box's wall and steady clocks at that midpoint: `Date.now()` and `performance.now()`,
+   * or `testClock`'s when it is set. */
+  readonly measuredAt: { readonly wallMs: number; readonly monoMs: number };
+  /** `boxAt` the box's time at the midpoint; `uncertaintyMs` how far either way it may be off. */
+  readonly reading: {
+    readonly boxAt: string;
+    readonly witnessAt: string;
+    readonly uncertaintyMs: number;
+  };
+}
+
+export type ModuleClockSetAnswer =
+  { readonly status: "set" } | { readonly status: "refused"; readonly reason: string };
+
 export interface ModuleOperationHost {
   readRecoveryFacts?(binding: OperationBinding): Promise<ModuleRecoveryFacts>;
   readSetupFacts?(binding: OperationBinding): Promise<{
@@ -44,6 +62,11 @@ export interface ModuleOperationHost {
       replace(value: unknown, purpose?: "wait" | "intent"): Promise<void>;
     }) => Promise<T>,
   ): Promise<T>;
+  /** Sets the box's clock from a person's device; absent where the host cannot. */
+  setBoxClock?(
+    binding: OperationBinding,
+    request: ModuleClockSetRequest,
+  ): Promise<ModuleClockSetAnswer>;
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** Set only by a test; production leaves it unset and modules read the real clocks. */
   readonly testClock?: { wall(): number; monotonic(): number };

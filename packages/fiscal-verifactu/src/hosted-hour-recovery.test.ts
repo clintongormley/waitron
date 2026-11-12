@@ -660,3 +660,172 @@ it("refuses a changed conflict binding on status rather than reporting no prior 
     ).rejects.toMatchObject(refusal("event_mismatch"));
   });
 });
+
+async function setClock(
+  operations: Operations,
+  operation: Operation,
+  instantMs: number,
+  client = { onBox: false },
+) {
+  const challenge = (await operations.recovery!(
+    operation,
+    { action: "clock-challenge" },
+    client,
+  )) as { id: string };
+  monotonic += 40;
+  vi.setSystemTime(Date.now() + 40);
+  return operations.recovery!(
+    operation,
+    { action: "set-clock", browser: { challengeId: challenge.id, instantMs } },
+    client,
+  );
+}
+
+it("set-clock hands the host a disagreeing device's measurement and answers what it did", async () => {
+  const f = fixture();
+  const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+  f.host.setBoxClock = setBoxClock;
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    expect(await setClock(operations, operation, NOW + 20 + 90_000)).toEqual({ status: "set" });
+  });
+  expect(setBoxClock).toHaveBeenCalledWith(binding, {
+    offsetMs: 90_000,
+    measuredAt: { wallMs: NOW + 20, monoMs: 1020 },
+    reading: {
+      boxAt: new Date(NOW + 20).toISOString(),
+      witnessAt: new Date(NOW + 20 + 90_000).toISOString(),
+      uncertaintyMs: 20,
+    },
+  });
+  expect(f.history).toEqual([]);
+});
+
+it("set-clock answers host_unavailable where the host cannot set the clock", async () => {
+  const operations = FISCAL_OPERATIONS.configure!(fixture().host);
+  await withOperationAuthority(binding, key, async (authority) => {
+    expect(await setClock(operations, { binding, authority }, NOW + 90_000)).toEqual({
+      status: "refused",
+      reason: "host_unavailable",
+    });
+  });
+});
+
+it("set-clock never asks the host from a browser on the box", async () => {
+  const f = fixture();
+  const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+  f.host.setBoxClock = setBoxClock;
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(binding, key, async (authority) => {
+    expect(
+      await setClock(operations, { binding, authority }, NOW + 90_000, { onBox: true }),
+    ).toEqual({ status: "refused", reason: "same_machine" });
+  });
+  expect(setBoxClock).not.toHaveBeenCalled();
+});
+
+it("set-clock refuses a device earlier than the hour already chosen, without asking the host", async () => {
+  const f = fixture();
+  vi.setSystemTime(NOW - 120_000);
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const selected = (await selectAfterWait(operations, operation)) as unknown as {
+      issuedAt: string;
+    };
+    const issuedAt = Date.parse(selected.issuedAt);
+    const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+    f.host.setBoxClock = setBoxClock;
+    expect(await setClock(operations, operation, issuedAt - 1)).toEqual({
+      status: "refused",
+      reason: "later",
+    });
+    expect(setBoxClock).not.toHaveBeenCalled();
+    expect(await setClock(operations, operation, issuedAt)).toEqual({ status: "set" });
+  });
+});
+
+it.each<OperationOperator>(["administrator", { ...key, eventId: "different-event" }])(
+  "set-clock is refused for principal %j as compare-clocks is, without asking the host",
+  async (operator) => {
+    const f = fixture();
+    const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+    f.host.setBoxClock = setBoxClock;
+    const operations = FISCAL_OPERATIONS.configure!(f.host);
+    await withOperationAuthority(binding, operator, async (authority) => {
+      for (const action of ["compare-clocks", "set-clock"])
+        await expect(
+          operations.recovery!(
+            { binding, authority },
+            { action, browser: { challengeId: "x", instantMs: NOW } },
+            { onBox: false },
+          ),
+        ).rejects.toMatchObject(refusal("reauthentication_required"));
+    });
+    expect(setBoxClock).not.toHaveBeenCalled();
+    expect(f.reads).toBe(0);
+  },
+);
+
+it("set-clock rechecks authority after the host read, without asking the host", async () => {
+  const f = fixture();
+  const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+  f.host.setBoxClock = setBoxClock;
+  let releaseRead!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  const reading = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  let pending!: Promise<unknown>;
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const challenge = (await operations.recovery!(
+      operation,
+      { action: "clock-challenge" },
+      { onBox: false },
+    )) as { id: string };
+    const original = f.host.readRecoveryFacts!;
+    f.host.readRecoveryFacts = async (held) => {
+      const facts = await original(held);
+      entered();
+      await gate;
+      return facts;
+    };
+    pending = operations.recovery!(
+      operation,
+      { action: "set-clock", browser: { challengeId: challenge.id, instantMs: NOW } },
+      { onBox: false },
+    );
+    await reading;
+  });
+  const rejected = expect(pending).rejects.toMatchObject(refusal("reauthentication_required"));
+  releaseRead();
+  await rejected;
+  expect(setBoxClock).not.toHaveBeenCalled();
+});
+
+it.each([
+  { action: "set-clock" },
+  { action: "set-clock", browser: null },
+  { action: "set-clock", browser: {} },
+  { action: "set-clock", browser: { challengeId: 1, instantMs: NOW } },
+  { action: "set-clock", browser: { challengeId: "x", instantMs: NOW + 0.5 } },
+  { action: "set-clock", browser: { challengeId: "x", instantMs: NOW, extra: true } },
+])("refuses malformed set-clock proposal %j", async (proposal) => {
+  const f = fixture();
+  const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+  f.host.setBoxClock = setBoxClock;
+  await withOperationAuthority(binding, key, async (authority) => {
+    await expect(
+      FISCAL_OPERATIONS.configure!(f.host).recovery!({ binding, authority }, proposal, {
+        onBox: false,
+      }),
+    ).rejects.toMatchObject(refusal("event_mismatch"));
+  });
+  expect(setBoxClock).not.toHaveBeenCalled();
+});

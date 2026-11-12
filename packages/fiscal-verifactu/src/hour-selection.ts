@@ -255,6 +255,19 @@ function resumedIntent(entries: readonly Entry[]) {
   return intent;
 }
 
+/** When the hour already chosen for `binding`'s event was issued, if one was. */
+export function chosenHourIssuedAtMs(
+  state: { readonly value: unknown; readonly history: readonly unknown[] },
+  binding: OperationBinding,
+): number | undefined {
+  const entries = new Map<string, Entry>();
+  for (const entry of [state.value, ...state.history].flatMap(parseState))
+    if (entry.binding.module === binding.module && entry.binding.eventId === binding.eventId)
+      entries.set(entryKey(entry), entry);
+  const intent = resumedIntent([...entries.values()]);
+  return intent === undefined ? undefined : Date.parse(intent.issuedAt);
+}
+
 export function createHourSelection(options: {
   withState: HourSelectionStore;
   read(binding: OperationBinding, comparisonId?: string): Promise<HourSelectionFacts>;

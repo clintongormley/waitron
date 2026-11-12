@@ -13,7 +13,7 @@ import { createHourSelection, type HourSelectionFacts } from "./hour-selection.j
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { HourClockDecision } from "./hour-clock.js";
 import type { HourHistorySource } from "./hour-history.js";
-import { createSetupHourClock } from "./hour-setup-clock.js";
+import { createSetupHourClock, setBoxClockFrom } from "./hour-setup-clock.js";
 import "./errors.js";
 
 type SelectionOptions = Parameters<typeof createHourSelection>[0];
@@ -172,6 +172,17 @@ export function createHostedHourPreparation(
     ...preparation,
     clockChallenge(binding: ModuleOperationInput["binding"]) {
       return withFacts(binding, (facts) => clocks.challenge(facts.contextKey));
+    },
+    setClock(
+      binding: ModuleOperationInput["binding"],
+      browser: Parameters<typeof clocks.setFromBrowser>[1],
+      client: Parameters<typeof clocks.setFromBrowser>[2],
+    ) {
+      return host.withPreparationState!(binding, async (state) => {
+        const facts = await host.readSetupFacts!(binding);
+        const measured = clocks.setFromBrowser(facts.contextKey, browser, client);
+        return setBoxClockFrom(host, binding, state, measured);
+      });
     },
     compareClocks(
       binding: ModuleOperationInput["binding"],
