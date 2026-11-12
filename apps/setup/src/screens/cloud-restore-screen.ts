@@ -196,6 +196,7 @@ export class SetupCloudRestoreScreen extends LitElement {
     return html`
       <h1>${t("cloud_restore.heading")}</h1>
       <p>${t("cloud_restore.intro")}</p>
+      <p>${t("restore.replace_warning")}</p>
       ${
         !this.view
           ? html`

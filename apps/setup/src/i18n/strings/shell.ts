@@ -128,6 +128,8 @@ export const shellEn = {
     "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
   "shell.restore.staging_failed_code":
     "The backup could not be staged. Check the file, key and environment. ({code}) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+  "shell.restore.administrator_password_missing":
+    "This backup has no active administrator with a password. Choose another backup.",
   "shell.restore.environment_mismatch":
     "The backup comes from the other environment. Choose the environment it came from.",
   "shell.restore.other_version":
@@ -345,6 +347,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha podido preparar la copia de seguridad. Comprueba la conexión e inténtalo de nuevo. Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.restore.staging_failed_code":
     "No se ha podido preparar la copia de seguridad. Revisa el archivo, la clave y el entorno. ({code}) Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
+  "shell.restore.administrator_password_missing":
+    "Esta copia no tiene ningún administrador activo con contraseña. Elige otra copia de seguridad.",
   "shell.restore.environment_mismatch":
     "La copia viene del otro entorno. Elige el entorno del que viene.",
   "shell.restore.other_version":

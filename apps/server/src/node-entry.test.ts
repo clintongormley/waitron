@@ -1,3 +1,7 @@
+import * as firstSetupEntry from "./first-setup-entry.js";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { hashPassword } from "@waitron/identity";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
 import {
@@ -161,6 +165,18 @@ describe("runEntry", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   });
+  it("keeps the server stopped when the staged restore fails", async () => {
+    const failure = new Error("restore bookkeeping failed");
+    const d = deps({
+      runStagedRestore: async () => {
+        throw failure;
+      },
+    });
+    await expect(runEntry(d)).rejects.toBe(failure);
+    expect(d.startServer).not.toHaveBeenCalled();
+    expect(d.loadBoxEnv).not.toHaveBeenCalled();
+  });
+
   it("refuses ANY argument before it reads or writes the counter or opens the venue folder", async () => {
     const reportFailure = vi.fn();
     const d = deps({
@@ -2519,3 +2535,76 @@ it("a refused repair cleanup is logged after staying up and leaves the flow", as
     await rm(stateDir, { recursive: true, force: true });
   }
 });
+
+it.each(["recovery", "disk-full", "refused"] as const)(
+  "mounts restore discard on the %s recovery page",
+  async (mode) => {
+    const stateDir = await mkdtemp(join(tmpdir(), "entry-restore-discard-"));
+    const venueDir = join(stateDir, "venue");
+    const password = "administrator password";
+    const roots = { stateDir, venueDir };
+    await mkdir(venueDir);
+    await mkdir(join(stateDir, "flows/restore"), { recursive: true });
+    await writeFile(join(stateDir, "flows/restore/record.json"), "broken");
+    await writeFile(
+      join(stateDir, "flows/restore/admin-verifiers"),
+      JSON.stringify([hashPassword(password)]),
+    );
+    const admission = vi.spyOn(firstSetupEntry, "resolveFirstSetupEntry");
+    admission.mockResolvedValue(
+      mode === "refused"
+        ? {
+            kind: "refused",
+            code: "setup.start_again_incomplete",
+            roots,
+            error: new AppError("setup.start_again_incomplete", {}),
+          }
+        : { kind: "normal", roots, run: (body) => body(false) },
+    );
+    let app: Hono | undefined;
+    const d = deps({
+      ...roots,
+      spareBytes: 0,
+      exit: vi.fn(),
+      readRecoveryState: async () => ({ ...FRESH, level: "recovery", failures: 3 }),
+      ...(mode !== "disk-full"
+        ? {}
+        : {
+            statfs: async () => ({ bavail: 0, frsize: 1 }),
+            writeRecoveryState: async () => {
+              throw Object.assign(new Error("full"), { code: "ENOSPC" });
+            },
+          }),
+      serveRecovery: async (surface) => {
+        app = surface;
+      },
+    });
+    try {
+      await runEntry(d);
+      const socket = new TLSSocket(new Socket());
+      try {
+        const page = await app!.request("https://box.test/", {}, { incoming: { socket } });
+        expect(await page.text()).toContain('action="/recovery-api/restore/discard"');
+        const answer = await app!.request(
+          "https://box.test/recovery-api/restore/discard",
+          {
+            method: "POST",
+            headers: { Origin: "https://box.test" },
+            body: new URLSearchParams({ choice: "move", password }),
+          },
+          { incoming: { socket } },
+        );
+        expect(answer.status).toBe(200);
+        expect(await answer.text()).toContain("restore again");
+        await expect(stat(join(stateDir, "flows/restore"))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      } finally {
+        socket.destroy();
+      }
+    } finally {
+      admission.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  },
+);

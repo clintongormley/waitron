@@ -1,3 +1,4 @@
+import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE, SERVER_PEM_FILE } from "@waitron/store";
@@ -299,7 +300,11 @@ import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
-import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
+import {
+  readRestoreAdminVerifiers,
+  stageRestoreRequest,
+  stageStreamRestore,
+} from "./restore-request.js";
 import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
@@ -1526,6 +1531,7 @@ async function bootServer(
                 now,
                 openStore: openBoundedBucket,
               });
+              return await readRestoreAdminVerifiers(validated.databasePath);
             } finally {
               await validated.discard();
             }
@@ -2169,8 +2175,8 @@ async function bootServer(
   // A mirror or a fenced node defers it: nothing is re-issued or signed, and the bucket copy is
   // held. A failure does not keep the box shut: it sells, does not stream, and raises
   // restore.first_start_failed until a later start finishes. The exception is a restored
-  // membership document that fails its signature check (`restore.membership_invalid`): that fails
-  // the start.
+  // membership document that fails its signature check, or unreadable restore state: either
+  // fails the start. Discard authority ends after this step returns, before sale routes are mounted.
   const firstStart = fencedOrMirror
     ? await deferFirstStart(config.stateDir, log)
     : await runFirstStart({
@@ -2186,6 +2192,7 @@ async function bootServer(
         log,
         pointerTerm: () => readBucketPointerTerm(db, ring),
       });
+  await disarmRestoreDiscard(config.stateDir);
   const isSingletonPrimary = holders.singletonRole.current === "primary";
   const acceptingSales = isSingletonPrimary && !fencedOrMirror;
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its

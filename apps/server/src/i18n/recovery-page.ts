@@ -406,19 +406,26 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Necesita sitio para otra copia entera del local, y los detalles de abajo indican cuántos bytes. Waitron no puede liberar más espacio por sí solo. La copia se conserva. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
     },
   },
+  "restore.flow_unreadable": {
+    "en-GB": {
+      title: "The unfinished restore request cannot be read.",
+      action: "The box cannot finish this restore.",
+    },
+    "es-ES": {
+      title: "No se puede leer la solicitud de restauración sin terminar.",
+      action: "El equipo no puede terminar esta restauración.",
+    },
+  },
   "restore.placement_failed": {
-    // Shown only if this is the last failure when the box reaches recovery; a failed setup restore
-    // is not retried, so one failed placement does not get here. Which database was kept is in the
-    // params (`node-entry.ts` → `failureDetail`).
     "en-GB": {
       title: "A restore could not put the restored database in place.",
       action:
-        "This is a fault in Waitron or this box's disk. The details under “Why the last start failed” below, and the server's own output, say whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
+        "This is a fault in Waitron or this box's disk. The details under “Why the last start failed” below describe the failed step. A restore started from setup runs again from its backup when you retry. Use the restore choice below to abandon it.",
     },
     "es-ES": {
       title: "Una restauración no pudo poner en su sitio la base de datos restaurada.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. Los detalles de «Por qué falló el último arranque», más abajo, y la salida del propio servidor indican si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
+        "Es un fallo de Waitron o del disco de este equipo. Los detalles de «Por qué falló el último arranque», más abajo, describen el paso que falló. Una restauración iniciada desde la configuración vuelve a ejecutarse desde su copia cuando reintentas. La opción de abajo permite descartar esta restauración.",
     },
   },
   "restore.database_set_aside": {
@@ -605,3 +612,34 @@ export const ENVIRONMENT_RECOVERY_TEXT: Readonly<
       "No se ha podido verificar la contraseña de administrador. No se ha movido nada. Revísala y vuelve a intentarlo.",
   },
 };
+
+export const RESTORE_DISCARD_TEXT = {
+  "en-GB": {
+    move: "Throw this restore away",
+    stop: "Stop",
+    before:
+      "This restore has not begun copying. Throwing it away keeps the database already on this box.",
+    after:
+      "Throwing this restore away removes the destination database, including any previous database put back after a failed attempt. It does not recover the old data. You can restore again or set up this box.",
+    wrong: "The password does not match an active administrator in the selected backup.",
+    unavailable: "This restore cannot be thrown away now.",
+    notFinished:
+      "The restore could not be thrown away completely. The box remains stopped. Try this action again.",
+    done: "This restore has been thrown away. You can restore again or set up this box.",
+    stopped: "Nothing changed. This restore is still waiting.",
+  },
+  "es-ES": {
+    move: "Descartar esta restauración",
+    stop: "Parar",
+    before:
+      "La copia de esta restauración aún no ha comenzado. Descartarla conserva la base de datos que ya está en esta caja.",
+    after:
+      "Descartar esta restauración elimina la base de datos de destino, incluida cualquier base de datos anterior que se haya devuelto tras un intento fallido. No recupera los datos anteriores. Puedes restaurar otra copia o configurar esta caja.",
+    wrong: "La contraseña no coincide con la de un administrador activo de la copia seleccionada.",
+    unavailable: "Ahora no se puede descartar esta restauración.",
+    notFinished:
+      "No se ha podido descartar por completo la restauración. La caja sigue detenida. Vuelve a intentarlo.",
+    done: "Se ha descartado esta restauración. Puedes restaurar otra copia o configurar esta caja.",
+    stopped: "Nada ha cambiado. Esta restauración sigue pendiente.",
+  },
+} as const;

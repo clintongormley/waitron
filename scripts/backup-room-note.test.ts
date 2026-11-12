@@ -1,7 +1,8 @@
 /**
  * Every file that replaces or removes the live `venue.db` deletes the backup room note first, so
  * the start never trusts a note written for a database that is gone. A file that names `venue.db`
- * beside a removal or copy is either on REPLACES (it must call `deleteBackupRoomNote(`) or on
+ * beside a removal or copy is either on REPLACES (it must call `deleteBackupRoomNote(`,
+ * or `wipeVenueDatabases(` in restore-request.ts) or on
  * CO_NAMERS (with the reason it never touches the live database); any other such file fails.
  *
  * Weaker than its name: it reads TEXT. A non-test `.ts` file under `apps/<app>/src` or
@@ -26,6 +27,7 @@ const REPLACES: readonly string[] = [
   "apps/server/src/db-wipe.ts",
   "apps/server/src/handover-place-copy.ts",
   "apps/server/src/restore.ts",
+  "apps/server/src/restore-request.ts",
   "packages/provisioning/src/environment-recovery-move.ts",
   "packages/provisioning/src/first-setup-start-again-deletion.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",
@@ -49,8 +51,6 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/reset-request.ts":
     "checks venue.db exists; removes its own marker and state files",
   "apps/server/src/restore-flow.ts": "removes only restore attachments under flows/restore",
-  "apps/server/src/restore-request.ts":
-    "removes and renames its own request files in the state folder",
   "apps/server/src/restore-stream.ts": "restores into a scratch folder it removes",
   "apps/server/src/start-backup-room-record.ts":
     "names venue.db in prose; unlinks only the start's deletion record",
@@ -101,8 +101,9 @@ function problems(files: readonly Source[]): string[] {
   const found: string[] = [];
   for (const { path, text } of files) {
     if (REPLACES.includes(path)) {
-      if (!DELETES_NOTE.test(text))
-        found.push(`${path}: replaces venue.db, never deletes the note`);
+      const deletesNote =
+        path === "apps/server/src/restore-request.ts" ? /\bwipeVenueDatabases\(/ : DELETES_NOTE;
+      if (!deletesNote.test(text)) found.push(`${path}: replaces venue.db, never deletes the note`);
     } else if (matches(text) && !(path in CO_NAMERS))
       found.push(`${path}: names venue.db beside a removal or copy, on neither list`);
   }
@@ -157,5 +158,21 @@ describe("the backup room note guard (weaker than its name: reads text)", () => 
           `apps/server/src/${name}.ts: names venue.db beside a removal or copy, on neither list`,
       ),
     );
+  });
+
+  it("requires the staged retry's wipe and the shared wipe's note deletion", () => {
+    const files = tree();
+    for (const [path, call] of [
+      ["apps/server/src/restore-request.ts", "wipeVenueDatabases("],
+      ["apps/server/src/db-wipe.ts", "deleteBackupRoomNote("],
+    ]) {
+      expect(
+        problems(
+          files.map((file) =>
+            file.path === path ? { ...file, text: file.text.replaceAll(call!, "x(") } : file,
+          ),
+        ),
+      ).toEqual([`${path}: replaces venue.db, never deletes the note`]);
+    }
   });
 });

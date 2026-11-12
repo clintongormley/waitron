@@ -354,6 +354,7 @@ export class SetupRestoreBucketScreen extends LitElement {
     return html`
       <h1>${t("restore_bucket.heading")}</h1>
       <p>${t("restore_bucket.intro")}</p>
+      <p>${t("restore.replace_warning")}</p>
       <p class="sensitive" data-test="kit-sensitive">${t("restore_bucket.sensitive")}</p>
       <label class="field">
         ${t("restore_bucket.kit_file")}

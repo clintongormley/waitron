@@ -1,3 +1,9 @@
+import { renderEnvironmentSection } from "./recovery-administrator.js";
+import {
+  mountRestoreDiscard,
+  renderRestoreDiscard,
+  type RestoreRecoveryDeps,
+} from "./recovery-restore.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -26,7 +32,6 @@ import {
   isSecure,
   mountStartAgainChoice,
   renderStartAgainSection,
-  renderEnvironmentSection,
   type StartAgainView,
 } from "./recovery-start-again.js";
 
@@ -58,6 +63,7 @@ export interface RecoveryDeps {
   refusedAtStart?: true;
   log?: Logger;
   environment?: EnvironmentRecoveryDeps;
+  restore?: RestoreRecoveryDeps;
   /** Present when the start found files a cut-off Start again did not create. */
   startAgain?: {
     roots: { stateDir: string; venueDir: string };
@@ -227,6 +233,7 @@ ${section}<form method="post" action="/recovery-api/retry">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(heading)}</title>
+<style>:root { color-scheme: light dark; }</style>
 <style>pre { white-space: pre-wrap; } pre, p { overflow-wrap: anywhere; }</style>
 <style>li { overflow-wrap: anywhere; }</style>
 </head>
@@ -318,7 +325,27 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
       );
     return renderPage(deps, log, view.locale, freeBytes, deps.state, section, environmentAnswer);
   };
-  const draw = deps.environment === undefined ? startAgainPage : drawEnvironment;
+  const drawRestore = async (view: EnvironmentView) => {
+    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
+    const section = await renderRestoreDiscard(deps.restore!, view, deps.log);
+    if (section === "")
+      return (deps.environment === undefined ? startAgainPage : drawEnvironment)(view);
+    return renderPage(
+      deps,
+      log,
+      view.locale,
+      freeBytes,
+      deps.state,
+      view.message?.kind === "moved" ? "" : section,
+      view.message?.kind === "moved" ? section : undefined,
+    );
+  };
+  const draw =
+    deps.restore !== undefined
+      ? drawRestore
+      : deps.environment === undefined
+        ? startAgainPage
+        : drawEnvironment;
 
   app.get("/", async (c) => {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
@@ -328,12 +355,14 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   });
 
   if (startAgain !== undefined)
-    mountStartAgainChoice(app, startAgain, draw, deps.log, () => {
+    mountStartAgainChoice(app, startAgain, startAgainPage, deps.log, () => {
       kept = true;
     });
 
   if (deps.environment !== undefined)
     mountEnvironmentChoice(app, deps.environment, drawEnvironment, deps.log);
+
+  if (deps.restore !== undefined) mountRestoreDiscard(app, deps.restore, drawRestore, deps.log);
 
   // Named one by one, to leave out the clear count and the trigger names.
   app.get("/recovery-api/status", (c) => {

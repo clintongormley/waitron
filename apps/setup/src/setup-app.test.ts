@@ -13,7 +13,7 @@ import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.j
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { SetupDoneScreen } from "./screens/done-screen.js";
 import type { BucketRestoreRequestDetail } from "./events.js";
-import { currentLocale, setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { startEn } from "./i18n/strings/start.js";
 import { wizardApi } from "../test/first-setup-browser.js";
@@ -4233,6 +4233,11 @@ describe("restore from my bucket", () => {
       { module: "fiscal", code: "x.y" },
       "The copy could not be restored. (restore.hook_failed) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
     ],
+    [
+      "restore.administrator_password_missing",
+      {},
+      "This backup has no active administrator with a password. Choose another backup.",
+    ],
   ])("explains %s (%o) and stays on the bucket screen", async (code, params, message) => {
     const screen = await refusedWith({ code, params, status: 400 });
     expect(screen.errorMessage).toBe(message);
@@ -4601,6 +4606,31 @@ describe("restoring a backup file whose old server may still be running", () => 
       );
     },
   );
+
+  it.each([
+    ["en-GB", "This backup has no active administrator with a password. Choose another backup."],
+    ["es-ES", t("shell.restore.administrator_password_missing", "es-ES")],
+  ])("explains a backup with no administrator password in %s", async (locale, message) => {
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          restore: vi.fn().mockRejectedValue({
+            code: "restore.administrator_password_missing",
+            params: {},
+            status: 400,
+          }),
+        }),
+      );
+      setLocale(locale!);
+      restoreRequest(el, backup);
+      await flush(el);
+      const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+      expect(screen.invalidField).toBeUndefined();
+      expect(await bottomOf(screen)).toBe(message);
+    } finally {
+      setLocale("en-GB");
+    }
+  });
 
   it("keeps an archive refusal of a field the form does not show, above Restore", async () => {
     const el = await mountSetupApp(
@@ -4977,6 +5007,11 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
       "restore.environment_mismatch",
       409,
       "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
+    ],
+    [
+      "restore.administrator_password_missing",
+      400,
+      "This backup has no active administrator with a password. Choose another backup.",
     ],
   ])(
     "says why a Cloud restore refused with %s cannot work by trying again",
@@ -6137,3 +6172,22 @@ describe("a recovery request refused because another setup holds the server", ()
     },
   );
 });
+
+it.each(["setup-restore-screen", "setup-restore-bucket-screen", "setup-cloud-restore-screen"])(
+  "%s warns that restoring replaces the box's existing database",
+  async (tag) => {
+    setLocale("en-GB");
+    const screen = document.createElement(tag) as LitElement;
+    const host = document.createElement("div");
+    applyTokens(host);
+    mounted.push(host);
+    document.body.appendChild(host);
+    host.appendChild(screen);
+    await screen.updateComplete;
+    expect(
+      [...screen.shadowRoot!.querySelectorAll("p")].some(
+        (p) => p.textContent?.trim() === "Restoring replaces the database already on this box.",
+      ),
+    ).toBe(true);
+  },
+);

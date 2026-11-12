@@ -510,14 +510,16 @@ a downloaded SQLite database changes its journal-mode header, so `activationSour
 the prepared file rather than the untouched bucket object. A later download with different bytes
 needs a fresh review and matching outside recovery evidence.
 
-The backend checks this binding before replacing a staged request and again at restart. A fresh
-attempt removes the staged key after success or a refusal before placement is marked started;
-a venue-lock refusal keeps it for another fresh attempt. Once placement is marked started, any
-failure keeps the request and key for a checked resume, including a thrown file-write error after
-activation commits. A successful resume removes them. Restaging replaces the credential. Each attempt
-still authenticates the key. See
-[interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore). An interrupted write with no marker leaves no runnable request, and the
-next entry pass removes the orphaned node-key file. These rules do not establish that a copied
+The backend checks this binding before replacing a staged request and again at restart. Every
+failed attempt keeps its request and staged key. On a marked retry, it removes the unfinished
+databases and places the selected source again; it never uses that partial copy for committed
+replay. Completion removes the request and its source attachments; independently saved
+administrator password hashes remain until boot passes its first-start step, then are removed
+before serving. A blocking failure retains those hashes for the recovery page's authenticated
+**Throw this restore away** action. Restaging replaces the credential, and every attempt still authenticates the key. See
+[interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore). A write
+interrupted before request publication leaves no runnable request; the next start removes its
+unpublished scratch files. These rules do not establish that a copied
 marker proves an allocation can be reused. Environment-only command inputs retain their existing
 contract.
 

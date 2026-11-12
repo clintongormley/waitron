@@ -1,3 +1,4 @@
+import { resultFacts } from "./testing/restore-result-facts.js";
 import { generateKeyPairSync } from "node:crypto";
 import {
   signPaperBlock,
@@ -346,7 +347,7 @@ it("refuses a fresh recovery of the older backup whose settle wait would land on
   expect(committed.records).toEqual(f.original);
   expect(f.journal()).toBe(retained);
 });
-it("replays its exact committed result after trading-settings publication is interrupted", async () => {
+it("restarts from the backup after trading-settings publication is interrupted", async () => {
   const f = await stage("archive");
   const target = join(f.stateDir, "trading.env");
   const originalRename = nativeFs.rename;
@@ -362,11 +363,13 @@ it("replays its exact committed result after trading-settings publication is int
     publication.mockRestore();
     syncBuiltinESMExports();
   }
-  await f.advanceCounters();
   const before = await f.snapshot();
+  await f.advanceCounters();
   expect(before.allocations).toHaveLength(2);
   expect(await f.run()).toBe(true);
-  expect(await f.snapshot()).toEqual(before);
+  expect(resultFacts(await f.snapshot(), "numeroInstalacion")).toEqual(
+    resultFacts(before, "numeroInstalacion"),
+  );
   expect(before.records).toEqual(f.original);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
     `WAITRON_NODE_ID=${f.node.nodeId}`,

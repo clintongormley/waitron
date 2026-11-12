@@ -154,6 +154,8 @@ browser storage is unavailable. The observations stay in this browser and are no
 recovery request. The report reads the storage available at this Waitron address; it does not
 fetch observations from other devices.
 
+Restoring replaces the database already on this box.
+
 Choose **Compare clocks**. Follow the clock and waiting instructions; there is no installation code
 to type. Choose **Make the series** once the page allows it; it then shows the new series name.
 Tick the confirmation the page shows — "I confirm no other running server has newer restaurant
@@ -169,6 +171,8 @@ payments once the recovery finishes, until its clock catches up or is confirmed:
 A key that opens the backup does not bypass the history and clock checks. If the clock check
 refuses, resolve its cause and try again. If the box then shows a page saying it could not make
 its new invoice series, connect it to the internet and press **Retry a normal boot**.
+
+If the backup has no active administrator with a password, choose another backup.
 
 ## If a recovery is interrupted {#resume}
 

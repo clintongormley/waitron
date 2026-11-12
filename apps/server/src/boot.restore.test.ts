@@ -1,4 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import * as atomic from "./fs-atomic.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { X509Certificate } from "node:crypto";
@@ -541,6 +542,10 @@ describe("startServer, against a migrated venue directory", () => {
       join(stateDir, "flows/restore/record.json"),
       JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "stream" } }),
     );
+    await writeFile(
+      join(stateDir, "flows/restore/admin-verifiers"),
+      JSON.stringify(["saved-hash"]),
+    );
     // A bucket copy set up, and no membership document: a copy that tried to start would read off
     // with the reason `no_membership`, so `first_start_pending` shows it was held first.
     await withTransaction(db, (tx) =>
@@ -557,7 +562,20 @@ describe("startServer, against a migrated venue directory", () => {
         },
       }),
     );
+    let disarmedBeforeServing = false;
     const [server, failed] = await withCapturedStdout(async (lines) => {
+      const originalSync = atomic.syncFolderHolding;
+      vi.spyOn(atomic, "syncFolderHolding").mockImplementation(async (path) => {
+        if (path === join(stateDir, "flows/restore/admin-verifiers")) {
+          expect(lines.some((line) => line.includes('"event":"restore.first_start_failed"'))).toBe(
+            true,
+          );
+          expect(lines.some((line) => line.includes('"event":"server.listening"'))).toBe(false);
+          expect(existsSync(path)).toBe(false);
+          disarmedBeforeServing = true;
+        }
+        await originalSync(path);
+      });
       const started = await startServer({
         ...KEY_ENV,
         WAITRON_STATE_DIR: stateDir,
@@ -572,6 +590,8 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       // Nothing listens on the bucket's port, so reading its pointer fails before any term is signed.
       expect(failed.errorCode).toBe("backup.stream_request_failed");
+      expect(disarmedBeforeServing).toBe(true);
+      expect(existsSync(join(stateDir, "flows/restore/admin-verifiers"))).toBe(false);
       const health = await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via);
       expect(health.status).toBe(200);
       expect(((await health.json()) as { stream: unknown }).stream).toEqual({
@@ -594,6 +614,24 @@ describe("startServer, against a migrated venue directory", () => {
       expect(body.alerts.map((alert) => alert.code)).toContain("restore.first_start_failed");
       expect(body.alerts.map((alert) => alert.code)).not.toContain("backup.stream_stopped");
       expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(true);
+      await server.close();
+      vi.restoreAllMocks();
+      await writeFile(join(stateDir, "flows/restore/record.json"), "{ torn after serving");
+      const restarted = await startServer({
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venue.directory,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+      });
+      try {
+        const node = await fetch(`https://127.0.0.1:${httpPort()}/api/node`, via);
+        expect(node.status).toBe(200);
+        expect(await node.json()).toMatchObject({ acceptingSales: true });
+      } finally {
+        await restarted.close();
+      }
     } finally {
       await server.close();
       await close();

@@ -1,5 +1,9 @@
+import type { Logger } from "./logger.js";
+import { errnoOf } from "./errno.js";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { readFile, rename, rm } from "node:fs/promises";
+import { lstat, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readRestoreFlowPhase, type RestoreFlowPhase } from "@waitron/provisioning";
 import { FLOWS_DIR, RESTORE_FLOW_DIR, SCRATCH_DIR } from "@waitron/store";
@@ -14,7 +18,15 @@ export interface RestoreFlowRecord {
   readonly request?: StagedRequestFields;
   readonly firstStart?: { readonly source: RebuildSource };
 }
-const ATTACHMENTS = ["artifact", "key", "venue.db", "entries", "placement.db", "node-key"] as const;
+const ATTACHMENTS = [
+  "artifact",
+  "key",
+  "venue.db",
+  "entries",
+  "placement.db",
+  "node-key",
+  "admin-verifiers",
+] as const;
 export type RestoreAttachment = (typeof ATTACHMENTS)[number];
 
 const recordPath = (stateDir: string) => join(stateDir, RESTORE_FLOW_DIR, "record.json");
@@ -63,7 +75,11 @@ export async function updateRestoreFlow(
 }
 
 export async function dropAttachments(stateDir: string): Promise<void> {
-  await Promise.all(ATTACHMENTS.map((name) => rm(attachmentPath(stateDir, name), { force: true })));
+  await Promise.all(
+    ATTACHMENTS.filter((name) => name !== "admin-verifiers").map((name) =>
+      rm(attachmentPath(stateDir, name), { force: true }),
+    ),
+  );
 }
 
 export async function endRestoreFlow(stateDir: string): Promise<void> {
@@ -81,13 +97,68 @@ export async function endRestoreFlow(stateDir: string): Promise<void> {
   await rm(discarded, { recursive: true, force: true });
 }
 
+export async function restoreDiscardPending(stateDir: string): Promise<boolean> {
+  try {
+    await lstat(attachmentPath(stateDir, "admin-verifiers"));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw new AppError("restore.flow_unreadable", {});
+  }
+}
+
 export async function firstStartPending(
   stateDir: string,
 ): Promise<{ source: RebuildSource | "unknown" } | null> {
   const phase = await readRestoreFlowPhase(stateDir);
-  if (phase === "unreadable") return { source: "unknown" };
+  if (phase === "unreadable") {
+    if (await restoreDiscardPending(stateDir)) throw new AppError("restore.flow_unreadable", {});
+    return { source: "unknown" };
+  }
   const record = await readRestoreFlow(stateDir);
   if (record?.firstStart === undefined) return null;
   const source = record.firstStart.source;
   return { source: source === "archive" || source === "stream" ? source : "unknown" };
+}
+
+export async function restoreAdminVerifiers(
+  stateDir: string,
+  log?: Logger,
+): Promise<readonly string[] | null> {
+  try {
+    const hashes: unknown = JSON.parse(
+      await readFile(attachmentPath(stateDir, "admin-verifiers"), "utf8"),
+    );
+    if (
+      !Array.isArray(hashes) ||
+      hashes.length === 0 ||
+      hashes.some((hash) => typeof hash !== "string" || hash === "")
+    )
+      return null;
+    return hashes as string[];
+  } catch (error) {
+    const errno = errnoOf(error);
+    if (!(error instanceof SyntaxError) && !["ENOENT", "ENOTDIR", "EISDIR"].includes(errno ?? "")) {
+      try {
+        log?.("warn", "recovery.restore_auth_unreadable", { errno: errno ?? null });
+      } catch {
+        /* Recovery remains visible when its logger fails. */
+      }
+    }
+    return null;
+  }
+}
+
+export async function disarmRestoreDiscard(stateDir: string): Promise<void> {
+  const path = attachmentPath(stateDir, "admin-verifiers");
+  try {
+    await rm(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  try {
+    await syncFolderHolding(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 }

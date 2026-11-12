@@ -158,15 +158,18 @@ export interface FirstStart {
 /**
  * {@link completeRebuild}, for boot. A failure does not keep the box shut: it sells, does not
  * stream (its term may not have moved), and the first-start record stays so the next start tries again. The log
- * carries the error's code only. The exception is `restore.membership_invalid`, which is thrown on,
- * so the start fails, and once starts have failed repeatedly the recovery page shows it.
+ * carries the error's code only.
  */
 export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
   try {
     await completeRebuild(deps);
     return { mayStream: true, failedSince: null };
   } catch (error) {
-    if (isAppError(error) && error.code === "restore.membership_invalid") throw error;
+    if (
+      isAppError(error) &&
+      ["restore.membership_invalid", "restore.flow_unreadable"].includes(error.code)
+    )
+      throw error;
     deps.log("error", "restore.first_start_failed", { errorCode: codeOf(error) });
     return { mayStream: false, failedSince: deps.now().toISOString() };
   }
@@ -179,7 +182,8 @@ export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
 export async function deferFirstStart(stateDir: string, log: Logger): Promise<FirstStart> {
   try {
     if ((await firstStartPending(stateDir)) === null) return { mayStream: true, failedSince: null };
-  } catch {
+  } catch (error) {
+    if (isAppError(error) && error.code === "restore.flow_unreadable") throw error;
     return { mayStream: false, failedSince: null };
   }
   log("warn", "restore.first_start_deferred", {});

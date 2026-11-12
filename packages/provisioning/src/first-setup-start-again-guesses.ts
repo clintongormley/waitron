@@ -18,6 +18,7 @@ const turns = {};
 
 interface Counter {
   version: 1;
+  /** The id never selects or resets the shared password wait. */
   attemptId: string;
   failures: number;
   lastFailureAt: string | null;
@@ -66,7 +67,6 @@ function parseCounter(value: unknown): Counter | null {
 /** What the counter means now: a time ahead of the clock is never trusted past the ceiling. */
 async function readCounter(
   path: string,
-  attemptId: string,
   now: number,
 ): Promise<{
   failures: number;
@@ -91,8 +91,6 @@ async function readCounter(
       waitUntil: null,
       capped: false,
     };
-  if (stored.attemptId.toLowerCase() !== attemptId)
-    return { failures: 0, lastFailureAt: null, waitUntil: null, capped: false };
   const lastFailureAt = stored.lastFailureAt === null ? null : Date.parse(stored.lastFailureAt);
   const waitUntil = stored.waitUntil === null ? null : Date.parse(stored.waitUntil);
   const ceiling = now + START_AGAIN_MAX_WAIT_MS;
@@ -135,7 +133,7 @@ export async function beginStartAgainGuess(
     );
   await inTurn(turns, stateDir, async () => {
     const at = now.getTime();
-    const read = await readCounter(path, attemptId, at);
+    const read = await readCounter(path, at);
     if (read.waitUntil !== null && read.waitUntil > at) {
       // Store the capped times, so the next try's clock reads the wait this refusal named. The try
       // is refused either way, so a failed write still answers with the wait.

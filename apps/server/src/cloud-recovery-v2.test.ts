@@ -1,3 +1,10 @@
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { mkdir } from "node:fs/promises";
+import { hashPassword } from "@waitron/identity";
+import { publishRestoreFlow } from "./restore-flow.js";
+import { recoveryApp } from "./recovery-surface.js";
+import { FRESH } from "./recovery-state.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -708,3 +715,47 @@ describe("target-bound snapshot recovery v2", () => {
     expect((await stat(join(f.stateDir, "cloud/recovery.json"))).size).toBeLessThanOrEqual(65536);
   });
 });
+
+it.each([false, true])(
+  "starts a fresh Cloud recovery after discarding a restore, marked restored=%s",
+  async (marked) => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    const original = await client.start();
+    await client.status();
+    const venueDir = join(f.stateDir, "venue");
+    await mkdir(venueDir);
+    const password = "backup administrator password";
+    await client.restore(async () => {
+      await publishRestoreFlow(f.stateDir, { version: 1, phase: "placing" }, async (dir) => {
+        await writeFile(join(dir, "admin-verifiers"), JSON.stringify([hashPassword(password)]));
+      });
+    }, point.id);
+    if (marked) await client.markRestored({ requestId: original.requestId, pointId: point.id });
+    await writeFile(join(f.stateDir, "flows/restore/record.json"), "broken");
+    const app = recoveryApp({
+      state: { ...FRESH, level: "recovery" },
+      logDir: f.stateDir,
+      onRetry: async () => {},
+      restore: { roots: { stateDir: f.stateDir, venueDir }, onFinished: async () => {} },
+    });
+    const socket = new TLSSocket(new Socket());
+    try {
+      const answer = await app.request(
+        "https://box.test/recovery-api/restore/discard",
+        {
+          method: "POST",
+          headers: { Origin: "https://box.test" },
+          body: new URLSearchParams({ choice: "move", password }),
+        },
+        { incoming: { socket } },
+      );
+      expect(answer.status).toBe(200);
+      const next = await client.start();
+      expect(next.requestId).not.toBe(original.requestId);
+      expect(next.state).toBe("awaiting_owner");
+    } finally {
+      socket.destroy();
+    }
+  },
+);

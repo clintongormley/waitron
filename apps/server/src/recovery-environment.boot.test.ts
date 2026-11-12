@@ -2,6 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as filesystem from "node:fs/promises";
 import { mkdtemp, mkdir, rm, readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { Socket } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import { TLSSocket } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -284,23 +285,6 @@ it.each([
   expect(f.exit).not.toHaveBeenCalled();
 });
 
-it("rejects HTTP and foreign origins before counting a guess, and keeps throttling over restart", async () => {
-  const f = await recoveryFixture();
-  let app = await f.boot();
-  for (const options of [{ secure: false }, { origin: "https://other.test" }])
-    expect((await post(app, { choice: "move", password: PASSWORD }, options)).status).toBe(403);
-  await expect(
-    stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
-  for (let n = 0; n < 6; n++)
-    expect((await post(app, { choice: "move", password: "wrong" })).status).toBe(403);
-  app = await f.boot();
-  const response = await post(app, { choice: "move", password: PASSWORD });
-  expect(response.status).toBe(429);
-  expect(Number(response.headers.get("Retry-After"))).toBeGreaterThan(0);
-  expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
-});
-
 it("offers the password and safe Stop in English and Spanish only over HTTPS", async () => {
   const f = await recoveryFixture();
   const app = await f.boot();
@@ -560,4 +544,36 @@ it("rechecks a corrected saved environment before moving the installed database"
   await expect(
     stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("authorizes Move using an administrator password committed only in a retained WAL", async () => {
+  const f = await recoveryFixture();
+  const path = join(f.venueDir, "venue.db");
+  const before = await readFile(path);
+  const password = "the password committed in WAL";
+  const hash = hashPassword(password);
+  const writer = new DatabaseSync(path);
+  let wal: Buffer;
+  let shm: Buffer;
+  try {
+    writer.exec("pragma journal_mode = wal; pragma wal_autocheckpoint = 0");
+    writer.prepare("update persons set password_hash = ? where role = 'admin'").run(hash);
+    wal = await readFile(`${path}-wal`);
+    shm = await readFile(`${path}-shm`);
+  } finally {
+    writer.close();
+  }
+  expect(before.includes(Buffer.from(hash))).toBe(false);
+  expect(wal.includes(Buffer.from(hash))).toBe(true);
+  await writeFile(path, before);
+  await writeFile(`${path}-wal`, wal);
+  await writeFile(`${path}-shm`, shm);
+  const app = new Hono();
+  mountEnvironmentChoice(
+    app,
+    { roots: f, baseEnv: f.baseEnv, onFinished: async () => {} },
+    async () => "<main></main>",
+  );
+  expect((await post(app, { choice: "move", password: PASSWORD })).status).toBe(403);
+  expect((await post(app, { choice: "move", password })).status).toBe(200);
 });

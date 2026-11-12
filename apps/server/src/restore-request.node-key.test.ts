@@ -69,11 +69,14 @@ it.each(["marker", "directory"])(
       return handle;
     });
     syncBuiltinESMExports();
-    const restore = vi.fn(async () => {});
-    await expect(runStagedRestore(deps(stateDir), restore)).rejects.toThrow(
-      "injected placement sync failure",
-    );
-    expect(restore).not.toHaveBeenCalled();
+    let moved = false;
+    await expect(
+      runStagedRestore(deps(stateDir), async (args) => {
+        await args.beforeDatabaseMove?.();
+        moved = true;
+      }),
+    ).rejects.toThrow("injected placement sync failure");
+    expect(moved).toBe(false);
   },
 );
 
@@ -150,8 +153,8 @@ it.each(["success", "refusal"])(
   async (outcome) => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, archive());
-    const restore = async (args: { onDatabasePlaced?: () => void }) => {
-      args.onDatabasePlaced?.();
+    const restore = async (args: { beforeDatabaseMove?: () => Promise<void> }) => {
+      await args.beforeDatabaseMove?.();
       if (outcome === "refusal") throw new AppError("promotion.break_glass_invalid", {});
     };
     const context = deps(stateDir);
@@ -172,72 +175,53 @@ it.each(["success", "refusal"])(
   },
 );
 
-it.each(["", " and the clean-up then fails too"])(
-  "a started request whose placement changed nothing gets its marker back%s",
-  async (cleanUp) => {
-    const stateDir = await fresh();
-    await stageRestoreRequest(stateDir, archive());
-    const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
-    const writeFailure = Object.assign(new Error("injected secrets write failure"), {
-      code: "ENOSPC",
-    });
-    const cleanUpFailure = Object.assign(new Error("injected clean-up failure"), { code: "EIO" });
-    const failure = cleanUp === "" ? writeFailure : cleanUpFailure;
-    let originalOpenMocked = false;
-    const originalOpen = nativeFs.open;
-    vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
-      if (String(args[0]) === join(stateDir, "secrets.env.incoming.tmp")) {
-        originalOpenMocked = true;
-        throw writeFailure;
-      }
-      return originalOpen(...args);
-    });
-    const originalRm = nativeFs.rm;
-    vi.spyOn(nativeFs, "rm").mockImplementation(async (...args) => {
-      if (
-        cleanUp !== "" &&
-        originalOpenMocked &&
-        String(args[0]) === join(stateDir, "flows/restore/record.json.tmp")
-      ) {
-        originalOpenMocked = false;
-        throw cleanUpFailure;
-      }
-      return originalRm(...args);
-    });
-    syncBuiltinESMExports();
-    const restore = async (args: Parameters<typeof writeValidated>[1]) => {
-      // The real placement, from a copy already validated: the fake archive above cannot be opened.
-      const databasePath = join(stateDir, "validated.db");
-      await writeFile(databasePath, "database", { mode: 0o600 });
-      await writeValidated(
-        {
-          manifest: {
-            manifestVersion: 1,
-            createdAt: "2026-11-07T00:00:00.000Z",
-            environment: "preproduction",
-            modules: {},
-          },
-          databasePath,
-          nodeDump: Buffer.from("node"),
-          discard: async () => {},
-          secretEntries: [
-            { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_VAULT_MASTER_KEY=1\n") },
-            {
-              name: "secrets/trading.env",
-              bytes: Buffer.from(`WAITRON_NODE_ID=${operation.binding.targetNodeId}\n`),
-            },
-          ],
+it("retains an unmarked request when secrets staging fails before any database move", async () => {
+  const stateDir = await fresh();
+  await stageRestoreRequest(stateDir, archive());
+  const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
+  const writeFailure = Object.assign(new Error("injected secrets write failure"), {
+    code: "ENOSPC",
+  });
+  const originalOpen = nativeFs.open;
+  vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
+    if (String(args[0]) === join(stateDir, "secrets.env.incoming.tmp")) {
+      throw writeFailure;
+    }
+    return originalOpen(...args);
+  });
+  syncBuiltinESMExports();
+  const restore = async (args: Parameters<typeof writeValidated>[1]) => {
+    // The real placement, from a copy already validated: the fake archive above cannot be opened.
+    const databasePath = join(stateDir, "validated.db");
+    await writeFile(databasePath, "database", { mode: 0o600 });
+    await writeValidated(
+      {
+        manifest: {
+          manifestVersion: 1,
+          createdAt: "2026-11-07T00:00:00.000Z",
+          environment: "preproduction",
+          modules: {},
         },
-        { ...args, modules: ALL_MODULES, withModuleOperations: undefined },
-      );
-    };
-    await expect(runStagedRestore(deps(stateDir), restore)).rejects.toBe(failure);
-    expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
-    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
-  },
-);
+        databasePath,
+        nodeDump: Buffer.from("node"),
+        discard: async () => {},
+        secretEntries: [
+          { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_VAULT_MASTER_KEY=1\n") },
+          {
+            name: "secrets/trading.env",
+            bytes: Buffer.from(`WAITRON_NODE_ID=${operation.binding.targetNodeId}\n`),
+          },
+        ],
+      },
+      { ...args, modules: ALL_MODULES, withModuleOperations: undefined },
+    );
+  };
+  await expect(runStagedRestore(deps(stateDir), restore)).rejects.toBe(writeFailure);
+  expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+});
 
-it("writes a started request's marker back durably: the file synced before it is renamed into place, then its folder", async () => {
+it("durably marks placement before moving a database", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
   const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
@@ -260,11 +244,15 @@ it("writes a started request's marker back durably: the file synced before it is
   });
   syncBuiltinESMExports();
   await expect(
-    runStagedRestore(deps(stateDir), async () => {
+    runStagedRestore(deps(stateDir), async (args) => {
+      await args.beforeDatabaseMove?.();
       throw new Error("injected failure before placement");
     }),
   ).rejects.toThrow("injected failure before placement");
-  expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
+  expect(JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8"))).toEqual({
+    ...JSON.parse(before),
+    phase: "placing",
+  });
   const writeBack = events.lastIndexOf("flows/restore/record.json.tmp → flows/restore/record.json");
   expect(events.slice(writeBack - 1)).toEqual([
     "sync flows/restore/record.json.tmp",
@@ -295,11 +283,11 @@ it("a lock refusal leaves the next attempt as a fresh placement", async () => {
       throw new AppError("provisioning.database_in_use", { database: "venue" });
     }),
   ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
-  let resumed: unknown = "not called";
-  await runStagedRestore(deps(stateDir), async (args) => {
-    resumed = args.resumeOperation;
+  await runStagedRestore(deps(stateDir), async () => {
+    expect(
+      JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).phase,
+    ).toBe("staged");
   });
-  expect(resumed).toBeUndefined();
 });
 
 it("restaging without a node credential removes the old credential", async () => {
@@ -344,14 +332,14 @@ it.each(["missing", "empty", "oversized"])(
       params: { variable: "WAITRON_NODE_RECOVERY_KEY", reason: "invalid_credential" },
     });
     expect(restore).not.toHaveBeenCalled();
-    await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(
+      JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")),
+    ).toHaveProperty("request");
   },
 );
 
 it.each(["marker-json", "marker-shape", "operation", "archive-key", "stream-entries"])(
-  "clears the private key when %s cannot be read at restart",
+  "retains the request and private key when %s cannot be read at restart",
   async (part) => {
     const stateDir = await fresh();
     if (part === "stream-entries") {
@@ -388,18 +376,22 @@ it.each(["marker-json", "marker-shape", "operation", "archive-key", "stream-entr
     }
     const restore = vi.fn(async () => {});
     if (part === "marker-json") {
-      await expect(runStagedRestore(deps(stateDir), restore, restore)).resolves.toBe(false);
-      expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
+      await expect(runStagedRestore(deps(stateDir), restore, restore)).rejects.toMatchObject({
+        code: "restore.flow_unreadable",
+      });
+      await expect(firstStartPending(stateDir)).rejects.toMatchObject({
+        code: "restore.flow_unreadable",
+      });
       expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
       expect(restore).not.toHaveBeenCalled();
       return;
     }
     await expect(runStagedRestore(deps(stateDir), restore, restore)).rejects.toThrow();
     expect(restore).not.toHaveBeenCalled();
-    await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+    expect(
+      JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")),
+    ).toHaveProperty("request");
   },
 );
 
@@ -440,7 +432,7 @@ it("refuses changed archive bytes before invoking the restarted restore", async 
     params: { variable: "WAITRON_RECOVERY_OPERATION_FILE", reason: "source_mismatch" },
   });
   expect(restore).not.toHaveBeenCalled();
-  await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
 });
 
 it.each(["staging", "restart-db", "restart-entries"])(
@@ -490,18 +482,22 @@ it.each(["staging", "restart-db", "restart-entries"])(
       params: { reason: "source_mismatch" },
     });
     expect(restore).not.toHaveBeenCalled();
-    await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
   },
 );
 
-it("an unreadable restart record retains the key until its unknown first start ends", async () => {
+it("an unreadable restart record refuses start and retains the key for discard", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
   await rm(join(stateDir, "flows/restore/record.json"));
   await mkdir(join(stateDir, "flows/restore/record.json"));
   const restore = vi.fn(async () => {});
-  await expect(runStagedRestore(deps(stateDir), restore)).resolves.toBe(false);
-  expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
+  await expect(runStagedRestore(deps(stateDir), restore)).rejects.toMatchObject({
+    code: "restore.flow_unreadable",
+  });
+  await expect(firstStartPending(stateDir)).rejects.toMatchObject({
+    code: "restore.flow_unreadable",
+  });
   expect(restore).not.toHaveBeenCalled();
   expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
 });

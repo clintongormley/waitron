@@ -1,7 +1,10 @@
+import nativeFs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import * as flow from "./restore-flow.js";
 import * as atomic from "./fs-atomic.js";
 import {
   attachmentPath,
@@ -30,6 +33,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.restoreAllMocks();
+  syncBuiltinESMExports();
   await rm(stateDir, { recursive: true, force: true });
 });
 
@@ -150,9 +154,85 @@ it("reports the first start independently of a waiting request", async () => {
   expect(await firstStartPending(stateDir)).toEqual({ source: "archive" });
 });
 
-it("treats an unreadable flow as an unknown pending first start", async () => {
+it("refuses to treat an unreadable flow as a completed restore", async () => {
   expect(await firstStartPending(stateDir)).toBeNull();
-  await publishRestoreFlow(stateDir, firstStart, async () => {});
+  await publishRestoreFlow(stateDir, firstStart, async (dir) => {
+    await writeFile(join(dir, "admin-verifiers"), "[]");
+  });
   await writeFile(join(stateDir, "flows", "restore", "record.json"), "{ torn");
+  await expect(firstStartPending(stateDir)).rejects.toMatchObject({
+    code: "restore.flow_unreadable",
+  });
+});
+
+it("retains private discard authority through an unreadable record and drops it durably before serving", async () => {
+  const hashes = ["saved-password-hash"];
+  await publishRestoreFlow(stateDir, staged, async (folder) => {
+    await atomic.writeFileDurable(join(folder, "admin-verifiers"), JSON.stringify(hashes), 0o600);
+  });
+  expect((await stat(join(stateDir, "flows/restore/admin-verifiers"))).mode & 0o777).toBe(0o600);
+  await writeFile(join(stateDir, "flows/restore/record.json"), "broken");
+  expect(await flow.restoreAdminVerifiers(stateDir)).toEqual(hashes);
+  await dropAttachments(stateDir);
+  expect(await flow.restoreAdminVerifiers(stateDir)).toEqual(hashes);
+  const synced: string[] = [];
+  const original = atomic.syncFolderHolding;
+  vi.spyOn(atomic, "syncFolderHolding").mockImplementation(async (path) => {
+    synced.push(path);
+    expect(await flow.restoreAdminVerifiers(stateDir)).toBeNull();
+    await original(path);
+  });
+  await flow.disarmRestoreDiscard(stateDir);
+  expect(synced).toContain(join(stateDir, "flows/restore/admin-verifiers"));
+  expect(await flow.restoreAdminVerifiers(stateDir)).toBeNull();
+});
+
+it("flushes a prior discard-authority deletion again after its first folder flush failed", async () => {
+  await publishRestoreFlow(stateDir, firstStart, async (folder) => {
+    await atomic.writeFileDurable(
+      join(folder, "admin-verifiers"),
+      JSON.stringify(["saved-hash"]),
+      0o600,
+    );
+  });
+  const original = atomic.syncFolderHolding;
+  const failure = Object.assign(new Error("folder flush failed"), { code: "EIO" });
+  let fail = true;
+  let attempts = 0;
+  vi.spyOn(atomic, "syncFolderHolding").mockImplementation(async (path) => {
+    if (path === join(stateDir, "flows/restore/admin-verifiers")) {
+      attempts++;
+      if (fail) throw failure;
+    }
+    await original(path);
+  });
+  await expect(flow.disarmRestoreDiscard(stateDir)).rejects.toBe(failure);
+  expect(await flow.restoreAdminVerifiers(stateDir)).toBeNull();
+  fail = false;
+  await flow.disarmRestoreDiscard(stateDir);
+  expect(attempts).toBe(2);
+});
+
+it("logs an unexpected authentication read failure while withholding discard authority", async () => {
+  const failure = Object.assign(new Error("authentication read failed"), { code: "EIO" });
+  vi.spyOn(nativeFs, "readFile").mockRejectedValueOnce(failure);
+  syncBuiltinESMExports();
+  const lines: unknown[] = [];
+  expect(
+    await flow.restoreAdminVerifiers(stateDir, (level, event, fields) => {
+      lines.push({ level, event, fields });
+    }),
+  ).toBeNull();
+  expect(lines).toEqual([
+    { level: "warn", event: "recovery.restore_auth_unreadable", fields: { errno: "EIO" } },
+  ]);
+});
+
+it("keeps first start pending after a served box's restore record becomes unreadable", async () => {
+  await publishRestoreFlow(stateDir, firstStart, async (dir) => {
+    await writeFile(join(dir, "admin-verifiers"), "[]");
+  });
+  await flow.disarmRestoreDiscard(stateDir);
+  await writeFile(join(stateDir, "flows/restore/record.json"), "{ torn");
   expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
 });

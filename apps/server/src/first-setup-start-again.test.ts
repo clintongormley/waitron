@@ -1790,7 +1790,7 @@ it("lifetime: a start that finishes an interrupted deletion leaves the choice re
 it.each([
   ["placed", async () => {}, true],
   [
-    "discarded",
+    "refused",
     async () => {
       throw new Error("refused placement");
     },
@@ -1820,9 +1820,9 @@ it.each([
         JSON.parse(await readFile(join(folders.stateDir, "flows/restore/record.json"), "utf8")),
       ).not.toHaveProperty("request");
     else
-      await expect(
-        access(join(folders.stateDir, "flows/restore/record.json")),
-      ).rejects.toMatchObject({ code: "ENOENT" });
+      expect(
+        JSON.parse(await readFile(join(folders.stateDir, "flows/restore/record.json"), "utf8")),
+      ).toMatchObject({ phase: "staged", request: { environment: "production" } });
     expect(await kept.bytes()).toEqual(kept.before);
   },
 );
