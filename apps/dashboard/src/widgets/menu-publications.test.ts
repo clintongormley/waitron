@@ -422,7 +422,6 @@ describe("a menu's scheduled versions", () => {
     await flush(el);
     await flush(el);
     expect(table(el)).toBeNull();
-    expect(table(el)).toBeNull();
   });
 
   it("does not show the list read after a cancel once it follows another menu", async () => {

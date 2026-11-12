@@ -140,10 +140,10 @@ it.each(["now", "later"] as const)("A547 shows Publish %s on its own", async (ac
   });
   const publications = q(el, "dashboard-menu-publications")!;
   await expect.poll(() => publications.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
-  expect(q(el, '[data-test="publish"]') !== null).toBe(action === "now");
-  expect(publications.shadowRoot!.querySelector('[data-test="schedule-open"]') !== null).toBe(
-    action === "later",
-  );
+  const now = q(el, '[data-test="publish"]');
+  expect((now?.getBoundingClientRect().width ?? 0) > 0).toBe(action === "now");
+  const later = publications.shadowRoot!.querySelector('[data-test="schedule-open"]');
+  expect((later?.getBoundingClientRect().width ?? 0) > 0).toBe(action === "later");
 });
 
 function text(node: Element | null): string {
