@@ -459,6 +459,24 @@ describe("POST /api/invoice-corrections/:id/cash", () => {
     expect(counts()).toEqual(after);
   });
 
+  it("answers a repeat of the last cash leg after every cash payment has been given back", async () => {
+    const saleId = await sold(["10.00"]);
+    const split = (await preview(saleId, { gross: "10.00" })).json.vatBreakdown;
+    const answer = await open(saleId, body({ gross: "10.00", expectedSplit: split }));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const id = (answer.json as { correction: { id: string } }).correction.id;
+    const ask = cashBody({ amount: "10.00" });
+    const first = await giveCash(id, ask);
+    expect(first).toMatchObject({ status: 200, json: { correction: { state: "filed" } } });
+    const after = counts();
+
+    expect(await giveCash(id, ask)).toEqual({
+      status: 200,
+      json: { ...first.json, replayed: true },
+    });
+    expect(counts()).toEqual(after);
+  });
+
   it("refuses a till whose profile cannot take cash, writing nothing, and gives cash once it can", async () => {
     const id = await opened(await sold(["10.00"]));
     const [till] = await venue.db

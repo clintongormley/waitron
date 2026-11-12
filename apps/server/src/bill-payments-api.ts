@@ -4,7 +4,7 @@ import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
-import { invalid } from "./bill-allocation.js";
+import { invalid, MONEY } from "./bill-allocation.js";
 import {
   getBillBalance,
   previewBillPayment,
@@ -30,8 +30,6 @@ import { requestCfg } from "./request-config.js";
 import { assertRequestDevice, isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
 import { gateZones } from "./zone-access.js";
-
-const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
 
 function moneyField(value: unknown, field: string): string {
   if (typeof value !== "string" || !MONEY.test(value)) throw invalid(field);

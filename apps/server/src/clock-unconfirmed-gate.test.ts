@@ -557,7 +557,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     const body = { submissionId: randomUUID(), amount: "5.00", override: OVERRIDE() };
     return {
       send: (app) => as(app, "POST", `/api/invoice-corrections/${correctionId}/cash`, body),
-      grows: ["tenderRefunds", "sales"],
+      grows: ["tenderRefunds", "drawerJobs", "sales", "records"],
     };
   },
   "a pending connected card tender refund sent again": async () => {

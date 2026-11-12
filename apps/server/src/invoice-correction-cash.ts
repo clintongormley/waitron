@@ -16,7 +16,7 @@ import {
   isUuid,
   type Decimal,
 } from "@waitron/shared";
-import { invalid } from "./bill-allocation.js";
+import { invalid, MONEY } from "./bill-allocation.js";
 import { readCorrectionMoney } from "./invoice-correction-legs.js";
 import {
   fileCorrectionIn,
@@ -33,8 +33,6 @@ import type { TenderRefundView } from "./tender-refund-types.js";
 import { canonicaliseUuid } from "./till-session.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import "./errors.js";
-
-const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
 
 /** The request's submission id, canonical, and its amount; refused by field when malformed or zero. */
 export function parseCorrectionCash(request: { submissionId: unknown; amount: unknown }): {

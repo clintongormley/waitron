@@ -28,7 +28,7 @@ import {
   type Decimal,
   type SaleId,
 } from "@waitron/shared";
-import { invalid } from "./bill-allocation.js";
+import { invalid, MONEY } from "./bill-allocation.js";
 import {
   readCorrectionLegs,
   readCorrectionMoney,
@@ -81,7 +81,6 @@ export interface InvoiceCorrectionView {
 
 export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
 
-const MONEY = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/;
 const ZERO = decimal("0.00");
 
 /**
