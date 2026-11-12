@@ -338,9 +338,10 @@ declare module "@waitron/shared" {
     "node.enrol_unavailable": Record<string, never>;
     /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error code (`EADDRINUSE`,
-     * `EACCES`) — never the `Error` itself, whose `.message` can embed the bind address.
+     * `EACCES`) — never the `Error` itself, whose `.message` can embed the bind address. `listener`
+     * names any listener but the main one.
      */
-    "server.listen_failed": { port: number; code: string };
+    "server.listen_failed": { port: number; code: string; listener?: string };
     /**
      * `StartedServer.close()` rejected during a signal-initiated shutdown. `errorCode` is `codeOf`'s
      * structured classification, never the caught value's `.message`.
@@ -1376,6 +1377,9 @@ declare module "@waitron/shared" {
     /** Start the copy again was asked while the copy is refused because another box was found
      * writing this venue's copy to the same bucket (`pointer_changed`, `pointer_newer_term`). */
     "backup.stream_held_by_another_box": Record<string, never>;
+    /** Saving bucket settings was asked while this box holds a pair link: the venue copies to its
+     * standby. */
+    "backup.spare_stream_active": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
      * artifact), or a recovery pack's bucket or archives page is drawn

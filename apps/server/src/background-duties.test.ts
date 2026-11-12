@@ -34,6 +34,7 @@ const CLOSERS = [
   "backupSupervisor",
   "handoverDestinationDuty",
   "chartPost",
+  "spareStore",
   "jobRunnerServices",
 ];
 
@@ -84,6 +85,7 @@ function recordingHandles(
     backupSupervisor: stopper("backupSupervisor"),
     handoverDestinationDuty: stopper("handoverDestinationDuty"),
     chartPost: stopper("chartPost"),
+    spareStore: stopper("spareStore"),
     ...overrides,
   };
 }
@@ -116,6 +118,7 @@ describe("background duties", () => {
       "stop backupSupervisor",
       "stop handoverDestinationDuty",
       "stop chartPost",
+      "stop spareStore",
       "stop jobRunnerServices",
     ]);
   });
@@ -127,13 +130,30 @@ describe("background duties", () => {
       attendanceLoop: undefined,
       certificateDiagnosis: undefined,
       handoverDestinationDuty: undefined,
+      spareStore: undefined,
     });
     await stopBackgroundDuties(backgroundDuties(handles));
     expect(calls).not.toContain("abort certificateReminderController");
     expect(calls).not.toContain("await attendanceLoop");
     expect(calls).not.toContain("stop certificateDiagnosis");
     expect(calls).not.toContain("stop handoverDestinationDuty");
+    expect(calls).not.toContain("stop spareStore");
     expect(calls.at(-1)).toBe("stop jobRunnerServices");
+  });
+
+  it("stops a spare's store, which carries a reason, after the chart post and before the runner's services", async () => {
+    const calls: string[] = [];
+    const duties = backgroundDuties(recordingHandles(calls));
+    const closer = duties.closers.find((c) => c.name === "spareStore");
+    expect(closer?.atStepdown).toBeUndefined();
+    expect(closer?.reason).not.toBe("");
+    expect(closer?.reason).toBeDefined();
+    await stopBackgroundDuties(duties);
+    expect(calls.slice(-3)).toEqual([
+      "stop chartPost",
+      "stop spareStore",
+      "stop jobRunnerServices",
+    ]);
   });
 
   it("carries on past a failing closer and rejects with the first failure", async () => {

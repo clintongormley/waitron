@@ -3734,7 +3734,8 @@ listed 289 files without the two flags and 287 with them, and the config-exclude
 and run the same way (2026-09-30), and so are the Amazon S3 rehearsal's scenarios run against
 versitygw, `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (2026-10-14), and the
 rehearsal's send gate and interrupt suites, `apps/server/src/aws-send-gate.e2e.test.ts` and
-`apps/server/src/aws-rehearsal-interrupt.e2e.test.ts`. So do the full-disk start tests,
+`apps/server/src/aws-rehearsal-interrupt.e2e.test.ts`, and the spare's store suite,
+`apps/server/src/spare-store.test.ts`. So do the full-disk start tests,
 `apps/server/src/start-full-disk.e2e.test.ts`, `apps/server/src/start-again-full-disk.e2e.test.ts`
 and `apps/server/src/start-from-spare.e2e.test.ts`, the backup-room file,
 `apps/server/src/backup-room.e2e.test.ts`, and the handover files,

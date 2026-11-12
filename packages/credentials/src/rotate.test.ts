@@ -5,14 +5,13 @@ import {
   withNodeTransaction,
   withTransaction,
   type Database,
-  type NodeDatabase,
   tenantCredentials,
 } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import { hasCode } from "@waitron/shared";
+import { hasCode, type AppError } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
-import { readPairSecret, writePairLinkTx, type NewPairLink } from "./node-pair-link.js";
+import { writePairLinkTx, type NewPairLink } from "./node-pair-link.js";
 import { readNodeSigningKey, sealNodeSigningKeyTx } from "./node-signing-key.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
 import { captured } from "./testing/captured.js";
@@ -46,7 +45,7 @@ const suite = useVenueDb({
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const SIGNING_KEY = "MC4CAQAwBQYDK2VwBCIEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-const PAIR_SECRET = "0f".repeat(32);
+const OTHER_NODE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PAIR_LINK: NewPairLink = {
   role: "streams",
   state: "pending",
@@ -55,12 +54,14 @@ const PAIR_LINK: NewPairLink = {
   storeUrl: "https://spare.example:7443",
   venueId: "venue-a",
   accessKeyId: "waitron0123456789abcdef",
-  secretAccessKey: PAIR_SECRET,
+  secretAccessKey: "0f".repeat(32),
 };
 
 /** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
 beforeEach(async () => {
   await suite.db.execute(sql`delete from tenant_credentials`);
+  suite.node.run(sql`delete from node_signing_key`);
+  suite.node.run(sql`delete from node_pair_link`);
 });
 
 describe("rotateCredentials", () => {
@@ -69,7 +70,7 @@ describe("rotateCredentials", () => {
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
 
-    const result = await rotateCredentials(suite.db, RING_BOTH);
+    const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(0);
 
@@ -91,9 +92,9 @@ describe("rotateCredentials", () => {
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
     );
-    const first = await rotateCredentials(suite.db, RING_BOTH);
+    const first = await rotateCredentials(suite.db, RING_BOTH, suite.node);
     expect(first.rotated).toBe(1);
-    const second = await rotateCredentials(suite.db, RING_BOTH);
+    const second = await rotateCredentials(suite.db, RING_BOTH, suite.node);
     expect(second.rotated).toBe(0);
     expect(second.alreadyCurrent).toBe(1);
   });
@@ -113,7 +114,7 @@ describe("rotateCredentials", () => {
       }),
     );
 
-    const result = await rotateCredentials(suite.db, RING_BOTH);
+    const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(1);
 
@@ -126,7 +127,7 @@ describe("rotateCredentials", () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
-    const error = await captured(() => rotateCredentials(suite.db, RING_V2_ONLY));
+    const error = await captured(() => rotateCredentials(suite.db, RING_V2_ONLY, suite.node));
     expect(hasCode(error, "credentials.key_version_unknown")).toBe(true);
   });
 
@@ -147,7 +148,7 @@ describe("rotateCredentials", () => {
       }),
     );
 
-    const error = await captured(() => rotateCredentials(suite.db, RING_BOTH));
+    const error = await captured(() => rotateCredentials(suite.db, RING_BOTH, suite.node));
     expect(hasCode(error, "credentials.decrypt_failed")).toBe(true);
 
     // No phantom success, no partial write: the row is exactly as it was sealed.
@@ -173,7 +174,7 @@ describe("rotateCredentials", () => {
       }),
     );
 
-    const result = await rotateCredentials(suite.db, RING_BOTH);
+    const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
     expect(result.rotated).toBe(1);
 
     const rows = await suite.db.execute<{ purpose: string; key_version: number }>(sql`
@@ -208,7 +209,7 @@ describe("rotateCredentials", () => {
       },
     });
 
-    const result = await rotateCredentials(deletingDb, RING_BOTH);
+    const result = await rotateCredentials(deletingDb, RING_BOTH, suite.node);
     expect(transactions).toBe(2);
     expect(result).toEqual({ rotated: 0, alreadyCurrent: 0 });
   });
@@ -229,73 +230,22 @@ describe("rotateCredentials", () => {
     expect(again).toEqual({ rotated: 0, alreadyCurrent: 1 });
   });
 
-  it("leaves the signing key alone when no node handle is given", async () => {
-    await withNodeTransaction(suite.node, (tx) =>
-      sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY),
+  it("refuses while node.db holds a pair link, and re-seals nothing", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
-    expect(await rotateCredentials(suite.db, RING_BOTH)).toEqual({ rotated: 0, alreadyCurrent: 0 });
-    expect(suite.node.all(sql`select key_version from node_signing_key`)).toEqual([
-      { key_version: 1 },
-    ]);
-  });
-
-  it("rotation re-seals the pair link's secret, and it opens once the previous key is dropped", async () => {
-    await withNodeTransaction(suite.node, (tx) => writePairLinkTx(tx, RING_V1, NODE, PAIR_LINK));
-    suite.node.run(sql`update node_pair_link set created_at = '2000-01-01T00:00:00.000Z'`);
-
-    const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
-    expect(result).toEqual({ rotated: 1, alreadyCurrent: 0 });
-    // The ring version records what the spare was handed, which a rotation here does not change.
-    expect(
-      suite.node.all(sql`select key_version, ring_version, created_at from node_pair_link`),
-    ).toEqual([{ key_version: 2, ring_version: 1, created_at: "2000-01-01T00:00:00.000Z" }]);
-    expect(await readPairSecret(suite.node, RING_V2_ONLY, NODE)).toBe(PAIR_SECRET);
-
-    const again = await rotateCredentials(suite.db, RING_BOTH, suite.node);
-    expect(again).toEqual({ rotated: 0, alreadyCurrent: 1 });
-  });
-
-  it("does not count a pair link deleted between the listing and its re-seal", async () => {
-    await withNodeTransaction(suite.node, (tx) => writePairLinkTx(tx, RING_V1, NODE, PAIR_LINK));
-    const node = suite.node;
-    const deletingNode = new Proxy(node, {
-      get(target, property, receiver) {
-        if (property !== "withWriteLock") return Reflect.get(target, property, receiver) as unknown;
-        const withWriteLock: NodeDatabase["withWriteLock"] = async (body) => {
-          target.run(sql`delete from node_pair_link`);
-          return target.withWriteLock(body);
-        };
-        return withWriteLock;
-      },
+    await withNodeTransaction(suite.node, async (tx) => {
+      await sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY);
+      await writePairLinkTx(tx, RING_V1, OTHER_NODE, PAIR_LINK);
     });
 
-    expect(await rotateCredentials(suite.db, RING_BOTH, deletingNode)).toEqual({
-      rotated: 0,
-      alreadyCurrent: 0,
-    });
-  });
-
-  it("does not count a signing key deleted between the listing and its re-seal", async () => {
-    await withNodeTransaction(suite.node, (tx) =>
-      sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY),
-    );
-    const node = suite.node;
-    // The listing takes no write lock, so the first `withWriteLock` is the row's re-seal; the
-    // delete commits on `target` before that lock is taken.
-    const deletingNode = new Proxy(node, {
-      get(target, property, receiver) {
-        if (property !== "withWriteLock") return Reflect.get(target, property, receiver) as unknown;
-        const withWriteLock: NodeDatabase["withWriteLock"] = async (body) => {
-          target.run(sql`delete from node_signing_key`);
-          return target.withWriteLock(body);
-        };
-        return withWriteLock;
-      },
-    });
-
-    expect(await rotateCredentials(suite.db, RING_BOTH, deletingNode)).toEqual({
-      rotated: 0,
-      alreadyCurrent: 0,
-    });
+    const error = await captured(() => rotateCredentials(suite.db, RING_BOTH, suite.node));
+    expect(hasCode(error, "credentials.rotation_spare_joined")).toBe(true);
+    expect((error as AppError).params).toEqual({ role: "streams" });
+    expect([
+      ...suite.db.all(sql`select key_version from tenant_credentials`),
+      ...suite.node.all(sql`select key_version from node_signing_key`),
+      ...suite.node.all(sql`select key_version from node_pair_link`),
+    ]).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
   });
 });

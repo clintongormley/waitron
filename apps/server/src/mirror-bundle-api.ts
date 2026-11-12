@@ -185,6 +185,9 @@ export function mountMirrorBundleApi(
           // One pair link per box: a second spare would replace a joined one's.
           if ((await readPairLink(tx, deps.designated.nodeId))?.state === "streaming")
             throw new AppError("mirror.spare_already_joined", {});
+          // Again, under node.db's lock: bucket Save checks for a link and stores its settings
+          // under the same lock (`stream-api.ts`), so one of the two sees the other.
+          await refuseWhileBucketStream(deps);
           const assembled = await assembleMirrorBundle({
             appDb: deps.appDb,
             node: deps.node,
@@ -292,18 +295,22 @@ async function refuseBeforeReserving(
       standbyAt: new Date(standbyAt).toISOString(),
     });
   }
-  if (
-    (await withTransaction(deps.appDb, (tx) =>
-      credentialRevision(tx, { purpose: STREAM_PURPOSE }),
-    )) !== null
-  )
-    throw new AppError("mirror.bucket_stream_active", {});
+  await refuseWhileBucketStream(deps);
   if (
     sameBoxName(deps.designated.nodeId, standbyNodeId) ||
     held?.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))
   )
     throw new AppError("mirror.standby_name_taken", {});
   if (held !== null) refuseUnverifiableChart(held.body.nodes, held.body.revoked ?? []);
+}
+
+async function refuseWhileBucketStream(deps: MirrorBundleApiDeps): Promise<void> {
+  if (
+    (await withTransaction(deps.appDb, (tx) =>
+      credentialRevision(tx, { purpose: STREAM_PURPOSE }),
+    )) !== null
+  )
+    throw new AppError("mirror.bucket_stream_active", {});
 }
 
 /** The designated main box's own stored keys, which it trusts the held chart against. */

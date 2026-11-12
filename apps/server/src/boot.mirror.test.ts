@@ -16,11 +16,13 @@ import {
   openVenueDatabase,
   stampDeployment,
   tenants,
+  withNodeTransaction,
   withTransaction,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
+import { deletePairLinkTx, loadKeyRing, writePairLinkTx } from "@waitron/credentials";
 import {
   persons,
   managementSessions,
@@ -41,7 +43,9 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
-import { peerCertificate } from "./testing/box-tls.js";
+import { peerCertificate, writeTlsSet } from "./testing/box-tls.js";
+import { connect as connectTcp } from "node:net";
+import { boxHostnameFor } from "./box-name.js";
 import { get } from "node:https";
 
 vi.mock("@hono/node-server", async () => {
@@ -100,6 +104,106 @@ const BOX_CA_PEM = mintSelfSignedServerCert({
 }).caCertPem;
 
 let migrationsRoot: string;
+
+const PAIR_SECRET = "c".repeat(64);
+/** A spare's `tls/` set: its store's listener serves this leaf under this authority. */
+const BOX_TLS = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: ["127.0.0.1"],
+  now: new Date(),
+});
+const PAIR_ACCESS_KEY_ID = "waitron0123456789abcdef";
+
+/**
+ * A stand-in versitygw: records its arguments, its environment and its process id beside itself,
+ * then waits to be stopped.
+ */
+async function fakeVersitygw(): Promise<{ bin: string; dir: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "waitron-fake-versitygw-"));
+  const bin = join(dir, "versitygw");
+  writeFileSync(
+    bin,
+    [
+      "#!/bin/sh",
+      `printf '%s\\n' "$@" > "${dir}/args"`,
+      `env > "${dir}/env"`,
+      `echo $$ > "${dir}/pid"`,
+      "exec sleep 60",
+      "",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  return { bin, dir };
+}
+
+/** Gives `venue`'s node a pair link that serves its main box, for one case; returns its removal. */
+async function servePair(venue: VenueName): Promise<() => Promise<void>> {
+  const ring = loadKeyRing(KEY_ENV);
+  await withNodeTransaction(stores[venue].node, (tx) =>
+    writePairLinkTx(tx, ring, TILL_ENV.WAITRON_NODE_ID, {
+      role: "serves",
+      state: "awaiting_copy",
+      peerNodeId: MIRROR_ORIGIN_NODE,
+      peerPublicKey: "pub",
+      storeUrl: "https://box-7777.waitron.local:7443",
+      venueId: "venue",
+      accessKeyId: PAIR_ACCESS_KEY_ID,
+      secretAccessKey: PAIR_SECRET,
+    }),
+  );
+  return () =>
+    withNodeTransaction(stores[venue].node, (tx) => deletePairLinkTx(tx, TILL_ENV.WAITRON_NODE_ID));
+}
+
+/** What the stand-in recorded once it started; then that its process is gone after `close`. */
+async function expectStoreRan(dir: string, stateDir: string, loopbackPort: number) {
+  await vi.waitFor(async () => expect(await readFile(join(dir, "pid"), "utf8")).not.toBe(""), {
+    timeout: 10_000,
+  });
+  const args = (await readFile(join(dir, "args"), "utf8")).trimEnd().split("\n");
+  expect(args).toEqual([
+    "--port",
+    `127.0.0.1:${loopbackPort}`,
+    "--region",
+    "us-east-1",
+    "posix",
+    "--sidecar",
+    join(stateDir, "pair-store", "meta"),
+    join(stateDir, "pair-store", "data"),
+  ]);
+  const env = await readFile(join(dir, "env"), "utf8");
+  expect(env).toContain(`ROOT_ACCESS_KEY_ID=${PAIR_ACCESS_KEY_ID}\n`);
+  expect(env).toContain(`ROOT_SECRET_ACCESS_KEY=${PAIR_SECRET}\n`);
+  return Number((await readFile(join(dir, "pid"), "utf8")).trim());
+}
+
+/** Whether something accepts a TCP connection on 127.0.0.1:`port`. */
+function accepts(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connectTcp(port, "127.0.0.1", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on("error", () => resolve(false));
+  });
+}
+
+/** The store's listener serves a leaf naming this box under `BOX_TLS`'s authority, whose own leaf
+ * names only the venue: so the start's leaf repair reached the listener. */
+async function expectStoreServesOwnName(port: number) {
+  const ownName = boxHostnameFor(TILL_ENV.WAITRON_NODE_ID);
+  const served = await peerCertificate({ port, ca: BOX_TLS.caCertPem, servername: ownName });
+  expect(served?.checkHost(ownName)).toBe(ownName);
+}
+
+function running(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function seedIdentity(admin: Database): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
@@ -660,6 +764,57 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
+  it("a spare's full start runs its store on loopback with the pair's key, serves the leaf the start repaired, and stops it on close", async () => {
+    const fake = await fakeVersitygw();
+    const removePair = await servePair("mirror");
+    const [httpPortNumber, loopbackPort, storePort] = await freePorts(3);
+    await writeTlsSet(STATE_ROOT, BOX_TLS);
+    let pid: number | undefined;
+    try {
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venueDir.mirror,
+        WAITRON_HTTP_PORT: String(httpPortNumber),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_VERSITYGW_BIN: fake.bin,
+        WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
+        WAITRON_SPARE_STORE_PORT: String(storePort),
+      });
+      try {
+        pid = await expectStoreRan(fake.dir, STATE_ROOT, loopbackPort!);
+        expect(running(pid)).toBe(true);
+        expect(await accepts(storePort!)).toBe(true);
+        await expectStoreServesOwnName(storePort!);
+      } finally {
+        await server.close();
+      }
+      expect(running(pid)).toBe(false);
+      expect(await accepts(storePort!)).toBe(false);
+    } finally {
+      await removePair();
+      await rm(fake.dir, { recursive: true, force: true });
+      await rm(join(STATE_ROOT, "pair-store"), { recursive: true, force: true });
+      await rm(join(STATE_ROOT, "tls"), { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a mirror with no pair link starts no store (control: the same box with one starts it)", async () => {
+    const fake = await fakeVersitygw();
+    try {
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venueDir.mirror,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_VERSITYGW_BIN: fake.bin,
+      });
+      await server.close();
+      await expect(readFile(join(fake.dir, "pid"), "utf8")).rejects.toThrow();
+    } finally {
+      await rm(fake.dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("refuses a mirror boot that has no node_mirror_link row (a mirror REQUIRES its DB connection config)", async () => {
     let caught: unknown;
     try {
@@ -747,6 +902,57 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       rmSync(stateDir, { recursive: true, force: true });
     }
     await expect(fetch(`${base}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("a box still joining runs its store with the pair's key, serves the leaf the start repaired, and stops it on close", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-store-"));
+    writeFileSync(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    writeFileSync(
+      join(stateDir, "pending-adoption.json"),
+      JSON.stringify({
+        standby: { nodeId: "88888888-8888-4888-8888-888888888888", publicKey: "pub" },
+        nodeName: "standby",
+        filingModule: "fiscal-verifactu",
+        taxModule: null,
+        reserved: { modules: {}, series: [], endorsement: {} },
+        originNodeId: MIRROR_ORIGIN_NODE,
+      }),
+      { mode: 0o600 },
+    );
+    const fake = await fakeVersitygw();
+    const removePair = await servePair("adopting");
+    const [httpPortNumber, loopbackPort, storePort] = await freePorts(3);
+    await writeTlsSet(stateDir, BOX_TLS);
+    try {
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venueDir.adopting,
+        WAITRON_HTTP_PORT: String(httpPortNumber),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_VERSITYGW_BIN: fake.bin,
+        WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
+        WAITRON_SPARE_STORE_PORT: String(storePort),
+      });
+      let pid: number;
+      try {
+        pid = await expectStoreRan(fake.dir, stateDir, loopbackPort!);
+        expect(running(pid)).toBe(true);
+        expect(await accepts(storePort!)).toBe(true);
+        await expectStoreServesOwnName(storePort!);
+      } finally {
+        await server.close();
+      }
+      expect(running(pid)).toBe(false);
+      expect(await accepts(storePort!)).toBe(false);
+    } finally {
+      await removePair();
+      await rm(fake.dir, { recursive: true, force: true });
+      rmSync(stateDir, { recursive: true, force: true });
+    }
   }, 60_000);
 
   it("a box still joining reissues, before it serves, a leaf that does not name it", async () => {

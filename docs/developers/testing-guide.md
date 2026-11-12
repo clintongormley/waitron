@@ -1207,7 +1207,8 @@ versitygw's place and always run (`.github/workflows/ci.yml`; see
 The same job runs `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`, the Amazon S3 rehearsal's
 scenarios against versitygw alone, and the rehearsal's send gate and interrupt suites,
 `apps/server/src/aws-send-gate.e2e.test.ts` and `apps/server/src/aws-rehearsal-interrupt.e2e.test.ts`,
-also against versitygw alone; each skips and fails the same way.
+also against versitygw alone, and the spare's store suite, `apps/server/src/spare-store.test.ts`,
+whose case that starts the real versitygw does the same; each skips and fails the same way.
 
 **A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and
 `WAITRON_LITESTREAM_BIN=/nonexistent`: `pnpm --filter @waitron/server exec vitest run
@@ -3782,7 +3783,8 @@ only, and only when the store loads before the clock is faked. Receipt:
 SKIPPED locally and FAIL in CI.** Install both with
 `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. The S3 rehearsal
 scenarios, send gate and interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
-`aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
+`aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) and the spare's store suite
+(`apps/server/src/spare-store.test.ts`) need versitygw alone and skip
 and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
 `ci.yml` as TEXT, so install commands left only in a YAML comment, or in a step an `if:` switches
 off, pass it. Receipt:

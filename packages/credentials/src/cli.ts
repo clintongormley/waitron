@@ -1,8 +1,10 @@
 import { parseArgs } from "node:util";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
-import { AppError, isAppError } from "@waitron/shared";
+import type { PairLinkRole } from "@waitron/node-db";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import type { KeyRing } from "./keyring.js";
 import { PURPOSES, isPurpose } from "./purposes.js";
+import "./errors.js";
 import {
   deleteCredential,
   listCredentials,
@@ -21,8 +23,8 @@ export interface CliIo {
 
 export interface CliDeps {
   db: Database;
-  /** The box's own file; `rotate` re-seals its signing key and pair link's secret there. */
-  node?: NodeDatabase;
+  /** The box's own file; `rotate` re-seals its signing key there. */
+  node: NodeDatabase;
   ring: KeyRing;
   io: CliIo;
   readFile(path: string): Promise<string>;
@@ -177,12 +179,32 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
   return 0;
 }
 
+const SPARE_JOINED: Record<PairLinkRole, string> = {
+  streams: [
+    "This box has a standby server, which holds this key ring too.",
+    "Rotating here would leave the standby unable to open the venue's keys. Nothing was changed.",
+    "If the standby never finished joining, remove it in the dashboard (Servers, then Remove on its row) and rotate again.",
+    "A standby that finished joining cannot be removed in this version, so this key ring cannot be rotated while it is joined.",
+  ].join(" "),
+  serves: [
+    "This box joined another server as its standby, so it holds that server's key ring.",
+    "Nothing was changed.",
+    "A key ring that two servers hold cannot be rotated in this version, because nothing sends the new one to the other server.",
+  ].join(" "),
+};
+
 async function rotate(deps: CliDeps): Promise<number> {
   let result: RotationResult;
   try {
     result = await rotateCredentials(deps.db, deps.ring, deps.node);
   } catch (error) {
-    return reportFailure(error, deps);
+    const exit = reportFailure(error, deps);
+    // `reportFailure` returns only for an AppError; it throws anything else.
+    const refusal = error as AppError;
+    if (hasCode(refusal, "credentials.rotation_spare_joined")) {
+      deps.io.stderr(SPARE_JOINED[refusal.params.role]);
+    }
+    return exit;
   }
   deps.io.stdout(`rotated ${result.rotated}, already current ${result.alreadyCurrent}`);
   return 0;

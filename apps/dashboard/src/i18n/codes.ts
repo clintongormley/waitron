@@ -1141,6 +1141,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Another box was found writing this venue's copy to the same bucket, so this box will not copy over it. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
     es: "Se ha visto a otro equipo escribiendo la copia de este local en el mismo bucket, así que este equipo no copiará encima. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
   },
+  "backup.spare_stream_active": {
+    en: "This venue has a standby server, listed under Servers, which receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. If the standby never finished joining, choose Remove on its row under Servers; the bucket can then be saved here. A standby that finished joining cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
+    es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o está a punto de recibirla, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Si el servidor en espera no terminó de unirse, elige Retirar en su fila de Servidores; después se puede guardar aquí el bucket. Un servidor en espera que terminó de unirse no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una actualización le permita pasarla a un bucket.",
+  },
   "backup.stream_config_unsafe": {
     en: "The bucket copy cannot use one of these settings as written.",
     es: "La copia en el bucket no puede usar uno de estos ajustes tal como está escrito.",

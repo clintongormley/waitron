@@ -45,6 +45,8 @@ export interface ServerConfig {
   landingPort: number;
   /** `WAITRON_SPARE_STORE_PORT`: where a spare's store listens for the main box's copy (D11). */
   spareStorePort: number;
+  /** `WAITRON_SPARE_STORE_LOOPBACK_PORT`: where the spare's versitygw listens, on 127.0.0.1. */
+  spareStoreLoopbackPort: number;
   /** Defaults to loopback, because `/health` is unauthenticated. */
   httpHost: string;
   minTickMs: number;
@@ -57,6 +59,8 @@ export interface ServerConfig {
   migrationsRoot: string;
   /** `WAITRON_LITESTREAM_BIN`; unset or empty means `litestream`, found on PATH. */
   litestreamBin: string;
+  /** `WAITRON_VERSITYGW_BIN`; unset or empty means `versitygw`, found on PATH. */
+  versitygwBin: string;
   /**
    * The directory the box keeps its TLS files and generated secrets under, absolute so it does not
    * shift with the cwd. `WAITRON_STATE_DIR` overrides `defaultStateRoot`; an unset OR EMPTY value
@@ -146,6 +150,7 @@ export const DEFAULT_HTTP_PORT = 8080;
 /** Port 80, where a phone lands by typing the box's bare address. Exported for recovery. */
 export const DEFAULT_HTTP_LANDING_PORT = 80;
 const DEFAULT_SPARE_STORE_PORT = 7443;
+const DEFAULT_SPARE_STORE_LOOPBACK_PORT = 7444;
 const DEFAULT_LOG_MAX_BYTES = 10_000_000;
 const DEFAULT_LOG_MAX_FILES = 5;
 /** Loopback, so an unconfigured box never binds a public interface. Exported for recovery. */
@@ -413,6 +418,17 @@ export function loadConfig(
       reason: "listener_port_conflict",
     });
   }
+  const spareStoreLoopbackPort = listeningPort(
+    env,
+    "WAITRON_SPARE_STORE_LOOPBACK_PORT",
+    DEFAULT_SPARE_STORE_LOOPBACK_PORT,
+  );
+  if ([httpPort, landingPort, spareStorePort].includes(spareStoreLoopbackPort)) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_SPARE_STORE_LOOPBACK_PORT",
+      reason: "listener_port_conflict",
+    });
+  }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
   // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.
@@ -473,7 +489,7 @@ export function loadConfig(
         reason: "https_origin_required",
       });
     const port = listeningPort(env, "WAITRON_STAFF_PORT", 8443);
-    if (port === httpPort || port === landingPort || port === spareStorePort)
+    if ([httpPort, landingPort, spareStorePort, spareStoreLoopbackPort].includes(port))
       throw new AppError("server.config_invalid", {
         variable: "WAITRON_STAFF_PORT",
         reason: "listener_port_conflict",
@@ -495,6 +511,7 @@ export function loadConfig(
     httpPort,
     landingPort,
     spareStorePort,
+    spareStoreLoopbackPort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,
     maxTickMs,
@@ -502,6 +519,7 @@ export function loadConfig(
     settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     litestreamBin: resolveLitestreamBin(env),
+    versitygwBin: isUnset(env.WAITRON_VERSITYGW_BIN) ? "versitygw" : env.WAITRON_VERSITYGW_BIN,
     stateDir: resolvedStateDir,
     ...(isUnset(env.WAITRON_TUNNEL_CONTROL_DIR)
       ? {}

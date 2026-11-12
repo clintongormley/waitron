@@ -53,6 +53,7 @@ export interface BackgroundDutyHandles {
   backupSupervisor: Stopper;
   handoverDestinationDuty: Stopper | undefined;
   chartPost: Stopper;
+  spareStore: Stopper | undefined;
 }
 
 /** The first call's result, or its synchronous failure, is what every later call gets. */
@@ -161,6 +162,12 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       close: () => h.chartPost.stop(),
       reason:
         "hands the old box a chart it may keep, once, within its own limit; it reaches no box but that one and writes nothing here",
+    },
+    {
+      name: "spareStore",
+      close: () => h.spareStore?.stop(),
+      reason:
+        "stops the spare's store and its listener, which admits only the main box; they serve that box's copy under pair-store/ and write nothing in venue.db",
     },
     {
       name: "jobRunnerServices",

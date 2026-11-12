@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   readMembershipTrustSet,
   readNodeMembership,
+  withNodeTransaction,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -12,8 +13,10 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { loadKeyRing, tryGetCredential, writePairLinkTx, type KeyRing } from "@waitron/credentials";
+import { readPairLink } from "@waitron/node-db";
 import { startManagementSession } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
 import {
   MAX_REVOKED,
   routableServers,
@@ -24,6 +27,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
+import { createTurns } from "./backup-turns.js";
+import { mountStreamApi } from "./stream-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -53,6 +58,7 @@ interface Primary {
   adminCookie: string;
   managerCookie: string;
   lines: { level: string; event: string; fields: Record<string, unknown> | undefined }[];
+  reloadStream: ReturnType<typeof vi.fn<() => Promise<void>>>;
   app: Hono;
 }
 
@@ -75,9 +81,10 @@ async function primary(
   const lines: Primary["lines"] = [];
   const log: Logger = (level, event, fields) => lines.push({ level, event, fields });
   const app = new Hono();
+  const reloadStream = vi.fn(async () => {});
   mountMembershipRemovalApi(
     app,
-    { db, node: suite.node, ring: RING, nodeId, authorityFingerprint },
+    { db, node: suite.node, ring: RING, nodeId, authorityFingerprint, reloadStream },
     log,
   );
   return {
@@ -89,6 +96,7 @@ async function primary(
     adminCookie: `${MANAGEMENT_COOKIE}=${token}`,
     managerCookie: venue.managerCookie,
     lines,
+    reloadStream,
     app,
   };
 }
@@ -488,6 +496,146 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       });
       expect(await heldTerm(p.db)).toBe(seedTerm);
       expect(await removals(p.db)).toEqual([]);
+    });
+  });
+});
+
+describe("removing the standby this box's pair link names", () => {
+  async function linkTo(p: Primary, peerNodeId: string): Promise<void> {
+    await withNodeTransaction(suite.node, (tx) =>
+      writePairLinkTx(tx, RING, p.nodeId, {
+        role: "streams",
+        state: "pending",
+        peerNodeId,
+        peerPublicKey: "pub",
+        storeUrl: "https://box-7777.waitron.local:7443",
+        venueId: "venue",
+        accessKeyId: "spare-access-key",
+        secretAccessKey: "spare-secret-key",
+      }),
+    );
+  }
+
+  function mountBucketCopy(p: Primary): void {
+    mountStreamApi(
+      p.app,
+      {
+        db: p.db,
+        node: suite.node,
+        nodeId: p.nodeId,
+        ring: RING,
+        stream: { reload: async () => {}, status: () => ({ state: "off" }) },
+        venueId: "venue",
+        isPrimary: () => true,
+        isManagedByEnvironment: () => false,
+        loadedArchives: () => [],
+        readRecoveryKey: async () => "recovery-key-one-strong",
+        writeRecoveryKey: async () => {},
+        sealedState: { refresh: async () => "sealed" as const },
+        probe: async () => ({ ok: true as const }),
+        prepareEncryption: async () => ({ ok: true as const }),
+        turns: createTurns(),
+      },
+      () => {},
+    );
+  }
+
+  async function saveBucket(p: Primary): Promise<Response> {
+    return p.app.request("/api/backup/stream", {
+      method: "PUT",
+      headers: { cookie: p.adminCookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        endpoint: "https://s3.example.net",
+        region: "eu-west-1",
+        bucket: "venue-copy",
+        prefix: "",
+        accessKeyId: "AKIAEXAMPLE",
+        secretAccessKey: "not-a-real-secret-0123456789",
+      }),
+    });
+  }
+
+  it("removing a standby that never finished joining deletes the pair link, and bucket settings can then be saved", async () => {
+    const p = await primary();
+    mountBucketCopy(p);
+    const gone = standby();
+    await holdChart(p, [self(p), gone]);
+    await linkTo(p, gone.nodeId);
+    expect((await saveBucket(p)).status).toBe(409);
+
+    const res = await remove(p, gone.nodeId, p.adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+    expect(p.lines).toContainEqual({
+      level: "info",
+      event: "membership.pair_link_deleted",
+      fields: { nodeId: gone.nodeId },
+    });
+    expect((await saveBucket(p)).status).toBe(200);
+    expect(
+      await withTransaction(p.db, (tx) => tryGetCredential(tx, RING, { purpose: "backup.stream" })),
+    ).not.toBeNull();
+  });
+
+  it("a standby with a nodes row is still refused removal, and its pair link stays", async () => {
+    const p = await primary();
+    const joinedId = await seedNode(p.db, p.locationId);
+    await holdChart(p, [self(p), standby(joinedId)]);
+    await linkTo(p, joinedId);
+
+    const res = await remove(p, joinedId, p.adminCookie);
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({ code: "membership.standby_joined", params: {} });
+    expect((await readPairLink(suite.node, p.nodeId))?.peerNodeId).toBe(joinedId);
+    expect(p.reloadStream).not.toHaveBeenCalled();
+  });
+
+  it("removing another standby leaves the pair link and the copy alone", async () => {
+    const p = await primary();
+    const linked = standby();
+    const other = standby(randomUUID(), "https://other.deli.test");
+    await holdChart(p, [self(p), linked, other]);
+    await linkTo(p, linked.nodeId);
+
+    expect((await remove(p, other.nodeId, p.adminCookie)).status).toBe(200);
+
+    expect((await readPairLink(suite.node, p.nodeId))?.peerNodeId).toBe(linked.nodeId);
+    expect(p.reloadStream).not.toHaveBeenCalled();
+  });
+
+  it("a second removal deletes a pair link the first left behind", async () => {
+    const p = await primary();
+    const gone = standby();
+    await holdChart(p, [self(p), { ...gone, standing: "evicted" }]);
+    await linkTo(p, gone.nodeId);
+
+    const res = await remove(p, gone.nodeId, p.adminCookie);
+
+    expect(await res.json()).toMatchObject({ removed: false });
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+  });
+
+  it("a reload that fails after the pair link is deleted is logged by its code, and the removal still answers 200", async () => {
+    const p = await primary();
+    const gone = standby();
+    await holdChart(p, [self(p), gone]);
+    await linkTo(p, gone.nodeId);
+    p.reloadStream.mockRejectedValueOnce(new AppError("backup.reload_in_progress", {}));
+
+    const res = await remove(p, gone.nodeId, p.adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ removed: true });
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+    expect(p.lines).toContainEqual({
+      level: "warn",
+      event: "membership.stream_reload_failed",
+      fields: { nodeId: gone.nodeId, errorCode: "backup.reload_in_progress" },
     });
   });
 });

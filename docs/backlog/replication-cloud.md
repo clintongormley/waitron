@@ -1140,8 +1140,9 @@ takes the venue's certificate authority as its own) as
 [#2761](https://github.com/clintongormley/waitron/pull/2761); 3b-4 (box-to-box calls find a `.local` box by
 asking the network, a spare listens on the venue's network, and what it serves there is walked by a
 test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
-the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898). 3b-5b to 3b-F
-and slices 3c onwards are still open;
+the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
+that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
+rotation is refused while a pair link exists) landed too. 3b-G, 3b-6a to 3b-F and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
@@ -1199,6 +1200,9 @@ vault rows and its own signing key under the ring's current version (`rotateCred
 joined. From reading, not run: a spare holding a copy of `venue.db` taken after a rotation could
 not open the rows sealed under the new version. Wanted: a way for the ring to reach the spare, or a
 rule that a rotation re-joins it.
+Since 3b-5b the plan's decision D7 holds instead: `rotate` refuses `credentials.rotation_spare_joined`
+while `node.db` holds a pair link, re-sealing nothing (`packages/credentials/src/cli.test.ts`). A
+ring changed by hand in `secrets.env` is not stopped, and the two risks below are untouched.
 Two related risks, found by reading only, not run (2026-11-09): before a handover the new box
 compares key-ring version numbers, not the keys themselves (`handover-manifest.ts:166-168`); and a
 ring rotated after the bucket copy's sealed state bundle was last refreshed could leave a bucket

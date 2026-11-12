@@ -1,11 +1,13 @@
 import "./errors.js";
 import { inArray } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
+import { codeOf } from "@waitron/server-kit";
 import {
   recordActivity,
   nodes,
   persistNodeMembershipIfNewerTx,
   readNodeMembership,
+  withNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
@@ -18,7 +20,8 @@ import {
   type NodeStanding,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import type { KeyRing } from "@waitron/credentials";
+import { deletePairLinkTx, type KeyRing } from "@waitron/credentials";
+import { readPairLink } from "@waitron/node-db";
 import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
@@ -279,6 +282,37 @@ export async function removeUnjoinedStandby(
       },
     };
   });
+}
+
+/**
+ * Deletes this box's pair link when it names `targetNodeId`, then reloads the stream. Run after
+ * `removeUnjoinedStandby` commits the chart, so a removal that stops between the two deletes the
+ * link when it is run again.
+ */
+export async function unlinkRemovedStandby(
+  deps: {
+    readonly node: NodeDatabase;
+    readonly nodeId: string;
+    readonly log: Logger;
+    readonly reloadStream: () => Promise<void>;
+  },
+  targetNodeId: string,
+): Promise<void> {
+  const unlinked = await withNodeTransaction(deps.node, async (tx) => {
+    if ((await readPairLink(tx, deps.nodeId))?.peerNodeId !== targetNodeId) return false;
+    await deletePairLinkTx(tx, deps.nodeId);
+    return true;
+  });
+  if (!unlinked) return;
+  deps.log("info", "membership.pair_link_deleted", { nodeId: targetNodeId });
+  try {
+    await deps.reloadStream();
+  } catch (error) {
+    deps.log("warn", "membership.stream_reload_failed", {
+      nodeId: targetNodeId,
+      errorCode: codeOf(error),
+    });
+  }
 }
 
 export interface ClearanceResult {

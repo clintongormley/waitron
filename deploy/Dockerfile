@@ -162,8 +162,8 @@ RUN set -eux; \
 # versitygw stage — the pinned S3 server a spare box runs as the store the main
 # box streams to. Shaped like the Litestream stage, for the same reasons. The
 # sums are the ones scripts/setup-s3-test-server.mjs checks;
-# scripts/versitygw-pin.test.ts holds them and the version equal to it and
-# apps/server/src/testing/s3-test-server.ts.
+# scripts/versitygw-pin.test.ts holds them and the version equal to it,
+# apps/server/src/testing/s3-test-server.ts and apps/server/src/spare-store.ts.
 # A new version also needs both notice files regenerated (deploy/third-party/README.md).
 # ---------------------------------------------------------------------------
 FROM node:26 AS versitygw

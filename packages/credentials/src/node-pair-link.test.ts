@@ -8,6 +8,7 @@ import { loadKeyRing } from "./keyring.js";
 import {
   deleteNodePairLinkOtherThanTx,
   deletePairLinkTx,
+  heldPairLinkRole,
   readPairSecret,
   setPairLinkStateTx,
   writePairLinkTx,
@@ -169,5 +170,22 @@ describe("the pair link in node.db", () => {
     await write(PEER);
     await withNodeTransaction(suite.node, (tx) => deleteNodePairLinkOtherThanTx(tx, NODE));
     expect(suite.node.all(sql`select node_id from node_pair_link`)).toEqual([{ node_id: NODE }]);
+  });
+
+  it("names the role of a pair link whichever node id it is under", async () => {
+    expect(await heldPairLinkRole(suite.node)).toBeNull();
+    await write(OTHER);
+    expect(await heldPairLinkRole(suite.node)).toBe("streams");
+    suite.node.run(sql`delete from node_pair_link`);
+    await write(OTHER, { ...LINK, role: "serves", state: "awaiting_copy" });
+    expect(await heldPairLinkRole(suite.node)).toBe("serves");
+  });
+});
+
+describe("before the node set has run", () => {
+  const bare = useVenueDb({ migrations: [] });
+
+  it("holds no pair link when node.db has no pair-link table", async () => {
+    expect(await heldPairLinkRole(bare.node)).toBeNull();
   });
 });

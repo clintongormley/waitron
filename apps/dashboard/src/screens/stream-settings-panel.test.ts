@@ -416,6 +416,37 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(field(el, "bucket-name").error).toBe("");
   });
 
+  it.each([
+    [
+      "en-GB",
+      "This venue has a standby server, listed under Servers, which receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. If the standby never finished joining, choose Remove on its row under Servers; the bucket can then be saved here. A standby that finished joining cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
+    ],
+    [
+      "es-ES",
+      "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o está a punto de recibirla, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Si el servidor en espera no terminó de unirse, elige Retirar en su fila de Servidores; después se puede guardar aquí el bucket. Un servidor en espera que terminó de unirse no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una actualización le permita pasarla a un bucket.",
+    ],
+  ] as const)(
+    "explains in %s a Save refused because the venue copies to its standby, and leaves Save working",
+    async (locale, message) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({
+          saveStreamSettings: vi
+            .fn()
+            .mockRejectedValue({ code: "backup.spare_stream_active", params: {}, status: 409 }),
+        });
+        const { el } = await mount(api);
+        fillRequired(el);
+        await press(el, "save");
+        expect(text(el, "[role=alert]")).toBe(message);
+        expect(disabled(el, "save")).toBe(false);
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
   it("explains, in this panel's words, a Save refused because the environment sets the backups", async () => {
     const api = stubApi({
       saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.managed_by_environment" }),

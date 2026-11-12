@@ -985,7 +985,7 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 those six `node.db` tables under another node id; the main box's joining route
 (`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`, and the rotation also reaches `node_pair_link`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
@@ -995,6 +995,15 @@ dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reac
 files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
+
+`waitron-credentials rotate` re-seals nothing while `node.db` holds a pair link under any node id:
+it refuses with `credentials.rotation_spare_joined`, because the spare holds the same key ring and
+nothing sends it a new one (decision D7 in
+[the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). Removing a spare that
+never finished joining deletes the link, and rotation then runs. A spare that finished joining
+cannot be removed in this version, so while it is joined the ring is not rotated. On the spare,
+whose own link names its main box, `rotate` refuses too. A ring changed by hand in `secrets.env` is
+not stopped by this.
 
 **What the guard does not see.** `scripts/write-path-tables.test.ts` reads TEXT, so a table name
 reached through a variable is invisible to it; it judges a FILE against an allowance list rather

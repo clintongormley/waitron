@@ -447,6 +447,8 @@ describe("the start check on a real start", () => {
               streamApp,
               {
                 db: spareSuite.db,
+                node: spareSuite.node,
+                nodeId: SPARE.nodeId,
                 ring: loadKeyRing(KEY_ENV),
                 stream: publisher,
                 venueId: "returning-main",

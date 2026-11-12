@@ -1,6 +1,6 @@
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
-import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE } from "@waitron/store";
+import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE, SERVER_PEM_FILE } from "@waitron/store";
 import {
   boxHostClient,
   boxHostRequests,
@@ -76,8 +76,11 @@ import {
   readHandoverRestriction,
   readMirrorLink,
   readNodeMode,
+  readPairLink,
   setSingletonRole,
 } from "@waitron/node-db";
+import { startSpareStore } from "./spare-store.js";
+import { startStoreListener } from "./spare-pipe.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
@@ -86,7 +89,12 @@ import {
   runStartPeerCheck,
   type StartPeerCheckOutcome,
 } from "./start-peer-check.js";
-import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
+import {
+  credentialProvisioned,
+  loadKeyRing,
+  readPairSecret,
+  tenantCredentials,
+} from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { mountDeviceLiveApi } from "./device-live-api.js";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -369,6 +377,7 @@ import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
   ensureBoxSecrets,
+  caCertPath,
   ensureLeaf,
   mintedBoxLeaf,
   tightenTlsDir,
@@ -1784,6 +1793,42 @@ async function bootServer(
       });
     }
   };
+  // Only a spare whose pair link serves its main box runs the store that box streams to, behind a
+  // listener admitting that box's client certificate alone. Each stop is registered on
+  // `undoOnFailure` here, so the caller registers neither. Called after `checkLeaf` where the start
+  // runs it: the listener reads the leaf once, when it starts.
+  const ownNodeId = config.node.nodeId;
+  const startServedStore = async (): Promise<{ stop(): Promise<void> } | undefined> => {
+    const link = await readPairLink(store.node, ownNodeId);
+    if (link?.role !== "serves") return undefined;
+    const spareStore = await startSpareStore({
+      bin: config.versitygwBin,
+      stateDir: config.stateDir,
+      accessKeyId: link.accessKeyId,
+      secretAccessKey: await readPairSecret(store.node, ring, ownNodeId),
+      loopbackPort: config.spareStoreLoopbackPort,
+      log,
+    });
+    undoOnFailure.push(() => spareStore.stop());
+    const leafFile = join(config.stateDir, SERVER_PEM_FILE);
+    const listener = await startStoreListener({
+      port: config.spareStorePort,
+      host: config.httpHost,
+      certFile: leafFile,
+      keyFile: leafFile,
+      caFile: caCertPath(config.stateDir),
+      peerHostname: boxHostnameFor(link.peerNodeId),
+      upstreamPort: config.spareStoreLoopbackPort,
+      log,
+    });
+    undoOnFailure.push(() => listener.close());
+    return {
+      async stop() {
+        await listener.close();
+        await spareStore.stop();
+      },
+    };
+  };
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     spare = true;
@@ -1802,6 +1847,7 @@ async function bootServer(
     );
     undoOnFailure.push(() => finishWorker.catch(() => {}));
     await checkLeaf();
+    const latchStore = await startServedStore();
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
@@ -1820,6 +1866,7 @@ async function bootServer(
       {
         stopWork: async () => {
           await finishWorker.catch(() => {});
+          await latchStore?.stop();
         },
         settleRequests: () => Promise.resolve(),
         closePools: () => store.close(),
@@ -2238,6 +2285,7 @@ async function bootServer(
     return context;
   });
   if (!fenced) await checkLeaf();
+  const spareStore = isMirror ? await startServedStore() : undefined;
   if (context.savedZone.kind !== "valid") {
     tradingAdmission.repairOnly(context.savedZone.kind);
     app.use("*", zoneRepairGate(tradingAdmission));
@@ -3490,6 +3538,7 @@ async function bootServer(
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
+  const backupTurns = createTurns();
   mountMembershipRemovalApi(
     app,
     {
@@ -3497,6 +3546,7 @@ async function bootServer(
       node: store.node,
       ring,
       nodeId: tradingContext.nodeId,
+      reloadStream: () => backupTurns(() => streamHost.reload()),
       // `/ca.crt` serves no authority when the operator supplies the certificate files.
       authorityFingerprint: () =>
         config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),
@@ -3580,7 +3630,6 @@ async function bootServer(
     log,
   );
 
-  const backupTurns = createTurns();
   mountBackupApi(
     app,
     {
@@ -3620,6 +3669,8 @@ async function bootServer(
     app,
     {
       db,
+      node: store.node,
+      nodeId: config.node.nodeId,
       ring,
       stream: streamHost,
       venueId,
@@ -4171,6 +4222,7 @@ async function bootServer(
     backupSupervisor,
     handoverDestinationDuty,
     chartPost,
+    spareStore,
   });
   const started = makeStartedServer(
     server,
