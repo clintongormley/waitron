@@ -9,7 +9,7 @@ Recorded at `/Users/clintongormley/waitron-campaign-d/receipts/d-a11y-2910/reque
 
 ## Evidence and result
 
-Driver's receipts: campaign `receipts/d-a11y-2910`. System font passes main `14931d8078` and parent `41272511e3`; Arial fails main in both themes, matching CI's Used-by heading/Delete-button ratios 2.71/2.11, but passes that parent. Footer positioning passes both; body `z-index: 0` or background does not. No implementation retained.
+Driver's receipts: campaign `receipts/d-a11y-2910`. System font passes main `14931d8078` and parent `41272511e3`; Arial fails main in both themes, matching CI's Used-by heading/Delete-button ratios 2.71/2.11, but passes that parent. Footer positioning passes both; body `z-index: 0` or background does not. Diagnostic source changes were restored before plan review.
 
 The screenshot shows no visible heading/button overlap. The claim is limited to the reproduced axe failure; footer-over-body paint order is the source-based explanation. `git rev-parse bf3fead0bf^` returned `41272511e386ddfede0a593207d60730a8e09b6f`. Preserve A1259 hidden-hint containment while preventing this stacked-dialog contrast-scan regression.
 
@@ -23,3 +23,5 @@ The screenshot shows no visible heading/button overlap. The claim is limited to 
 ## Bounds and clearance
 
 Forecast: production +1/-0; tests +1–3/-0; support 0; docs 20–40 lines. No palettes, controls, helpers, guide wording or other behaviour. Claude reviewed this plan (198 seconds); the driver accepted the test-selection, current-head CI, font fallback, parent-SHA and claim limits. The watcher must still clear it before implementation; neither is owner design approval. One PR; notify K/L after landing.
+
+**Clearance:** The watcher cleared this plan on 2026-11-12 at 07:56 in Lane D questions.md: “Build the one-line shared footer fix and the fixture font line, keep #2910's hint containment and its regression test unchanged, and weaken no assertion.” This is watcher clearance, not owner design approval.
