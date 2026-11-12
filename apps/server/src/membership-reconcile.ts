@@ -53,16 +53,17 @@ export async function reconcileMembershipOnBoot(
 }
 
 /**
- * Answers `null` for a transport error, a refused certificate, no answer within `timeoutMs`, a
- * non-2xx response, an unparseable body or a peer holding no chart, so "unreachable → proceed"
- * holds. An https peer is asked only under `authority`, this box's venue authority. The returned
+ * Answers `null` for an address that is not a URL, a transport error, a refused certificate, no
+ * answer within `timeoutMs`, a non-2xx response, an unparseable body or a peer holding no chart, so
+ * "unreachable → proceed" holds. An https peer is asked only under `authority`, this box's venue authority. The returned
  * document is UNVERIFIED; `acceptDocument` is the fence.
  */
 export async function fetchPeerMembershipDocument(
   url: string,
   { authority, timeoutMs }: { authority?: string; timeoutMs: number },
 ): Promise<SignedMembershipDocument | null> {
-  const target = new URL(url);
+  const target = URL.parse(url);
+  if (target === null) return null;
   if (target.protocol === "https:" && authority === undefined) return null;
   let res: { status: number; text: string };
   try {

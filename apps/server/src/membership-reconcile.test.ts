@@ -301,6 +301,15 @@ describe("fetchPeerMembershipDocument (the best-effort HTTP peer read)", () => {
       }),
     ).toBeNull();
   });
+
+  it("answers null for an address that is not a URL", async () => {
+    expect(
+      await fetchPeerMembershipDocument("https://[broken/management-api/membership", {
+        authority: "unused",
+        timeoutMs: 5_000,
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("fetchPeerMembershipDocument (another box, over HTTPS)", () => {

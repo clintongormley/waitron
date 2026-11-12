@@ -453,6 +453,51 @@ describe("returned-box membership reconciliation at boot", () => {
     }
   }, 60_000);
 
+  it("starts and keeps selling when the held chart lists the origin box at an address that is not a URL", async () => {
+    const [venueDir, db, nodeDb] = await migratedVenue();
+    await seed(db);
+    await stampDeployment(db, "preproduction");
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(1, {
+        signerNodeId: TILL_ENV.WAITRON_NODE_ID,
+        nodes: [
+          {
+            nodeId: TILL_ENV.WAITRON_NODE_ID,
+            contactUrl: "https://box",
+            standing: "serving-primary",
+          },
+          { nodeId: PEER_NODE, contactUrl: "https://[broken", standing: "serving-secondary" },
+        ],
+      }),
+    );
+    const [deadPort, port] = await freePorts(2);
+    await writeMirrorLink(nodeDb, TILL_ENV.WAITRON_NODE_ID, {
+      originUrl: `http://127.0.0.1:${deadPort}/`,
+      boxHostname: "box.local",
+      boxCaPem: BOX_CA_PEM,
+      originNodeId: PEER_NODE,
+    });
+    let server: Awaited<ReturnType<typeof startServer>> | undefined;
+    try {
+      server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        },
+        {},
+        { peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }) },
+      );
+      const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+      expect(await node.json()).toMatchObject({ acceptingSales: true });
+      expect((await readNodeMembership(db))?.body.term).toBe(1);
+    } finally {
+      await server?.close();
+    }
+  }, 60_000);
+
   it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales (prove-by-deletion)", async () => {
     await seedHeldChart(proceedsDb, 1);
     const [deadPort, port] = await freePorts(2);
