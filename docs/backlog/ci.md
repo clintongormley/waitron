@@ -405,7 +405,7 @@ infer either from the missing outcome alone.
 ## A1398-2: slow browser test files
 
 Keep the four-minute goal open after the selected draft autosave waits are advanced.
-The watcher's 2026-11-11 16:38 cut targets the drafts file in till shard 1 only.
+The watcher's initial 2026-11-11 16:38 cut targeted the drafts file in till shard 1 only.
 The coverage-on baseline run 43034947887 recorded shard 1 at 266 s, shard 2 at
 253 s (215 s of tests), and shard 5 at 250 s (59 s installing dependencies).
 The watcher's 2026-11-11 21:23 cut shortens only the menu test mount helper's
@@ -423,6 +423,8 @@ every interaction, flush, geometry and accessibility assertion. The shared axe h
 Dashboard packing uses refreshed complete-run file durations. Measure the current-head
 coverage-on whole jobs before claiming a speed gain or the four-minute goal; any
 remaining product-editor, product-list or menu cut still needs a demonstrated cause.
+The till’s warm-cache `cpu-features` rebuild remains the next diagnostic target;
+its install time still needs a root-cause fix.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.
