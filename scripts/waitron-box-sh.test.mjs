@@ -541,3 +541,21 @@ it("answers one host_failed line when the tag adapter crashes before a reply", (
     reason: "host_failed",
   });
 });
+
+it("forwards a network read without a write lock, retaining unknown_request when absent", () => {
+  const sb = sandbox();
+  const host = join(sb.dir, "network-host.mjs");
+  const received = join(sb.dir, "received");
+  writeFileSync(
+    host,
+    `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(received)}, fs.readFileSync(0)); console.log('{"ok":true}');`,
+  );
+  sb.env.WAITRON_BOX_NETWORK_HOST = host;
+  const line = 'network.read {"actor":{"source":"server"}}';
+  expect(answer(sb, line)).toEqual({ ok: true });
+  expect(readFileSync(received, "utf8")).toBe(line);
+  expect(sb.calls().some((call) => call[0] === "flock")).toBe(false);
+  expect(touchesClock(sb.calls())).toEqual([]);
+  sb.env.WAITRON_BOX_NETWORK_HOST = join(sb.dir, "absent.mjs");
+  expect(answer(sb, line)).toEqual({ ok: false, reason: "unknown_request" });
+});

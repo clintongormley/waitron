@@ -220,10 +220,26 @@ describe("installed boot evidence", () => {
       tpmPcrs: [5, 7, 8, 9, 15],
     },
     areas: ["@rootfs", "@images", "@volumes", "@logs", "@host-state"],
+    network: { ok: true, wired: { connected: true, address: "192.0.2.8" } },
+    networkInterfaces: { eth0: [{ address: "192.0.2.8", internal: false }] },
   };
   it("accepts the installed services and a second boot keeping identity", async () => {
     const { installedFailures } = await import("./recipe-setup.mjs");
     expect(installedFailures(expected, "installed-root", first, first)).toEqual([]);
+  });
+  it.each([
+    { network: undefined },
+    { network: { ok: false, reason: "host_failed" } },
+    { network: { ok: true, wired: { connected: false, address: null } } },
+    { network: { ok: true, wired: { connected: true, address: "192.0.2.9" } } },
+    { networkInterfaces: undefined },
+  ])("rejects a disk boot without a matching real network observation (%j)", async (patch) => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    for (const boots of [
+      [{ ...first, ...patch }, first],
+      [first, { ...first, ...patch }],
+    ])
+      expect(installedFailures(expected, "installed-root", ...boots)).toContain("host-network");
   });
   it.each([
     ["uuid", { uuid: expected.uuid }, "root-uuid"],
