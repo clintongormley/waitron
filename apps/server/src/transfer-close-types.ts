@@ -3,7 +3,7 @@ import type { InvoiceRecipient } from "./invoice-selection.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import type { BillInvoiceDelivery } from "./parties.js";
 
-/** Close one bill, final in Waitron, as to be paid by bank transfer. */
+/** Close one bill, final in Waitron, as a deferred payment. */
 export interface CloseByTransferRequest {
   /** The bill. */
   id: string;

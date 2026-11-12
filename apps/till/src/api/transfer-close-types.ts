@@ -1,6 +1,6 @@
 import type { BillEditExpected, InvoiceDeliveryChoice, PartyBill } from "./client.js";
 
-/** Close one bill, final in Waitron, as to be paid by bank transfer. */
+/** Close one bill, final in Waitron, as a deferred payment. */
 export interface CloseByTransferRequest {
   submissionId: string;
   expectedRevision: number;

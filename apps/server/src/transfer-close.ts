@@ -69,7 +69,7 @@ export interface TransferCloseDeps {
 }
 
 /**
- * Close one bill, final in Waitron, as to be paid by transfer: issue its invoice unless it has
+ * Close one bill, final in Waitron, as a deferred payment: issue its invoice unless it has
  * one, settle it with one transfer tender for the whole total, finish its party when every check
  * passes, and keep the answer. Runs in the caller's issuance transaction; any failure rolls back
  * all of it, the invoice included.

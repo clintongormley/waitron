@@ -1061,6 +1061,16 @@ describe("till-ticket-view", () => {
       expect(t).not.toContain("Tarjeta");
       expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
     });
+
+    it("names a bill closed by transfer as still to be paid, with no card row or payment slip", async () => {
+      const { el } = await mount({ tender: { method: "transfer" } });
+      const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((row) =>
+        norm(row.textContent ?? "").trim(),
+      );
+      expect(rows).toEqual(["Pago aplazado"]);
+      expect(text(el)).not.toContain("Tarjeta");
+      expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
+    });
   });
 
   it("renders the QR from the verification URL and the VERI*FACTU legend", async () => {

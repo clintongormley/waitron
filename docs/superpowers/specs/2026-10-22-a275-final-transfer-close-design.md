@@ -1,5 +1,7 @@
 # A275: Invoice at the meal, close by transfer
 
+_2026-11-11 (owner, 13:49): the words people see are now "Deferred payment" / «Pago aplazado», not "To be paid by transfer" / «A pagar por transferencia» — the payment is deferred, not necessarily by bank transfer. Task 7's till button reads "Close as deferred payment" / «Cerrar como pago aplazado». Code names keep `transfer` until a follow-up rename._
+
 > **Approval and plan update, 2026-10-22 15:55:** Owner: “A275 looks fine”. The revised minimal
 > design and pictures are approved; plan authoring, separate fresh-context review and docs-only
 > publication are authorised. The [implementation plan](../plans/2026-10-22-a275-final-transfer-close.md)

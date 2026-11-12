@@ -23,7 +23,7 @@ export function waitingScope(order: CounterWaitingOrder): string {
 }
 
 /**
- * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
+ * The counter orders still waiting on the counter: sent and not paid, or settled and not handed over
  * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
  * its `hand-over-order` and `pay-waiting-order` events into API calls, its
  * `move-waiting-order` event into the move-to-station dialog.
@@ -123,6 +123,7 @@ export class TillCounterWaiting extends LitElement {
   }
 
   #state(order: CounterWaitingOrder): StringKey {
+    if (order.closedByTransfer) return "waiting.transfer_not_handed_over";
     if (order.status === "settled") return "waiting.paid_not_handed_over";
     return order.collectedAt === null ? "waiting.sent_not_paid" : "waiting.handed_over_not_paid";
   }

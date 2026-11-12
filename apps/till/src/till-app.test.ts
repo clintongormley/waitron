@@ -18397,7 +18397,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   });
 });
 
-describe("the counter's waiting orders (sent and not paid, or paid and not handed over)", () => {
+describe("the counter's waiting orders (sent and not paid, or settled and not handed over)", () => {
   const sentOrder: CounterWaitingOrder = {
     items: [],
     id: "wo-sent",

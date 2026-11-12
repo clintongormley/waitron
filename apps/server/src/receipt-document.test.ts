@@ -528,6 +528,18 @@ describe("the simplified receipt's own layout (A663)", () => {
             if (kind === "rule") expect(kinds[at + 1], `${input} at ${at}`).not.toBe("rule");
         }
   });
+
+  it("names a bill closed by transfer as still to be paid, never as card or charged", () => {
+    const printed = JSON.stringify(
+      buildReceiptDocument({
+        ...SIMPLIFIED,
+        result: { ...SIMPLIFIED.result, tender: { method: "transfer" } },
+      }).elements,
+    );
+    expect(printed).toContain("Pago aplazado");
+    for (const word of ["Tarjeta", "Cobrado", "Ref.", "Efectivo"])
+      expect(printed).not.toContain(word);
+  });
 });
 
 describe("the full invoice's heading, customer block, table and totals (A663)", () => {

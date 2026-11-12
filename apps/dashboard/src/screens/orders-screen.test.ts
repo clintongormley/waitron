@@ -617,6 +617,16 @@ describe("dashboard Orders", () => {
     expect(table.shadowRoot!.textContent).toContain("Left without paying on");
   });
 
+  it("names a bill closed by transfer and keeps its earlier departure visible", async () => {
+    const closed = { ...ROW, status: "to_be_paid_by_transfer" as const, stillOwed: null };
+    const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [closed] }) });
+    const { el } = await loaded(api);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.textContent).toContain("Deferred payment");
+    expect(table.shadowRoot!.textContent).toContain("Left without paying on");
+  });
+
   describe("finding a customer by tax number", () => {
     const findButton = (el: OrdersScreen) =>
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=find-invoice-customer]");

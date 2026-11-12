@@ -22,6 +22,7 @@ import {
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readTransferClosure } from "./transfer-close.js";
+import { readSettledTicket } from "./till-sale.js";
 import "./errors.js";
 
 // Close one bill by transfer, new work only: every case calls the writer directly on
@@ -187,6 +188,16 @@ describe("closeBillByTransferTx, new work", () => {
     expect(await tendersOfBill(t.venue, billId)).toMatchObject([
       { method: "transfer", amount: 1800, tip: 0 },
     ]);
+  });
+
+  it("gives the closed bill's receipt a transfer tender, never a card one", async () => {
+    const billId = await t.counterOrder("placed", true);
+    await t.close(await t.requestFor(billId, "18.00", null));
+
+    const ticket = await inTx(t.venue, (tx) =>
+      readSettledTicket(t.venue.backend, tx, t.venue.cfg, billId),
+    );
+    expect(ticket.tender).toEqual({ method: "transfer" });
   });
 
   it("freezes the receipt grouping of a presented party bill it issues", async () => {

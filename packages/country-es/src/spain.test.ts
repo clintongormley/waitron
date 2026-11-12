@@ -371,6 +371,10 @@ describe("receipt labels", () => {
     expect(labels?.registeredAddress).toBe("Domicilio fiscal");
     expect(labels?.invoiceHeading).toBe("FACTURA");
   });
+
+  it("names a bill closed by transfer as still to be paid, in Spanish", () => {
+    expect(SPAIN.receiptLabels?.["es-ES"]?.toBePaidByTransfer).toBe("Pago aplazado");
+  });
 });
 
 describe("the short simplified-invoice heading", () => {

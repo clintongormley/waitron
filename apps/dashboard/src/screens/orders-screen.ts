@@ -247,7 +247,7 @@ export class OrdersScreen extends LitElement {
         label: t("orders.col.status"),
         choosable: "shown",
         cell: (row) =>
-          html`${t(`orders.status.${row.status}`)}${row.credited ? html`<span part="mark">${t(row.credited === "in_full" ? "orders.credited_in_full" : "orders.credited_in_part")}</span>` : nothing}${row.departedAt && (row.status === "paid" || row.status === "cancelled") ? html`<span part="mark">${fill("orders.left_on", { date: new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium" }).format(new Date(row.departedAt)) })}</span>` : nothing}`,
+          html`${t(`orders.status.${row.status}`)}${row.credited ? html`<span part="mark">${t(row.credited === "in_full" ? "orders.credited_in_full" : "orders.credited_in_part")}</span>` : nothing}${row.departedAt && (row.status === "paid" || row.status === "to_be_paid_by_transfer" || row.status === "cancelled") ? html`<span part="mark">${fill("orders.left_on", { date: new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium" }).format(new Date(row.departedAt)) })}</span>` : nothing}`,
       },
       { key: "total", label: t("orders.col.total"), cell: (row) => money(row.total) },
       {

@@ -196,6 +196,7 @@ import {
   parties,
   ticketItemMoves,
   partyTableLabels,
+  transferClosures,
   withTransaction,
   workingLinePortions,
   workingOrderLines,
@@ -7739,7 +7740,7 @@ export function paysAfterSending(mode: string | undefined): boolean {
   return PAY_AFTER_SENDING.has(mode ?? "prepay");
 }
 
-/** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
+/** A counter order the counter is still waiting on: sent and not paid, or settled and not handed over. */
 export interface CounterWaitingOrder {
   items: OrderPreviewItem[];
   counts: OrderStateCounts;
@@ -7766,6 +7767,8 @@ export interface CounterWaitingOrder {
   movableDishes: { lineId: string; stationId: string }[];
   /** {@link readFormerNumbers}; absent when there are none. */
   formerNumbers?: number[];
+  /** Only on a settled order closed as a deferred payment. */
+  closedByTransfer?: true;
 }
 
 /**
@@ -7844,6 +7847,16 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
               ),
             )
             .orderBy(workingOrderLines.lineNo);
+    const byTransfer = new Set(
+      settledIds.length === 0
+        ? []
+        : (
+            await tx
+              .select({ id: transferClosures.workingOrderId })
+              .from(transferClosures)
+              .where(inArray(transferClosures.workingOrderId, settledIds))
+          ).map((row) => row.id),
+    );
     const former = await readFormerNumbers(
       tx,
       rows.map((row) => row.id),
@@ -7889,6 +7902,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
         ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
         movableDishes: movable.get(row.id) ?? [],
         ...optional("formerNumbers", former.get(row.id)),
+        ...(byTransfer.has(row.id) ? { closedByTransfer: true as const } : {}),
       });
     }
     return waiting;

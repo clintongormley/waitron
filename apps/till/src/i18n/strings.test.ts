@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fill } from "./t.js";
-import { catalogues, en, es } from "./strings.js";
+import { catalogues, en, es, type StringKey } from "./strings.js";
 
 /**
  * The permanent-refusal messages, checked as prose in every language the till ships. `sale.refused`
@@ -61,7 +61,7 @@ describe("the Spanish strings call a restaurant menu a carta", () => {
   });
 });
 
-describe("the till's Spanish Clear snooze label, and no aplazar in the catalogue", () => {
+describe("the till's Spanish Clear snooze label, and no aplazar for snooze in the catalogue", () => {
   // Owner decision (2026-09-29): "Cancelar" or "Cancelar posponer", because nobody uses
   // posposición. A bare "Cancelar" would not say what the reminder row's button cancels. Weaker
   // than its name: only the catalogue in strings.ts is read, not the Spanish in codes.ts.
@@ -69,11 +69,20 @@ describe("the till's Spanish Clear snooze label, and no aplazar in the catalogue
     expect(catalogues["es-ES"]?.["table.reminder_clear_snooze"]).toBe("Cancelar posponer");
   });
 
-  it("has no Spanish catalogue string that says aplazar", () => {
-    const snoozeTermEntries = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
-      /aplaz/i.test(text),
+  // "Pago aplazado" is the owner's word for a deferred payment (2026-11-11), not snooze.
+  const DEFERRED_PAYMENT_KEYS = new Set<StringKey>([
+    "find_page.transfer",
+    "waiting.transfer_not_handed_over",
+  ]);
+
+  it("has no Spanish catalogue string that says aplazar, other than a deferred payment", () => {
+    const snoozeTermEntries = Object.entries(catalogues["es-ES"] ?? {}).filter(
+      ([key, text]) => /aplaz/i.test(text) && !DEFERRED_PAYMENT_KEYS.has(key as StringKey),
     );
     expect(snoozeTermEntries).toEqual([]);
+    for (const key of DEFERRED_PAYMENT_KEYS) {
+      expect(catalogues["es-ES"]?.[key]).toMatch(/^Pago aplazado/);
+    }
   });
 });
 

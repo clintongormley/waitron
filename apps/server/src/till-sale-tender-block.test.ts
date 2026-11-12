@@ -168,7 +168,12 @@ beforeAll(async () => {
  */
 async function seedSale(
   tx: Transaction,
-  tender: { method: "cash" | "card"; amount: string; tipAmount: string; cashTendered?: string },
+  tender: {
+    method: "cash" | "card" | "transfer";
+    amount: string;
+    tipAmount: string;
+    cashTendered?: string;
+  },
   payment?: { provider: string; externalRef?: string; card?: CardDetails },
 ): Promise<{ saleId: ReturnType<typeof brandSaleId>; workingOrderId: string }> {
   const workingOrderId = randomUUID();
@@ -323,6 +328,18 @@ describe("readTenderBlock", () => {
       tip: "0.00",
       reference: null,
     });
+  });
+
+  it("names a transfer closure with no amount, tip or reference, never as card", async () => {
+    const block = await withTransaction(suite.db, async (tx) => {
+      const { saleId, workingOrderId } = await seedSale(tx, {
+        method: "transfer",
+        amount: "1.00",
+        tipAmount: "0.00",
+      });
+      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+    });
+    expect(block).toEqual({ method: "transfer" });
   });
 
   it("shows the tender taken first when two were taken in the same millisecond", async () => {

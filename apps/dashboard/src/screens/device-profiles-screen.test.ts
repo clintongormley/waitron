@@ -2103,7 +2103,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     ]);
   });
 
-  it("offers Closes bills by transfer as an action, off until switched on, and saves it", async () => {
+  it("offers Closes bills as deferred payments as an action, off until switched on, and saves it", async () => {
     const { api, el } = await openEdit({ ...profiles[0]!, capabilities: ["take-orders"] });
     const sw = q(el, "cap-close-by-transfer") as Field;
     expect(q(el, "profile-actions")!.contains(sw)).toBe(true);
