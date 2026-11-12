@@ -695,9 +695,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Two date helpers read years 0 to 99 as 1900 to 1999**
   [Detail](backlog/service-periods.md#two-date-helpers-read-years-0-to-99-as-1900-to-1999)
 
-- **A897. Sales by department**
-  [Detail](backlog/service-periods.md#a897-sales-by-department)
-
 - **Refresh service settings on an open till**
   [Detail](backlog/service-periods.md#refresh-service-settings-on-an-open-till)
 

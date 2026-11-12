@@ -871,6 +871,8 @@ secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report fi
 A close is a counted withdrawal from one drawer, at any time, covering everything since that drawer's
 last close. It takes in A239, so the two are built together, and A240 can land after them. It replaces
 `daily_closes`, and no plan exists yet.
+Sales shows frozen figures once a node's day has a saved close. The closer must decide where a later
+write dated to that day goes; A897 does not settle that rule (watcher, 2026-11-11 22:09).
 
 ## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 

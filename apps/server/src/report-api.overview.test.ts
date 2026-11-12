@@ -360,6 +360,15 @@ describe("mountReportApi — /reports/overview", () => {
 
     // One non-correcting, non-voided sale on today.
     expect(body.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
+    expect((body as unknown as { departmentTakings: unknown }).departmentTakings).toEqual([
+      {
+        departmentId: null,
+        departmentName: null,
+        active: null,
+        byMethod: [{ method: "cash", amount: "130.00", tip: "5.00" }],
+        billsClosed: { count: 0, total: "0.00" },
+      },
+    ]);
 
     // Two ACTIVE tables, one held by a party and one its party has left; the inactive third counts
     // in neither.

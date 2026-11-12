@@ -2519,6 +2519,15 @@ export const en = {
   "purchase.amount_invalid": "Enter an amount of 0 or more, such as 21.00 (not 21,00 or 021.00).",
   "purchase.percentage_invalid":
     "Enter a percentage from 0 to 100, such as 21.00 (not 21,00 or 021.00).",
+  "reports.by_department": "By department",
+  "reports.department": "Department",
+  "reports.cash": "Cash",
+  "reports.card": "Card",
+  "reports.unallocated": "Unallocated",
+  "reports.inactive": "Inactive",
+  "reports.departments_empty": "No takings for this day.",
+  "reports.department_note":
+    "Each bill counts under its invoice’s recorded department. Payments without an invoice stay Unallocated until the invoice is issued; earlier live reports update too. Tips are included in cash and card.",
   "overview.title": "Today at a glance",
   "overview.takings_title": "Takings today",
   "overview.bills_closed": "Bills closed",
@@ -6435,6 +6444,15 @@ export const es: Record<StringKey, string> = {
   "purchase.amount_invalid": "Introduce un importe de 0 o más, como 21.00 (no 21,00 ni 021.00).",
   "purchase.percentage_invalid":
     "Introduce un porcentaje de 0 a 100, como 21.00 (no 21,00 ni 021.00).",
+  "reports.by_department": "Por departamento",
+  "reports.department": "Departamento",
+  "reports.cash": "Efectivo",
+  "reports.card": "Tarjeta",
+  "reports.unallocated": "Sin asignar",
+  "reports.inactive": "Inactivo",
+  "reports.departments_empty": "No hay cobros en este día.",
+  "reports.department_note":
+    "Cada cuenta se asigna al departamento registrado en su factura. Los pagos sin factura quedan Sin asignar hasta que se emita; los informes anteriores sin cerrar también se actualizan. El efectivo y la tarjeta incluyen las propinas.",
   "overview.title": "Hoy de un vistazo",
   "overview.takings_title": "Recaudación de hoy",
   "overview.bills_closed": "Cuentas cerradas",

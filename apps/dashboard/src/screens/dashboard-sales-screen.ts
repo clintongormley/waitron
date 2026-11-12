@@ -1,3 +1,7 @@
+import {
+  renderDepartmentTakings,
+  departmentTakingsStyles,
+} from "../widgets/department-takings-table.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -62,6 +66,7 @@ export class SalesScreen extends LitElement {
 
   static override styles = [
     baseStyles,
+    departmentTakingsStyles,
     metricStyles,
     topSellersStyles,
     css`
@@ -704,6 +709,7 @@ export class SalesScreen extends LitElement {
   #renderClose(close: DailyCloseDto): TemplateResult {
     return html`
       <div data-test="daily-close">
+        ${renderDepartmentTakings(close.departmentTakings)}
         ${this.#renderTender(close.cash, close.closureSummary)} ${this.#renderVat(close.vat)}
         <h2>${t("sales.counts_title")}</h2>
         <div class="counts" data-test="counts">

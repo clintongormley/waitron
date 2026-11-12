@@ -1,15 +1,16 @@
 import type { Transaction } from "@waitron/db";
 import { validateBusinessDay, validateCutover, validateTimeZone } from "./business-day.js";
+import { computeDepartmentClosedBills } from "./closed-bills.js";
 import { computeCashUp } from "./cash-up.js";
 import { computeCloseCounts } from "./counts.js";
 import { computeVatSummary } from "./vat-summary.js";
-import type { DailyClose, DailyCloseInput } from "./types.js";
+import type { DailyClose, DailyCloseInput, DepartmentTakings } from "./types.js";
 
 /**
  * The daily close for a list of boxes — or the whole venue when `input.nodeIds` is omitted (the
  * venue-wide dashboard overview) — over one business day: a VAT summary (sales on their issue
  * day, a void on the day it was made) and an operational cash-up (settlement-anchored), plus record
- * counts. Its three sub-aggregates each scope by box only when a list is given. Inputs are validated
+ * counts and department subtotals. Each aggregate scopes by box only when a list is given. Inputs are validated
  * before any query runs.
  */
 export async function computeDailyClose(
@@ -22,8 +23,23 @@ export async function computeDailyClose(
 
   // Awaited in turn on the one transaction, never `Promise.all` (docs/developers/conventions-data.md).
   const vat = await computeVatSummary(tx, input);
-  const cash = await computeCashUp(tx, input);
+  const { cash, departmentTakings } = await computeCashUp(tx, input);
   const counts = await computeCloseCounts(tx, input);
+  const departmentBills = await computeDepartmentClosedBills(tx, input);
+  const departments = new Map<string | null, DepartmentTakings>(
+    departmentTakings.map((row) => [row.departmentId, row]),
+  );
+  for (const department of departmentBills) {
+    const row = departments.get(department.departmentId);
+    if (row === undefined)
+      departments.set(department.departmentId, { ...department, byMethod: [] });
+    else row.billsClosed = department.billsClosed;
+  }
+  const sortedDepartments = [...departments.values()].sort(
+    (a, b) =>
+      Number((a.departmentId ?? "") > (b.departmentId ?? "")) -
+      Number((a.departmentId ?? "") < (b.departmentId ?? "")),
+  );
 
   return {
     nodeId: input.nodeIds?.[0],
@@ -32,5 +48,6 @@ export async function computeDailyClose(
     vat,
     cash,
     counts,
+    departmentTakings: sortedDepartments,
   };
 }

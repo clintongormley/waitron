@@ -1,6 +1,6 @@
 import { expect, vi } from "vitest";
 import { createRequest } from "@waitron/dashboard-kit";
-import { DashboardApi, type VenueDefaults } from "../api/client.js";
+import { DashboardApi, type SalesOverview, type VenueDefaults } from "../api/client.js";
 import type { DashboardApp } from "../dashboard-app.js";
 import "../dashboard-app.js";
 import { mountWidget, type Theme } from "../widgets/test-helpers.js";
@@ -106,6 +106,7 @@ export async function mountReceiptApp(
       "/management-api/reports/overview": {
         businessDay: "2026-08-30",
         takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+        departmentTakings: [],
         closureSummary: {
           billsClosed: { count: 0, total: "0.00" },
           toBePaidByTransfer: "0.00",
@@ -114,7 +115,7 @@ export async function mountReceiptApp(
         counts: { sales: 0, corrections: 0, voids: 0 },
         openTables: { open: 0, total: 0 },
         topSellers: [],
-      },
+      } satisfies SalesOverview,
       "/management-api/venue-service": model,
       "/management-api/receipt-preview": preview(),
       "/management-api/receipt": { receipt: {}, venueAddress: [] },

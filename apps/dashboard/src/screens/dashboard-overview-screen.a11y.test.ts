@@ -7,6 +7,15 @@ import type { DashboardApi, SalesOverview } from "../api/client.js";
 const overview: SalesOverview = {
   businessDay: "2026-08-29",
   takings: { tenderTotal: "1234.50", tipTotal: "45.00", grossTotal: "1279.50" },
+  departmentTakings: [
+    {
+      departmentId: "dining",
+      departmentName: "Dining",
+      active: true,
+      byMethod: [{ method: "cash", amount: "50.00", tip: "0.00" }],
+      billsClosed: { count: 2, total: "50.00" },
+    },
+  ],
   closureSummary: {
     billsClosed: { count: 42, total: "1279.50" },
     toBePaidByTransfer: "0.00",

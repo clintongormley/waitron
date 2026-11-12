@@ -23,15 +23,19 @@ beforeEach(async () => {
 });
 
 function run(input: Partial<DailyCloseInput> = {}) {
-  return withTransaction(suite.db, (tx) =>
-    computeCashUp(tx, {
-      nodeIds: [venue.nodeId],
-      businessDay: "2026-08-05",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-      cutoverChanges: [],
-      ...input,
-    }),
+  return withTransaction(
+    suite.db,
+    async (tx) =>
+      (
+        await computeCashUp(tx, {
+          nodeIds: [venue.nodeId],
+          businessDay: "2026-08-05",
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+          cutoverChanges: [],
+          ...input,
+        })
+      ).cash,
   );
 }
 

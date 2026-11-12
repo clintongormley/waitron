@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  departments,
+  saleReceiptHeaders,
   invoiceSeries,
   saleLines,
   saleSettlements,
@@ -9,7 +11,16 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedSale, seedTender, seedVenueWithSeries } from "../test/fixtures.js";
+import {
+  seedSale,
+  seedTender,
+  seedVenueWithSeries,
+  seedBillPayment,
+  seedBillRefund,
+  seedOpenOrder,
+  settleOrder,
+  seedVenueDevice,
+} from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { seedRefundableSale, seedTenderRefund } from "../test/tender-refund-fixtures.js";
 import { computeDailyClose } from "./daily-close.js";
@@ -37,6 +48,181 @@ function run(i: DailyCloseInput) {
 }
 
 describe("computeDailyClose", () => {
+  it("groups takings and closed bills by recorded department, moving an uninvoiced payment out of Unallocated", async () => {
+    const [restaurant, bar] = await suite.db
+      .insert(departments)
+      .values([
+        {
+          id: "ffffffff-0000-4000-8000-000000000002",
+          name: "Restaurant",
+          tradingName: "Restaurant",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          name: "Bar",
+          tradingName: "Bar",
+          active: false,
+        },
+      ])
+      .returning();
+    const at = "2026-08-04T10:00:00.000Z";
+    const bill = await seedOpenOrder(suite.db, venue, 1);
+    const payment = await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill.orderId, deviceId: venue.deviceId },
+      { method: "cash", applied: "40.00", tip: "2.00", state: "received", at },
+    );
+    await seedBillRefund(
+      suite.db,
+      { billPaymentId: payment, deviceId: venue.deviceId },
+      { applied: "5.00", state: "completed", at },
+    );
+    expect((await run(input())).departmentTakings).toEqual([
+      {
+        departmentId: null,
+        departmentName: null,
+        active: null,
+        byMethod: [{ method: "cash", amount: "37.00", tip: "2.00" }],
+        billsClosed: { count: 0, total: "0.00" },
+      },
+    ]);
+
+    const sale = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      workingOrderId: bill.orderId,
+      issuedAt: at,
+      total: "100.00",
+      lines: [{ vatRate: "10.00", lineTotal: "100.00" }],
+    });
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: sale,
+      departmentId: restaurant!.id,
+      tradingName: "Restaurant",
+      printTradingName: true,
+    });
+    await settleOrder(suite.db, bill.orderId, at);
+    // The tender mirrors the payment; it must not count a second time.
+    await seedTender(
+      suite.db,
+      { saleId: sale },
+      {
+        method: "cash",
+        amount: "37.00",
+        tipAmount: "2.00",
+        settledAt: at,
+        billPaymentId: payment,
+      },
+    );
+    await seedTender(
+      suite.db,
+      { saleId: sale },
+      { method: "transfer", amount: "65.00", settledAt: at },
+    );
+    const otherDevice = await seedVenueDevice(suite.db, venue.locationId);
+    const direct = await seedRefundableSale(
+      suite.db,
+      { ...venue, deviceId: otherDevice },
+      {
+        method: "card",
+        applied: "20.00",
+        tip: "1.00",
+        at: "2026-08-03T10:00:00.000Z",
+        invoiceNumber: 2,
+      },
+    );
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: direct.saleId,
+      departmentId: bar!.id,
+      tradingName: "Bar",
+      printTradingName: false,
+    });
+    await seedTenderRefund(suite.db, direct, {
+      applied: "5.00",
+      tip: "0.00",
+      state: "completed",
+      createdAt: at,
+      at,
+    });
+    const unallocated = await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: at,
+      total: "3.00",
+      lines: [{ vatRate: "10.00", lineTotal: "3.00" }],
+    });
+    await seedTender(
+      suite.db,
+      { saleId: unallocated },
+      { method: "cash", amount: "3.00", settledAt: at },
+    );
+    const close = await run(input());
+    expect(close.departmentTakings).toEqual(
+      expect.arrayContaining([
+        {
+          departmentId: restaurant!.id,
+          departmentName: "Restaurant",
+          active: true,
+          byMethod: [
+            { method: "cash", amount: "37.00", tip: "2.00" },
+            { method: "transfer", amount: "65.00", tip: "0.00" },
+          ],
+          billsClosed: { count: 1, total: "100.00" },
+        },
+        {
+          departmentId: bar!.id,
+          departmentName: "Bar",
+          active: false,
+          byMethod: [{ method: "card", amount: "-5.00", tip: "0.00" }],
+          billsClosed: { count: 0, total: "0.00" },
+        },
+        {
+          departmentId: null,
+          departmentName: null,
+          active: null,
+          byMethod: [{ method: "cash", amount: "3.00", tip: "0.00" }],
+          billsClosed: { count: 0, total: "0.00" },
+        },
+      ]),
+    );
+    expect(close.departmentTakings).toHaveLength(3);
+    expect(close.departmentTakings.map((row) => row.departmentId)).toEqual([
+      null,
+      bar!.id,
+      restaurant!.id,
+    ]);
+    expect(close.cash.tenderTotal).toBe("100.00");
+  });
+
+  it("keeps a settled department bill even when no money moves on its closing day", async () => {
+    const [department] = await suite.db
+      .insert(departments)
+      .values({ name: "Dining", tradingName: "Dining" })
+      .returning();
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      workingOrderId: orderId,
+      issuedAt: "2026-08-03T10:00:00.000Z",
+      total: "10.00",
+      lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+    });
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId,
+      departmentId: department!.id,
+      tradingName: "Dining",
+      printTradingName: true,
+    });
+    await settleOrder(suite.db, orderId, "2026-08-04T10:00:00.000Z");
+    expect((await run(input())).departmentTakings).toEqual([
+      {
+        departmentId: department!.id,
+        departmentName: "Dining",
+        active: true,
+        byMethod: [],
+        billsClosed: { count: 1, total: "10.00" },
+      },
+    ]);
+  });
+
   it("returns money on a later day without changing invoice VAT, counts or stored sale facts", async () => {
     const paid = await seedRefundableSale(suite.db, venue, {
       method: "cash",

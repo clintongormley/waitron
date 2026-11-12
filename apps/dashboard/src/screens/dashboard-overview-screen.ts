@@ -1,3 +1,7 @@
+import {
+  renderDepartmentTakings,
+  departmentTakingsStyles,
+} from "../widgets/department-takings-table.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
@@ -30,6 +34,7 @@ export class OverviewScreen extends LitElement {
 
   static override styles = [
     baseStyles,
+    departmentTakingsStyles,
     metricStyles,
     topSellersStyles,
     css`
@@ -239,6 +244,7 @@ export class OverviewScreen extends LitElement {
           )}
         </wt-card>
       </div>
+      ${renderDepartmentTakings(overview.departmentTakings)}
       <wt-card class="top-sellers" data-test="top-sellers">
         <h2 slot="header">${t("overview.top_sellers_title")}</h2>
         ${renderTopSellers(overview.topSellers, this.#topSellerLabels())}

@@ -1485,10 +1485,19 @@ export interface ClosureSummaryDto {
   received: string;
 }
 
+export interface DepartmentTakingsDto {
+  departmentId: string | null;
+  departmentName: string | null;
+  active: boolean | null;
+  byMethod: TenderMethodRow[];
+  billsClosed: { count: number; total: string };
+}
+
 export interface SalesOverview {
   businessDay: string;
   takings: { tenderTotal: string; tipTotal: string; grossTotal: string };
   closureSummary: ClosureSummaryDto;
+  departmentTakings: DepartmentTakingsDto[];
   counts: SalesCounts;
   openTables: { open: number; total: number };
   topSellers: TopSellerRow[];
@@ -1508,6 +1517,7 @@ export interface DailyCloseDto {
   vat: VatSummaryDto;
   cash: CashUpDto;
   closureSummary: ClosureSummaryDto;
+  departmentTakings: DepartmentTakingsDto[];
   counts: SalesCounts;
   topSellers: TopSellerRow[];
 }

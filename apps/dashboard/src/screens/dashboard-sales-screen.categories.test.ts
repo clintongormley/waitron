@@ -22,6 +22,7 @@ const close: DailyCloseDto = {
   businessDay: "2026-08-29",
   vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
   cash: { byOrigin: [], tenderTotal: "0.00", tipTotal: "0.00" },
+  departmentTakings: [],
   closureSummary: {
     billsClosed: { count: 0, total: "0.00" },
     toBePaidByTransfer: "0.00",
@@ -176,6 +177,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getSalesOverview: vi.fn().mockImplementation(async () => ({
       businessDay: today(),
       takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 0, total: "0.00" },
         toBePaidByTransfer: "0.00",

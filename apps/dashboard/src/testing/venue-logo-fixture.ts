@@ -1,7 +1,7 @@
 import { vi, type Mock } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, SalesOverview } from "../api/client.js";
 
 export { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 
@@ -48,9 +48,10 @@ export function stubShellApi(signedIn: boolean, locale: ShellLocale = "es-ES"): 
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getDiskStop: async () => ({ stopped: false, deleted: null }),
-    getSalesOverview: async () => ({
+    getSalesOverview: async (): Promise<SalesOverview> => ({
       businessDay: "2026-08-30",
       takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 0, total: "0.00" },
         toBePaidByTransfer: "0.00",

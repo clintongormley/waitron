@@ -39,6 +39,7 @@ function touchApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getSalesOverview: async () => ({
       businessDay: "2026-08-30",
       takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 0, total: "0.00" },
         toBePaidByTransfer: "0.00",

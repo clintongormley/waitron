@@ -177,6 +177,14 @@ export interface ClosedBills {
   total: Decimal;
 }
 
+export interface DepartmentTakings {
+  departmentId: string | null;
+  departmentName: string | null;
+  active: boolean | null;
+  byMethod: TenderMethodLine[];
+  billsClosed: ClosedBills;
+}
+
 export interface DailyClose {
   /** The first box in `DailyCloseInput.nodeIds`, or omitted for a venue-wide close. */
   nodeId?: NodeId;
@@ -185,6 +193,7 @@ export interface DailyClose {
   vat: VatSummary;
   cash: CashUp;
   counts: CloseCounts;
+  departmentTakings: DepartmentTakings[];
 }
 
 /** One currently-open order whose worst UNSERVED line has crossed into `overdue` or `forgotten` —

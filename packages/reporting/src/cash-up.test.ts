@@ -35,7 +35,7 @@ function run(overrides: Partial<DailyCloseInput> = {}): Promise<CashUp> {
     ...overrides,
   };
   return withTransaction(suite.db, async (tx) => {
-    return computeCashUp(tx, input);
+    return (await computeCashUp(tx, input)).cash;
   });
 }
 // Helper: a settled sale with tenders. Returns nothing; each test seeds its own.
