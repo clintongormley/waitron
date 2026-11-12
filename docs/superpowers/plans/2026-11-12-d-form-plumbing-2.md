@@ -1,6 +1,6 @@
 # D-form-plumbing, slice 2: message assembly and two list editors
 
-**PLAN FOR APPROVAL.** Author: separate GPT-6.1 Sol, high effort, corrected by the driver after Claude's 275-second approach read (`receipts/form-plumbing-2/plan-review.md` in Lane D). Watcher clearance is pending. The 12 November 16:54 conditional clearance is spent on PR2977 (`a58168dd8ad3421622f3da92b593bdcba4fe304c`). No owner design approval claimed.
+**Cleared to build by the watcher, 12 November 18:01.** Author: separate GPT-6.1 Sol, high effort, corrected by the driver after Claude's 275-second approach read (`receipts/form-plumbing-2/plan-review.md` in Lane D). The clearance is recorded in Lane D `questions.md`, “D-form-plumbing slice two: plan CLEARED by the watcher”. The 12 November 16:54 conditional clearance is spent on PR2977 (`a58168dd8ad3421622f3da92b593bdcba4fe304c`). No owner design approval claimed.
 
 **Finish line:** ten dashboard editors share repeated feedback through `@waitron/ui`, with their current fields, wording and behavior preserved. Source: Lane D queue, D-form-plumbing; [backlog](../../backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form). The review brief quotes the full ask verbatim. Remaining forms stay open.
 
@@ -22,4 +22,4 @@ Callers own mappings, footer/retry, table focus/removal, nested editors and draf
 
 **Stay/defer:** Product editor needs separate inventory of variant-row refusals and named-field focus. Email settings, menu copy, attendance export/proposal, invoice customer/email and theme-name retain multi-job plumbing for a later bounded batch, not exclusion as single-job forms. Equipment-label, home-shortcut and print-job-reprint keep simple joining; variant-form keeps one flag; floor-plan-editor has no named repeated plumbing. Page-printer-add and misdated-note need their direct-focus lifecycle inventoried later. Module/media/Stripe/SumUp/adjustments/departments/zones remain later batches; no till/setup work.
 
-**Docs/size:** narrow `docs/backlog/dashboard.md`; update Forms in `docs/developers/design-system.md`; keep `catalogue.md`'s separate list-plumbing entry unchanged. Forecast from inspected lines: production +80/−135, tests +30/−0, support 0, docs about 90 changed including this plan; about 335 overall, no generated files. No build clearance implied.
+**Docs/size:** narrow `docs/backlog/dashboard.md`; update Forms in `docs/developers/design-system.md`; keep `catalogue.md`'s separate list-plumbing entry unchanged. Forecast from inspected lines: production +80/−135, tests +30/−0, support 0, docs about 90 changed including this plan; about 335 overall, no generated files. Clearance covers this batch only.

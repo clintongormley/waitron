@@ -1,6 +1,7 @@
 import { sameValue } from "./product-editor-model.js";
 import {
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -10,7 +11,7 @@ import { ReorderController, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -179,9 +180,7 @@ export class OptionListForm extends LitElement {
   @state() private labels: DraftLabel[] = [];
   @state() private defaultLabelId: string | null = null;
   @state() private editingLabel: DraftLabel | "new" | null = null;
-  @state() private attempted = false;
-  /** `serverErrors` keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
   /** `fieldErrors` with each path turned into one of this form's own keys. A label's message is
    * held against the label's ID rather than the position the server named, so moving a label
    * carries its message with it. */
@@ -256,7 +255,7 @@ export class OptionListForm extends LitElement {
     // After the reseed, so a label path resolves against the labels now on screen.
     if (changes.has("fieldErrors")) {
       this.serverErrors = this.#mapFieldErrors();
-      this.dismissed = new Set();
+      this.#feedback.newRefusal();
     }
     this.#registerDraft();
   }
@@ -269,8 +268,7 @@ export class OptionListForm extends LitElement {
   /** A message under the options table or a row has no control of its own, so focus goes to the
    * table when no control is invalid. */
   async #focusFirstInvalid(): Promise<void> {
-    await this.updateComplete;
-    if ((await focusFirstInvalid(this.shadowRoot!)) === null)
+    if ((await this.#feedback.focus(this.shadowRoot!)) === null)
       this.shadowRoot!.querySelector<HTMLElement>(".table-wrap")?.focus();
   }
 
@@ -291,8 +289,7 @@ export class OptionListForm extends LitElement {
     this.defaultLabelId = value?.defaultLabelId ?? null;
     this.#keepDefault();
     this.editingLabel = null;
-    this.attempted = false;
-    this.dismissed = new Set();
+    this.#feedback.reset();
   }
 
   #keepDefault(): void {
@@ -357,7 +354,7 @@ export class OptionListForm extends LitElement {
       "labels",
       ...this.languages.languages.map((locale) => `customer-name-${locale}`),
     ]);
-    const live = Object.entries(this.serverErrors).filter(([key]) => !this.dismissed.has(key));
+    const live = Object.entries(this.#feedback.remaining(this.serverErrors));
     const removed = ([key]: [string, string]) => {
       const held = /^label:([^:]+):/.exec(key);
       return held !== null && !this.labels.some((label) => label.id === held[1]);
@@ -367,7 +364,7 @@ export class OptionListForm extends LitElement {
       errors[key] = message;
       if (key.startsWith("label:") || shown.has(key)) fieldKeys.add(key);
     }
-    if (this.attempted)
+    if (this.#feedback.attempted)
       for (const [key, message] of Object.entries(this.#validate())) {
         errors[key] = message;
         fieldKeys.add(key);
@@ -391,7 +388,7 @@ export class OptionListForm extends LitElement {
   #edit(change: () => void, ...keys: string[]): void {
     change();
     this.#scope?.changed();
-    this.dismissed = new Set([...this.dismissed, ...keys]);
+    this.#feedback.dismiss(...keys);
   }
 
   /** A change to the options answers a refusal about them as a whole. */
@@ -479,8 +476,7 @@ export class OptionListForm extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
-    this.dismissed = new Set(Object.keys(this.serverErrors));
+    this.#feedback.press(...Object.keys(this.serverErrors));
     if (Object.keys(this.#validate()).length) {
       void this.#focusFirstInvalid();
       return;
@@ -743,13 +739,12 @@ export class OptionListForm extends LitElement {
     const fields = this.#fields(errors);
     const byLabel = this.#errorsByLabel(errors);
     // The options table shows its own message, even one that marks no field.
-    const bottom = [
-      ...Object.entries(errors)
-        .filter(([key, message]) => message && key !== "labels" && !fieldKeys.has(key))
-        .map(([, message]) => message),
-      ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
-    ].join(" ");
-    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const bottom = this.#feedback.message(
+      { ...errors, labels: undefined },
+      fieldKeys,
+      t("form.fix_fields"),
+    );
+    const invalid = this.#feedback.attempted && Object.keys(this.#validate()).length > 0;
     const saveAction = saveActionState(this.#scope);
     return html`<wt-modal
         size="standard"

@@ -90,15 +90,12 @@ printer keys.
 
 ## The form plumbing is hand-written per form
 
-Share repeated bottom-message assembly across dashboard and module forms, including Unit,
-Add/Edit staff, Section, Include folder, Category colour and Option label: their assembly
-stays local; `bottomMessage` shares only the string joiner.
-
-Move repeated attempt, refusal-dismissal and render-before-focus plumbing in the other dashboard
+Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
+plumbing in the remaining dashboard
 editors, the image library, Stripe and SumUp forms, Voids and comps (`packages/adjustments`),
 Departments and zones, and the till's forms onto `FormFeedback` in `@waitron/ui`. Inventory each
 later batch before migrating it; leave single-job forms local. Preserve each form's field mapping
-and message behavior. See the [first-slice plan](../superpowers/plans/2026-11-12-d-form-plumbing.md).
+and message behavior. See the [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md).
 
 ## What C47 part 2 found and did not fix
 

@@ -51,12 +51,11 @@ export class CategoryColorForm extends LitElement {
     const errors = Object.fromEntries(
       Object.entries(this.#feedback.remaining(this.errors)).filter(([, message]) => message),
     );
-    const bottom = [
-      ...Object.entries(errors)
-        .filter(([key]) => key !== "color")
-        .map(([, message]) => message),
-      ...(errors.color ? [t("form.fix_fields")] : []),
-    ].join(" ");
+    const bottom = this.#feedback.message(
+      errors,
+      new Set(errors.color ? ["color"] : []),
+      t("form.fix_fields"),
+    );
     return html`<wt-modal
       size="compact"
       .open=${this.open}
