@@ -9,7 +9,7 @@ until the owner sees it. Claude reads the design first; local mock-ups then acco
 ## Two products, one identity
 
 You design a **printed menu**, downloaded as an A4 PDF to print yourself or send to a printer,
-and an **online ordering menu**, used at a table or from outside for counter collection.
+and an **online ordering menu**, used at a table or from outside. Counter collection is the proposed first outside flow (A509); delivery (A1012) remains an explicit later choice.
 They share venue identity and dish content, with separate presentation settings.
 
 Offer compact text and photo-led presets: venue display name, logo, optional cover,
@@ -23,7 +23,12 @@ dashboard appearance, using declared `--wt-*` tokens and an independent theme ro
 Preview paper, phone and desktop independently of dashboard theme. Paper captures one published
 version and language. Keep headings with their first dish and each item's name, price and
 declarations together; reserve key space, adding a final page if needed. Allow section page breaks.
-Download ordinary A4 PDF; PDF/X, bleed and press colour management stay outside this proposal.
+Recommend HTML/CSS rendered by the manager’s browser, then **Print / Save as PDF**. This avoids
+putting a headless browser on the box or building a separate PDF layout engine. It requires the
+browser’s print dialog, rather than a one-click PDF download; ask the owner to accept that first
+cut below. The full ask still includes downloadable PDF. Native PDF generation or a hosted print
+service needs a later design if one-click download is required. PDF/X, bleed and press colour
+management stay outside this proposal.
 
 Table ordering needs menu, dish choices, basket, submission and status, alongside A508's
 waiter/bill/payment actions. Collection needs collection choices, basket, checkout and pickup status.
@@ -44,15 +49,25 @@ directory. Dish, variant and extra declarations stay distinct (`menu-types.ts#Of
 References describe source inspection, not runtime verification.
 
 Default to inline allergen and dietary icons after dish names, reusing
-`packages/ui/src/nutrition-icons.ts`; add any missing dietary symbols there. Paper's written key
+`packages/ui/src/nutrition-icons.ts`, which already has the six dietary symbols. Paper's written key
 names the used icons once, at the end of the **last page**, in separate allergen and dietary groups.
-Offer an each-page key or inline words. Online, labelled icon buttons reveal meaning on tap/focus,
-with screen-reader text and dismissible explanations. Cereal/nut kinds stay written per item,
-even in icon mode: wheat/walnuts, Catalan **blat/nous**, Galician **trigo/noces**.
+Offer a key on each page for that page’s used icons, or inline words. Other paper pages carry a
+short “Allergen key on page N” footer. This keeps the owner’s quiet default visible while
+acknowledging the words-with-symbols constraint recorded in A670’s backlog; it is not a legal
+compliance conclusion. Online, labelled icon buttons open on click, Enter or Space, with accessible
+names and a dismissible explanation; focus alone opens nothing. Cereal/nut kinds stay written per item,
+even in icon mode, so a generic cereal/nut symbol does not hide which ingredient was declared:
+wheat/walnuts, Catalan **blat/nous**, Galician **trigo/noces**.
 
+Use published `dietaryDeclarations` for dietary marks. Show the most specific declared mark:
+vegan suppresses vegetarian/no-meat/no-fish; vegetarian suppresses no-meat/no-fish. Independent
+halal/kosher declarations remain. Do not expand one vegan declaration into four visible symbols.
 Dietary marks represent positive declarations, not allergen absence. An absent icon says nothing
 about safety; unreviewed and reviewed-empty information never become “allergen-free”. Preserve
 A509's proposed allergen/diet filters in the later interactive work, without promising safe dishes.
+Keep October’s decision against per-dish “Not reviewed” labels. Both unreviewed and reviewed-empty
+dishes have no allergen icon; one key note explains that icons show declarations and guests should
+tell staff about allergies. This does not claim the two stored states are equivalent.
 
 ## Languages added to this spec now
 
@@ -60,6 +75,14 @@ Offer every enabled venue **content language**, independently of staff app local
 controls, keys and explanations too, extending beyond current dashboard EN/ES tables. Missing dish
 text follows `resolveMenuText`: requested language, venue default, then staff name where supplied;
 descriptions can remain empty. Never infer a recipe or translate its ingredients from its name.
+Keep guest standard wording in one future browser-safe translation file,
+`packages/shared/src/i18n/guest-menu.ts`, reused by print and online renderers; do not add another
+copy to each app. If a requested content language lacks standard wording, use the whole guest
+wording bundle in the venue default when available, otherwise English, and name that language
+beside the key. Dish text still uses its content-language fallback. CA covers Valencian with the
+standard-wording override **Cereals que continguen gluten**; other terms here are shared, while
+venue dish names preserve their own `ca-ES-valencia` text. This override is editorial, not a
+verbatim Annex II quotation.
 
 Complete short labels follow ACSA (CA) and SERGAS Annex V (GL), except **Froitos de casca**,
 an editorial normalization of its printed “Froitos de cascara”. The older guide supplies vocabulary,
@@ -130,19 +153,17 @@ Checked 12 November 2026. Quotes are short source excerpts; interpretations desc
 
 ## Proposed first phase and remaining size
 
-Recommend two stages, to split into build PRs after the owner chooses the design. These are estimates, not commitments; the first row is too large for one campaign slice:
-
-| Result | Production lines | Test lines |
-| --- | --- | --- |
-| Shared presets/media choices, paper preview and A4 PDF download | 700–1,100 | 350–650 |
-| Responsive guest browsing renderer, language controls and accessible icon meanings | 450–750 | 300–500 |
+Recommend shared styling and paper output as the first usable stage: approximately
+**700–1,100 production lines and 350–650 test lines**, split into proportionate build PRs after
+the owner chooses the route. Re-estimate if direct PDF download is required. Build the online
+renderer with the customer entrance and ordering, not as a separate locally-only product.
+The online studies are design evidence, not a promised usable first release.
 
 Reuse `packages/media/src/routes.ts`, `packages/media/src/presentation.ts` and
-`packages/media/src/renditions.ts` for images.
-Check publication fidelity, separate extras, language fallback, escaping, icon accessibility and
-long-menu pagination; inspect actual PDFs and phone/desktop output. No tests ran for this spec.
-The browsing renderer is initially locally previewable; a deployed guest URL depends on the
-customer entrance design. This proposed phase delivers no ordering and does not complete A508/A509.
+`packages/media/src/renditions.ts` for images. Check publication fidelity, separate extras,
+language fallback, escaping, icon accessibility and long-menu pagination; inspect actual saved
+PDFs and phone/desktop output. No tests ran for this spec. The paper stage does not complete
+A508/A509 or provide any ordering.
 
 Estimate later table ordering at **8–15 engineering days**, collection at **8–15**, after decisions;
 shared work may overlap. Exclude customer hosting/payment integration. Credential lifetime,
@@ -152,13 +173,45 @@ need their own design before a reliable commitment. CSS theme upload comes later
 design for styling boundaries, assets and preview compatibility; no arbitrary code in the first cut.
 
 After Claude's read, show the owner local A4 and online 390/1280 mock-ups in EN/ES plus
-Catalan, including a multipage last-page key. Keep them outside git; they are the next design evidence.
+Catalan, including a multipage last-page key. Keep them outside git. Names/prices come from the
+published demo snapshot; Catalan names come from `packages/country-es/src/demo/menu.ts`. Any
+added allergen/diet markers are explicitly illustrative, not verified recipes.
 
 ## Owner questions
 
 1. Start with settings/presets and defer CSS theme upload? Recommend yes: compact text and photo-led
    examples make layout, colours, fonts and imagery editable immediately.
-2. Deliver print plus browsing first, then ordering separately? Recommend yes, explicitly retaining
-   both table and collection ordering in the full scope.
+2. Deliver styled paper output first, then the online menu with ordering? Recommend yes; do not
+   build an online result guests cannot reach. Retain table/outside ordering in the full scope.
 3. Use inline icons with the last-page key by default, retaining each-page key and words as choices?
    Recommend yes, with cereal/nut kinds always written per item.
+
+4. Accept browser Print / Save as PDF for the first cut, or require one-click PDF download now?
+   Recommend browser Save as PDF first; you can send that file to your printer, with a print dialog.
+5. Start outside ordering with counter collection (A509), then delivery (A1012)? Recommend yes;
+   this is a proposed sequence, not an interpretation that removes delivery from your request.
+
+## Draft guest wording
+
+These are editorial translations, not statutory quotations. `{n}` is the last-page number.
+The kinds format is “Cereals containing gluten (Wheat)”, with both names localized using the tables.
+
+| Use | English | Español | Català | Galego |
+| --- | --- | --- | --- | --- |
+| Menu | Menu | Carta | Carta | Carta |
+| Language | Language | Idioma | Idioma | Idioma |
+| Context | At your table | En tu mesa | A la teva taula | Na túa mesa |
+| Outside context | Collection | Recogida | Recollida | Recollida |
+| Basket | View basket | Ver pedido | Veure comanda | Ver pedido |
+| Add | Add | Añadir | Afegir | Engadir |
+| Close explanation | Close | Cerrar | Tancar | Pechar |
+| Explanation | Allergen and dietary information | Información sobre alérgenos y dietas | Informació sobre al·lèrgens i dietes | Información sobre alérxenos e dietas |
+| Key heading | Allergen key | Leyenda de alérgenos | Llegenda d’al·lèrgens | Lenda de alérxenos |
+| Diet heading | Dietary declarations | Declaraciones dietéticas | Declaracions dietètiques | Declaracións dietéticas |
+| Page footer | Allergen key on page {n} | Leyenda de alérgenos en la página {n} | Llegenda d’al·lèrgens a la pàgina {n} | Lenda de alérxenos na páxina {n} |
+| Key language | Key in English | Leyenda en español | Llegenda en català | Lenda en galego |
+| Common note | Icons show declared allergens. No icon does not mean allergen-free. Tell staff about allergies. | Los iconos muestran los alérgenos declarados. La ausencia de iconos no significa que no haya alérgenos. Informa al personal de tus alergias. | Les icones mostren els al·lèrgens declarats. L’absència d’icones no vol dir que no hi hagi al·lèrgens. Informa el personal de les teves al·lèrgies. | As iconas mostran os alérxenos declarados. A ausencia de iconas non significa que non haxa alérxenos. Informa o persoal das túas alerxias. |
+
+Valencian shares this draft wording, with editorial **A la teua taula**, **no hi haja** and
+**les teues al·lèrgies** in the affected entries. Guest ordering/status/checkout wording belongs to
+its later ordering design; the local studies label those controls as demonstrations.
