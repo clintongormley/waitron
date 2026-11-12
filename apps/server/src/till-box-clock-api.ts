@@ -97,7 +97,8 @@ function overrideOf(body: unknown): { personId: string; pin: string } | undefine
 
 /** "Check the time" on a till: `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
  * (plan decision 15). Any staff member the till's profile admits, during the start-up window or
- * until the internet confirms the start; an administrator, signed in or by PIN, at any time.
+ * until the internet confirms the start; an administrator, signed in or by PIN, while the start
+ * waits or the clock reads before 28-10-2024.
  * Refused on the box itself. */
 export function mountTillBoxClockApi(
   app: Hono,

@@ -4485,7 +4485,7 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while
   the start has not been confirmed by the internet (during a stop, or while the start waits) or
   during the start-up window (below), or an administrator signed in on the till or named with their
-  PIN, at any time;
+  PIN, while the start waits or the clock reads before 28-10-2024;
 - the person on the first-setup, restore or handover page, from their own device, when the clocks
   differ and they choose **This device** (A1482,
   [plan](../superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
@@ -6160,11 +6160,12 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the chain case covers sales
   only, and the gate covers the money routes `clock-unconfirmed-gate.test.ts` lists. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
-  until the internet confirms that start or during start-up; a Box administration holder's at any time), a
-  Box administration holder's own device, the device showing the clock step of the setup page (under its
-  owner's pass), the restore page (under its recovery key or kit) or the handover page (signed in as
-  a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
-  2026-11-12: "add \"This device\" to #2693 now") — never from devices alone
+  until the internet confirms that start or during start-up; a Box administration holder's while the
+  start waits or the clock reads before 28-10-2024), a Box administration holder's own device, the
+  device showing the clock step of the setup page (under its owner's pass), the restore page (under
+  its recovery key or kit) or the handover page (signed in as a `node.manage` holder), when that
+  person chooses **This device** (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
+  #2693 now") — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
   clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
   full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
