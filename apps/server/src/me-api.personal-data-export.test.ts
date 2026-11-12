@@ -52,7 +52,7 @@ async function download(
   beforeRequest?: (personId: string) => Promise<void>,
 ): Promise<Record<string, string>> {
   await seedVenue(suite.db);
-  const [row] = await seedPersons(suite.db, { displayName: "Marta Canary", role: "staff" });
+  const [row] = await seedPersons(suite.db, { displayName: "Martha Canary", role: "staff" });
   await beforeRequest?.(row!.id);
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: row!.id }),
@@ -70,7 +70,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
   it("reads the identity part when identity is enabled", async () => {
     const files = await download(["core", "identity"]);
     expect(Object.keys(files).sort()).toEqual(["README.txt", "profile.json", "sign-in.json"]);
-    expect(files["profile.json"]).toContain("Marta Canary");
+    expect(files["profile.json"]).toContain("Martha Canary");
   });
 
   it("reads only the enabled modules, not every module", async () => {
@@ -87,7 +87,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
     });
     const venueId = await venueLocationId(suite.db);
     await suite.db.insert(nodes).values({ id: NODE_ID, locationId: venueId, name: "Box" });
-    const [row] = await seedPersons(suite.db, { displayName: "Marta Canary", role: "staff" });
+    const [row] = await seedPersons(suite.db, { displayName: "Martha Canary", role: "staff" });
     await withTransaction(suite.db, (tx) =>
       new WorkforceBackend().clockIn(tx, {
         nodeId: NODE_ID,
@@ -146,7 +146,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
-    const [row] = await seedPersons(suite.db, { displayName: "Marta Canary", role: "staff" });
+    const [row] = await seedPersons(suite.db, { displayName: "Martha Canary", role: "staff" });
     await suite.db.insert(saleVoids).values({
       saleId: sale!.id,
       reason: "Wrong table",
