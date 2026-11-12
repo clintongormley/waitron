@@ -195,7 +195,7 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
   if (!(await db.select({ id: persons.id }).from(persons).where(eq(persons.id, PERSON)))[0]) {
     await seedPersons(db, {
       id: PERSON,
-      displayName: "Cajera",
+      displayName: "Cashier",
       pinHash: hashPin("5555"),
       role: "staff",
     });

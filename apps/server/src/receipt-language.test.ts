@@ -187,7 +187,7 @@ async function venueWith(
     });
     const offers = await offerProducts(tx, cfg, { productIds: [product.id] });
     const [staff] = await seedPersons(tx, {
-      displayName: "Cajera",
+      displayName: "Cashier",
       pinHash: hashPin("5555"),
       role: "staff",
     });
@@ -1057,7 +1057,7 @@ describe("a sale prints its goods in the default content language its lines stor
     const { v, goods } = await goodsVenue();
     const id = randomUUID();
     const [cashier] = suite.db.all<{ id: string }>(
-      sql`select id from persons where display_name = 'Cajera'`,
+      sql`select id from persons where display_name = 'Cashier'`,
     );
 
     const { invoice } = await withTransaction(suite.db, async (tx) => {
