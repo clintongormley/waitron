@@ -407,7 +407,8 @@ it.each([
       paused();
       await release;
     });
-    let ahead = true;
+    let refusing = true;
+    let batchesSent = 0;
     const duty = startReturnRecordsDuty({
       db: suite.db,
       node: suite.node,
@@ -415,16 +416,19 @@ it.each([
       nodeId: source,
       modules,
       log: () => {},
-      fetch: async (url, init) =>
-        ahead
+      fetch: async (url, init) => {
+        batchesSent++;
+        return refusing
           ? Response.json({ error: { code } }, { status: 409 })
-          : app.request(String(url), init),
+          : app.request(String(url), init);
+      },
     });
     try {
       await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(1));
       await waiting;
       expect(duty.state()).toBe(state);
-      ahead = false;
+      expect(batchesSent).toBe(1);
+      refusing = false;
       resume();
       await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
       await duty.stop();

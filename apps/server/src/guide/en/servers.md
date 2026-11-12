@@ -86,8 +86,8 @@ the main box and keep the old box's data if you still need it. The return is not
 Reset remains available, but deletes the old box's venue data, including any records still waiting.
 
 If other returned facts differ, keep both boxes running with their data intact. Only eligible
-payment differences can be accepted through the internal API. An administrator can inspect them with GET `/management-api/return-clashes` on the main box and accept
-one with POST `/management-api/return-clashes/:clashId/accept`, giving `actionKey` and `reason`.
+payment differences can be accepted through the internal API. An administrator can inspect them
+with GET `/management-api/return-clashes` on the main box and accept one with POST `/management-api/return-clashes/:clashId/accept`, giving `actionKey` and `reason`.
 There is no screen for this yet. Then switch the stopped box off and on to retry. Each newly
 reached clashing batch needs its own acceptance; only the exact accepted group counts.
 
