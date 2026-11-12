@@ -61,3 +61,5 @@ fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapsh
 
 **Estimate, added/removed lines.** Production +245/−5; tests +300/−0; support +20/−0 (suite-local); docs +35/−5; generated 0/0;
 total 610 changed lines. Stop for watcher/outside opinion before 1.5× (915) or persistent state/report growth. The watcher cleared these exclusions at 11:06 on 2026-11-12.
+
+**2026-11-12 follow-up split:** the watcher cleared [warnings as PR 1](2026-11-12-a1018-12a-warnings-return-completion.md) at 13:49; durable receiver completion now gets its own later short plan.
