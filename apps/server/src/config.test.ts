@@ -1008,7 +1008,7 @@ describe("duty timings", () => {
   });
   it("refuses an impossible override", () => {
     for (const [override, option] of [
-      [{ minTickMs: 300, maxTickMs: 200 }, "minTickMs"],
+      [{ minTickMs: 300, maxTickMs: 200 }, "minTickMs exceeds maxTickMs"],
       [{ skipRetryMs: 1 }, "skipRetryMs"],
       [{ skipRetryMs: 4_000_000 }, "skipRetryMs"],
       [{ maxTickMs: 2_147_483_648 }, "maxTickMs"],

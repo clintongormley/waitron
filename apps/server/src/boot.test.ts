@@ -260,7 +260,7 @@ vi.mock("./box-secrets.js", async (importOriginal) => {
 });
 
 /**
- * `startServer` end to end: the field mapping in `boot.ts` — `config.scheduler.*` into
+ * `startServer` end to end: the field mapping in `boot.ts` — `timings.scheduler.*` into
  * `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into `recordPass`, the `settlementLagMs`
  * conditional spread, the migrations-root default — and the whole `close()` sequence.
  *
@@ -2667,7 +2667,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   });
 
-  // Pins which config field reaches the drain: a `config.minTickMs` passed as `skipRetryMs` would pass
+  // Pins which timing reaches the drain: a `timings.minTickMs` passed as `skipRetryMs` would pass
   // the typecheck and every unit test. A due `envios` row is seeded with no `fiscal.aeat` credential,
   // and the loop's logged sleep is read back. That row would stay due forever in the shared directory,
   // where other tests assert `consecutiveFailures === 0`, so the `finally` deletes it.
@@ -2708,7 +2708,7 @@ describe("startServer, against a migrated venue directory", () => {
         // The row was reached and skipped for its missing credential, not dropped some other way.
         expect(skipped.errorCode).toBe("credentials.missing");
 
-        // `config.skipRetryMs` folds into `nextDueAt`, and 45678 sits inside both clamps. `sleepMsFor`
+        // `timings.skipRetryMs` folds into `nextDueAt`, and 45678 sits inside both clamps. `sleepMsFor`
         // subtracts a `now()` read after the pass ran, so the tolerance absorbs the pass's duration
         // while staying far from `minTickMs` (1000), which a swapped field would report.
         expect(sleeping.sleepMs).toBeLessThanOrEqual(45678);

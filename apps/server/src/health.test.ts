@@ -706,6 +706,6 @@ describe("runner jobs on health", () => {
   });
 });
 
-it("drain's budget exceeds the longest idle sleep", () => {
+it("drain's budget exceeds the default idle sleep", () => {
   expect(DEFAULT_DUTY_TIMINGS.maxTickMs).toBeLessThan(DUTY_BUDGET_MS[DRAIN_DUTY]);
 });
