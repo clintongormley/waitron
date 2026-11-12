@@ -386,14 +386,7 @@ describe("automatic card capture recovery", () => {
       .where(eq(workingOrders.id, id));
     await expect(
       withTransaction(suite.db, (tx) =>
-        updateOrderLine(
-          tx,
-          cfg,
-          id,
-          1,
-          { portionLineNos: [], note: "changed while unknown" },
-          order!.revision,
-        ),
+        updateOrderLine(tx, cfg, id, 1, { portionLineNos: [], quantity: "9" }, order!.revision),
       ),
     ).rejects.toMatchObject({ code: "order.payment_in_flight" });
     await expect(

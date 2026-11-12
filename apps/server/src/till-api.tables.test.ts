@@ -724,7 +724,7 @@ describe("table + tab routes", () => {
       await sendRound(partyId, [{ menuItemId, quantity: "1" }]),
       await request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
-        body: JSON.stringify({ portionLineNos: [], note: "x", revision }),
+        body: JSON.stringify({ portionLineNos: [], quantity: "9", revision }),
       }),
       await cancel(tabId, 1),
     ];

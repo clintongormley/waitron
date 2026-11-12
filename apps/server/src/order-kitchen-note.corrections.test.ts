@@ -225,7 +225,7 @@ async function set(
 ) {
   const current = before ?? (await read(scope));
   return inTx(v, (tx) =>
-    setOrderKitchenNote(tx, v.db, v.cfg, scope, {
+    setOrderKitchenNote(tx, v.cfg, scope, {
       submissionId,
       expectedNoteRevision: current.revision,
       expectedOwnerRevision: current.ownerRevision,

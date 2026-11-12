@@ -80,7 +80,6 @@ describe("whole-order instructions and issued customer documents", () => {
       await inTx(v, (tx) =>
         setOrderKitchenNote(
           tx,
-          v.db,
           v.cfg,
           { workingOrderId },
           {
@@ -117,7 +116,6 @@ describe("whole-order instructions and issued customer documents", () => {
     await inTx(v, (tx) =>
       setOrderKitchenNote(
         tx,
-        v.db,
         v.cfg,
         { partyId: party.partyId },
         {
@@ -194,7 +192,6 @@ describe("whole-order instructions and issued customer documents", () => {
     await inTx(v, (tx) =>
       setOrderKitchenNote(
         tx,
-        v.db,
         v.cfg,
         { partyId: party.partyId },
         {

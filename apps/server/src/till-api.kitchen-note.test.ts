@@ -403,24 +403,40 @@ describe("whole-order kitchen note routes", () => {
     expect(device!.at).toBe(seenAt);
   });
 
-  it.each(["abandoned", "collected", "payment"])("refuses %s counter writes", async (state) => {
+  it.each(["abandoned", "collected"])("refuses %s counter writes", async (state) => {
     await suite.db
       .update(workingOrders)
       .set(
-        state === "abandoned"
-          ? { status: "abandoned" }
-          : state === "collected"
-            ? { collectedAt: new Date().toISOString() }
-            : { paymentAttemptAt: new Date().toISOString() },
+        state === "abandoned" ? { status: "abandoned" } : { collectedAt: new Date().toISOString() },
       )
       .where(eq(workingOrders.id, orderId));
-    await expectError(
-      await request("PUT", path(), command()),
-      409,
-      state === "payment" ? "order.payment_in_flight" : "working_order.not_open",
-    );
+    await expectError(await request("PUT", path(), command()), 409, "working_order.not_open");
     expect(await suite.db.select().from(serviceCommands)).toHaveLength(0);
   });
+
+  it.each([
+    ["counter", false],
+    ["party", true],
+  ] as const)(
+    "saves a %s note while a card is at the reader, keeping the payment's mark",
+    async (_scope, party) => {
+      const paying = party ? billId : orderId;
+      await suite.db
+        .update(workingOrders)
+        .set({ paymentAttemptAt: "2026-09-26T10:00:00.000Z" })
+        .where(eq(workingOrders.id, paying));
+      const before = await suite.db.select().from(workingOrders);
+
+      const saved = await request("PUT", path(party), command(party));
+
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toMatchObject({
+        note: "All together; train at 14:30",
+        revision: 1,
+      });
+      expect(await suite.db.select().from(workingOrders)).toEqual(before);
+    },
+  );
 
   it.each(["logout", "revoke", "profile", "zone"])(
     "rechecks %s after reading a delayed request body",

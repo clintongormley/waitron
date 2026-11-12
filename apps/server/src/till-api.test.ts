@@ -2892,10 +2892,45 @@ async function park(
 
 describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it.each([
-    ["stale", "working_order.out_of_date", 409],
-    ["closed", "working_order.not_open", 409],
-    ["paying", "order.payment_in_flight", 409],
-  ])("refuses a %s held label save without changing the order", async (state, code, status) => {
+    ["stale", "working_order.out_of_date", 409, "Ana"],
+    ["closed", "working_order.not_open", 409, "Ana"],
+    // A rename goes through while paying; one that changes nothing is still refused.
+    ["paying", "order.payment_in_flight", 409, "Mesa 7"],
+  ])(
+    "refuses a %s held label save without changing the order",
+    async (state, code, status, label) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
+      const id = randomUUID();
+      await park(app, cookie, {
+        id,
+        lines: [{ menuItemId: waterOfferId, quantity: "2" }],
+        label: "Mesa 7",
+      });
+      if (state === "closed")
+        await suite.db.execute(
+          sql`update working_orders set status = 'abandoned' where id = ${id}`,
+        );
+      if (state === "paying")
+        await suite.db.execute(
+          sql`update working_orders set payment_attempt_at = '2026-10-12T10:00:00Z' where id = ${id}`,
+        );
+      const before = await suite.db.execute(sql`select * from working_orders where id = ${id}`);
+      const response = await app.request(`/api/working-orders/${id}/label`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ label, revision: state === "stale" ? 99 : 0 }),
+      });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+      expect(
+        (await suite.db.execute(sql`select * from working_orders where id = ${id}`)).rows,
+      ).toEqual(before.rows);
+    },
+  );
+
+  it("renames a held order while a card is at the reader, keeping the payment's mark", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -2905,23 +2940,23 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       lines: [{ menuItemId: waterOfferId, quantity: "2" }],
       label: "Mesa 7",
     });
-    if (state === "closed")
-      await suite.db.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
-    if (state === "paying")
-      await suite.db.execute(
-        sql`update working_orders set payment_attempt_at = '2026-10-12T10:00:00Z' where id = ${id}`,
-      );
-    const before = await suite.db.execute(sql`select * from working_orders where id = ${id}`);
+    await suite.db.execute(
+      sql`update working_orders set payment_attempt_at = '2026-10-12T10:00:00Z' where id = ${id}`,
+    );
     const response = await app.request(`/api/working-orders/${id}/label`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ label: "Ana", revision: state === "stale" ? 99 : 0 }),
+      body: JSON.stringify({ label: "Ana", revision: 0 }),
     });
-    expect(response.status).toBe(status);
-    expect(await response.json()).toMatchObject({ error: { code } });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toEqual({ revision: 1 });
     expect(
-      (await suite.db.execute(sql`select * from working_orders where id = ${id}`)).rows,
-    ).toEqual(before.rows);
+      (
+        await suite.db.execute(
+          sql`select label, revision, payment_attempt_at from working_orders where id = ${id}`,
+        )
+      ).rows,
+    ).toEqual([{ label: "Ana", revision: 1, payment_attempt_at: "2026-10-12T10:00:00Z" }]);
   });
 
   it("saves only a held order label and retains its stored lines", async () => {
