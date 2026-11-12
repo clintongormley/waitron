@@ -49,6 +49,7 @@ async function routed() {
   const cookies = await withTransaction(suite.db, async (tx) => {
     const session = async (personRole: PersonRoleValue) => {
       const [row] = await seedPersons(tx, {
+        jobRoles: [],
         displayName: `${personRole} ${randomUUID()}`,
         pinHash: hashPin("1234"),
         role: personRole,

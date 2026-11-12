@@ -14,3 +14,7 @@ export const STARTER_PROFILE_NAMES = {
   Kitchen: { es: "Cocina" },
   Handheld: { es: "Móvil" },
 } as const satisfies StaffNames;
+
+export const STARTER_JOB_ROLE_NAMES = {
+  Team: { es: "Equipo" },
+} as const satisfies StaffNames;

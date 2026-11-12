@@ -244,3 +244,37 @@ it("keeps floor-set identity when department ownership moves into its row", asyn
     Object.keys(original.tables.floor_plan_sets!.rows),
   );
 });
+
+it("maps a job-role baseline event and its generated role id together", async () => {
+  const snapshot = (role: string) => ({
+    tables: {
+      staff_roles: table([
+        { id: role, name: "Team", colour: "grey", position: 0, hidden_at: null },
+      ]),
+      activity_log: table([
+        {
+          id: "123e4567-e89b-42d3-a456-426614174002",
+          kind: "job_role.member_added",
+          subject_id: "admin",
+          at: "2026-10-08T10:00:00.000Z",
+          data: JSON.stringify({ staffRoleId: role, name: "Team" }),
+        },
+      ]),
+    },
+  });
+  const first = await canonical(snapshot(id));
+  expect(await canonical(snapshot(otherId))).toEqual(first);
+  expect(Object.values(first.tables.staff_roles!.rows)).toEqual([
+    {
+      id: '@staff_roles:["Team"]',
+      name: "Team",
+      colour: "grey",
+      position: 0,
+      hidden_at: null,
+    },
+  ]);
+  expect(Object.values(first.tables.activity_log!.rows)[0]!.data).toEqual({
+    staffRoleId: '@staff_roles:["Team"]',
+    name: "Team",
+  });
+});

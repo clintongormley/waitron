@@ -20,7 +20,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { STARTER_ZONE_NAMES } from "@waitron/venue-service";
-import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.js";
+import {
+  STARTER_PROFILE_NAMES,
+  STARTER_STATION_NAMES,
+  STARTER_JOB_ROLE_NAMES,
+} from "./starter-content.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
 
@@ -1194,3 +1198,32 @@ it("first setup writes the zone document and the first day-start row", async () 
     { effectiveBusinessDay: "2000-01-01", dayCutover: "06:00:00" },
   ]);
 });
+
+for (const [staffLanguage, name] of [
+  ["en", "Team"],
+  ["es", () => STARTER_JOB_ROLE_NAMES.Team.es],
+] as const) {
+  it(`setup's admin holds the starter job role in ${staffLanguage}`, async () => {
+    const plan = planVenue({ ...request(), staffLanguage }, ALL_MODULES);
+    await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+    await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+    const expectedName = typeof name === "string" ? name : name();
+    expect(
+      suite.db.all(sql`select r.name, p.display_name from person_staff_roles h
+      join staff_roles r on r.id = h.staff_role_id join persons p on p.id = h.person_id`),
+    ).toEqual([{ name: expectedName, display_name: "Owner" }]);
+    expect(
+      suite.db.all(sql`select a.person_id, a.subject_id, a.data from activity_log a
+      where a.kind = 'job_role.member_added'`),
+    ).toEqual([
+      {
+        person_id: null,
+        subject_id: expect.any(String),
+        data: JSON.stringify({
+          staffRoleId: suite.db.all<{ id: string }>(sql`select id from staff_roles`)[0]!.id,
+          name: expectedName,
+        }),
+      },
+    ]);
+  });
+}

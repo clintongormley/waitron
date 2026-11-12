@@ -1,8 +1,11 @@
+import { createStarterStaffRole } from "@waitron/staffing";
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
+  personStaffRoles,
+  recordActivity,
   FIRST_DAY_START,
   dayCutoverChanges,
   readSettings,
@@ -241,6 +244,14 @@ export async function applyVenue(
               })
               .returning({ id: persons.id });
             createdAdministrator = created!.id;
+            const staffRoleId = await createStarterStaffRole(tx, action.jobRoleName);
+            await tx.insert(personStaffRoles).values({ personId: created!.id, staffRoleId });
+            await recordActivity(tx, {
+              kind: "job_role.member_added",
+              subjectId: created!.id,
+              personId: null,
+              data: { staffRoleId, name: action.jobRoleName },
+            });
           }
           break;
         }

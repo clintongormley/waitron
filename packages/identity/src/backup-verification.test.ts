@@ -94,13 +94,21 @@ beforeEach(async () => {
     await seedPersons(suite.db, [
       {
         id: person,
+        jobRoles: [],
         displayName: "First",
         passwordHash: password,
         pinHash: pin,
         totpSecret: encrypted,
         createdAt: old,
       },
-      { id: second, displayName: "Second", role: "manager", status: "suspended", createdAt: now },
+      {
+        id: second,
+        displayName: "Second",
+        role: "manager",
+        status: "suspended",
+        createdAt: now,
+        jobRoles: [],
+      },
     ]);
     suite.db.run(
       sql`insert into staff_roles (id, name, colour, position) values ('job', 'Cook', 'blue', 2)`,

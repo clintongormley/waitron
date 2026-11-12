@@ -131,7 +131,9 @@ describe("staff roles", () => {
 
   it("hiding a role logs a removal for each of its three holders", async () => {
     const v = await seedVenueWithStaff(suite.db);
-    const [third] = await inTx((tx) => seedPersons(tx, { displayName: "Alex", role: "staff" }));
+    const [third] = await inTx((tx) =>
+      seedPersons(tx, { jobRoles: [], displayName: "Alex", role: "staff" }),
+    );
     const actor = { personId: v.ana };
     const role = await inTx((tx) => createStaffRole(tx, { name: "Waiter", colour: "blue" }, actor));
     const holders = [v.ana, v.marc, third!.id];
@@ -520,7 +522,13 @@ describe("staff roles", () => {
       id: string = randomUUID(),
     ) =>
       inTx(async (tx) => {
-        const [row] = await seedPersons(tx, { id, displayName, role: "staff", status });
+        const [row] = await seedPersons(tx, {
+          jobRoles: [],
+          id,
+          displayName,
+          role: "staff",
+          status,
+        });
         return row!.id;
       });
     const marc = await person("Marc");

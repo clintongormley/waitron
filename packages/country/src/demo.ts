@@ -178,6 +178,7 @@ export interface CountryDemoPlacement {
   readonly rotation: number;
 }
 export interface CountryDemoPerson {
+  readonly jobRoles: readonly string[];
   readonly displayName: string;
   readonly role: string;
   readonly email: string;
