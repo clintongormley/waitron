@@ -241,6 +241,52 @@ function byRate(rows: readonly { rate: string; base: string; tax: string }[]) {
   );
 }
 
+describe("comps by permission", () => {
+  it("a waiter applies a staff meal within limits and a Supervisor approves a zero-limit complaint", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    const line = await todayLine(venue, billId, 1);
+    await adjust(billId, {
+      ...line,
+      action: "discount_amount",
+      amount: "1.00",
+      reasonId: venue.reasonId.staffMeal,
+      operatorId: venue.staffId,
+    });
+    const reason = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, {
+        ...REASONS.complaint,
+        name: randomUUID(),
+        maxAmount: decimal("0.00"),
+      }),
+    );
+    const ask: Ask = { ...line, action: "comp", reasonId: reason.id, operatorId: venue.staffId };
+    expect((await preview(billId, ask)).needsApproval).toEqual({
+      by: "limit",
+      permission: "adjustment.approve",
+      limit: { kind: "reason", amount: "0.00", percentBp: null },
+    });
+    await adjust(billId, {
+      ...ask,
+      approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
+    const recorded = await inTx(venue, (tx) =>
+      tx.select().from(adjustments).where(eq(adjustments.workingOrderId, billId)),
+    );
+    expect(
+      recorded
+        .sort((a, b) => a.reduction - b.reduction)
+        .map((row) => ({
+          requestedBy: row.requestedBy,
+          approvedBy: row.approvedBy,
+          reduction: row.reduction,
+        })),
+    ).toEqual([
+      { requestedBy: venue.staffId, approvedBy: null, reduction: 100 },
+      { requestedBy: venue.staffId, approvedBy: venue.supervisorId, reduction: 1100 },
+    ]);
+  });
+});
+
 describe("a comp (plan D4)", () => {
   it("sets the line to zero, keeps its list price, and files the bill with the line at zero", async () => {
     const { billId } = await bill([{ name: "Burger" }, { name: "Bread" }]);
@@ -896,7 +942,6 @@ describe("approval (plan D6)", () => {
           ...REASONS.complaint,
           name: "Complaint, supervisors apply",
           names: {},
-          applyRoles: ["supervisor"],
         })
       ).id;
     });
@@ -1771,7 +1816,6 @@ describe("cumulative limits (plan D6)", () => {
         names: {},
         actions: ["discount_amount"],
         maxAmount: decimal("5.00"),
-        approverRoles: ["manager", "admin"],
       }),
     );
     const off = (amount: string): Ask => ({
@@ -2311,7 +2355,6 @@ describe("a reason's euro limit counts what is still off the bill (owner, 2026-1
           name: "Eleven a bill",
           names: {},
           maxAmount: decimal("11.00"),
-          approverRoles: ["manager", "admin"],
         })
       ).id;
     });
@@ -2493,8 +2536,6 @@ describe("the bill's comp limit (A758 §3.5)", () => {
         ...REASONS.complaint,
         name: "Owner's comp A758",
         names: {},
-        applyRoles: ["admin"],
-        approverRoles: ["admin"],
       }),
     );
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
@@ -2539,8 +2580,6 @@ describe("the bill's comp limit (A758 §3.5)", () => {
         name: "On the house A803",
         names: {},
         maxAmount: null,
-        applyRoles: ["manager"],
-        approverRoles: ["manager"],
       }),
     );
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
@@ -4034,7 +4073,6 @@ describe("a counter order (B11c)", () => {
           tx,
           {
             maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-            billApproverRoles: ["manager", "admin"],
           },
           { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
         ),

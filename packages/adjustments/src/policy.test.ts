@@ -23,8 +23,6 @@ const COMPLAINT: AdjustmentReason = {
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
   maxAmount: decimal("30.00"),
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
   noteRequired: false,
   position: 0,
 };
@@ -37,8 +35,6 @@ const MISTAKE: AdjustmentReason = {
   actions: ["cancel"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
   noteRequired: false,
   position: 1,
 };
@@ -48,71 +44,89 @@ function comp(overrides: Partial<CompRequest> = {}): CompRequest {
   return {
     action: "comp",
     reduction: decimal("25.00"),
-    actorRole: "supervisor",
+    actorPermissions: new Set(["adjustment.apply"]),
     note: null,
     takesAll: false,
     standingOnBill: decimal("0.00"),
     dishes: [{ list: decimal("25.00"), after: decimal("0.00"), allowance: 1 }],
     billComped: decimal("0.00"),
-    billLimit: { maxAmount: decimal("40.00"), approverRoles: ["manager", "admin"] },
+    billLimit: { maxAmount: decimal("40.00") },
     ...overrides,
   };
 }
 
 function cancel(overrides: Partial<CancelRequest> = {}): CancelRequest {
-  return { actorRole: "staff", note: null, stage: "held", ...overrides };
+  return { actorPermissions: new Set(), note: null, stage: "held", ...overrides };
 }
 
 const BY_REASON = {
   kind: "needs_approval",
-  approval: { by: "reason", roles: ["manager", "admin"] },
+  approval: {
+    by: "limit",
+    permission: "adjustment.approve",
+    limit: { kind: "reason", amount: decimal("30.00"), percentBp: null },
+  },
+} as const;
+
+const BY_BILL = {
+  kind: "needs_approval",
+  approval: {
+    by: "limit",
+    permission: "adjustment.approve",
+    limit: { kind: "bill", amount: decimal("40.00"), percentBp: null },
+  },
 } as const;
 
 describe("evaluateComp", () => {
-  it("Ana, staff, asks for one €25 Ribeye free: someone on Who can approve it", () => {
-    expect(evaluateComp(COMPLAINT, comp({ actorRole: "staff" }))).toEqual(BY_REASON);
-  });
-
-  it("Luis, supervisor, €25 within €30 goes straight through", () => {
+  it("a holder of adjustment.apply comps within the reason's limit", () => {
     expect(evaluateComp(COMPLAINT, comp())).toEqual({ kind: "allowed" });
-  });
-
-  it("Luis, €50 past €30 and the bill's €40: someone on Who can approve past it", () => {
-    expect(evaluateComp(COMPLAINT, comp({ reduction: decimal("50.00") }))).toEqual({
-      kind: "needs_approval",
-      approval: { by: "bill_limit", roles: ["manager", "admin"], limit: decimal("40.00") },
-    });
-  });
-
-  it("Marta, manager, €50: on both approval lists, straight through", () => {
     expect(
-      evaluateComp(COMPLAINT, comp({ actorRole: "manager", reduction: decimal("50.00") })),
+      evaluateComp(
+        { ...COMPLAINT, maxPercentBp: 5000 },
+        comp({
+          action: "discount_percent",
+          reduction: decimal("10.00"),
+          dishes: [{ list: decimal("25.00"), after: decimal("15.00"), allowance: 1 }],
+        }),
+      ),
     ).toEqual({ kind: "allowed" });
   });
 
-  it("someone on Who can approve it but not Who can apply it goes straight through", () => {
-    const reason = {
-      ...COMPLAINT,
-      applyRoles: ["staff" as const],
-      approverRoles: ["manager" as const],
-    };
-    expect(evaluateComp(reason, comp({ actorRole: "manager" }))).toEqual({ kind: "allowed" });
-    expect(evaluateComp(reason, comp({ actorRole: "supervisor" }))).toEqual({
-      kind: "needs_approval",
-      approval: { by: "reason", roles: ["manager"] },
-    });
+  it("without adjustment.apply every comp needs approval", () => {
+    expect(evaluateComp(COMPLAINT, comp({ actorPermissions: new Set() }))).toEqual(BY_REASON);
+  });
+
+  it("past the reason's limit needs someone who can approve", () => {
+    expect(evaluateComp(COMPLAINT, comp({ reduction: decimal("30.01") }))).toEqual(BY_REASON);
+  });
+
+  it("a holder of adjustment.approve passes their own limits without adjustment.apply", () => {
+    expect(
+      evaluateComp(
+        COMPLAINT,
+        comp({ actorPermissions: new Set(["adjustment.approve"]), reduction: decimal("50.00") }),
+      ),
+    ).toEqual({ kind: "allowed" });
   });
 
   it("below the floor asks the reason's approver, never refuses", () => {
     const halves = { ...COMPLAINT, maxPercentBp: 5000 };
-    const small = { reduction: decimal("5.00") };
     const dish = (after: string) => [
       { list: decimal("25.00"), after: decimal(after), allowance: 1 },
     ];
-    expect(evaluateComp(halves, comp({ ...small, dishes: dish("12.49") }))).toEqual(BY_REASON);
-    expect(evaluateComp(halves, comp({ ...small, dishes: dish("12.50") }))).toEqual({
-      kind: "allowed",
+    expect(
+      evaluateComp(halves, comp({ reduction: decimal("5.00"), dishes: dish("12.49") })),
+    ).toEqual({
+      kind: "needs_approval",
+      approval: {
+        by: "limit",
+        permission: "adjustment.approve",
+        limit: { kind: "reason", amount: decimal("30.00"), percentBp: 5000 },
+      },
     });
+    expect(
+      evaluateComp(halves, comp({ reduction: decimal("5.00"), dishes: dish("12.50") })),
+    ).toEqual({ kind: "allowed" });
   });
 
   it("past the reason's bill amount asks, never refuses", () => {
@@ -132,118 +146,64 @@ describe("evaluateComp", () => {
     ).toEqual({ kind: "allowed" });
     expect(
       evaluateComp(open, comp({ billComped: decimal("15.01"), reduction: decimal("25.00") })),
-    ).toEqual({
-      kind: "needs_approval",
-      approval: { by: "bill_limit", roles: ["manager", "admin"], limit: decimal("40.00") },
-    });
+    ).toEqual(BY_BILL);
   });
 
-  it("past the bill's comp limit, staff need the bill list even when the reason asks too", () => {
+  it("the bill's comp limit applies with the same approvers even past the reason's limit", () => {
+    expect(evaluateComp(COMPLAINT, comp({ reduction: decimal("50.00") }))).toEqual(BY_BILL);
     expect(
-      evaluateComp(COMPLAINT, comp({ actorRole: "staff", reduction: decimal("50.00") })),
+      evaluateComp(COMPLAINT, comp({ actorPermissions: new Set(), reduction: decimal("50.00") })),
+    ).toEqual(BY_BILL);
+  });
+
+  it("a zero amount limit always needs approval", () => {
+    expect(
+      evaluateComp(
+        { ...COMPLAINT, maxAmount: decimal("0.00") },
+        comp({ reduction: decimal("0.01") }),
+      ),
     ).toEqual({
       kind: "needs_approval",
-      approval: { by: "bill_limit", roles: ["manager", "admin"], limit: decimal("40.00") },
+      approval: {
+        by: "limit",
+        permission: "adjustment.approve",
+        limit: { kind: "reason", amount: decimal("0.00"), percentBp: null },
+      },
     });
   });
 
-  it("past the bill's comp limit, the reason's approver needs someone on both lists", () => {
-    const reason = { ...COMPLAINT, approverRoles: ["supervisor" as const, "manager" as const] };
-    // An admin is on the bill's list but may only apply this reason within its €30.00.
-    expect(evaluateComp(reason, comp({ reduction: decimal("50.00") }))).toEqual({
+  it("a zero percent limit needs approval even within the rounding allowance", () => {
+    expect(
+      evaluateComp(
+        { ...COMPLAINT, maxPercentBp: 0 },
+        comp({
+          reduction: decimal("0.01"),
+          dishes: [{ list: decimal("10.00"), after: decimal("9.99"), allowance: 2 }],
+        }),
+      ),
+    ).toEqual({
       kind: "needs_approval",
-      approval: { by: "bill_limit", roles: ["manager"], limit: decimal("40.00") },
+      approval: {
+        by: "limit",
+        permission: "adjustment.approve",
+        limit: { kind: "reason", amount: decimal("30.00"), percentBp: 0 },
+      },
     });
   });
 
-  it("past the bill's comp limit, nobody on both lists is refused no_common_approver", () => {
-    const reason = {
-      ...COMPLAINT,
-      applyRoles: ["admin" as const],
-      approverRoles: ["admin" as const],
-    };
-    const request = comp({
-      actorRole: "manager",
-      reduction: decimal("50.00"),
-      billLimit: { maxAmount: decimal("40.00"), approverRoles: ["manager"] },
-    });
-    expect(evaluateComp(reason, request)).toEqual({
-      kind: "refused",
-      code: "adjustment.no_common_approver",
-    });
-  });
-
-  describe("past the bill's limit, whoever approves is allowed both (owner, 2026-10-28)", () => {
-    /** Two €25 steaks free under On the house, which only managers apply or approve, past a €40
-     * bill limit approved by supervisors and managers. */
-    const ON_THE_HOUSE: AdjustmentReason = {
-      ...COMPLAINT,
-      name: "On the house",
-      maxAmount: null,
-      applyRoles: ["manager"],
-      approverRoles: ["manager"],
-    };
-    const twoSteaks = (overrides: Partial<CompRequest> = {}) =>
-      comp({
-        reduction: decimal("50.00"),
-        dishes: [
-          { list: decimal("25.00"), after: decimal("0.00"), allowance: 1 },
-          { list: decimal("25.00"), after: decimal("0.00"), allowance: 1 },
-        ],
-        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor", "manager"] },
-        ...overrides,
-      });
-    const byManagerPastBill = {
+  it("a zero bill limit makes every comp need approval", () => {
+    expect(
+      evaluateComp(
+        COMPLAINT,
+        comp({ reduction: decimal("0.01"), billLimit: { maxAmount: decimal("0.00") } }),
+      ),
+    ).toEqual({
       kind: "needs_approval",
-      approval: { by: "bill_limit", roles: ["manager"], limit: decimal("40.00") },
-    };
-
-    it("Luis, a supervisor on the bill-limit list, needs a manager's PIN", () => {
-      expect(evaluateComp(ON_THE_HOUSE, twoSteaks())).toEqual(byManagerPastBill);
-    });
-
-    it("a manager, on both lists, goes straight through", () => {
-      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ actorRole: "manager" }))).toEqual({
-        kind: "allowed",
-      });
-    });
-
-    it("within the bill's limit the reason's lists decide, as today", () => {
-      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ reduction: decimal("40.00") }))).toEqual({
-        kind: "needs_approval",
-        approval: { by: "reason", roles: ["manager"] },
-      });
-    });
-
-    it("staff past the bill's limit get the bill list's roles that can do the reason", () => {
-      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ actorRole: "staff" }))).toEqual(
-        byManagerPastBill,
-      );
-    });
-
-    it("a bill-list role that may only apply the reason approves within the reason's limits", () => {
-      // Complaint: supervisors apply it up to €30.00 a bill; €15.00 on a bill with €30.00 comped.
-      const request = comp({
-        actorRole: "staff",
-        reduction: decimal("15.00"),
-        dishes: [{ list: decimal("15.00"), after: decimal("0.00"), allowance: 1 }],
-        billComped: decimal("30.00"),
-        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor"] },
-      });
-      expect(evaluateComp(COMPLAINT, request)).toEqual({
-        kind: "needs_approval",
-        approval: { by: "bill_limit", roles: ["supervisor"], limit: decimal("40.00") },
-      });
-    });
-
-    it("nobody on both lists is refused no_common_approver", () => {
-      const request = twoSteaks({
-        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor"] },
-      });
-      expect(evaluateComp(ON_THE_HOUSE, request)).toEqual({
-        kind: "refused",
-        code: "adjustment.no_common_approver",
-      });
+      approval: {
+        by: "limit",
+        permission: "adjustment.approve",
+        limit: { kind: "bill", amount: decimal("0.00"), percentBp: null },
+      },
     });
   });
 
@@ -254,7 +214,7 @@ describe("evaluateComp", () => {
         comp({
           reduction: decimal("1000.00"),
           billComped: decimal("5000.00"),
-          billLimit: { maxAmount: null, approverRoles: ["admin"] },
+          billLimit: { maxAmount: null },
         }),
       ),
     ).toEqual({ kind: "allowed" });
@@ -286,10 +246,9 @@ describe("evaluateComp", () => {
       actions: ["discount_percent", "discount_amount"],
       maxPercentBp: 5000,
       maxAmount: null,
-      applyRoles: ["staff", "supervisor", "manager", "admin"],
     };
     const all = (action: "discount_percent" | "discount_amount") =>
-      comp({ action, actorRole: "manager", takesAll: true });
+      comp({ action, actorPermissions: new Set(["adjustment.approve"]), takesAll: true });
 
     it.each(["discount_percent", "discount_amount"] as const)(
       "%s taking everything off is refused free_not_allowed",
@@ -315,13 +274,20 @@ describe("evaluateComp", () => {
     it("less than everything off goes on to the floor check", () => {
       expect(
         evaluateComp(CREW_MEAL, comp({ action: "discount_percent", takesAll: false })),
-      ).toEqual(BY_REASON);
+      ).toEqual({
+        kind: "needs_approval",
+        approval: {
+          by: "limit",
+          permission: "adjustment.approve",
+          limit: { kind: "reason", amount: null, percentBp: 5000 },
+        },
+      });
     });
   });
 
   it("a missing required note is refused before any approval is asked", () => {
     const noted = { ...COMPLAINT, noteRequired: true };
-    const past = { actorRole: "staff" as const, reduction: decimal("50.00") };
+    const past = { actorPermissions: new Set<string>(), reduction: decimal("50.00") };
     expect(evaluateComp(noted, comp({ ...past, note: null }))).toEqual({
       kind: "refused",
       code: "adjustment.note_required",
@@ -365,17 +331,21 @@ describe("evaluateCancel", () => {
   });
 
   it("staff cancelling a fired or served dish need the refund permission", () => {
-    const refund = { kind: "needs_approval", approval: { by: "refund" } };
+    const refund = {
+      kind: "needs_approval",
+      approval: { by: "refund", permission: "sale.refund" },
+    };
     expect(evaluateCancel(MISTAKE, cancel({ stage: "fired" }))).toEqual(refund);
     expect(evaluateCancel(MISTAKE, cancel({ stage: "served" }))).toEqual(refund);
   });
 
-  it("a supervisor cancels a fired dish alone", () => {
-    for (const actorRole of ["supervisor", "manager", "admin"] as const) {
-      expect(evaluateCancel(MISTAKE, cancel({ actorRole, stage: "fired" }))).toEqual({
-        kind: "allowed",
-      });
-    }
+  it("a holder of sale.refund cancels a fired dish alone", () => {
+    expect(
+      evaluateCancel(
+        MISTAKE,
+        cancel({ actorPermissions: new Set(["sale.refund"]), stage: "fired" }),
+      ),
+    ).toEqual({ kind: "allowed" });
   });
 
   it("a Comp reason cannot cancel", () => {
@@ -404,54 +374,51 @@ describe("evaluateCancel", () => {
 });
 
 describe("approves", () => {
-  it("a refund approval accepts supervisor, manager and admin and refuses staff", () => {
-    const refund: Approval = { by: "refund" };
-    expect(approves(refund, "staff")).toBe(false);
-    expect(approves(refund, "supervisor")).toBe(true);
-    expect(approves(refund, "manager")).toBe(true);
-    expect(approves(refund, "admin")).toBe(true);
-  });
-
-  it("a list accepts exactly its members", () => {
-    const reason: Approval = { by: "reason", roles: ["supervisor", "admin"] };
-    expect(approves(reason, "staff")).toBe(false);
-    expect(approves(reason, "supervisor")).toBe(true);
-    expect(approves(reason, "manager")).toBe(false);
-    expect(approves(reason, "admin")).toBe(true);
-    const bill: Approval = { by: "bill_limit", roles: ["manager"], limit: decimal("40.00") };
-    expect(approves(bill, "admin")).toBe(false);
-    expect(approves(bill, "manager")).toBe(true);
+  it.each<Approval>([
+    { by: "refund", permission: "sale.refund" },
+    {
+      by: "limit",
+      permission: "adjustment.approve",
+      limit: { kind: "reason", amount: decimal("30.00"), percentBp: null },
+    },
+    {
+      by: "limit",
+      permission: "adjustment.approve",
+      limit: { kind: "bill", amount: decimal("40.00"), percentBp: null },
+    },
+  ])("requires the approval's permission: $by", (approval) => {
+    expect(approves(approval, new Set())).toBe(false);
+    expect(approves(approval, new Set(["adjustment.apply"]))).toBe(false);
+    expect(approves(approval, new Set([approval.permission]))).toBe(true);
   });
 });
 
 describe("policySnapshotOf", () => {
-  it("keeps the evaluated policy and nothing that names or orders the reason", () => {
-    expect(policySnapshotOf({ ...COMPLAINT, maxPercentBp: 5000, noteRequired: true })).toEqual({
+  it("the snapshot records limits, not roles", () => {
+    expect(
+      policySnapshotOf(
+        { ...COMPLAINT, maxPercentBp: 5000, noteRequired: true },
+        { maxBillComp: decimal("40.00") },
+      ),
+    ).toEqual({
       kind: "comp",
       actions: ["comp", "discount_percent"],
       maxPercentBp: 5000,
       maxAmount: "30.00",
-      applyRoles: ["supervisor", "manager", "admin"],
-      approverRoles: ["manager", "admin"],
+      maxBillComp: "40.00",
       noteRequired: true,
     });
   });
 
-  it("copies the actions and both role lists, so a later edit of the reason cannot reach it", () => {
-    const reason = {
-      ...COMPLAINT,
-      actions: [...COMPLAINT.actions],
-      applyRoles: [...COMPLAINT.applyRoles],
-      approverRoles: [...COMPLAINT.approverRoles],
-    };
-    const snapshot = policySnapshotOf(reason);
+  it("copies the actions so a later edit of the reason cannot reach it", () => {
+    const reason = { ...COMPLAINT, actions: [...COMPLAINT.actions] };
+    const snapshot = policySnapshotOf(reason, { maxBillComp: null });
     reason.actions.push("discount_amount");
-    reason.applyRoles.push("staff");
-    reason.approverRoles.push("supervisor");
     expect(snapshot.actions).toEqual(["comp", "discount_percent"]);
-    expect(snapshot.applyRoles).toEqual(["supervisor", "manager", "admin"]);
-    expect(snapshot.approverRoles).toEqual(["manager", "admin"]);
-    expect(policySnapshotOf({ ...COMPLAINT, maxAmount: null }).maxAmount).toBeNull();
+    expect(
+      policySnapshotOf({ ...COMPLAINT, maxAmount: null }, { maxBillComp: null }).maxAmount,
+    ).toBeNull();
+    expect(snapshot.maxBillComp).toBeNull();
   });
 });
 
@@ -489,6 +456,11 @@ describe("belowFloor: a dish is never charged below its floor (owner, 2026-10-28
 
   it("one entry below its floor asks though another is not", () => {
     expect(belowFloor([dish("12.00", "12.00"), dish("12.00", "5.99")], 5000)).toBe(true);
+  });
+
+  it("a zero floor distinguishes any reduction from an unchanged dish", () => {
+    expect(belowFloor([dish("10.00", "9.99", 2)], 0)).toBe(true);
+    expect(belowFloor([dish("10.00", "10.00", 2)], 0)).toBe(false);
   });
 
   it("a reason with no per-dish limit never asks on it", () => {

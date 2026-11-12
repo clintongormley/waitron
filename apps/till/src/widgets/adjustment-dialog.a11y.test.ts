@@ -17,8 +17,6 @@ const reasons: AdjustmentReason[] = [
     noteRequired: false,
     maxPercentBp: null,
     maxAmount: "30.00",
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
   },
   {
     id: "error",
@@ -28,8 +26,6 @@ const reasons: AdjustmentReason[] = [
     noteRequired: true,
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
   },
 ];
 

@@ -49,8 +49,6 @@ describe.each(["en", "es"] as const)("combined Comp %s", (locale) => {
                 maxAmount: "20.00",
                 noteRequired: true,
                 kind: "comp",
-                applyRoles: ["supervisor", "manager", "admin"],
-                approverRoles: ["manager", "admin"],
               },
             ],
           },

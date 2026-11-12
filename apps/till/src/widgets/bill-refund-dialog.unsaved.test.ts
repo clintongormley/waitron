@@ -36,8 +36,6 @@ const reasons = ["Charged twice", "Too much", "Other"].map(
       noteRequired: name === "Other",
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
     }) as AdjustmentReason,
 );
 class RefundLeaveApp extends LitElement {

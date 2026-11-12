@@ -1237,6 +1237,7 @@ describe("the route's own rules", () => {
       [{ lineId, action: "comp", reasonId: "house" }, "reasonId"],
       [{ lineId, action: "comp", quantity: 1 }, "quantity"],
       [{ lineId, action: "discount_percent", percentBp: "10" }, "percentBp"],
+      [{ lineId, action: "discount_percent", percentBp: 0 }, "percentBp"],
       [{ lineId, action: "discount_amount", amount: "1.005" }, "amount"],
       [{ lineId, action: "comp", note: 5 }, "note"],
       [{ lineId, action: "comp", note: "x".repeat(501) }, "note"],
@@ -1281,6 +1282,29 @@ describe("the route's own rules", () => {
 });
 
 describe("what the till reads", () => {
+  it("lists approvers by permission", async () => {
+    const answer = await send(
+      venue.app,
+      venue.cookie.staff,
+      "GET",
+      "/api/adjustment-approvers?permission=adjustment.approve",
+    );
+    expect(answer.status).toBe(200);
+    const ids = (answer.json as unknown as { personId: string }[]).map((person) => person.personId);
+    expect(ids).toContain(venue.supervisorId);
+    expect(ids).toContain(venue.managerId);
+    expect(ids).not.toContain(venue.staffId);
+    const refused = await send(
+      venue.app,
+      venue.cookie.staff,
+      "GET",
+      "/api/adjustment-approvers?permission=person.admin",
+    );
+    expect([refused.status, refused.json]).toEqual([
+      400,
+      { code: "management.request_invalid", params: { field: "permission" } },
+    ]);
+  });
   it("lists the reasons in the operator's language", async () => {
     const answer = await send(venue.app, venue.cookie.staff, "GET", "/api/adjustment-reasons");
     expect(answer.status).toBe(200);
@@ -1299,8 +1323,7 @@ describe("what the till reads", () => {
       noteRequired: false,
       maxPercentBp: null,
       maxAmount: "30.00",
-      applyRoles: ["supervisor", "manager", "admin"],
-      approverRoles: ["manager", "admin"],
+
       startsFinishTable: false,
     });
 

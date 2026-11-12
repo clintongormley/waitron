@@ -104,7 +104,6 @@ export {
   deactivatePerson,
   invitePerson,
   listActivePersonsWithPermission,
-  listActivePersonsWithRoles,
   listActiveStaff,
   listPersons,
   normalizeAndValidateEmail,

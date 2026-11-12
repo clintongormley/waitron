@@ -15,8 +15,7 @@ const reason: AdjustmentReason = {
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
   maxAmount: "30.00",
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
+
   noteRequired: true,
   position: 0,
 };
@@ -28,8 +27,7 @@ const voidReason: AdjustmentReason = {
   actions: ["cancel"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
+
   noteRequired: false,
   position: 1,
 };
@@ -330,8 +328,7 @@ for (const add of [false, true]) {
       actions: add ? ["comp"] : ["comp", "discount_percent"],
       maxPercentBp: null,
       maxAmount: add ? null : "30.00",
-      applyRoles: add ? ["manager", "admin"] : ["supervisor", "manager", "admin"],
-      approverRoles: ["manager", "admin"],
+
       noteRequired: !add,
     };
     if (add) expect(api.createReason).toHaveBeenCalledWith(input);
@@ -558,8 +555,7 @@ it("acceptance invalidates a pending discard without undoing the saved reason", 
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,
     maxAmount: "30.00",
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: true,
   });
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();

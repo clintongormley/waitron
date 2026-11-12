@@ -2825,8 +2825,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: [],
-        approverRoles: [],
+
         noteRequired: false,
       }),
     );

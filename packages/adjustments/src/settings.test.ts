@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { PersonRoleValue } from "@waitron/identity";
 import { decimal } from "@waitron/shared";
 import {
   ADJUSTMENTS_SETTINGS,
@@ -31,72 +30,63 @@ async function rows() {
 }
 
 describe("adjustment settings", () => {
-  it("answers no limit, approved past by Manager and Admin, when the venue has never saved one", async () => {
+  it("answers no limit when the venue has never saved one", async () => {
     expect(await inTx(readAdjustmentSettings)).toEqual({
       maxBillComp: null,
-      billApproverRoles: ["manager", "admin"],
+
       revision: 0,
     });
   });
 
-  it("answers each read of the unsaved settings with its own list", async () => {
+  it("answers each read of the unsaved settings with its own value", async () => {
     const first = await inTx(readAdjustmentSettings);
-    first.billApproverRoles.push("staff");
-    expect((await inTx(readAdjustmentSettings)).billApproverRoles).toEqual(["manager", "admin"]);
+    first.maxBillComp = decimal("1.00");
+    expect((await inTx(readAdjustmentSettings)).maxBillComp).toBeNull();
   });
 
-  it("saves €40.00 with Supervisor and Manager, replaces it and clears it, keeping one row", async () => {
+  it("saves €40.00 replaces it and clears it, keeping one row", async () => {
     expect(
       await inTx((tx) =>
         saveAdjustmentSettings(
           tx,
           {
             maxBillComp: decimal("40.00"),
-            billApproverRoles: ["supervisor", "manager"],
           },
           { expectedRevision: 0, personId: null },
         ),
       ),
-    ).toEqual({ maxBillComp: "40.00", billApproverRoles: ["supervisor", "manager"], revision: 1 });
+    ).toEqual({ maxBillComp: "40.00", revision: 1 });
     expect(await inTx(readAdjustmentSettings)).toEqual({
       maxBillComp: "40.00",
-      billApproverRoles: ["supervisor", "manager"],
+
       revision: 1,
     });
 
     await inTx((tx) =>
       saveAdjustmentSettings(
         tx,
-        { maxBillComp: decimal("12.5"), billApproverRoles: ["admin"] },
+        { maxBillComp: decimal("12.5") },
         { expectedRevision: 1, personId: null },
       ),
     );
-    expect(await rows()).toEqual([
-      { doc: '{"maxBillComp":1250,"billApproverRoles":["admin"]}', revision: 2 },
-    ]);
+    expect(await rows()).toEqual([{ doc: '{"maxBillComp":1250}', revision: 2 }]);
 
     await inTx((tx) =>
-      saveAdjustmentSettings(
-        tx,
-        { maxBillComp: null, billApproverRoles: ["manager"] },
-        { expectedRevision: 2, personId: null },
-      ),
+      saveAdjustmentSettings(tx, { maxBillComp: null }, { expectedRevision: 2, personId: null }),
     );
     expect(await inTx(readAdjustmentSettings)).toEqual({
       maxBillComp: null,
-      billApproverRoles: ["manager"],
+
       revision: 3,
     });
-    expect(await rows()).toEqual([
-      { doc: '{"maxBillComp":null,"billApproverRoles":["manager"]}', revision: 3 },
-    ]);
+    expect(await rows()).toEqual([{ doc: '{"maxBillComp":null}', revision: 3 }]);
   });
 
   it("moves the row's timestamp on each save", async () => {
     await inTx((tx) =>
       saveAdjustmentSettings(
         tx,
-        { maxBillComp: decimal("1.00"), billApproverRoles: ["admin"] },
+        { maxBillComp: decimal("1.00") },
         { expectedRevision: 0, personId: null },
       ),
     );
@@ -109,7 +99,7 @@ describe("adjustment settings", () => {
     await inTx((tx) =>
       saveAdjustmentSettings(
         tx,
-        { maxBillComp: decimal("2.00"), billApproverRoles: ["admin"] },
+        { maxBillComp: decimal("2.00") },
         { expectedRevision: 1, personId: null },
       ),
     );
@@ -121,13 +111,13 @@ describe("adjustment settings", () => {
     expect(second > first).toBe(true);
   });
 
-  it("refuses an amount that is not a positive count of whole cents, writing nothing", async () => {
-    for (const bad of ["0", "0.00", "-1.00", "1.005"]) {
+  it("refuses an amount that is not a nonnegative count of whole cents, writing nothing", async () => {
+    for (const bad of ["-1.00", "1.005"]) {
       await expect(
         inTx((tx) =>
           saveAdjustmentSettings(
             tx,
-            { maxBillComp: decimal(bad), billApproverRoles: ["admin"] },
+            { maxBillComp: decimal(bad) },
             { expectedRevision: 0, personId: null },
           ),
         ),
@@ -137,43 +127,39 @@ describe("adjustment settings", () => {
     expect(await rows()).toEqual([]);
   });
 
-  it("refuses an approver list that is empty, repeats a role or names none, writing nothing", async () => {
-    for (const bad of [[], ["manager", "manager"], ["chef"]] as PersonRoleValue[][]) {
-      await expect(
-        inTx((tx) =>
-          saveAdjustmentSettings(
-            tx,
-            { maxBillComp: null, billApproverRoles: bad },
-            { expectedRevision: 0, personId: null },
-          ),
+  it("a zero bill limit round-trips", async () => {
+    expect(
+      await inTx((tx) =>
+        saveAdjustmentSettings(
+          tx,
+          { maxBillComp: decimal("0.00") },
+          { expectedRevision: 0, personId: null },
         ),
-        JSON.stringify(bad),
-      ).rejects.toThrow(RangeError);
-    }
-    expect(await rows()).toEqual([]);
+      ),
+    ).toEqual({ maxBillComp: "0.00", revision: 1 });
+    expect(await inTx(readAdjustmentSettings)).toEqual({ maxBillComp: "0.00", revision: 1 });
+    expect(await rows()).toEqual([{ doc: '{"maxBillComp":0}', revision: 1 }]);
   });
 });
 
 describe("the adjustments document", () => {
-  it("keeps the amount and approver rules when checking a document", () => {
-    const good = { maxBillComp: 4000, billApproverRoles: ["admin"] };
-    for (const maxBillComp of [0, -100, 12.5, "40"]) {
+  it("keeps the amount rules when checking a document", () => {
+    const good = { maxBillComp: 4000 };
+    for (const maxBillComp of [-100, 12.5, "40"]) {
       expect(ADJUSTMENTS_SETTINGS.parse({ ...good, maxBillComp })).toEqual({
         ok: false,
         field: "maxBillComp",
       });
     }
-    for (const billApproverRoles of [[], ["manager", "manager"], ["owner"], undefined, "manager"]) {
-      expect(ADJUSTMENTS_SETTINGS.parse({ ...good, billApproverRoles })).toEqual({
-        ok: false,
-        field: "billApproverRoles",
-      });
-    }
+    expect(ADJUSTMENTS_SETTINGS.parse({ ...good, billApproverRoles: ["admin"] })).toEqual({
+      ok: false,
+      field: "billApproverRoles",
+    });
     expect(ADJUSTMENTS_SETTINGS.parse({ ...good, colour: "blue" })).toEqual({
       ok: false,
       field: "colour",
     });
-    for (const maxBillComp of [null, 4000]) {
+    for (const maxBillComp of [null, 0, 4000]) {
       const doc = { ...good, maxBillComp };
       expect(ADJUSTMENTS_SETTINGS.parse(doc)).toEqual({ ok: true, doc });
     }
@@ -181,7 +167,6 @@ describe("the adjustments document", () => {
   it("refuses a save from a stale revision, keeping the first document", async () => {
     const first = {
       maxBillComp: decimal("40.00"),
-      billApproverRoles: ["manager"] as PersonRoleValue[],
     };
     await inTx((tx) => saveAdjustmentSettings(tx, first, { expectedRevision: 0, personId: null }));
     await expect(
@@ -203,7 +188,7 @@ describe("the adjustments document", () => {
     await inTx((tx) =>
       saveAdjustmentSettings(
         tx,
-        { maxBillComp: null, billApproverRoles: ["manager"] },
+        { maxBillComp: null },
         { expectedRevision: 0, personId: person!.id },
       ),
     );

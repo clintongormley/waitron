@@ -17,7 +17,6 @@ import type {
   AdjustmentApproval,
   AdjustmentPreview,
   AdjustmentReason,
-  PersonRole,
 } from "../api/client.js";
 
 export type AdjustKind = "cancel" | "comp" | "discount";
@@ -112,15 +111,6 @@ const DO: Record<AdjustKind, StringKey> = {
 };
 
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
-
-const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
-
-function roleList(roles: readonly PersonRole[]): string {
-  if (ROLES.every((role) => roles.includes(role))) return t("comp.role_everyone");
-  return ROLES.filter((role) => roles.includes(role))
-    .map((role) => t(`comp.role_${role}`))
-    .join(", ");
-}
 
 @customElement("till-adjustment-dialog")
 export class TillAdjustmentDialog extends LitElement {
@@ -412,14 +402,14 @@ export class TillAdjustmentDialog extends LitElement {
   /** Whose PIN the adjustment needs; a reason no longer listed gets the general sentence. */
   #approvalText(approval: AdjustmentApproval, reason: AdjustmentReason | undefined): string {
     switch (approval.by) {
-      case "reason":
-        return reason === undefined
-          ? t("adjust.approval_any")
-          : t("adjust.approval_reason").replace("{reason}", () => reason.name);
-      case "bill_limit":
-        return t("adjust.approval_bill_limit").replace("{limit}", () =>
-          this.#money(approval.limit),
-        );
+      case "limit":
+        return approval.limit.kind === "bill" && approval.limit.amount !== null
+          ? t("adjust.approval_bill_limit").replace("{limit}", () =>
+              this.#money(approval.limit.amount!),
+            )
+          : reason === undefined
+            ? t("adjust.approval_any")
+            : t("adjust.approval_reason").replace("{reason}", () => reason.name);
       case "refund":
         return t("adjust.approval_refund");
     }
@@ -646,9 +636,7 @@ export class TillAdjustmentDialog extends LitElement {
       reason.maxAmount === null
         ? ""
         : " · " + t("comp.bill_cap").replace("{value}", this.#money(reason.maxAmount));
-    return `${reason.name} · ${kinds.join(", ")}${cap} · ${t("comp.policy")
-      .replace("{apply}", roleList(reason.applyRoles))
-      .replace("{approve}", roleList(reason.approverRoles))}`;
+    return `${reason.name} · ${kinds.join(", ")}${cap}`;
   }
 
   #compLabel(choice?: AdjustmentChoice): string {

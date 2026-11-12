@@ -23,8 +23,7 @@ function reason(id: string, over: Partial<AdjustmentReason> = {}): AdjustmentRea
     noteRequired: false,
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: ["staff", "supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     ...over,
   };
 }
@@ -34,8 +33,6 @@ const mistake = reason("Mistake", {
   kind: "void",
   actions: ["cancel"],
   noteRequired: true,
-  applyRoles: [],
-  approverRoles: [],
 });
 const regular = reason("Regular", { actions: ["discount_percent", "discount_amount"] });
 const staffMeal = reason("Staff meal", { actions: ["comp", "discount_amount"] });
@@ -591,9 +588,7 @@ describe("till-adjustment-dialog: before confirming", () => {
     const { el } = await atConfirm(
       {
         kind: "cancel",
-        reasons: [
-          reason("Void", { kind: "void", actions: ["cancel"], applyRoles: [], approverRoles: [] }),
-        ],
+        reasons: [reason("Void", { kind: "void", actions: ["cancel"] })],
         preview: preview({ needsApproval: { by: "refund" } }),
       },
       (el) => chooseReason(el, "Void"),
@@ -609,9 +604,7 @@ describe("till-adjustment-dialog: before confirming", () => {
     const { el } = await atConfirm(
       {
         kind: "cancel",
-        reasons: [
-          reason("Void", { kind: "void", actions: ["cancel"], applyRoles: [], approverRoles: [] }),
-        ],
+        reasons: [reason("Void", { kind: "void", actions: ["cancel"] })],
         preview: preview({ needsApproval: { by: "refund" } }),
       },
       (el) => chooseReason(el, "Void"),

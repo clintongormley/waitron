@@ -71,8 +71,6 @@ for (const locale of ["en-GB", "es-ES"]) {
                 maxPercentBp: null,
                 maxAmount: null,
                 kind: "void",
-                applyRoles: [],
-                approverRoles: [],
               },
             ],
           },

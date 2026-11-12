@@ -45,8 +45,6 @@ const COMPLAINT = {
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
   maxAmount: "30.00",
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
   noteRequired: true,
 };
 
@@ -57,8 +55,6 @@ const OTHER = {
   actions: ["cancel"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
   noteRequired: true,
 };
 
@@ -202,7 +198,11 @@ describe("adjustment reason management routes", () => {
           stage: "served",
         },
         quantity: "1",
-        reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+        reason: {
+          id: reason.id,
+          name: reason.name,
+          policy: policySnapshotOf(reason, { maxBillComp: null }),
+        },
         action: "comp",
         percentBp: null,
         beforeAmount: decimal("20.00"),
@@ -371,15 +371,6 @@ describe("adjustment reason management routes", () => {
     ["maxAmount", { maxAmount: "1e3" }],
     ["kind", { kind: undefined }],
     ["kind", { kind: "refund" }],
-    ["applyRoles", { applyRoles: "staff" }],
-    ["applyRoles", { applyRoles: undefined }],
-    ["applyRoles", { applyRoles: [] }],
-    ["applyRoles", { applyRoles: ["staff", "staff"] }],
-    ["applyRoles", { applyRoles: ["chef"] }],
-    ["approverRoles", { approverRoles: undefined }],
-    ["approverRoles", { approverRoles: [] }],
-    ["approverRoles", { approverRoles: ["manager", "manager"] }],
-    ["approverRoles", { approverRoles: [7] }],
     ["noteRequired", { noteRequired: "yes" }],
   ])("refuses a body whose %s is malformed (%o), writing nothing", async (field, overrides) => {
     const fx = await fixture();
@@ -443,8 +434,8 @@ describe("adjustment reason management routes", () => {
     ],
     [
       "a Void reason holding a role",
-      { ...OTHER, applyRoles: ["staff"] },
-      { code: "adjustment_reason.invalid", params: { field: "applyRoles" } },
+      { ...OTHER, maxAmount: "1.00" },
+      { code: "adjustment_reason.invalid", params: { field: "maxAmount" } },
     ],
   ])("answers %s with 400, writing nothing", async (_case, overrides, error) => {
     const fx = await fixture();
@@ -554,8 +545,20 @@ describe("adjustment reason management routes", () => {
 });
 
 describe("adjustment settings routes", () => {
+  it("saves a zero bill limit", async () => {
+    const fx = await fixture();
+    const response = await send(
+      fx.app,
+      "PUT",
+      "/management-api/adjustments/settings",
+      fx.cookie.manager,
+      { maxBillComp: "0.00", revision: 0 },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ maxBillComp: "0.00", revision: 1 });
+  });
   const SETTINGS = "/management-api/adjustments/settings";
-  const LIMIT = { maxBillComp: "40.00", billApproverRoles: ["supervisor", "manager"], revision: 0 };
+  const LIMIT = { maxBillComp: "40.00", revision: 0 };
 
   async function stored(): Promise<unknown[]> {
     return (await db.execute(sql`select doc from settings where module = 'adjustments'`)).rows;
@@ -568,7 +571,6 @@ describe("adjustment settings routes", () => {
     expect(empty.status).toBe(200);
     expect(await empty.json()).toEqual({
       maxBillComp: null,
-      billApproverRoles: ["manager", "admin"],
       revision: 0,
     });
 
@@ -585,10 +587,9 @@ describe("adjustment settings routes", () => {
 
     await send(fx.app, "PUT", SETTINGS, fx.cookie.admin, {
       maxBillComp: null,
-      billApproverRoles: ["admin"],
       revision: 1,
     });
-    expect(await stored()).toEqual([{ doc: '{"maxBillComp":null,"billApproverRoles":["admin"]}' }]);
+    expect(await stored()).toEqual([{ doc: '{"maxBillComp":null}' }]);
   });
 
   it("refuses a supervisor or staff member, and writes nothing", async () => {
@@ -624,13 +625,8 @@ describe("adjustment settings routes", () => {
   it.each<[string, string, Record<string, unknown>]>([
     ["maxBillComp", "missing", { maxBillComp: undefined }],
     ["maxBillComp", "a number", { maxBillComp: 40 }],
-    ["maxBillComp", "zero", { maxBillComp: "0.00" }],
+    ["maxBillComp", "negative", { maxBillComp: "-0.01" }],
     ["maxBillComp", "a third decimal place", { maxBillComp: "40.001" }],
-    ["billApproverRoles", "missing", { billApproverRoles: undefined }],
-    ["billApproverRoles", "not a list", { billApproverRoles: "manager" }],
-    ["billApproverRoles", "empty", { billApproverRoles: [] }],
-    ["billApproverRoles", "a repeated role", { billApproverRoles: ["admin", "admin"] }],
-    ["billApproverRoles", "an unknown role", { billApproverRoles: ["chef"] }],
   ])("refuses a %s that is %s, writing nothing", async (field, _case, overrides) => {
     const fx = await fixture();
     const response = await send(fx.app, "PUT", SETTINGS, fx.cookie.manager, {
@@ -677,7 +673,7 @@ describe("adjustment settings routes", () => {
   it("answers a stored document the code refuses with 500 settings.invalid", async () => {
     const fx = await fixture();
     db.execute(
-      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":0,"billApproverRoles":["admin"]}', '2026-11-09T12:00:00.000Z')`,
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":-1}', '2026-11-09T12:00:00.000Z')`,
     );
     const response = await send(fx.app, "GET", SETTINGS, fx.cookie.manager);
     expect(response.status).toBe(500);
@@ -736,7 +732,11 @@ describe("adjustment report routes", () => {
     const reason = await seedReason(db);
     const base = {
       workingOrderId: bill!.id,
-      reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+      reason: {
+        id: reason.id,
+        name: reason.name,
+        policy: policySnapshotOf(reason, { maxBillComp: null }),
+      },
       percentBp: null,
       approvedBy: null,
       note: null,
@@ -938,7 +938,11 @@ describe("adjustment report routes", () => {
         workingOrderId: fx.billId,
         line: null,
         quantity: null,
-        reason: { id: other.id, name: other.name, policy: policySnapshotOf(other) },
+        reason: {
+          id: other.id,
+          name: other.name,
+          policy: policySnapshotOf(other, { maxBillComp: null }),
+        },
         action: "discount_amount",
         percentBp: null,
         beforeAmount: decimal("15.00"),

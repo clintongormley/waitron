@@ -56,14 +56,9 @@ export type SeedCatalogue<L extends string = string> = Omit<
 export type SeedProductOptionLists<L extends string = string> = CountryDemoProductOptionLists<L>;
 export type SeedProductExtraLists<L extends string = string> = CountryDemoProductExtraLists<L>;
 export type SeedPerson = Omit<CountryDemoPerson, "role"> & { readonly role: PersonRoleValue };
-type RawReason<L extends string = string> = Omit<
-  CountryDemoReason<L>,
-  "kind" | "actions" | "applyRoles" | "approverRoles"
-> & {
+type RawReason<L extends string = string> = Omit<CountryDemoReason<L>, "kind" | "actions"> & {
   readonly kind: AdjustmentReasonInput["kind"];
   readonly actions: readonly AdjustmentReasonInput["actions"][number][];
-  readonly applyRoles: readonly AdjustmentReasonInput["applyRoles"][number][];
-  readonly approverRoles: readonly AdjustmentReasonInput["approverRoles"][number][];
 };
 export type StrictCountryDemoData<L extends string = string> = Omit<
   CountryDemoData<L>,
@@ -101,8 +96,6 @@ function adapt(set: StrictCountryDemoData): DemoDataSet {
       ...reason,
       maxAmount: reason.maxAmount === null ? null : decimal(reason.maxAmount),
       actions: [...reason.actions],
-      applyRoles: [...reason.applyRoles],
-      approverRoles: [...reason.approverRoles],
     })),
   };
 }

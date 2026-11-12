@@ -17,8 +17,6 @@ const house: AdjustmentReason = {
   maxPercentBp: null,
   maxAmount: null,
   kind: "void",
-  applyRoles: [],
-  approverRoles: [],
 };
 const other = { ...house, id: "other", name: "Other", noteRequired: true };
 function dish(lineId: string, stage: "held" | "fired" | "started" = "held"): UnservedDish {

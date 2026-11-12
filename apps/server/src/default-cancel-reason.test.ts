@@ -44,8 +44,7 @@ describe("a newly set-up venue's till", () => {
       noteRequired,
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
+
       startsFinishTable: name === expected["Not served"].es,
     });
     const compReason = (
@@ -117,8 +116,7 @@ describe("the reason Finish table starts on", () => {
     actions: reason.actions,
     maxPercentBp: reason.maxPercentBp,
     maxAmount: reason.maxAmount,
-    applyRoles: reason.applyRoles,
-    approverRoles: reason.approverRoles,
+
     noteRequired: reason.noteRequired,
   });
   const notServed = async () =>
@@ -130,8 +128,7 @@ describe("the reason Finish table starts on", () => {
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
   });
 
@@ -161,8 +158,7 @@ describe("the reason Finish table starts on", () => {
         actions: ["comp"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: ["manager", "admin"],
-        approverRoles: ["manager", "admin"],
+
         noteRequired: false,
       }),
     );

@@ -10,7 +10,7 @@ export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 export type ReasonKind = "void" | "comp";
 
 /** Every field an owner edits. `maxAmount` is euros as a decimal string; a `null` limit is no limit.
- * A Void reason's `actions` is `["cancel"]`, with empty lists and no limits. */
+ * A Void reason's `actions` is `["cancel"]`, with no limits. */
 export interface AdjustmentReasonInput {
   name: string;
   names: Record<string, string>;
@@ -18,8 +18,6 @@ export interface AdjustmentReasonInput {
   actions: AdjustmentAction[];
   maxPercentBp: number | null;
   maxAmount: string | null;
-  applyRoles: PersonRole[];
-  approverRoles: PersonRole[];
   noteRequired: boolean;
 }
 
@@ -27,7 +25,6 @@ export interface AdjustmentReasonInput {
 export interface AdjustmentSettings {
   revision: number;
   maxBillComp: string | null;
-  billApproverRoles: PersonRole[];
 }
 
 export interface AdjustmentReason extends AdjustmentReasonInput {

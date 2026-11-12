@@ -661,8 +661,8 @@ describe("A1208 a counter order of more portions than one statement can bind", (
             actions: ["discount_amount"],
             maxPercentBp: null,
             maxAmount: null,
-            applyRoles: [],
-            approverRoles: [],
+            maxBillComp: null,
+
             noteRequired: false,
           },
           action: "discount_amount",

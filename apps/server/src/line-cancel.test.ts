@@ -511,8 +511,7 @@ describe("Cancel item service command", () => {
             actions: ["cancel"],
             maxPercentBp: null,
             maxAmount: null,
-            applyRoles: [],
-            approverRoles: [],
+
             noteRequired: false,
           }),
         );
@@ -549,8 +548,7 @@ describe("Cancel item service command", () => {
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: [],
-        approverRoles: [],
+
         noteRequired: true,
       }),
     );
@@ -578,7 +576,7 @@ describe("Cancel item service command", () => {
       requestedBy: venue.staffId,
       approvedBy: null,
       note: ask.note,
-      policySnapshot: { kind: "void", applyRoles: [], approverRoles: [], noteRequired: true },
+      policySnapshot: { kind: "void", maxBillComp: null, noteRequired: true },
     });
     expect(after.cancellations).toMatchObject([{ quantity: 2000, wasStarted: true }]);
     await cancel(order, ask);
@@ -1447,8 +1445,7 @@ describe("Cancel item service command", () => {
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: [],
-        approverRoles: [],
+
         noteRequired: true,
       }),
     );

@@ -37,8 +37,6 @@ const reasons = [
       actions: ["cancel"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
     }) as AdjustmentReason,
 );
 

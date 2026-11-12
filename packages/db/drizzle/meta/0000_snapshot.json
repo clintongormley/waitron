@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2bd03c4e-d321-4f9a-b938-7386fa080c70",
+  "id": "9fe3fee0-b16a-425e-978a-06df05e0013e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -14202,22 +14202,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "apply_roles": {
-          "name": "apply_roles",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "approver_roles": {
-          "name": "approver_roles",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
         "note_required": {
           "name": "note_required",
           "type": "integer",
@@ -14264,11 +14248,11 @@
         },
         "adjustment_reasons_max_percent_ck": {
           "name": "adjustment_reasons_max_percent_ck",
-          "value": "\"adjustment_reasons\".\"max_percent\" is null or (\"adjustment_reasons\".\"max_percent\" > 0 and \"adjustment_reasons\".\"max_percent\" <= 10000)"
+          "value": "\"adjustment_reasons\".\"max_percent\" is null or \"adjustment_reasons\".\"max_percent\" between 0 and 10000"
         },
         "adjustment_reasons_max_amount_ck": {
           "name": "adjustment_reasons_max_amount_ck",
-          "value": "\"adjustment_reasons\".\"max_amount\" is null or \"adjustment_reasons\".\"max_amount\" > 0"
+          "value": "\"adjustment_reasons\".\"max_amount\" is null or \"adjustment_reasons\".\"max_amount\" >= 0"
         },
         "adjustment_reasons_kind_ck": {
           "name": "adjustment_reasons_kind_ck",
@@ -14276,7 +14260,7 @@
         },
         "adjustment_reasons_kind_fields_ck": {
           "name": "adjustment_reasons_kind_fields_ck",
-          "value": "(\"adjustment_reasons\".\"kind\" = 'void' and json_array_length(\"adjustment_reasons\".\"apply_roles\") = 0 and json_array_length(\"adjustment_reasons\".\"approver_roles\") = 0 and \"adjustment_reasons\".\"max_percent\" is null and \"adjustment_reasons\".\"max_amount\" is null) or (\"adjustment_reasons\".\"kind\" = 'comp' and json_array_length(\"adjustment_reasons\".\"apply_roles\") > 0 and json_array_length(\"adjustment_reasons\".\"approver_roles\") > 0)"
+          "value": "(\"adjustment_reasons\".\"kind\" = 'void' and \"adjustment_reasons\".\"max_percent\" is null and \"adjustment_reasons\".\"max_amount\" is null) or \"adjustment_reasons\".\"kind\" = 'comp'"
         },
         "adjustment_reasons_position_ck": {
           "name": "adjustment_reasons_position_ck",

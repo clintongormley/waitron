@@ -15066,10 +15066,7 @@ export class TillApp extends LitElement {
     this.adjusting = { ...open, refusal: null, busy: true };
     try {
       const api = open.bill?.api ?? this.api;
-      const approvers =
-        approval.by === "refund"
-          ? await api.listRefundAuthorizers()
-          : await api.listAdjustmentApprovers(approval.roles);
+      const approvers = await api.listApprovers(approval.permission);
       const now = this.#adjustingNow(open.id);
       if (now === null) return;
       this.adjusting = { ...now, busy: false };
@@ -17794,7 +17791,6 @@ export class TillApp extends LitElement {
                 ? nothing
                 : html`<till-supervisor-override-dialog
                     data-finish-approval
-                    .approverRole=${null}
                     .authorizers=${open.approval.authorizers}
                     .error=${open.approval.error}
                     @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => void this.#approveFinishTable(event, open)}
@@ -21613,7 +21609,6 @@ export class TillApp extends LitElement {
             : html`<till-supervisor-override-dialog
                 data-late-send-approval
                 .authorizers=${lateSendApproval.authorizers}
-                .approverRole=${"manager"}
                 .error=${lateSendApproval.error}
                 @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {
                   event.stopPropagation();

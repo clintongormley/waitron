@@ -13,8 +13,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
   },
   {
@@ -29,8 +28,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
   },
   {
@@ -45,8 +43,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
   },
   {
@@ -61,8 +58,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
   },
   {
@@ -77,8 +73,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: true,
   },
   {
@@ -93,8 +88,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,
     maxAmount: "30.00",
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: true,
   },
   {
@@ -109,8 +103,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["discount_percent"],
     maxPercentBp: 2000,
     maxAmount: "50.00",
-    applyRoles: ["manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: true,
   },
   {
@@ -125,8 +118,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["discount_percent"],
     maxPercentBp: 3000,
     maxAmount: "20.00",
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: false,
   },
   {
@@ -141,8 +133,7 @@ export const DEMO_ADJUSTMENT_REASONS = [
     actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: 10000,
     maxAmount: "100.00",
-    applyRoles: ["manager", "admin"],
-    approverRoles: ["admin"],
+
     noteRequired: true,
   },
 ] as const satisfies readonly CountryDemoReason<CasaDelgadoLanguage>[];

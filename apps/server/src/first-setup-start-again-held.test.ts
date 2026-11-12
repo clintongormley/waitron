@@ -289,7 +289,7 @@ it("imported settings history does not block Start again for a held setup", asyn
           ...bundle,
           settings: {
             ...bundle.settings,
-            adjustments: { version: 1, doc: { maxBillComp: 4000, billApproverRoles: ["manager"] } },
+            adjustments: { version: 1, doc: { maxBillComp: 4000 } },
           },
         },
         f.host.modules,

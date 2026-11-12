@@ -146,8 +146,7 @@ describe("seedAdjustmentReasons", () => {
       actions: ["comp", "discount_percent"],
       maxPercentBp: null,
       maxAmount: "30.00",
-      applyRoles: ["supervisor", "manager", "admin"],
-      approverRoles: ["manager", "admin"],
+
       noteRequired: true,
     });
   });

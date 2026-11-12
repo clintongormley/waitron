@@ -17,8 +17,6 @@ const regular: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: ["staff", "supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
 };
 
 class AdjustmentLeaveApp extends LitElement {

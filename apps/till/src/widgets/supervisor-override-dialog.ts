@@ -9,7 +9,7 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { PersonRole, StaffMember } from "../api/client.js";
+import type { StaffMember } from "../api/client.js";
 
 export interface OverrideConfirmDetail {
   personId: string;
@@ -65,10 +65,6 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
   @property() error: string | null = null;
 
-  /** The role that must approve, which the prompt then names; without one it asks for a
-   * supervisor. */
-  @property({ attribute: false }) approverRole: PersonRole | null = null;
-
   @state() private selected?: StaffMember;
   @state() private pin = "";
   @state() private dismissed = false;
@@ -107,7 +103,6 @@ export class TillSupervisorOverrideDialog extends LitElement {
   }
 
   #text(which: "title" | "none" | "pick" | "enter_pin"): string {
-    if (this.approverRole !== null) return t(`approval.${which}_${this.approverRole}`);
     const supervisor: Record<typeof which, StringKey> = {
       title: "override.title",
       none: "override.no_supervisors",

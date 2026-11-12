@@ -2489,8 +2489,6 @@ describe("TillApi", () => {
           noteRequired: false,
           maxPercentBp: null,
           maxAmount: "30.00",
-          applyRoles: ["supervisor", "manager", "admin"],
-          approverRoles: ["manager", "admin"],
         },
       ];
       const fetchStub = vi.fn().mockResolvedValue(jsonResponse(reasons));
@@ -2502,15 +2500,15 @@ describe("TillApi", () => {
       );
     });
 
-    it("listAdjustmentApprovers GETs the people holding any of the roles", async () => {
+    it("listApprovers GETs the people holding the requested permission", async () => {
       const roster = [{ personId: "m-1", displayName: "Marta" }];
       const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
 
-      await expect(
-        new TillApi("", fetchStub).listAdjustmentApprovers(["manager", "admin"]),
-      ).resolves.toEqual(roster);
+      await expect(new TillApi("", fetchStub).listApprovers("adjustment.approve")).resolves.toEqual(
+        roster,
+      );
       expect(fetchStub).toHaveBeenCalledWith(
-        "/api/adjustment-approvers?roles=manager,admin",
+        "/api/adjustment-approvers?permission=adjustment.approve",
         expect.objectContaining({ method: "GET", credentials: "include" }),
       );
     });

@@ -593,8 +593,6 @@ export const cancelReason: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
 };
 
 /** An app API stub's adjustment calls: the cancel reason, a preview nobody need approve, and an

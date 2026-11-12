@@ -143,8 +143,7 @@ async function cancelLine(billId: string, name: string) {
       actions: ["cancel"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
+
       noteRequired: false,
     });
     const [line] = await tx

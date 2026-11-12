@@ -28,7 +28,6 @@ import type {
   AdjustmentReasonInput,
   AdjustmentSettings,
   AdjustmentsApi,
-  PersonRole,
   ReasonKind,
 } from "./client.js";
 import { firstReadThenPassive } from "./first-read.js";
@@ -36,26 +35,15 @@ import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
 import { MAX_REASON_NAME_LENGTH } from "../reason-limits.js";
 import { reasonDeleteCopy } from "./reason-delete-copy.js";
-import { actionChoice, kindName, roleName, t, tf, type StringKey } from "./strings.js";
+import { actionChoice, kindName, t, tf, type StringKey } from "./strings.js";
 
 /** What a Comp reason may offer, in the order the form and the request list them. */
 const OFFERS: readonly AdjustmentAction[] = ["comp", "discount_percent", "discount_amount"];
 const KINDS: readonly ReasonKind[] = ["void", "comp"];
-const ROLES_BY_SENIORITY: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
-const NEW_REASON_ROLES: readonly PersonRole[] = ["manager", "admin"];
 const PERCENT = /^(\d{1,3})(?:[.,](\d{1,2}))?$/;
 const AMOUNT = /^(\d{1,9})(?:[.,](\d{1,2}))?$/;
 
-type Field =
-  | "kind"
-  | "name"
-  | "names"
-  | "actions"
-  | "maxPercent"
-  | "maxAmount"
-  | "applyRoles"
-  | "approverRoles"
-  | "noteRequired";
+type Field = "kind" | "name" | "names" | "actions" | "maxPercent" | "maxAmount" | "noteRequired";
 /** The field a `management.request_invalid` or `adjustment_reason.invalid` names, onto the editor
  * field that holds it. */
 const SERVER_FIELDS: Record<string, Field> = {
@@ -65,8 +53,6 @@ const SERVER_FIELDS: Record<string, Field> = {
   actions: "actions",
   maxPercentBp: "maxPercent",
   maxAmount: "maxAmount",
-  applyRoles: "applyRoles",
-  approverRoles: "approverRoles",
   noteRequired: "noteRequired",
 };
 
@@ -79,8 +65,6 @@ interface Draft {
   actions: AdjustmentAction[];
   maxPercent: string;
   maxAmount: string;
-  applyRoles: PersonRole[];
-  approverRoles: PersonRole[];
   noteRequired: boolean;
 }
 
@@ -88,29 +72,13 @@ const COMP_FIELDS_CLEARED = {
   actions: [],
   maxPercent: "",
   maxAmount: "",
-  applyRoles: [],
-  approverRoles: [],
 } satisfies Partial<Draft>;
-
-function bySeniority(roles: readonly PersonRole[]): PersonRole[] {
-  return ROLES_BY_SENIORITY.filter((role) => roles.includes(role));
-}
-
-/** The chosen roles by seniority, or Everyone once all four are chosen. */
-function rolesText(roles: readonly PersonRole[]): string {
-  const chosen = bySeniority(roles);
-  return chosen.length === ROLES_BY_SENIORITY.length
-    ? t("adjustments.everyone")
-    : chosen.map((role) => roleName(role)).join(", ");
-}
 
 function copyDraft(value: Draft): Draft {
   return {
     ...value,
     names: { ...value.names },
     actions: [...value.actions],
-    applyRoles: [...value.applyRoles],
-    approverRoles: [...value.approverRoles],
   };
 }
 
@@ -137,7 +105,7 @@ function percentBp(text: string): number | null | undefined {
   const match = parsed === null ? null : PERCENT.exec(parsed);
   if (match === null) return undefined;
   const bp = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
-  return bp > 0 && bp <= 10000 ? bp : undefined;
+  return bp >= 0 && bp <= 10000 ? bp : undefined;
 }
 
 /** The amount as the route reads it; `null` for no limit, `undefined` when it cannot be one. */
@@ -148,7 +116,6 @@ function amount(text: string): string | null | undefined {
   const match = parsed === null ? null : AMOUNT.exec(parsed);
   if (match === null) return undefined;
   const whole = String(Number(match[1]));
-  if (whole === "0" && Number(match[2] ?? "0") === 0) return undefined;
   return match[2] === undefined ? whole : `${whole}.${match[2]}`;
 }
 
@@ -160,16 +127,13 @@ function money(text: string): string | null | undefined {
   return `${whole}.${cents.padEnd(2, "0")}`;
 }
 
-/** The bill limit's two fields, as typed. */
 interface LimitDraft {
   amount: string;
-  roles: PersonRole[];
 }
-type LimitField = "maxBillComp" | "billApproverRoles";
+type LimitField = "maxBillComp";
 type LimitErrors = Partial<Record<LimitField, string>>;
 const LIMIT_MESSAGES: Record<LimitField, StringKey> = {
   maxBillComp: "adjustments.limit.invalid",
-  billApproverRoles: "adjustments.error.approverRoles",
 };
 
 const percentFormat = perLocale(
@@ -428,8 +392,6 @@ export class AdjustmentReasonsScreen extends LitElement {
         percentBp(draft.maxPercent) ??
         (draft.maxPercent.trim() === "" ? null : { invalid: draft.maxPercent }),
       maxAmount: normalizedMoney,
-      applyRoles: bySeniority(draft.applyRoles),
-      approverRoles: bySeniority(draft.approverRoles),
       noteRequired: draft.noteRequired,
     });
   }
@@ -545,10 +507,10 @@ export class AdjustmentReasonsScreen extends LitElement {
               id: {},
               parent: this,
               current: () => this.#limitValue(),
-              snapshot: (value) => ({ amount: value.amount, roles: [...value.roles] }),
+              snapshot: (value) => ({ amount: value.amount }),
               equal: (a, b) => this.#sameLimit(a, b),
               restore: (value) => {
-                this.limitDraft = { amount: value.amount, roles: [...value.roles] };
+                this.limitDraft = { amount: value.amount };
                 this.limitAttempted = false;
                 this.limitRefused = undefined;
                 this.limitError = undefined;
@@ -664,8 +626,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       maxPercent:
         reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
       maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
-      applyRoles: [...(reason?.applyRoles ?? NEW_REASON_ROLES)],
-      approverRoles: [...(reason?.approverRoles ?? NEW_REASON_ROLES)],
       noteRequired: reason?.noteRequired ?? false,
     };
     const draft = draftScopeFor(this, {
@@ -722,10 +682,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       errors.names = tooLong;
     }
     if (draft.kind === "void") return errors;
-    if (draft.applyRoles.length === 0) errors.applyRoles = t("adjustments.error.applyRoles");
-    if (draft.approverRoles.length === 0) {
-      errors.approverRoles = t("adjustments.error.approverRoles");
-    }
     if (draft.actions.length === 0) errors.actions = t("adjustments.error.actions");
     const percent = percentBp(draft.maxPercent);
     if (percent === undefined) {
@@ -753,8 +709,6 @@ export class AdjustmentReasonsScreen extends LitElement {
         actions: ["cancel"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: [],
-        approverRoles: [],
       };
     }
     return {
@@ -763,8 +717,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       actions: OFFERS.filter((action) => draft.actions.includes(action)),
       maxPercentBp: percentBp(draft.maxPercent)!,
       maxAmount: amount(draft.maxAmount)!,
-      applyRoles: bySeniority(draft.applyRoles),
-      approverRoles: bySeniority(draft.approverRoles),
     };
   }
 
@@ -973,12 +925,10 @@ export class AdjustmentReasonsScreen extends LitElement {
     const saved = this.settings!.maxBillComp;
     return {
       amount: saved === null ? "" : localDecimal(saved),
-      roles: [...this.settings!.billApproverRoles],
     };
   }
 
   #sameLimit(a: LimitDraft, b: LimitDraft): boolean {
-    if (bySeniority(a.roles).join() !== bySeniority(b.roles).join()) return false;
     const left = money(a.amount);
     const right = money(b.amount);
     return left === undefined || right === undefined
@@ -990,9 +940,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     const value = this.#limitValue();
     const errors: LimitErrors = {};
     if (money(value.amount) === undefined) errors.maxBillComp = t(LIMIT_MESSAGES.maxBillComp);
-    if (value.roles.length === 0) {
-      errors.billApproverRoles = t(LIMIT_MESSAGES.billApproverRoles);
-    }
     return errors;
   }
 
@@ -1030,7 +977,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       settings = await this.api.saveSettings({
         revision: this.#limitRevision ?? this.settings!.revision,
         maxBillComp: money(submitted.amount)!,
-        billApproverRoles: bySeniority(submitted.roles),
       });
     } catch (error) {
       if (generation !== this.#limitGeneration || !this.isConnected) return;
@@ -1115,15 +1061,6 @@ export class AdjustmentReasonsScreen extends LitElement {
             >${t("adjustments.limit.hint")}</wt-help-tooltip
           ></wt-price-input
         >
-        ${this.#roleList({
-          name: "billApproverRoles",
-          label: t("adjustments.limit.approvers"),
-          values: value.roles,
-          current: () => (this.settings ? this.#limitValue().roles : []),
-          error: errors.billApproverRoles ?? "",
-          disabled: this.limitSaving,
-          change: (roles) => this.#limitEdit({ roles }, "billApproverRoles"),
-        })}
       </div>
       ${
         this.limitSaved
@@ -1204,7 +1141,6 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #row(reason: AdjustmentReason) {
-    const isVoid = reason.kind === "void";
     return html`<tr data-reason=${reason.id}>
       <td class="handle-cell">${this.#reorder.handle(reason.id)}</td>
       <td>
@@ -1216,8 +1152,6 @@ export class AdjustmentReasonsScreen extends LitElement {
         }
       </td>
       <td><wt-lozenge>${kindName(reason.kind)}</wt-lozenge></td>
-      <td>${isVoid ? t("adjustments.none") : rolesText(reason.applyRoles)}</td>
-      <td>${isVoid ? t("adjustments.none") : rolesText(reason.approverRoles)}</td>
       <td>${this.#lines(this.#limits(reason))}</td>
       <td class="actions-cell">${this.#rowMenu(reason)}</td>
     </tr>`;
@@ -1243,8 +1177,6 @@ export class AdjustmentReasonsScreen extends LitElement {
               </th>
               <th scope="col">${t("adjustments.column.name")}</th>
               <th scope="col">${t("adjustments.column.kind")}</th>
-              <th scope="col">${t("adjustments.column.apply_roles")}</th>
-              <th scope="col">${t("adjustments.column.approver_roles")}</th>
               <th scope="col">${t("adjustments.column.limits")}</th>
               <th scope="col" class="actions-cell">
                 <span class="visually-hidden">${t("adjustments.column.actions")}</span>
@@ -1272,55 +1204,6 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   /** `current` names the chosen roles on the closed field: the combobox hands `countLabel` only the
    * count, and a closing editor's list still draws after its draft is gone. */
-  #roleList(list: {
-    name: string;
-    label: string;
-    hint?: string;
-    values: readonly PersonRole[];
-    current: () => readonly PersonRole[];
-    error: string;
-    disabled: boolean;
-    change: (roles: PersonRole[]) => void;
-  }) {
-    const locale = currentLocale();
-    const collator = new Intl.Collator(locale, { sensitivity: "base" });
-    const roles = [...ROLES_BY_SENIORITY].sort((a, b) =>
-      collator.compare(roleName(a, locale), roleName(b, locale)),
-    );
-    return html`<wt-combobox
-      name=${list.name}
-      multiple
-      required
-      label=${list.label}
-      hint=${list.hint ?? ""}
-      search="auto"
-      .options=${roles.map((role) => ({ value: role, label: roleName(role) }))}
-      .values=${list.values}
-      .countLabel=${() => rolesText(list.current())}
-      error=${list.error}
-      .disabled=${list.disabled}
-      @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
-        event.stopPropagation();
-        list.change(event.detail.values as PersonRole[]);
-      }}
-    ></wt-combobox>`;
-  }
-
-  #reasonRoles(errors: FieldErrors, field: "applyRoles" | "approverRoles") {
-    const editor = this.editor!;
-    const words = field === "applyRoles" ? "apply_roles" : "approver_roles";
-    return this.#roleList({
-      name: field,
-      label: t(`adjustments.field.${words}`),
-      hint: t(`adjustments.field.${words}_hint`),
-      values: this.draft![field],
-      current: () => this.draft?.[field] ?? [],
-      error: errors[field] ?? "",
-      disabled: this.busy,
-      change: (roles) => this.#edit({ [field]: roles }, editor),
-    });
-  }
-
   #compFields(errors: FieldErrors) {
     const draft = this.draft!;
     const editor = this.editor!;
@@ -1334,9 +1217,10 @@ export class AdjustmentReasonsScreen extends LitElement {
     });
     const percent = text("maxPercent");
     const money = text("maxAmount");
-    return html`${this.#reasonRoles(errors, "applyRoles")}
-      ${this.#reasonRoles(errors, "approverRoles")}
-      <fieldset class="offers" aria-describedby=${errors.actions ? "error-actions" : nothing}>
+    return html`<fieldset
+        class="offers"
+        aria-describedby=${errors.actions ? "error-actions" : nothing}
+      >
         <legend>
           ${t("adjustments.field.actions")}<span class="required" aria-hidden="true">*</span>
         </legend>

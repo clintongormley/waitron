@@ -24359,8 +24359,6 @@ describe("A737 post-invoice refund integration", () => {
     noteRequired: false,
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
   });
   const refundReasons = [
     voidReason("r-request", "Customer request"),

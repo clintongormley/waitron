@@ -502,8 +502,7 @@ describe("A803 monetary comparison: operations on portions through the real path
           actions: ["comp", "discount_percent", "discount_amount"],
           maxPercentBp: null,
           maxAmount: null,
-          applyRoles: ["staff", "supervisor", "manager", "admin"],
-          approverRoles: ["staff", "supervisor", "manager", "admin"],
+
           noteRequired: false,
         })
       ).id;
@@ -922,8 +921,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
           actions: ["comp", "discount_percent", "discount_amount"],
           maxPercentBp: null,
           maxAmount: null,
-          applyRoles: ["staff", "supervisor", "manager", "admin"],
-          approverRoles: ["staff", "supervisor", "manager", "admin"],
+
           noteRequired: false,
         })
       ).id;

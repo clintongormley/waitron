@@ -233,8 +233,7 @@ describe("dated business-day reporting through real storage", () => {
         actions: ["discount_amount"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: ["staff", "supervisor", "manager", "admin"],
-        approverRoles: ["manager", "admin"],
+
         noteRequired: false,
       });
       await recordAdjustment(tx, {

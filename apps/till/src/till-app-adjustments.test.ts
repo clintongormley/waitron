@@ -147,8 +147,6 @@ const complaint: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
 };
 const mistake: AdjustmentReason = {
   ...complaint,
@@ -157,8 +155,6 @@ const mistake: AdjustmentReason = {
   kind: "void",
   actions: ["cancel"],
   noteRequired: true,
-  applyRoles: [],
-  approverRoles: [],
 };
 
 const formFactor: FormFactor = "till";
@@ -1248,8 +1244,6 @@ describe("till-app: cancelling a dish", () => {
       noteRequired: false,
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
     };
     const { el } = await mountApp({
       listAdjustmentReasons: vi.fn().mockResolvedValue([defaultReason]),

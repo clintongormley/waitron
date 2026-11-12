@@ -24,8 +24,7 @@ const reasons: AdjustmentReason[] = [
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
     position: 0,
   },
@@ -37,8 +36,7 @@ const reasons: AdjustmentReason[] = [
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,
     maxAmount: "30.00",
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: true,
     position: 1,
   },
@@ -50,8 +48,7 @@ const reasons: AdjustmentReason[] = [
     actions: ["discount_amount"],
     maxPercentBp: null,
     maxAmount: "5.00",
-    applyRoles: ["staff", "supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: false,
     position: 2,
   },
@@ -77,9 +74,7 @@ async function screen(
   await mountThemed("<div></div>", theme);
   const api = {
     listReasons: vi.fn().mockResolvedValue(reasons),
-    getSettings: vi
-      .fn()
-      .mockResolvedValue({ maxBillComp: "15.00", billApproverRoles: ["manager", "admin"] }),
+    getSettings: vi.fn().mockResolvedValue({ maxBillComp: "15.00" }),
     saveSettings: vi.fn(async (settings: unknown) => settings),
     ...overrides,
   } as Record<string, unknown>;

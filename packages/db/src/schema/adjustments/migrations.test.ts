@@ -29,27 +29,22 @@ interface Row {
   actions?: string;
   maxPercent?: number | null;
   maxAmount?: number | null;
-  applyRoles?: string;
-  approverRoles?: string;
   position?: number;
 }
 
-/** A Void reason, as the columns store one: cancel only, no role lists, no limits. */
+/** A Void reason, as the columns store one: cancel only, no limits. */
 const VOID: Row = {
   kind: "void",
   actions: '["cancel"]',
-  applyRoles: "[]",
-  approverRoles: "[]",
 };
 
 function insert(row: Row = {}) {
   return sql`insert into adjustment_reasons
-      (id, name, names, kind, actions, max_percent, max_amount, apply_roles, approver_roles,
+      (id, name, names, kind, actions, max_percent, max_amount,
        note_required, position, created_at)
     values (${randomUUID()}, ${row.name ?? "Complaint"}, '{}', ${row.kind ?? "comp"},
       ${row.actions ?? '["comp"]'}, ${row.maxPercent ?? null}, ${row.maxAmount ?? null},
-      ${row.applyRoles ?? '["supervisor","manager","admin"]'},
-      ${row.approverRoles ?? '["manager","admin"]'}, 1, ${row.position ?? 0},
+      1, ${row.position ?? 0},
       ${new Date().toISOString()})`;
 }
 
@@ -91,7 +86,7 @@ async function refusedBy(row: Row, constraint: string): Promise<void> {
 }
 
 describe("the adjustments tables in core's set", () => {
-  it("creates adjustment_reasons with the kind and both role lists, and no single-role columns", async () => {
+  it("creates adjustment_reasons with the kind and limits, and no role columns", async () => {
     const columns = await db.execute<{ name: string; notnull: number; pk: number }>(
       sql`select name, "notnull", pk from pragma_table_info('adjustment_reasons')`,
     );
@@ -105,8 +100,6 @@ describe("the adjustments tables in core's set", () => {
       actions: { notNull: 1, pk: 0 },
       max_percent: { notNull: 0, pk: 0 },
       max_amount: { notNull: 0, pk: 0 },
-      apply_roles: { notNull: 1, pk: 0 },
-      approver_roles: { notNull: 1, pk: 0 },
       note_required: { notNull: 1, pk: 0 },
       position: { notNull: 1, pk: 0 },
       created_at: { notNull: 1, pk: 0 },
@@ -121,14 +114,10 @@ describe("the adjustments tables in core's set", () => {
     ]);
   });
 
-  it("refuses a Void reason with a role list or a limit, and a Comp reason with an empty list", async () => {
+  it("refuses a Void reason with a limit", async () => {
     const check = "adjustment_reasons_kind_fields_ck";
-    await refusedBy({ ...VOID, applyRoles: '["manager"]' }, check);
-    await refusedBy({ ...VOID, approverRoles: '["manager"]' }, check);
     await refusedBy({ ...VOID, maxPercent: 5000 }, check);
     await refusedBy({ ...VOID, maxAmount: 3000 }, check);
-    await refusedBy({ applyRoles: "[]" }, check);
-    await refusedBy({ approverRoles: "[]" }, check);
     await db.execute(insert({ ...VOID, name: "Mistake" }));
     await db.execute(insert({ name: "Complaint" }));
     const kinds = await db.execute<{ name: string; kind: string }>(
@@ -144,10 +133,11 @@ describe("the adjustments tables in core's set", () => {
     await refusedBy({ kind: "discount" }, "adjustment_reasons_kind_ck");
   });
 
-  it("refuses a percentage limit of zero or above 100%, and an amount limit of zero", async () => {
-    await refusedBy({ maxPercent: 0 }, "adjustment_reasons_max_percent_ck");
+  it("accepts zero limits, refuses negative limits and a percentage above 100%", async () => {
+    await db.execute(insert({ name: "Zero", maxPercent: 0, maxAmount: 0 }));
+    await refusedBy({ maxPercent: -1 }, "adjustment_reasons_max_percent_ck");
     await refusedBy({ maxPercent: 10001 }, "adjustment_reasons_max_percent_ck");
-    await refusedBy({ maxAmount: 0 }, "adjustment_reasons_max_amount_ck");
+    await refusedBy({ maxAmount: -1 }, "adjustment_reasons_max_amount_ck");
   });
 
   it("refuses an empty action list, a blank name and a negative position", async () => {

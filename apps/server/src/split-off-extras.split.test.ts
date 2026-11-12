@@ -74,8 +74,7 @@ async function compOne(venue: Venue) {
       actions: ["comp"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: ["staff", "supervisor", "manager", "admin"],
-      approverRoles: ["staff", "supervisor", "manager", "admin"],
+
       noteRequired: false,
     });
     const [dish] = await tx

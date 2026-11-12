@@ -2102,17 +2102,15 @@ CREATE TABLE `adjustment_reasons` (
 	`actions` text NOT NULL,
 	`max_percent` integer,
 	`max_amount` integer,
-	`apply_roles` text DEFAULT '[]' NOT NULL,
-	`approver_roles` text DEFAULT '[]' NOT NULL,
 	`note_required` integer DEFAULT false NOT NULL,
 	`position` integer NOT NULL,
 	`created_at` text NOT NULL,
 	CONSTRAINT "adjustment_reasons_name_ck" CHECK(length(trim("adjustment_reasons"."name")) > 0),
 	CONSTRAINT "adjustment_reasons_actions_ck" CHECK(json_array_length("adjustment_reasons"."actions") > 0),
-	CONSTRAINT "adjustment_reasons_max_percent_ck" CHECK("adjustment_reasons"."max_percent" is null or ("adjustment_reasons"."max_percent" > 0 and "adjustment_reasons"."max_percent" <= 10000)),
-	CONSTRAINT "adjustment_reasons_max_amount_ck" CHECK("adjustment_reasons"."max_amount" is null or "adjustment_reasons"."max_amount" > 0),
+	CONSTRAINT "adjustment_reasons_max_percent_ck" CHECK("adjustment_reasons"."max_percent" is null or "adjustment_reasons"."max_percent" between 0 and 10000),
+	CONSTRAINT "adjustment_reasons_max_amount_ck" CHECK("adjustment_reasons"."max_amount" is null or "adjustment_reasons"."max_amount" >= 0),
 	CONSTRAINT "adjustment_reasons_kind_ck" CHECK("adjustment_reasons"."kind" in ('void', 'comp')),
-	CONSTRAINT "adjustment_reasons_kind_fields_ck" CHECK(("adjustment_reasons"."kind" = 'void' and json_array_length("adjustment_reasons"."apply_roles") = 0 and json_array_length("adjustment_reasons"."approver_roles") = 0 and "adjustment_reasons"."max_percent" is null and "adjustment_reasons"."max_amount" is null) or ("adjustment_reasons"."kind" = 'comp' and json_array_length("adjustment_reasons"."apply_roles") > 0 and json_array_length("adjustment_reasons"."approver_roles") > 0)),
+	CONSTRAINT "adjustment_reasons_kind_fields_ck" CHECK(("adjustment_reasons"."kind" = 'void' and "adjustment_reasons"."max_percent" is null and "adjustment_reasons"."max_amount" is null) or "adjustment_reasons"."kind" = 'comp'),
 	CONSTRAINT "adjustment_reasons_position_ck" CHECK("adjustment_reasons"."position" >= 0)
 );
 --> statement-breakpoint

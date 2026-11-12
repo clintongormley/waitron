@@ -214,8 +214,8 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
               actions: ["comp"],
               maxPercentBp: null,
               maxAmount: null,
-              applyRoles: [],
-              approverRoles: [],
+              maxBillComp: null,
+
               noteRequired: false,
             },
           },

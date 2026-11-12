@@ -73,28 +73,24 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
 
     expect(report).toBe("default cancel reason ready");
     const seeded = await reasons();
-    const every = ["staff", "supervisor", "manager", "admin"];
-    const supervisorUp = ["supervisor", "manager", "admin"];
-    const managerUp = ["manager", "admin"];
     expect(
       seeded.map((reason) => [
         reason.kind,
         reason.names.en,
-        reason.applyRoles,
-        reason.approverRoles,
+        reason.maxAmount,
         reason.maxPercentBp,
         reason.noteRequired,
       ]),
     ).toEqual([
-      ["void", "Entry error", [], [], null, false],
-      ["void", "Item not available", [], [], null, false],
-      ["void", "Customer changed mind", [], [], null, false],
-      ["void", "Not served", [], [], null, false],
-      ["void", "Other", [], [], null, true],
-      ["comp", "Complaint", supervisorUp, supervisorUp, null, false],
-      ["comp", "On the house", managerUp, managerUp, null, false],
-      ["comp", "Staff meal", every, managerUp, 5000, false],
-      ["comp", "Discount", managerUp, managerUp, null, false],
+      ["void", "Entry error", null, null, false],
+      ["void", "Item not available", null, null, false],
+      ["void", "Customer changed mind", null, null, false],
+      ["void", "Not served", null, null, false],
+      ["void", "Other", null, null, true],
+      ["comp", "Complaint", "0.00", null, false],
+      ["comp", "On the house", "0.00", null, false],
+      ["comp", "Staff meal", null, 5000, false],
+      ["comp", "Discount", "0.00", null, false],
     ]);
     expect(seeded.map((reason) => reason.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
     expect(seeded.map((reason) => [reason.name, reason.names])).toEqual(
@@ -122,7 +118,17 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
       ["discount_percent", "discount_amount"],
       all,
     ]);
-    expect(seeded.every((reason) => reason.maxAmount === null)).toBe(true);
+    expect(seeded.map((reason) => reason.maxAmount)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+      "0.00",
+      "0.00",
+      null,
+      "0.00",
+    ]);
     expect(
       (await db.select().from(settings)).filter((row) => row.module === "adjustments"),
     ).toEqual([]);
@@ -227,8 +233,6 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
         actions: ["comp"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: ["supervisor", "manager", "admin"],
-        approverRoles: ["manager", "admin"],
         noteRequired: true,
       });
     });

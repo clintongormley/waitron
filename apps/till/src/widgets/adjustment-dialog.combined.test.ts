@@ -24,11 +24,9 @@ const reason = (
   maxPercentBp: null,
   maxAmount: null,
   ...(actions.includes("cancel")
-    ? { kind: "void" as const, applyRoles: [], approverRoles: [] }
+    ? { kind: "void" as const }
     : {
         kind: "comp" as const,
-        applyRoles: ["staff", "supervisor", "manager", "admin"],
-        approverRoles: ["manager", "admin"],
       }),
   ...over,
 });
@@ -130,13 +128,7 @@ it.each([
 ] as const)("names each of a reason's role lists in %s", async (locale, policy) => {
   setLocale(locale);
   const el = await mount({
-    reasons: [
-      reason("Free", ["comp"]),
-      reason("Staff meal", ["comp"], {
-        applyRoles: ["admin", "supervisor"],
-        approverRoles: ["staff", "supervisor", "manager", "admin"],
-      }),
-    ],
+    reasons: [reason("Free", ["comp"]), reason("Staff meal", ["comp"], {})],
   });
   const text = q(el, "[data-reasons]").textContent!.replace(/\s+/g, " ");
   expect(text).toContain(policy);

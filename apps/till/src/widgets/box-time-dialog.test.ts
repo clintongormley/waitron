@@ -29,7 +29,7 @@ function fakeApi(
       }),
     ),
     boxClockConfirm: vi.fn(confirm),
-    listAdjustmentApprovers: vi.fn(() => Promise.resolve([ADMIN])),
+    listApprovers: vi.fn(() => Promise.resolve([ADMIN])),
   };
 }
 
@@ -487,13 +487,12 @@ describe("till-box-time-dialog", () => {
 
     const override = { personId: ADMIN.personId, pin: "1234" };
 
-    it("lists the administrators and, on a PIN, shows both times before sending anything", async () => {
+    it("lists Box administration holders for the clock and shows both times before sending anything", async () => {
       const api = fakeApi(BOX_BEHIND, okConfirm(5_000));
       const el = await refusedNotStartUp(api);
-      expect(api.listAdjustmentApprovers).toHaveBeenCalledWith(["admin"]);
+      expect(api.listApprovers).toHaveBeenCalledWith("system.box_admin");
       const dialog = pinDialog(el) as unknown as { authorizers: unknown; approverRole: string };
       expect(dialog.authorizers).toEqual([ADMIN]);
-      expect(dialog.approverRole).toBe("admin");
       await signIn(el);
       expect(pinDialog(el)).toBeNull();
       expect(api.boxClockChallenge.mock.calls.at(-1)).toEqual([override]);

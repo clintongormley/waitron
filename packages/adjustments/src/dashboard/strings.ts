@@ -57,11 +57,10 @@ const en = {
   "adjustments.field.max_percent": "Most off one item",
   "adjustments.field.max_percent_help_label": "About most off one item",
   "adjustments.field.max_percent_hint":
-    "Counts every discount on the item, from any reason or on the whole bill.",
+    "Counts every discount on the item. 0 means every comp with this reason needs approval.",
   "adjustments.field.max_amount": "Most off one bill",
   "adjustments.field.max_amount_help_label": "About most off one bill",
-  "adjustments.field.max_amount_hint":
-    "The venue's own amount. Above it, someone who can approve it is asked.",
+  "adjustments.field.max_amount_hint": "0 means every comp with this reason needs approval.",
   "adjustments.field.note_required": "Note required",
   "adjustments.field.note_required_void_hint": "The till asks for the note with “Say why”.",
   "adjustments.void_rule": "Who may cancel is set by the refund permission, not by the reason.",
@@ -83,10 +82,9 @@ const en = {
   "adjustments.error.names": "Check the names in each language.",
   "adjustments.error.name_too_long": "Use at most {max} characters.",
   "adjustments.error.actions": "Choose at least one action.",
-  "adjustments.error.maxPercent":
-    "Enter a percentage above 0 and up to 100, with at most two decimals.",
+  "adjustments.error.maxPercent": "Enter a percentage from 0 to 100, with at most two decimals.",
   "adjustments.error.maxAmount":
-    "Enter an amount above 0 with at most two decimals, such as 30.00.",
+    "Enter an amount of 0 or more with at most two decimals, such as 30.00.",
   "adjustments.error.kind": "Choose Void or Comp.",
   "adjustments.error.applyRoles": "Choose at least one role.",
   "adjustments.error.approverRoles": "Choose at least one role.",
@@ -103,12 +101,13 @@ const en = {
   "adjustments.limit.field": "Most comped on one bill",
   "adjustments.limit.help_label": "About most comped on one bill",
   "adjustments.limit.hint":
-    "Every comp on the bill counts, whatever its reason. Above it, someone on the next list who may also approve the reason enters their PIN.",
+    "Every comp on the bill counts. 0 means every comp on a bill needs approval.",
   "adjustments.limit.approvers": "Who can approve past it",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
   "adjustments.limit.load_error": "The bill's comp limit could not be loaded.",
-  "adjustments.limit.invalid": "Enter an amount above 0 with at most two decimals, such as 40.00.",
+  "adjustments.limit.invalid":
+    "Enter an amount of 0 or more with at most two decimals, such as 40.00.",
   "nav.adjustment_report": "Adjustment report",
   "adjustment_report.title": "Adjustment report",
   "adjustment_report.intro":
@@ -278,8 +277,7 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.limit.heading": "Límite de descuentos por cuenta",
   "adjustments.limit.field": "Máximo descontado en una cuenta",
   "adjustments.limit.help_label": "Acerca del máximo descontado en una cuenta",
-  "adjustments.limit.hint":
-    "Cuenta cada descuento de la cuenta, sea cual sea su motivo. Por encima, introduce su PIN alguien de la lista siguiente que también pueda autorizar el motivo.",
+  "adjustments.limit.hint": "0 significa que cada invitación de una cuenta necesita aprobación.",
   "adjustments.limit.approvers": "Quién puede autorizar más",
   "adjustments.limit.save": "Guardar límite",
   "adjustments.limit.saved": "Límite guardado.",

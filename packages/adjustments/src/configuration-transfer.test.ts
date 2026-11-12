@@ -19,8 +19,6 @@ function row(
     actions: JSON.stringify(isVoid ? ["cancel"] : ["comp", "discount_percent"]),
     max_percent: null,
     max_amount: null,
-    apply_roles: JSON.stringify(isVoid ? [] : ["supervisor", "manager"]),
-    approver_roles: JSON.stringify(isVoid ? [] : ["manager"]),
     note_required: noteRequired,
     ...change,
   };
@@ -113,29 +111,6 @@ describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
     ["no actions", row("comp", 0, { actions: undefined })],
   ])("refuses %s", (_, extra) => {
     expect(refusal(withExtra(extra))).toEqual(refusedAt("adjustment_reasons.actions"));
-  });
-
-  it.each([
-    ["apply_roles", "a role that is not one", '["owner"]'],
-    ["apply_roles", "a role twice", '["manager","manager"]'],
-    ["apply_roles", "an empty list", "[]"],
-    ["apply_roles", "a list holding a number", "[1]"],
-    ["approver_roles", "a role that is not one", '["owner"]'],
-    ["approver_roles", "a role twice", '["admin","admin"]'],
-    ["approver_roles", "an empty list", "[]"],
-  ])("refuses a Comp reason whose %s is %s", (column, _, value) => {
-    expect(refusal(withExtra(row("comp", 0, { [column]: value })))).toEqual(
-      refusedAt(`adjustment_reasons.${column}`),
-    );
-  });
-
-  it.each([
-    ["apply_roles", '["staff"]'],
-    ["approver_roles", '["manager"]'],
-  ])("refuses a Void reason with %s", (column, value) => {
-    expect(refusal(withExtra(row("void", 0, { [column]: value })))).toEqual(
-      refusedAt(`adjustment_reasons.${column}`),
-    );
   });
 
   it("refuses a reason of no kind there is", () => {

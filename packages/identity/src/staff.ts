@@ -608,14 +608,6 @@ export async function listActivePersonsWithPermission(
   return listActivePersonsWhose(tx, (role) => roleHasPermission(role, permission));
 }
 
-/** The approver picker for a list of roles: the active people whose role is one of `roles`. */
-export async function listActivePersonsWithRoles(
-  tx: Transaction,
-  roles: readonly PersonRoleValue[],
-): Promise<StaffListEntry[]> {
-  return listActivePersonsWhose(tx, (held) => roles.includes(held));
-}
-
 async function listActivePersonsWhose(
   tx: Transaction,
   admits: (role: PersonRoleValue) => boolean,

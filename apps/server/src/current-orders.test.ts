@@ -2082,8 +2082,7 @@ describe("a paid held dish fired on its own", () => {
         actions: ["discount_percent"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: ["staff", "supervisor", "manager", "admin"],
-        approverRoles: ["staff", "supervisor", "manager", "admin"],
+
         noteRequired: false,
       });
       const [dish] = await tx

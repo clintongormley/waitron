@@ -181,8 +181,6 @@ const complaint: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
 };
 const mistake: AdjustmentReason = {
   id: "r-mistake",
@@ -192,8 +190,6 @@ const mistake: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
 };
 
 const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
