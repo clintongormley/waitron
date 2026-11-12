@@ -29,6 +29,7 @@ import {
   invoiceSeries,
   locations,
   nodes,
+  settings,
   stampDeployment,
   openVenueDatabase,
   tenants,
@@ -55,6 +56,7 @@ import {
   type RestoreDeps,
   readArtifactIdentity,
   readArtifactNode,
+  resolveArtifactNode,
   clearReplacedDatabases,
   putIdentityBack,
   restoreDatabase as placeDatabaseFile,
@@ -2175,7 +2177,7 @@ describe("transactional series restore identity", () => {
   });
 });
 
-it("resolves an archive node's own location through the read-only source database", async () => {
+it("resolves an archive node through the read-only source database", async () => {
   const otherLocation = "c0000000-0000-4000-8000-000000000001";
   const otherNode = "c0000000-0000-4000-8000-000000000009";
   await suite.db.insert(locations).values({
@@ -2206,5 +2208,25 @@ it("resolves an archive node's own location through the read-only source databas
   } finally {
     await suite.db.delete(nodes).where(eq(nodes.id, otherNode));
     await suite.db.delete(locations).where(eq(locations.id, otherLocation));
+  }
+});
+
+it("refuses an archive node when its venue document is missing", async () => {
+  const entries = [
+    {
+      name: "secrets/trading.env",
+      bytes: Buffer.from(formatEnvFile({ WAITRON_NODE_ID: T.nodeId })),
+    },
+  ];
+  await expect(resolveArtifactNode(suite.db, entries)).resolves.toEqual({ nodeId: T.nodeId });
+  const [venue] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
+  expect(venue).toBeDefined();
+  await suite.db.delete(settings).where(eq(settings.module, "venue"));
+  try {
+    await expect(resolveArtifactNode(suite.db, entries)).rejects.toMatchObject({
+      code: "venue.not_found",
+    });
+  } finally {
+    await suite.db.insert(settings).values(venue!);
   }
 });

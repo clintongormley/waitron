@@ -221,6 +221,40 @@ describe("private host recovery material", () => {
     expect(await verifyBackupKeyPlacement(input, dir)).toBe("passed");
   });
 
+  it.each([
+    "WAITRON_BACKUP_RECOVERY_KEY=short\n",
+    "WAITRON_BACKUP_DIR=/old\n",
+    'WAITRON_BACKUP_DESTINATIONS={"secret":"private-destination-sentinel"}\n',
+  ])("refuses malformed optional backup settings %#", async (value) => {
+    expect(
+      await verifyBackupStateSecrets(set(entries(), "backup.env", value), source, now),
+    ).toEqual(unsupported);
+  });
+  it.each([
+    "{",
+    "null",
+    '{"modules":{"unknown-module":true}}',
+    '{"modules":{"payments":"off"}}',
+    '{"modules":{"core":false}}',
+    '{"modules":{},"extra":true}',
+    '{"modules":{"payments":true,"payments":false}}',
+  ])("refuses malformed or unknown module configuration %#", async (raw) => {
+    expect(
+      await verifyBackupStateSecrets(set(entries(), "modules.json", raw), source, now),
+    ).toEqual(unsupported);
+  });
+  it.each(["cloud/connection.json", "cloud/staff.key", "cloud/staff.json", "cloud/staff.session"])(
+    "refuses archived Cloud authority %s",
+    async (name) => {
+      expect(
+        await verifyBackupStateSecrets(
+          set(entries(), name, "private-cloud-secret-sentinel"),
+          source,
+          now,
+        ),
+      ).toEqual(unsupported);
+    },
+  );
   it("authenticates and checks the selected node's sealed state", async () => {
     expect(await verifyBackupStateSecrets(entries(), source, now, await seal(entries()))).toEqual(
       pass,

@@ -18,12 +18,7 @@ const suite = useVenueDb({
 });
 const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
-let personId: string,
-  other: string,
-  manager: string,
-  locationId: string,
-  nodeId: string,
-  openEntryId: string;
+let personId: string, other: string, manager: string, nodeId: string, openEntryId: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const event = (at: string) => ({ nodeId, personId, at, offsetMinutes: 0, origin });
 const input = () => ({ ...event("2026-01-05T17:00:00Z"), openEntryId });
@@ -35,7 +30,7 @@ const confirm = (entryId: string, workerPersonId = personId) => ({
 });
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedLocation(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },

@@ -13,7 +13,6 @@ import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
 
-let locationId: string;
 let nodeId: string;
 
 const suite = useVenueDb({
@@ -21,7 +20,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
+    await seedLocation(db);
     nodeId = await seedNode(db);
   },
 });

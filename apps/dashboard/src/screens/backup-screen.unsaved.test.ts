@@ -187,7 +187,7 @@ it("a changed destination choice warns, and Discard restores the opening choice"
       revision: "11111111-2222-4333-8444-555555555555",
     })) as unknown as DashboardApi["getStreamSettings"],
   });
-  await change(screen, "archive-destination", "stream-bucket");
+  await change(screen, "archive-destination", "custom-s3");
   expect(unload()).toBe(true);
   const discarded = leave(app);
   await choose(app, "discard");
@@ -786,18 +786,18 @@ it("a stored folder and bucket open without warning; the folder switch warns, an
   await expect.poll(() => field(screen, "edit-settings")).not.toBeNull();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await edit(screen);
-  expect(field(screen, "archive-destination").value).toBe("stream-bucket");
+  expect(field(screen, "archive-destination").value).toBe("custom-s3");
   expect(unload()).toBe(false);
   await setFolderOn(screen, false);
   expect(unload()).toBe(true);
-  await change(screen, "archive-destination", "custom-s3");
+  await change(screen, "archive-destination", "none");
   const discarded = leave(app);
   await choose(app, "discard");
   expect(await discarded).toBe("proceeded");
   await screen.updateComplete;
   expect(folderOn(screen)).toBe(true);
   expect(field(screen, "destination").value).toBe("/mnt/usb/waitron");
-  expect(field(screen, "archive-destination").value).toBe("stream-bucket");
+  expect(field(screen, "archive-destination").value).toBe("custom-s3");
   expect(unload()).toBe(false);
 });
 it("a folder typed and then switched off is no change, and a status read keeps it for the switch", async () => {
@@ -812,7 +812,7 @@ it("a folder typed and then switched off is no change, and a status read keeps i
     getBackupStatus,
     getStreamSettings: streamOn,
   });
-  await expect.poll(() => field(screen, "archive-destination")?.value).toBe("stream-bucket");
+  await expect.poll(() => field(screen, "archive-destination")?.value).toBe("custom-s3");
   expect(folderOn(screen)).toBe(false);
   await setFolderOn(screen, true);
   await change(screen, "destination", "/mnt/kept");

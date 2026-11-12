@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, nodes, type Database, handoverActivations } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, type Database, handoverActivations } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { validateBackupVerificationContribution } from "@waitron/module";
@@ -26,7 +26,6 @@ const NODE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 // row from the start, and an emptied one is one that never received any.
 async function activate(db: Database, activatedAt = "2026-10-20T08:00:00.000Z"): Promise<void> {
   await seedVenue(db);
-  const [venue] = await db.select({ id: locations.id }).from(locations);
   await db.insert(nodes).values([
     { id: NODE_A, name: "Source" },
     { id: NODE_B, name: "Destination" },

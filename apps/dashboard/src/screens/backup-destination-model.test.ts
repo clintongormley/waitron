@@ -50,7 +50,7 @@ const otherCustom = {
 
 describe("openingDestinations", () => {
   it("opens a fresh box with the folder on, empty, and no bucket", () => {
-    expect(openingDestinations(status([]), stream)).toEqual({
+    expect(openingDestinations(status([]))).toEqual({
       folderOn: true,
       folder: "",
       bucket: "none",
@@ -59,7 +59,7 @@ describe("openingDestinations", () => {
   });
 
   it("opens a stored folder alone with the folder on and no bucket", () => {
-    expect(openingDestinations(status([folder]), stream)).toEqual({
+    expect(openingDestinations(status([folder]))).toEqual({
       folderOn: true,
       folder: "/srv/backups",
       bucket: "none",
@@ -67,17 +67,17 @@ describe("openingDestinations", () => {
     });
   });
 
-  it("opens a stored bucket matching the bucket copy's as the bucket copy's bucket, folder off", () => {
-    expect(openingDestinations(status([streamMatched]), stream)).toEqual({
+  it("opens a saved bucket as editable fields even when it matches the stream", () => {
+    expect(openingDestinations(status([streamMatched]))).toEqual({
       folderOn: false,
       folder: "",
-      bucket: "stream-bucket",
-      custom: EMPTY_CUSTOM,
+      bucket: "custom-s3",
+      custom: { ...stream, secretAccessKey: "" },
     });
   });
 
   it("opens another stored bucket with its fields and no secret, folder off", () => {
-    expect(openingDestinations(status([otherBucket]), stream)).toEqual({
+    expect(openingDestinations(status([otherBucket]))).toEqual({
       folderOn: false,
       folder: "",
       bucket: "custom-s3",
@@ -86,7 +86,7 @@ describe("openingDestinations", () => {
   });
 
   it("reads a bucket matching nothing as another bucket when there is no bucket copy", () => {
-    expect(openingDestinations(status([streamMatched]), null).bucket).toBe("custom-s3");
+    expect(openingDestinations(status([streamMatched])).bucket).toBe("custom-s3");
   });
 
   it("opens a stored folder and bucket together, whichever is listed first", () => {
@@ -96,17 +96,17 @@ describe("openingDestinations", () => {
       bucket: "custom-s3",
       custom: otherCustom,
     };
-    expect(openingDestinations(status([folder, otherBucket]), stream)).toEqual(both);
-    expect(openingDestinations(status([otherBucket, folder]), stream)).toEqual(both);
-    expect(openingDestinations(status([streamMatched, folder]), stream)).toEqual({
+    expect(openingDestinations(status([folder, otherBucket]))).toEqual(both);
+    expect(openingDestinations(status([otherBucket, folder]))).toEqual(both);
+    expect(openingDestinations(status([streamMatched, folder]))).toEqual({
       ...both,
-      bucket: "stream-bucket",
-      custom: EMPTY_CUSTOM,
+      bucket: "custom-s3",
+      custom: { ...stream, secretAccessKey: "" },
     });
   });
 
   it("returns a custom copy the caller can change without touching EMPTY_CUSTOM", () => {
-    const opened = openingDestinations(status([]), null);
+    const opened = openingDestinations(status([]));
     opened.custom.bucket = "changed";
     expect(EMPTY_CUSTOM.bucket).toBe("");
   });
@@ -137,21 +137,11 @@ describe("destinationsBody", () => {
     ]);
   });
 
-  it("sends the bucket copy's bucket alone when the folder is off", () => {
-    expect(destinationsBody(false, "/srv/backups", "stream-bucket", typed)).toEqual([
-      { kind: "stream-bucket" },
-    ]);
-  });
-
   it("sends another bucket alone, trimmed, with the secret untrimmed", () => {
     expect(destinationsBody(false, "/srv/backups", "custom-s3", typed)).toEqual([customEntry]);
   });
 
   it("sends the folder first, then the bucket, when both are chosen", () => {
-    expect(destinationsBody(true, "/srv/backups", "stream-bucket", typed)).toEqual([
-      { kind: "local-fs", dir: "/srv/backups" },
-      { kind: "stream-bucket" },
-    ]);
     expect(destinationsBody(true, "/srv/backups", "custom-s3", typed)).toEqual([
       { kind: "local-fs", dir: "/srv/backups" },
       customEntry,

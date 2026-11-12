@@ -69,12 +69,11 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 let personId: string;
-let locationId: string;
 let nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedLocation(suite.db);
   nodeId = await seedNode(suite.db);
 });
 it("round-trips an automatic end with no human recorder and verifies its hash", async () => {

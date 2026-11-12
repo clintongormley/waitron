@@ -26,10 +26,10 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
 const now = new Date("2026-02-07T08:00:00.000Z");
-let personId: string, other: string, manager: string, locationId: string, nodeId: string;
+let personId: string, other: string, manager: string, nodeId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedLocation(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },

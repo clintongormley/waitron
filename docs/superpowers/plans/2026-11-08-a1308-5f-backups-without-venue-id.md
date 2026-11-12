@@ -210,12 +210,14 @@ Not counted: the script's output for `nodes`, deletions, regenerated files.
    stream's and the kit's lines (5g: `stream-api.ts`, `stream-host.ts`, `restore-stream.ts`,
    `rebuild-first-start.ts`, `backup-recovery-pack-parts.ts`, `recovery-preparation.ts`,
    `recovery-backup-preview.ts`), the Cloud connection's (5g: `boot.ts`, `cloud-client.ts`,
-   `cloud-replacement.ts`), and the lines that already use Cloud's own id and stay (the design's "They
+   `cloud-replacement.ts`), mirror-bundle and stream-key callers and test support, and the lines that already use Cloud's own id and stay (the design's "They
    do not change": `cloud-installation.ts`, `cloud-backup.ts`, `cloud-billing.ts`,
    `cloud-snapshot-worker.ts`, `cloud-recovery*.ts`, `cloud-tunnel.ts`, `backup-verification-protocol.ts`).
    Control, on the base first: it also prints `archive-settings.ts:64`.
-6. `git grep -n -P "nodes\.locationId|n\.location_id|seedNode\([^)]*,[^)]*\)" -- apps packages scripts ':!**/drizzle/**'`
+6. `git grep -n -P "nodes\.locationId|n\.location_id" -- apps packages scripts ':!**/drizzle/**'`
    prints nothing; control on the base: it prints `apps/server/src/backup-verification-compatibility.ts:371`.
+   Audit `seedNode` calls by their import: the database helper loses its location argument; the
+   fiscal fixture helper retains its optional label. A name-only grep cannot distinguish them.
 7. `pnpm protection-list compare` prints exactly the next section.
 
 ## Expected protection-list difference
@@ -246,6 +248,10 @@ FK". The backup and guard changes touch no schema.
 
 - Archive folder paths lose `archives/<id>/` (design table, row "Archive folder"); a stream and
   archives at the same bucket and prefix are now refused as overlapping (item 1).
+- Nested selected folders are refused in both directions: stream at the bucket root and archives
+  in `backups/`, or stream in `copy/` and archives at the root or in `copy/backups/`.
+- The dashboard no longer offers the stream's own folder as an archive destination; use the
+  custom S3 fields with a separate folder (watcher, 2026-11-12 10:15).
 - `backup-evidence.test.ts`'s node read; the copy checks that joined `locations`;
   `verifyCoreBackupData`'s venue case counts the `settings` row.
 - Guard cases assert "a venue row exists" (a boolean) instead of a list of ids; the codes stay.

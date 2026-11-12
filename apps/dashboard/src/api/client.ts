@@ -1759,7 +1759,6 @@ export type BackupDestinationView =
       endpoint: string | null;
       region: string;
       bucket: string;
-
       prefix: string;
       accessKeyId: string;
       namespace: string;

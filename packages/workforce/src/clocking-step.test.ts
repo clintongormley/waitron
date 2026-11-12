@@ -17,7 +17,6 @@ import { planningEveryStatement } from "../test/query-plans.js";
 const backend = new WorkforceBackend();
 const origin = jobOrigin("dashboard");
 
-let locationId: string;
 let nodeId: string;
 let manager: string;
 
@@ -26,7 +25,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
+    await seedLocation(db);
     nodeId = await seedNode(db);
     const [row] = await seedPersons(db, {
       displayName: "Manager",

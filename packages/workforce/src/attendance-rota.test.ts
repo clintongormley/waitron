@@ -26,12 +26,7 @@ const suite = useVenueDb({
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();
 const now = new Date("2026-01-06T04:01:00.000Z");
-let locationId: string,
-  personId: string,
-  other: string,
-  nodeId: string,
-  versionId: string,
-  shiftId: string;
+let personId: string, other: string, nodeId: string, versionId: string, shiftId: string;
 const day = () => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
@@ -54,7 +49,7 @@ async function retire(tx: Transaction) {
 const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedLocation(suite.db);
   nodeId = await seedNode(suite.db);
   const workers = await seedPersons(suite.db, [
     { displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" },

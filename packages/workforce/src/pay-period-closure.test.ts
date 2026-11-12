@@ -21,10 +21,10 @@ const ruleset = {
   overtimeModel: "daily-accrual" as const,
   dailyTargetMinutes: null,
 };
-let nodeId: string, locationId: string, worker: string, manager: string, other: string;
+let nodeId: string, worker: string, manager: string, other: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedLocation(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
