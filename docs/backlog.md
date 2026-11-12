@@ -106,7 +106,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
 **4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
-A555, close the day, then A947 and its handover bundles, including the spare's backup settings, which
+close the day, then A947 and its handover bundles, including the spare's backup settings, which
 A947 3b's plan still owes. A1150 (allergens from the live product) is needed before go-live and has
 no design yet.
 
@@ -284,17 +284,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Reporting — the fiscal remainder (parked)** — left open by the modelo 303 work (#76, #91, #98, #1106).
   [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
 
-- **A231/A948. Full invoices at the till** — table bill payments and per-bill unpaid departures can issue F1; counter sales and collection remain refused until A555 carries the delivery choice.
-  **Next action:** complete A555, A444, physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
+- **A231/A948. Full invoices at the till** — table bill payments, per-bill unpaid departures and, since #2725, Counter bills paid through the shared Pay window issue F1; direct `POST /api/sales`, `POST /api/pay`, unissued collection, closing a counter bill by transfer and zero-total counter bills still refuse it.
+  **Next action:** complete A444, physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
   An unpaid departure that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A close by transfer now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
 - **Show a late success, decide the address, fix those strings** (bundle of 3, 1 important, size S). Holds A554, A557, A558. [Detail](backlog/fiscal.md#bundle-show-a-late-success-decide-the-address-fix-those-strings)
-
-- **A555. Keep a counter full invoice's email or A4 choice through payment** — DESIGN APPROVED,
-  plan and build against A739's released interfaces.
-  No implementation or public F1 enablement is included.
-  [Detail](backlog/fiscal.md#a555-counter-full-invoice-delivery-through-payment--design-proposed-2026-10-21)
 
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
   the bill.** Nothing issues an F3 today: no route calls `recordSubstitution`.

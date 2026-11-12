@@ -188,7 +188,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     const savedOther = this.savedDelivery !== undefined && this.savedDelivery.medium !== "receipt";
     if (printer === null && !this.#emailAvailable() && !savedOther && !this.#choiceShown) return [];
     const offered: { value: DeliveryMedium; label: string }[] = [
-      { value: "receipt", label: t("invoice.delivery_receipt") },
+      { value: "receipt", label: t("invoice.delivery_receipt_after_payment") },
     ];
     if (printer !== null)
       offered.push({

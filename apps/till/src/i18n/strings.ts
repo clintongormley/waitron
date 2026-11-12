@@ -466,7 +466,7 @@ export const en = {
   "invoice.country": "Customer country",
   "invoice.save_choice": "Use full invoice",
   "invoice.delivery": "Delivery",
-  "invoice.delivery_receipt": "Printed receipt",
+  "invoice.delivery_receipt_after_payment": "Receipt printer: print after paying",
   "invoice.delivery_a4_on": "A4 on {printer}",
   "invoice.delivery_saved_a4": "Saved choice: A4",
   "invoice.delivery_saved_email": "Saved choice: email",
@@ -1616,7 +1616,7 @@ export const en = {
     "This change would leave this bill owing {amount} less than has already been paid on it. Change less, or refund {amount} first.",
   "bill.refund_excess": "Refund {amount}",
   "sale.over_simplified_limit":
-    "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice on a table bill, or remove items.",
+    "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.unsent": "Send or remove the unsent dishes before paying.",
@@ -2449,7 +2449,7 @@ export const es: Record<StringKey, string> = {
   "invoice.country": "País del cliente",
   "invoice.save_choice": "Usar factura completa",
   "invoice.delivery": "Entrega",
-  "invoice.delivery_receipt": "Ticket impreso",
+  "invoice.delivery_receipt_after_payment": "Impresora de tickets: imprimir tras cobrar",
   "invoice.delivery_a4_on": "A4 en {printer}",
   "invoice.delivery_saved_a4": "Opción guardada: A4",
   "invoice.delivery_saved_email": "Opción guardada: correo electrónico",
@@ -3558,7 +3558,7 @@ export const es: Record<StringKey, string> = {
     "Con este cambio, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Cambia menos o devuelve antes {amount}.",
   "bill.refund_excess": "Devolver {amount}",
   "sale.over_simplified_limit":
-    "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
+    "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
   "bill_pay.unsent": "Envía o quita los platos sin enviar antes de cobrar.",
   "bill_pay.title": "Cobrar",

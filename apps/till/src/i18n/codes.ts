@@ -358,12 +358,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este local no tiene una serie de facturas rectificativas. Avisa a un responsable",
   },
   "sale.total_exceeds_simplified_limit": {
-    en: "This order is over the limit for a simplified invoice. Choose Full invoice on a table bill, or remove items.",
-    es: "Este pedido supera el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
+    en: "This order is over the limit for a simplified invoice. Choose Full invoice, or remove items.",
+    es: "Este pedido supera el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   },
   "sale.full_invoice_unavailable": {
-    en: "Counter payment cannot issue a full invoice yet. Use a table bill and its payments.",
-    es: "El cobro de mostrador todavía no puede emitir una factura completa. Usa una cuenta de mesa y sus pagos.",
+    en: "This payment cannot issue a full invoice. An order with nothing to pay cannot have one. Otherwise, open the order on the Counter and pay it with Pay to issue the invoice.",
+    es: "Este cobro no puede emitir una factura completa. Un pedido sin nada que cobrar no puede tenerla. Si no es el caso, abre el pedido en el Mostrador y cóbralo con Cobrar para emitir la factura.",
   },
   "receipt.not_printed": {
     en: "The original has not finished printing. Check its status before confirming handover",

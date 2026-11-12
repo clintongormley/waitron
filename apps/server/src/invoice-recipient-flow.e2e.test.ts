@@ -106,7 +106,7 @@ async function choose(id: string, recipient: InvoiceRecipient, revision?: number
 }
 
 describe.each(cases)("recipient flow: $name", ({ recipient }) => {
-  it("stores a walk-up choice while public counter F1 remains refused", async () => {
+  it("stores a walk-up choice while a direct counter sale still refuses F1", async () => {
     const id = randomUUID();
     await inTx(venue, (tx) =>
       createOpenOrder(

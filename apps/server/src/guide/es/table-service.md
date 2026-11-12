@@ -65,9 +65,12 @@ corrección. Cuando ya has elegido un cliente, su nombre y su identificador apar
 **Factura completa**, en la zona de cobro. Al juntar cuentas, la caja pregunta antes de cambiar
 el cliente de una factura completa.
 
-El cobro de mostrador todavía no puede emitir una factura completa. Mantén el pedido del cliente
-en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
-no emite una factura.
+En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo el pedido se
+emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
+
+Cuando el formulario muestra **Entrega**, **A4 en {printer}** o **Correo electrónico** envía el
+original por sí solo al emitirse la factura. Con **Impresora de tickets: imprimir tras cobrar**,
+pulsa **Imprimir en {printer}** en la ventana posterior al cobro.
 
 Elige **NIF español** para un NIF, NIE o CIF. Para un pasaporte u otro documento aceptado,
 elige su **Tipo de identificador**, **País emisor** y **Número de documento**. Introduce el número
