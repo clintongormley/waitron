@@ -658,3 +658,44 @@ it("keeps an already-stopped tunnel off when reopening", async () => {
   await f.host.resume(images.old);
   expect(calls.find((args) => args.includes("up"))).not.toContain("staff-tunnel");
 });
+
+it("relays only the real clock status line and refuses a clock change without contacting the host", async () => {
+  const { createServer, createConnection } = await import("node:net");
+  const { clockStatusRelay } = await import("./host.mjs");
+  const { root, fs, join } = await imageFixture({ prepare: false });
+  const source = join(root, "host.sock");
+  const received = [];
+  const realReply =
+    '{"ok":true,"service":"on","unit":"chrony.service","synchronised":false,"lastSyncAt":null}\n';
+  const upstream = createServer((socket) =>
+    socket.on("data", (bytes) => {
+      received.push(bytes.toString());
+      socket.end(realReply);
+    }),
+  );
+  await new Promise((done) => upstream.listen(source, done));
+  let relay;
+  try {
+    relay = await clockStatusRelay({ directory: join(root, "relay"), socketPath: source });
+    const exchange = (line) =>
+      new Promise((done, reject) => {
+        const socket = createConnection(join(root, "relay", "box.sock"));
+        let reply = "";
+        socket.on("connect", () => socket.write(line));
+        socket.on("data", (bytes) => {
+          reply += bytes.toString();
+        });
+        socket.on("end", () => done(reply));
+        socket.on("error", reject);
+      });
+    expect(await exchange("clock.status\n")).toBe(realReply);
+    expect(await exchange('clock.set {"targetMs":1}\n')).toBe(
+      '{"ok":false,"reason":"forbidden"}\n',
+    );
+    expect(received).toEqual(["clock.status\n"]);
+    expect((await fs.stat(join(root, "relay", "box.sock"))).mode & 0o777).toBe(0o666);
+  } finally {
+    await relay?.close();
+    await new Promise((done) => upstream.close(done));
+  }
+});

@@ -4,6 +4,8 @@ import { recoverUpgrade, upgradeStatus, writeFileDurable } from "./transaction.m
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { parseEnv, promisify } from "node:util";
+import { createServer, createConnection } from "node:net";
+import { once } from "node:events";
 
 const execute = promisify(execFile);
 const command = (file, args, input) => {
@@ -516,4 +518,53 @@ export async function assertCopyRoom(paths, directory, { run = command, statfs =
   const available = await statfs(directory, { bigint: true });
   if (available.bavail * available.bsize < 2n * bytes + 16n * 1024n * 1024n)
     throw new Error("not enough room for the upgrade copy");
+}
+
+export async function clockStatusRelay({ directory, socketPath = "/run/waitron-box/box.sock" }) {
+  await fs.mkdir(directory, { mode: 0o755 });
+  const clients = new Set();
+  const server = createServer((client) => {
+    clients.add(client);
+    let source;
+    let request = "";
+    client.on("error", () => {});
+    client.on("close", () => {
+      clients.delete(client);
+      source?.destroy();
+    });
+    client.on("data", (bytes) => {
+      request += bytes.toString();
+      if (!request.includes("\n") && request.length <= 4096) return;
+      client.removeAllListeners("data");
+      if (request !== "clock.status\n") {
+        client.end('{"ok":false,"reason":"forbidden"}\n');
+        return;
+      }
+      source = createConnection(socketPath);
+      source.on("connect", () => source.write("clock.status\n"));
+      let reply = "";
+      source.on("data", (chunk) => {
+        reply += chunk.toString();
+        const end = reply.indexOf("\n");
+        if (end >= 0) {
+          client.end(reply.slice(0, end + 1));
+          source.destroy();
+        } else if (reply.length > 4096) source.destroy();
+      });
+      source.on("error", () => client.end('{"ok":false,"reason":"unavailable"}\n'));
+      source.on("close", () => client.end());
+    });
+  });
+  const path = join(directory, "box.sock");
+  server.listen(path);
+  await once(server, "listening");
+  await fs.chmod(path, 0o666);
+  return {
+    async close() {
+      for (const client of clients) client.destroy();
+      await new Promise((done, reject) =>
+        server.close((error) => (error ? reject(error) : done())),
+      );
+    },
+  };
 }
