@@ -1,11 +1,16 @@
 import type { Hono } from "hono";
-import { eq } from "drizzle-orm";
-import { invoiceCorrections, withTransaction } from "@waitron/db";
+import { and, asc, eq } from "drizzle-orm";
+import { invoiceCorrections, tenders, withTransaction } from "@waitron/db";
 import type { PinThrottle } from "@waitron/identity";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid, saleId as brandSaleId } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { withCorrectionAuthorization } from "./invoice-correction-authorization.js";
+import {
+  giveCorrectionCash,
+  parseCorrectionCash,
+  readCashLeft,
+} from "./invoice-correction-cash.js";
 import {
   lineIdsOf,
   openInvoiceCorrection,
@@ -15,7 +20,9 @@ import {
   type InvoiceCorrectionRequest,
 } from "./invoice-corrections.js";
 import type { Logger } from "./logger.js";
+import { withCheck } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
+import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { checkAccess, overrideOf, pathId } from "./tender-refund-api.js";
 import { overridePinAttempts, STATUS, type TillApiDeps } from "./till-api.js";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -46,6 +53,9 @@ export function mountInvoiceCorrectionApi(
       "invoice_correction.money_short": 409,
       "invoice_correction.split_changed": 409,
       "invoice_correction.chain_unsound": 409,
+      "invoice_correction.not_open": 409,
+      "invoice_correction.leg_too_large": 409,
+      "invoice_correction.cash_short": 409,
     },
     "invoice_correction.failed",
   );
@@ -101,12 +111,69 @@ export function mountInvoiceCorrectionApi(
       return c.json(result);
     }),
   );
+  app.post("/api/invoice-corrections/:id/cash", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertRequestDevice(deps, c, session);
+      const cfg = requestCfg(deps.cfg, session);
+      const correctionId = correctionIdOf(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const ask = parseCorrectionCash({ submissionId: body.submissionId, amount: body.amount });
+      const override = overrideOf(body);
+      const { saleId, tenderId } = await withTransaction(deps.db, async (tx) => {
+        const [row] = await tx
+          .select({ saleId: invoiceCorrections.originalSaleId })
+          .from(invoiceCorrections)
+          .where(eq(invoiceCorrections.id, correctionId));
+        if (row === undefined) throw new AppError("invoice_correction.not_found", { correctionId });
+        const [holding] = await readCashLeft(tx, row.saleId);
+        const [oldest] = await tx
+          .select({ id: tenders.id })
+          .from(tenders)
+          .where(and(eq(tenders.saleId, row.saleId), eq(tenders.method, "cash")))
+          .orderBy(asc(tenders.settledAt), asc(tenders.id));
+        return { saleId: row.saleId, tenderId: holding?.tenderId ?? oldest?.id ?? "" };
+      });
+      const result = await withTenderRefundAuthorization(
+        deps.db,
+        cfg,
+        saleId,
+        {
+          submissionId: ask.submissionId,
+          tenderId,
+          appliedAmount: ask.amount,
+          tipAmount: "0.00",
+          reason: "",
+          override,
+        },
+        {
+          personId: session.personId,
+          sessionId: session.sessionId,
+          attempts: overridePinAttempts(pinThrottle, session.deviceId),
+        },
+        async (tx, authorization, checked) => {
+          await requireEconomicWrite(tx, cfg, deps.admission);
+          return giveCorrectionCash(
+            tx,
+            { backend: deps.backend, clock: deps.clock, attendance: deps.attendance },
+            cfg,
+            correctionId,
+            ask,
+            {
+              personId: session.personId,
+              authz: { sessionId: session.sessionId, override: withCheck(override, checked) },
+              authorization,
+            },
+          );
+        },
+      );
+      return c.json(result);
+    }),
+  );
   app.get("/api/invoice-corrections/:id", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
-      const raw = c.req.param("id");
-      if (!isUuid(raw)) throw new AppError("invoice_correction.not_found", { correctionId: raw });
-      const correctionId = raw.toLowerCase();
+      const correctionId = correctionIdOf(c.req.param("id"));
       const result = await withTransaction(deps.db, async (tx) => {
         const [row] = await tx
           .select({ saleId: invoiceCorrections.originalSaleId })
@@ -119,4 +186,9 @@ export function mountInvoiceCorrectionApi(
       return c.json(result);
     }),
   );
+}
+
+function correctionIdOf(raw: string): string {
+  if (!isUuid(raw)) throw new AppError("invoice_correction.not_found", { correctionId: raw });
+  return raw.toLowerCase();
 }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { createAdjustmentReason } from "@waitron/adjustments";
+import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   billPaymentRefunds,
@@ -536,6 +536,29 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
   "a new cash tender refund": async () => {
     const { saleId, tenderId } = await soldWhole("cash");
     return { send: tenderRefund(saleId, tenderId), grows: ["tenderRefunds", "drawerJobs"] };
+  },
+  "a correction's cash leg": async () => {
+    const { saleId } = await soldWhole("cash");
+    const reason = (await inTx(venue, (tx) => listAdjustmentReasons(tx))).find(
+      (row) => row.kind === "void" && !row.noteRequired,
+    )!;
+    const preview = await as(venue.app, "POST", `/api/transactions/${saleId}/corrections/preview`, {
+      gross: "5.00",
+    });
+    const opened = await as(venue.app, "POST", `/api/transactions/${saleId}/corrections`, {
+      submissionId: randomUUID(),
+      gross: "5.00",
+      reasonId: reason.id,
+      expectedSplit: preview.json.vatBreakdown,
+      override: OVERRIDE(),
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json.correction as { id: string }).id;
+    const body = { submissionId: randomUUID(), amount: "5.00", override: OVERRIDE() };
+    return {
+      send: (app) => as(app, "POST", `/api/invoice-corrections/${correctionId}/cash`, body),
+      grows: ["tenderRefunds", "sales"],
+    };
   },
   "a pending connected card tender refund sent again": async () => {
     const { saleId, tenderId } = await soldWhole("card");

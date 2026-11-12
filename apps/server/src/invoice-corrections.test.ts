@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentReasons,
+  drawerOpens,
   invoiceCorrections,
   saleLines,
   sales,
@@ -14,9 +16,16 @@ import { createProduct } from "@waitron/catalogue";
 import { previewCorrectionAmounts } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { latestRecord } from "@waitron/fiscal-verifactu/src/clock-behind.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { centsToDecimal, decimal, decimalToCents, saleId as brandSaleId } from "@waitron/shared";
+import {
+  businessDayAt,
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  saleId as brandSaleId,
+} from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { parkOrder } from "./working-order.js";
@@ -30,6 +39,8 @@ import {
   previewInvoiceCorrection,
   readInvoiceCorrection,
 } from "./invoice-corrections.js";
+import { giveCorrectionCash } from "./invoice-correction-cash.js";
+import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { systemClock } from "./till-backend.js";
@@ -837,5 +848,250 @@ describe("openInvoiceCorrection refuses", () => {
     await expect(
       open(saleId, { submissionId: randomUUID(), gross: "6.05" }),
     ).resolves.toMatchObject({ correction: { state: "open" } });
+  });
+});
+
+/** `amount` in cash on the correction `correctionId`, given by the manager. */
+async function cash(
+  correctionId: string,
+  amount: string,
+  submissionId: string = randomUUID(),
+  backend = venue.backend,
+) {
+  return inTx(venue, (tx) =>
+    giveCorrectionCash(
+      tx,
+      { ...deps(), backend },
+      venue.cfg,
+      correctionId,
+      { submissionId, amount },
+      {
+        personId: managerId,
+        authz: { sessionId: managerSessionId },
+        authorization: { authorizedBy: managerId, permission: "sale.refund", viaOverride: false },
+      },
+    ),
+  );
+}
+
+async function drawerOpensFor(refundIds: readonly string[]) {
+  return venue.db.select().from(drawerOpens).where(inArray(drawerOpens.tenderRefundId, refundIds));
+}
+
+describe("a correction's cash", () => {
+  it("gives €15 of a €25 correction in cash, files nothing and leaves €10 to go back", async () => {
+    const saleId = await soldForCash("Set menu", ["40.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    const was = counts();
+
+    const given = await cash(correction.id, "15.00");
+
+    expect(given.replayed).toBe(false);
+    expect(given.refunds).toMatchObject([{ state: "completed", appliedAmount: "15.00" }]);
+    expect(given.correction).toMatchObject({
+      state: "open",
+      moneyBack: "15.00",
+      left: "10.00",
+      correctiveSaleId: null,
+    });
+    expect(counts()).toEqual({ ...was, refunds: was.refunds + 1, drawers: was.drawers + 1 });
+  });
+
+  it("files −5.00 base and −1.05 VAT off a €12.10 cash steak once its €6.05 is back, opening the drawer once", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const before = await original(saleId);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    const was = counts();
+
+    const given = await cash(correction.id, "6.05");
+
+    expect(given.correction).toMatchObject({ state: "filed", moneyBack: "6.05", left: "0.00" });
+    const correctiveSaleId = given.correction.correctiveSaleId!;
+    const [corrective] = await venue.db.select().from(sales).where(eq(sales.id, correctiveSaleId));
+    expect(corrective).toMatchObject({
+      correctsSaleId: saleId,
+      total: -605,
+      vatBreakdown: [{ rate: "21.00", base: "-5.00", tax: "-1.05" }],
+    });
+    expect(
+      await venue.db.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, saleId)),
+    ).toMatchObject([{ method: "cash", state: "completed", appliedAmount: 605, tipAmount: 0 }]);
+    expect(await drawerOpensFor(given.refunds.map((refund) => refund.id))).toHaveLength(1);
+    expect(counts()).toEqual({
+      ...was,
+      invoices: was.invoices + 1,
+      refunds: was.refunds + 1,
+      drawers: was.drawers + 1,
+    });
+    expect(await correctionRow(correction.id)).toMatchObject({
+      state: "filed",
+      correctiveSaleId,
+      endedBy: managerId,
+    });
+    expect(await original(saleId)).toEqual(before);
+  });
+
+  it("gives €25 back over two €20 cash payments, oldest first, as €20 and €5 with one drawer job", async () => {
+    const saleId = await soldForCash("Set menu", ["20.00", "20.00"]);
+    const before = await original(saleId);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    const paidInOrder = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
+    const was = counts();
+
+    const given = await cash(correction.id, "25.00");
+
+    expect(
+      given.refunds.map(({ tenderId, appliedAmount }) => ({ tenderId, appliedAmount })),
+    ).toEqual([
+      { tenderId: paidInOrder[0]!.tenderId, appliedAmount: "20.00" },
+      { tenderId: paidInOrder[1]!.tenderId, appliedAmount: "5.00" },
+    ]);
+    expect(await drawerOpensFor(given.refunds.map((refund) => refund.id))).toMatchObject([
+      { tenderRefundId: given.refunds[0]!.id },
+    ]);
+    expect(counts().drawers).toBe(was.drawers + 1);
+    expect(given.correction).toMatchObject({ state: "filed", moneyBack: "25.00" });
+    expect(await original(saleId)).toEqual(before);
+  });
+
+  it("counts the −€6.05 once in the day's sales and once in its cash", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const cookie = `${MANAGEMENT_COOKIE}=${
+      (await inTx(venue, (tx) => startManagementSession(tx, { personId: managerId }))).token
+    }`;
+    const reports = new Hono();
+    mountReportApi(
+      reports,
+      { db: venue.db, cfg: { nodeId: venue.cfg.nodeId }, venueLocale: "es-ES" },
+      () => {},
+    );
+    const [sold] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
+    const day = businessDayAt(
+      await inTx(venue, (tx) => resolveVenueClock(tx, venue.cfg.nodeId)),
+      new Date(sold!.issuedAt),
+    );
+    const close = async () => {
+      const response = await reports.request(
+        `/management-api/reports/daily-close?businessDay=${day}`,
+        { headers: { cookie } },
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        vat: { grossTotal: string };
+        cash: { tenderTotal: string };
+      };
+      const cents = (value: string) => Math.round(Number(value) * 100);
+      return { gross: cents(body.vat.grossTotal), cash: cents(body.cash.tenderTotal) };
+    };
+    const before = await close();
+
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await cash(correction.id, "6.05");
+
+    const after = await close();
+    expect({ gross: after.gross - before.gross, cash: after.cash - before.cash }).toEqual({
+      gross: -605,
+      cash: -605,
+    });
+  });
+
+  it("answers a repeated cash request with its first legs, and refuses its id with another amount", async () => {
+    const saleId = await soldForCash("Set menu", ["20.00", "20.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "30.00" });
+    const firstId = randomUUID();
+    const first = await cash(correction.id, "25.00", firstId);
+    const after = counts();
+
+    const again = await cash(correction.id, "25.00", firstId);
+
+    expect(again).toEqual({ ...first, replayed: true });
+    expect(counts()).toEqual(after);
+    await refusedWithNothingWritten(() => cash(correction.id, "24.00", firstId), {
+      code: "submission.id_reused",
+      params: { submissionId: firstId },
+    });
+
+    const lastId = randomUUID();
+    const last = await cash(correction.id, "5.00", lastId);
+    expect(last.correction.state).toBe("filed");
+    const filed = counts();
+    const lastAgain = await cash(correction.id, "5.00", lastId);
+    expect(lastAgain).toMatchObject({ replayed: true, refunds: last.refunds });
+    expect(counts()).toEqual(filed);
+  });
+
+  it("refuses a second cash request once the corrective is filed", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await cash(correction.id, "6.05");
+
+    await refusedWithNothingWritten(() => cash(correction.id, "1.00"), {
+      code: "invoice_correction.not_open",
+      params: { correctionId: correction.id, state: "filed" },
+    });
+  });
+
+  it("refuses more cash than the correction has left, and more than the cash payments hold", async () => {
+    const saleId = await soldForCash("Set menu", ["5.00", "35.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "10.00" });
+
+    await refusedWithNothingWritten(() => cash(correction.id, "15.00"), {
+      code: "invoice_correction.leg_too_large",
+      params: { correctionId: correction.id, left: "10.00" },
+    });
+    await refusedWithNothingWritten(() => cash(correction.id, "40.01"), {
+      code: "invoice_correction.cash_short",
+      params: { correctionId: correction.id, cashLeft: "40.00", amount: "40.01" },
+    });
+    await expect(cash(correction.id, "7.00")).resolves.toMatchObject({
+      refunds: [{ appliedAmount: "5.00" }, { appliedAmount: "2.00" }],
+      correction: { left: "3.00" },
+    });
+    await refusedWithNothingWritten(() => cash(correction.id, "3.01"), {
+      code: "invoice_correction.leg_too_large",
+      params: { correctionId: correction.id, left: "3.00" },
+    });
+    await expect(cash(correction.id, "3.00")).resolves.toMatchObject({
+      correction: { state: "filed" },
+    });
+  });
+
+  it("refuses a malformed submission id or amount, writing nothing", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    for (const [field, submissionId, amount] of [
+      ["submissionId", "not-an-id", "1.00"],
+      ["amount", randomUUID(), "0.00"],
+      ["amount", randomUUID(), "01.00"],
+      ["amount", randomUUID(), "1.001"],
+    ] as const)
+      await refusedWithNothingWritten(() => cash(correction.id, amount, submissionId), {
+        code: "management.request_invalid",
+        params: { field },
+      });
+  });
+
+  it("an R5 refused at the last cash leg undoes the leg and its drawer job, and gives it once the chain checks out", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    const broken = Object.create(venue.backend, {
+      checkIntegrity: {
+        value: async () => ({
+          ok: false,
+          checked: 1,
+          issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+        }),
+      },
+    }) as typeof venue.backend;
+
+    await refusedWithNothingWritten(() => cash(correction.id, "6.05", randomUUID(), broken), {
+      code: "invoice_correction.chain_unsound",
+      params: { saleId },
+    });
+    expect(await correctionRow(correction.id)).toMatchObject({ state: "open" });
+
+    await expect(cash(correction.id, "6.05")).resolves.toMatchObject({
+      correction: { state: "filed", moneyBack: "6.05" },
+    });
   });
 });

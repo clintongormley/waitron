@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, invoiceCorrections, sales, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, invoiceCorrections, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
@@ -412,5 +412,157 @@ describe("GET /api/invoice-corrections/:id", () => {
       status: 404,
       json: { code: "invoice_correction.not_found", params: { correctionId: "not-an-id" } },
     });
+  });
+});
+
+const giveCash = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/cash`, payload);
+const cashBody = (patch: Record<string, unknown> = {}) => ({
+  submissionId: randomUUID(),
+  amount: "5.00",
+  override: supervisor(),
+  ...patch,
+});
+
+describe("POST /api/invoice-corrections/:id/cash", () => {
+  it("refuses staff without sale.refund, then gives the cash with a supervisor's PIN and files the corrective", async () => {
+    const saleId = await sold(["10.00"]);
+    const id = await opened(saleId);
+    const before = counts();
+    expect(await giveCash(id, cashBody({ override: undefined }))).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
+    });
+    expect(counts()).toEqual(before);
+
+    const ask = cashBody();
+    const first = await giveCash(id, ask);
+    expect(first).toMatchObject({
+      status: 200,
+      json: {
+        replayed: false,
+        refunds: [{ state: "completed", appliedAmount: "5.00" }],
+        correction: { id, state: "filed", moneyBack: "5.00", left: "0.00" },
+      },
+    });
+    expect(counts()).toEqual({
+      ...before,
+      invoices: before.invoices + 1,
+      refunds: before.refunds + 1,
+      drawers: before.drawers + 1,
+    });
+    const after = counts();
+    expect(await giveCash(id, ask)).toEqual({
+      status: 200,
+      json: { ...first.json, replayed: true },
+    });
+    expect(counts()).toEqual(after);
+  });
+
+  it("refuses a till whose profile cannot take cash, writing nothing, and gives cash once it can", async () => {
+    const id = await opened(await sold(["10.00"]));
+    const [till] = await venue.db
+      .select({ profileId: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+      .from(devices)
+      .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+      .where(eq(devices.id, venue.deviceId));
+    const capabilities = till!.capabilities as string[];
+    const setCapabilities = (to: string[]) =>
+      venue.db
+        .update(deviceProfiles)
+        .set({ capabilities: to })
+        .where(eq(deviceProfiles.id, till!.profileId));
+    const before = counts();
+    await setCapabilities(capabilities.filter((entry) => entry !== "take-cash"));
+    try {
+      expect(await giveCash(id, cashBody())).toEqual({
+        status: 403,
+        json: { code: "device.cash_not_allowed", params: {} },
+      });
+      expect(counts()).toEqual(before);
+    } finally {
+      await setCapabilities(capabilities);
+    }
+    expect(await giveCash(id, cashBody())).toMatchObject({
+      status: 200,
+      json: { replayed: false, refunds: [{ appliedAmount: "5.00" }] },
+    });
+  });
+
+  it("refuses a till outside the invoice's zone, writing nothing, and gives cash once the zone is its own", async () => {
+    const id = await opened(await sold(["10.00"]));
+    await serveOnly(otherZone);
+    const before = counts();
+    expect(await giveCash(id, cashBody(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(counts()).toEqual(before);
+    await serveOnly(venue.zoneId);
+    expect(await giveCash(id, cashBody(), zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { refunds: [{ appliedAmount: "5.00" }], correction: { state: "filed" } },
+    });
+  });
+
+  it.each([
+    ["submissionId", { submissionId: 1 }],
+    ["amount", { amount: 5 }],
+    ["amount", { amount: "05.00" }],
+    ["override", { override: null }],
+  ])("refuses a malformed %s, naming it and writing nothing", async (field, patch) => {
+    const id = await opened(await sold(["10.00"]));
+    const before = counts();
+    expect(await giveCash(id, cashBody(patch))).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field } },
+    });
+    expect(counts()).toEqual(before);
+  });
+
+  it("refuses an unknown or malformed correction id", async () => {
+    const unknown = randomUUID();
+    expect(await giveCash(unknown, cashBody())).toEqual({
+      status: 404,
+      json: { code: "invoice_correction.not_found", params: { correctionId: unknown } },
+    });
+    expect(await giveCash("not-an-id", cashBody())).toEqual({
+      status: 404,
+      json: { code: "invoice_correction.not_found", params: { correctionId: "not-an-id" } },
+    });
+  });
+
+  const cashRefusals: [string, () => Promise<{ id: string; patch?: Record<string, unknown> }>][] = [
+    [
+      "invoice_correction.not_open",
+      async () => {
+        const id = await opened(await sold(["10.00"]));
+        expect((await giveCash(id, cashBody())).status).toBe(200);
+        return { id, patch: { amount: "1.00" } };
+      },
+    ],
+    [
+      "invoice_correction.leg_too_large",
+      async () => ({ id: await opened(await sold(["10.00"])), patch: { amount: "5.01" } }),
+    ],
+    [
+      "invoice_correction.cash_short",
+      async () => ({ id: await opened(await sold(["10.00"])), patch: { amount: "10.01" } }),
+    ],
+    [
+      "invoice_correction.chain_unsound",
+      async () => {
+        const id = await opened(await sold(["10.00"]));
+        vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValueOnce({
+          ok: false,
+          checked: 1,
+          issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+        } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+        return { id };
+      },
+    ],
+  ];
+  it.each(cashRefusals)("answers %s with 409, writing nothing", async (code, arrange) => {
+    const { id, patch } = await arrange();
+    const before = counts();
+    expect(await giveCash(id, cashBody(patch))).toMatchObject({ status: 409, json: { code } });
+    expect(counts()).toEqual(before);
   });
 });
