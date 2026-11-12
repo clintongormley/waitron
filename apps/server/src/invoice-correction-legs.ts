@@ -3,6 +3,7 @@ import {
   invoiceCorrectionRefunds,
   invoiceCorrections,
   tenderRefunds,
+  tenders,
   type Transaction,
 } from "@waitron/db";
 import { AppError, centsToDecimal } from "@waitron/shared";
@@ -16,8 +17,9 @@ export interface CorrectionMoney {
   firstCompletedAt: string | null;
 }
 
-/** A correction's refunds, oldest link first, and the money they have given back and still hold
- * pending, in cents; failed refunds count nothing. */
+/** A correction's refunds, oldest link first and, among links made at one time, oldest payment
+ * first; and the money they have given back and still hold pending, in cents; failed refunds count
+ * nothing. */
 export async function readCorrectionLegs(
   tx: Transaction,
   correctionId: string,
@@ -27,8 +29,14 @@ export async function readCorrectionLegs(
       .select({ refund: tenderRefunds })
       .from(invoiceCorrectionRefunds)
       .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
+      .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
       .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
-      .orderBy(asc(invoiceCorrectionRefunds.createdAt), asc(invoiceCorrectionRefunds.id))
+      .orderBy(
+        asc(invoiceCorrectionRefunds.createdAt),
+        asc(tenders.settledAt),
+        asc(tenders.id),
+        asc(invoiceCorrectionRefunds.id),
+      )
   ).map(({ refund }) => refund);
   const money: CorrectionMoney = {
     completed: 0,
@@ -114,7 +122,12 @@ export async function refuseWhileCorrectionOpen(tx: Transaction, saleId: string)
 
 export async function linkRefundToCorrection(
   tx: Transaction,
-  link: { invoiceCorrectionId: string; tenderRefundId: string; requestId: string },
+  link: {
+    invoiceCorrectionId: string;
+    tenderRefundId: string;
+    requestId: string;
+    createdAt: string;
+  },
 ): Promise<void> {
   await tx.insert(invoiceCorrectionRefunds).values(link);
 }

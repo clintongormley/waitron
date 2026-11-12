@@ -333,6 +333,7 @@ export async function reserveTenderRefund(
       invoiceCorrectionId: correctionLink.id,
       tenderRefundId: refund!.id,
       requestId: correctionLink.requestId,
+      createdAt,
     });
   return {
     refund: refund!,

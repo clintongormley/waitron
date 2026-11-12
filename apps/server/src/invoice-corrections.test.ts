@@ -5,6 +5,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentReasons,
   drawerOpens,
+  invoiceCorrectionRefunds,
   invoiceCorrections,
   saleLines,
   sales,
@@ -866,11 +867,12 @@ async function cash(
   amount: string,
   submissionId: string = randomUUID(),
   backend = venue.backend,
+  clock: TrustedClock = venue.clock,
 ) {
   return inTx(venue, (tx) =>
     giveCorrectionCash(
       tx,
-      { ...deps(), backend },
+      { ...deps(clock), backend },
       venue.cfg,
       correctionId,
       { submissionId, amount },
@@ -961,6 +963,36 @@ describe("a correction's cash", () => {
     expect(counts().drawers).toBe(was.drawers + 1);
     expect(given.correction).toMatchObject({ state: "filed", moneyBack: "25.00" });
     expect(await original(saleId)).toEqual(before);
+  });
+
+  it("links each leg at the request's clock reading and reads the legs back oldest payment first", async () => {
+    const saleId = await soldForCash("Set menu", ["8.00", "8.00", "8.00", "8.00", "8.00"]);
+    const paidInOrder = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "40.00" });
+    const base = systemClock();
+    const reading = { ...base.now(), instant: new Date(Date.now() + 30 * MINUTE) };
+
+    await cash(correction.id, "36.00", randomUUID(), venue.backend, {
+      ...base,
+      now: () => reading,
+    });
+
+    const links = await venue.db
+      .select({ createdAt: invoiceCorrectionRefunds.createdAt })
+      .from(invoiceCorrectionRefunds)
+      .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correction.id));
+    expect(links.map((link) => link.createdAt)).toEqual(
+      Array(5).fill(reading.instant.toISOString()),
+    );
+    const read = await inTx(venue, (tx) =>
+      readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id),
+    );
+    expect(read.legs.map(({ tenderId, appliedAmount }) => ({ tenderId, appliedAmount }))).toEqual(
+      paidInOrder.map(({ tenderId }, index) => ({
+        tenderId,
+        appliedAmount: index === 4 ? "4.00" : "8.00",
+      })),
+    );
   });
 
   it("counts the −€6.05 once in the day's sales and once in its cash", async () => {
