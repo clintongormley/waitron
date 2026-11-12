@@ -678,6 +678,14 @@ declare module "@waitron/shared" {
     /** A cash payment asked to join a correction through Refund a payment; cash goes back through
      * the correction's own cash request. */
     "invoice_correction.cash_route_only": { correctionId: string };
+    /** An open correction's earliest refund went through over an hour ago; the payment check's
+     * alert. */
+    "invoice_correction.unfinished": {
+      correctionId: string;
+      saleId: string;
+      moneyBack: string;
+      since: string;
+    };
     /** The bill cannot be closed as a deferred payment: it is not one whole, positive bill. */
     "deferred_close.ineligible": {
       workingOrderId: string;

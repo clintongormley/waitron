@@ -3,6 +3,7 @@ import { requireEconomicWrite } from "./trading-admission.js";
 import { tenderRefunds, withTransaction } from "@waitron/db";
 import { refundLookupGapMs } from "./bill-payments-loop.js";
 import { raiseTenderRefundUnresolved } from "./bill-refund-alerts.js";
+import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
 import {
   resumeTenderRefund,
   tenderRefundIsLive,
@@ -15,6 +16,7 @@ import { refundsPaused } from "./bill-refunds.js";
 
 const RECHECK_MS = 60_000;
 const UNRESOLVED_MS = 3_600_000;
+const FAILED = "Settled-tender refund recovery failed";
 const pendingConnected = and(
   eq(tenderRefunds.state, "pending"),
   eq(tenderRefunds.method, "card"),
@@ -28,7 +30,18 @@ export async function recoverTenderRefunds(
   const reading = deps.clock.now();
   const now = reading.instant;
   const instant = now.toISOString();
+  // A paused pass still sweeps: an alert moves no money and files no record.
+  const sweep = async (): Promise<unknown[]> => {
+    try {
+      await sweepInvoiceCorrections(deps, now);
+      return [];
+    } catch (error) {
+      return [error];
+    }
+  };
   if (await refundsPaused(deps, reading)) {
+    const failed = await sweep();
+    if (failed.length > 0) throw new AggregateError(failed, FAILED);
     const [summary] = await deps.db
       .select({ pending: sql<number>`count(*)` })
       .from(tenderRefunds)
@@ -98,10 +111,13 @@ export async function recoverTenderRefunds(
       return failures;
     }),
   );
-  const errors = results.flatMap((result) =>
-    result.status === "rejected" ? [result.reason as unknown] : result.value,
-  );
-  if (errors.length > 0) throw new AggregateError(errors, "Settled-tender refund recovery failed");
+  const errors = [
+    ...results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason as unknown] : result.value,
+    ),
+    ...(await sweep()),
+  ];
+  if (errors.length > 0) throw new AggregateError(errors, FAILED);
   const [summary] = await deps.db
     .select({
       pending: sql<number>`count(*)`,

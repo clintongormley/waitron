@@ -1069,6 +1069,12 @@ are in [the note](../superpowers/plans/2026-11-12-a802-correction-primitives.md)
 Refund a payment ([reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md), decision 13), and
 Open does not check the corrective series, which the last cash step does.
 
+**2026-11-12, as built in PR 1b:** tickets paid by card, or by card and cash, are corrected the
+same way: a card refund joins through Refund a payment and files nothing, and a manager presses
+Record correction once all the money is back, until PR 2 files it automatically. A correction that
+gave money back over an hour ago and is still open raises `invoice_correction.unfinished`, a warning
+among the tax-filing alerts.
+
 ### A444: a full invoice shows only the date it was created (owner, 2026-11-12)
 
 The owner, 2026-11-12, about 11:00 in the watcher's window: "I think we should use the creation

@@ -27,6 +27,7 @@ const INCIDENT_CODE_SOURCES = [
   "apps/server/src/bill-refund-alerts.ts",
   "apps/server/src/closed-station-alert.ts",
   "apps/server/src/dish-not-sent-alert.ts",
+  "apps/server/src/invoice-correction-alerts.ts",
   "packages/core/src/record-correction.ts",
   "packages/core/src/record-sale.ts",
   "packages/core/src/record-substitution.ts",
