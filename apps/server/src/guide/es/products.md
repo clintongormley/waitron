@@ -423,8 +423,10 @@ toque corto en cualquier parte del botón, incluida la marca, añade el plato co
 
 Las líneas del pedido muestran iconos nutricionales tras el nombre del plato. Un plato sin revisar no
 muestra iconos; consulta su ventana de información en lugar de tomar la falta de iconos como una
-declaración. Los extras mantienen su propia información nutricional separada de la del plato. La caja
-no tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
+declaración. Los extras mantienen su propia información nutricional separada de la del plato. Al
+elegir los extras de un plato, cada extra muestra los alérgenos que declara su producto antes de
+añadirlo. Un extra sin revisar no muestra ninguno, lo que no establece que sea apto. La caja no
+tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
 
 Mayús+F10 o la tecla de menú contextual abre la misma ventana de información para un producto
 enfocado. Intro selecciona un plato disponible; toca o pulsa Intro sobre uno agotado para abrir su información.

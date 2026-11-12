@@ -399,8 +399,10 @@ including the mark, adds the dish as usual.
 
 Order lines show nutrition icons after the dish’s name. An unreviewed dish shows no icons; check its
 information window rather than treating the absence of icons as a declaration. Extras keep their
-own nutrition separate from the dish. There is no separate Allergens screen or printed allergen
-sheet in the till.
+own nutrition separate from the dish. When you choose a dish’s extras, each extra shows the
+allergens its product declares before you add it. An unreviewed extra shows none, which does not
+establish that it is suitable. There is no separate Allergens screen or printed allergen sheet in
+the till.
 
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
 selects an available dish; tap or press Enter on a sold-out dish to open its information.

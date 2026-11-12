@@ -3,7 +3,12 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
+import {
+  sellingValuesOf,
+  type OfferedExtrasList,
+  type OfferedModifier,
+  type TillProduct,
+} from "../api/client.js";
 
 /** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §3). */
 function offeredItem(productId: string, staff: string, price: string, maxQuantity = 1) {
@@ -87,7 +92,12 @@ const burger: TillProduct = {
   offeredModifiers: [extras, cooked],
 };
 
-afterEach(cleanupWidgets);
+const startLocale = currentLocale();
+
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(startLocale);
+});
 
 describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)", (theme) => {
   it("A738 line inspection and invalid quantity remain accessible", async () => {
@@ -162,6 +172,32 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
       { product: burger },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with both extras showing their declared allergens", async () => {
+    setLocale("es-ES");
+    const [bacon, cheese] = (extras as OfferedExtrasList).items;
+    const { el, host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      {
+        product: {
+          ...burger,
+          offeredModifiers: [
+            {
+              ...extras,
+              items: [
+                { ...bacon!, addAllergens: { milk: {} } },
+                { ...cheese!, addAllergens: { nuts: {}, sulphites: {} } },
+              ],
+            },
+            cooked,
+          ],
+        },
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelectorAll(".allergen-chip")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
 

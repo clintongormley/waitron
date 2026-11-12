@@ -139,7 +139,8 @@ orden en que las colocaste. Un plato que se vende por peso, o en una unidad que 
 pregunta primero la cantidad y después muestra solo sus listas de opciones: no se le pueden añadir
 extras. Un plato en una unidad con **Mide una cantidad (ml, g…) — sin extras** activado también muestra
 solo sus listas de opciones. Una lista de extras muestra el precio por porción de cada elemento, con una casilla para cada
-uno, o un selector de cantidad donde permitiste más de uno; una lista que hiciste obligatoria mantiene
+uno, o un selector de cantidad donde permitiste más de uno. Bajo el nombre de cada elemento
+aparecen los alérgenos que declara su producto. Una lista que hiciste obligatoria mantiene
 **Añadir** desactivado hasta que se elige algo. Una lista de opciones muestra sus opciones disponibles
 como botones de opción, para elegir exactamente una, con tu opción predeterminada ya elegida. Mientras la
 opción predeterminada está desactivada, se elige en su lugar la primera opción disponible. Si no hay

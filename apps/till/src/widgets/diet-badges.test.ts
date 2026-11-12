@@ -37,6 +37,10 @@ it("adds no chrome for an extra declaring neither, ignoring a label outside the 
   expect(extraNutrition({ suitableFor: ["no_meat"], addAllergens: null }, "a", "d")).toBe(nothing);
 });
 
+it("adds no chrome for an extra declaring an empty set of allergens", () => {
+  expect(extraNutrition({ addAllergens: {} }, "a", "d")).toBe(nothing);
+});
+
 it("shows a kosher badge the dish's profile asserts", () => {
   const host = draw(
     dietBadges({ vegan: "no", vegetarian: "no", kosher: "yes", contains: [] }, "line-diet"),
