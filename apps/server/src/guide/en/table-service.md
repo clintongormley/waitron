@@ -15,6 +15,7 @@ apply their own comps without a second person's PIN. By default, all staff can a
 limits; supervisors, managers and administrators can approve.
 
 In the dashboard's **Voids and comps**, set a limit to **0** when each comp needs approval.
+New reasons start at 0; change the amount or clear it when you want to allow comps without a limit.
 **Complaint**, **On the house** and **Discount** start at 0; **Staff meal** allows up to 50% off
 an item before approval is needed.
 

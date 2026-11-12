@@ -16,7 +16,8 @@ y aplicar sus propias invitaciones sin el PIN de otra persona. Por defecto, el p
 descuentos dentro de los límites; supervisores, encargados y administradores pueden autorizarlos.
 
 En **Cancelaciones y descuentos** del panel, indica **0** cuando cada invitación necesite
-autorización. **Queja**, **Invitación** y **Descuento** empiezan en 0; **Comida de
+autorización. Los motivos nuevos empiezan en 0; cambia el importe o bórralo para permitir invitaciones sin límite.
+**Queja**, **Invitación** y **Descuento** empiezan en 0; **Comida de
 personal** permite hasta un 50% de descuento por artículo antes de pedir autorización.
 
 ## Repartir una cuenta del mostrador {#counter-part-payments}
