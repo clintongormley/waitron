@@ -44,8 +44,8 @@ describe("till-make-now", () => {
   });
 
   for (const [locale, dish, ham] of [
-    ["es-ES", "0,375 kg× Pulpo", "+ Jamón 0,125 rac"],
-    ["en-GB", "0.375 kg× Pulpo", "+ Jamón 0.125 srv"],
+    ["es-ES", "0,375 kg× Pulpo", "+ Ham 0,125 rac"],
+    ["en-GB", "0.375 kg× Pulpo", "+ Ham 0.125 srv"],
   ] as const)
     it(`writes a dish and its extras with the ${locale} screen's decimal mark`, async () => {
       const prior = currentLocale();
@@ -64,7 +64,7 @@ describe("till-make-now", () => {
               optionSnapshots: [],
               extras: [
                 {
-                  name: "Jamón",
+                  name: "Ham",
                   quantity: "0.125",
                   unitName: { en: "srv", es: "rac" },
                   soldInEach: false,
