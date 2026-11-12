@@ -1709,7 +1709,10 @@ describe("settled-tender refund scheduled recovery", () => {
       throw refusal;
     };
     at(60 * 60_000 + 1);
-    await expect(recoverTenderRefunds(deps)).rejects.toMatchObject({ errors: [refusal] });
+    await expect(recoverTenderRefunds(deps)).rejects.toMatchObject({
+      message: "Settled-tender refund recovery failed",
+      errors: [refusal],
+    });
     expect(await store.db.select().from(incidents)).toMatchObject([
       {
         code: "payment.tender_refund_unresolved",

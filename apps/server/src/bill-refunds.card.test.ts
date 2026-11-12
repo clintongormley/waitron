@@ -1812,15 +1812,11 @@ describe("how often the loop looks a pending refund up", () => {
     const over = await runLoop(clockPlus(HOUR + 60_000));
 
     expect(lookupsOf(refundId)).toBe(lookups);
-    // The case at "raises the alert for a refund pending over an hour" checks the alert itself. A
-    // refund whose lookup failed on this pass is reported as an error, not counted.
-    const failed = new Set(over.errors.map((error) => ("refundId" in error ? error.refundId : "")));
-    const pending = venue.db
-      .all<{ id: string }>(
-        sql`select id from bill_payment_refunds
-            where state = 'pending' and created_at < ${overAnHour}`,
-      )
-      .filter(({ id }) => !failed.has(id));
+    // The case at "raises the alert for a refund pending over an hour" checks the alert itself.
+    const pending = venue.db.all<{ id: string }>(
+      sql`select id from bill_payment_refunds
+          where state = 'pending' and created_at < ${overAnHour}`,
+    );
     expect(pending.map(({ id }) => id)).toContain(refundId);
     expect(over.refundsUnresolved).toBe(pending.length);
   });

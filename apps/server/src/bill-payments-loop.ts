@@ -64,7 +64,6 @@ export interface BillPaymentsPass {
   failed: number;
   refundsCompleted: number;
   refundsFailed: number;
-  /** Refunds pending over an hour, counted on every pass. */
   refundsUnresolved: number;
   /** The payments and refunds this pass found pending and did not settle. */
   pending: number;
