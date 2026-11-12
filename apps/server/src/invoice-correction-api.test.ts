@@ -5,6 +5,7 @@ import {
   deviceProfiles,
   devices,
   invoiceCorrections,
+  floorZones,
   sales,
   tenderRefunds,
   withTransaction,
@@ -18,7 +19,6 @@ import {
   createDepartment,
   createServiceZone,
   setProfileServiceAccess,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -85,9 +85,9 @@ useVenueDb({
 async function serveOnly(zoneId: string) {
   await inTx(venue, async (tx) => {
     const [policy] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, zoneId));
     await setProfileServiceAccess(tx, zonedTill.profileId, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [zoneId],
