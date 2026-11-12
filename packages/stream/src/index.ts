@@ -47,7 +47,9 @@ export type { ChildHandle, SpawnFn } from "./litestream-process.js";
 export { spawnLitestream } from "./litestream-process.js";
 export {
   DEFAULT_WAL_LIMIT_BYTES,
+  HEALTHY_RUN_MS,
   L0_RETENTION_MS,
+  RESTART_BACKOFF_MS,
   StreamSupervisor,
   TICK_MS,
 } from "./supervisor.js";

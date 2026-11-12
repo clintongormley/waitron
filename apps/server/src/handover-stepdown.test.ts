@@ -73,6 +73,7 @@ const STOPPERS = [
   "backupSupervisor",
   "handoverDestinationDuty",
   "chartPost",
+  "spareStore",
 ] as const;
 const AT_STEPDOWN = ["certificateDiagnosis", "boxEmails", "handoverDestinationDuty"];
 

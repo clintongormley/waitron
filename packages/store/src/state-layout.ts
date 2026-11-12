@@ -42,6 +42,7 @@ export const CONFIGURATION_IMPORT_ARTIFACT = "configuration-import.artifact";
 export const CONFIGURATION_IMPORT_KEY = "configuration-import.key";
 export const STREAM_DIR = "stream";
 export const HANDOVER_DIR = "handover";
+export const PAIR_STORE_DIR = "pair-store";
 export const TLS_DIR = "tls";
 export const TLS_REPAIR_FLOW_DIR = "flows/tls-repair";
 export const TLS_REPAIR_DIR = "tls/repair";
@@ -238,6 +239,12 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "folder",
     reset: "deleted",
     why: "Handover copies must survive a restart.",
+  },
+  {
+    name: PAIR_STORE_DIR,
+    kind: "folder",
+    reset: "deleted",
+    why: "The spare's copy of the main box's stream.",
   },
   {
     name: TLS_DIR,

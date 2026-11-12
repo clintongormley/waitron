@@ -42,6 +42,9 @@ import { startStaffListener } from "./cloud-remote.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { stopBackgroundDuties } from "./background-duties.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
+import { startSpareStore } from "./spare-store.js";
+import { loadKeyRing, writePairLinkTx } from "@waitron/credentials";
+import { withNodeTransaction } from "@waitron/db";
 vi.mock("./background-duties.js", async (original) => {
   const actual = await original<typeof import("./background-duties.js")>();
   return { ...actual, stopBackgroundDuties: vi.fn(actual.stopBackgroundDuties) };
@@ -50,6 +53,11 @@ vi.mock("./background-duties.js", async (original) => {
 vi.mock("./mirror-bundle-fetch.js", async (original) => {
   const actual = await original<typeof import("./mirror-bundle-fetch.js")>();
   return { ...actual, rememberCheckedAddressesIn: vi.fn(actual.rememberCheckedAddressesIn) };
+});
+
+vi.mock("./spare-store.js", async (original) => {
+  const actual = await original<typeof import("./spare-store.js")>();
+  return { ...actual, startSpareStore: vi.fn(actual.startSpareStore) };
 });
 
 vi.mock("./cloud-remote.js", async (original) => {
@@ -169,6 +177,7 @@ afterEach(async () => {
   vi.mocked(cloudConnectionJob).mockClear();
   vi.mocked(createContentSuggestionRunner).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
+  vi.mocked(startSpareStore).mockClear();
   vi.mocked(createJobRunner).mockClear();
   vi.mocked(tamperWatchJob).mockClear();
   vi.mocked(runTenderRefundRecoveryLoop).mockReset();
@@ -663,6 +672,43 @@ describe("a start that fails after the venue folder is opened gives the folder b
         WAITRON_TLS_KEY_FILE: join(state, "does-not-exist.key"),
       }),
     ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("when a joining spare's start cannot read its certificate, stopping its store", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir();
+    await writeFile(join(state, PENDING_ADOPTION_FILE), "{}");
+    const env = await tradingEnv(venueDir, state);
+    const seeded = await openVenueDatabase(venueDir);
+    try {
+      await withNodeTransaction(seeded.node, (tx) =>
+        writePairLinkTx(tx, loadKeyRing(env), TILL_ENV.WAITRON_NODE_ID, {
+          role: "serves",
+          state: "awaiting_copy",
+          peerNodeId: "77777777-7777-4777-8777-777777777777",
+          peerPublicKey: "pub",
+          storeUrl: "https://box-7777.waitron.local:7443",
+          venueId: "venue",
+          accessKeyId: "waitron0123456789abcdef",
+          secretAccessKey: "c".repeat(64),
+        }),
+      );
+    } finally {
+      await seeded.close();
+    }
+    const stop = vi.fn(async () => {});
+    vi.mocked(startSpareStore).mockResolvedValueOnce({ loopbackUrl: "http://127.0.0.1:1", stop });
+
+    await expect(
+      startServer({
+        ...env,
+        WAITRON_TLS_CERT_FILE: join(state, "does-not-exist.crt"),
+        WAITRON_TLS_KEY_FILE: join(state, "does-not-exist.key"),
+      }),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(startSpareStore).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 

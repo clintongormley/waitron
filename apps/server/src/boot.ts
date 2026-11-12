@@ -76,8 +76,10 @@ import {
   readHandoverRestriction,
   readMirrorLink,
   readNodeMode,
+  readPairLink,
   setSingletonRole,
 } from "@waitron/node-db";
+import { startSpareStore, type SpareStore } from "./spare-store.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
@@ -86,7 +88,12 @@ import {
   runStartPeerCheck,
   type StartPeerCheckOutcome,
 } from "./start-peer-check.js";
-import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
+import {
+  credentialProvisioned,
+  loadKeyRing,
+  readPairSecret,
+  tenantCredentials,
+} from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { mountDeviceLiveApi } from "./device-live-api.js";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -1784,6 +1791,20 @@ async function bootServer(
       });
     }
   };
+  // Only a spare whose pair link serves its main box runs the store that box streams to.
+  const ownNodeId = config.node.nodeId;
+  const startServedStore = async (): Promise<SpareStore | undefined> => {
+    const link = await readPairLink(store.node, ownNodeId);
+    if (link?.role !== "serves") return undefined;
+    return startSpareStore({
+      bin: config.versitygwBin,
+      stateDir: config.stateDir,
+      accessKeyId: link.accessKeyId,
+      secretAccessKey: await readPairSecret(store.node, ring, ownNodeId),
+      loopbackPort: config.spareStoreLoopbackPort,
+      log,
+    });
+  };
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     spare = true;
@@ -1801,6 +1822,8 @@ async function bootServer(
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
     undoOnFailure.push(() => finishWorker.catch(() => {}));
+    const latchStore = await startServedStore();
+    if (latchStore !== undefined) undoOnFailure.push(() => latchStore.stop());
     await checkLeaf();
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
@@ -1820,6 +1843,7 @@ async function bootServer(
       {
         stopWork: async () => {
           await finishWorker.catch(() => {});
+          await latchStore?.stop();
         },
         settleRequests: () => Promise.resolve(),
         closePools: () => store.close(),
@@ -2172,6 +2196,7 @@ async function bootServer(
   // whose node_id the venue's sales carry; `config.node.nodeId` stays the node's own identity for
   // every WRITE path.
   let dataNodeId: string = config.node.nodeId;
+  let spareStore: SpareStore | undefined;
   if (isMirror) {
     const loaded = await readMirrorLink(store.node, config.node.nodeId);
     if (loaded === null) {
@@ -2181,6 +2206,9 @@ async function bootServer(
       });
     }
     dataNodeId = loaded.originNodeId;
+    const served = await startServedStore();
+    if (served !== undefined) undoOnFailure.push(() => served.stop());
+    spareStore = served;
   }
 
   // `makeFiscalBackend` cross-checks `filingModule` against the enabled fiscal module, so a node
@@ -4171,6 +4199,7 @@ async function bootServer(
     backupSupervisor,
     handoverDestinationDuty,
     chartPost,
+    ...(spareStore === undefined ? {} : { spareStore }),
   });
   const started = makeStartedServer(
     server,

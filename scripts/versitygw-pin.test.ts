@@ -13,6 +13,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const DOCKERFILE = read("deploy/Dockerfile");
 const TEST_SERVER = read("apps/server/src/testing/s3-test-server.ts");
 const IMAGE_SMOKE = read(".github/workflows/image-smoke.yml");
+const SPARE_STORE = read("apps/server/src/spare-store.ts");
 
 /** The one capture of the one match of `pattern`; throws on none or several. */
 function one(text: string, pattern: RegExp, what: string): string {
@@ -40,6 +41,12 @@ describe("the pinned versitygw", () => {
         line.startsWith("COPY --from=versitygw /usr/local/bin/versitygw /usr/local/bin/versitygw"),
       ),
     ).toHaveLength(1);
+  });
+
+  it("the spare's store names the same version", () => {
+    expect(
+      one(SPARE_STORE, /export const VERSITYGW_VERSION = "([0-9.]+)";/g, "spare store pin"),
+    ).toBe(VERSITYGW_VERSION);
   });
 
   it("checks the same Linux checksums in the box image and the setup script", () => {
