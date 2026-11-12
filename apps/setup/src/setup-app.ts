@@ -70,7 +70,7 @@ import { VENUE_SERVER_FIELDS } from "./server-fields.js";
 import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
-import { currentLocale, format, setLocale, t } from "./i18n/t.js";
+import { currentLocale, format, localTime, setLocale, t } from "./i18n/t.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
@@ -321,17 +321,10 @@ function adoptErrorWords(code: string, params: Record<string, unknown> | undefin
   )
     return () =>
       format("shell.adopt.clocks_apart", {
-        primaryAt: clockReading(primaryAt),
-        standbyAt: clockReading(standbyAt),
+        primaryAt: localTime(primaryAt) ?? primaryAt,
+        standbyAt: localTime(standbyAt) ?? standbyAt,
       });
   return say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
-}
-
-function clockReading(iso: string): string {
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime())
-    ? iso
-    : at.toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
 /**
