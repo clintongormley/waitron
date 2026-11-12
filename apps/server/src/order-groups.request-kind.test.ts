@@ -339,6 +339,7 @@ describe("A773 request kind", () => {
     await inTx(async (tx) =>
       moveDishes(tx, split.cfg, split.party.tabId, null, [submitted.groups[0]!.lineIds[0]!], {
         ...moveArgs,
+        admission: testTradingAdmission(),
         partyId,
         expectedEdits: [await readBillEditState(tx, split.party.tabId)],
       }),

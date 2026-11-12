@@ -84,6 +84,7 @@ export async function moveDishes(
   command: BillCommand & { expectedEdits?: BillEditExpected[] },
 ) {
   return moveLines(tx, cfg, from, to, lineIds, {
+    admission: testTradingAdmission(),
     ...command,
     expectedEdits: command.expectedEdits ?? (await editsFor(tx, to === null ? [from] : [from, to])),
   });

@@ -318,8 +318,9 @@ export async function moveDishes(
   fromBillId: string,
   toBillId: string | null,
   lineIds: readonly string[],
-  command: BillCommand & { expectedEdits: BillEditExpected[] },
+  command: BillCommand & { expectedEdits: BillEditExpected[]; admission: TradingAdmission },
 ): Promise<{ billId: string }> {
+  await requireEconomicWrite(tx, cfg, command.admission);
   if (lineIds.length === 0) throw new AppError("sale.empty_basket", {});
   if (toBillId === fromBillId) throw new AppError("tab.transfer_self", { tabId: fromBillId });
   const path = await guardPathParty(tx, fromBillId, command);

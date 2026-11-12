@@ -4239,6 +4239,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             ...(toBillId === null ? [] : [{ orderId: toBillId }]),
           ]);
           const moved = await moveDishes(tx, cfg, fromBillId, toBillId, lineIds, {
+            admission: deps.admission,
             ...command,
             expectedEdits: parseBillEditExpecteds(body.expectedEdits),
           });
