@@ -47,16 +47,28 @@ import {
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const receiver = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-async function recordClash() {
+async function recordClash(paid = false) {
   const source = await original("Source", 1, copyBase);
   await suite.db.execute(sql`insert into envios
     (registro_id, estado, csv, codigo_error, proximo_intento_en)
     values (${source.recordId}, 'aceptado_con_errores', 'old-csv', '2000',
       '2026-07-20T17:21:00.000Z')`);
+  if (paid)
+    await suite.db
+      .insert(tenders)
+      .values({
+        id: "discarded-tip",
+        saleId: source.saleId,
+        method: "cash",
+        amount: 100,
+        tipAmount: 100,
+        settledAt: "2026-07-20T17:21:00.000Z",
+      });
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
   const existing = structuredClone(returned);
+  existing.tenders = [];
   existing.records[0]!.id = "held-record";
   existing.records[0]!.sale_id = "held-sale";
   existing.sales[0]!.id = "held-sale";
@@ -105,7 +117,7 @@ it("lists both versions of a record clash with current filing status for a reada
 });
 
 it("accepts only the exact tail record clash without importing its sale or delivery", async () => {
-  const { source, returned, existing, now } = await recordClash();
+  const { source, returned, existing, now } = await recordClash(true);
   const [clash] = await VERIFACTU_HANDOVER.returnRecords!.inspect!(
     receiver.db,
     source.nodeId,
@@ -122,6 +134,8 @@ it("accepts only the exact tail record clash without importing its sale or deliv
   );
   expect(receiver.db.all<ReturnRow>(sql`select * from sales`)).toEqual(existing.sales);
   expect(receiver.db.all<ReturnRow>(sql`select * from envios`)).toEqual(existing.deliveries);
+  expect(returned.tenders).toHaveLength(1);
+  expect(receiver.db.all<ReturnRow>(sql`select * from tenders`)).toEqual([]);
   const changed = structuredClone(returned);
   changed.records[0]!.descripcion_operacion = "Different immutable evidence";
   expect(
@@ -129,6 +143,45 @@ it("accepts only the exact tail record clash without importing its sale or deliv
       receiveReturnedOriginals(tx, source.nodeId, changed, now, [clash!.fingerprint]),
     ),
   ).toEqual({ complete: false });
+});
+
+it("keeps a held sale's different payments unaccounted when accepting its only record clash", async () => {
+  const source = await original("Source", 1, copyBase);
+  await suite.db
+    .insert(tenders)
+    .values({
+      id: "shared-tip",
+      saleId: source.saleId,
+      method: "cash",
+      amount: 200,
+      tipAmount: 200,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    });
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const existing = structuredClone(returned);
+  existing.records[0]!.descripcion_operacion = "Held invoice description";
+  existing.tenders[0]!.amount = 100;
+  existing.tenders[0]!.tip_amount = 100;
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source.nodeId, existing, now),
+  );
+  const [clash] = await VERIFACTU_HANDOVER.returnRecords!.inspect!(
+    receiver.db,
+    source.nodeId,
+    returned as unknown as CanonicalValue,
+  );
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
+    ),
+  ).toEqual({ complete: false });
+  expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+    existing.records,
+  );
+  expect(receiver.db.all<ReturnRow>(sql`select * from tenders`)).toEqual(existing.tenders);
 });
 
 it("keeps every missing suffix record blocked after accepting a middle-of-chain clash", async () => {
@@ -1338,16 +1391,14 @@ it("stops when both boxes have corrected the same original", async () => {
       receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
     ),
   ).toEqual({ complete: true });
-  await receiver.db
-    .insert(tenders)
-    .values({
-      id: "unaccounted-payment",
-      saleId: source.saleId,
-      method: "cash",
-      amount: 200,
-      tipAmount: 200,
-      settledAt: now.toISOString(),
-    });
+  await receiver.db.insert(tenders).values({
+    id: "unaccounted-payment",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 200,
+    tipAmount: 200,
+    settledAt: now.toISOString(),
+  });
   returned.tenders.push({
     id: "unaccounted-payment",
     sale_id: source.saleId,
