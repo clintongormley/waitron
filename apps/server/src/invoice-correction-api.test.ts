@@ -584,3 +584,137 @@ describe("POST /api/invoice-corrections/:id/cash", () => {
     expect(counts()).toEqual(before);
   });
 });
+
+const fileNow = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/file`, payload);
+const closeIt = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
+  send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/close`, payload);
+const THREE_BACK = [{ rate: "21.00", base: "2.48", tax: "0.52" }];
+const fileBody = (patch: Record<string, unknown> = {}) => ({
+  expectedSplit: THREE_BACK,
+  override: supervisor(),
+  ...patch,
+});
+
+/** A €5.00 correction of a fresh €10.00 cash ticket with €3.00 of it given back in cash. */
+async function threeBack(): Promise<string> {
+  const id = await opened(await sold(["10.00"]));
+  expect((await giveCash(id, cashBody({ amount: "3.00" }))).status).toBe(200);
+  return id;
+}
+
+describe("POST /api/invoice-corrections/:id/file and /close", () => {
+  it("files and closes only with sale.rectify, or a supervisor's PIN", async () => {
+    const id = await threeBack();
+    const before = counts();
+    expect(await fileNow(id, fileBody({ override: undefined }))).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.rectify" } },
+    });
+    expect(
+      await fileNow(id, fileBody({ override: { personId: venue.adminId, pin: "0000" } })),
+    ).toMatchObject({ status: 401, json: { code: "pin.invalid" } });
+    expect(counts()).toEqual(before);
+    expect(await fileNow(id, fileBody())).toMatchObject({
+      status: 200,
+      json: { id, state: "filed", moneyBack: "3.00", left: "2.00" },
+    });
+    expect(counts()).toEqual({ ...before, invoices: before.invoices + 1 });
+
+    const empty = await opened(await sold(["10.00"]));
+    const was = counts();
+    expect(await closeIt(empty, { override: undefined })).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.rectify" } },
+    });
+    expect(await read(empty)).toMatchObject({ status: 200, json: { state: "open" } });
+    expect(await closeIt(empty, { override: supervisor() })).toMatchObject({
+      status: 200,
+      json: { id: empty, state: "discarded" },
+    });
+    expect(counts()).toEqual(was);
+  });
+
+  it("refuses a till outside the invoice's zone, writing nothing, and files and closes once the zone is its own", async () => {
+    const id = await threeBack();
+    const empty = await opened(await sold(["10.00"]));
+    await serveOnly(otherZone);
+    const before = counts();
+    expect(await fileNow(id, fileBody(), zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    expect(await closeIt(empty, { override: supervisor() }, zonedTill.cookie)).toEqual(
+      ZONE_REFUSED(),
+    );
+    expect(counts()).toEqual(before);
+    expect(await read(empty)).toMatchObject({ json: { state: "open" } });
+    await serveOnly(venue.zoneId);
+    expect(await fileNow(id, fileBody(), zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { state: "filed" },
+    });
+    expect(await closeIt(empty, { override: supervisor() }, zonedTill.cookie)).toMatchObject({
+      status: 200,
+      json: { state: "discarded" },
+    });
+  });
+
+  it.each([
+    ["expectedSplit", { expectedSplit: [{ rate: "21.00", base: 2.48, tax: "0.52" }] }],
+    ["expectedSplit", { expectedSplit: null }],
+    ["override", { override: null }],
+  ])("File now refuses a malformed %s, naming it and writing nothing", async (field, patch) => {
+    const id = await threeBack();
+    const before = counts();
+    expect(await fileNow(id, fileBody(patch))).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field } },
+    });
+    expect(counts()).toEqual(before);
+  });
+
+  it("refuses an unknown or malformed correction id", async () => {
+    const unknown = randomUUID();
+    for (const call of [fileNow, closeIt]) {
+      expect(await call(unknown, fileBody())).toEqual({
+        status: 404,
+        json: { code: "invoice_correction.not_found", params: { correctionId: unknown } },
+      });
+      expect(await call("not-an-id", fileBody())).toEqual({
+        status: 404,
+        json: { code: "invoice_correction.not_found", params: { correctionId: "not-an-id" } },
+      });
+    }
+  });
+
+  const refusals: [string, () => Promise<{ call: typeof fileNow; id: string; patch?: object }>][] =
+    [
+      [
+        "invoice_correction.nothing_back",
+        async () => ({ call: fileNow, id: await opened(await sold(["10.00"])) }),
+      ],
+      [
+        "invoice_correction.split_changed",
+        async () => ({ call: fileNow, id: await threeBack(), patch: { expectedSplit: SPLIT } }),
+      ],
+      [
+        "invoice_correction.still_correctable",
+        async () => ({ call: closeIt, id: await threeBack() }),
+      ],
+      [
+        "invoice_correction.not_open",
+        async () => {
+          const id = await opened(await sold(["10.00"]));
+          expect((await closeIt(id, { override: supervisor() })).status).toBe(200);
+          return { call: fileNow, id };
+        },
+      ],
+    ];
+  it.each(refusals)("answers %s with 409, writing nothing", async (code, arrange) => {
+    const { call, id, patch } = await arrange();
+    const before = counts();
+    expect(await call(id, fileBody(patch as Record<string, unknown>))).toMatchObject({
+      status: 409,
+      json: { code },
+    });
+    expect(counts()).toEqual(before);
+  });
+});

@@ -662,6 +662,8 @@ declare module "@waitron/shared" {
     "invoice_correction.leg_too_large": { correctionId: string; left: string };
     /** None of the correction's refunds has given money back yet, so there is nothing to file. */
     "invoice_correction.nothing_back": { correctionId: string };
+    /** Close refused: money has gone back and the correction can still be filed on this box. */
+    "invoice_correction.still_correctable": { correctionId: string };
     /** The split the till showed is no longer what this correction would file; the fresh one. */
     "invoice_correction.split_changed": {
       saleId: string;

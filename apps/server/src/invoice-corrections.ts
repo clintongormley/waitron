@@ -14,7 +14,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { prepareIssueClock, type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
-import type { Authorization } from "@waitron/identity";
+import type { Authorization, AuthzInput } from "@waitron/identity";
 import {
   AppError,
   centsToDecimal,
@@ -325,6 +325,111 @@ export async function fileCorrectionIn(
   return correctiveSaleId;
 }
 
+/**
+ * Files the R5 of the open correction `correctionId` for the money its refunds have given back so
+ * far. Refuses nothing back (`invoice_correction.nothing_back`) and a split other than the one the
+ * till showed (`invoice_correction.split_changed`, with the fresh one).
+ */
+export async function fileInvoiceCorrectionNow(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  correctionId: string,
+  request: { expectedSplit: SplitLine[] },
+  actor: { personId: string; authz: AuthzInput },
+): Promise<InvoiceCorrectionView> {
+  const expectedSplit = expectedSplitOf(request.expectedSplit);
+  const correction = await openCorrection(tx, correctionId);
+  const { completed } = await readCorrectionMoney(tx, correctionId);
+  if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
+  const saleId = correction.originalSaleId as SaleId;
+  const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
+    gross: centsToDecimal(completed),
+    ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+  });
+  const split = preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
+  if (splitKey(split) !== splitKey(expectedSplit))
+    throw new AppError("invoice_correction.split_changed", {
+      saleId,
+      gross: preview.gross,
+      vatBreakdown: split,
+      moneyRefundable: sumDecimals([
+        ZERO,
+        ...(await readRefundableTenders(tx, saleId)).map((row) => decimal(row.appliedRemaining)),
+      ]),
+    });
+  await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId);
+  return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
+}
+
+/** The refusals of a filing that no later attempt on this box can get past. */
+const NEVER_FILEABLE = new Set(["replaced", "voided", "wrong_node", "not_simplified"]);
+
+/**
+ * Ends the open correction `correctionId` without filing: discarded when nothing has gone back;
+ * with money back, closed keeping its refunds only when filing it is refused for good
+ * (`sale.correction_not_admitted` for a reason in `NEVER_FILEABLE`), and otherwise refused
+ * `invoice_correction.still_correctable`.
+ */
+export async function closeInvoiceCorrection(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  correctionId: string,
+  actor: { personId: string },
+): Promise<InvoiceCorrectionView> {
+  const correction = await openCorrection(tx, correctionId);
+  const { completed } = await readCorrectionMoney(tx, correctionId);
+  if (completed > 0) {
+    const refusal = await previewCorrectionAmounts(
+      tx,
+      deps.backend,
+      correction.originalSaleId as SaleId,
+      cfg.nodeId,
+      {
+        gross: centsToDecimal(completed),
+        ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+      },
+    ).then(
+      () => null,
+      (error: unknown) => {
+        if (error instanceof AppError) return error;
+        throw error;
+      },
+    );
+    if (
+      refusal?.code !== "sale.correction_not_admitted" ||
+      !NEVER_FILEABLE.has((refusal.params as { reason: string }).reason)
+    )
+      throw new AppError("invoice_correction.still_correctable", { correctionId });
+  }
+  const ended = await tx
+    .update(invoiceCorrections)
+    .set({
+      state: completed === 0 ? "discarded" : "closed",
+      endedAt: deps.clock.now().instant.toISOString(),
+      endedBy: actor.personId,
+    })
+    .where(and(eq(invoiceCorrections.id, correctionId), eq(invoiceCorrections.state, "open")))
+    .returning({ id: invoiceCorrections.id });
+  if (ended.length !== 1)
+    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
+}
+
+/** The correction `correctionId`, refused unless it exists and is open. */
+async function openCorrection(tx: Transaction, correctionId: string) {
+  const [correction] = await tx
+    .select()
+    .from(invoiceCorrections)
+    .where(eq(invoiceCorrections.id, correctionId));
+  if (correction === undefined)
+    throw new AppError("invoice_correction.not_found", { correctionId });
+  if (correction.state !== "open")
+    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  return correction;
+}
+
 async function fileNowFor(
   tx: Transaction,
   backend: FiscalBackend,
@@ -365,28 +470,32 @@ export function parseInvoiceCorrection(request: InvoiceCorrectionRequest) {
   const lineIds = lineIdsOf(request.lineIds);
   const note = request.note ?? null;
   if (note !== null && typeof note !== "string") throw invalid("note");
-  const split = request.expectedSplit;
-  if (
-    !Array.isArray(split) ||
-    split.some((line) =>
-      [line?.rate, line?.base, line?.tax].some(
-        (value) => typeof value !== "string" || !MONEY.test(value),
-      ),
-    )
-  )
-    throw invalid("expectedSplit");
   return {
     submissionId: canonicaliseUuid(request.submissionId)!,
     gross: moneyOf(request.gross, "gross"),
     ...(lineIds === undefined ? {} : { lineIds }),
     reasonId: canonicaliseUuid(request.reasonId)!,
     note: note === null || note.trim() === "" ? null : note.trim(),
-    expectedSplit: split.map(({ rate, base, tax }) => ({
-      rate: centsToDecimal(decimalToCents(decimal(rate))),
-      base: centsToDecimal(decimalToCents(decimal(base))),
-      tax: centsToDecimal(decimalToCents(decimal(tax))),
-    })),
+    expectedSplit: expectedSplitOf(request.expectedSplit),
   };
+}
+
+/** The split a request says the till showed, at money scale; refused `expectedSplit` when malformed. */
+export function expectedSplitOf(split: unknown) {
+  if (
+    !Array.isArray(split) ||
+    split.some((line: Partial<SplitLine> | null) =>
+      [line?.rate, line?.base, line?.tax].some(
+        (value) => typeof value !== "string" || !MONEY.test(value),
+      ),
+    )
+  )
+    throw invalid("expectedSplit");
+  return (split as SplitLine[]).map(({ rate, base, tax }) => ({
+    rate: centsToDecimal(decimalToCents(decimal(rate))),
+    base: centsToDecimal(decimalToCents(decimal(base))),
+    tax: centsToDecimal(decimalToCents(decimal(tax))),
+  }));
 }
 
 /** The split compared by value, in rate order, whatever order or spelling the till sent. */

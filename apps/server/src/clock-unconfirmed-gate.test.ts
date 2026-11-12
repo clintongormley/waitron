@@ -560,6 +560,35 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       grows: ["tenderRefunds", "drawerJobs", "sales", "records"],
     };
   },
+  "a correction's File now": async () => {
+    const { saleId } = await soldWhole("cash");
+    const reason = (await inTx(venue, (tx) => listAdjustmentReasons(tx))).find(
+      (row) => row.kind === "void" && !row.noteRequired,
+    )!;
+    const preview = await as(venue.app, "POST", `/api/transactions/${saleId}/corrections/preview`, {
+      gross: "5.00",
+    });
+    const opened = await as(venue.app, "POST", `/api/transactions/${saleId}/corrections`, {
+      submissionId: randomUUID(),
+      gross: "5.00",
+      reasonId: reason.id,
+      expectedSplit: preview.json.vatBreakdown,
+      override: OVERRIDE(),
+    });
+    const correctionId = (opened.json.correction as { id: string }).id;
+    const given = await as(venue.app, "POST", `/api/invoice-corrections/${correctionId}/cash`, {
+      submissionId: randomUUID(),
+      amount: "2.00",
+      override: OVERRIDE(),
+    });
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    const fileNow = (given.json.correction as { fileNow: { vatBreakdown: unknown } }).fileNow;
+    const body = { expectedSplit: fileNow.vatBreakdown, override: OVERRIDE() };
+    return {
+      send: (app) => as(app, "POST", `/api/invoice-corrections/${correctionId}/file`, body),
+      grows: ["sales", "records"],
+    };
+  },
   "a pending connected card tender refund sent again": async () => {
     const { saleId, tenderId } = await soldWhole("card");
     const resend = tenderRefund(saleId, tenderId);

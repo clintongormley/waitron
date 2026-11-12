@@ -34,7 +34,9 @@ import { readRefundableTenders } from "./tender-refund-balance.js";
 import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import {
+  closeInvoiceCorrection,
   fileCorrectionIn,
+  fileInvoiceCorrectionNow,
   openInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
@@ -1092,6 +1094,180 @@ describe("a correction's cash", () => {
 
     await expect(cash(correction.id, "6.05")).resolves.toMatchObject({
       correction: { state: "filed", moneyBack: "6.05" },
+    });
+  });
+});
+
+/** File now for the correction `correctionId`, asked by `personId` with the split the till showed. */
+async function fileNow(
+  correctionId: string,
+  expectedSplit: { rate: string; base: string; tax: string }[],
+  { backend = venue.backend, personId = managerId } = {},
+) {
+  return inTx(venue, (tx) =>
+    fileInvoiceCorrectionNow(
+      tx,
+      { ...deps(), backend },
+      venue.cfg,
+      correctionId,
+      { expectedSplit },
+      { personId, authz: { sessionId: managerSessionId } },
+    ),
+  );
+}
+
+async function close(correctionId: string, { backend = venue.backend, personId = managerId } = {}) {
+  return inTx(venue, (tx) =>
+    closeInvoiceCorrection(tx, { ...deps(), backend }, venue.cfg, correctionId, { personId }),
+  );
+}
+
+const MENU_FIFTEEN = [{ rate: "21.00", base: "12.40", tax: "2.60" }];
+
+describe("File now and Close", () => {
+  it("finishes a €25 correction for the €15 of cash that went back", async () => {
+    const saleId = await soldForCash("Set menu", ["40.00"]);
+    const before = await original(saleId);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    const given = await cash(correction.id, "15.00");
+    expect(given.correction.fileNow).toEqual({ gross: "15.00", vatBreakdown: MENU_FIFTEEN });
+    const was = counts();
+
+    const filed = await fileNow(correction.id, MENU_FIFTEEN, { personId: venue.operatorId });
+
+    expect(filed).toMatchObject({
+      state: "filed",
+      gross: "25.00",
+      moneyBack: "15.00",
+      left: "10.00",
+      fileNow: null,
+    });
+    const [corrective] = await venue.db
+      .select()
+      .from(sales)
+      .where(eq(sales.id, filed.correctiveSaleId!));
+    expect(corrective).toMatchObject({
+      correctsSaleId: saleId,
+      total: -1500,
+      vatBreakdown: [{ rate: "21.00", base: "-12.40", tax: "-2.60" }],
+    });
+    expect(counts()).toEqual({ ...was, invoices: was.invoices + 1 });
+    expect(await correctionRow(correction.id)).toMatchObject({
+      state: "filed",
+      correctiveSaleId: filed.correctiveSaleId,
+      endedAt: expect.any(String),
+      endedBy: venue.operatorId,
+    });
+    expect(await original(saleId)).toEqual(before);
+  });
+
+  it("refuses to file with nothing back", async () => {
+    const saleId = await soldForCash("Set menu", ["40.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+
+    await refusedWithNothingWritten(() => fileNow(correction.id, MENU_FIFTEEN), {
+      code: "invoice_correction.nothing_back",
+      params: { correctionId: correction.id },
+    });
+    expect(await correctionRow(correction.id)).toMatchObject({ state: "open" });
+  });
+
+  it("refuses to file a split other than the one shown, answering the fresh one, and files the fresh one", async () => {
+    const saleId = await soldForCash("Set menu", ["40.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    await cash(correction.id, "15.00");
+
+    await refusedWithNothingWritten(() => fileNow(correction.id, STEAK_HALF), {
+      code: "invoice_correction.split_changed",
+      params: {
+        saleId,
+        gross: "15.00",
+        vatBreakdown: MENU_FIFTEEN,
+        moneyRefundable: "25.00",
+      },
+    });
+    await expect(fileNow(correction.id, MENU_FIFTEEN)).resolves.toMatchObject({ state: "filed" });
+  });
+
+  it("discards a correction with nothing back", async () => {
+    const saleId = await soldForCash("Set menu", ["40.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    const was = counts();
+
+    const ended = await close(correction.id, { personId: venue.operatorId });
+
+    expect(ended).toMatchObject({
+      state: "discarded",
+      moneyBack: "0.00",
+      correctiveSaleId: null,
+      legs: [],
+      fileNow: null,
+    });
+    expect(counts()).toEqual(was);
+    expect(await correctionRow(correction.id)).toMatchObject({
+      state: "discarded",
+      endedAt: expect.any(String),
+      endedBy: venue.operatorId,
+    });
+    await refusedWithNothingWritten(() => close(correction.id), {
+      code: "invoice_correction.not_open",
+      params: { correctionId: correction.id, state: "discarded" },
+    });
+    await expect(
+      open(saleId, { submissionId: randomUUID(), gross: "25.00" }),
+    ).resolves.toMatchObject({ correction: { state: "open" } });
+  });
+
+  it("closes keeping the refunds when another box has taken over, and refuses while the ticket's filing is only stopped", async () => {
+    const saleId = await soldForCash("Set menu", ["40.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    const { refunds } = await cash(correction.id, "15.00");
+    const [record] = (await original(saleId)).records as { id: string }[];
+    const filingState = (to: string) =>
+      venue.db.run(sql`update envios set estado = ${to} where registro_id = ${record!.id}`);
+    const [{ state }] = venue.db.all<{ state: string }>(
+      sql`select estado as state from envios where registro_id = ${record!.id}`,
+    ) as [{ state: string }];
+    filingState("detenido");
+    try {
+      await refusedWithNothingWritten(() => close(correction.id), {
+        code: "invoice_correction.still_correctable",
+        params: { correctionId: correction.id },
+      });
+    } finally {
+      filingState(state);
+    }
+
+    const takenOver = Object.create(venue.backend, {
+      correctionAdmissionFor: {
+        value: async () => ({ eligible: false, reason: "wrong_node" }),
+      },
+    }) as typeof venue.backend;
+    await refusedWithNothingWritten(() => cash(correction.id, "10.00", randomUUID(), takenOver), {
+      code: "sale.correction_not_admitted",
+      params: { reason: "wrong_node" },
+    });
+    await refusedWithNothingWritten(
+      () => fileNow(correction.id, MENU_FIFTEEN, { backend: takenOver }),
+      { code: "sale.correction_not_admitted", params: { reason: "wrong_node" } },
+    );
+    expect(
+      await inTx(venue, (tx) => readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id)),
+    ).toMatchObject({ state: "open", moneyBack: "15.00", legs: [{ id: refunds[0]!.id }] });
+    const was = counts();
+
+    const ended = await close(correction.id, { backend: takenOver });
+
+    expect(ended).toMatchObject({
+      state: "closed",
+      moneyBack: "15.00",
+      correctiveSaleId: null,
+      legs: [{ id: refunds[0]!.id, state: "completed", appliedAmount: "15.00" }],
+    });
+    expect(counts()).toEqual(was);
+    expect(await correctionRow(correction.id)).toMatchObject({
+      state: "closed",
+      endedBy: managerId,
     });
   });
 });

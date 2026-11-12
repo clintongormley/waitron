@@ -678,6 +678,13 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     routes: ["POST /api/transactions/:saleId/corrections"],
   },
   {
+    proof: "matching request (source)",
+    actions: [],
+    basis:
+      'File now files the corrective for money its refunds already gave back, and Close ends a correction; neither moves money nor opens the drawer. invoice-correction-api.ts; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
+    routes: ["POST /api/invoice-corrections/:id/file", "POST /api/invoice-corrections/:id/close"],
+  },
+  {
     proof: "matching request (tested)",
     actions: [],
     basis:
