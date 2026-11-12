@@ -13,7 +13,6 @@ Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de 
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
 Elige **Todas las categorías** para ver todos los módulos opcionales. Los otros cinco módulos opcionales aún no se pueden habilitar ni deshabilitar.
 
-
 ## Activar o desactivar un proveedor de tarjetas {#provider-state}
 
 Como administrador, elige **Desactivar** en el menú de la fila del proveedor y confirma.
