@@ -394,7 +394,7 @@ export class OrderDetailDialog extends LitElement {
                 <section>
                   <h3>${t("orders.detail.lines")}</h3>
                   <ul>
-                    ${detail.lines.map((line) => html`<li>${staffPresentationName(line)} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill("orders.detail.was", { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill("orders.detail.served_by", { name: line.creditedTo })}`}${line.sentAt === null ? nothing : this.#nutrition(line.sentNutrition)}</li>`)}
+                    ${detail.lines.map((line) => html`<li>${staffPresentationName(line)} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill("orders.detail.was", { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill("orders.detail.served_by", { name: line.creditedTo })}`}${line.sent ? this.#nutrition(line.sentNutrition) : nothing}</li>`)}
                   </ul>
                 </section>
                 <section>

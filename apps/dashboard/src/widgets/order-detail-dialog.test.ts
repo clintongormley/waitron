@@ -42,7 +42,7 @@ const detail: OrderDetailDto = {
       listUnitPrice: "12.00",
       creditedTo: "Ana",
       sentNutrition: null,
-      sentAt: "2026-09-30T12:00:00Z",
+      sent: true,
     },
   ],
   invoices: [
@@ -200,7 +200,7 @@ it("keeps the historical declaration block off an unsent line", async () => {
   const api = {
     getOrder: vi
       .fn()
-      .mockResolvedValue({ ...detail, lines: [{ ...detail.lines[0]!, sentAt: null }] }),
+      .mockResolvedValue({ ...detail, lines: [{ ...detail.lines[0]!, sent: false }] }),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {

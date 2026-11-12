@@ -924,7 +924,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
       venue,
       async (tx) => (await readOrderDetail(tx, billId, "all", false)).lines,
     );
-    expect(lines[0]!.sentAt).toEqual(expect.any(String));
+    expect(lines.map((line) => line.sent)).toEqual([true, true, true, true, true, true]);
     expect(lines.map((line) => [line.name, String(line.quantity), line.sentNutrition])).toEqual([
       ["Burger", "2.000", milk],
       ["Cheese", "2.000", cheese],
