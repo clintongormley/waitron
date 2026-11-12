@@ -11,7 +11,7 @@ afterEach(() => {
   setLocale(locale);
 });
 describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme) => {
-  it("keeps checking, unconfirmed, failed and no-permission messages accessible", async () => {
+  it("keeps initial checking, unconfirmed and failed states accessible", async () => {
     let answer!: (value: unknown) => void;
     const list = vi
       .fn()
@@ -25,7 +25,6 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
     const { el, host } = await mountWidget<HandoverReportWarning>(
       "dashboard-handover-report-warning",
       {
-        canViewReports: true,
         api: { listHandoverIntervals: list } as unknown as DashboardApi,
       },
       theme,
@@ -49,9 +48,6 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
     await expectNoA11yViolations(host);
     await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(false));
-    await expectNoA11yViolations(host);
-    el.canViewReports = false;
-    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

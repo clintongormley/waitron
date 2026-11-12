@@ -31,32 +31,31 @@ export class HandoverReportWarning extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
-  @property({ attribute: false }) canViewReports = false;
-  @state() private status: "loading" | "unconfirmed" | "empty" | "unavailable" = "loading";
+  @state() private status: "unconfirmed" | "empty" | "unavailable" = "empty";
+  @state() private loading = false;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if ((changed.has("api") || changed.has("canViewReports")) && this.canViewReports) {
+    if (changed.has("api")) {
       void this.#load();
     }
   }
   async #load(): Promise<void> {
-    this.status = "loading";
+    this.loading = true;
     try {
       const { intervals } = await this.api.listHandoverIntervals();
       this.status = intervals.length === 0 ? "empty" : "unconfirmed";
     } catch {
       this.status = "unavailable";
+    } finally {
+      this.loading = false;
     }
   }
   override render() {
-    if (!this.canViewReports) {
-      return html`<div class="notice" role="status">${t("handover_warning.permission")}</div>`;
-    }
     if (this.status === "empty") return nothing;
     return html`<div class="notice" role="status">
       <span>${t(`handover_warning.${this.status}`)}</span>
       ${this.status === "unconfirmed" ? html`<a href="/manage/handover-intervals">${t("handover_warning.check")}</a>` : nothing}
-      <wt-button .disabled=${this.status === "loading"} @click=${() => void this.#load()}
+      <wt-button .disabled=${this.loading} @click=${() => void this.#load()}
         >${t("handover_warning.refresh")}</wt-button
       >
     </div>`;

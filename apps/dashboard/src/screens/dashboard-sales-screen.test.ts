@@ -1117,16 +1117,12 @@ describe("dashboard-sales-screen accountant workbook", () => {
   });
 });
 
-it("places handover status before the sales and cash-up reports with the report-view permission", async () => {
+it("places handover status before the sales and cash-up reports", async () => {
   const api = stubApi();
   const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
-  const notice = el.shadowRoot!.querySelector<
-    HTMLElement & { api: DashboardApi; canViewReports: boolean }
-  >("dashboard-handover-report-warning");
+  const notice = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(
+    "dashboard-handover-report-warning",
+  );
   expect(notice).not.toBeNull();
   expect(notice!.api).toBe(api);
-  expect(notice!.canViewReports).toBe(false);
-  Object.assign(el, { canViewReports: true });
-  await el.updateComplete;
-  expect(notice!.canViewReports).toBe(true);
 });

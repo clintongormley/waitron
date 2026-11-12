@@ -2086,39 +2086,28 @@ describe("dashboard-app", () => {
     expect(catalogue(el)).toBeNull();
   });
 
-  it.each([true, false])(
-    "navigates to sales and maps report-view permission (%s)",
-    async (canViewReports) => {
-      const api = stubApi({
-        listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, permissions: canViewReports ? ["report.view"] : [] }),
-      });
-      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
-      await flush(el);
-      expect(overview(el)).toBeTruthy();
-      expect(navOverview(el)).toBeTruthy();
-      expect(navSales(el)).toBeTruthy();
+  it("navigates to the sales screen and back to overview", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(overview(el)).toBeTruthy();
+    expect(navOverview(el)).toBeTruthy();
+    expect(navSales(el)).toBeTruthy();
 
-      navSales(el)!.click();
-      await flush(el);
-      expect(sales(el)).toBeTruthy();
-      expect(overview(el)).toBeNull();
-      expect(mountedScreens(el)).toEqual(["dashboard-sales-screen"]);
-      expect((sales(el) as HTMLElement & { canViewReports: boolean }).canViewReports).toBe(
-        canViewReports,
-      );
-      expect(countH1(el)).toBe(1);
+    navSales(el)!.click();
+    await flush(el);
+    expect(sales(el)).toBeTruthy();
+    expect(overview(el)).toBeNull();
+    expect(mountedScreens(el)).toEqual(["dashboard-sales-screen"]);
+    expect(countH1(el)).toBe(1);
 
-      navOverview(el)!.click();
-      await flush(el);
-      expect(overview(el)).toBeTruthy();
-      expect(sales(el)).toBeNull();
-      expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
-      expect(countH1(el)).toBe(1);
-    },
-  );
+    navOverview(el)!.click();
+    await flush(el);
+    expect(overview(el)).toBeTruthy();
+    expect(sales(el)).toBeNull();
+    expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
+    expect(countH1(el)).toBe(1);
+  });
 
   it("reaches rota planning through Calendar without a second Rota entry in Team", async () => {
     const request: DashboardRequest = async (path) =>
@@ -3853,37 +3842,26 @@ describe("dashboard-app", () => {
     expect(location.pathname).toBe("/manage/devices");
   });
 
-  it.each([true, false])(
-    "offers VAT export and maps report-view permission (%s)",
-    async (canViewReports) => {
-      const api = stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({
-            ...meResponse,
-            permissions: canViewReports ? ["report.export", "report.view"] : ["report.export"],
-          }),
-      });
-      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
-      await flush(el);
-      const item = navItem(el, "vat-return");
-      expect(item!.textContent!.trim()).toBe(t("nav.vat_return"));
-      const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
-      const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map(
-        (b) => b.dataset.test,
-      );
-      expect(order.indexOf("nav-vat-return")).toBe(order.indexOf("nav-sales") + 1);
+  it("offers the VAT return under Sales to a session holding report.export, and opens its page", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["report.export"] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const item = navItem(el, "vat-return");
+    expect(item!.textContent!.trim()).toBe(t("nav.vat_return"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order.indexOf("nav-vat-return")).toBe(order.indexOf("nav-sales") + 1);
 
-      item!.click();
-      await flush(el);
-      const face = el.shadowRoot!.querySelector<
-        HTMLElement & { api?: DashboardApi; canViewReports: boolean }
-      >("dashboard-vat-return-screen");
-      expect(face!.api).toBe(api);
-      expect(face!.canViewReports).toBe(canViewReports);
-      expect(location.pathname).toBe("/manage/vat-return");
-    },
-  );
+    item!.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-vat-return-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/vat-return");
+  });
 
   it.each([
     ["supervisor", ["report.view"]],

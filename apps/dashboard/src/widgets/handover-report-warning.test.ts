@@ -29,7 +29,6 @@ it.each([
   async (language, words) => {
     setLocale(language);
     const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
-      canViewReports: true,
       api: {
         listHandoverIntervals: async () => ({ intervals: [interval], timeZone: "Europe/Madrid" }),
       } as unknown as DashboardApi,
@@ -48,47 +47,37 @@ it.each([
   },
 );
 
-it("keeps a pending check, failure, retry and empty result distinct", async () => {
+it("hides the first check and retains warning or failure while Refresh runs", async () => {
   setLocale("en-GB");
   let answer!: (value: unknown) => void;
-  const list = vi
-    .fn()
-    .mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          answer = resolve;
-        }),
-    )
-    .mockRejectedValueOnce({ code: "report.failed" })
-    .mockResolvedValue({ intervals: [], timeZone: "Europe/Madrid" });
+  let refuse!: (reason: unknown) => void;
+  const list = vi.fn(
+    () =>
+      new Promise((resolve, reject) => {
+        answer = resolve;
+        refuse = reject;
+      }),
+  );
   const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
-    canViewReports: true,
     api: { listHandoverIntervals: list } as unknown as DashboardApi,
   });
   expect(el.shadowRoot).not.toBeNull();
-  expect(el.shadowRoot?.textContent).toContain(en["handover_warning.loading"]);
+  expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
   answer({ intervals: [interval], timeZone: "Europe/Madrid" });
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector("a")).toBeTruthy());
   await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
+  expect(el.shadowRoot!.textContent).toContain(en["handover_warning.unconfirmed"]);
+  expect(el.shadowRoot!.querySelector("a")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
+  refuse({ code: "report.failed" });
   await vi.waitFor(() =>
     expect(el.shadowRoot?.textContent).toContain(en["handover_warning.unavailable"]),
   );
   expect(el.shadowRoot!.querySelector("a")).toBeNull();
   await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
+  expect(el.shadowRoot!.textContent).toContain(en["handover_warning.unavailable"]);
+  expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
+  answer({ intervals: [], timeZone: "Europe/Madrid" });
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector("[role=status]")).toBeNull());
   expect(el.shadowRoot!.textContent!.trim()).toBe("");
-});
-
-it("explains the missing report-view permission without requesting or linking private intervals", async () => {
-  setLocale("en-GB");
-  const list = vi.fn().mockResolvedValue({ intervals: [interval], timeZone: "Europe/Madrid" });
-  const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
-    canViewReports: false,
-    api: { listHandoverIntervals: list } as unknown as DashboardApi,
-  });
-  expect(el.shadowRoot).not.toBeNull();
-  expect(el.shadowRoot?.textContent).toContain(en["handover_warning.permission"]);
-  expect(el.shadowRoot!.querySelector("a")).toBeNull();
-  expect(el.shadowRoot!.querySelector("wt-button")).toBeNull();
-  expect(list).not.toHaveBeenCalled();
 });

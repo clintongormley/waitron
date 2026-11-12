@@ -271,16 +271,12 @@ describe("dashboard-vat-return-screen", () => {
   });
 });
 
-it("places the handover status beside VAT controls with the report-view permission", async () => {
+it("places the handover status beside VAT controls", async () => {
   const api = stubApi();
   const el = await mount(api);
-  const notice = el.shadowRoot!.querySelector<
-    HTMLElement & { api: DashboardApi; canViewReports: boolean }
-  >("dashboard-handover-report-warning");
+  const notice = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(
+    "dashboard-handover-report-warning",
+  );
   expect(notice).not.toBeNull();
   expect(notice!.api).toBe(api);
-  expect(notice!.canViewReports).toBe(false);
-  Object.assign(el, { canViewReports: true });
-  await el.updateComplete;
-  expect(notice!.canViewReports).toBe(true);
 });
