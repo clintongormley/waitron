@@ -22,6 +22,7 @@ packages=(
   --package='docker-ce-cli=5:29.9.3-1~debian.13~trixie'
   --package='containerd.io=2.4.2-3~debian.13~trixie'
   --package='docker-compose-plugin=5.7.0-1~debian.13~trixie'
+  --package='docker-buildx-plugin=0.39.0-1~debian.13~trixie'
 )
 cd "$output"
 timeout -k 10 600 mkosi --directory="$repo/deploy/box" --sandbox-tree="$output/sandbox" \

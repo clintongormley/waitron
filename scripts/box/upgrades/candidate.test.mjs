@@ -151,3 +151,26 @@ it.each([
   expect(f.calls.some((args) => args.includes("sale"))).toBe(false);
   expect(result).toMatchObject({ message: `upgrade agent ${reason}` });
 });
+
+it.each(["No such object", "error: no such object: check-agent"])(
+  "ignores an already removed check container (%s)",
+  async (stderr) => {
+    await expect(
+      removeUpgradeCheckContainers("/box.upgrades/attempt", async () => {
+        throw Object.assign(new Error(stderr), { code: 1, stderr });
+      }),
+    ).resolves.toBeUndefined();
+  },
+);
+
+it("finishes successful checks when Docker already removed their containers", async () => {
+  const f = await fixture();
+  const run = (file, args) => {
+    if (args[0] === "rm")
+      throw Object.assign(new Error("missing"), { code: 1, stderr: "error: no such container" });
+    return f.run(file, args);
+  };
+  await expect(
+    checkUpgradeCandidate({ boxDirectory: f.root, directory: f.directory, run }),
+  ).resolves.toHaveLength(2);
+});

@@ -92,9 +92,9 @@ it("enrols a real till and records a primary cash sale on the copy, continuing i
     expect(result).toMatchObject({ total: "1.00", fiscalBackend: "verifactu", fiscalRecords: 2 });
     expect(result.saleId).toMatch(/^[0-9a-f-]{36}$/);
     expect(source.db.all(sql`select count(*) as total from sales`)).toEqual([{ total: 1 }]);
-    expect(source.db.all(sql`select count(*) as total from registros_facturacion`)).toEqual([
-      { total: 1 },
-    ]);
+    expect(
+      await withTransaction(source.db, (tx) => venue.backend.checkIntegrity(tx, venue.cfg.nodeId)),
+    ).toMatchObject({ ok: true, checked: 1 });
   } finally {
     await f.close();
   }

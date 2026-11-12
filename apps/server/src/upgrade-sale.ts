@@ -91,12 +91,10 @@ async function prepareSale(config: ServerConfig) {
         departmentId: department.id,
         orderStart: "counter",
       });
-      await tx
-        .insert(departmentReceipts)
-        .values({
-          departmentId: department.id,
-          receipt: { operationDescription: location.operationDescription },
-        });
+      await tx.insert(departmentReceipts).values({
+        departmentId: department.id,
+        receipt: { operationDescription: location.operationDescription },
+      });
       const period = await saveMenuPeriod(tx, department.id, {
         name,
         menuId: menu.id,
@@ -150,7 +148,7 @@ export async function checkUpgradeSale(
   const server = await startServerOrFirstSetupResolution(env, env, {
     startServer: (effective, base) => startServer(effective, base, { boxHost: clock }),
   });
-  const base = `https://127.0.0.1:${config.httpPort}`;
+  const base = new URL(`https://127.0.0.1:${config.httpPort}`).origin;
   const cookies = new Map<string, string>();
   const call = <T = unknown>(path: string, body?: unknown, manager = false): Promise<T> =>
     new Promise((done, reject) => {

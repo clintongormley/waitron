@@ -29,7 +29,7 @@ export async function removeUpgradeCheckContainers(directory, run = command) {
         ])
       ).stdout.trim();
     } catch (error) {
-      if (error.code === 1 && /No such (object|container)/.test(error.stderr)) continue;
+      if (error.code === 1 && /no such (object|container)/i.test(error.stderr)) continue;
       throw error;
     }
     if (label !== directory) throw new Error("upgrade check container belongs to another attempt");
@@ -189,7 +189,7 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       try {
         await run("docker", ["rm", "--force", name]);
       } catch (error) {
-        if (!(error.code === 1 && /No such container/.test(error.stderr))) cleanups.push(error);
+        if (!(error.code === 1 && /no such container/i.test(error.stderr))) cleanups.push(error);
       }
     }
     try {
