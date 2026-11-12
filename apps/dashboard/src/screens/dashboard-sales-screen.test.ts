@@ -1117,12 +1117,18 @@ describe("dashboard-sales-screen accountant workbook", () => {
   });
 });
 
-it("places handover status before the sales and cash-up reports", async () => {
-  const api = stubApi();
+it("places handover status before the sales and cash-up reports without loading full inventory", async () => {
+  const fullRead = vi.fn().mockRejectedValue(new Error("A report must not load inventory receipt"));
+  const api = Object.assign(stubApi(), {
+    getHandoverWarning: async () => ({ hasEmergencyHandover: true }),
+    listHandoverIntervals: fullRead,
+  });
   const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
   const notice = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(
     "dashboard-handover-report-warning",
   );
   expect(notice).not.toBeNull();
   expect(notice!.api).toBe(api);
+  await vi.waitFor(() => expect(notice!.shadowRoot!.querySelector("a")).not.toBeNull());
+  expect(fullRead).not.toHaveBeenCalled();
 });

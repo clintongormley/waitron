@@ -4517,6 +4517,15 @@ export class DashboardApi {
     });
   }
 
+  getHandoverWarning(): Promise<{ hasEmergencyHandover: boolean }> {
+    return this.#request<{ hasEmergencyHandover: boolean }>(
+      "/management-api/reports/handover-warning",
+      "GET",
+      undefined,
+      { passive: true },
+    );
+  }
+
   listHandoverIntervals(): Promise<HandoverIntervals> {
     return this.#request<HandoverIntervals>(
       "/management-api/reports/handover-intervals",

@@ -42,8 +42,8 @@ export class HandoverReportWarning extends LitElement {
   async #load(): Promise<void> {
     this.loading = true;
     try {
-      const { intervals } = await this.api.listHandoverIntervals();
-      this.status = intervals.length === 0 ? "empty" : "unconfirmed";
+      const { hasEmergencyHandover } = await this.api.getHandoverWarning();
+      this.status = hasEmergencyHandover ? "unconfirmed" : "empty";
     } catch {
       this.status = "unavailable";
     } finally {

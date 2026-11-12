@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, handoverReturnBatches, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
@@ -13,6 +13,7 @@ import { seedSale, seedVenueWithSeries } from "@waitron/reporting/test/fixtures.
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { returnDigest } from "./return-records.js";
+import * as intervalReads from "./handover-intervals.js";
 import { mountReportApi } from "./report-api.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -166,18 +167,47 @@ it("refuses signed-out readers and staff without report.view", async () => {
 it("reads receipt confirmation from venue facts without needing a local operation", async () => {
   const operationId = await activation("emergency", null);
   const digest = returnDigest({ module: "sample", payload: "received" });
-  await suite.db
-    .insert(handoverReturnBatches)
-    .values({
-      operationId,
-      inventory: returnDigest([digest]),
-      batchIndex: 0,
-      batchCount: 1,
-      batchDigest: digest,
-    });
+  await suite.db.insert(handoverReturnBatches).values({
+    operationId,
+    inventory: returnDigest([digest]),
+    batchIndex: 0,
+    batchCount: 1,
+    batchDigest: digest,
+  });
   const response = await app.request(path, { headers: { cookie } });
   expect(response.status).toBe(200);
   expect((await response.json()).intervals).toMatchObject([
     { operationId, inventoryReceived: true },
   ]);
+});
+
+it("answers only whether an emergency takeover exists without running the full interval read", async () => {
+  const full = vi
+    .spyOn(intervalReads, "readHandoverIntervals")
+    .mockRejectedValue(new Error("A report warning must not compute inventory receipt"));
+  try {
+    const read = () =>
+      app.request("/management-api/reports/handover-warning", { headers: { cookie } });
+    expect(await (await read()).json()).toEqual({ hasEmergencyHandover: false });
+    await activation("controlled", null);
+    expect(await (await read()).json()).toEqual({ hasEmergencyHandover: false });
+    await activation("emergency", null);
+    const response = await read();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ hasEmergencyHandover: true });
+    expect(full).not.toHaveBeenCalled();
+  } finally {
+    full.mockRestore();
+  }
+});
+
+it("gates the cheap warning read with report.view", async () => {
+  const path = "/management-api/reports/handover-warning";
+  const signedOut = await app.request(path);
+  expect(signedOut.status).toBe(401);
+  expect((await signedOut.json()).error.code).toBe("management_session.required");
+  const staff = await app.request(path, { headers: { cookie: staffCookie } });
+  expect(staff.status).toBe(403);
+  expect((await staff.json()).error.code).toBe("authorization.not_permitted");
 });

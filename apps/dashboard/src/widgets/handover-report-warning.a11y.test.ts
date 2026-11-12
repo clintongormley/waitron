@@ -24,25 +24,11 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
     const { el, host } = await mountWidget<HandoverReportWarning>(
       "dashboard-handover-report-warning",
       {
-        api: { listHandoverIntervals: list } as unknown as DashboardApi,
+        api: { getHandoverWarning: list } as unknown as DashboardApi,
       },
       theme,
     );
-    answer({
-      intervals: [
-        {
-          operationId: "takeover",
-          inventoryReceived: true,
-          sourceName: "Old box",
-          destinationName: "New box",
-          lastChangeAtMs: null,
-          declaredAtMs: 1794304800000,
-          activatedAt: "2026-11-10T10:01:00Z",
-          reason: "Power failure",
-        },
-      ],
-      timeZone: "Europe/Madrid",
-    });
+    answer({ hasEmergencyHandover: true });
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("a")).not.toBeNull());
     await expectNoA11yViolations(host);
     await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);

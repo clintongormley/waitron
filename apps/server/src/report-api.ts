@@ -14,6 +14,7 @@ import {
 } from "@waitron/shared";
 import {
   devices,
+  handoverActivations,
   printers,
   readHistoryNodes,
   readTenant,
@@ -221,6 +222,21 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   };
 
   const activePrinters = () => eq(printers.active, true);
+
+  app.get("/management-api/reports/handover-warning", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const [activation] = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
+        tx
+          .select({ operationId: handoverActivations.operationId })
+          .from(handoverActivations)
+          .where(eq(handoverActivations.scenario, "emergency"))
+          .limit(1),
+      );
+      c.header("Cache-Control", "no-store");
+      return c.json({ hasEmergencyHandover: activation !== undefined });
+    }),
+  );
 
   app.get("/management-api/reports/handover-intervals", (c) =>
     run(c, log, async () => {
