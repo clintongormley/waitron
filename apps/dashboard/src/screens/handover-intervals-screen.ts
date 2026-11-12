@@ -99,6 +99,14 @@ export class HandoverIntervalsScreen extends LitElement {
         cell: (row) => this.#time(row.activatedAt),
       },
       {
+        key: "receipt",
+        label: t("handover_intervals.receipt"),
+        cell: (row) =>
+          html`<span part="value"
+            >${t(row.inventoryReceived ? "handover_intervals.received" : "handover_intervals.not_received")}</span
+          >`,
+      },
+      {
         key: "reason",
         label: t("handover_intervals.reason"),
         cell: (row) => html`<span part="value">${row.reason}</span>`,

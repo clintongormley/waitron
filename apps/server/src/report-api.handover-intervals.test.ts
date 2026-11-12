@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, nodes, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, handoverReturnBatches, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { insertHandoverActivationTx, signEnvelope } from "@waitron/handover";
@@ -12,6 +12,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedSale, seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { returnDigest } from "./return-records.js";
 import { mountReportApi } from "./report-api.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -107,6 +108,7 @@ it("lists committed emergency history with current box names, newest first, with
     intervals: [
       {
         operationId: newer,
+        inventoryReceived: false,
         sourceName: "Old kitchen box",
         destinationName: "New counter box",
         lastChangeAtMs: Date.parse("2026-11-10T09:50:00Z"),
@@ -116,6 +118,7 @@ it("lists committed emergency history with current box names, newest first, with
       },
       {
         operationId: older,
+        inventoryReceived: false,
         sourceName: "Old kitchen box",
         destinationName: "New counter box",
         lastChangeAtMs: 123,
@@ -140,6 +143,7 @@ it("does not fill unknown copy activity from recorded sales", async () => {
   expect((await res.json()).intervals).toEqual([
     {
       operationId,
+      inventoryReceived: false,
       sourceName: "Old kitchen box",
       destinationName: "New counter box",
       lastChangeAtMs: null,
@@ -157,4 +161,23 @@ it("refuses signed-out readers and staff without report.view", async () => {
   const staff = await app.request(path, { headers: { cookie: staffCookie } });
   expect(staff.status).toBe(403);
   expect((await staff.json()).error.code).toBe("authorization.not_permitted");
+});
+
+it("reads receipt confirmation from venue facts without needing a local operation", async () => {
+  const operationId = await activation("emergency", null);
+  const digest = returnDigest({ module: "sample", payload: "received" });
+  await suite.db
+    .insert(handoverReturnBatches)
+    .values({
+      operationId,
+      inventory: returnDigest([digest]),
+      batchIndex: 0,
+      batchCount: 1,
+      batchDigest: digest,
+    });
+  const response = await app.request(path, { headers: { cookie } });
+  expect(response.status).toBe(200);
+  expect((await response.json()).intervals).toMatchObject([
+    { operationId, inventoryReceived: true },
+  ]);
 });

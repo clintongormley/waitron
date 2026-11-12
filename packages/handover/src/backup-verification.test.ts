@@ -1,6 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, nodes, type Database, handoverActivations } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  nodes,
+  type Database,
+  handoverActivations,
+  handoverReturnBatches,
+} from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { validateBackupVerificationContribution } from "@waitron/module";
@@ -86,11 +92,11 @@ async function run(
   }
 }
 
-it("declares exactly its real table, as one that never changes, and no private inputs or restore effects", () => {
+it("declares its copied tables and only activation as immutable, without private inputs or restore effects", () => {
   const owner = validateBackupVerificationContribution(api.HANDOVER_BACKUP_VERIFICATION);
   expect(owner.data).toEqual({
     kind: "custom",
-    tables: ["handover_activations"],
+    tables: ["handover_activations", "handover_return_batches"],
     immutableTables: ["handover_activations"],
     checks: ["data"],
   });
@@ -142,3 +148,23 @@ it.each([0, null])("refuses restored rows when the source was absent (schema %s)
 it("refuses an applied source schema whose table is absent", async () => {
   expect(await run({ absentBefore: true })).toEqual(invalid);
 });
+
+it.each(["missing", "changed", "same"])(
+  "checks mutable return facts against the captured copy (%s)",
+  async (kind) => {
+    await activate(restored.db);
+    const row = {
+      operationId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      inventory: "a".repeat(64),
+      batchIndex: 0,
+      batchCount: 1,
+      batchDigest: "b".repeat(64),
+    };
+    await original.db.insert(handoverReturnBatches).values(row);
+    if (kind !== "missing")
+      await restored.db
+        .insert(handoverReturnBatches)
+        .values({ ...row, batchDigest: kind === "changed" ? "c".repeat(64) : row.batchDigest });
+    expect(await run()).toEqual(kind === "same" ? passed : invalid);
+  },
+);

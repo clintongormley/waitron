@@ -20,6 +20,7 @@ describe.each(["light", "dark"] as const)("handover intervals (%s)", (theme) => 
         intervals: [
           {
             operationId: "op",
+            inventoryReceived: true,
             sourceName: "Old box",
             destinationName: "New box",
             lastChangeAtMs: null,

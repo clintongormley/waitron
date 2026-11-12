@@ -13,6 +13,7 @@ afterEach(() => {
 });
 const interval: HandoverInterval = {
   operationId: "takeover",
+  inventoryReceived: true,
   sourceName: "Old box",
   destinationName: "New box",
   lastChangeAtMs: null,
@@ -25,7 +26,7 @@ it.each([
   ["en-GB", en],
   ["es-ES", es],
 ] as const)(
-  "warns about the venue's unconfirmed return without dating the displayed report (%s)",
+  "retains the emergency warning after inventory receipt without dating the displayed report (%s)",
   async (language, words) => {
     setLocale(language);
     const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {

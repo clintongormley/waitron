@@ -32,6 +32,7 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
       intervals: [
         {
           operationId: "takeover",
+          inventoryReceived: true,
           sourceName: "Old box",
           destinationName: "New box",
           lastChangeAtMs: null,

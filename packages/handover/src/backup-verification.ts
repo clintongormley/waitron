@@ -6,7 +6,7 @@ const tables = [...HANDOVER_TABLES];
 export const HANDOVER_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
-  data: { kind: "custom", tables, immutableTables: tables, checks: ["data"] },
+  data: { kind: "custom", tables, immutableTables: ["handover_activations"], checks: ["data"] },
   secrets: [],
   entries: [],
   effects: [],
@@ -28,7 +28,11 @@ export const HANDOVER_BACKUP_VERIFICATION: BackupVerificationContribution = {
     const same = await compareBackupTables({
       before: context.before,
       after: context.after,
-      policies: tables.map((table) => ({ table, immutable: true, addedColumns: {} })),
+      policies: tables.map((table) => ({
+        table,
+        immutable: table === "handover_activations",
+        addedColumns: {},
+      })),
     });
     const status = same ? "passed" : "invalid";
     return { status, checks: [{ code: "data", status }] };

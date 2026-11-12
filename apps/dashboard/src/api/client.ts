@@ -16,6 +16,7 @@ import type { FreshSignInGate } from "./fresh-sign-in.js";
 
 export interface HandoverInterval {
   operationId: string;
+  inventoryReceived: boolean;
   sourceName: string;
   destinationName: string;
   lastChangeAtMs: number | null;

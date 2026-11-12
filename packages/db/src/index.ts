@@ -364,7 +364,7 @@ export { nextStationColour } from "./station-colour.js";
 // same objects and its importers do not change.
 export { tenantCredentials } from "./schema/index.js";
 export { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/index.js";
-export { handoverActivations, handoverScenario } from "./schema/index.js";
+export { handoverActivations, handoverScenario, handoverReturnBatches } from "./schema/index.js";
 export {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,

@@ -112,9 +112,14 @@ held no dated sale or order; it does not mean that no money is missing.
 
 Sales, cash-up, category reports and VAT show a handover warning with a link to this list. Check
 the handover dates before deciding whether the figures cover the period you need. Use **Refresh
-handover status** to check again. Completeness and amounts stay unconfirmed here, even after a
-complete return. If the old
-box returns, check the return status on its page before deciding whether to reset it.
+handover status** to check again. The warning stays after an inventory is received.
+
+Use **Refresh intervals** to check the inventory receipt. **Inventory receipt confirmed** means
+the new box accounted for all batches in an inventory advertised by the old box. It does not
+confirm missing activity or amounts, or reconstruct cash-ups. An unconfirmed receipt needs a
+complete return; if the old box already stopped sending, restart it while it remains restricted
+to resend. If the old box returns, check the return status on its page before deciding whether
+to reset it.
 
 ## When a box is waiting for another box {#waiting}
 

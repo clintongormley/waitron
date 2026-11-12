@@ -17,3 +17,5 @@
 **Later part, separately planned.** Durable receiver completion is unavailable here. Its short plan must settle receiver-owned takeover binding and plain venue-transaction facts; never read `activity_log` for product decisions or store self-signed receipts in `node.db`. That part will decide when warnings clear. Acknowledgement, assignment, resolution, held-record outcomes (A1342), archive/reset and physical/Cloud qualification remain outside PR 1. No wire, storage, server behavior, operation state, fencing, schema, fiscal seat, hash, invoice allocation or filing change.
 
 **Expected size.** Production +150/−5; tests +210/−0; test support 0/0; docs +35/−10; generated 0/0, total 410 added-plus-removed lines. Before 615 changed lines or a material scope change, ask the watcher for an outside opinion; estimates are not a ceiling. The correction removes the initial proposal’s wire/storage/completion machinery entirely.
+
+**2026-11-12 receiver completion:** [The receiver completion slice](2026-11-12-a1018-return-completion.md) adds durable inventory receipt status. Its general report reminder remains after receipt; it does not establish financial completeness.
