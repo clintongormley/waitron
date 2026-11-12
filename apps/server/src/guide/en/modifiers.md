@@ -65,8 +65,9 @@ active extras list with no products on it, or an active options list with no ava
 tells you to add one (or, for options, add or enable one), or to disable this list.
 
 A **Default** seeds a new selection once. Changing it does not change an order you already started.
-Switching the default option off, or deleting it, makes the first available option the default
-instead. An extras entry is either preselected or not — there is no starting quantity to set.
+While your preferred option is sold out, the first available option is preselected instead.
+Put the preferred option back on sale to use it again. Deleting it leaves the first available
+option preselected. An extras entry is either preselected or not; there is no starting quantity to set.
 
 ## Attach a list to a product {#attach}
 

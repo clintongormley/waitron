@@ -1,4 +1,4 @@
-import type { ChangeAvailability } from "./product-info.js";
+import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { orderableMenus } from "../menu-filter.js";
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
@@ -384,6 +384,7 @@ export class TillMenuBrowser extends LitElement {
   /** The menu as a zone-offers body serves it: its structure and its Device Home Page. Nothing
    * renders until it is set. */
   @property({ attribute: false }) changeAvailability?: ChangeAvailability;
+  @property({ attribute: false }) changeOptionAvailability?: ChangeOptionAvailability;
   @property({ attribute: false }) menu?: TillZoneMenu;
 
   /** This menu's offers as till products. */
@@ -914,6 +915,7 @@ export class TillMenuBrowser extends LitElement {
           ? html`<till-product-info
               .product=${this.infoProduct}
               .changeAvailability=${this.changeAvailability}
+              .changeOptionAvailability=${this.changeOptionAvailability}
               @close-info=${(event: Event) => {
                 event.stopPropagation();
                 this.infoProduct = undefined;

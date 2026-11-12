@@ -1139,11 +1139,11 @@ What the design has to settle:
 
 ## A1516. Mark a dish sold out from the till
 
-**Go-live (owner, 2026-11-11). [Delivery 2](../superpowers/plans/2026-11-11-a1516-till-sold-out.md).**
-Extend the till information controls to extras and option choices. Preserve stored defaults and the
-last-choice refusal. The owner choices recorded by the watcher at 21:58 still apply: anyone signed
-in on a device that takes orders, no new permission, and manual restoration, never a next-day reset.
-A running-down quantity (“only 5 left”) stays parked.
+**Go-live.** The remaining sold-out work is A1516-3: a dashboard option list opened before a till
+change must not put that choice back on sale when saved; and A1516-4: portions already on a bill
+can still be sent after sold-out, with only new additions refused (owner, 2026-11-12 02:00,
+“Yes, stop new only”, recorded by the watcher).
+
 
 ## A1517. Allergen points to revisit before go-live
 
@@ -1162,6 +1162,12 @@ is built by the proposal. It distinguishes the narrower measured cases from thes
    a later edit changes what staff see on an earlier order.
 
 ## Decisions and deliberate limits
+
+- **Till sold-out choices (A1516, owner 2026-11-11, “All four as recommended”).** Anyone signed in
+  on a take-orders device can stop and restore availability, with no new permission. Restoration
+  is manual, never a next-day reset. A running-down quantity (“only 5 left”) stays parked.
+  [Delivery 2](../superpowers/plans/2026-11-12-a1516-modifier-availability.md) keeps stored defaults
+  and the stored active list's last-choice refusal; older published versions may contain fewer choices.
 
 - **Allergen choices (A1517, owner 2026-11-11, “As recommended”).** Hide unchecked dishes while
   excluding allergens, then extend filtering to extras/options; print live declarations on every

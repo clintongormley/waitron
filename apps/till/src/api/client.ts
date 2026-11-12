@@ -2941,6 +2941,19 @@ export class TillApi {
     );
   }
 
+  setOptionAvailability(
+    zoneId: string,
+    listId: string,
+    labelId: string,
+    available: boolean,
+  ): Promise<void> {
+    return this.#request<void>(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/options/${encodeURIComponent(listId)}/labels/${encodeURIComponent(labelId)}/availability`,
+      "PUT",
+      { available },
+    );
+  }
+
   menuState(zoneId: string, options: ReadOptions = {}): Promise<MenuStateAnswer> {
     return this.#request<MenuStateAnswer>(
       `/api/menu-state?zoneId=${encodeURIComponent(zoneId)}`,

@@ -669,6 +669,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This dish or size has been archived. Close this window and choose another dish or size.",
     es: "Este plato o tamaño se ha archivado. Cierra esta ventana y elige otro plato o tamaño.",
   },
+  "options.not_found": {
+    en: "This choice is no longer offered here. Close this window and choose another dish.",
+    es: "Esta opción ya no se ofrece aquí. Cierra esta ventana y elige otro plato.",
+  },
   "product.not_found": {
     en: "This dish or size is no longer offered here. Close this window and choose another dish or size.",
     es: "Este plato o tamaño ya no se ofrece aquí. Cierra esta ventana y elige otro plato o tamaño.",

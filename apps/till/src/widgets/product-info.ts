@@ -11,6 +11,7 @@ import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
 import { dietLabel, nutritionDietLabels } from "./nutrition-icons.js";
+import { takesExtras } from "../state/order-line.js";
 
 export type ChangeAvailability = (productId: string, available: boolean) => Promise<void>;
 export type ChangeOptionAvailability = (
@@ -108,6 +109,9 @@ export class TillProductInfo extends LitElement {
     const allergens = product.allergens;
     const description = descriptionFor(product.description ?? {}, "").trim();
     const labels = nutritionDietLabels(product.diet, product.dietaryDeclarations);
+    const extrasApply =
+      takesExtras(product) ||
+      product.variants?.some((variant) => variant.available && takesExtras(variant));
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -152,18 +156,19 @@ export class TillProductInfo extends LitElement {
                 ${this.#availability(product.productId, productName(product), product.available !== false)}
                 ${product.variants?.map((variant) => this.#availability(variant.id, variant.name, variant.available))}
               </ul>
-              ${
-                this.changeOptionAvailability
-                  ? product.modifierAvailability?.map((modifier) =>
-                      modifier.kind === "options"
-                        ? html`<h3>${modifier.name}</h3>
-                            <ul>
-                              ${modifier.labels.map((label) => this.#availability(label.id, label.name, label.available, modifier.id))}
-                            </ul>`
-                        : nothing,
-                    )
-                  : nothing
-              }
+              ${product.modifierAvailability?.map((modifier) =>
+                modifier.kind === "options" && this.changeOptionAvailability
+                  ? html`<h3>${modifier.name}</h3>
+                      <ul>
+                        ${modifier.labels.map((label) => this.#availability(label.id, label.name, label.available, modifier.id))}
+                      </ul>`
+                  : modifier.kind === "extras" && extrasApply
+                    ? html`<h3>${modifier.name}</h3>
+                        <ul>
+                          ${modifier.items.map((item) => this.#availability(item.productId, item.name, item.available))}
+                        </ul>`
+                    : nothing,
+              )}
               ${this.refusal ? html`<p role="alert">${this.refusal}</p>` : nothing}
             `
           : nothing

@@ -441,8 +441,9 @@ stay with the work.
 
 When the kitchen runs out, hold the dish on Counter or a table order to open its information.
 Send or fire portions already taken before marking the dish sold out.
-Choose **Mark sold out** for the dish or one size. You must be signed in on a device that takes
+Choose **Mark sold out** for the dish, one size, an extra or an option choice. You must be signed in on a device that takes
 orders. The change applies to every menu in this venue. A sold-out dish stays visible in grey.
 
 Choose **Back on sale** when it is ready again; nothing resets the switch the next day.
 Restoring the dish keeps any individually sold-out sizes off sale.
+For an option list, put another choice back on sale before marking its last available choice sold out.

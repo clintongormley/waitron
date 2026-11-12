@@ -16,6 +16,7 @@ import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillBasketRefreshDialog } from "./widgets/basket-refresh-dialog.js";
@@ -1103,9 +1104,7 @@ function tableStubs(
 
 const shellGrid = (el: TillApp) => el;
 const tableScreen = (el: TillApp) =>
-  shellGrid(el).shadowRoot!.querySelector<
-    HTMLElement & { products: { id: string; available?: boolean }[] }
-  >("till-table-order-screen")!;
+  shellGrid(el).shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
 const roundGrid = (el: TillApp) =>
   tableScreen(el).shadowRoot!.querySelector<
     HTMLElement & { store: { lines: { blocked?: string }[]; lineCount: number } }
@@ -2683,6 +2682,115 @@ it.each(["counter", "table"] as const)(
     await poll(el);
     await expect.poll(status).toBe("Receipt printer available: Front printer");
     expect(read.mock.calls.length).toBe(before + 1);
+  },
+);
+
+it.each([
+  ["counter", "rare"],
+  ["table", "rare"],
+  ["counter", "cheese"],
+  ["table", "cheese"],
+] as const)(
+  "changes a modifier from %s information (%s) and refreshes immediately",
+  async (kind, itemId) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    onTestFinished(() => page.viewport(width, height));
+    await page.viewport(390, 844);
+    const setOptionAvailability = vi.fn().mockResolvedValue(undefined);
+    const setAvailability = vi.fn().mockResolvedValue(undefined);
+    const overrides = {
+      setOptionAvailability,
+      setAvailability,
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-orders"] }),
+    };
+    const { el } = await mountApp(kind === "counter" ? overrides : tableStubs(DINING, overrides));
+    if (kind === "counter") await toCounter(el);
+    else {
+      await toTable(el);
+      await userEvent.click(
+        tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-view=menu]")!,
+      );
+      await flush(el);
+    }
+    const screen = kind === "counter" ? counter(el) : tableScreen(el);
+    const browser = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+    const dish = [
+      ...browser.shadowRoot!.querySelectorAll<HTMLElement>('[data-kind="product"]'),
+    ].find((row) => row.textContent!.includes("Burger"))!;
+    dish.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),
+    );
+    await browser.updateComplete;
+    const info = browser.shadowRoot!.querySelector("till-product-info")!;
+    await info.updateComplete;
+    const control = info.shadowRoot!.querySelector<HTMLElement>(`[data-availability="${itemId}"]`)!;
+    expect(control).not.toBeNull();
+    api.menuState.mockResolvedValue(
+      menuState("v1", itemId === "rare" ? { optionLabels: [itemId] } : { products: [itemId] }),
+    );
+    await userEvent.click(control);
+    await flush(el);
+    const zoneId = kind === "counter" ? "zone-counter" : "zone-dining";
+    if (itemId === "rare")
+      expect(setOptionAvailability).toHaveBeenCalledExactlyOnceWith(
+        zoneId,
+        "list-cooked",
+        itemId,
+        false,
+      );
+    else expect(setAvailability).toHaveBeenCalledExactlyOnceWith(zoneId, itemId, false);
+    const product = screen.products.find((row) => row.productId === "Burger")!;
+    const modifier = product.modifierAvailability!.find(
+      (row) => row.kind === (itemId === "rare" ? "options" : "extras"),
+    )!;
+    expect(
+      modifier.kind === "options"
+        ? modifier.labels.find((row) => row.id === itemId)!.available
+        : modifier.items.find((row) => row.productId === itemId)!.available,
+    ).toBe(false);
+    expect(browser.shadowRoot!.querySelector("till-product-info")).toBeNull();
+  },
+);
+
+it.each([
+  [null, false],
+  [false, false],
+  [true, true],
+] as const)(
+  "shows extras on a fractional dish only with an available whole-portion variant (%s)",
+  async (variantAvailable, visible) => {
+    const dish = burgerOffer();
+    dish.unit = { ...dish.unit, precision: 3 };
+    if (variantAvailable !== null)
+      dish.variants = [
+        {
+          ...burgerOffer(),
+          id: "piece",
+          name: "Piece",
+          menuPrice: null,
+          pricingUnit: "each",
+          available: variantAvailable,
+        },
+      ];
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("v1", [dish])),
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-orders"] }),
+    });
+    await toCounter(el);
+    const browser = grid(el).querySelector("till-menu-browser")!;
+    tile(el, "Burger").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),
+    );
+    await browser.updateComplete;
+    const info = browser.shadowRoot!.querySelector("till-product-info")!;
+    await info.updateComplete;
+    expect(info.shadowRoot!.querySelector('[data-availability="cheese"]') !== null).toBe(visible);
+    expect(info.shadowRoot!.querySelector('[data-availability="rare"]')).not.toBeNull();
   },
 );
 

@@ -43,17 +43,23 @@ it.each(["light", "dark"] as Theme[])(
           kind: "options",
           id: "cooked",
           name: "Cooking",
-          customerName: null,
-          kitchenName: null,
+          customerName: { en: "Guest cooking" },
+          kitchenName: "COOK KDS",
           defaultLabelId: "rare",
           publishedDefaultLabelId: "rare",
           labels: [
-            { id: "rare", name: "Rare", customerName: null, kitchenName: null, available: true },
+            {
+              id: "rare",
+              name: "Rare",
+              customerName: { en: "Guest red" },
+              kitchenName: "RED KDS",
+              available: true,
+            },
             {
               id: "medium",
               name: "Medium",
-              customerName: null,
-              kitchenName: null,
+              customerName: { en: "Guest pink" },
+              kitchenName: "PINK KDS",
               available: false,
             },
           ],
@@ -68,6 +74,11 @@ it.each(["light", "dark"] as Theme[])(
     const restore = el.shadowRoot!.querySelector<HTMLElement>('[data-availability="medium"]')!;
     expect(restore).not.toBeNull();
     expect(restore.textContent).toBe(t("product_info.restore"));
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-availability="rare"]')!
+        .parentElement!.querySelector("span")!.textContent,
+    ).toBe("Rare");
     await expectNoA11yViolations(host);
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-availability="rare"]')!);
     expect(change).toHaveBeenCalledExactlyOnceWith("cooked", "rare", false);
