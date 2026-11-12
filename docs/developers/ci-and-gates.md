@@ -5177,3 +5177,17 @@ does not see.
 
 > Guard: `scripts/migration-upgrade.test.ts`, weaker than its name: synthetic counted rows, not
 > compared; today's trigger lists, not each historical boot's.
+
+
+## An exported helper bundle must not activate the process entry
+
+Share a startup helper through a separate module instead of importing its process entry.
+In A950's built readiness library, importing `node-entry.ts` also brought its direct-entry check
+into the bundle. Its `import.meta.url` then named the readiness file: executing that supposedly
+inert library entered ordinary startup and wrote recovery state. The ahead check now lives in
+`upgrade-schema-check.ts`, and the ordinary entry re-exports it.
+
+`apps/server/src/boot.upgrade.test.ts` builds the real library, executes it with an invalid startup
+environment, and requires no output or state files. It then invokes the exported checks against a
+copied venue and packaged migrations. This guards this entry's packaging and invocation; it does
+not qualify the container, a complete upgrade, a test sale or power loss.
