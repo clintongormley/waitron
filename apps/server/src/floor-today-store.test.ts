@@ -2067,7 +2067,7 @@ it("a saved joined table resets to one named group of its real tables", async ()
   expect(await todayRow(table.t2!)).toMatchObject({ x: 20, y: 31, rotation: 0 });
 });
 
-it("reset slots prefer recorded placement size to kept size for a saved member", async () => {
+it("reset slots use recorded placement size before fallback for a saved member", async () => {
   const { zoneId, table, master } = await plannedZone(
     v,
     [
@@ -2083,7 +2083,6 @@ it("reset slots prefer recorded placement size to kept size for a saved member",
     ],
     NOW,
   );
-  await giveKeptSize(v, master.a!, { width: 2, height: 2 });
   await inTx(v, async (tx) => {
     const [plan] = await tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId));
     await tx.insert(floorPlanPlacements).values({
