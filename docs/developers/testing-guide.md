@@ -1833,8 +1833,6 @@ rather than landing before it, nor time the fold-back of a 256 MiB file; the fro
 with its own write queue; both are skipped locally without their binaries (the stream loop test's
 section above); the bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
 
-**Timers and real work**
-
 ## Repeat a named test while keeping each attempt's evidence
 
 When a failure appears only sometimes, keep the failed attempt instead of replacing it with a
@@ -1857,10 +1855,14 @@ node scripts/repeat-test.mjs 10 60 --load node -e 'const { Worker } = require("n
 ```
 
 Measure memory headroom and check other running tests before adding load. An early load exit
-makes the experiment invalid and fails it. Ctrl-C stops the owned attempt and load through
+makes the experiment invalid; the current attempt finishes and no further attempt starts. The
+first `--` separates the load arguments from the test command, so a load argument cannot itself
+be `--`. Ctrl-C stops the owned attempt and load through
 `run-with-deadline.mjs`, including its five-second cleanup grace. Arguments go directly to the
 commands, without shell expansion. Keep the printed evidence directory until you have recorded
 the result, then remove it yourself.
+
+**Timers and real work**
 
 ## A child’s exit can precede its readable output
 

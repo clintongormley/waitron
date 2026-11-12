@@ -27,7 +27,8 @@ export async function repeatTest({ count, seconds, command, load, signals = proc
     closeSync(fd);
     return { child, done: once(child, "close") };
   };
-  const background = load && start(load, join(directory, "load.log"), seconds * (count + 1) + 10);
+  // Allow for the wrapper's five-second stop grace and both two-second process snapshots.
+  const background = load && start(load, join(directory, "load.log"), count * (seconds + 10) + 10);
   background?.done.then(([code]) => {
     if (!finishing && !cancelled) {
       invalid = true;
@@ -35,11 +36,10 @@ export async function repeatTest({ count, seconds, command, load, signals = proc
         join(directory, "load.log"),
         `Invalid experiment: load exited early (${code})\n`,
       );
-      active?.child.kill("SIGTERM");
     }
   });
   const stop = (code) => {
-    cancelled = code;
+    cancelled ||= code;
     active?.child.kill("SIGTERM");
     background?.child.kill("SIGTERM");
   };
