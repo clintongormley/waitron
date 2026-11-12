@@ -91,7 +91,7 @@ const ZERO = decimal("0.00");
  * about the invoice with the same code. Answers what correcting `selection.gross` would file and
  * the money still refundable over every payment on the invoice.
  */
-export async function checkCorrectionOpenable(
+async function checkCorrectionOpenable(
   tx: Transaction,
   backend: FiscalBackend,
   cfg: Pick<DeviceRequestConfig, "nodeId">,
@@ -112,10 +112,7 @@ export async function checkCorrectionOpenable(
     throw new AppError("invoice_correction.not_cash", { saleId });
   await refuseWhileCorrectionOpen(tx, saleId);
   const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
-  const moneyRefundable = sumDecimals([
-    ZERO,
-    ...(await readRefundableTenders(tx, saleId)).map((row) => decimal(row.appliedRemaining)),
-  ]);
+  const moneyRefundable = appliedRemainingOf(await readRefundableTenders(tx, saleId));
   if (compareDecimal(moneyRefundable, preview.gross) < 0)
     throw new AppError("invoice_correction.money_short", {
       saleId,
@@ -153,16 +150,15 @@ export async function openInvoiceCorrection(
   deps: InvoiceCorrectionDeps,
   cfg: DeviceRequestConfig,
   saleId: SaleId,
-  request: InvoiceCorrectionRequest,
+  ask: InvoiceCorrectionAsk,
   actor: { personId: string; authorization: Authorization },
 ): Promise<{ correction: InvoiceCorrectionView; replayed: boolean }> {
-  const ask = parseInvoiceCorrection(request);
   const print = fingerprint({
     gross: ask.gross,
     lineIds: ask.lineIds === undefined ? null : [...ask.lineIds].sort(),
     reasonId: ask.reasonId,
     note: ask.note,
-    expectedSplit: [...ask.expectedSplit].sort((a, b) => compareDecimal(a.rate, b.rate)),
+    expectedSplit: splitKey(ask.expectedSplit),
   });
   const [earlier] = await tx
     .select({ id: invoiceCorrections.id, fingerprint: invoiceCorrections.fingerprint })
@@ -190,14 +186,7 @@ export async function openInvoiceCorrection(
     gross: ask.gross,
     ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }),
   });
-  const split = preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
-  if (splitKey(split) !== splitKey(ask.expectedSplit))
-    throw new AppError("invoice_correction.split_changed", {
-      saleId,
-      gross: preview.gross,
-      vatBreakdown: split,
-      moneyRefundable: preview.moneyRefundable,
-    });
+  await refuseChangedSplit(tx, saleId, preview, ask.expectedSplit, preview.moneyRefundable);
 
   const [row] = await tx
     .insert(invoiceCorrections)
@@ -284,19 +273,7 @@ export async function fileCorrectionIn(
     gross: centsToDecimal(completed),
     ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
   });
-  if (expectedSplit !== undefined) {
-    const split = preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
-    if (splitKey(split) !== splitKey(expectedSplit))
-      throw new AppError("invoice_correction.split_changed", {
-        saleId,
-        gross: preview.gross,
-        vatBreakdown: split,
-        moneyRefundable: sumDecimals([
-          ZERO,
-          ...(await readRefundableTenders(tx, saleId)).map((row) => decimal(row.appliedRemaining)),
-        ]),
-      });
-  }
+  if (expectedSplit !== undefined) await refuseChangedSplit(tx, saleId, preview, expectedSplit);
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
@@ -310,7 +287,7 @@ export async function fileCorrectionIn(
     correctsSaleId: saleId,
     total: negateDecimal(preview.gross),
     lines: preview.lines,
-    partialVatBreakdown: preview.vatBreakdown.map(({ rate, base, tax }) => ({
+    partialVatBreakdown: splitOf(preview).map(({ rate, base, tax }) => ({
       rate,
       base: negateDecimal(base),
       tax: negateDecimal(tax),
@@ -344,7 +321,7 @@ export async function fileInvoiceCorrectionNow(
   deps: InvoiceCorrectionDeps,
   cfg: DeviceRequestConfig,
   correctionId: string,
-  request: { expectedSplit: SplitLine[] },
+  request: { expectedSplit: readonly SplitLine[] },
   actor: { personId: string; authz: AuthzInput },
 ): Promise<InvoiceCorrectionView> {
   await fileCorrectionIn(
@@ -354,7 +331,7 @@ export async function fileInvoiceCorrectionNow(
     correctionId,
     actor.authz,
     actor.personId,
-    expectedSplitOf(request.expectedSplit),
+    request.expectedSplit,
   );
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }
@@ -450,10 +427,37 @@ async function fileNowFor(
 ): Promise<InvoiceCorrectionView["fileNow"]> {
   const filing = await previewOrRefusal(tx, backend, cfg, saleId, selection);
   if ("refusal" in filing) return { refusal: filing.refusal.code, closable: filing.closable };
-  return {
-    gross: filing.gross,
-    vatBreakdown: filing.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
-  };
+  return { gross: filing.gross, vatBreakdown: splitOf(filing) };
+}
+
+/** The money a sale's payments still hold, tips aside. */
+export function appliedRemainingOf(rows: readonly { appliedRemaining: string }[]): Decimal {
+  return sumDecimals([ZERO, ...rows.map((row) => decimal(row.appliedRemaining))]);
+}
+
+function splitOf(preview: Pick<CorrectionPreview, "vatBreakdown">) {
+  return preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
+}
+
+/**
+ * Refuses `invoice_correction.split_changed`, with the fresh split and the money still refundable
+ * (read here unless handed in), when `preview` splits other than the till showed.
+ */
+async function refuseChangedSplit(
+  tx: Transaction,
+  saleId: SaleId,
+  preview: CorrectionPreview,
+  expectedSplit: readonly SplitLine[],
+  moneyRefundable?: Decimal,
+): Promise<void> {
+  const split = splitOf(preview);
+  if (splitKey(split) === splitKey(expectedSplit)) return;
+  throw new AppError("invoice_correction.split_changed", {
+    saleId,
+    gross: preview.gross,
+    vatBreakdown: split,
+    moneyRefundable: moneyRefundable ?? appliedRemainingOf(await readRefundableTenders(tx, saleId)),
+  });
 }
 
 /** The line ids a request names, canonical; refused `lineIds` unless absent or a list of ids. */
@@ -464,25 +468,32 @@ export function lineIdsOf(lineIds: unknown): string[] | undefined {
   return lineIds.map((id: string) => canonicaliseUuid(id)!);
 }
 
+export type InvoiceCorrectionAsk = ReturnType<typeof parseInvoiceCorrection>;
+
 export function parseInvoiceCorrection(request: InvoiceCorrectionRequest) {
-  if (typeof request.submissionId !== "string" || !isUuid(request.submissionId))
-    throw invalid("submissionId");
-  if (typeof request.reasonId !== "string" || !isUuid(request.reasonId)) throw invalid("reasonId");
+  const submissionId = uuidOf(request.submissionId, "submissionId");
+  const reasonId = uuidOf(request.reasonId, "reasonId");
   const lineIds = lineIdsOf(request.lineIds);
   const note = request.note ?? null;
   if (note !== null && typeof note !== "string") throw invalid("note");
   return {
-    submissionId: canonicaliseUuid(request.submissionId)!,
+    submissionId,
     gross: moneyOf(request.gross, "gross"),
     ...(lineIds === undefined ? {} : { lineIds }),
-    reasonId: canonicaliseUuid(request.reasonId)!,
+    reasonId,
     note: note === null || note.trim() === "" ? null : note.trim(),
     expectedSplit: expectedSplitOf(request.expectedSplit),
   };
 }
 
-/** The split a request says the till showed, at money scale; refused `expectedSplit` when malformed. */
-export function expectedSplitOf(split: unknown) {
+/** A request's id, canonical; refused by `field` unless it is one. */
+export function uuidOf(value: unknown, field: string): string {
+  if (typeof value !== "string" || !isUuid(value)) throw invalid(field);
+  return canonicaliseUuid(value)!;
+}
+
+/** The split a request says the till showed; refused `expectedSplit` when malformed. */
+export function expectedSplitOf(split: unknown): SplitLine[] {
   if (
     !Array.isArray(split) ||
     split.some((line: Partial<SplitLine> | null) =>
@@ -492,11 +503,7 @@ export function expectedSplitOf(split: unknown) {
     )
   )
     throw invalid("expectedSplit");
-  return (split as SplitLine[]).map(({ rate, base, tax }) => ({
-    rate: centsToDecimal(decimalToCents(decimal(rate))),
-    base: centsToDecimal(decimalToCents(decimal(base))),
-    tax: centsToDecimal(decimalToCents(decimal(tax))),
-  }));
+  return (split as SplitLine[]).map(({ rate, base, tax }) => ({ rate, base, tax }));
 }
 
 /** The split compared by value, in rate order, whatever order or spelling the till sent. */
@@ -507,7 +514,8 @@ function splitKey(split: readonly SplitLine[]): string {
     .join(";");
 }
 
-function moneyOf(value: unknown, field: string): Decimal {
+/** A request's amount at money scale; refused by `field` when malformed. */
+export function moneyOf(value: unknown, field: string): Decimal {
   if (typeof value !== "string" || !MONEY.test(value)) throw invalid(field);
   return centsToDecimal(decimalToCents(decimal(value)));
 }

@@ -14,14 +14,16 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
-  isUuid,
   type Decimal,
 } from "@waitron/shared";
-import { invalid, MONEY } from "./bill-allocation.js";
+import { invalid } from "./bill-allocation.js";
 import { readCorrectionMoney } from "./invoice-correction-legs.js";
 import {
+  appliedRemainingOf,
   fileCorrectionIn,
+  moneyOf,
   readInvoiceCorrection,
+  uuidOf,
   type InvoiceCorrectionDeps,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
@@ -31,7 +33,6 @@ import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import { toTenderRefundView } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
-import { canonicaliseUuid } from "./till-session.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import "./errors.js";
 
@@ -42,12 +43,10 @@ export function parseCorrectionCash(request: { submissionId: unknown; amount: un
   submissionId: string;
   amount: Decimal;
 } {
-  if (typeof request.submissionId !== "string" || !isUuid(request.submissionId))
-    throw invalid("submissionId");
-  if (typeof request.amount !== "string" || !MONEY.test(request.amount)) throw invalid("amount");
-  const cents = decimalToCents(decimal(request.amount));
-  if (cents === 0) throw invalid("amount");
-  return { submissionId: canonicaliseUuid(request.submissionId)!, amount: centsToDecimal(cents) };
+  const submissionId = uuidOf(request.submissionId, "submissionId");
+  const amount = moneyOf(request.amount, "amount");
+  if (compareDecimal(amount, ZERO) === 0) throw invalid("amount");
+  return { submissionId, amount };
 }
 
 /** The sale's cash payments still holding money paid for the sale, oldest first: a correction gives
@@ -69,10 +68,9 @@ export async function giveCorrectionCash(
   deps: InvoiceCorrectionDeps,
   cfg: DeviceRequestConfig,
   correctionId: string,
-  request: { submissionId: string; amount: string },
+  ask: { submissionId: string; amount: Decimal },
   actor: { personId: string; authz: AuthzInput; authorization: Authorization },
 ): Promise<{ correction: InvoiceCorrectionView; refunds: TenderRefundView[]; replayed: boolean }> {
-  const ask = parseCorrectionCash(request);
   const [correction] = await tx
     .select()
     .from(invoiceCorrections)
@@ -107,10 +105,7 @@ export async function giveCorrectionCash(
 
   const amount = decimalToCents(ask.amount);
   const payments = await readCashLeft(tx, correction.originalSaleId);
-  const cashLeft = payments.reduce(
-    (sum, row) => sum + decimalToCents(decimal(row.appliedRemaining)),
-    0,
-  );
+  const cashLeft = decimalToCents(appliedRemainingOf(payments));
   if (cashLeft < amount)
     throw new AppError("invoice_correction.cash_short", {
       correctionId,

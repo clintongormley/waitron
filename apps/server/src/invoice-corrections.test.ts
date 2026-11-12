@@ -39,10 +39,11 @@ import {
   fileCorrectionIn,
   fileInvoiceCorrectionNow,
   openInvoiceCorrection,
+  parseInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
 } from "./invoice-corrections.js";
-import { giveCorrectionCash } from "./invoice-correction-cash.js";
+import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -201,14 +202,14 @@ async function open(
       { ...deps(ask.clock), backend: ask.backend ?? venue.backend },
       venue.cfg,
       saleId,
-      {
+      parseInvoiceCorrection({
         submissionId: ask.submissionId,
         gross: ask.gross,
         ...scope,
         reasonId: ask.reasonId ?? reasonId,
         note: ask.note === undefined ? "Overcooked" : ask.note,
         expectedSplit: split,
-      },
+      }),
       actor(),
     ),
   );
@@ -875,7 +876,7 @@ async function cash(
       { ...deps(clock), backend },
       venue.cfg,
       correctionId,
-      { submissionId, amount },
+      parseCorrectionCash({ submissionId, amount }),
       {
         personId: managerId,
         authz: { sessionId: managerSessionId },

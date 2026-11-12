@@ -89,8 +89,7 @@ export function mountInvoiceCorrectionApi(
       const cfg = requestCfg(deps.cfg, session),
         id = brandSaleId(pathId(c.req.param("saleId"), "sale"));
       const body = asObject(await readRawJsonBody<unknown>(c));
-      const request = body as unknown as InvoiceCorrectionRequest;
-      parseInvoiceCorrection(request);
+      const ask = parseInvoiceCorrection(body as unknown as InvoiceCorrectionRequest);
       const override = overrideOf(body);
       const result = await withCorrectionAuthorization(
         deps.db,
@@ -109,7 +108,7 @@ export function mountInvoiceCorrectionApi(
             { backend: deps.backend, clock: deps.clock, attendance: deps.attendance },
             cfg,
             id,
-            request,
+            ask,
             { personId: session.personId, authorization },
           );
         },
