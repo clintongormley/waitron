@@ -111,6 +111,7 @@ export async function readMadeHereItems(
           child.name,
           thousandthsToDecimal(child.quantity),
           thousandthsToDecimal(row.lineQuantity),
+          locale,
           child.unitName === null || each.has(child.id)
             ? undefined
             : (child.unitName[contentLanguageCode(locale)] ?? Object.values(child.unitName)[0]),

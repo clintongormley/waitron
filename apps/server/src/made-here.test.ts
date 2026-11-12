@@ -225,7 +225,7 @@ describe("device made-here stations", () => {
       });
       const items = await readMadeHereItems(suite.db, new Set([drinkId]), locale);
       expect(items).toHaveLength(1);
-      expect(items[0]!.extras).toEqual(["Jamón 0.150 kg"]);
+      expect(items[0]!.extras).toEqual([locale === "en-GB" ? "Jamón 0.150 kg" : "Jamón 0,150 kg"]);
     },
   );
   it("makes Bar work here and prints Grill work in the same send", async () => {

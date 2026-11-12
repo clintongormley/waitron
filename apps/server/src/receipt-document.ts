@@ -30,7 +30,7 @@ import {
 } from "./receipt-figures.js";
 import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
-import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
+import { formatAmount, formatMoney, formatVatRate, withDecimalMark } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
@@ -309,7 +309,7 @@ export function buildReceiptDocument({
     { line, figures: { price, amount } }: FiguredLine,
     indent: number,
   ): ReceiptTableRow => ({
-    units: quantityText(line, namesLocale),
+    units: quantityText(line, namesLocale, locale),
     item: lineName(line.descriptions, namesLocale),
     ...(indent > 0 ? { itemIndent: indent } : {}),
     price: formatAmount(price, locale),
@@ -359,7 +359,7 @@ export function buildReceiptDocument({
   const withVatGroup = ({ dish, options }: LineGroup): void => {
     // Without its filed figures, a dish priced per pack prints its quantity, not its packs.
     const { quantity: count, unitName, soldInEach } = dish;
-    const quantity = `${quantityText({ quantity: count, unitName, soldInEach }, namesLocale)}  `;
+    const quantity = `${quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale)}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     row(
       `${quantity}${lineName(dish.descriptions, namesLocale)}${included}`,
@@ -372,12 +372,12 @@ export function buildReceiptDocument({
       let caption: string;
       if (!simplified) {
         const { quantity: count, unitName, soldInEach } = option;
-        caption = `  ${name} ${quantityText({ quantity: count, unitName, soldInEach }, namesLocale)}`;
+        caption = `  ${name} ${quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale)}`;
       } else if (option.unitName == null || option.soldInEach === true) {
         const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
         caption = perDish > 1 ? `  ${name} x${perDish}` : `  ${name}`;
       } else {
-        caption = `  ${name} ${option.quantity} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
+        caption = `  ${name} ${withDecimalMark(option.quantity, locale)} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
       row(caption, itemAmount(option.listGross ?? option.gross), 2);
     }

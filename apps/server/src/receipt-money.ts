@@ -42,3 +42,17 @@ export function formatAmount(value: string, locale: string): string {
     .replace(/[\u{a0}\u{202f}]/gu, " ")
     .replace(/\u{2212}/gu, "-");
 }
+
+const decimalMarks = new Map<string, string>();
+
+/** A plain decimal quantity with `locale`'s decimal mark; its digits and places are unchanged. */
+export function withDecimalMark(quantity: string, locale: string): string {
+  let mark = decimalMarks.get(locale);
+  if (mark === undefined) {
+    mark = new Intl.NumberFormat(locale)
+      .formatToParts(1.5)
+      .find((part) => part.type === "decimal")!.value;
+    decimalMarks.set(locale, mark);
+  }
+  return quantity.replace(".", mark);
+}

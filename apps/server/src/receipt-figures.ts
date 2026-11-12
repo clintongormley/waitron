@@ -12,6 +12,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
+import { withDecimalMark } from "./receipt-money.js";
 
 export type FiledLine = TillSaleLine & { net: NonNullable<TillSaleLine["net"]> };
 
@@ -189,10 +190,11 @@ function clamp(value: Decimal, ceiling: Decimal): Decimal {
 }
 
 /** "4" for a count in the Each unit or a line with no unit; "2" for two portions of an extra
- *  priced per portion; "0.35 kg" for any other unit. */
+ *  priced per portion; "0,35 kg" in Spanish for any other unit. */
 export function quantityText(
   line: Pick<TillSaleLine, "quantity" | "unitName" | "soldInEach" | "net">,
   namesLocale: string,
+  locale: string,
 ): string {
   if (line.net !== undefined) {
     const priceQuantity = decimal(line.net.priceQuantity);
@@ -203,12 +205,13 @@ export function quantityText(
     }
   }
   const unitName = line.unitName;
-  if (unitName == null || line.soldInEach === true) return line.quantity;
+  const quantity = withDecimalMark(line.quantity, locale);
+  if (unitName == null || line.soldInEach === true) return quantity;
   // `soldInEach` marks a line whose recorded context says Each; any other line is judged by its names.
   const each = Object.entries(unitName).every(
     ([language, text]) =>
       (EACH_UNIT.abbreviation as Record<string, string>)[language.split("-")[0]!] === text,
   );
-  if (each) return line.quantity;
-  return `${line.quantity} ${resolveSnapshotText(unitName, namesLocale, namesLocale)}`;
+  if (each) return quantity;
+  return `${quantity} ${resolveSnapshotText(unitName, namesLocale, namesLocale)}`;
 }

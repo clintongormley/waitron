@@ -232,6 +232,42 @@ describe("formatKitchenTicket", () => {
       expect(text).toContain("0.375 kg x Ham");
     });
 
+    it.each([
+      ["es-ES", "Pescado", "0,350 kg x Pescado", "0,250 kg x Pulpo"],
+      ["en-GB", "Fish", "0.350 kg x Fish", "0.250 kg x Pulpo"],
+    ])(
+      "writes a weighed dish and the other-station list with the %s decimal mark",
+      (locale, dish, dishLine, otherLine) => {
+        const lines = printedLines(
+          formatKitchenTicket(
+            {
+              locale,
+              scope: "station",
+              stationName: "Kitchen",
+              tableLabel: "Table 1",
+              orderNumber: "A-1",
+              firedAt: new Date(2026, 7, 17, 9, 5),
+              items: [
+                { qty: "0.350", unit: "kg", name: dish },
+                { qty: "2.000", unit: "kg", name: "Whole", printedAsSold: true },
+              ],
+              alsoOnOrder: {
+                locale,
+                items: [
+                  { qty: "0.250", unit: "kg", name: "Pulpo", stationName: "Grill", held: false },
+                ],
+              },
+            },
+            KITCHEN_80,
+            TEST_TIME_ZONE,
+          ),
+        );
+        expect(lines).toContain(dishLine);
+        expect(lines).toContain("2 kg x Whole");
+        expect(lines).toContain(`${otherLine} — Grill`);
+      },
+    );
+
     it("prints the note as an indented sub-line beneath the dish", () => {
       const text = decodeTicket(
         formatKitchenTicket(

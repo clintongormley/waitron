@@ -18,6 +18,7 @@ import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 import { kitchenLanguageFor as ticketLanguage, kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { withDecimalMark } from "./receipt-money.js";
 
 interface KitchenNoteHeading {
   text: string;
@@ -171,12 +172,12 @@ export function arrangeTicketItems(
   }));
 }
 
-export function kitchenQuantityText(qty: number | string): string {
-  return String(qty).replace(/\.0+$/, "");
+export function kitchenQuantityText(qty: number | string, locale: string): string {
+  return withDecimalMark(String(qty).replace(/\.0+$/, ""), locale);
 }
 
-function itemLine(item: KitchenTicketItem): string {
-  return `${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
+function itemLine(item: KitchenTicketItem, locale: string): string {
+  return `${kitchenQuantityText(item.qty, locale)}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
 }
 
 /**
@@ -252,8 +253,8 @@ function emitItem(
   const text = (s: string, indent: number): void => {
     for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };
-  const prefix = `${sign}${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
-  text(`${sign}${itemLine(item)}`, prepareText(prefix).length);
+  const prefix = `${sign}${kitchenQuantityText(item.qty, locale)}${item.unit ? ` ${item.unit}` : ""} x `;
+  text(`${sign}${itemLine(item, locale)}`, prepareText(prefix).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   for (const ref of item.crossRefs ?? []) text(`  > ${ref}`, 4);
   if (item.note !== undefined && item.note !== "") {
@@ -465,7 +466,7 @@ export function formatKitchenTicket(
     const { alsoOnOrder: heading, onHold: held } = kitchenTicketWords(alsoOnOrder.locale);
     text(`-- ${heading} --`);
     for (const item of alsoOnOrder.items) {
-      const prefix = `${kitchenQuantityText(item.qty)}${item.unit ? ` ${item.unit}` : ""} x `;
+      const prefix = `${kitchenQuantityText(item.qty, alsoOnOrder.locale)}${item.unit ? ` ${item.unit}` : ""} x `;
       const line = `${prefix}${item.name} — ${item.stationName}${item.held ? ` ${held}` : ""}`;
       for (const part of wrapText(prepareText(line), columns, prepareText(prefix).length)) {
         b.line(part);

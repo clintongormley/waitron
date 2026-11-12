@@ -32,6 +32,7 @@ import {
   readContentLanguages,
   units,
   updateUnit,
+  writeContentLanguages,
 } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter, endDeletedPrinterJobs } from "@waitron/printing";
@@ -168,15 +169,19 @@ function lineWidths(payload: Uint8Array): Set<number> {
 /** A basket line for a product at quantity 1. */
 const line = (productId: string) => ({ productId, quantity: "1" });
 
-it.each<[number, string, string]>([
-  [2000, "g", "Mint 2 g"],
-  [200_000, "g", "Mint 200 g"],
-  [1500, "kg", "Mint 1.500 kg"],
+it.each<[number, string, string, string]>([
+  [2000, "g", "en", "Mint 2 g"],
+  [200_000, "g", "en", "Mint 200 g"],
+  [1500, "kg", "en", "Mint 1.500 kg"],
+  [2000, "g", "es", "Mint 2 g"],
+  [1500, "kg", "es", "Mint 1,500 kg"],
+  [150, "kg", "es-ES", "Mint 0,150 kg"],
+  [150, "kg", "en-GB", "Mint 0.150 kg"],
 ])(
-  "prints a measured extra's %s thousandths without whole-number decimals",
-  (quantity, unit, expected) => {
+  "prints a measured extra's %s thousandths in %s without whole-number decimals",
+  (quantity, unit, locale, expected) => {
     expect(
-      extraLabel("Mint", thousandthsToDecimal(quantity), thousandthsToDecimal(1000), unit),
+      extraLabel("Mint", thousandthsToDecimal(quantity), thousandthsToDecimal(1000), locale, unit),
     ).toBe(expected);
   },
 );
@@ -1449,6 +1454,48 @@ describe("dish extras on kitchen tickets", () => {
     const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
     expect(ticket).toContain("+ Ham 0.150 kg");
   });
+
+  it.each([
+    ["es", "+ Ham 0,150 kg", "Ham 0,150 kg"],
+    ["en", "+ Ham 0.150 kg", "Ham 0.150 kg"],
+  ])(
+    "writes a weighted extra with the decimal mark of a %s kitchen",
+    async (kitchenLanguage, printed, cancelled) => {
+      const { cfg, catalogueId } = await setupVenue();
+      const { printerId, jobs, label } = await asApp(cfg, async (tx) => {
+        await writeContentLanguages(tx, {
+          defaultLanguage: kitchenLanguage,
+          languages: ["es", "en"],
+        });
+        const station = await createStation(tx, { name: "Kitchen", isDefault: true });
+        const printerId = await makePrinter(tx, "Kitchen printer");
+        await attachPrinterToStation(tx, { stationId: station.id, printerId });
+        const dish = await makeProduct(tx, catalogueId, "Toast", { stationId: station.id });
+        const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+          { name: "Ham", customerName: "Smoked ham", kitchenName: "HAM" },
+        ]);
+        const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+        await assignProductUnit(tx, productIds[0]!, kg!.id);
+        await tx.execute(sql`update extra_list_items set portion = 50, max_quantity = 3
+          where list_id = ${listId} and product_id = ${productIds[0]}`);
+        await fireNewOrder(tx, cfg, [
+          {
+            productId: dish,
+            quantity: "1",
+            extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 3 }] }],
+          },
+        ]);
+        const child = await tx.execute<{ id: string }>(sql`
+          select id from working_order_lines where parent_line_id is not null`);
+        const { label } = await readCancelledExtra(tx, child.rows[0]!.id, cfg.locale);
+        return { printerId, jobs: await printJobsFor(tx), label };
+      });
+
+      const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
+      expect(ticket).toContain(printed);
+      expect(label).toBe(cancelled);
+    },
+  );
 
   // The kitchen looks the line's frozen `unit_name` up under its own `es-ES`, which is no key of it,
   // so it prints that map's first entry. The unit row stores Catalan first, so a line that copied

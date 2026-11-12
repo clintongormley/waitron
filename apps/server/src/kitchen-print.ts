@@ -119,8 +119,7 @@ function changeItem(entry: KitchenTicketItem, item: FiredItem): KitchenTicketIte
 function ticketName(text: Record<string, string>, locale: string): string {
   const localised = text[contentLanguageCode(locale)];
   if (localised !== undefined) return localised;
-  // The map is never empty: `unit_name` freezes a unit's abbreviation, and `createUnit` and
-  // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `requireTranslations`.
+  // Never empty: `unit_name` is written through `prepareUnitSnapshot`, which keys the default language.
   return Object.values(text)[0]!;
 }
 
@@ -129,9 +128,10 @@ export function extraLabel(
   name: string,
   quantity: Decimal,
   dishQuantity: Decimal,
+  locale: string,
   unitName?: string,
 ): string {
-  if (unitName !== undefined) return `${name} ${kitchenQuantityText(quantity)} ${unitName}`;
+  if (unitName !== undefined) return `${name} ${kitchenQuantityText(quantity, locale)} ${unitName}`;
   const perDish = perDishOptionQuantity(quantity, dishQuantity);
   return perDish > 1 ? `${name} x${perDish}` : name;
 }
@@ -316,6 +316,7 @@ async function buildTicketItems(
               kitchenPresentationName(child),
               child.quantity,
               parent.quantity,
+              language,
               extraUnit,
             ),
             stationName: child.stationName!,
@@ -327,7 +328,7 @@ async function buildTicketItems(
       continue;
     }
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    const label = extraLabel(child.name, child.quantity, parent.quantity, extraUnit);
+    const label = extraLabel(child.name, child.quantity, parent.quantity, language, extraUnit);
     const labels = allergenLabels(child.id);
     names.push(labels.length === 0 ? label : extraWithAllergens(label, labels, language));
     modifiersByParent.set(child.parentLineId!, names);
@@ -1409,6 +1410,7 @@ export async function readCancelledExtra(
       found.name,
       thousandthsToDecimal(found.quantity),
       thousandthsToDecimal(found.dishQuantity),
+      await readKitchenLanguage(tx),
       found.unitName === null || soldInEach ? undefined : ticketName(found.unitName, locale),
     ),
     dishLineId: found.dishLineId,
