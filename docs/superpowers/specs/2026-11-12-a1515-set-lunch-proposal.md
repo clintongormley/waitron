@@ -1,9 +1,8 @@
 # A1515. Set lunch menus: proposal
 
 **Draft, 12 November 2026.** These are recommendations, not agreed features. Lane L must
-review the invoice part before owner presentation. The proposal stays off main until the
-owner sees it. Nothing is built; implementation, schema, fiscal changes and public printed-menu
-design are outside this proposal.
+review the invoice part before owner presentation. Nothing is built; implementation, schema,
+fiscal changes and public printed-menu design are outside this proposal.
 
 You need to charge for one lunch while sending its dishes to different stations, sometimes
 before the guest chooses the last dish. I recommend one priced lunch item, with its selected
@@ -16,7 +15,7 @@ whose service periods limit its selling times and days. It is an item sold from 
 rather than a new kind of whole menu.
 
 You would enter **€18 including VAT** and build its choices from existing products:
-**Starter:** soup or salad; **Main:** chicken or premium fish; **Finish:** pudding or coffee.
+**Starter:** soup or salad; **Main:** chicken or premium fish; **Dessert or coffee:** pudding or coffee.
 Bread and one drink, water or a soft drink, are included. Dessert **or** coffee is one
 choice, not both. Beside fish you would enter **+€3**, added to the lunch price rather than
 using the fish's ordinary selling price. The lunch costs €18 with chicken or €21 with fish.
@@ -29,7 +28,7 @@ You would assign those separately, so choosing fish need not mean cooking it now
 
 You would tap **House lunch** at Table 4 and choose soup, fish and water. The till would
 show **€21**, explain “€18 lunch + €3 fish”, and show bread as included. I recommend adding
-separate lunch items when diners choose different dishes; each lunch remains its bill item,
+one lunch item per diner, even with identical choices; each remains its bill item,
 without introducing guest numbers.
 
 I recommend allowing **Dessert or coffee: choose later** while you send the known choices.
@@ -52,17 +51,19 @@ must settle tax treatment before implementation.
 
 Each kitchen ticket would list its actual dishes without prices. Each selected product
 would follow its ordinary folder routing; the lunch itself has no station. Parts would
-mention each other, as the Bundles design requires. For example, the Hot station gets
-“Table 4 · Fish · House lunch; with soup at Starters, bread and water; finish to choose”.
-Later, the coffee ticket would refer to the same lunch's soup and fish. These references
-would not order those dishes again.
+mention each other, following the Bundles design direction. For example, the Hot station gets
+“Table 4 · Fish · House lunch; soup from Soup station; bread and water from Bar;
+Dessert or coffee to choose”. Later coffee would refer to the lunch's soup and fish.
+References identify its dishes and table; identical lunches share those descriptions.
+They would not order earlier dishes again.
 
 ## Sources and limits
 
 Read-only design directions, not proof that lunches work: [A1515](../../backlog/catalogue.md#a1515-set-lunch-menus-the-menú-del-día);
 [Bundles](2026-09-30-catalogue-menus-routing-design.md), lines 640–644 and §5.10;
 [Courses](2026-10-16-a773-courses-and-groups-design.md), lines 95–105. Reuse candidates:
-`packages/venue-service/src/routing.ts:153` and `apps/server/src/invoice-document.ts:95`.
+`packages/venue-service/src/routing.ts:153`, `apps/server/src/invoice-document.ts:95`
+and split-off-extra references at `apps/server/src/kitchen-print.ts:303`.
 The adviser question below extends [S10](../../compliance/asesor-questions.md) and its
 [VAT research](../../compliance/research/2026-10-09-vat-and-corrections.md), rather than settling either.
 
@@ -70,7 +71,7 @@ The adviser question below extends [S10](../../compliance/asesor-questions.md) a
 
 **Owner, after Lane L review:**
 
-- **One lunch item per diner's choices, with explicit inclusions and surcharges?** Recommend
+- **One lunch item per diner, with explicit inclusions and surcharges?** Recommend
   yes: soup, fish, bread, water and coffee cost €21; the same choices with chicken cost €18.
 - **Allow later choices and leave the price unchanged if untaken?** Recommend yes: send soup
   and fish now; choose coffee later or close that choice at payment without ordering it.
