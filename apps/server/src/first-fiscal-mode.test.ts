@@ -63,9 +63,7 @@ it("durably completed ordinary trading needs no fresh outside consultation", asy
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db);
-    await suite.db
-      .insert(nodes)
-      .values({ id: f.context.binding.targetNodeId, locationId: LOCATION, name: "Box" });
+    await suite.db.insert(nodes).values({ id: f.context.binding.targetNodeId, name: "Box" });
     const config = loadConfig(
       { WAITRON_NODE_ID: f.context.binding.targetNodeId },
       "/migrations",

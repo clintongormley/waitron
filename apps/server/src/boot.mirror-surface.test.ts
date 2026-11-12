@@ -138,7 +138,6 @@ async function boot(
   if (start === "latch") {
     await suite.db.insert(nodes).values({
       id: ORIGIN,
-      locationId: LOCATION,
       name: "Main",
       filingModule: "none",
       taxModule: "vat",
@@ -151,7 +150,7 @@ async function boot(
     );
     await writePendingAdoption(stateDir, LATCH);
   } else {
-    await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Node" });
+    await suite.db.insert(nodes).values({ id: NODE, name: "Node" });
     await suite.db.insert(invoiceSeries).values({ id: SERIES, nodeId: NODE, code: "A" });
     await stampDeployment(suite.db, "preproduction");
     await writeFile(

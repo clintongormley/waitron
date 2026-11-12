@@ -242,9 +242,7 @@ describe("claimReminder", () => {
 
 describe("claimReminder after a handover", () => {
   async function tookOver(): Promise<void> {
-    await suite.db
-      .insert(nodes)
-      .values({ id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" });
+    await suite.db.insert(nodes).values({ id: TENANT_A.nodeId2, name: "Node 2" });
     await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
   }
 

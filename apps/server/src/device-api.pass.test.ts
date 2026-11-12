@@ -362,7 +362,7 @@ describe("the pass screen's device routes", () => {
       operationDescription: "Restaurant",
     });
     await seedBusinessDay(suite.db, {});
-    const foreignNode = await seedNode(suite.db, foreignLocation!.id);
+    const foreignNode = await seedNode(suite.db);
     const [foreignStation] = await suite.db
       .insert(kitchenStations)
       .values({ name: "Other kitchen" })

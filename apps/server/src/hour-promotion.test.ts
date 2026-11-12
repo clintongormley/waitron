@@ -1090,7 +1090,6 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   await seedBusinessDay(spare.db, {});
   await spare.db.insert(nodes).values({
     id: primary.nodeId,
-    locationId: TENANT_A.locationId,
     name: "Original",
     publicKey: primaryKeys.publicKey,
     filingModule: "verifactu",

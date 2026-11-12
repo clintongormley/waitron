@@ -28,8 +28,8 @@ async function activate(db: Database, activatedAt = "2026-10-20T08:00:00.000Z"):
   await seedVenue(db);
   const [venue] = await db.select({ id: locations.id }).from(locations);
   await db.insert(nodes).values([
-    { id: NODE_A, locationId: venue!.id, name: "Source" },
-    { id: NODE_B, locationId: venue!.id, name: "Destination" },
+    { id: NODE_A, name: "Source" },
+    { id: NODE_B, name: "Destination" },
   ]);
   await db.insert(handoverActivations).values({
     operationId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",

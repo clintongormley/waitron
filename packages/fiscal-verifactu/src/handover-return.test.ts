@@ -65,7 +65,7 @@ async function original(
   invoice: number,
   beforeRecord?: (node: SeededNode) => Promise<void>,
 ) {
-  const node = await seedNode(suite.db, label);
+  const node = await seedNode(suite.db);
   await beforeRecord?.(node);
   return appendOriginal(node, label, invoice);
 }
@@ -317,7 +317,7 @@ it("includes the replacement-invoice fact with both commercial originals", async
 
 it("includes a corrective sale's parent from another node and its payment facts", async () => {
   const parent = await original("Parent", 1);
-  const source = await seedNode(suite.db, "Source");
+  const source = await seedNode(suite.db);
   const [parentSale] = await suite.db.select().from(sales).where(eq(sales.id, parent.saleId));
   const correctionId = saleId("10000000-0000-4000-8000-000000000001");
   await suite.db.insert(sales).values({
@@ -540,7 +540,7 @@ it.each(["node", "series", "sif"])(
 );
 
 it("inserts an earlier sale's settlement before its later corrective sale", async () => {
-  const node = await seedNode(suite.db, "Source");
+  const node = await seedNode(suite.db);
   await copyBase();
   const parent = await appendOriginal(node, "Source", 1);
   await suite.db.insert(tenders).values({
@@ -914,8 +914,8 @@ it.each([
 });
 
 it("selects and receives a substitution's earlier sale from a different node", async () => {
-  const parentNode = await seedNode(suite.db, "Parent");
-  const sourceNode = await seedNode(suite.db, "Source");
+  const parentNode = await seedNode(suite.db);
+  const sourceNode = await seedNode(suite.db);
   await copyBase();
   const parent = await appendOriginal(parentNode, "Parent", 1);
   const source = await appendOriginal(sourceNode, "Source", 2);
@@ -981,7 +981,7 @@ it("withholds confirmation for changed commercial facts even when the record is 
 });
 
 it("batches real originals within the row and byte bounds without splitting payment facts", async () => {
-  const node = await seedNode(suite.db, "Source");
+  const node = await seedNode(suite.db);
   await copyBase();
   for (let number = 1; number <= 51; number++) await appendOriginal(node, "Source", number);
   const [last] = suite.db.all<{ sale_id: string }>(
@@ -1077,7 +1077,7 @@ it("refuses a single oversized byte payload before inserting it", async () => {
 });
 
 it("stops when both boxes have corrected the same original", async () => {
-  const main = await seedNode(suite.db, "Main");
+  const main = await seedNode(suite.db);
   const source = await original("Source", 1, copyBase);
   const now = new Date("2026-07-20T17:22:00.000Z");
   const first = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
@@ -1245,8 +1245,8 @@ it.each([
 ])(
   "accounts for the receiver's own refunds before confirming $applied plus $tip",
   async ({ applied, tip, complete }) => {
-    const sourceNode = await seedNode(suite.db, "Source");
-    const currentNode = await seedNode(suite.db, "Receiver");
+    const sourceNode = await seedNode(suite.db);
+    const currentNode = await seedNode(suite.db);
     await copyBase();
     const [sale] = await suite.db
       .insert(sales)

@@ -27,7 +27,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);
-    nodeId = await seedNode(db, locationId);
+    nodeId = await seedNode(db);
     const [row] = await seedPersons(db, {
       displayName: "Manager",
       pinHash: "scrypt$00$00",
@@ -181,7 +181,7 @@ describe("clocking across a backward step of the box's clock", () => {
 
   it("keeps a chain per node", async () => {
     const p = await worker("two nodes");
-    const second = await seedNode(suite.db, locationId);
+    const second = await seedNode(suite.db);
     await run((tx) => backend.clockIn(tx, at(p, "09:00")));
     await run((tx) => backend.clockOut(tx, at(p, "12:00")));
     await run((tx) => backend.clockIn(tx, { ...at(p, "13:00"), nodeId: second }));

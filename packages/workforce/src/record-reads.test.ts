@@ -41,7 +41,7 @@ const query = () => run((tx) => backend.timeRecord(tx, { period: january, person
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
@@ -189,7 +189,7 @@ it("follows both versions when a whole session moves into the next month", async
 });
 it("keeps another node's proposal and answer attached to the original worker day", async () => {
   const target = await day();
-  const second = await seedNode(suite.db, locationId);
+  const second = await seedNode(suite.db);
   const request = await run((tx) =>
     backend.proposeCorrection(tx, {
       nodeId: second,

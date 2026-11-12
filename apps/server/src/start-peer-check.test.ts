@@ -85,7 +85,6 @@ async function box(
       .where(eq(nodes.id, nodeId));
     await suite.db.insert(nodes).values({
       id: PEER.nodeId,
-      locationId: own!.locationId,
       name: "Spare",
       publicKey: PEER.publicKey,
     });
@@ -341,7 +340,6 @@ describe("a destination whose activation committed and whose node.db record was 
       .where(eq(nodes.id, nodeId));
     await suite.db.insert(nodes).values({
       id: THIRD_BOX,
-      locationId: own!.locationId,
       name: "Third",
       publicKey: generateNodeKeyPair().publicKey,
     });

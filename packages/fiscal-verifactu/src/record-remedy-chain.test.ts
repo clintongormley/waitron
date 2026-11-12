@@ -187,7 +187,7 @@ it("appends a correction of a record of the box this one took over from on this 
   const original = await withTransaction(suite.db, (tx) =>
     appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1, "preproduction")),
   );
-  const successor = await seedNode(suite.db, "B");
+  const successor = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   const ownSaleId = await seedSale(suite.db, successor, 1);
   const own = await withTransaction(suite.db, (tx) =>
@@ -215,8 +215,8 @@ it("refuses a correction of a record of a box this one did not take over from", 
   const original = await withTransaction(suite.db, (tx) =>
     appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1, "preproduction")),
   );
-  const successor = await seedNode(suite.db, "B");
-  const unrelated = await seedNode(suite.db, "C");
+  const successor = await seedNode(suite.db);
+  const unrelated = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   const before = await rows();
   const headBefore = await readChainHead(suite.db, unrelated.nodeId);

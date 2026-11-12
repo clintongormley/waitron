@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, nodes, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -69,7 +69,6 @@ async function seedInitiated(
   const nodeId = brandNodeId("11111111-1111-4111-8111-111111111111");
   await db.insert(nodes).values({
     id: nodeId,
-    locationId: await venueLocationId(db),
     name: "Webhook node",
   });
   const wo = await seedWorkingOrder(db, { source: "device", deviceId, orderNumber: 1 });

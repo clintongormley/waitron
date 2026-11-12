@@ -1,14 +1,7 @@
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import {
-  nodes,
-  withTransaction,
-  captureError,
-  refusalOn,
-  UNIQUE_VIOLATION,
-  venueLocationId,
-} from "@waitron/db";
+import { nodes, withTransaction, captureError, refusalOn, UNIQUE_VIOLATION } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -30,8 +23,7 @@ beforeEach(async () => {
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
-    const venueId = await venueLocationId(tx);
-    await tx.insert(nodes).values({ id: NODE, locationId: venueId, name: "Caja" });
+    await tx.insert(nodes).values({ id: NODE, name: "Caja" });
   });
 });
 

@@ -12,7 +12,6 @@ import {
   openVenueDatabase,
   stampDeployment,
   tenants,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -154,9 +153,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await suite.db
-    .insert(nodes)
-    .values({ id: NODE, locationId: await venueLocationId(suite.db), name: "Reimaged" });
+  await suite.db.insert(nodes).values({ id: NODE, name: "Reimaged" });
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: NODE, nextNumber: 23 })));

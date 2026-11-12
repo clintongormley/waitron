@@ -143,9 +143,7 @@ describe("certificateAlerts", () => {
   it("raises the expiry alert on the box that took over from the one that installed it", async () => {
     await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId, "representante");
-    await suite.db
-      .insert(nodes)
-      .values({ id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" });
+    await suite.db.insert(nodes).values({ id: TENANT_A.nodeId2, name: "Node 2" });
     await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
     await expect(alertsAt("2026-10-19T10:00:00Z", TENANT_A.nodeId2)).resolves.toMatchObject([
       { code: "fiscal.certificate_expiring", params: { days: 6, date: "2026-10-25" } },

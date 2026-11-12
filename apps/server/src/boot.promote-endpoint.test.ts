@@ -152,7 +152,6 @@ async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void>
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_LOCATION_ID,
       name: "Promote Endpoint node",
     })
     .onConflictDoNothing();

@@ -75,7 +75,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
 });
 it("round-trips an automatic end with no human recorder and verifies its hash", async () => {
   const automatic = { ...extension, authorKind: "automatic" as const };

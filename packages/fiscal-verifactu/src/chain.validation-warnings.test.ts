@@ -28,7 +28,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let node: SeededNode;
 
 beforeEach(async () => {
-  node = await seedNode(suite.db, "A");
+  node = await seedNode(suite.db);
   injected.issues = [];
 });
 

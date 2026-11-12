@@ -116,7 +116,7 @@ beforeAll(async () => {
     operationDescription: "Venta",
   });
   await seedBusinessDay(db, {});
-  await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
+  await db.insert(nodes).values({ id: T.nodeId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db
     .insert(invoiceSeries)
@@ -2183,9 +2183,7 @@ it("resolves an archive node's own location through the read-only source databas
   });
   await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
   await seedBusinessDay(suite.db, {});
-  await suite.db
-    .insert(nodes)
-    .values({ id: otherNode, locationId: otherLocation, name: "Other node" });
+  await suite.db.insert(nodes).values({ id: otherNode, name: "Other node" });
   try {
     const path = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const copy = (id: string) => ({

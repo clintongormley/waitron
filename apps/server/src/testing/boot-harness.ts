@@ -68,7 +68,6 @@ export async function seedSharedVenue(db: Database): Promise<void> {
   // against the enabled fiscal module.
   await db.insert(nodes).values({
     id: TILL_ENV.WAITRON_NODE_ID,
-    locationId: TILL_LOCATION_ID,
     name: "Boot Till",
     filingModule: "verifactu",
   });
@@ -341,7 +340,6 @@ export async function seedTradingVenue(db: Database): Promise<void> {
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({
     id: TILL_ENV.WAITRON_NODE_ID,
-    locationId: TILL_LOCATION_ID,
     name: "Route Wiring Till",
     filingModule: "verifactu",
   });

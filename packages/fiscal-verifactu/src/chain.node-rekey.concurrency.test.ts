@@ -38,7 +38,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let node: SeededNode;
 
 beforeEach(async () => {
-  node = await seedNode(suite.db, "A");
+  node = await seedNode(suite.db);
 });
 
 describe("appendToChain from many callers started together, keyed by node", () => {
@@ -165,7 +165,7 @@ describe("currentSif resolves per node", () => {
       await seedBusinessDay(tx, {});
       const [nodeRow] = await tx
         .insert(nodes)
-        .values({ locationId: loc!.id, name: "Node sib" })
+        .values({ name: "Node sib" })
         .returning({ id: nodes.id });
       const sibling = brandNodeId(nodeRow!.id);
       // Register a SIF for the sibling under the same NIF as the fixture (one obligado, two nodes)
@@ -197,7 +197,7 @@ describe("the series↔node guard (record-sale)", () => {
   }
 
   it("rejects a sale whose node does not own the series", async () => {
-    const other = await seedNode(suite.db, "OTH"); // a DIFFERENT node
+    const other = await seedNode(suite.db); // a DIFFERENT node
     const backend = backendFor();
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {

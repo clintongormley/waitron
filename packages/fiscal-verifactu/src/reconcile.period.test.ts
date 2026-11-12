@@ -178,7 +178,7 @@ describe("reconcile — the boxes a period's check covers", () => {
   it("a period's check includes the records of the box this one took over from", async () => {
     const [inserted] = await suite.db
       .insert(nodes)
-      .values({ locationId: venue.locationId, name: "Spare" })
+      .values({ name: "Spare" })
       .returning({ id: nodes.id });
     const node = { id: brandNodeId(inserted!.id) };
     const spare = await suite.db.transaction((tx) =>

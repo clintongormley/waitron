@@ -21,7 +21,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let node: SeededNode;
 
 beforeEach(async () => {
-  node = await seedNode(suite.db, "A");
+  node = await seedNode(suite.db);
 });
 
 /** An F3 canje record carrying BOTH the substituted ticket's identity (FacturasSustituidas) and the

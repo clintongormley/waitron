@@ -33,7 +33,7 @@ beforeEach(async () => {
   personId = await seedPerson(suite.db, "Ana");
   otherPersonId = await seedPerson(suite.db, "Ben");
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
 });
 
 function event(at: string): ClockEventInput {

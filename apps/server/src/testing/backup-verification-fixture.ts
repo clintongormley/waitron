@@ -193,7 +193,6 @@ export function useBackupVerificationFixture() {
     await seedBusinessDay(suite.db, {});
     await suite.db.insert(nodes).values({
       id: verificationNode.nodeId,
-      locationId: verificationNode.locationId,
       name: "Source node",
     });
     await suite.db.insert(deployment).values({ id: 1, environment: "production" });

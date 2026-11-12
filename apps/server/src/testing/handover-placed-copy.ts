@@ -167,7 +167,6 @@ export function placedSpareFixture(boxes: {
     await seedBusinessDay(mainBox.db, { timeZone: "Europe/Madrid" });
     await mainBox.db.insert(nodes).values({
       id: primary.nodeId,
-      locationId: venueId,
       name: "Primary",
       filingModule: "verifactu",
       taxModule: "vat",
@@ -194,7 +193,6 @@ export function placedSpareFixture(boxes: {
     await seedBusinessDay(spareBefore.db, { timeZone: "Europe/Madrid" });
     await spareBefore.db.insert(nodes).values({
       id: standby.nodeId,
-      locationId: venueId,
       name: "Standby",
       filingModule: "verifactu",
       taxModule: "vat",

@@ -34,7 +34,7 @@ const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 /** A fresh node under TENANT_A's seeded location. */
 async function seedNodeForA(): Promise<string> {
-  return seedNode(suite.db, TENANT_A.locationId);
+  return seedNode(suite.db);
 }
 
 async function nodeIdNullability(table: string): Promise<{ is_nullable: string }[]> {

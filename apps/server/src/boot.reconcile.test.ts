@@ -108,7 +108,6 @@ async function seed(db: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_LOCATION_ID,
       name: "Box",
     })
     .onConflictDoNothing();
@@ -117,7 +116,6 @@ async function seed(db: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: PEER_NODE,
-      locationId: TILL_LOCATION_ID,
       name: "Cloud",
       publicKey: PEER_KEY.publicKey,
     })

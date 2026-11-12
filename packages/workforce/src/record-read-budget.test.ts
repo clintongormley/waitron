@@ -29,7 +29,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     locationId = await seedLocation(db);
-    nodeId = await seedNode(db, locationId);
+    nodeId = await seedNode(db);
     personId = await seedPerson(db, "Worker");
     other = await seedPerson(db, "Other");
     await withTransaction(db, async (tx) => {

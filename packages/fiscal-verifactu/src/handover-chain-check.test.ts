@@ -46,7 +46,7 @@ async function append(node: SeededNode, number: number) {
 
 async function twoChains() {
   for (const name of ["First", "Second"]) {
-    const node = await seedNode(suite.db, name);
+    const node = await seedNode(suite.db);
     for (const number of [1, 2, 3]) await append(node, number);
   }
 }

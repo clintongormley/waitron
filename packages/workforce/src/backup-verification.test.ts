@@ -49,8 +49,8 @@ beforeEach(async () => {
     });
     await seedBusinessDay(suite.db);
     await suite.db.insert(nodes).values([
-      { id: node, locationId: place, name: "Current" },
-      { id: retired, locationId: place, name: "Retired" },
+      { id: node, name: "Current" },
+      { id: retired, name: "Retired" },
     ]);
   }
   const append = (nodeId: string, entry: Partial<TimeEntryAppend> = {}) =>

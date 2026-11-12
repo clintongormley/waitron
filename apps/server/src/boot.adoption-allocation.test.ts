@@ -88,7 +88,6 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
     id: PRIMARY,
-    locationId: LOCATION,
     name: "Primary",
     filingModule: "none",
     taxModule: "vat",
@@ -172,7 +171,6 @@ it("the pending-adoption start answers the main box's signed query", async () =>
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
     id: PRIMARY,
-    locationId: LOCATION,
     name: "Primary",
     filingModule: "none",
     taxModule: "vat",

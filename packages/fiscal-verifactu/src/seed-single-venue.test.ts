@@ -17,7 +17,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 it("adds fiscal nodes at the existing venue without replacing its settings", async () => {
   await seedNode(suite.db);
   const before = await readVenue(suite.db);
-  await seedNode(suite.db, "B");
+  await seedNode(suite.db);
   await seedNodesForSifContention(suite.db, 2);
   expect(await readVenue(suite.db)).toEqual(before);
   expect(await suite.db.select().from(nodes)).toHaveLength(4);

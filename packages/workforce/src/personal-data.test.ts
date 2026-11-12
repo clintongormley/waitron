@@ -450,7 +450,7 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   const { manager, marta, colleague } = people;
   await seedTenant(db);
   const locationId = await seedLocation(db);
-  const nodeId = await seedNode(db, locationId);
+  const nodeId = await seedNode(db);
   const [openEntry, automaticEntry] = await clockInThenAutomaticOut(db, {
     nodeId,
     personId: marta,

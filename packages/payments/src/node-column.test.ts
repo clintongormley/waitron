@@ -21,7 +21,7 @@ async function seedOrderWithNode(): Promise<{
   node: string;
 }> {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
-  const node = await seedNode(suite.db, seeded.locationId);
+  const node = await seedNode(suite.db);
   return { seeded, node };
 }
 

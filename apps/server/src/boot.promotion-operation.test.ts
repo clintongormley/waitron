@@ -111,7 +111,6 @@ it.each(["account", "key"])(
     await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "05:00" });
     await suite.db.insert(nodes).values({
       id: NODE,
-      locationId: LOCATION,
       name: "Spare",
       filingModule: "none",
       taxModule: "vat",

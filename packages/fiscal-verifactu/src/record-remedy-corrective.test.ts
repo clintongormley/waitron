@@ -600,7 +600,7 @@ it("replays an omitted optional line value when the caller supplies undefined", 
 });
 
 async function takeOverWithCorrectiveSeries(): Promise<SeededNode> {
-  const successor = await seedNode(suite.db, "B");
+  const successor = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -641,7 +641,7 @@ it("a refused record of the box this one took over from can be remedied here", a
 
 it("a record of an unrelated box is still refused", async () => {
   await takeOverWithCorrectiveSeries();
-  const unrelated = await seedNode(suite.db, "C");
+  const unrelated = await seedNode(suite.db);
   input.generation.nodeId = unrelated.nodeId;
   await refuses("fiscal.remedy_invalid");
 });

@@ -60,7 +60,7 @@ describe("nodes schema", () => {
   });
 
   it("inserts a node under its tenant", async () => {
-    await db.insert(nodes).values({ locationId: LOCATION_A, name: "Node A1" });
+    await db.insert(nodes).values({ name: "Node A1" });
     const found = await db.select({ name: nodes.name }).from(nodes);
     expect(found.map((r) => r.name)).toEqual(["Node A1"]);
   });
@@ -68,9 +68,9 @@ describe("nodes schema", () => {
   it("rejects a duplicate id with a uniqueness violation", async () => {
     // `UNIQUE_VIOLATION` covers a primary key as well as any other unique index; `refusalOn` adds
     // that the collision was on `nodes.id` and not on some sibling index of this table.
-    await db.insert(nodes).values({ id: NODE_A1, locationId: LOCATION_A, name: "N" });
+    await db.insert(nodes).values({ id: NODE_A1, name: "N" });
     const error = await captureError(() =>
-      db.insert(nodes).values({ id: NODE_A1, locationId: LOCATION_A, name: "N again" }),
+      db.insert(nodes).values({ id: NODE_A1, name: "N again" }),
     );
     expect(refusalOn(error, UNIQUE_VIOLATION, { table: "nodes", columns: ["id"] })).toBe(true);
   });
@@ -98,14 +98,9 @@ describe("nodes schema", () => {
     // A foreign-key refusal on this engine names no table and no column, so the class is all the
     // refusal itself can say. The positive control below closes that gap: the same insert with a
     // real location is accepted, and `location_id` is the only value the two calls set differently.
-    const accepted = await db
-      .insert(nodes)
-      .values({ locationId: LOCATION_A, name: "Orphan" })
-      .returning({ id: nodes.id });
+    const accepted = await db.insert(nodes).values({ name: "Orphan" }).returning({ id: nodes.id });
     expect(accepted).toHaveLength(1);
-    const error = await captureError(() =>
-      db.insert(nodes).values({ locationId: LOCATION_MISSING, name: "Orphan" }),
-    );
+    const error = await captureError(() => db.insert(nodes).values({ name: "Orphan" }));
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 

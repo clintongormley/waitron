@@ -85,8 +85,8 @@ beforeEach(async () => {
   });
   LOCATION = await venueLocationId(suite.db);
   await suite.db.insert(nodes).values([
-    { id: PRIMARY, locationId: LOCATION, name: "Primary" },
-    { id: TARGET, locationId: LOCATION, name: "Spare" },
+    { id: PRIMARY, name: "Primary" },
+    { id: TARGET, name: "Spare" },
   ]);
   await seedPersons(suite.db, {
     id: ADMIN,

@@ -210,7 +210,7 @@ it.each([
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(source.db, { timeZone });
-    await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
+    await source.db.insert(nodes).values({ id: NODE, name: "Own box" });
     const server = await startServer(await environment(true));
     try {
       if (province === "Barcelona") {
@@ -259,7 +259,7 @@ it.each([
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(source.db, { timeZone: "Europe/London" });
-    await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
+    await source.db.insert(nodes).values({ id: NODE, name: "Own box" });
     const server = await startServer({
       ...(await environment(true)),
       WAITRON_ENV: "dev",
@@ -304,8 +304,8 @@ it.each(["mirror", "primary"] as const)(
     });
     await seedBusinessDay(source.db, { timeZone: "Europe/London" });
     await source.db.insert(nodes).values([
-      { id: NODE, locationId: LOCATION, name: "Own box" },
-      { id: originNode, locationId: LOCATION, name: "Origin box" },
+      { id: NODE, name: "Own box" },
+      { id: originNode, name: "Origin box" },
     ]);
     for (const [nodeId, amount] of [
       [NODE, "90.00"],

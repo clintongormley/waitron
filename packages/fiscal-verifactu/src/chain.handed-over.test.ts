@@ -19,8 +19,8 @@ let m1: SeededNode;
 let m2: SeededNode;
 
 beforeEach(async () => {
-  m1 = await seedNode(suite.db, "A");
-  m2 = await seedNode(suite.db, "B");
+  m1 = await seedNode(suite.db);
+  m2 = await seedNode(suite.db);
 });
 
 function chart(

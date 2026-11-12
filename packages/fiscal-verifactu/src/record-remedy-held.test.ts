@@ -612,7 +612,7 @@ it("a set-aside cancellation on another chain is released once its original is a
       return { refused, refusedCase, cancellation, cancellationCase };
     },
   );
-  const successor = await seedNode(suite.db, "B");
+  const successor = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   runtimeNode = successor.nodeId;
   const correction = await send(
@@ -655,7 +655,7 @@ it("a set-aside cancellation on another chain is released once its original is a
 
 it("a refused record of the box this one took over from can be remedied here", async () => {
   await acceptCurrent();
-  const successor = await seedNode(suite.db, "B");
+  const successor = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   runtimeNode = successor.nodeId;
   const before = await snapshot();
@@ -672,8 +672,8 @@ it("a refused record of the box this one took over from can be remedied here", a
 
 it("a record of an unrelated box is still refused", async () => {
   await acceptCurrent();
-  const successor = await seedNode(suite.db, "B");
-  const unrelated = await seedNode(suite.db, "C");
+  const successor = await seedNode(suite.db);
+  const unrelated = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   runtimeNode = unrelated.nodeId;
   const before = await snapshot();

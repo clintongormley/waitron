@@ -87,7 +87,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   });
   await seedBusinessDay(db, {});
   await seedDevice(db, {});
-  await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
+  await db.insert(nodes).values({ id: F.nodeId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
     .values({ id: F.seriesId, nodeId: F.nodeId, code: "FA", purpose: "standard", nextNumber: 5 });

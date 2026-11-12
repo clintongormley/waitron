@@ -218,7 +218,7 @@ it("a pending allocated adoption refuses without creating a selling identity and
     operationDescription: "Venta",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
+  await suite.db.insert(nodes).values({ id: PRIMARY, name: "Primary" });
   const pending: PendingAdoption = {
     originNodeId: PRIMARY,
     standby: { nodeId: STANDBY, publicKey: "synthetic-public" },

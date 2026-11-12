@@ -179,7 +179,7 @@ describe("refusals", () => {
   });
 
   it("another node's", async () => {
-    const other = await seedNode(suite.db, "B");
+    const other = await seedNode(suite.db);
     const { saleId } = await file({ on: other });
     expect(await admission(saleId)).toEqual(refused("wrong_node"));
   });

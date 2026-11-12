@@ -15,7 +15,7 @@ beforeEach(async () => {
   personId = await seedPerson(suite.db);
   otherPersonId = await seedPerson(suite.db, "Other");
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
 });
 interface Shape {
   kind: string;

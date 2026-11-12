@@ -25,7 +25,7 @@ let nodeId: string, locationId: string, worker: string, manager: string, other: 
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
@@ -211,7 +211,7 @@ it("serialises simultaneous closes into one closure and one marker", async () =>
 });
 it("closes a period once for the venue", async () => {
   const first = await close();
-  const secondNode = await seedNode(suite.db, locationId);
+  const secondNode = await seedNode(suite.db);
   const again = await close({ nodeId: secondNode });
   expect(again.id).toBe(first.id);
   expect(await api.readPayPeriodClosures(suite.db, { period })).toHaveLength(1);

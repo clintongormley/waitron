@@ -46,9 +46,7 @@ async function seedStampedVenue(stamp: "preproduction" | "production") {
     operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db
-    .insert(nodes)
-    .values({ id: node.nodeId, locationId: node.locationId, name: "Node 1" });
+  await suite.db.insert(nodes).values({ id: node.nodeId, name: "Node 1" });
   await suite.db.insert(deployment).values({ id: 1, environment: stamp });
 }
 

@@ -141,7 +141,7 @@ describe("seedNode", () => {
     });
     await seedBusinessDay(db, {});
     const location = loc!.id;
-    const node = await seedNode(db, location);
+    const node = await seedNode(db);
     const result = await db.execute<{ n: number }>(
       sql`select count(*) as n from nodes where id = ${node} and location_id = ${location}`,
     );
@@ -153,7 +153,7 @@ describe("seedNode", () => {
     const [second] = await db.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(db, { operationDescription: "Restaurant" });
     await seedBusinessDay(db, {});
-    const node = await seedNode(db, second!.id);
+    const node = await seedNode(db);
     const [row] = await db
       .select({ locationId: nodes.locationId })
       .from(nodes)

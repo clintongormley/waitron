@@ -431,7 +431,7 @@ it("refuses a synthetic held absent-original cancellation rather than treating i
 });
 
 it("refuses a record of a box outside this box's takeover history before reading the case", async () => {
-  const unrelated = await seedNode(suite.db, "C");
+  const unrelated = await seedNode(suite.db);
   const before = await snapshot();
   await expect(
     withTransaction(suite.db, (tx) =>

@@ -55,7 +55,7 @@ const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
   const workers = await seedPersons(suite.db, [
     { displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Bea", pinHash: "scrypt$00$00", role: "staff" },

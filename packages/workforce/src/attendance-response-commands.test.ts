@@ -50,7 +50,7 @@ let personId: string, manager: string, other: string, locationId: string, nodeId
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
@@ -112,7 +112,7 @@ it("revision changes for an older event appended on a different node", async () 
   )!.entryId;
   const before = await revision();
   expect(await revision()).toBe(before);
-  const earlierNode = await seedNode(suite.db, locationId);
+  const earlierNode = await seedNode(suite.db);
   await run((tx) =>
     backend.requestCorrection(tx, {
       nodeId: earlierNode,
@@ -134,7 +134,7 @@ it("revision ignores another worker's entries and questions", async () => {
 });
 it("revision covers an entry written on another node", async () => {
   const before = await revision();
-  const otherNode = await seedNode(suite.db, locationId);
+  const otherNode = await seedNode(suite.db);
   await clock("2026-01-05T09:00:00Z", personId, otherNode);
   expect(await revision()).not.toBe(before);
 });
@@ -787,7 +787,7 @@ it("a till decision on another node keeps the selected manager and device origin
   const value = await command(pair());
   const requested = await send(value, personId, personId, capture);
   const earlierNode = nodeId;
-  const decisionNode = await seedNode(suite.db, locationId);
+  const decisionNode = await seedNode(suite.db);
   const result = await send(
     await command({ action: "approve", itemId: value.commandId }),
     personId,

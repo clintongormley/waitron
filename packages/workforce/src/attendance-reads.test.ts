@@ -30,7 +30,7 @@ let personId: string, other: string, manager: string, locationId: string, nodeId
 beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
     { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
     { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },

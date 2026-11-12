@@ -187,7 +187,6 @@ async function boot(
       .where(eq(nodes.id, nodeId));
     await suite.db.insert(nodes).values({
       id: SPARE.nodeId,
-      locationId: own!.locationId,
       name: "Spare",
       publicKey: SPARE.publicKey,
     });

@@ -39,7 +39,7 @@ const RECIPIENT: Counterparty = {
 };
 
 beforeEach(async () => {
-  node = await seedNode(suite.db, "A");
+  node = await seedNode(suite.db);
   // Through the table: `id` and `created_at` are `$defaultFn` generators that only the insert
   // BUILDER runs.
   const [series] = await suite.db

@@ -53,9 +53,7 @@ beforeEach(async () => {
     operationDescription: "Venta",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db
-    .insert(nodes)
-    .values({ id: target.nodeId, locationId: target.locationId, name: "Restored node" });
+  await suite.db.insert(nodes).values({ id: target.nodeId, name: "Restored node" });
   await suite.db.insert(invoiceSeries).values([
     { nodeId: target.nodeId, code: "A", purpose: "standard" },
     { nodeId: target.nodeId, code: "FF", purpose: "full" },

@@ -9,7 +9,6 @@ import {
   sales,
   saleVoids,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedWorkingOrder, seedVenue } from "@waitron/db/testing/seed.js";
@@ -85,8 +84,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
       operationDescription: "Sale on premises",
       timeZone: "Europe/Madrid",
     });
-    const venueId = await venueLocationId(suite.db);
-    await suite.db.insert(nodes).values({ id: NODE_ID, locationId: venueId, name: "Box" });
+    await suite.db.insert(nodes).values({ id: NODE_ID, name: "Box" });
     const [row] = await seedPersons(suite.db, { displayName: "Martha Canary", role: "staff" });
     await withTransaction(suite.db, (tx) =>
       new WorkforceBackend().clockIn(tx, {

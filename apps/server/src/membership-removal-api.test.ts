@@ -307,7 +307,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
 
     it("refuses a standby this database holds a node row for as membership.standby_joined (409)", async () => {
       const p = await primary();
-      const joinedId = await seedNode(p.db, p.locationId);
+      const joinedId = await seedNode(p.db);
       await holdChart(p, [self(p), standby(joinedId)]);
       await expectRefused(p, joinedId, 409, "membership.standby_joined");
     });
@@ -929,7 +929,7 @@ describe("GET /management-api/servers", () => {
   it("lists the held chart with removable set by the same rule the removal applies", async () => {
     const p = await primary();
     const neverJoined = standby();
-    const joinedId = await seedNode(p.db, p.locationId);
+    const joinedId = await seedNode(p.db);
     const joined = standby(joinedId, "https://joined.deli.test");
     const former: MembershipNode = {
       nodeId: randomUUID(),

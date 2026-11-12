@@ -31,7 +31,7 @@ async function seed(db: Database): Promise<void> {
     operationDescription: "Hostelería",
   });
   await seedBusinessDay(db, {});
-  await seedNode(db, LOCATION_B);
+  await seedNode(db);
 }
 
 async function makeSeries(

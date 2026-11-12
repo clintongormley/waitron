@@ -685,9 +685,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       .select({ locationId: nodes.locationId })
       .from(nodes)
       .where(eq(nodes.id, mainId));
-    await mainBox.db
-      .insert(nodes)
-      .values({ id: spareId, locationId: own!.locationId, name: "Spare", publicKey: sparePublic });
+    await mainBox.db.insert(nodes).values({ id: spareId, name: "Spare", publicKey: sparePublic });
     const [owner] = await seedPersons(mainBox.db, {
       displayName: "Owner",
       role: "admin",

@@ -299,7 +299,6 @@ async function seedVenueWithNode(directory: string): Promise<void> {
     await seedBusinessDay(db, {});
     await db.insert(nodes).values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_LOCATION_ID,
       name: "Node",
       filingModule: "verifactu",
     });

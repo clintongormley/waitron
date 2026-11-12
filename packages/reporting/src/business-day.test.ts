@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, nodes, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -213,11 +213,7 @@ describe("resolveVenueClock", () => {
       timeZone: "Atlantic/Canary",
       dayCutover: "04:30:00",
     });
-    const venueId = await venueLocationId(suite.db);
-    const [node] = await suite.db
-      .insert(nodes)
-      .values({ locationId: venueId, name: "Box" })
-      .returning({ id: nodes.id });
+    const [node] = await suite.db.insert(nodes).values({ name: "Box" }).returning({ id: nodes.id });
 
     expect(await withTransaction(suite.db, (tx) => resolveVenueClock(tx, node!.id))).toEqual({
       cutoverChanges: [],

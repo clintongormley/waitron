@@ -254,8 +254,8 @@ const THIRD_BOX = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 async function rig() {
   const db = suite.db;
-  const m1 = await seedNode(db, "First");
-  const m2 = await seedNode(db, "Second");
+  const m1 = await seedNode(db);
+  const m2 = await seedNode(db);
   for (const number of [1, 2, 3]) await appendRecord(m1, number);
   for (const { nodeId } of [m1, m2]) {
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);

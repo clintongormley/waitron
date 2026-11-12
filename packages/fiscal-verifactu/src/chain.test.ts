@@ -407,7 +407,7 @@ describe("appendToChain — pre-fetched SIF", () => {
   });
 
   it("rejects a takeover history that belongs to a different box, writing nothing", async () => {
-    const other = await seedNode(suite.db, "B");
+    const other = await seedNode(suite.db);
     const saleId = await seedSale(suite.db, node, 1);
     const error = await captureError(() =>
       suite.db.transaction((tx) =>
@@ -429,7 +429,7 @@ describe("appendToChain — pre-fetched SIF", () => {
   });
 
   it("accepts a takeover history that starts with this box", async () => {
-    const other = await seedNode(suite.db, "B");
+    const other = await seedNode(suite.db);
     const saleId = await seedSale(suite.db, node, 1);
     const appended = await suite.db.transaction((tx) =>
       appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), {

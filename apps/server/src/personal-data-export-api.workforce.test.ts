@@ -207,7 +207,7 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   locationId = await venueLocationId(suite.db);
-  await suite.db.insert(nodes).values({ id: NODE_ID, locationId, name: "Box" });
+  await suite.db.insert(nodes).values({ id: NODE_ID, name: "Box" });
   const [marta, colleague, manager, admin] = await seedPersons(suite.db, [
     {
       displayName: MARTA.name,

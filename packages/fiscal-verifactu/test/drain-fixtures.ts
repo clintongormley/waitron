@@ -455,10 +455,7 @@ export async function seedSecondChain(
   });
   await seedBusinessDay(db, {});
   if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala B" });
-  const [node] = await db
-    .insert(nodes)
-    .values({ locationId: location!.id, name: "Node B" })
-    .returning({ id: nodes.id });
+  const [node] = await db.insert(nodes).values({ name: "Node B" }).returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   await db.insert(invoiceSeries).values({ nodeId, code: "B" });
   // Same `nif` and `idSistemaInformatico` as `seeded`'s chain: `registerSif` mints installation
@@ -502,10 +499,7 @@ export async function seedIndependentChain(
       ? existing[0]!
       : (await db.insert(locations).values({}).returning({ id: locations.id }))[0]!;
   if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala Z" });
-  const [node] = await db
-    .insert(nodes)
-    .values({ locationId: location!.id, name: "Node Z" })
-    .returning({ id: nodes.id });
+  const [node] = await db.insert(nodes).values({ name: "Node Z" }).returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   await db.insert(invoiceSeries).values({ nodeId, code: "Z" });
   // A fresh nif, so this fixed installation number cannot collide with another chain's.
@@ -563,7 +557,7 @@ export async function seedPinnedChain(
     await seedVenueSettings(db, { name: `Sala ${params.sifId.slice(0, 4)}` });
   const [node] = await db
     .insert(nodes)
-    .values({ locationId: location!.id, name: `Node ${params.sifId.slice(0, 4)}` })
+    .values({ name: `Node ${params.sifId.slice(0, 4)}` })
     .returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   pinnedInstallationSequence += 1;

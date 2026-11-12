@@ -30,10 +30,7 @@ async function bill(full = false) {
       operationDescription: "Restaurant",
     });
     await seedBusinessDay(tx, {});
-    const [node] = await tx
-      .insert(nodes)
-      .values({ locationId: location!.id, name: "Selector" })
-      .returning();
+    const [node] = await tx.insert(nodes).values({ name: "Selector" }).returning();
     const [standard, fullSeries] = await tx
       .insert(invoiceSeries)
       .values([

@@ -119,7 +119,7 @@ describe("the D1a time & attendance tables", () => {
   }> {
     const personId = await seedPerson(suite.db, `d1a-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db);
-    const nodeId = await seedNode(suite.db, locationId);
+    const nodeId = await seedNode(suite.db);
     return { personId, locationId, nodeId };
   }
 
@@ -189,7 +189,7 @@ describe("the D1b correction columns", () => {
   }> {
     const personId = await seedPerson(suite.db, `d1b-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db);
-    const nodeId = await seedNode(suite.db, locationId);
+    const nodeId = await seedNode(suite.db);
     // A valid position-1 entry; the cases below write at position 2, so they never collide on
     // time_entries_chain_position_uq. `.000Z` because the whole-second checks demand it.
     const rows = await suite.db.execute<{ id: string }>(sql`

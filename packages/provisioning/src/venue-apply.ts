@@ -350,7 +350,6 @@ export async function applyVenue(
           nodeId = initialNodeId;
           await tx.insert(nodes).values({
             id: nodeId,
-            locationId,
             name: action.name,
             filingModule: action.filingModule,
             taxModule: action.taxModule,

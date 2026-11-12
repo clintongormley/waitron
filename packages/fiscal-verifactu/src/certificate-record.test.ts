@@ -41,8 +41,8 @@ const NODE_3 = brandNodeId("a0000000-0000-4000-8000-00000000000a");
 async function seedBoxes(): Promise<void> {
   await seedTenantNodeSif(suite.db);
   await suite.db.insert(nodes).values([
-    { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
-    { id: NODE_3, locationId: TENANT_A.locationId, name: "Node 3" },
+    { id: TENANT_A.nodeId2, name: "Node 2" },
+    { id: NODE_3, name: "Node 3" },
   ]);
 }
 

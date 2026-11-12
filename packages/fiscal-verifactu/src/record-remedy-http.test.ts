@@ -149,8 +149,8 @@ async function snapshot() {
 }
 
 it("keeps correction disabled for an original outside the pinned former main", async () => {
-  generationNode = (await seedNode(suite.db, "Current main")).nodeId;
-  const formerMain = (await seedNode(suite.db, "Former main")).nodeId;
+  generationNode = (await seedNode(suite.db)).nodeId;
+  const formerMain = (await seedNode(suite.db)).nodeId;
   const before = await snapshot();
   const response = await send(body, false, true, async () => formerMain);
   expect(response.status).toBe(409);
@@ -737,7 +737,7 @@ it.each(["R1", "F3"] as const)(
 );
 
 it("a refused record of the box this one took over from can be remedied here", async () => {
-  const successor = await seedNode(suite.db, "B");
+  const successor = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   generationNode = successor.nodeId;
   const before = await snapshot();
@@ -762,7 +762,7 @@ it("a refused record of the box this one took over from can be remedied here", a
 });
 
 it("walks the takeover history once to remedy a record of the box this one took over from", async () => {
-  const successor = await seedNode(suite.db, "B");
+  const successor = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   generationNode = successor.nodeId;
   let reads = 0;
@@ -785,8 +785,8 @@ it("walks the takeover history once to remedy a record of the box this one took 
 });
 
 it("a record of an unrelated box is still refused", async () => {
-  const successor = await seedNode(suite.db, "B");
-  const unrelated = await seedNode(suite.db, "C");
+  const successor = await seedNode(suite.db);
+  const unrelated = await seedNode(suite.db);
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   generationNode = unrelated.nodeId;
   const before = await snapshot();

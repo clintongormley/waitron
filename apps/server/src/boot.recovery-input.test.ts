@@ -51,7 +51,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
   await seedBusinessDay(suite.db, {});
-  await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
+  await suite.db.insert(nodes).values({ id: NODE, name: "Old node" });
   scratch = await mkdtemp(join(tmpdir(), "w41s6-public-boot-"));
 });
 afterEach(async () => {

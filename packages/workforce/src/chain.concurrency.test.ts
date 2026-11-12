@@ -30,7 +30,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
 });
 
 function key(node = nodeId): ChainKey {
@@ -93,7 +93,7 @@ describe("appendToChain under concurrent callers", () => {
   it("never collides between two nodes on the SAME location — independent heads", async () => {
     // Both nodes claim the same sequence_no values at one location; they cannot collide only because
     // `node_id` is in `time_entries_chain_position_uq`.
-    const nodeB = await seedNode(suite.db, locationId);
+    const nodeB = await seedNode(suite.db);
     const perNode = WRITERS / 2;
     // Interleaved, so each node produces sequence_no 1..perNode.
     await appendAll((i) => key(i % 2 === 0 ? nodeId : nodeB));

@@ -41,7 +41,7 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   personId = await seedPerson(suite.db);
   locationId = await seedLocation(suite.db);
-  nodeId = await seedNode(suite.db, locationId);
+  nodeId = await seedNode(suite.db);
 });
 
 function key(node = nodeId): ChainKey {
@@ -132,7 +132,7 @@ describe("appendToChain", () => {
 
   it("keeps one chain per node; two nodes do not collide", async () => {
     // Two nodes write one venue across a promotion, taking the same sequence_no values.
-    const nodeB = await seedNode(suite.db, locationId);
+    const nodeB = await seedNode(suite.db);
     const k1 = key(nodeId);
     const k2 = key(nodeB);
     await suite.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));

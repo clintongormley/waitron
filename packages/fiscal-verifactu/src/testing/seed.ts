@@ -86,7 +86,7 @@ async function insertLocation(tx: Transaction, label: string): Promise<string> {
 async function insertNode(tx: Transaction, location: string, label: string): Promise<NodeId> {
   const [nodeRow] = await tx
     .insert(nodes)
-    .values({ locationId: location, name: "Node " + label })
+    .values({ name: "Node " + label })
     .returning({ id: nodes.id });
   if (nodeRow === undefined) throw new Error("seedNode: node insert returned no row");
   return brandNodeId(nodeRow.id);
