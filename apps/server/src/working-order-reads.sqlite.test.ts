@@ -8,7 +8,6 @@ import {
   partyTables,
   ticketItems,
   withTransaction,
-  venueLocationId,
   workingOrderLines,
   workingOrders,
   type Database,
@@ -19,12 +18,13 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { listTables } from "./tables.js";
 import { listStationQueue, listTablesWithState } from "./working-order.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { boardCards, boardItems, boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
 import { numberBill } from "./testing/bill-identities.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** The three kitchen/floor read models, run against a real migrated venue database. */
 
@@ -37,7 +37,7 @@ const suite = useVenueDb({
   resetPerTest: false,
 });
 let db: Database;
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let stationId: string;
 let tableId: string;
 
@@ -48,11 +48,10 @@ beforeAll(async () => {
     invoiceLocales: [LOCALE],
     operationDescription: "In-store sales",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   [{ id: stationId }] = await db
     .insert(kitchenStations)
-    .values({ locationId, name: "Kitchen", isDefault: true })
+    .values({ name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
 
   const orderId = randomUUID();
@@ -93,18 +92,15 @@ beforeAll(async () => {
   });
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId, name: "Tables" })
+    .values({ name: "Tables" })
     .returning({ id: floorZones.id });
   tableId = randomUUID();
-  await db
-    .insert(diningTables)
-    .values({ id: tableId, locationId, zoneId: zone!.id, label: "Table 1" });
+  await db.insert(diningTables).values({ id: tableId, zoneId: zone!.id, label: "Table 1" });
   await db.insert(floorTodayTables).values({ tableId: tableId });
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
   cfg = {
     nodeId,
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -115,15 +111,15 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
   it("omits missing-today and disabled-zone tables from both floor lists, keeping taken-off tables", async () => {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Closed", active: false })
+      .values({ name: "Closed", active: false })
       .returning();
     const [normalZone] = await db.select().from(floorZones).where(eq(floorZones.name, "Tables"));
     const [absent, closed, takenOff] = await db
       .insert(diningTables)
       .values([
-        { locationId: cfg.locationId, zoneId: normalZone!.id, label: "Absent" },
-        { locationId: cfg.locationId, zoneId: zone!.id, label: "Closed" },
-        { locationId: cfg.locationId, zoneId: normalZone!.id, label: "Spare" },
+        { zoneId: normalZone!.id, label: "Absent" },
+        { zoneId: zone!.id, label: "Closed" },
+        { zoneId: normalZone!.id, label: "Spare" },
       ])
       .returning();
     await db

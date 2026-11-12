@@ -9,7 +9,6 @@ import {
   readTenant,
   sales,
   tenders,
-  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
@@ -263,7 +262,6 @@ async function enqueueSlips(
   if (taxpayer === null) return;
   /* v8 ignore stop */
   const order = await readReceiptOrder(tx, workingOrderId);
-  const venueId = await venueLocationId(tx);
   for (const payment of cards) {
     const card: CardDetails | null =
       payment.scheme === null || payment.last4 === null || payment.entryMode === null
@@ -289,6 +287,6 @@ async function enqueueSlips(
       remaining: payment.remaining === null ? null : centsToDecimal(payment.remaining),
       printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
     });
-    await enqueuePrintJob(tx, printer.id, payload, "document", { venueId });
+    await enqueuePrintJob(tx, printer.id, payload, "document");
   }
 }

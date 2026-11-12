@@ -212,7 +212,6 @@ async function seedVenueWithPrinters() {
       await suite.db
         .insert(printers)
         .values({
-          locationId: values.location ?? locationId,
           name: values.name,
           transport: "network_tcp",
           host: `${values.name.toLowerCase().replaceAll(" ", "-")}.test`,
@@ -298,11 +297,11 @@ async function seedVenueWithPrinters() {
 
   const [grill] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId, name: "Grill" })
+    .values({ name: "Grill" })
     .returning({ id: kitchenStations.id });
   const [drinks] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId, name: "Drinks" })
+    .values({ name: "Drinks" })
     .returning({ id: kitchenStations.id });
   await suite.db.insert(stationPrinters).values([
     { stationId: grill!.id, printerId: P },
@@ -319,7 +318,7 @@ async function seedVenueWithPrinters() {
     (
       await suite.db
         .insert(printJobs)
-        .values({ locationId, printerId, payload: new Uint8Array([27, 64]), ...values })
+        .values({ printerId, payload: new Uint8Array([27, 64]), ...values })
         .returning({ id: printJobs.id })
     )[0]!.id;
   const queued = await job(P, { saleId: sales[0], receiptCopy: false });
@@ -733,7 +732,7 @@ describe("deleting a printer", () => {
     for (let i = 0; i < 2; i++) {
       const [row] = await suite.db
         .insert(printJobs)
-        .values({ locationId: v.cfg.locationId, printerId: v.P, payload: new Uint8Array([1]) })
+        .values({ printerId: v.P, payload: new Uint8Array([1]) })
         .returning({ id: printJobs.id });
       added.push(row!.id);
     }

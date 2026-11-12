@@ -7,7 +7,6 @@ import {
   kitchenStations,
   nowIso,
   ticketItems,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -41,11 +40,10 @@ describe("station queue rest of the order", () => {
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     });
-    const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     const [{ id: stationId }] = await db
       .insert(kitchenStations)
-      .values({ locationId, name: "Cocina", isDefault: true })
+      .values({ name: "Cocina", isDefault: true })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await seedWorkingOrder(db, { id: orderId, nodeId, orderNumber: 1, status: "open" });
@@ -72,10 +70,7 @@ describe("station queue rest of the order", () => {
     });
     const otherStations = await db
       .insert(kitchenStations)
-      .values([
-        { locationId: locationId, name: "A Freidora" },
-        { locationId: locationId, name: "Z Parrilla" },
-      ])
+      .values([{ name: "A Freidora" }, { name: "Z Parrilla" }])
       .returning({ id: kitchenStations.id, name: kitchenStations.name });
     const station = (name: string) => otherStations.find((row) => row.name === name)!.id;
     const cases = [
@@ -253,7 +248,6 @@ describe("station queue bump mode", () => {
       invoiceLocales: [LOCALE],
       operationDescription: "Dine-in sale",
     });
-    const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     const cfg: TradingContext = {
       nodeId: brandNodeId(nodeId),
@@ -264,8 +258,8 @@ describe("station queue bump mode", () => {
     const stations = await db
       .insert(kitchenStations)
       .values([
-        { locationId, name: "Grill", isDefault: true, bumpMode: "ticket" },
-        { locationId, name: "Bar", bumpMode: "line" },
+        { name: "Grill", isDefault: true, bumpMode: "ticket" },
+        { name: "Bar", bumpMode: "line" },
       ])
       .returning({ id: kitchenStations.id, name: kitchenStations.name });
     const grillId = stations.find((row) => row.name === "Grill")!.id;

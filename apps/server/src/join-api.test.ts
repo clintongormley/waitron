@@ -161,10 +161,7 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
   );
   const [offered, other] = await suite.db
     .insert(floorZones)
-    .values([
-      { locationId: venue.cfg.locationId, name: "Terrace" },
-      { locationId: venue.cfg.locationId, name: "Bar" },
-    ])
+    .values([{ name: "Terrace" }, { name: "Bar" }])
     .returning({ id: floorZones.id });
   const [profile] = await suite.db
     .insert(deviceProfiles)

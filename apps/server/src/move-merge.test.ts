@@ -12,7 +12,6 @@ import {
   floorTodayJoinTables,
   floorTodayJoins,
   kitchenStations,
-  venueLocationId,
   parties,
   partyTables,
   printJobs,
@@ -35,7 +34,7 @@ import {
 } from "@waitron/catalogue";
 import { centsToDecimal, decimalToCents, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { listStationQueues, moveOrderLines, storedOrderTotal } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
@@ -129,7 +128,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: WithVenueRowId<OriginConfig>;
+  cfg: OriginConfig;
   coffeeId: string;
   waterId: string;
   /** "Bacon" — sold only as another dish's extra here, so a child line's product id can never be
@@ -165,12 +164,10 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
-  const cfg: WithVenueRowId<OriginConfig> = {
+  const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -218,17 +215,16 @@ function offersOf(cfg: OriginConfig): ZoneOffers {
   return offersByCfg.get(cfg)!;
 }
 
-function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
 }
 
 /** Create one active dining table in the venue's tables zone; returns its id. */
-async function seedTable(cfg: WithVenueRowId<OriginConfig>, label: string): Promise<string> {
+async function seedTable(cfg: OriginConfig, label: string): Promise<string> {
   const zoneId = offersOf(cfg).zoneId;
-  return asApp(cfg, (tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
+  return asApp((tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
 }
 
 /** Open a tab on a table with the given lines; returns the tab (working_order) id. */
@@ -237,7 +233,7 @@ async function openTabOn(
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
-  return asApp(cfg, (tx) =>
+  return asApp((tx) =>
     openPartyTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then(
       (r) => r.tabId,
     ),
@@ -271,7 +267,7 @@ describe("moveOrderLines", () => {
     const to = await openTabOn(cfg, t2, [{ productId: waterId, quantity: "1" }]);
     const sourceLineId = (await linesOf(from))[0]!.id;
 
-    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined));
+    await asApp((tx) => moveOrderLines(tx, cfg, from, to, undefined));
 
     const dest = await linesOf(to);
     expect(dest).toHaveLength(2);
@@ -291,7 +287,7 @@ describe("moveOrderLines", () => {
     ]);
     const to = await openTabOn(cfg, t2, []);
 
-    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, [2]));
+    await asApp((tx) => moveOrderLines(tx, cfg, from, to, [2]));
 
     expect(await linesOf(to)).toHaveLength(1);
     expect((await linesOf(to))[0]!.productId).toBe(waterId);
@@ -307,7 +303,7 @@ describe("moveOrderLines", () => {
     const from = await openTabOn(cfg, t1, []); // empty tab
     const to = await openTabOn(cfg, t2, [{ productId: waterId, quantity: "1" }]);
 
-    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined));
+    await asApp((tx) => moveOrderLines(tx, cfg, from, to, undefined));
     expect(await linesOf(to)).toHaveLength(1); // unchanged
   });
 
@@ -319,18 +315,18 @@ describe("moveOrderLines", () => {
     const to = await openTabOn(cfg, t2, []);
     // Abandon the destination (owner write, fixture setup).
     await db.execute(sql`update working_orders set status = 'abandoned' where id = ${to}`);
-    await expect(
-      asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined)),
-    ).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId: to },
-    });
-    await expect(
-      asApp(cfg, (tx) => moveOrderLines(tx, cfg, to, from, undefined)),
-    ).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId: to },
-    });
+    await expect(asApp((tx) => moveOrderLines(tx, cfg, from, to, undefined))).rejects.toMatchObject(
+      {
+        code: "tab.not_open",
+        params: { tabId: to },
+      },
+    );
+    await expect(asApp((tx) => moveOrderLines(tx, cfg, to, from, undefined))).rejects.toMatchObject(
+      {
+        code: "tab.not_open",
+        params: { tabId: to },
+      },
+    );
     expect(await linesOf(from)).toHaveLength(1);
   });
 
@@ -343,12 +339,12 @@ describe("moveOrderLines", () => {
     ]);
     // `mergeBills` guards this at its own top, but `moveOrderLines` is exported and must self-guard:
     // a "move all" onto itself would wipe the tab.
-    await expect(
-      asApp(cfg, (tx) => moveOrderLines(tx, cfg, tab, tab, undefined)),
-    ).rejects.toMatchObject({
-      code: "tab.merge_self",
-      params: { tabId: tab },
-    });
+    await expect(asApp((tx) => moveOrderLines(tx, cfg, tab, tab, undefined))).rejects.toMatchObject(
+      {
+        code: "tab.merge_self",
+        params: { tabId: tab },
+      },
+    );
     // The guard fires BEFORE any read/write, so the tab still holds both original lines.
     expect(await linesOf(tab)).toHaveLength(2);
   });
@@ -388,7 +384,7 @@ async function kitchenPrinter(v: PartyVenue): Promise<string> {
     const [station] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, v.cfg.locationId));
+      .where(sql`true`);
     const { id } = await createPrinter(tx, {
       name: "Cocina",
       transport: "cloud_poll",
@@ -582,17 +578,11 @@ async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[])
 }
 
 /** The id of the active station named `name`. */
-async function activeStationId(tx: Transaction, v: PartyVenue, name: string): Promise<string> {
+async function activeStationId(tx: Transaction, name: string): Promise<string> {
   const [row] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.locationId, v.cfg.locationId),
-        eq(kitchenStations.name, name),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.name, name), eq(kitchenStations.active, true)));
   return row!.id;
 }
 
@@ -2086,7 +2076,7 @@ describe("A803 split: what the kitchen is told", () => {
         const v = await setupPartyVenue(db);
         const grill = await stationWithPrinter(v, "Grill", dishes);
         await inTx(v, async (tx) =>
-          setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+          setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, "Grill")]),
         );
         const firstTable = await v.table(`Mesa ${first}`);
         const { partyId, tabId } = await seat(v, firstTable);
@@ -2299,7 +2289,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await inTx(v, async (tx) =>
-      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, "Grill")]),
     );
     const table112 = await v.table("Mesa 112");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 111"));
@@ -2337,9 +2327,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
         { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
         { kind: "station", stationId: station.id },
       );
-      await setStationPrinting(tx, { printHeldWork: true }, [
-        await activeStationId(tx, v, "Kitchen"),
-      ]);
+      await setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, "Kitchen")]);
       return station.id;
     });
     const table122 = await v.table("Mesa 122");
@@ -2390,7 +2378,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await inTx(v, async (tx) =>
-      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, "Grill")]),
     );
     const table119 = await v.table("Mesa 119");
     const { partyId, tabId } = await seat(v, await v.table("Mesa 118"));
@@ -2450,7 +2438,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await inTx(v, async (tx) =>
-      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, "Grill")]),
     );
     const { partyId, tabId } = await seat(v, await v.table("Mesa 115"));
     await burgerAndHeldPaella(v, partyId, tabId);
@@ -2489,7 +2477,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     await printHeldWork(v, true);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await inTx(v, async (tx) =>
-      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, v, "Grill")]),
+      setStationPrinting(tx, { printHeldWork: true }, [await activeStationId(tx, "Grill")]),
     );
     const { partyId, tabId } = await seat(v, await v.table("Mesa 117"));
     await burgerAndHeldPaella(v, partyId, tabId);
@@ -2633,7 +2621,7 @@ describe("A1378 MOVED follows station grouping and preserves portion boundaries"
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     await inTx(v, async (tx) =>
       setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: true }, [
-        await activeStationId(tx, v, "Grill"),
+        await activeStationId(tx, "Grill"),
       ]),
     );
     const p = await seat(v, await v.table("Held source"));
@@ -2719,7 +2707,7 @@ describe("A1378 MOVED follows station grouping and preserves portion boundaries"
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     await inTx(v, async (tx) =>
       setStationPrinting(tx, { ticketGrouping: "separate", printHeldWork: true }, [
-        await activeStationId(tx, v, "Grill"),
+        await activeStationId(tx, "Grill"),
       ]),
     );
     const table122 = await v.table("Mesa 122");
@@ -2892,7 +2880,7 @@ describe("a station's print-MOVED-slips choice", () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     await inTx(v, async (tx) => {
-      const id = await activeStationId(tx, v, "Grill");
+      const id = await activeStationId(tx, "Grill");
       if (on === null)
         await tx
           .update(kitchenStations)
@@ -2971,16 +2959,16 @@ describe("a station's print-MOVED-slips choice", () => {
 });
 
 describe("a prep station's own print-MOVED-slips choice", () => {
-  async function stationIdOf(v: PartyVenue, name: string): Promise<string> {
+  async function stationIdOf(name: string): Promise<string> {
     const [station] = await db
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(and(eq(kitchenStations.locationId, v.cfg.locationId), eq(kitchenStations.name, name)));
+      .where(and(eq(kitchenStations.name, name)));
     return station!.id;
   }
 
   async function stationPrints(v: PartyVenue, name: string, printMovedSlips: boolean) {
-    const id = await stationIdOf(v, name);
+    const id = await stationIdOf(name);
     await inTx(v, (tx) => updateStation(tx, id, { printMovedSlips }));
   }
 
@@ -2994,7 +2982,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     const dessertsPrinter = await stationWithPrinter(v, "Postres", ["Flan"]);
     await stationPrints(v, "Grill", grill);
     if (desserts === null) {
-      const id = await stationIdOf(v, "Postres");
+      const id = await stationIdOf("Postres");
       await inTx(v, (tx) =>
         tx.update(kitchenStations).set({ printMovedSlips: null }).where(eq(kitchenStations.id, id)),
       );
@@ -3061,7 +3049,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     await inTx(v, (tx) => mergeBills(tx, v.cfg, tabId, second, command));
 
     expect(await slipsSince(grill, before)).toEqual([]);
-    const grillId = await stationIdOf(v, "Grill");
+    const grillId = await stationIdOf("Grill");
     const queues = await inTx(v, (tx) => listStationQueues(tx, [grillId]));
     expect(n28).toBeDefined();
     expect(queues.get(grillId)!.find((group) => group.orderId === tabId)).toMatchObject({

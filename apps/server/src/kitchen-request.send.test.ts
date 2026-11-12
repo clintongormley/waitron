@@ -420,7 +420,7 @@ describe("A773 waiter request: send", () => {
     await withTransaction(db, async (tx) => {
       await advanceTicket(tx, venue.cfg, venue.party.tabId, venue.stations.grill, "preparing");
       expect(await items(tx, venue.party.tabId)).toEqual([item]);
-      await bumpGroupReady(tx, venue.cfg, venue.party.partyId, groupId, {
+      await bumpGroupReady(tx, venue.party.partyId, groupId, {
         operatorId: OPERATOR,
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(tx, venue.party.partyId),

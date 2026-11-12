@@ -160,7 +160,7 @@ export async function insertPartyBill(
   partyId: string,
 ): Promise<string> {
   const billId = randomUUID();
-  const zoneId = await partyZone(tx, cfg, partyId);
+  const zoneId = await partyZone(tx, partyId);
   await createOpenOrder(tx, cfg, billId, [], null, {
     zoneId: zoneId ?? undefined,
     partyId,
@@ -206,12 +206,7 @@ export async function createPartyBill(
 }
 
 /** The service zone of the party's earliest active table; null when it holds none, or no zone. */
-export async function partyZone(
-  tx: Transaction,
-  cfg: TradingContext,
-  partyId: string,
-): Promise<string | null> {
-  void cfg;
+export async function partyZone(tx: Transaction, partyId: string): Promise<string | null> {
   return (await partyStateAndZone(tx, partyId))?.zoneId ?? null;
 }
 

@@ -92,7 +92,7 @@ export async function moveGuests(
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, toTableId, partyId, options);
-  const zoneBefore = await partyZone(tx, cfg, partyId);
+  const zoneBefore = await partyZone(tx, partyId);
   if (table.zoneId !== zoneBefore)
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, table.zoneId, new Date());
   const held = await memberTables(tx, partyId);
@@ -156,7 +156,7 @@ export async function joinTables(
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, tableId, partyId, options);
   if (table.holding === partyId) throw new AppError("table.already_in_party", { tableId });
-  const zoneId = await partyZone(tx, cfg, partyId);
+  const zoneId = await partyZone(tx, partyId);
   if (zoneId !== null && zoneId !== table.zoneId) {
     throw new AppError("service_zone.join_mismatch", {
       orderZoneId: zoneId,
@@ -245,7 +245,7 @@ export async function combineParties(
     args.operatorId,
     args.expectedEdits,
   );
-  const zoneId = args.intoZoneId !== undefined ? args.intoZoneId : await partyZone(tx, cfg, into);
+  const zoneId = args.intoZoneId !== undefined ? args.intoZoneId : await partyZone(tx, into);
   await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);

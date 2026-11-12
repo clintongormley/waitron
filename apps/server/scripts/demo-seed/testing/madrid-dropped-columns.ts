@@ -16,6 +16,28 @@ export function madridWithDroppedColumns(
           `@routing_cells:${stable([row.category_id, row.product_id, row.zone_id])}`,
         );
   }
+  if (drops.floor_zones?.includes("location_id")) {
+    for (const row of Object.values(result.tables.floor_zones?.rows ?? {}))
+      if (typeof row.id === "string") aliases.set(row.id, `@floor_zones:${stable([row.name])}`);
+    const ids = new Set(
+      Object.values(result.tables)
+        .flatMap((table) => Object.values(table.rows).map((row) => row.id))
+        .filter((id): id is string => typeof id === "string"),
+    );
+    const resolve = (id: string): string => {
+      const mapped = aliases.get(id) ?? id;
+      if (!ids.has(id)) return mapped;
+      const colon = mapped.indexOf(":");
+      if (!mapped.startsWith("@") || colon < 0) return mapped;
+      const parts = JSON.parse(mapped.slice(colon + 1)) as unknown[];
+      const updated =
+        mapped.slice(0, colon + 1) +
+        stable(parts.map((part) => (typeof part === "string" ? resolve(part) : part)));
+      aliases.set(id, updated);
+      return updated;
+    };
+    for (const id of ids) resolve(id);
+  }
   for (const [name, columns] of Object.entries(drops)) {
     const table = result.tables[name];
     if (table === undefined) throw new Error(`missing Madrid table: ${name}`);

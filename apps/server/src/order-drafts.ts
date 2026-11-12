@@ -267,10 +267,10 @@ export interface UnsentDraft {
 
 export async function readDrafts(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
 ): Promise<Draft[]> {
-  return readOpenDrafts(tx, cfg, partyId);
+  return readOpenDrafts(tx, partyId);
 }
 
 export async function saveDraft(
@@ -314,7 +314,6 @@ export async function saveDraft(
   await requireCourses(tx, lines, previous);
   const offers = await offersFor(
     tx,
-    cfg,
     partyId,
     lines.map((line) => line.menuItemId),
   );
@@ -786,7 +785,6 @@ export async function submitDraft(
       );
       const offers = await offersFor(
         tx,
-        cfg,
         partyId,
         lines.map((line) => line.menuItemId),
       );
@@ -1318,18 +1316,17 @@ async function replaceLines(
 /** One open draft of the party, which the caller knows is there. */
 async function readOpenDraft(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
   draftId: string,
   offers?: Map<string, ZoneMenuOffer>,
 ): Promise<Draft> {
-  return (await readOpenDrafts(tx, cfg, partyId, draftId, offers))[0]!;
+  return (await readOpenDrafts(tx, partyId, draftId, offers))[0]!;
 }
 
 /** `known` is the offers of every line the drafts hold, when the caller has already read them. */
 async function readOpenDrafts(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   draftId?: string,
   known?: Map<string, ZoneMenuOffer>,
@@ -1362,7 +1359,6 @@ async function readOpenDrafts(
     known ??
     (await offersFor(
       tx,
-      cfg,
       partyId,
       lines.map(({ line }) => line.menuItemId),
     ));
@@ -1422,12 +1418,11 @@ function soldMeasured(offer: ZoneMenuOffer | undefined): boolean {
 /** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */
 async function offersFor(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   menuItemIds: readonly string[],
 ): Promise<Map<string, ZoneMenuOffer>> {
   if (menuItemIds.length === 0) return new Map();
-  const zoneId = await partyZone(tx, cfg, partyId);
+  const zoneId = await partyZone(tx, partyId);
   if (zoneId === null) return new Map();
   const { offers } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
     menuItemIds: [...new Set(menuItemIds)],

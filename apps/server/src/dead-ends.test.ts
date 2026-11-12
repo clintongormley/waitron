@@ -20,7 +20,6 @@ describe("findDeadEnds", () => {
     const [bar] = await suite.db
       .insert(kitchenStations)
       .values({
-        locationId: v.cfg.locationId,
         name: stationName,
       })
       .returning({ id: kitchenStations.id });
@@ -94,7 +93,6 @@ describe("findDeadEnds", () => {
     const [destination] = await suite.db
       .insert(kitchenStations)
       .values({
-        locationId: v.cfg.locationId,
         name: `Destination bar ${randomUUID()}`,
       })
       .returning({ id: kitchenStations.id });

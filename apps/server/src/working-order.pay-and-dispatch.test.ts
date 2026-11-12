@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
@@ -8,7 +9,7 @@ import {
   placeOrder,
 } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
-import { floorTodayTables, venueLocationId } from "@waitron/db";
+import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -49,7 +50,6 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   advanceTicket,
   advanceTicketItem,
@@ -153,10 +153,9 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -167,7 +166,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
 type OfferedProduct = AvailableProduct & { menuItemId: string };
 
 interface SeededVenue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   /** The venue's counter-default zone. */
   zoneId: string;
@@ -214,8 +213,7 @@ async function setupVenue(): Promise<SeededVenue> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const [department] = await suite.db.select().from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
@@ -247,7 +245,7 @@ async function setupVenue(): Promise<SeededVenue> {
 }
 
 async function offerAtCounter(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   available: AvailableProduct[],
   mode: OrderFlow = "prepay",
 ): Promise<SeededVenue> {
@@ -472,10 +470,10 @@ async function ticketStateOf(id: string): Promise<string | null> {
  *  venue-apply.ts). No fixture product names a station, itself or through its category, so the
  *  routes `offerProducts` writes send every line here; it is the id the whole-ticket bump and the
  *  per-station queue address. */
-async function defaultStationId(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
+async function defaultStationId(): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select id from kitchen_stations
-    where location_id = ${cfg.locationId} and is_default and active
+    where is_default and active
   `);
   return rows[0]!.id;
 }
@@ -498,11 +496,7 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
  * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) in a
  * `withTransaction` scope — they run on a CALLER-supplied transaction.
  */
-async function asTenant<T>(
-  cfg: DeviceRequestConfig,
-  fn: (tx: Transaction) => Promise<T>,
-): Promise<T> {
-  void cfg;
+async function asTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
   });
@@ -2193,7 +2187,7 @@ describe("prepare & collect — zone payment timing", () => {
   // through the direct settle UPDATE.
   it("Mode T: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -2209,9 +2203,9 @@ describe("prepare & collect — zone payment timing", () => {
       id,
       OPERATOR,
     );
-    expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
-    ).toEqual([id]);
+    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+      id,
+    ]);
     expect(await collectedAtSet(id)).toBe(false);
 
     // COLLECT → Mode T files immediate at collect.
@@ -2234,16 +2228,16 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
     expect(await collectedAtSet(id)).toBe(false);
-    expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
-    ).toEqual([id]);
+    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+      id,
+    ]);
     // Collect does not move the ticket item's kitchen state.
     expect(await ticketStateOf(id)).toBe("queued");
   });
 
   it("Mode I: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -2257,9 +2251,9 @@ describe("prepare & collect — zone payment timing", () => {
       id,
       OPERATOR,
     );
-    expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
-    ).toEqual([id]);
+    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+      id,
+    ]);
     expect(await collectedAtSet(id)).toBe(false);
 
     // COLLECT → settle the EXISTING invoice (file NOTHING new).
@@ -2278,9 +2272,9 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
     expect(await collectedAtSet(id)).toBe(false);
-    expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
-    ).toEqual([id]);
+    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+      id,
+    ]);
   });
 
   it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
@@ -2370,7 +2364,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // Skipping `preparing` (queued → ready) matches no row — `ready`'s only legal predecessor is
     // `preparing` — so the empty `returning` refuses it, naming the offending item.
     await expect(
-      asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready")),
+      asTenant((tx) => advanceTicketItem(tx, cfg, item!, "ready")),
     ).rejects.toMatchObject({
       code: "ticket.invalid_transition",
       params: { ticketItemId: item },
@@ -2378,23 +2372,21 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     expect(await ticketStateOf(id)).toBe("queued"); // the refused skip changed nothing
 
     // The forward walk, one legal step at a time — the timestamps are stamped as it goes.
-    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
     expect(await ticketStateOf(id)).toBe("preparing");
-    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready"));
+    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
 
     // A repeat (ready → ready) and a backwards move (ready → preparing) both match no row now.
     for (const to of ["ready", "preparing"] as const) {
-      await expect(
-        asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, to)),
-      ).rejects.toMatchObject({
+      await expect(asTenant((tx) => advanceTicketItem(tx, cfg, item!, to))).rejects.toMatchObject({
         code: "ticket.invalid_transition",
         params: { ticketItemId: item },
       });
     }
     // No kitchen state advances INTO `queued` — refused before any query (reaching queued is a fire's job).
     await expect(
-      asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "queued")),
+      asTenant((tx) => advanceTicketItem(tx, cfg, item!, "queued")),
     ).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "to" },
@@ -2419,28 +2411,28 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       id,
       OPERATOR,
     ); // fires two items → default station
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const items = await ticketItemIdsFor(id);
     expect(items).toHaveLength(2);
 
     // Push item[0] all the way to `ready` first, so the whole-ticket bump must SKIP it (it is no longer
     // at the `queued` predecessor).
-    await asTenant(cfg, async (tx) => {
+    await asTenant(async (tx) => {
       await advanceTicketItem(tx, cfg, items[0]!, "preparing");
       await advanceTicketItem(tx, cfg, items[0]!, "ready");
     });
 
     // Whole-ticket bump to `preparing`: only the still-queued item[1] advances; item[0] (ready) is untouched.
-    await asTenant(cfg, (tx) => advanceTicket(tx, cfg, id, station, "preparing"));
+    await asTenant((tx) => advanceTicket(tx, cfg, id, station, "preparing"));
 
-    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
+    const queue = await asTenant((tx) => listStationQueue(tx, station));
     const group = queue.find((g) => g.orderId === id)!;
     expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
   });
 
   it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
 
     // Two orders placed oldest-first, each a single line → the default station.
     const id1 = randomUUID();
@@ -2472,7 +2464,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     );
 
     // Both orders show, oldest first, each one line, at `queued`, carrying the order's label + queued_at.
-    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
+    const queue = await asTenant((tx) => listStationQueue(tx, station));
     expect(queue.map((g) => g.orderId)).toEqual([id1, id2]);
     expect(queue[0]).toMatchObject({
       orderId: id1,
@@ -2485,9 +2477,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
     // Advancing order 1's line keeps it on the queue (a `preparing`/`ready` line stays until collected).
     const [item1] = await ticketItemIdsFor(id1);
-    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item1!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, cfg, item1!, "preparing"));
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).find((g) => g.orderId === id1)
+      (await asTenant((tx) => listStationQueue(tx, station))).find((g) => g.orderId === id1)
         ?.items[0]?.state,
     ).toBe("preparing");
 
@@ -2497,9 +2489,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     await suite.db.execute(sql`
       update working_orders set status = 'settled', settled_at = ${settledNow}, collected_at = ${settledNow}
       where id = ${id1}`);
-    expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
-    ).toEqual([id2]);
+    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+      id2,
+    ]);
 
     // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
     // `ticket_items`), but `listStationQueue`'s `status != 'abandoned'` join retires it.
@@ -2511,7 +2503,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       UNUSED_SESSION_OPERATOR,
     );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
+    expect(await asTenant((tx) => listStationQueue(tx, station))).toEqual([]);
   });
 
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node", async () => {
@@ -2520,7 +2512,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
     // Both nodes share the location's one default station.
     const nodeB = await addNode(nodeA);
-    const station = await defaultStationId(nodeA);
+    const station = await defaultStationId();
 
     const idA = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
@@ -2550,8 +2542,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       OPERATOR,
     );
 
-    const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, station));
-    const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, station));
+    const queueA = await asTenant((tx) => listStationQueue(tx, station));
+    const queueB = await asTenant((tx) => listStationQueue(tx, station));
 
     // Same station on both sides, each holding BOTH orders (oldest-first: A fired before B) — the
     // reads do not separate by node.
@@ -2564,7 +2556,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const id = randomUUID();
     // With the default station off, paying leaves the dish unsent; turning it back on before
     // `sendToPrep` lets that call send the same stored dish.
-    await setDefaultStationActive(cfg, false);
+    await setDefaultStationActive(false);
     await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
@@ -2585,7 +2577,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       ).map((row) => row.sentAt);
     expect(await ticketStateOf(id)).toBeNull();
     expect(await sentAt()).toEqual([null]);
-    await setDefaultStationActive(cfg, true);
+    await setDefaultStationActive(true);
 
     await sendToPrep({ db: suite.db }, cfg, id);
 
@@ -2657,14 +2649,14 @@ describe("the pass board — venue-wide", () => {
       OPERATOR,
     );
 
-    const orderIdsOn = (cfg: DeviceRequestConfig) =>
-      asTenant(cfg, async (tx) =>
+    const orderIdsOn = () =>
+      asTenant(async (tx) =>
         boardCards(await readScopedPassBoard(tx, EVERY)).flatMap((card) =>
           card.orders.map((order) => order.orderId),
         ),
       );
-    const expoA = await orderIdsOn(nodeA);
-    const expoB = await orderIdsOn(nodeB);
+    const expoA = await orderIdsOn();
+    const expoB = await orderIdsOn();
 
     // Same tenant + location on both sides, each pass board holding BOTH orders (oldest-first: A
     // fired before B) — the reads do not separate by node.
@@ -2673,18 +2665,15 @@ describe("the pass board — venue-wide", () => {
   });
 });
 
-async function setDefaultStationActive(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
-  active: boolean,
-): Promise<void> {
+async function setDefaultStationActive(active: boolean): Promise<void> {
   await suite.db.execute(sql`
     update kitchen_stations set active = ${active ? 1 : 0}
-    where location_id = ${cfg.locationId} and is_default`);
+    where is_default`);
 }
 
 /** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
-async function kitchenPrinter(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
-  const station = await defaultStationId(cfg);
+async function kitchenPrinter(): Promise<string> {
+  const station = await defaultStationId();
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(tx, {
       name: "P-Cocina",
@@ -2721,8 +2710,8 @@ async function linesSent(orderId: string): Promise<boolean[]> {
 describe("paying a counter order never sent, in a zone that sends before payment", () => {
   it("ticket_then_pay: a cash walk-up's dish reaches the station queue and prints its kitchen ticket in the payment", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
-    const printerId = await kitchenPrinter(cfg);
+    const station = await defaultStationId();
+    const printerId = await kitchenPrinter();
     const id = randomUUID();
 
     await payWorkingOrder(
@@ -2740,16 +2729,16 @@ describe("paying a counter order never sent, in a zone that sends before payment
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await ticketStateOf(id)).toBe("queued");
-    expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
-    ).toEqual([id]);
+    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+      id,
+    ]);
     expect(await kitchenJobCount(printerId)).toBe(1);
     expect(await linesSent(id)).toEqual([true]);
   });
 
   it("ticket_then_pay: a cash walk-up files a settled sale and sends its dish in the payment", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const printerId = await kitchenPrinter(cfg);
+    const printerId = await kitchenPrinter();
     const id = randomUUID();
 
     const ticket = await payWorkingOrder(
@@ -2801,7 +2790,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
 
   it("ticket_then_pay: the same pay sent again sends nothing more and files no second sale", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const printerId = await kitchenPrinter(cfg);
+    const printerId = await kitchenPrinter();
     const id = randomUUID();
     const req = {
       id,
@@ -2834,7 +2823,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
     "%s: a parked order paid sends every counter course, and the same pay sent again changes nothing",
     async (mode) => {
       const { cfg, coffee, water, zoneId } = await modeVenue(mode);
-      const printerId = await kitchenPrinter(cfg);
+      const printerId = await kitchenPrinter();
       const { starters, mainCourses } = await withTransaction(suite.db, async (tx) => {
         const starters = (await createCourse(tx, { name: "Primeros", displayOrder: 1 })).id;
         const mainCourses = (await createCourse(tx, { name: "Segundos", displayOrder: 2 })).id;
@@ -2895,7 +2884,7 @@ describe("markCollected (the counter handover)", () => {
   // stamp, a ready order stays on the queue.
   it("Mode P: fired → ready → markCollected stamps collected_at and drops the order off listStationQueue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const id = randomUUID();
 
     // Pay and fire at order (open → settled in one transaction — the Mode-P walk-up).
@@ -2910,16 +2899,16 @@ describe("markCollected (the counter handover)", () => {
       },
       OPERATOR,
     );
-    expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
-    ).toEqual([id]);
+    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+      id,
+    ]);
 
     // Walk the line all the way to `ready` — a ready line STAYS on the queue until the order collects.
     const [item] = await ticketItemIdsFor(id);
-    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
-    await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready"));
+    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
-    const readyQueue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
+    const readyQueue = await asTenant((tx) => listStationQueue(tx, station));
     // Still listed — a ready-but-uncollected order lingers — and
     // the group carries the order's `status`, so the till surfaces the collect action (collectable = settled).
     expect(readyQueue.map((g) => g.orderId)).toEqual([id]);
@@ -2928,7 +2917,7 @@ describe("markCollected (the counter handover)", () => {
     // Hand it over. NON-FISCAL — markCollected writes only collected_at (no sale/fiscal record/tender/huella).
     await markCollected({ db: suite.db }, cfg, id);
     expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
+    expect(await asTenant((tx) => listStationQueue(tx, station))).toEqual([]);
     // Its fiscal state is untouched — still settled with settled_at intact (only collected_at moved).
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
   });
@@ -3014,17 +3003,13 @@ describe("markCollected (the counter handover)", () => {
 
 /** Insert an active dining table in `zoneId` under `cfg`'s location and return its id — the `openTab`
  *  → `addTabRound` entry point. */
-async function addTable(
-  tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
-  zoneId: string,
-): Promise<string> {
+async function addTable(tx: Transaction, zoneId: string): Promise<string> {
   // Through the table, not a raw `insert`: BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused
   // `NOT NULL constraint failed: dining_tables.id`.
   const rows = await tx
     .insert(diningTables)
-    .values({ locationId: cfg.locationId, zoneId, label: `T-${randomUUID().slice(0, 8)}` })
+    .values({ zoneId, label: `T-${randomUUID().slice(0, 8)}` })
     .returning({ id: diningTables.id });
   await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
   return rows[0]!.id;
@@ -3080,7 +3065,7 @@ describe("coursing editing verbs — setLineCourse racing selected line release"
         const other = await createCourse(tx, { name: "Other", displayOrder: 10 });
         await setProductCourse(tx, coffee.id, original.id);
         const tables = await offerProducts(tx, cfg, { zone: "tables" });
-        const tableId = await addTable(tx, cfg, tables.zoneId);
+        const tableId = await addTable(tx, tables.zoneId);
         const { tabId } = await openPartyTab(tx, cfg, { tableId });
         await addTabRound(
           tx,

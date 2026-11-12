@@ -15,7 +15,6 @@ import {
 } from "./columns.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
-import { locations } from "./tenants.js";
 
 export const floorPlanShape = enumType(["rect", "round"]);
 
@@ -77,20 +76,9 @@ const placeChecks = (name: string, t: Placed) => {
 };
 
 /** A named set of layouts, one per zone; its name and default live with the department. */
-export const floorPlanSets = table(
-  "floor_plan_sets",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "floor_plan_sets_location_fk",
-    }),
-  ],
-);
+export const floorPlanSets = table("floor_plan_sets", {
+  id: id("id").primaryKey().$defaultFn(newId),
+});
 
 /** One set's layout of one zone, edited by the dashboard only. */
 export const floorPlans = table(

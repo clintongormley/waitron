@@ -201,7 +201,6 @@ import {
   workingOrderStatus,
   insertInChunks,
   statementChunks,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -1503,7 +1502,6 @@ export async function createOpenOrder(
     id,
     source: cfg.origin.source,
     deviceId: cfg.origin.deviceId,
-    locationId: await venueLocationId(tx),
     nodeId: cfg.nodeId,
     orderNumber,
     label,

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { nowIso, parties, partyTables, venueLocationId, withTransaction } from "@waitron/db";
+import { nowIso, parties, partyTables, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
@@ -11,14 +11,15 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 import { departmentOf, setSteps } from "./testing/service-steps.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let personId: string;
 let token: string;
 let requestCookie: string;
@@ -34,7 +35,6 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     tipsEnabled: false,

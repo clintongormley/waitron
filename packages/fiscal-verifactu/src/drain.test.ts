@@ -109,7 +109,7 @@ async function sellAndVoid(options: {
   nif?: string;
   identity?: SoftwareIdentity;
 }): Promise<{ nodeId: string }> {
-  const { locationId, nodeId, seriesId } = await seedTenantWithSif(
+  const { nodeId, seriesId } = await seedTenantWithSif(
     suite.db,
     options.nif === undefined ? {} : { nif: options.nif },
   );
@@ -120,7 +120,7 @@ async function sellAndVoid(options: {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
+  const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const voidSession = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
   );
@@ -1201,7 +1201,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
-    const deviceId = (await seedDevice(suite.db, { locationId: venue.locationId })).deviceId;
+    const deviceId = (await seedDevice(suite.db, {})).deviceId;
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );

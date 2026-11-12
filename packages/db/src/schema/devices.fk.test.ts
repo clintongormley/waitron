@@ -7,12 +7,10 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { printers } from "./printers.js";
 
-let LOCATION_A: string;
 const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";
 const PROFILE_A = "11111111-0000-4000-8000-0000000000a4";
 const TOKEN_HASH = "scrypt$00$00";
@@ -32,13 +30,11 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(admin);
     // cloud_poll needs only `poll_id` under `printers_transport_fields_ck`.
     await admin
       .insert(printers)
       .values({
         id: PRINTER_A,
-        locationId: LOCATION_A,
         name: "Printer A",
         transport: "cloud_poll",
         pollId: "poll-a",
@@ -59,7 +55,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const bound = await admin
       .insert(devices)
       .values({
-        locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
         label: "Bound till",
         tokenHash: TOKEN_HASH,
@@ -71,7 +66,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const [row] = await admin
       .insert(devices)
       .values({
-        locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
         label: "Unbound printer",
         tokenHash: TOKEN_HASH,
@@ -84,13 +78,11 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const slipPrinter = "11111111-0000-4000-8000-0000000000b3";
     await admin.insert(printers).values({
       id: slipPrinter,
-      locationId: LOCATION_A,
       name: "Slip printer",
       transport: "cloud_poll",
       pollId: "poll-slip",
     });
     await admin.insert(devices).values({
-      locationId: LOCATION_A,
       deviceProfileId: PROFILE_A,
       label: "Slip device",
       tokenHash: TOKEN_HASH,
@@ -115,7 +107,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     const bound = await admin
       .insert(devices)
       .values({
-        locationId: LOCATION_A,
         deviceProfileId: PROFILE_A,
         label: "Profile-bound",
         tokenHash: TOKEN_HASH,
@@ -130,7 +121,6 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
       .insert(deviceProfiles)
       .values({ id: profileC, name: "Profile C", formFactor: "till" });
     await admin.insert(devices).values({
-      locationId: LOCATION_A,
       deviceProfileId: profileC,
       label: "Restrict device",
       tokenHash: TOKEN_HASH,

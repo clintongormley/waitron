@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -57,8 +57,8 @@ async function venue() {
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
   const locationId = await location("Bar");
   const nodeId = await seedNode(suite.db);
-  const agentOne = await agent(locationId, "Back office agent");
-  const agentTwo = await agent(locationId, "Re-paired agent");
+  const agentOne = await agent("Back office agent");
+  const agentTwo = await agent("Re-paired agent");
   return { locationId, nodeId, agentOne, agentTwo };
 }
 
@@ -71,10 +71,10 @@ async function location(name: string): Promise<string> {
   return venueLocationId(suite.db);
 }
 
-async function agent(locationId: string, name: string): Promise<string> {
+async function agent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -82,14 +82,13 @@ async function agent(locationId: string, name: string): Promise<string> {
 let hostCounter = 20;
 
 async function printer(
-  locationId: string,
+  _locationId: string,
   agentId: string | null,
   extra: Partial<typeof pagePrinters.$inferInsert> = {},
 ): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId,
       name: "Back office",
       host: `192.0.2.${hostCounter++}`,
       port: 631,
@@ -251,29 +250,6 @@ describe("claiming an A4 delivery", () => {
     await report(second!.claim, { status: "sent" }, 5_000);
     expect(await claim(v.agentOne, 5_000)).toBeUndefined();
     expect((await claim(v.agentOne, 10_000))?.claim.deliveryId).toBe(notDue);
-  });
-
-  it("claims a due A4 delivery whatever the printer's location column holds", async () => {
-    const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
-    const id = await queueA4(await fullInvoice(v.nodeId), office);
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db
-        .update(pagePrinters)
-        .set({ locationId: randomUUID() })
-        .where(eq(pagePrinters.id, office));
-      const { job } = await withTransaction(suite.db, (tx) =>
-        claimInvoicePagePrint(tx, v.agentOne, {}, at(1_000)),
-      );
-      expect(job?.claim.deliveryId).toBe(id);
-    } finally {
-      await suite.db
-        .update(pagePrinters)
-        .set({ locationId: v.locationId })
-        .where(eq(pagePrinters.id, office));
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
   });
 
   it("hands out a delivery whose next attempt lies 400 days ahead, as after a backward step", async () => {

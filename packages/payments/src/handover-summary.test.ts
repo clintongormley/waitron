@@ -93,7 +93,6 @@ async function refund(
       source: "device",
       deviceId: seeded.deviceId,
       nodeId: seeded.nodeId,
-      locationId: seeded.locationId,
       method,
       manual: card === "manual",
       provider: typeof card === "object" && card !== null ? card.provider : null,

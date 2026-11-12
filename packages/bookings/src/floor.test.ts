@@ -40,14 +40,14 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
   };
 }
 
-async function makeTable(v: Venue, label: string): Promise<string> {
+async function makeTable(label: string): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: v.locationId, name: label })
+    .values({ name: label })
     .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (id, created_at, location_id, zone_id, label)
-    values (${newId()}, ${nowIso()}, ${v.locationId}, ${zone!.id}, ${label})
+    insert into dining_tables (id, created_at, zone_id, label)
+    values (${newId()}, ${nowIso()}, ${zone!.id}, ${label})
     returning id`);
   await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
   return row.rows[0]!.id;
@@ -88,22 +88,22 @@ const MADRID_NOON = new Date("2026-09-15T10:00:00Z");
 describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
   it("returns the table's next booked reservation later today as HH:MM", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "7");
+    const t = await makeTable("7");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
     const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
   it("returns reservedTime null when the table has no upcoming booked reservation", async () => {
-    const v = await setupVenue();
-    const t = await makeTable(v, "8");
+    await setupVenue();
+    const t = await makeTable("8");
     const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: null });
   });
 
   it("carries one entry per input tableId (empty set → empty map)", async () => {
-    const v = await setupVenue();
-    const t = await makeTable(v, "8b");
+    await setupVenue();
+    const t = await makeTable("8b");
     const m = await annotate(MADRID_NOON, [t]);
     expect([...m.keys()]).toEqual([t]);
     expect(await annotate(MADRID_NOON, [])).toEqual(new Map());
@@ -111,7 +111,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
 
   it("excludes past-time, non-booked-status, and other-day reservations", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "9");
+    const t = await makeTable("9");
     // Past-time today (now = 12:00): excluded.
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "09:00" });
     // Future today but not `booked`: each excluded.
@@ -127,7 +127,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
 
   it("returns the earliest of two future booked reservations", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "10");
+    const t = await makeTable("10");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "20:00" });
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "13:30" });
     const m = await annotate(MADRID_NOON, [t]);
@@ -136,7 +136,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
 
   it("does not crash when the saved venue zone is an invalid IANA zone (falls back to the default)", async () => {
     const v = await setupVenue({ timeZone: "Not/AZone" });
-    const t = await makeTable(v, "13");
+    const t = await makeTable("13");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
     const m = await annotate(MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
@@ -147,7 +147,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     // calendar day than the UTC 2026-09-01.
     const v = await setupVenue({ timeZone: "Pacific/Kiritimati" });
     const clock = new Date("2026-09-01T23:00:00Z");
-    const t = await makeTable(v, "11");
+    const t = await makeTable("11");
     await insertBooking(v, { tableId: t, date: "2026-09-02", time: "15:00" });
     // A booking on the UTC day (2026-09-01) must NOT surface — it is yesterday at the venue.
     await insertBooking(v, { tableId: t, date: "2026-09-01", time: "23:30" });
@@ -159,7 +159,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     // Same instant/tz → venue now is 2026-09-02 13:00. 12:00 (before) excluded; 14:00 (after) surfaces.
     const v = await setupVenue({ timeZone: "Pacific/Kiritimati" });
     const clock = new Date("2026-09-01T23:00:00Z");
-    const t = await makeTable(v, "12");
+    const t = await makeTable("12");
     await insertBooking(v, { tableId: t, date: "2026-09-02", time: "12:00" });
     await insertBooking(v, { tableId: t, date: "2026-09-02", time: "14:00" });
     const m = await annotate(clock, [t]);
@@ -170,9 +170,9 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     // now = Madrid 12:00, grace 30 min → grace floor 11:30. 11:45 (within) surfaces; 11:15 (beyond) gone;
     // 11:30 (the exact inclusive floor) STILL surfaces — a `>=`→`>` regression would drop it.
     const v = await setupVenue();
-    const within = await makeTable(v, "14");
-    const beyond = await makeTable(v, "15");
-    const boundary = await makeTable(v, "16");
+    const within = await makeTable("14");
+    const beyond = await makeTable("15");
+    const boundary = await makeTable("16");
     await insertBooking(v, { tableId: within, date: "2026-09-15", time: "11:45" });
     await insertBooking(v, { tableId: beyond, date: "2026-09-15", time: "11:15" });
     await insertBooking(v, { tableId: boundary, date: "2026-09-15", time: "11:30" });
@@ -186,8 +186,8 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     // Zones no other test uses, so the module cache is cold when the spy is installed.
     const tzA = "Asia/Tokyo";
     const tzB = "America/New_York";
-    const v = await setupVenue({ timeZone: tzA });
-    const t = await makeTable(v, "tz");
+    await setupVenue({ timeZone: tzA });
+    const t = await makeTable("tz");
 
     // Return a genuine instance: a bare construct-through spy's object makes `formatToParts` throw
     // "incompatible receiver". It must be a `function` expression: with an arrow the count below
@@ -227,7 +227,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     // A failed formatter construction (invalid zone) must not be memoized as if valid; every poll of
     // an invalid zone re-throws and falls back, so the 14:00 Madrid-default booking keeps surfacing.
     const v = await setupVenue({ timeZone: "Not/AZone" });
-    const t = await makeTable(v, "invalid-cache");
+    const t = await makeTable("invalid-cache");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
     expect((await annotate(MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
     expect((await annotate(MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });

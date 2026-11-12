@@ -18,12 +18,12 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { withTransaction, venueLocationId } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { nodeId as brandNodeId, rawCentsToDecimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -75,10 +75,9 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -86,7 +85,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
 }
 
 interface SeededVenue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   coffee: AvailableProduct;
   water: AvailableProduct;
@@ -128,8 +127,7 @@ async function setupVenue(): Promise<SeededVenue> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Bebidas" });
@@ -168,7 +166,7 @@ function offersOf(cfg: DeviceRequestConfig): ZoneOffers {
 }
 
 /** Seed one active dining table in the venue's tables zone; returns its id. */
-async function seedTable(cfg: WithVenueRowId<DeviceRequestConfig>, label: string): Promise<string> {
+async function seedTable(cfg: DeviceRequestConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     return createTable(tx, cfg, { label, zoneId: offersOf(cfg).zoneId }).then((r) => r.id);
   });

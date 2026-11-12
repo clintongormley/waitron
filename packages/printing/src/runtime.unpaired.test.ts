@@ -36,10 +36,10 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: venueId };
 }
 
-async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
+async function seedAgent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId: cfg.locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -81,8 +81,8 @@ const ENDED = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: PR
 
 describe("endUnpairedPrinterJobs", () => {
   it("ends every waiting job of the unpaired printer, and this agent's own claims, failed with no attempts left", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Box");
+    await setup();
+    const agentId = await seedAgent("Box");
     const printerId = await printer();
     const queued = await job(printerId);
     const failedUnderCap = await job(printerId);
@@ -123,9 +123,9 @@ describe("endUnpairedPrinterJobs", () => {
   });
 
   it("leaves another agent's live claim, printed jobs, jobs already given up, and other printers' jobs", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Box");
-    const otherAgent = await seedAgent(cfg, "Other box");
+    await setup();
+    const agentId = await seedAgent("Box");
+    const otherAgent = await seedAgent("Other box");
     const printerId = await printer();
     const othersLive = await job(printerId);
     const done = await job(printerId);
@@ -159,8 +159,8 @@ describe("endUnpairedPrinterJobs", () => {
 
   // A drawer kick left waiting would open the cash drawer when the printer is added again.
   it("ends a waiting drawer kick", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Box");
+    await setup();
+    const agentId = await seedAgent("Box");
     const kick = await job(await printer(), "drawer");
 
     expect(await end(agentId, [MAC])).toEqual([kick]);
@@ -168,8 +168,8 @@ describe("endUnpairedPrinterJobs", () => {
   });
 
   it("ends the jobs of a printer already switched off", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Box");
+    await setup();
+    const agentId = await seedAgent("Box");
     const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
       const created = await createPrinter(tx, {
         name: "Off",
@@ -186,8 +186,8 @@ describe("endUnpairedPrinterJobs", () => {
   });
 
   it("ends more waiting jobs than one pull claims, in one call", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Box");
+    await setup();
+    const agentId = await seedAgent("Box");
     const printerId = await printer();
     const jobs: string[] = [];
     for (let i = 0; i <= PULL_BATCH_LIMIT; i++) jobs.push(await job(printerId));
@@ -198,8 +198,8 @@ describe("endUnpairedPrinterJobs", () => {
   });
 
   it("changes nothing when no address is given", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Box");
+    await setup();
+    const agentId = await seedAgent("Box");
     const jobId = await job(await printer());
 
     expect(await end(agentId, [])).toEqual([]);

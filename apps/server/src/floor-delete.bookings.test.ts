@@ -9,7 +9,6 @@ import {
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -49,15 +48,14 @@ for (const enabled of [true, false]) {
         invoiceLocales: ["es"],
         operationDescription: "test",
       });
-      const venueId = await venueLocationId(suite.db);
-      const cfg = { locationId: venueId };
+
       const [zone] = await suite.db
         .insert(floorZones)
-        .values({ locationId: cfg.locationId, name: "Stream hierarchy" })
+        .values({ name: "Stream hierarchy" })
         .returning();
       const [table] = await suite.db
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, zoneId: zone!.id, label: "T1" })
+        .values({ zoneId: zone!.id, label: "T1" })
         .returning();
       await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
       const sources = modules.flatMap((module) => module.changes ?? []);
@@ -163,15 +161,11 @@ for (const enabled of [true, false]) {
           invoiceLocales: ["es"],
           operationDescription: "test",
         });
-        const venueId = await venueLocationId(suite.db);
-        const cfg = { locationId: venueId };
-        const [zone] = await suite.db
-          .insert(floorZones)
-          .values({ locationId: cfg.locationId, name: "Hierarchy" })
-          .returning();
+
+        const [zone] = await suite.db.insert(floorZones).values({ name: "Hierarchy" }).returning();
         const [table] = await suite.db
           .insert(diningTables)
-          .values({ locationId: cfg.locationId, zoneId: zone!.id, label: "T1" })
+          .values({ zoneId: zone!.id, label: "T1" })
           .returning();
         let bookingId: string | undefined;
         if (enabled) {

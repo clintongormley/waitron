@@ -382,7 +382,6 @@ async function seedTenderRefund(
     source: "device",
     deviceId: venue.deviceId,
     nodeId: venue.cfg.nodeId,
-    locationId: venue.cfg.locationId,
     manual: false,
   });
 }

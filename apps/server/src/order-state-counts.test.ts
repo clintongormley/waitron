@@ -70,7 +70,7 @@ useVenueDb({
       zones[mode] = await inTx(venue, async (tx) => {
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: venue.cfg.locationId, name: `Bar ${mode}` })
+          .values({ name: `Bar ${mode}` })
           .returning({ id: floorZones.id });
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
         if (mode === "ticket_then_pay") {
@@ -560,8 +560,8 @@ describe("readOrderStateCounts", () => {
   it("counts all zeros for an order with no lines", async () => {
     const id = randomUUID();
     venue.db.run(sql`
-      insert into working_orders (id, source, device_id, location_id, node_id, order_number, status, opened_at)
-      values (${id}, 'device', ${venue.cfg.origin.deviceId}, ${venue.cfg.locationId}, ${venue.cfg.nodeId}, 90001, 'open', ${nowIso()})`);
+      insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at)
+      values (${id}, 'device', ${venue.cfg.origin.deviceId}, ${venue.cfg.nodeId}, 90001, 'open', ${nowIso()})`);
     expect(await countsOf([id])).toEqual(new Map([[id, zero]]));
   });
 

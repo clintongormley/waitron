@@ -134,7 +134,7 @@ describe("the floor plan sets port", () => {
     const rows = await inTx(v, (tx) =>
       tx.select().from(floorPlanSets).where(eq(floorPlanSets.id, setId)),
     );
-    expect(rows).toEqual([{ id: setId, locationId: v.cfg.locationId }]);
+    expect(rows).toEqual([{ id: setId }]);
     const layouts = await inTx(v, (tx) =>
       tx.select().from(floorPlans).where(eq(floorPlans.setId, setId)),
     );

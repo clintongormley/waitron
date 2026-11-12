@@ -1,4 +1,5 @@
 import { cancelItemForTest } from "./testing/cancel-line.js";
+import type { TradingContext } from "./trading-context.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { sendLines } from "./testing/order-writer-fixture.js";
@@ -11,7 +12,6 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
-  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -28,7 +28,6 @@ import {
 } from "@waitron/catalogue";
 import { nodeId as brandNodeId, thousandthsToDecimal } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
 import { advanceTicketItem, createOpenOrder, listStationQueue } from "./working-order.js";
@@ -60,7 +59,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   waterId: string;
   hamId: string;
   tableId: string;
@@ -74,15 +73,13 @@ async function setupVenue(): Promise<Seeded> {
     operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies WithVenueRowId);
+  } satisfies TradingContext);
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Daily menu" });
     const drinks = await createCategory(tx, { name: "Drinks" });
@@ -202,7 +199,6 @@ describe("splitBill", () => {
           nodeId: workingOrders.nodeId,
           source: workingOrders.source,
           deviceId: workingOrders.deviceId,
-          locationId: workingOrders.locationId,
         })
         .from(workingOrders)
         .where(eq(workingOrders.id, checkId));
@@ -228,12 +224,10 @@ describe("splitBill", () => {
 
     expect(state.check?.status).toBe("open");
     expect(state.check?.label).toBe("T1");
-    // Opened on the splitting device's node and location (createOpenOrder stamps them from cfg).
     expect(state.check?.nodeId).toBe(cfg.nodeId);
     expect(state.check).toMatchObject({
       source: "device",
       deviceId: cfg.origin.deviceId,
-      locationId: cfg.locationId,
     });
     expect(state.checkLines).toEqual([{ productId: hamId, quantity: 300 }]);
     expect(state.originLines).toEqual([{ lineNo: 1, productId: waterId, quantity: 3000 }]);
@@ -307,8 +301,8 @@ describe("splitBill", () => {
 });
 
 /** A default kitchen station, with each product's route re-pointed at it, so a round fires there. */
-async function withKitchen(cfg: WithVenueRowId<OriginConfig>): Promise<string> {
-  const stationId = await seedKitchenStation(db, { locationId: cfg.locationId });
+async function withKitchen(cfg: OriginConfig): Promise<string> {
+  const stationId = await seedKitchenStation(db, {});
   const offers = await asApp(cfg, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
   offersByCfg.set(cfg, offers);
   return stationId;

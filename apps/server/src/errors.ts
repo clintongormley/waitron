@@ -1096,7 +1096,7 @@ declare module "@waitron/shared" {
     "device_profile.incompatible": { field: "approvedProfileIds" };
     /**
      * Accepting a device under a name another active device already has
-     * (`devices_location_label_active_key`). The admin renames the device.
+     * (`devices_label_active_key`). The admin renames the device.
      */
     "device.name_taken": Record<string, never>;
     /** The venue's region fixes its receipt language; `language` is that fixed language, never the

@@ -75,7 +75,7 @@ useVenueDb({
       tables = await offerProducts(tx, venue.cfg, { zone: "tables", productIds });
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra pago posterior" })
+        .values({ name: "Barra pago posterior" })
         .returning({ id: floorZones.id });
       ticketThenPay = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },

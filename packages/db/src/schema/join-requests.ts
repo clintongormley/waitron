@@ -36,15 +36,10 @@ export const joinRequests = table(
     // The node that received the knock (`cfg.nodeId`). Every verb in
     // `apps/server/src/join-requests.ts` filters on it, so another node holding this database
     // neither lists nor accepts the request — the same fail-closed posture as the in-memory pairing
-    // window. No foreign key to `nodes`, for the reason on `location_id` below. Nothing checks
+    // window. A local table holds no foreign key into a venue table. Nothing checks
     // that `nodes` holds this id, when the row is written or later: accept never copies it, so it
     // only decides which node sees the request.
     nodeId: id("node_id").notNull(),
-    // The venue's id, stamped from `venueLocationId`, never asked for, so a joiner says nothing
-    // about which venue it is joining. No foreign key to `locations`: a `local` table holds no key
-    // into a venue table (guard: `scripts/two-file-foreign-keys.test.ts`). Nothing reads it:
-    // accept stamps the venue on the new `devices` or `print_agents` row itself.
-    locationId: id("location_id").notNull(),
     kind: joinRequestKind("kind").notNull(),
     // The name the joiner asked for. An agent accept copies it to `print_agents.name`; a device accept
     // stores the name its caller passes (the Pair form's, or in dev mode the asked-for one).

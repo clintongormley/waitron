@@ -8,9 +8,7 @@ import { locations } from "./schema/tenants.js";
 import { tableInService } from "./table-in-service.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { venueLocationId } from "./venue.js";
 
-let LOCATION: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
 const PRESENT = "cccccccc-0000-4000-8000-000000000001";
@@ -27,16 +25,15 @@ describe("table in service", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(suite.db);
     await suite.db.insert(floorZones).values([
-      { id: ZONE, locationId: LOCATION, name: "On" },
-      { id: OTHER_ZONE, locationId: LOCATION, name: "Off", active: false },
+      { id: ZONE, name: "On" },
+      { id: OTHER_ZONE, name: "Off", active: false },
     ]);
     await suite.db.insert(diningTables).values([
-      { id: PRESENT, locationId: LOCATION, zoneId: ZONE, label: "Present" },
-      { id: TAKEN_OFF, locationId: LOCATION, zoneId: ZONE, label: "Taken off" },
-      { id: ABSENT, locationId: LOCATION, zoneId: ZONE, label: "Absent" },
-      { id: DISABLED_ZONE, locationId: LOCATION, zoneId: OTHER_ZONE, label: "Disabled zone" },
+      { id: PRESENT, zoneId: ZONE, label: "Present" },
+      { id: TAKEN_OFF, zoneId: ZONE, label: "Taken off" },
+      { id: ABSENT, zoneId: ZONE, label: "Absent" },
+      { id: DISABLED_ZONE, zoneId: OTHER_ZONE, label: "Disabled zone" },
     ]);
     await suite.db
       .insert(floorTodayTables)
@@ -88,7 +85,7 @@ describe("table in service", () => {
     const rows = await suite.db
       .select({ id: diningTables.id, inService: tableInService(diningTables.id) })
       .from(locations)
-      .innerJoin(diningTables, eq(diningTables.locationId, locations.id))
+      .innerJoin(diningTables, sql`true`)
       .orderBy(diningTables.id);
     expect(rows).toEqual([
       { id: PRESENT, inService: 1 },

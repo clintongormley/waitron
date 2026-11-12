@@ -19,7 +19,6 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let backend: VerifactuBackend;
-let locationId: string;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 // recordVoid requires `sale.void`; this is a manager shift session that authorizes every void
@@ -42,7 +41,7 @@ let voidSessionId: string;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ nodeId, seriesId } = await seedTenantWithSif(suite.db));
   // Seed a manager (holds `sale.void`) and open its session.
   const { rows } = await suite.db.execute<{ id: string }>(
     // `id` and `created_at` are supplied here: both come from a `$defaultFn` generator, which
@@ -50,7 +49,7 @@ beforeEach(async () => {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
+  const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
   );

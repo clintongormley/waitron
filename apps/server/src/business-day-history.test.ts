@@ -391,7 +391,7 @@ describe("dated business-day reporting through real storage", () => {
             timeZone: string;
             dayCutover: string;
           }>(
-            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, (select id from catalogues where is_default) as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
           ),
         )
       )[0]!.dayCutover,
@@ -482,9 +482,7 @@ it.each(["void", "tender", "payment", "refund", "notice"])(
           )
         ).rows[0]!;
         const station = (
-          await tx.execute<{ id: string }>(
-            sql`select id from kitchen_stations where location_id = ${venue.cfg.locationId} limit 1`,
-          )
+          await tx.execute<{ id: string }>(sql`select id from kitchen_stations limit 1`)
         ).rows[0]!;
         await recordKitchenNotices(
           tx,

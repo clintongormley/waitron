@@ -6,7 +6,6 @@ import { captureError } from "../testing/errors.js";
 import { seedDevice, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { kitchenStations } from "./kitchen-stations.js";
@@ -25,9 +24,7 @@ describe("device made-here stations schema", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await suite.db
-      .insert(kitchenStations)
-      .values({ id: STATION, locationId: await venueLocationId(suite.db), name: "Kitchen A" });
+    await suite.db.insert(kitchenStations).values({ id: STATION, name: "Kitchen A" });
     await suite.db
       .insert(deviceProfiles)
       .values({ id: PROFILE, name: "Till profile", formFactor: "till" });

@@ -30,7 +30,7 @@ async function fixture() {
   return withTransaction(suite.db, async (tx) => {
     const [agent] = await tx
       .insert(printAgents)
-      .values({ locationId: venueId, name: "Agent", tokenHash: "fixture" })
+      .values({ name: "Agent", tokenHash: "fixture" })
       .returning();
     const printer = await createPrinter(tx, {
       name: "Kitchen",
@@ -140,7 +140,7 @@ describe("print claims with delivered history", () => {
   )(
     "bounds empty pulls by printer and status ($specific, statistics: $statistics, invoice: $invoice)",
     async ({ specific, statistics, invoice }) => {
-      const { agentId, printerId, venueId } = await fixture();
+      const { agentId, printerId } = await fixture();
       await withTransaction(suite.db, async (tx) => {
         const other = await createPrinter(tx, {
           name: "Other",
@@ -151,7 +151,6 @@ describe("print claims with delivered history", () => {
         if (specific)
           await tx.insert(printJobs).values({
             id: otherJobId,
-            locationId: venueId,
             printerId: other.id,
             payload: Buffer.from([1]),
             status: "queued",
@@ -175,7 +174,7 @@ describe("print claims with delivered history", () => {
   );
 
   it("keeps failed-printer priority, same-time insertion order and expired document recovery", async () => {
-    const { agentId, printerId, venueId } = await fixture();
+    const { agentId, printerId } = await fixture();
     await withTransaction(suite.db, async (tx) => {
       const other = await createPrinter(tx, {
         name: "Pass",
@@ -189,7 +188,6 @@ describe("print claims with delivered history", () => {
         printJobs,
         ids.map((id, i) => ({
           id,
-          locationId: venueId,
           printerId: i === 2 ? other.id : printerId,
           payload: Buffer.from([i]),
           kind: i === 6 ? ("drawer" as const) : ("document" as const),

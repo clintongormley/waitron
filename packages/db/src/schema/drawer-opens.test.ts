@@ -9,7 +9,6 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
-import { venueLocationId } from "../venue.js";
 import { randomUUID } from "node:crypto";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { sales, tenders } from "./sales.js";
@@ -35,7 +34,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     });
     await db.insert(printers).values({
       id: PRINTER_A,
-      locationId: await venueLocationId(db),
       name: "Impresora A",
       transport: "cloud_poll",
       pollId: "poll-a",
@@ -226,7 +224,6 @@ describe("settled-tender refund drawer targets", () => {
       invoiceLocales: ["en"],
       operationDescription: "Meals",
     });
-    const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [series] = await db
@@ -271,7 +268,6 @@ describe("settled-tender refund drawer targets", () => {
         source: "device",
         deviceId,
         nodeId,
-        locationId,
         method: "cash",
         manual: false,
         state: "completed",
@@ -306,7 +302,7 @@ describe("settled-tender refund drawer targets", () => {
     billPaymentId = payment!.id;
     const [printer] = await db
       .insert(printers)
-      .values({ locationId, name: "Drawer", transport: "cloud_poll", pollId: randomUUID() })
+      .values({ name: "Drawer", transport: "cloud_poll", pollId: randomUUID() })
       .returning();
     printerId = printer!.id;
   });

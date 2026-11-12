@@ -100,9 +100,7 @@ async function zone(): Promise<string> {
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    await tx
-      .insert(floorZones)
-      .values({ id, locationId: v.cfg.locationId, name: `Zone ${id.slice(0, 8)}` });
+    await tx.insert(floorZones).values({ id, name: `Zone ${id.slice(0, 8)}` });
     await tx.insert(zoneServicePolicies).values({
       zoneId: id,
       departmentId: tables!.departmentId,
@@ -478,7 +476,6 @@ describe("building today's plan from a zone's layout", () => {
     expect((await tableRow(v, t1)).label).toBe("Mid 1b");
     expect(await todayRow(t1)).toMatchObject({ x: 40 });
     const t3 = (await liveTablesOf(z)).find((t) => t.label === "Mid 3");
-    expect(t3).toMatchObject({ locationId: v.cfg.locationId });
     expect(await todayRow(t3!.id)).toMatchObject({ x: 50, y: 50 });
     expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t2);
     expect(await todayRow(t2)).toBeUndefined();
@@ -1254,7 +1251,7 @@ it.each(["03:00", "07:00"])(
           timeZone: string;
           dayCutover: string;
         }>(
-          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, (select id from catalogues where is_default) as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
         ),
       ),
     );
@@ -2375,7 +2372,7 @@ describe("resets onto a set's layout", () => {
       });
       const [unlinked] = await tx
         .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
+        .values({})
         .returning({ id: floorPlanSets.id });
       await tx.insert(floorPlans).values({
         zoneId: zone.id,
@@ -2423,7 +2420,7 @@ describe("resets onto a set's layout", () => {
         .where(eq(zoneServicePolicies.zoneId, zone.id));
       const [unlinked] = await tx
         .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
+        .values({})
         .returning({ id: floorPlanSets.id });
       await tx.insert(floorPlans).values({
         zoneId: zone.id,
@@ -2443,10 +2440,7 @@ describe("resets onto a set's layout", () => {
     expect(await todayRow(live!.id)).toEqual(rowBefore);
 
     const setId = await inTx(v, async (tx) => {
-      const [set] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
-        .returning({ id: floorPlanSets.id });
+      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       await linkFloorPlanSet(tx, {
         setId: set!.id,
         departmentId: gaining,
@@ -2527,10 +2521,7 @@ describe("resets onto a set's layout", () => {
         .update(zoneServicePolicies)
         .set({ departmentId: gaining.id })
         .where(eq(zoneServicePolicies.zoneId, zone.id));
-      const [set] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
-        .returning({ id: floorPlanSets.id });
+      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       await linkFloorPlanSet(tx, {
         setId: set!.id,
         departmentId: gaining.id,

@@ -12,7 +12,6 @@ import {
   devices,
   drawerOpens,
   invoiceSeries,
-  venueLocationId,
   printers,
   printJobs,
   saleSettlements,
@@ -55,14 +54,14 @@ import {
 import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import type { RefundAnswer, RefundLookup } from "@waitron/payments";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const AT = "2026-10-16T12:00:00.000Z";
 const PIN = "4567";
 const HASH = hashPin(PIN);
-let cfg: WithVenueRowId<DeviceRequestConfig>;
+let cfg: DeviceRequestConfig;
 let personId: string;
 let managerId: string;
 let sessionId: string;
@@ -80,7 +79,6 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, {
     capabilities: [
@@ -93,7 +91,6 @@ beforeEach(async () => {
   profileId = device.profileId;
   cfg = {
     nodeId,
-    locationId: placeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en-GB",
     tipsEnabled: true,
@@ -122,7 +119,6 @@ beforeEach(async () => {
   const [printer] = await db
     .insert(printers)
     .values({
-      locationId: placeId,
       name: "Drawer",
       transport: "cloud_poll",
       pollId: randomUUID(),

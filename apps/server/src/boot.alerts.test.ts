@@ -148,7 +148,6 @@ describe("the running server's undelivered invoice alert", () => {
     const [agent] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: venue.cfg.locationId,
         name: "Office agent",
         tokenHash: hashDeviceToken(secret),
       })
@@ -156,7 +155,6 @@ describe("the running server's undelivered invoice alert", () => {
     const [office] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: venue.cfg.locationId,
         name: "Back office",
         host: "192.0.2.20",
         port: 631,
@@ -238,7 +236,6 @@ describe("the running server's dark pass screen alert", () => {
     const pass = await kitchenScreenDevice(
       suite.db,
       {
-        locationId: venue.cfg.locationId,
         deviceProfileId: await profile(suite.db, "kds"),
         label: "Pass",
         tokenHash: "hash",

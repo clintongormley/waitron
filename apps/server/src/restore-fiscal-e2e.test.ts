@@ -86,7 +86,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     operationDescription: "Venta en establecimiento",
   });
   await seedBusinessDay(db, {});
-  await seedDevice(db, { locationId: F.locationId });
+  await seedDevice(db, {});
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
@@ -104,7 +104,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db.insert(sales).values({
     id: F.saleId,
     source: "device",
-    deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
+    deviceId: sql`(select id from devices)`,
     nodeId: F.nodeId,
     seriesId: F.seriesId,
     invoiceNumber: 4,
@@ -121,7 +121,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     .insert(registrosFacturacion)
     .values({
       source: "device",
-      deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
+      deviceId: sql`(select id from devices)`,
       nodeId: F.nodeId,
       sifId: F.sifId,
       saleId: F.saleId,

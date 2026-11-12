@@ -66,10 +66,7 @@ describe("booking change interests", () => {
     });
     const venueId = await venueLocationId(suite.db);
     const cfg = { locationId: venueId };
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Events" })
-      .returning();
+    const [zone] = await suite.db.insert(floorZones).values({ name: "Events" }).returning();
     const tables = await suite.db
       .insert(diningTables)
       .values(

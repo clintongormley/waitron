@@ -8,8 +8,8 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashDeviceToken, hashSecret } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { authenticateAgent } from "./agent.js";
-type PrintAgentConfig = { locationId: string };
 import "./errors.js";
+type PrintAgentConfig = { locationId: string };
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -115,7 +115,6 @@ describe("authenticateAgent", () => {
     const [row] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: cfg.locationId,
         name: "Auth agent",
         tokenHash: hashDeviceToken(secret),
         active: true,

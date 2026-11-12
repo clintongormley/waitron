@@ -9,7 +9,6 @@ import {
   floorTodayZones,
   floorZones,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { FloorPlanSets } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -250,10 +249,7 @@ async function zonesShowing(tx: Transaction, setId: string): Promise<string[]> {
 export function floorPlanSetsFor(): FloorPlanSets {
   return {
     async create(tx) {
-      const [row] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: await venueLocationId(tx) })
-        .returning({ id: floorPlanSets.id });
+      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       return row!.id;
     },
     copyLayouts,

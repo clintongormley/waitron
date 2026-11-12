@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { NoneBackend } from "@waitron/fiscal-none";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -32,7 +31,6 @@ import {
   tenants,
   triggerRaised,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -223,21 +221,13 @@ describe("recordSale — the sale's origin", () => {
     },
   );
 
-  it("describes a device sale from the venue whatever the device's location column holds", async () => {
+  it("describes a device sale from the venue", async () => {
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Counter service"}) where module = 'venue'`,
     );
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db.execute(
-        sql`update devices set location_id = ${randomUUID()} where id = ${deviceId}`,
-      );
-      expect(await descriptionsFiled({ origin: deviceOrigin(deviceId) })).toEqual([
-        "Counter service",
-      ]);
-    } finally {
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
+    expect(await descriptionsFiled({ origin: deviceOrigin(deviceId) })).toEqual([
+      "Counter service",
+    ]);
   });
 
   it("describes a sale with no device from the venue", async () => {
@@ -2057,7 +2047,7 @@ describe("recordSale — saved full-invoice service date", () => {
     expect(retained).toEqual(saved);
   });
 
-  it("dates a full invoice's bill in the venue's zone whatever the order's location column holds", async () => {
+  it("dates a full invoice's bill in the venue's zone", async () => {
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
     );
@@ -2073,23 +2063,14 @@ describe("recordSale — saved full-invoice service date", () => {
       .values({ nodeId, code: "FF", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     await suite.db.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street" });
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db
-        .update(workingOrders)
-        .set({ locationId: randomUUID() })
-        .where(eq(workingOrders.id, bill.id));
-      const { saleId } = await run(new FakeFiscalBackend(suite.db), {
-        seriesId: brandSeriesId(full!.id),
-        workingOrderId: brandWorkingOrderId(bill.id),
-        counterparty: { taxId: "12345678Z", legalName: "Test Customer", countryCode: "ES" },
-        recipientAddress: "2 Main Street, 28013 Madrid, Spain",
-      });
-      const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
-      expect(saved).toMatchObject({ operationDate: "2026-02-28" });
-    } finally {
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      seriesId: brandSeriesId(full!.id),
+      workingOrderId: brandWorkingOrderId(bill.id),
+      counterparty: { taxId: "12345678Z", legalName: "Test Customer", countryCode: "ES" },
+      recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+    });
+    const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(saved).toMatchObject({ operationDate: "2026-02-28" });
   });
 
   it("uses the issuance calendar date for a full invoice with no bill", async () => {

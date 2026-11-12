@@ -424,7 +424,7 @@ async function keptBeforeActivation(stateDir: string) {
     migrationOptionsFor(manifestSets(), null),
   );
   const bundle = {
-    version: 18 as const,
+    version: 19 as const,
     contentLanguages: null,
     holidayArea: null,
     settings: {},
@@ -450,7 +450,6 @@ async function keptBeforeActivation(stateDir: string) {
       fullSeriesCode: "FF",
       rectificativeSeriesCode: "R",
     },
-    defaultCatalogueId: null,
     privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
     modules: { core: 1 },
     tables: {},

@@ -71,17 +71,11 @@ async function fixture(): Promise<Fixture> {
       .returning();
     const [bar, kitchen] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: venueId, name: "Bar" },
-        { locationId: venueId, name: "Kitchen", isDefault: true },
-      ])
+      .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }])
       .returning();
     const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: venueId, name: "Pass" },
-        { locationId: venueId, name: "Grill" },
-      ])
+      .values([{ name: "Pass" }, { name: "Grill" }])
       .returning();
     const [calendarMenu] = await tx
       .insert(catalogues)
@@ -192,7 +186,7 @@ const setDepartmentActive = (department: { id: string }, active: boolean) =>
     tx.update(departments).set({ active }).where(eq(departments.id, department.id)),
   );
 
-async function addSubjects(f: Fixture) {
+async function addSubjects() {
   return withTransaction(db, async (tx) => {
     const [terrace] = await tx
       .insert(departments)
@@ -203,10 +197,7 @@ async function addSubjects(f: Fixture) {
       .returning();
     const [terraceStation, grill] = await tx
       .insert(kitchenStations)
-      .values([
-        { locationId: f.cfg.locationId, name: "Terrace pass" },
-        { locationId: f.cfg.locationId, name: `Grill ${randomUUID()}` },
-      ])
+      .values([{ name: "Terrace pass" }, { name: `Grill ${randomUUID()}` }])
       .returning();
     return {
       terraceDepartment: { kind: "department" as const, id: terrace!.id },
@@ -281,7 +272,7 @@ describe("the calendar's Closed colour", () => {
       });
       expect(await toneAndClosed(date)).toEqual(["special_day", !open]);
     }
-    const { terraceDepartment: terrace } = await addSubjects(f);
+    const { terraceDepartment: terrace } = await addSubjects();
     expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", true]);
     await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();

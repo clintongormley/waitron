@@ -42,7 +42,6 @@ import {
   sales,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -89,7 +88,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import {
   collectOrderOrchestration as collectOrder,
   printSaleReceipt,
@@ -145,6 +144,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
+import type { TradingContext } from "./trading-context.js";
 
 /**
  * PRINTING NEVER OPENS THE DRAWER (CLAUDE.md §5): a receipt is a `document` job carrying no drawer
@@ -194,10 +194,9 @@ function nextTaxId(): string {
   return nifWithControlLetter(60_000_000 + taxIdCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -209,7 +208,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
  * the counter zone under `orderFlow`.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   each: AvailableProduct & { menuItemId: string };
   zoneId: string;
 }> {
@@ -244,8 +243,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Drinks" });
@@ -318,7 +316,7 @@ async function makePrinter({
 }
 
 async function configureReceipt(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   opts: { printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -340,9 +338,9 @@ const NO_DRAWER_CAPABILITY = CAPABILITY_FLAGS.filter((flag) => flag !== "open-ca
 
 /** `cfg` as a request from a new device at its location whose profile lacks `capability`. */
 async function deviceWithout(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   capability: string,
-): Promise<WithVenueRowId<DeviceRequestConfig>> {
+): Promise<DeviceRequestConfig> {
   const { deviceId } = await seedDevice(suite.db, {
     capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== capability),
   });
@@ -410,8 +408,7 @@ function logos(payload: Uint8Array): number[][] {
 }
 
 /** The one filed sale's id; the database is emptied after each test. */
-async function onlySaleId(cfg: DeviceRequestConfig): Promise<string> {
-  void cfg;
+async function onlySaleId(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select({ id: sales.id }).from(sales);
     return rows[0]!.id;
@@ -461,7 +458,7 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
       },
       OPERATOR,
     );
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     await withTransaction(suite.db, (tx) => enqueueOriginalReceipt(tx, cfg, ticket, saleId));
     const papers = (await printJobsFor(cfg)).map((job) => new Uint8Array(job.payload));
     const receipt = papers.find((payload) => decodeTicket(payload).includes("TOTAL"))!;
@@ -923,7 +920,7 @@ describe("simplified invoice original requests", () => {
         OPERATOR,
       );
       await printSaleReceipt(deps(), cfg, workingOrderId, false);
-      const saleId = await onlySaleId(cfg);
+      const saleId = await onlySaleId();
       await withTransaction(suite.db, (tx) =>
         tx
           .update(printJobs)
@@ -967,7 +964,7 @@ describe("simplified invoice original requests", () => {
     const jobs = await suite.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
-      saleId: await onlySaleId(cfg),
+      saleId: await onlySaleId(),
       receiptCopy: false,
       kind: "document",
     });
@@ -1123,7 +1120,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       deviceId: cfg.origin.deviceId,
       printerId,
     });
-    expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
+    expect(opens[0]!.saleId).toBe(await onlySaleId());
   });
 
   it("ignores the venue footer while printing the filed invoice", async () => {
@@ -1219,7 +1216,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await drawerOpensFor(cfg)).toEqual([
       {
         reason: "card_slip",
-        saleId: await onlySaleId(cfg),
+        saleId: await onlySaleId(),
         personId: OPERATOR,
         deviceId: cfg.origin.deviceId,
         printerId,
@@ -1319,7 +1316,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await drawerOpensFor(cfg)).toEqual([
       {
         reason: "card_slip",
-        saleId: await onlySaleId(cfg),
+        saleId: await onlySaleId(),
         personId: OPERATOR,
         deviceId: cfg.origin.deviceId,
         printerId,
@@ -1504,17 +1501,17 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR });
     // The `sale_id` back-reference is PINNED to the settled invoice's sale.
-    expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
+    expect(opens[0]!.saleId).toBe(await onlySaleId());
   });
 });
 
 describe("every device whose profile allows the drawer opens its chosen drawer", () => {
   /** Another till device at the venue's location, and the config a sale there runs under. */
   async function addNode(
-    cfg: WithVenueRowId<DeviceRequestConfig>,
+    cfg: DeviceRequestConfig,
     name: string,
     capabilities: string[] = [...CAPABILITY_FLAGS],
-  ): Promise<WithVenueRowId<DeviceRequestConfig>> {
+  ): Promise<DeviceRequestConfig> {
     const { deviceId } = await seedDevice(suite.db, {
       label: name,
       capabilities,
@@ -1767,7 +1764,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
 
     await sell(cfg, product, "cash");
 
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     const jobs = await allJobs();
     expect(jobs.map((job) => [job.printerId, job.kind])).toEqual([
       [drawer, "drawer"],
@@ -1802,7 +1799,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     expect(await drawerOpensFor(cfg)).toEqual([
       {
         reason: "card_slip",
-        saleId: await onlySaleId(cfg),
+        saleId: await onlySaleId(),
         personId: OPERATOR,
         deviceId: cfg.origin.deviceId,
         printerId: drawer,
@@ -2089,14 +2086,10 @@ describe("a record with no device prints nothing", () => {
 });
 
 describe("the device's invoice printer", () => {
-  async function officePrinter(
-    cfg: WithVenueRowId<DeviceRequestConfig>,
-    active = true,
-  ): Promise<string> {
+  async function officePrinter(active = true): Promise<string> {
     const [row] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: cfg.locationId,
         name: active ? "Back office" : "Old office",
         host: `192.0.2.${active ? 40 : 41}`,
         port: 631,
@@ -2124,7 +2117,7 @@ describe("the device's invoice printer", () => {
 
   it("resolves the profile's default A4 printer", async () => {
     const { cfg } = await setupVenue();
-    const office = await officePrinter(cfg);
+    const office = await officePrinter();
     await withTransaction(suite.db, async (tx) =>
       listInvoicePrinter(tx, {
         profileId: await profileOf(cfg),
@@ -2138,7 +2131,7 @@ describe("the device's invoice printer", () => {
 
   it("resolves the device's own receipt-printer choice over the profile's default", async () => {
     const { cfg } = await setupVenue();
-    const office = await officePrinter(cfg);
+    const office = await officePrinter();
     const receipt = await makePrinter();
     await withTransaction(suite.db, async (tx) => {
       const profileId = await profileOf(cfg);
@@ -2155,7 +2148,7 @@ describe("the device's invoice printer", () => {
 
   it("resolves none when the profile lists no invoice printer, or the origin is not a device", async () => {
     const { cfg } = await setupVenue();
-    await officePrinter(cfg);
+    await officePrinter();
 
     expect(await resolve(cfg.origin)).toBeUndefined();
     expect(await resolve(jobOrigin("operator_script"))).toBeUndefined();
@@ -2163,8 +2156,8 @@ describe("the device's invoice printer", () => {
 
   it("resolves none for a switched-off choice, never falling back to the profile's default", async () => {
     const { cfg } = await setupVenue();
-    const office = await officePrinter(cfg);
-    const old = await officePrinter(cfg, false);
+    const office = await officePrinter();
+    const old = await officePrinter(false);
     await withTransaction(suite.db, async (tx) => {
       const profileId = await profileOf(cfg);
       await listInvoicePrinter(tx, { profileId, pagePrinterId: office, isDefault: true });
@@ -2194,7 +2187,7 @@ describe("receipt issuer", () => {
       tender: { method: "card", amount: "1.50" },
     });
     await printSaleReceipt(deps(), cfg, explicitPrintOrder9, false);
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     const original = (await printJobsFor(cfg)).map((job) =>
       printedLines(new Uint8Array(job.payload)).map((line) => line.trim()),
     )[0]!;
@@ -2226,7 +2219,7 @@ describe("receipt issuer", () => {
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
     });
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     await withTransaction(suite.db, (tx) => tx.delete(tenants));
 
     await expect(
@@ -2245,7 +2238,7 @@ describe("receipt issuer", () => {
     });
     const withoutIssuer = { ...filed, issuer: undefined };
     const taxpayer = (await withTransaction(suite.db, (tx) => readTenant(tx)))!;
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
 
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, withoutIssuer, saleId));
     const [fallback] = (await printJobsFor(cfg)).map((job) =>
@@ -2800,7 +2793,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter() });
     const filed = await sellOne(cfg, each, zoneId);
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     await storeReceipt({
       logo: LOGO,
       phone: "910000000",
@@ -3173,7 +3166,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
       await withTransaction(suite.db, async (tx) => {
         await tx.insert(pagePrinters).values({
           id: pagePrinterId,
-          locationId: cfg.locationId,
           name: "Invoice A4",
           host: "127.0.0.1",
           port: 631,
@@ -3297,7 +3289,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(pagePrinters).values({
         id: pagePrinterId,
-        locationId: cfg.locationId,
         name: "Invoice A4",
         host: "127.0.0.1",
         port: 631,
@@ -3539,11 +3530,11 @@ describe("department receipt presentation on thermal jobs", () => {
       await suite.db
         .update(printers)
         .set({ paperWidth })
-        .where(eq(printers.locationId, cfg.locationId));
+        .where(sql`true`);
 
       await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
       const ticket = await sell();
-      const saleId = await onlySaleId(cfg);
+      const saleId = await onlySaleId();
       await suite.db
         .update(departmentReceipts)
         .set({ receipt: {}, logoRasters: null })
@@ -3768,7 +3759,7 @@ describe("department receipt presentation on thermal jobs", () => {
     const { cfg, departmentId, sell, documents } = await setupReceipt();
     await storeDepartmentReceipt(departmentId, { headerSubtitle: { "es-ES": "Before edit" } });
     const ticket = await sell();
-    const id = await onlySaleId(cfg);
+    const id = await onlySaleId();
     await suite.db
       .update(departments)
       .set({ active: false, tradingName: "New mutable brand" })
@@ -3805,7 +3796,7 @@ describe("department receipt presentation on thermal jobs", () => {
         footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
       });
       const ticket = await sell();
-      const id = await onlySaleId(cfg);
+      const id = await onlySaleId();
       await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
       const text = decodeTicket((await documents())[1]!.payload);
@@ -3830,7 +3821,7 @@ describe("department receipt presentation on thermal jobs", () => {
         footerMessage: { "es-ES": "Spanish footer", "gl-ES": "Galician footer" },
       });
       const ticket = await sell();
-      const id = await onlySaleId(cfg);
+      const id = await onlySaleId();
       await seedVenueSettings(suite.db, { invoiceLocales: [current] });
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
       const text = decodeTicket((await documents())[1]!.payload);
@@ -3852,7 +3843,7 @@ describe("the theme's logo on thermal receipts", () => {
     await suite.db
       .update(printers)
       .set({ paperWidth })
-      .where(eq(printers.locationId, cfg.locationId));
+      .where(sql`true`);
     const [{ departmentId }] = await suite.db
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
@@ -3878,7 +3869,7 @@ describe("the theme's logo on thermal receipts", () => {
         (job) => job.saleId !== null && job.kind === "document",
       );
     const reprint = async (ticket: Awaited<ReturnType<typeof sell>>) => {
-      const saleId = await onlySaleId(cfg);
+      const saleId = await onlySaleId();
       const before = new Set((await documents()).map((job) => job.id));
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
       const copies = (await documents()).filter((job) => !before.has(job.id));

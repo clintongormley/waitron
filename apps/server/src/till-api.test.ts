@@ -176,9 +176,7 @@ const suite = useVenueDb({
     });
     const venueId = await venueLocationId(db);
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
-    const defaultStationId = await seedKitchenStation(db, {
-      locationId: venueId,
-    });
+    const defaultStationId = await seedKitchenStation(db, {});
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row).
     const nodeId = await seedNode(db);
@@ -232,7 +230,7 @@ const suite = useVenueDb({
           .returning({ id: departments.id });
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: venueId, name: "Counter" })
+          .values({ name: "Counter" })
           .returning({ id: floorZones.id });
         await tx.execute(sql`
         insert into zone_service_policies
@@ -1862,15 +1860,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // offers) and drops the retired one. Cleaned up in `finally` so the shared venue's default `[]`
     // case stays order-independent.
     await suite.db.insert(kitchenCourses).values([
-      { locationId: cfg.locationId, name: "Postres", displayOrder: 2, active: true },
+      { name: "Postres", displayOrder: 2, active: true },
       {
-        locationId: cfg.locationId,
         name: "Entrantes",
         displayOrder: 1,
         active: true,
         heldUntilFired: false,
       },
-      { locationId: cfg.locationId, name: "Retirado", displayOrder: 0, active: false },
+      { name: "Retirado", displayOrder: 0, active: false },
     ]);
     try {
       const app = new Hono();
@@ -1885,9 +1882,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
         { id: expect.any(String), name: "Postres", displayOrder: 2, heldUntilFired: true },
       ]);
     } finally {
-      await suite.db.execute(
-        sql`delete from kitchen_courses where location_id = ${cfg.locationId}`,
-      );
+      await suite.db.execute(sql`delete from kitchen_courses`);
     }
   });
 
@@ -2170,7 +2165,7 @@ describe("zone-offer catalogue routes", () => {
     const headers = { cookie: `${SESSION_COOKIE}=${token}` };
     const [second] = await suite.db
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Collect at counter" })
+      .values({ name: "Collect at counter" })
       .returning({ id: floorZones.id });
     await suite.db.execute(sql`
       insert into zone_service_policies (zone_id, department_id)
@@ -2251,7 +2246,7 @@ describe("zone-offer catalogue routes", () => {
     const otherCookie = await enrolTillDeviceCookie(suite.db);
     const [second] = await suite.db
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: `Device zone ${deviceId}` })
+      .values({ name: `Device zone ${deviceId}` })
       .returning({ id: floorZones.id });
     await suite.db.execute(sql`
       insert into zone_service_policies
@@ -3061,13 +3056,11 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       status: string;
       source: string;
       device_id: string;
-      location_id: string;
-    }>(sql`select status, source, device_id, location_id from working_orders where id = ${id}`);
+    }>(sql`select status, source, device_id from working_orders where id = ${id}`);
     expect(rows.rows[0]).toEqual({
       status: "open",
       source: "device",
       device_id: sessionDeviceId,
-      location_id: cfg.locationId,
     });
   });
 
@@ -3502,7 +3495,6 @@ describe("KDS-1 station-display operate routes", () => {
     const [printer] = await suite.db
       .insert(printers)
       .values({
-        locationId: cfg.locationId,
         name: `KDS ${randomUUID()}`,
         transport: "cloud_poll",
         pollId: randomUUID(),
@@ -3512,7 +3504,6 @@ describe("KDS-1 station-display operate routes", () => {
       .insert(stationPrinters)
       .values({ stationId: kitchenStation.id, printerId: printer!.id });
     await suite.db.insert(printJobs).values({
-      locationId: cfg.locationId,
       printerId: printer!.id,
       payload: Uint8Array.of(1),
       status: "failed",
@@ -3694,7 +3685,6 @@ describe("KDS-1 station-display operate routes", () => {
     const id = await placeFired(app, cookie);
     const kitchenStation = await defaultStation(app, cookie);
     const grill = await seedKitchenStation(suite.db, {
-      locationId: cfg.locationId,
       name: `Grill ${randomUUID()}`,
       isDefault: false,
     });
@@ -4068,7 +4058,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     // is the only zone-seeding test in the suite, so "Comedor" cannot collide.
     const [zoneRow] = await suite.db
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Comedor" })
+      .values({ name: "Comedor" })
       .returning({ id: floorZones.id });
     const zoneId = zoneRow!.id;
     const [department] = await suite.db
@@ -4605,7 +4595,7 @@ describe("canonical modifier HTTP serialization", () => {
     const f = await modifierOfferFixture();
     const [zone] = await suite.db
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Modifier tables" })
+      .values({ name: "Modifier tables" })
       .returning({ id: floorZones.id });
     const zoneId = zone!.id;
     const [modifierDepartment] = await suite.db

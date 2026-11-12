@@ -4,10 +4,10 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import {} from "@waitron/catalogue";
+
 import { persons, startManagementSession } from "@waitron/identity";
 import {
   MEDIA_MODULE,
@@ -27,7 +27,8 @@ import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 import * as logoModule from "./receipt-logo.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -55,9 +56,7 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
     city: "Madrid",
     province: "Madrid",
   });
-  const venueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
-    locationId: venueId,
+  const cfg: TradingContext = {
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",
     tipsEnabled: false,

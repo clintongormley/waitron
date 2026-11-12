@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { tenders, withTransaction, venueLocationId } from "@waitron/db";
+import { tenders, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -32,7 +32,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
 import { descendingIds } from "./testing/descending-ids.js";
@@ -40,6 +40,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The whole manifest is migrated because the seed runs the real provisioning plan and `recordSale`.
 // Each case seeds its own sale under its own working-order id, which `sales_working_order_id_key`
@@ -82,17 +83,16 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
 
-let cfg: WithVenueRowId<DeviceRequestConfig>;
+let cfg: DeviceRequestConfig;
 let seriesId: ReturnType<typeof brandSeriesId>;
 let menuItemId: string;
 let zoneId: string;
@@ -142,8 +142,8 @@ beforeAll(async () => {
   );
 
   seriesId = brandSeriesId(venue.seriesIds[0]!);
-  const venueId = await venueLocationId(suite.db);
-  cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+
+  cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });

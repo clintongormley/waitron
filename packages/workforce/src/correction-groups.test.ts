@@ -242,7 +242,7 @@ it("retains a singleton missing end request even before its missing start is sup
 });
 
 it("records the selected till device on both request and decision rows", async () => {
-  const { deviceId } = await seedDevice(suite.db, { locationId });
+  const { deviceId } = await seedDevice(suite.db, {});
   const till = deviceOrigin(deviceId);
   const ids = await run((tx) =>
     corrections.requestCorrectionGroup(

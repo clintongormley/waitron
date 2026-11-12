@@ -43,10 +43,10 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: await seedLocation("Bar") };
 }
 
-async function seedAgent(cfg: PrintConfig, name = "Kitchen agent"): Promise<string> {
+async function seedAgent(name = "Kitchen agent"): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId: cfg.locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -95,8 +95,8 @@ class FlakySink implements Transport {
 
 describe("runAgentOnce (pull → push → report)", () => {
   it("pulls a queued job, pushes the exact bytes, and reports done", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx);
       const { jobId } = await enqueuePrintJob(
@@ -124,8 +124,8 @@ describe("runAgentOnce (pull → push → report)", () => {
   });
 
   it("isolates a down printer: it fails that job (attempts++) without blocking another printer's job", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await withTransaction(suite.db, async (tx) => {
       const down = await createPrinter(tx, {
         name: "Down",
@@ -177,8 +177,8 @@ describe("runAgentOnce (pull → push → report)", () => {
   });
 
   it("records a non-Error push rejection as its stringified form in last_error", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx);
       const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([1]));
@@ -197,8 +197,8 @@ describe("runAgentOnce (pull → push → report)", () => {
   });
 
   it("does not record a sent job as failed when its done report is refused; the refusal propagates", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await suite.db.run(sql`create trigger refuse_done before update on print_jobs
       when new.status = 'done' begin select raise(abort, 'done report refused'); end`);
     try {
@@ -231,8 +231,8 @@ describe("runAgentOnce (pull → push → report)", () => {
   });
 
   it("retries a failed job on a later run, up to the attempt cap", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx);
       const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([7]));
@@ -260,9 +260,9 @@ describe("runAgentOnce (pull → push → report)", () => {
   });
 
   it("reclaims a claim whose lease has EXPIRED and leaves one still INSIDE the lease alone", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
-    const deadAgentId = await seedAgent(cfg, "Crashed agent");
+    await setup();
+    const agentId = await seedAgent();
+    const deadAgentId = await seedAgent("Crashed agent");
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx);
       const { jobId: live } = await enqueuePrintJob(tx, printerId, new Uint8Array([1]));
@@ -301,8 +301,8 @@ describe("runAgentOnce (pull → push → report)", () => {
   // same-day 'T'-separated cutoff, and a job claimed a moment ago would be reprinted on the next
   // batch. The lease case above cannot notice, because it writes `claimed_at` itself.
   it("does not re-claim a job it claimed moments ago (the stamp is in the cutoff's own spelling)", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx);
       const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([3]));
@@ -327,8 +327,8 @@ describe("runAgentOnce (pull → push → report)", () => {
   });
 
   it("stops retrying once a job has reached the attempt cap (bounded)", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx);
       const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([9]));
@@ -351,8 +351,8 @@ describe("runAgentOnce (pull → push → report)", () => {
   });
 
   it("reports an empty batch when the agent has no queued work", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     await withTransaction(suite.db, async (tx) => {
       await seedPrinter(tx);
       const sink = new FakeSink();

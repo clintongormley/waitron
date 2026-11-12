@@ -185,21 +185,20 @@ function billRefund(id, paymentId) {
 
 /** A working order row, opened on `dev-active`. Callers name only what a case turns on. */
 function workingOrder(id, status, extra = {}) {
-  const locationId = extra.locationId ?? "loc";
   const settledAt = status === "settled" ? `'${STAMP}'` : "null";
   const collectedAt = extra.collectedAt ? `'${extra.collectedAt}'` : "null";
   const partyId = extra.partyId ? `'${extra.partyId}'` : "null";
   return (
-    `insert into working_orders (id, source, device_id, location_id, order_number, status, opened_at, settled_at, collected_at, party_id) ` +
-    `values ('${id}', 'device', 'dev-active', '${locationId}', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, ${partyId})`
+    `insert into working_orders (id, source, device_id, order_number, status, opened_at, settled_at, collected_at, party_id) ` +
+    `values ('${id}', 'device', 'dev-active', 1, '${status}', '${STAMP}', ${settledAt}, ${collectedAt}, ${partyId})`
   );
 }
 
-/** A device row at the venue `loc`, enrolled at `STAMP`. */
+/** A device enrolled at `STAMP`. */
 function device(id, profileId, label, active) {
   return (
-    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
-    `values ('${id}', 'loc', '${profileId}', '${label}', 'hash', ${active ? 1 : 0}, '${STAMP}', '${STAMP}')`
+    `insert into devices (id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+    `values ('${id}', '${profileId}', '${label}', 'hash', ${active ? 1 : 0}, '${STAMP}', '${STAMP}')`
   );
 }
 
@@ -239,8 +238,8 @@ function party(id) {
 
 function table(id, label) {
   return (
-    `insert into dining_tables (id, location_id, zone_id, label, created_at) ` +
-    `values ('${id}', 'loc', 'zone', '${label}', '${STAMP}')`
+    `insert into dining_tables (id, zone_id, label, created_at) ` +
+    `values ('${id}', 'zone', '${label}', '${STAMP}')`
   );
 }
 

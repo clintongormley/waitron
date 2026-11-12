@@ -7,7 +7,6 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { isRefusal } from "../unique-violation.js";
 import { NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
@@ -16,8 +15,28 @@ import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { locations } from "./tenants.js";
 
-let LOCATION_A: string;
 const LOCATION_B = "aaaaaaaa-0000-4000-8000-000000000002";
+
+describe("table labels without a location", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("two tables cannot share a label, including in different zones", async () => {
+    await suite.db.run(sql`insert into floor_zones (id, name, created_at)
+      values ('inside', 'Inside', '2026-11-11'), ('outside', 'Outside', '2026-11-11')`);
+    const insert = (id: string, label: string, zone: string) =>
+      suite.db.run(sql`insert into dining_tables (id, label, zone_id, created_at)
+        values (${id}, ${label}, ${zone}, '2026-11-11')`);
+    await insert("first", "Table 1", "inside");
+    await insert("second", "Table 2", "outside");
+    const error = await captureError(() => insert("duplicate", "Table 1", "outside"));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: dining_tables.label");
+    expect(suite.db.all(sql`select id from dining_tables order by id`)).toEqual([
+      { id: "first" },
+      { id: "second" },
+    ]);
+  });
+});
 
 describe("dining_tables columns", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -29,7 +48,6 @@ describe("dining_tables columns", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(db);
     await db.insert(locations).values({
       id: LOCATION_B,
     });
@@ -48,16 +66,15 @@ describe("dining_tables columns", () => {
   // Through the Drizzle builder rather than raw SQL: `dining_tables.id` takes its value from a
   // `$defaultFn` that Drizzle applies CLIENT-side, so a raw `insert` never reaches it and the row
   // is refused `NOT NULL constraint failed: dining_tables.id`.
-  async function seedTable(location: string, label: string, shortName?: string): Promise<string> {
+  async function seedTable(label: string, shortName?: string): Promise<string> {
     return inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: location, name: label })
+        .values({ name: label })
         .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
         .values({
-          locationId: location,
           label,
           zoneId: zone!.id,
           ...(shortName === undefined ? {} : shortNameColumns(shortName)),
@@ -68,11 +85,10 @@ describe("dining_tables columns", () => {
   }
 
   it("accepts a dining table in its zone", async () => {
-    const id = await seedTable(LOCATION_A, "T-zoned");
+    const id = await seedTable("T-zoned");
     const [row] = await inTx((tx) => tx.select().from(diningTables).where(eq(diningTables.id, id)));
     expect(row).toMatchObject({
       id,
-      locationId: LOCATION_A,
       label: "T-zoned",
       zoneId: expect.any(String),
       planTableId: null,
@@ -84,7 +100,7 @@ describe("dining_tables columns", () => {
     const error = await captureError(() =>
       inTx(async (tx) => {
         tx.run(
-          sql`insert into dining_tables (id, location_id, label, created_at) values (${id}, ${LOCATION_A}, ${"T-no-zone"}, ${"2026-10-11T10:00:00.000Z"})`,
+          sql`insert into dining_tables (id, label, created_at) values (${id}, ${"T-no-zone"}, ${"2026-10-11T10:00:00.000Z"})`,
         );
       }),
     );
@@ -100,7 +116,6 @@ describe("dining_tables columns", () => {
       "created_at",
       "id",
       "label",
-      "location_id",
       "needs_clearing_since",
       "plan_table_id",
       "short_name",
@@ -110,25 +125,24 @@ describe("dining_tables columns", () => {
   });
 
   it("refuses two tables of one venue whose short names differ only in case", async () => {
-    await seedTable(LOCATION_A, "Terrace 1", "T1");
-    const error = await captureError(() => seedTable(LOCATION_A, "Tower 1", "t1"));
+    await seedTable("Terrace 1", "T1");
+    const error = await captureError(() => seedTable("Tower 1", "t1"));
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toBe(
-      "UNIQUE constraint failed: dining_tables.location_id, dining_tables.short_name_key",
+      "UNIQUE constraint failed: dining_tables.short_name_key",
     );
   });
 
   it("a key a writer did not fold is not refused", async () => {
-    await seedTable(LOCATION_A, "Terrace 1", "t1");
+    await seedTable("Terrace 1", "t1");
     const id = await inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION_A, name: "Tower" })
+        .values({ name: "Tower" })
         .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
         .values({
-          locationId: LOCATION_A,
           label: "Tower 1",
           zoneId: zone!.id,
           shortName: "T1",
@@ -146,11 +160,10 @@ describe("dining_tables columns", () => {
     expect(row).toEqual({ shortNameKey: "T1" });
   });
 
-  it("lets two venues use one short name, and any number of tables have none", async () => {
-    await seedTable(LOCATION_A, "Garden 1", "G1");
-    const other = await seedTable(LOCATION_B, "Garden 1", "G1");
-    const first = await seedTable(LOCATION_A, "Unnamed 1");
-    const second = await seedTable(LOCATION_A, "Unnamed 2");
+  it("allows any number of tables without a short name", async () => {
+    const other = await seedTable("Garden 1", "G1");
+    const first = await seedTable("Unnamed 1");
+    const second = await seedTable("Unnamed 2");
     const rows = await inTx((tx) =>
       tx
         .select({ id: diningTables.id, shortName: diningTables.shortName })

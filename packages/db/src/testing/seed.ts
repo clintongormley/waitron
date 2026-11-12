@@ -13,6 +13,8 @@ import { settings } from "../schema/settings.js";
 import { BUSINESS_DAY_SETTINGS, FIRST_DAY_START, type VenueSettings } from "../venue-settings.js";
 import { readSettings, saveSettings } from "../settings.js";
 import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
+import { catalogues } from "../schema/catalogue.js";
+import { createVenueSettings, saveVenueFields, venueLocationId, type Venue } from "../venue.js";
 
 export async function seedVenueSettings(
   db: Database | Transaction,
@@ -46,7 +48,6 @@ export async function seedVenueSettings(
     await saveVenueFields(db, overrides, null);
   }
 }
-import { createVenueSettings, saveVenueFields, venueLocationId, type Venue } from "../venue.js";
 
 // The taxpayer row is a singleton keyed on id = 1, so a suite has at most one NIF in play and a
 // second seed is a no-op. The counter survives because other fixtures still mint their own NIFs for
@@ -76,7 +77,7 @@ export async function seedTenant(db: Database | Transaction): Promise<void> {
 /** Writes the taxpayer row ({@link seedTenant}) and the one venue; refuses a second venue. */
 export async function seedVenue(
   db: Database | Transaction,
-  overrides: Partial<Venue> = {},
+  overrides: Partial<Venue> & { defaultCatalogueId?: string | null } = {},
 ): Promise<void> {
   const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
   if (existing) throw new Error(`seedVenue: a venue row already exists (${existing.id})`);
@@ -98,8 +99,15 @@ export async function seedVenue(
   } = overrides;
   await db.insert(locations).values({
     ...columns,
-    ...(defaultCatalogueId === undefined ? {} : { catalogueId: defaultCatalogueId }),
   });
+  if (defaultCatalogueId !== undefined) {
+    await db.update(catalogues).set({ isDefault: false }).where(eq(catalogues.isDefault, true));
+    if (defaultCatalogueId !== null)
+      await db
+        .update(catalogues)
+        .set({ isDefault: true })
+        .where(eq(catalogues.id, defaultCatalogueId));
+  }
   const doc: Partial<VenueSettings> = {};
   for (const [key, value] of Object.entries({
     name,
@@ -126,38 +134,35 @@ export async function seedNode(db: Database | Transaction, location?: string): P
   return brandNodeId(row!.id);
 }
 
-/** Seeds one kitchen station for `locationId` and returns its id. Defaults to the DEFAULT station
- * named 'Cocina' — the fixture shape the till suites need so a fire's default-station fallback
- * ({@link fireLines}) resolves. */
+/** Seeds one kitchen station; defaults to the default station. */
 export async function seedKitchenStation(
   db: Database | Transaction,
-  opts: { locationId: string; name?: string; isDefault?: boolean },
+  opts: { name?: string; isDefault?: boolean } = {},
 ): Promise<string> {
-  const { locationId, name = "Cocina", isDefault = true } = opts;
+  const { name = "Cocina", isDefault = true } = opts;
   const [row] = await db
     .insert(kitchenStations)
-    .values({ locationId, name, isDefault })
+    .values({ name, isDefault })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
 
 let deviceCounter = 0;
 
-/** Pairs one active device at `locationId` (the venue when omitted), on `profileId` or on a new
+/** Pairs one active device on `profileId` or on a new
  * profile of `formFactor` (till by default). */
 export async function seedDevice(
   db: Database | Transaction,
   opts: {
-    locationId?: string;
     label?: string;
     formFactor?: Exclude<(typeof deviceFormFactorEnum.enumValues)[number], "kds">;
     capabilities?: string[];
     profileId?: string;
   } = {},
 ): Promise<{ deviceId: DeviceId; profileId: string }> {
+  await venueLocationId(db);
   deviceCounter += 1;
   const label = opts.label ?? `Device ${deviceCounter}`;
-  const locationId = opts.locationId ?? (await venueLocationId(db));
   const profileId =
     opts.profileId ??
     (
@@ -173,7 +178,6 @@ export async function seedDevice(
   const [row] = await db
     .insert(devices)
     .values({
-      locationId,
       deviceProfileId: profileId,
       label,
       tokenHash: "seeded",
@@ -186,7 +190,7 @@ export async function seedDevice(
  * needs no device) and order number 1. */
 export async function seedWorkingOrder(
   db: Database | Transaction,
-  values: Partial<Omit<typeof workingOrders.$inferInsert, "locationId">> = {},
+  values: Partial<typeof workingOrders.$inferInsert> = {},
 ): Promise<typeof workingOrders.$inferSelect> {
   const [row] = await db
     .insert(workingOrders)
@@ -194,7 +198,6 @@ export async function seedWorkingOrder(
       source: "dashboard",
       orderNumber: 1,
       ...values,
-      locationId: await venueLocationId(db),
     })
     .returning();
   return row!;

@@ -11,7 +11,6 @@ import {
   workingOrderLines,
   workingOrders,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -37,7 +36,6 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 import { createTable } from "./testing/live-table.js";
 import { advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
@@ -48,6 +46,7 @@ import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
 // a `working_order_lines` field the pay path never reads: `payWorkingOrder` files from the tab's
@@ -136,10 +135,9 @@ function venueRequest(nif: string): VenueRequest {
   };
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -174,8 +172,8 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(db);
-  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue, venueId));
+
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   await withTransaction(db, (tx) =>
     registerSif(tx, {
       nodeId: cfg.nodeId,

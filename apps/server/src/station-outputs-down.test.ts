@@ -48,7 +48,6 @@ async function setup() {
     const [p] = await suite.db
       .insert(printers)
       .values({
-        locationId: venue.cfg.locationId,
         name,
         transport: "cloud_poll",
         pollId: randomUUID(),
@@ -84,13 +83,8 @@ async function darkScreenAlertKeys(f: Awaited<ReturnType<typeof setup>>): Promis
     .filter((key) => key.startsWith("station.screens_dark:"));
 }
 
-async function job(
-  locationId: string,
-  printerId: string,
-  values: Partial<typeof printJobs.$inferInsert> = {},
-) {
+async function job(printerId: string, values: Partial<typeof printJobs.$inferInsert> = {}) {
   await suite.db.insert(printJobs).values({
-    locationId,
     printerId,
     payload: Uint8Array.of(1),
     createdAt: "2026-10-02T18:00:00.000Z",
@@ -134,8 +128,8 @@ describe("station output status", () => {
   it("keeps a printer down through a drawer pulse, then clears it after a document prints", async () => {
     const f = await setup();
     const p = await f.printer(f.grill, "Epson");
-    await job(f.venue.cfg.locationId, p);
-    await job(f.venue.cfg.locationId, p, {
+    await job(p);
+    await job(p, {
       kind: "drawer",
       status: "done",
       createdAt: "2026-10-02T18:05:00.000Z",
@@ -150,7 +144,7 @@ describe("station output status", () => {
         since: "2026-10-02T18:00:00.000Z",
       },
     ]);
-    await job(f.venue.cfg.locationId, p, { status: "done", createdAt: "2026-10-02T18:05:01.000Z" });
+    await job(p, { status: "done", createdAt: "2026-10-02T18:05:01.000Z" });
     expect(await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at))).toEqual([]);
   });
 
@@ -158,8 +152,8 @@ describe("station output status", () => {
     const f = await setup();
     const one = await f.printer(f.grill, "Grill printer");
     const two = await f.printer(f.bar, "Bar printer");
-    await job(f.venue.cfg.locationId, one);
-    await job(f.venue.cfg.locationId, two);
+    await job(one);
+    await job(two);
     expect(
       await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at, [f.grill])),
     ).toMatchObject([{ printerId: one }]);
@@ -175,13 +169,13 @@ describe("station output status", () => {
   it("keeps a given-up ticket down overnight and ignores a young queued ticket", async () => {
     const f = await setup();
     const p = await f.printer(f.grill, "Epson");
-    await job(f.venue.cfg.locationId, p, {
+    await job(p, {
       status: "queued",
       attempts: 0,
       createdAt: "2026-10-02T18:05:00.000Z",
     });
     expect(await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at))).toEqual([]);
-    await job(f.venue.cfg.locationId, p);
+    await job(p);
     expect(
       await withTransaction(suite.db, (tx) =>
         stationPrintersDown(tx, new Date("2026-10-03T04:00:00Z")),
@@ -202,7 +196,6 @@ describe("station output status", () => {
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.bar,
       deviceProfileId: profile!.id,
       label: "Screen",
@@ -248,7 +241,6 @@ describe("station output status", () => {
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
       label: "Never seen",
@@ -258,7 +250,6 @@ describe("station output status", () => {
       { stationId: f.grill, stationName: "Cocina", lastSeenAt: null },
     ]);
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
       label: "Live",
@@ -278,7 +269,6 @@ describe("station output status", () => {
     const pass = await kitchenScreenDevice(
       suite.db,
       {
-        locationId: f.venue.cfg.locationId,
         deviceProfileId: profile!.id,
         label: "Dark pass",
         tokenHash: "hash",
@@ -288,7 +278,6 @@ describe("station output status", () => {
     );
     expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
       label: "Dark Grill",
@@ -312,7 +301,6 @@ describe("station output status", () => {
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
       label: "Revoked",
@@ -329,14 +317,13 @@ describe("station output status", () => {
   it("alerts a closed station with waiting dishes about both its printer and dark screens", async () => {
     const f = await setup();
     const p = await f.printer(f.bar, "Bar printer");
-    await job(f.venue.cfg.locationId, p);
+    await job(p);
     await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
     const [profile] = await suite.db
       .insert(deviceProfiles)
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.bar,
       deviceProfileId: profile!.id,
       label: "Dark",
@@ -372,7 +359,6 @@ describe("station output status", () => {
       .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: profile!.id,
       label: "Never seen",
@@ -400,7 +386,6 @@ describe("station output status", () => {
     await kitchenScreenDevice(
       suite.db,
       {
-        locationId: f.venue.cfg.locationId,
         deviceProfileId: await profile(suite.db, "kds"),
         label: "Dark line",
         tokenHash: "hash",
@@ -429,7 +414,6 @@ describe("station output status", () => {
         await kitchenScreenDevice(
           suite.db,
           {
-            locationId: f.venue.cfg.locationId,
             deviceProfileId: await profile(suite.db, "kds"),
             label: kind,
             tokenHash: "hash",
@@ -447,7 +431,6 @@ describe("station output status", () => {
       await kitchenScreenDevice(
         suite.db,
         {
-          locationId: f.venue.cfg.locationId,
           deviceProfileId: await profile(suite.db, "till"),
           label: "Till",
           tokenHash: "hash",
@@ -486,7 +469,6 @@ describe("passScreensDark", () => {
     return kitchenScreenDevice(
       suite.db,
       {
-        locationId: f.venue.cfg.locationId,
         deviceProfileId: await profile(suite.db, options.formFactor ?? "kds"),
         label: options.label ?? kind,
         tokenHash: "hash",
@@ -633,7 +615,6 @@ describe("passScreensDark", () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       stationId: f.grill,
       deviceProfileId: await profile(suite.db, "kds"),
       label: "Grill screen",
@@ -713,7 +694,7 @@ it("A725 down printers and dark station screens use station and printer names", 
   const z = await f.printer(f.bar, "Zulu printer");
   const a = await f.printer(f.bar, "Alpha printer");
   const k = await f.printer(f.grill, "Kitchen printer");
-  for (const id of [z, a, k]) await job(f.venue.cfg.locationId, id);
+  for (const id of [z, a, k]) await job(id);
   expect(
     (await stationPrintersDown(suite.db, at)).map(({ stationName, printerName }) => [
       stationName,
@@ -728,7 +709,6 @@ it("A725 down printers and dark station screens use station and printer names", 
   for (const stationId of [f.grill, f.bar]) {
     await waitingItem(f.venue, stationId, "2026-10-02T17:50:00.000Z");
     await stationScreenDevice({
-      locationId: f.venue.cfg.locationId,
       label: randomUUID(),
       deviceProfileId: profileId,
       stationId,

@@ -31,7 +31,6 @@ let stationId: string;
 beforeEach(async () => {
   venue = await seedVenueWithSeries(suite.db);
   stationId = await seedKitchenStation(suite.db, {
-    locationId: venue.locationId,
     name: "Kitchen",
   });
 });
@@ -45,7 +44,6 @@ function run(): Promise<OverdueOrder[]> {
 describe("computeOverdueOrders", () => {
   it("does not age made-here drinks but still reports an old kitchen item", async () => {
     const bar = await seedKitchenStation(suite.db, {
-      locationId: venue.locationId,
       name: "Bar",
       isDefault: false,
     });
@@ -217,7 +215,6 @@ describe("computeOverdueOrders", () => {
     // A second station in the same location — the fixture the tie needs, since the beforeEach station
     // only gives us one. `isDefault: false` avoids colliding with the beforeEach station's own default.
     const barStationId = await seedKitchenStation(suite.db, {
-      locationId: venue.locationId,
       name: "Counter",
       isDefault: false,
     });
@@ -448,7 +445,6 @@ describe("computeOverdueOrders", () => {
   it("another box's overdue order is listed", async () => {
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     const stationB = await seedKitchenStation(suite.db, {
-      locationId: venue.locationId,
       name: "Counter",
       isDefault: false,
     });

@@ -2,7 +2,7 @@ import type { ProductEditorSaveBody } from "@waitron/shared";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenCourses, products, withTransaction, venueLocationId } from "@waitron/db";
+import { kitchenCourses, products, withTransaction } from "@waitron/db";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
@@ -578,10 +578,9 @@ describe("a variant's own page", () => {
         invoiceLocales: ["en-GB"],
         operationDescription: "Test op",
       });
-      const venueId = await venueLocationId(tx);
       const [course] = await tx
         .insert(kitchenCourses)
-        .values({ locationId: venueId, name: "Drinks" })
+        .values({ name: "Drinks" })
         .returning({ id: kitchenCourses.id });
       const parentCategory = await createCategory(tx, { name: "Coffee" });
       const ownCategory = await createCategory(tx, { name: "Espresso" });

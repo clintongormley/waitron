@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, id, label, newId, now, table, ts } from "./columns.js";
-import { catalogues } from "./catalogue.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
@@ -46,10 +45,6 @@ export const locations = table(
     id: id("id").primaryKey().$defaultFn(newId),
     bumpMode: bumpMode("bump_mode").notNull().default("line"),
     fireControl: fireControlMode("fire_control").notNull().default("waiter"),
-    // This location's DEFAULT catalogue (menu); a venue may exist before a menu is assigned.
-    /* v8 ignore start */
-    catalogueId: id("catalogue_id").references(() => catalogues.id),
-    /* v8 ignore stop */
   },
   (t) => [
     check("locations_bump_mode_ck", enumCheck(t.bumpMode)),

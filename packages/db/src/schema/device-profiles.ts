@@ -20,7 +20,7 @@ import {
 export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-landscape", "kds"]);
 
 /**
- * A reusable device profile: the binding bundle a device resolves against. Not location-scoped.
+ * A reusable device profile: the binding bundle a device resolves against.
  *
  * `retired_at` set means RETIRED: deleted while only disabled devices held it, which the
  * `devices.device_profile_id` key would refuse. The database does not stop an active device

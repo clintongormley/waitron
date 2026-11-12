@@ -10,7 +10,6 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -31,7 +30,7 @@ import {
 } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
@@ -59,6 +58,7 @@ import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import type { TradingContext } from "./trading-context.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
 // and on its station's card, never refuses the next order, and clears once a reprint has printed,
@@ -88,7 +88,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   kitchenStationId: string;
   barStationId: string;
   kitchenPrinterId: string;
@@ -106,19 +106,16 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurante",
   });
-  const locationId = await venueLocationId(db);
   const kitchenStationId = await seedKitchenStation(db, {
-    locationId: locationId,
     name: "Kitchen",
   });
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies WithVenueRowId);
+  } satisfies TradingContext);
   return inTx(async (tx) => {
     const { id: barStationId } = await createStation(tx, { name: "Bar" });
     const catalogue = await createCatalogue(tx, { name: "Menu" });

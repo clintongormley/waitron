@@ -14,7 +14,7 @@ import {
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
-import { catalogues, ticketItems, workingOrderLines, venueLocationId } from "@waitron/db";
+import { catalogues, ticketItems, workingOrderLines } from "@waitron/db";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -28,7 +28,7 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
@@ -42,6 +42,7 @@ import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 /**
  * Tabs end to end through a real `VerifactuBackend`: what paying a tab files, and that a refusal
@@ -69,10 +70,9 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -80,7 +80,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
 }
 
 interface SeededVenue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   /** 1.50 gross. */
   coffee: AvailableProduct;
   /** 2.00 gross, at café's VAT rate, so a two-line basket has one VAT group. */
@@ -121,8 +121,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
     { db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(db);
-  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   const { available, counter, tables } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
@@ -155,7 +154,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
 }
 
 async function seedTable(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   label: string,
   db: Database = suite.db,
   zoneId?: string,

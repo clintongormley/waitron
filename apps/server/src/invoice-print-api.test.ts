@@ -128,11 +128,11 @@ async function setup(bluetooth = false) {
   const secret = "synthetic-agent-secret";
   const [agent] = await suite.db
     .insert(printAgents)
-    .values({ locationId: location!.id, name: "Agent", tokenHash: hashDeviceToken(secret) })
+    .values({ name: "Agent", tokenHash: hashDeviceToken(secret) })
     .returning();
   const [other] = await suite.db
     .insert(printAgents)
-    .values({ locationId: location!.id, name: "Other", tokenHash: hashDeviceToken(secret) })
+    .values({ name: "Other", tokenHash: hashDeviceToken(secret) })
     .returning();
   const printer = await withTransaction(suite.db, (tx) =>
     createPrinter(

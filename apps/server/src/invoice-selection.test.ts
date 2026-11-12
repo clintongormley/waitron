@@ -46,7 +46,6 @@ async function bill(full = false) {
       .insert(workingOrders)
       .values({
         source: "operator_script",
-        locationId: location!.id,
         nodeId: node!.id,
         orderNumber: 1,
         invoiceType: full ? "F1" : "F2",

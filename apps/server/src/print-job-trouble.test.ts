@@ -6,7 +6,6 @@ import {
   printers,
   stationPrinters,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -23,20 +22,14 @@ function minsAgo(mins: number): string {
   return new Date(NOW.getTime() - mins * 60_000).toISOString();
 }
 
-async function seedLocation(name = "Counter"): Promise<string> {
+async function prepareVenue(name = "Counter"): Promise<void> {
   await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"], operationDescription: "Retail" });
-  return venueLocationId(suite.db);
 }
 
-async function seedPrinter(t: {
-  locationId: string;
-  name: string;
-  active?: boolean;
-}): Promise<string> {
+async function seedPrinter(t: { name: string; active?: boolean }): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: t.locationId,
       name: t.name,
       transport: "network_tcp",
       host: "10.0.0.1",
@@ -47,7 +40,6 @@ async function seedPrinter(t: {
 }
 
 async function seedJob(t: {
-  locationId: string;
   printerId: string;
   createdAt: string;
   kind?: "document" | "drawer";
@@ -58,7 +50,6 @@ async function seedJob(t: {
   const [row] = await suite.db
     .insert(printJobs)
     .values({
-      locationId: t.locationId,
       printerId: t.printerId,
       payload: Uint8Array.from([0x01]),
       kind: t.kind ?? "document",
@@ -71,14 +62,10 @@ async function seedJob(t: {
   return row!.id;
 }
 
-async function seedStation(t: {
-  locationId: string;
-  printerId: string;
-  active: boolean;
-}): Promise<void> {
+async function seedStation(t: { printerId: string; active: boolean }): Promise<void> {
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: t.locationId, name: "Kitchen", isDefault: false, active: t.active })
+    .values({ name: "Kitchen", isDefault: false, active: t.active })
     .returning({ id: kitchenStations.id });
   await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId: t.printerId });
 }
@@ -91,11 +78,11 @@ async function read() {
 
 describe("printersInTrouble", () => {
   it("names an active printer whose document has waited past two minutes, with how many and the oldest", async () => {
-    const locationId = await seedLocation();
-    const id = await seedPrinter({ locationId, name: "Bar" });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(10), status: "done" });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(5) });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(3) });
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Bar" });
+    await seedJob({ printerId: id, createdAt: minsAgo(10), status: "done" });
+    await seedJob({ printerId: id, createdAt: minsAgo(5) });
+    await seedJob({ printerId: id, createdAt: minsAgo(3) });
 
     expect(await read()).toEqual([
       { id, name: "Bar", count: 2, oldest: minsAgo(5), stuckSince: minsAgo(5), kitchen: false },
@@ -103,42 +90,40 @@ describe("printersInTrouble", () => {
   });
 
   it("names nothing for a young job, a drawer pulse, a job an Unpair ended, or a switched-off printer", async () => {
-    const locationId = await seedLocation();
-    const bar = await seedPrinter({ locationId, name: "Bar" });
-    const off = await seedPrinter({ locationId, name: "Kitchen", active: false });
-    await seedJob({ locationId, printerId: bar, createdAt: minsAgo(1) });
-    await seedJob({ locationId, printerId: bar, createdAt: minsAgo(10), kind: "drawer" });
+    await prepareVenue();
+    const bar = await seedPrinter({ name: "Bar" });
+    const off = await seedPrinter({ name: "Kitchen", active: false });
+    await seedJob({ printerId: bar, createdAt: minsAgo(1) });
+    await seedJob({ printerId: bar, createdAt: minsAgo(10), kind: "drawer" });
     await seedJob({
-      locationId,
       printerId: bar,
       createdAt: minsAgo(10),
       status: "failed",
       lastError: PRINTER_UNPAIRED,
     });
-    await seedJob({ locationId, printerId: off, createdAt: minsAgo(10) });
+    await seedJob({ printerId: off, createdAt: minsAgo(10) });
 
     expect(await read()).toEqual([]);
   });
 
   it("a printer that has printed a later document is in trouble but not stuck", async () => {
-    const locationId = await seedLocation();
-    const id = await seedPrinter({ locationId, name: "Bar" });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(10), ...exhausted });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(5), status: "done" });
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Bar" });
+    await seedJob({ printerId: id, createdAt: minsAgo(10), ...exhausted });
+    await seedJob({ printerId: id, createdAt: minsAgo(5), status: "done" });
 
     expect(await read()).toMatchObject([{ count: 1, oldest: minsAgo(10), stuckSince: null }]);
   });
 
   it("a printer whose only printed document came before its stuck one stays stuck", async () => {
-    const locationId = await seedLocation();
-    const id = await seedPrinter({ locationId, name: "Bar" });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(5), status: "done" });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(10), ...exhausted });
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Bar" });
+    await seedJob({ printerId: id, createdAt: minsAgo(5), status: "done" });
+    await seedJob({ printerId: id, createdAt: minsAgo(10), ...exhausted });
 
     expect(await read()).toMatchObject([{ count: 1, stuckSince: minsAgo(10) }]);
 
     await seedJob({
-      locationId,
       printerId: id,
       createdAt: minsAgo(4),
       kind: "drawer",
@@ -149,19 +134,19 @@ describe("printersInTrouble", () => {
   });
 
   it("marks a printer an active kitchen station prints to", async () => {
-    const locationId = await seedLocation();
-    const id = await seedPrinter({ locationId, name: "Kitchen" });
-    await seedStation({ locationId, printerId: id, active: true });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(10) });
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Kitchen" });
+    await seedStation({ printerId: id, active: true });
+    await seedJob({ printerId: id, createdAt: minsAgo(10) });
 
     expect(await read()).toMatchObject([{ id, kitchen: true }]);
   });
 
   it("a printer whose only station is switched off is not a kitchen printer", async () => {
-    const locationId = await seedLocation();
-    const id = await seedPrinter({ locationId, name: "Kitchen" });
-    await seedStation({ locationId, printerId: id, active: false });
-    await seedJob({ locationId, printerId: id, createdAt: minsAgo(10) });
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Kitchen" });
+    await seedStation({ printerId: id, active: false });
+    await seedJob({ printerId: id, createdAt: minsAgo(10) });
 
     expect(await read()).toMatchObject([{ id, kitchen: false }]);
   });

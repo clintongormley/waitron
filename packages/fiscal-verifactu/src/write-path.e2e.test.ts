@@ -29,7 +29,7 @@ import {
 } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { decimal, deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleOrigin, SeriesId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -549,10 +549,7 @@ describe("the source and device are inert to the huella and the chain (SP-A.2 §
   }
 
   it("files the same huella and chain position from two devices, and from no device", async () => {
-    const { rows } = await pg.db.execute<{ location_id: string }>(
-      sql`select location_id from devices where id = ${deviceId}`,
-    );
-    const second = await seedDevice(pg.db, { locationId: brandLocationId(rows[0]!.location_id) });
+    const second = await seedDevice(pg.db, {});
 
     const x = await recordFor(deviceOrigin(deviceId));
     const y = await recordFor(deviceOrigin(second.deviceId));

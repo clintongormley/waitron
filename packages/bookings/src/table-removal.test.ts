@@ -39,14 +39,14 @@ async function setupVenue(timeZone = "Europe/Madrid"): Promise<Venue> {
   return { locationId: await venueLocationId(db) };
 }
 
-async function makeTable(v: Venue, label: string): Promise<string> {
+async function makeTable(label: string): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: v.locationId, name: label })
+    .values({ name: label })
     .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (id, created_at, location_id, zone_id, label)
-    values (${newId()}, ${nowIso()}, ${v.locationId}, ${zone!.id}, ${label})
+    insert into dining_tables (id, created_at, zone_id, label)
+    values (${newId()}, ${nowIso()}, ${zone!.id}, ${label})
     returning id`);
   await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
   return row.rows[0]!.id;
@@ -80,8 +80,8 @@ const AFTER_MADRID_MIDNIGHT = new Date("2026-09-15T22:30:00Z");
 describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
   it("refuses while a booking from the venue's today on is booked at the table", async () => {
     const v = await setupVenue();
-    const today = await makeTable(v, "T1");
-    const later = await makeTable(v, "T2");
+    const today = await makeTable("T1");
+    const later = await makeTable("T2");
     await insertBooking(v, { tableId: today, date: "2026-09-16" });
     await insertBooking(v, { tableId: later, date: "2026-10-01" });
 
@@ -94,9 +94,9 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
 
   it("answers for several tables in one call, refusing only the booked ones", async () => {
     const v = await setupVenue();
-    const booked = await makeTable(v, "T7");
-    const free = await makeTable(v, "T8");
-    const twice = await makeTable(v, "T9");
+    const booked = await makeTable("T7");
+    const free = await makeTable("T8");
+    const twice = await makeTable("T9");
     await insertBooking(v, { tableId: booked, date: "2026-09-16" });
     await insertBooking(v, { tableId: twice, date: "2026-09-16" });
     await insertBooking(v, { tableId: twice, date: "2026-09-20" });
@@ -110,8 +110,8 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
 
   it("names the earliest upcoming booking's date and time, by date before time", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "T10");
-    const other = await makeTable(v, "T11");
+    const t = await makeTable("T10");
+    const other = await makeTable("T11");
     await insertBooking(v, { tableId: t, date: "2026-09-20", time: "19:00:00" });
     await insertBooking(v, { tableId: t, date: "2026-09-17", time: "22:00:00" });
     await insertBooking(v, { tableId: t, date: "2026-09-17", time: "21:30:00" });
@@ -135,8 +135,8 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
 
   it("does not refuse for the venue's yesterday, a cancelled or completed booking today, or another table", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "T3");
-    const other = await makeTable(v, "T4");
+    const t = await makeTable("T3");
+    const other = await makeTable("T4");
     // The UTC date of `now`, but yesterday on the venue's wall clock.
     await insertBooking(v, { tableId: t, date: "2026-09-15" });
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "cancelled" });
@@ -148,7 +148,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
 
   it("does not refuse for a seated or no-show booking today", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "T6");
+    const t = await makeTable("T6");
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "seated" });
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "no_show" });
 
@@ -157,7 +157,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
 
   it("reads today in the default zone when the venue's zone is one Intl rejects", async () => {
     const v = await setupVenue("Not/AZone");
-    const t = await makeTable(v, "T5");
+    const t = await makeTable("T5");
     await insertBooking(v, { tableId: t, date: "2026-09-16" });
 
     expect((await refusalsOf([t])).get(t)).toMatchObject({
@@ -170,8 +170,8 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
 describe("BOOKINGS_TABLE_REMOVAL.release", () => {
   it("keeps the table's name on past bookings when it lets go", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "Terrace 4");
-    const other = await makeTable(v, "Terrace 5");
+    const t = await makeTable("Terrace 4");
+    const other = await makeTable("Terrace 5");
     const past = await insertBooking(v, { tableId: t, date: "2026-09-01", status: "completed" });
     const kept = await insertBooking(v, { tableId: other, date: "2026-09-01" });
 
@@ -187,8 +187,8 @@ describe("BOOKINGS_TABLE_REMOVAL.release", () => {
 describe("BOOKINGS_TABLE_REMOVAL.deleteRefusals", () => {
   it("names every booked and seated booking, including past dates, in date/time/id order", async () => {
     const v = await setupVenue();
-    const t = await makeTable(v, "Hierarchy");
-    const other = await makeTable(v, "Elsewhere");
+    const t = await makeTable("Hierarchy");
+    const other = await makeTable("Elsewhere");
     const later = await insertBooking(v, {
       tableId: t,
       date: "2026-09-20",

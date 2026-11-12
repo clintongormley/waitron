@@ -496,7 +496,7 @@ describe("service deletion", () => {
     const tableId = await run(async (tx) => {
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: f.cfg.locationId, zoneId: f.alpha, label: randomUUID() })
+        .values({ zoneId: f.alpha, label: randomUUID() })
         .returning({ id: diningTables.id });
       return table!.id;
     });
@@ -641,9 +641,7 @@ describe("service deletion", () => {
           .where(eq(floorZones.id, f.alpha)),
       ),
     ).toEqual([{ name: "Alpha", active: false }]);
-    await run((tx) =>
-      tx.insert(floorZones).values({ locationId: f.cfg.locationId, name: "Alpha" }),
-    );
+    await run((tx) => tx.insert(floorZones).values({ name: "Alpha" }));
     expect(
       await refusal(run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW))),
     ).toBe("service_zone.not_found");

@@ -201,7 +201,6 @@ describe("boot's clock watch", () => {
         .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
         .returning();
       const device = await seedDevice(suite.db, {
-        locationId: venue.cfg.locationId,
         capabilities: ["take-orders"],
       });
       const session = await withTransaction(suite.db, (tx) =>

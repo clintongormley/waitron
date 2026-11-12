@@ -10,7 +10,6 @@ import {
   tenderRefunds,
   tenders,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -28,7 +27,7 @@ const DAY1 = "2026-08-04T10:00:00.000Z";
 const DAY2 = "2026-08-05T10:00:00.000Z";
 const PIN_HASH = hashPin("1234");
 let nodeId: NodeId;
-let locationId: string;
+
 let soldOn: string;
 let returnedOn: string;
 let saleId: string;
@@ -46,7 +45,7 @@ beforeEach(async () => {
     operationDescription: "Meals",
     dayCutover: "05:00:00",
   });
-  locationId = await venueLocationId(db);
+
   nodeId = await seedNode(db);
   soldOn = (await seedDevice(db, { label: "Sale till" })).deviceId;
   returnedOn = (await seedDevice(db, { label: "Refund till" })).deviceId;
@@ -151,7 +150,6 @@ async function refund(state: "completed" | "pending" | "failed", refundNode = no
     source: "device",
     deviceId: returnedOn,
     nodeId: refundNode,
-    locationId,
     method: "card",
     provider: "fake",
     providerPaymentRef: saleId,

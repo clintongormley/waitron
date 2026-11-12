@@ -15,7 +15,6 @@ import {
   receiptReprints,
   withTransaction,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -90,19 +89,18 @@ async function seedDeletedAndReplaced() {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const locationId = await venueLocationId(suite.db);
   const node = await seedNode(suite.db);
   await suite.db.insert(invoiceSeries).values({ nodeId: node, code: "F", purpose: "standard" });
   const [old] = await suite.db
     .insert(printers)
-    .values({ locationId, name: "Old kitchen", transport: "network_tcp", host: "10.0.4.1" })
+    .values({ name: "Old kitchen", transport: "network_tcp", host: "10.0.4.1" })
     .returning({ id: printers.id });
   const saleId = await newSale();
   const job = async (values: Partial<typeof printJobs.$inferInsert>) =>
     (
       await suite.db
         .insert(printJobs)
-        .values({ locationId, printerId: old!.id, payload: new Uint8Array([27, 64]), ...values })
+        .values({ printerId: old!.id, payload: new Uint8Array([27, 64]), ...values })
         .returning({ id: printJobs.id })
     )[0]!.id;
   await job({ status: "done", attempts: 1, saleId, receiptCopy: false });
@@ -117,7 +115,7 @@ async function seedDeletedAndReplaced() {
     .values({ printerId: old!.id, personId: "manager-one", reason: "calibration" });
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId, name: "Grill" })
+    .values({ name: "Grill" })
     .returning({ id: kitchenStations.id });
   const order = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 1 });
   await suite.db.insert(kitchenPrintJobs).values({
@@ -130,7 +128,7 @@ async function seedDeletedAndReplaced() {
   await withTransaction(suite.db, (tx) => deletePrinter(tx, old!.id, DELETED_AT));
   const [replacement] = await suite.db
     .insert(printers)
-    .values({ locationId, name: "New kitchen", transport: "network_tcp", host: "10.0.4.1" })
+    .values({ name: "New kitchen", transport: "network_tcp", host: "10.0.4.1" })
     .returning({ id: printers.id });
   return { old: old!.id, replacement: replacement!.id, waiting };
 }

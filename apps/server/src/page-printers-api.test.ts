@@ -2,13 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  pagePrinters,
-  stationPrinters,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, pagePrinters, stationPrinters, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -20,8 +14,9 @@ import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import "./errors.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -48,7 +43,7 @@ const UNANSWERED = {
 /** Text the printer announced; none of it may reach a response or a stored name. */
 const ANNOUNCED = { make: "HP", model: "LaserJet Pro M404dn", name: "HP LaserJet secret-floor-3" };
 
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let managerCookie: string;
 let staffCookie: string;
 
@@ -58,10 +53,8 @@ beforeEach(async () => {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta",
   });
-  const venueId = await venueLocationId(suite.db);
   cfg = {
     nodeId: brandNodeId(randomUUID()),
-    locationId: venueId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -455,7 +448,6 @@ describe("page-printer management routes", () => {
     const [orphan] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: cfg.locationId,
         name: "Unassigned printer",
         host: "10.61.7.2",
         port: 631,

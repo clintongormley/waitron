@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import {
   catalogues,
   CORE_MIGRATIONS,
-  locations,
   menuDetails,
   sections,
   tenants,
@@ -21,6 +20,7 @@ import { CATALOGUE_PROVISIONING, FIRST_MENU_NAME } from "./provisioning.js";
 import { readCatalogueSettings, saveCatalogueDefaultColor } from "./settings.js";
 import { getSeededUnit } from "./units.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
+import { readDefaultCatalogueId } from "./operations.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES;
@@ -67,6 +67,17 @@ async function storedUnits() {
 }
 
 describe("catalogue provisioning", () => {
+  it("makes the starter menu the default when there is none", async () => {
+    const node = await venue("GB", "London", "en-GB");
+    await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    expect(
+      (
+        await suite.db.execute<{ name: string; is_default: number }>(sql`
+      select name, is_default from catalogues`)
+      ).rows,
+    ).toEqual([{ name: "Menu", is_default: 1 }]);
+  });
+
   it.each([
     ["ES", "reduced"],
     ["GB", "general"],
@@ -156,10 +167,7 @@ describe("catalogue provisioning", () => {
     const menus = await suite.db.select({ count: sql<number>`count(*)` }).from(catalogues);
     expect(menus).toEqual([{ count: 1 }]);
     // The initial menu got its root and default layout once, not once per seed.
-    const [menu] = await suite.db
-      .select({ catalogueId: locations.catalogueId })
-      .from(locations)
-      .where(eq(locations.id, node.locationId));
+    const menu = { catalogueId: await readDefaultCatalogueId(suite.db) };
     const owned = await suite.db
       .select({ role: sections.role })
       .from(sections)
@@ -362,10 +370,7 @@ it.each(STARTER_VENUES)(
     const node = await venue(country, province, receipt);
     await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
     const name = staffLanguage === "en" ? FIRST_MENU_NAME : STARTER_MENU_NAMES[FIRST_MENU_NAME].es;
-    const [location] = await suite.db
-      .select({ catalogueId: locations.catalogueId })
-      .from(locations)
-      .where(eq(locations.id, node.locationId));
+    const location = { catalogueId: await readDefaultCatalogueId(suite.db) };
     const menus = await suite.db
       .select({ name: catalogues.name })
       .from(catalogues)

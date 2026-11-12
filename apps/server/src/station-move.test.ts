@@ -1563,12 +1563,7 @@ describe("moveDishesToStation", () => {
         await tx
           .select({ id: kitchenStations.id })
           .from(kitchenStations)
-          .where(
-            and(
-              eq(kitchenStations.locationId, venue.cfg.locationId),
-              eq(kitchenStations.active, true),
-            ),
-          )
+          .where(and(eq(kitchenStations.active, true)))
       ).map((row) => row.id);
       const rows: [string, readonly string[]][] = [];
       for (const [name, stationIds] of [

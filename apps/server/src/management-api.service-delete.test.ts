@@ -398,7 +398,7 @@ it.each([
     } else {
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: v.cfg.locationId, zoneId: f.zoneId, label: "Garden table" })
+        .values({ zoneId: f.zoneId, label: "Garden table" })
         .returning();
       if (code === "zone.table_in_use")
         await tx.insert(floorTodayTables).values({ tableId: table!.id });
@@ -451,7 +451,7 @@ describe("stale floor identifiers", () => {
     return run(async (tx) => {
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: v.cfg.locationId, zoneId: f.zoneId, label: randomUUID() })
+        .values({ zoneId: f.zoneId, label: randomUUID() })
         .returning();
       await tx.insert(floorTodayTables).values({
         tableId: table!.id,
@@ -462,10 +462,7 @@ describe("stale floor identifiers", () => {
         shape: "rect",
         rotation: 0,
       });
-      const [set] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
-        .returning();
+      const [set] = await tx.insert(floorPlanSets).values({}).returning();
       const [plan] = await tx
         .insert(floorPlans)
         .values({ zoneId: f.zoneId, setId: set!.id, savedAt: now.toISOString() })

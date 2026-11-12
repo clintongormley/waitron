@@ -45,10 +45,7 @@ async function venue() {
     const cfg = { locationId: venueId };
     const departmentId = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
     const zone = async (name: string, displayOrder: number, active = true) => {
-      const [z] = await db
-        .insert(floorZones)
-        .values({ locationId: cfg.locationId, name, displayOrder })
-        .returning();
+      const [z] = await db.insert(floorZones).values({ name, displayOrder }).returning();
       await configureZone(db, { zoneId: z!.id, departmentId });
       if (!active)
         await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, z!.id));

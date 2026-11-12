@@ -599,12 +599,12 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
   const cfg = { locationId };
   await db
     .insert(kitchenStations)
-    .values({ locationId, name: `Cocina${suffix}`, isDefault: existing === undefined });
+    .values({ name: `Cocina${suffix}`, isDefault: existing === undefined });
   const zone = async (name: string, displayOrder: number) =>
     (
       await db
         .insert(floorZones)
-        .values({ locationId, name: `${name}${suffix}`, displayOrder })
+        .values({ name: `${name}${suffix}`, displayOrder })
         .returning({ id: floorZones.id })
     )[0]!.id;
   const barra = await zone("Barra", 0);
@@ -1470,8 +1470,8 @@ async function recordedLine(v: Timed) {
     await publish(tx, v.menus.Desayunos);
     const orderId = randomUUID();
     await tx.execute(sql`
-      insert into working_orders (id, source, location_id, node_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${v.locationId}, ${nodeId}, 1, ${AT.toISOString()})`);
+      insert into working_orders (id, source, node_id, order_number, opened_at)
+      values (${orderId}, 'dashboard', ${nodeId}, 1, ${AT.toISOString()})`);
     await recordOrderServiceContext(tx, orderId, v.sala);
     const lineId = randomUUID();
     await tx.insert(workingOrderLines).values({
@@ -2703,7 +2703,7 @@ describe("the routing that names a period", () => {
     const [cocina] = await db
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, v.locationId));
+      .where(sql`true`);
     const [cocktails] = await db
       .insert(categories)
       .values({ name: "Cocktails" })
@@ -2791,7 +2791,7 @@ describe("the routing that names a period", () => {
     const [cocina] = await db
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, v.locationId));
+      .where(sql`true`);
     const { drinksCocktails, brunchCocktails, mojito, bread } = await scoped(async (tx) => {
       const drinks = (await createCategory(tx, { name: "Drinks" })).id;
       const brunch = (await createCategory(tx, { name: "Brunch" })).id;

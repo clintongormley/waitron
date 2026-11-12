@@ -277,13 +277,12 @@ describe("a deleted device's history", () => {
   });
 
   it("a profile save after the delete leaves the deleted device's row and every row naming it unchanged", async () => {
-    const { venue, profileId, barTill } = await seedDeleted();
+    const { profileId, barTill } = await seedDeleted();
     const printer = async (name: string) =>
       (
         await suite.db
           .insert(printers)
           .values({
-            locationId: venue.cfg.locationId,
             name,
             transport: "network_tcp",
             host: `${name.toLowerCase().replaceAll(" ", "-")}.test`,

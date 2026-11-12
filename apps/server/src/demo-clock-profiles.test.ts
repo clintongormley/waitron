@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, venueLocationId } from "@waitron/db";
+import { deviceProfiles } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -69,7 +69,6 @@ describe("installed starter clock profiles", () => {
     await seedDemoRestaurant(suite.db, {
       venue: {
         nodeId: result.nodeId,
-        locationId: await venueLocationId(suite.db),
         seriesId: result.seriesIds[0]!,
       },
       locale: "es",

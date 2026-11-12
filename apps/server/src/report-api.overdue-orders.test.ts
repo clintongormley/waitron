@@ -1,4 +1,4 @@
-import { floorTodayTables, venueLocationId } from "@waitron/db";
+import { floorTodayTables } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -29,7 +29,7 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 
 let nodeId: string;
-let locationId: string;
+
 let managerCookie: string;
 let staffCookie: string;
 
@@ -94,11 +94,11 @@ async function seedFiredOrder(
   if (opts.tableLabel !== undefined) {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId, name: `Tables ${orderId}` })
+      .values({ name: `Tables ${orderId}` })
       .returning({ id: floorZones.id });
     const [table] = await db
       .insert(diningTables)
-      .values({ locationId, zoneId: zone!.id, label: opts.tableLabel })
+      .values({ zoneId: zone!.id, label: opts.tableLabel })
       .returning({ id: diningTables.id });
     await db.insert(floorTodayTables).values({ tableId: table!.id });
     await db
@@ -119,11 +119,11 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = await venueLocationId(db);
+
     nodeId = await seedNode(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId, name: "Kitchen", isDefault: true })
+      .values({ name: "Kitchen", isDefault: true })
       .returning({ id: kitchenStations.id });
     const stationId = station!.id;
 

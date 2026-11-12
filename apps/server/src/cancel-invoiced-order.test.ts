@@ -1406,10 +1406,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
 
   function noInvoiceZone(name: string) {
     return inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name })
-        .returning({ id: floorZones.id });
+      const [zone] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
@@ -1508,7 +1505,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
     const ticketFirst = await inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra sin factura, sin clave" })
+        .values({ name: "Barra sin factura, sin clave" })
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
@@ -1768,7 +1765,7 @@ describe("cancelling a placed order with no invoice", () => {
     const ticketFirst = await inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra ticket" })
+        .values({ name: "Barra ticket" })
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
@@ -1792,7 +1789,7 @@ describe("cancelling a placed order with no invoice", () => {
     const ticketFirst = await inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra tarjeta" })
+        .values({ name: "Barra tarjeta" })
         .returning({ id: floorZones.id });
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },

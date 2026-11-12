@@ -11,14 +11,14 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError, isAppError } from "@waitron/shared";
 import { hashDeviceToken, hashSecret } from "@waitron/identity";
-import { deviceProfiles, devices, withTransaction, venueLocationId } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
@@ -87,18 +87,16 @@ function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T>
 /**
  * Each database-backed test seeds its own venue, so the device state each case reads is its own.
  */
-async function setupStation(): Promise<{ cfg: WithVenueRowId; stationId: string }> {
+async function setupStation(): Promise<{ cfg: TradingContext; stationId: string }> {
   const admin = suite.db;
   await seedVenue(admin, {
     name: "Bar",
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(admin);
   const nodeId = await seedNode(admin);
-  const cfg: WithVenueRowId = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -111,7 +109,7 @@ async function setupStation(): Promise<{ cfg: WithVenueRowId; stationId: string 
  * stored hash actually verifies. Returns the plaintext token the accept route would set in the
  * cookie, never at rest. */
 async function enrolDeviceFixture(): Promise<{
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   deviceId: string;
   token: string;
   stationId: string;

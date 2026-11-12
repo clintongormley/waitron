@@ -14,7 +14,6 @@ import {
   withTransaction,
   type Database,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { createPrinter, PULL_BATCH_LIMIT } from "@waitron/printing";
@@ -34,18 +33,10 @@ export async function configureDemoPrinter(
   practiceMode: boolean,
 ): Promise<DemoPrinterIdentity | null> {
   return withTransaction(db, async (tx) => {
-    // The venue condition keeps the lookup on `printers_local_key_key`, which leads with it.
-    const venueId = await venueLocationId(tx);
     const [existing] = await tx
       .select({ id: printers.id })
       .from(printers)
-      .where(
-        and(
-          eq(printers.locationId, venueId),
-          eq(printers.localKey, DEMO_PRINTER_KEY),
-          isNull(printers.deletedAt),
-        ),
-      );
+      .where(and(eq(printers.localKey, DEMO_PRINTER_KEY), isNull(printers.deletedAt)));
     if (!practiceMode) {
       if (existing !== undefined) {
         await deletePrinter(tx, existing.id);
@@ -75,7 +66,6 @@ export async function configureDemoPrinter(
         await tx
           .insert(printAgents)
           .values({
-            locationId: venueId,
             name: "Demo printer",
             tokenHash: DEMO_AGENT_TOKEN_HASH,
             active: false,

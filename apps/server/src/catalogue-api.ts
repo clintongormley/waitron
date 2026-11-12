@@ -114,7 +114,7 @@ import { readJsonBody, requireEnum, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { setProductCourse } from "./kitchen.js";
-import type { TradingContext } from "./trading-context.js";
+
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
@@ -127,7 +127,6 @@ export interface CatalogueApiDeps {
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
   db: Database;
-  venueCfg?: TradingContext;
   venueLocale?: string;
 }
 

@@ -1,8 +1,9 @@
+import type { TradingContext } from "./trading-context.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
-import { floorTodayTables, venueLocationId } from "@waitron/db";
+import { floorTodayTables } from "@waitron/db";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -67,7 +68,6 @@ import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/share
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   payWorkingOrder,
   receiptQr,
@@ -146,10 +146,9 @@ async function readyDepartment(): Promise<void> {
   });
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -161,7 +160,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
  * `weight` product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   seriesId: ReturnType<typeof brandSeriesId>;
   available: AvailableProduct[];
   zoneId: string;
@@ -202,9 +201,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
   await readyDepartment();
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const food = await createCategory(tx, { name: "Food" });
@@ -273,7 +271,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     await tx.execute(sql`
       insert into routing_cells (id, category_id, station_id)
       values (${randomUUID()}, ${drinks.id}, (select id from kitchen_stations
-         where location_id = ${cfg.locationId} and is_default))`);
+         where is_default))`);
     await publishWorkingMenu(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx)).products,
@@ -817,9 +815,9 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
-    const venueId = await venueLocationId(suite.db);
+
     await readyDepartment();
-    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const drinks = await createCategory(tx, { name: "Drinks" });
@@ -998,7 +996,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
  */
 describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {
-    cfg: WithVenueRowId<DeviceRequestConfig>;
+    cfg: DeviceRequestConfig;
     /** The counter-default zone, which offers every product at its own price. */
     zoneId: string;
     /** A second zone, `table_tab`, offering the same menu, for the tabs' dining tables. */
@@ -1073,9 +1071,9 @@ describe("ordering extras and options — parent + child lines", () => {
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
-    const venueId = await venueLocationId(suite.db);
+
     await readyDepartment();
-    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+    const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -1996,7 +1994,6 @@ describe("ordering extras and options — parent + child lines", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
       });
@@ -2056,7 +2053,6 @@ describe("ordering extras and options — parent + child lines", () => {
     const tabId = await withTransaction(suite.db, async (tx) => {
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
       });
@@ -2089,7 +2085,6 @@ describe("ordering extras and options — parent + child lines", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa NC",
       });
@@ -2349,7 +2344,6 @@ describe("ordering extras and options — parent + child lines", () => {
       const tableId = randomUUID();
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: `Mesa ${tableId.slice(0, 4)}`,
       });
@@ -2837,7 +2831,6 @@ describe("ordering extras and options — parent + child lines", () => {
       const tableId = randomUUID();
       await tx.insert(diningTables).values({
         id: tableId,
-        locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa V",
       });

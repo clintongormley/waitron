@@ -465,7 +465,7 @@ it("counts returned VAT and settled payments without changing the new main's own
       manual: false,
     },
   ]);
-  const [location] = old.db.all<{ location_id: string }>(
+  old.db.all<{ location_id: string }>(
     sql`select location_id from nodes where id = ${source.nodeId}`,
   );
   await old.db.insert(tenderRefunds).values({
@@ -481,7 +481,6 @@ it("counts returned VAT and settled payments without changing the new main's own
     source: "device",
     deviceId: source.deviceId,
     nodeId: source.nodeId,
-    locationId: location!.location_id,
     method: "cash",
     state: "completed",
     createdAt: "2026-07-20T17:21:01.000Z",
@@ -563,7 +562,6 @@ async function pendingCardOriginal() {
     source: "device",
     deviceId: source.deviceId,
     nodeId: source.nodeId,
-    locationId: order.locationId,
     method: "card",
     provider: "fake",
     providerPaymentRef: "original-charge",

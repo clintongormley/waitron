@@ -9,7 +9,6 @@ import {
   kitchenCourses,
   readTenant,
   readVenue,
-  venueLocationId,
   zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/db";
@@ -20,6 +19,7 @@ import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
 import { STARTER_COURSE_NAMES, STARTER_ZONE_NAMES } from "./starter-content.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
+import { readDefaultCatalogueId } from "@waitron/catalogue";
 
 export const COUNTER_ZONE_NAME = "Counter";
 
@@ -30,8 +30,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
     async run(tx, _node, _operation, options) {
       const staffLanguage = options?.staffLanguage ?? (await readStarterStaffLanguage(tx));
       const venue = await readVenue(tx);
-      let venueId: string | undefined;
-      const venueRowId = async () => (venueId ??= await venueLocationId(tx));
       // Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only
       // the builder runs. Read-then-insert is safe because a seed runs inside `withTransaction`,
       // which holds the file's write lock for its whole body.
@@ -68,10 +66,8 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           const courses =
             tenant === null ? [] : (getCountryPack(tenant.country)?.starterCourses ?? []);
           if (courses.length > 0) {
-            const locationId = await venueRowId();
             await tx.insert(kitchenCourses).values(
               courses.map(({ name, heldUntilFired }, displayOrder) => ({
-                locationId,
                 name: starterName(STARTER_COURSE_NAMES, name, staffLanguage),
                 displayOrder,
                 heldUntilFired,
@@ -112,13 +108,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         const zone = await tx
           .insert(floorZones)
           .values({
-            locationId: await venueRowId(),
             name: starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage),
             displayOrder: 0,
             active: true,
           })
           .onConflictDoUpdate({
-            target: [floorZones.locationId, floorZones.name],
+            target: [floorZones.name],
             targetWhere: sql`${floorZones.active} = 1`,
             set: { name: sql`excluded.name` },
           })
@@ -157,7 +152,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .values({ zoneId })
         .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
       await ensureDefaultSeasons(tx, staffLanguage);
-      const menuId = venue.defaultCatalogueId;
+      const menuId = await readDefaultCatalogueId(tx);
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
         await placeOpenPeriod(tx, counterDepartmentId, menuId, staffLanguage);

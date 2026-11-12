@@ -165,19 +165,18 @@ async function profile(name: string, formFactor: "till" | "kds" = "till"): Promi
   return row!.id;
 }
 
-async function station(venue: Venue, name: string): Promise<string> {
+async function station(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: venue.cfg.locationId, name })
+    .values({ name })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
 
-async function printer(venue: Venue, name: string, portable = false): Promise<string> {
+async function printer(name: string, portable = false): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: venue.cfg.locationId,
       name,
       transport: "network_tcp",
       host: `${name.toLowerCase().replaceAll(" ", "-")}.test`,
@@ -278,9 +277,9 @@ async function seed() {
   const cfg = venue.cfg;
   const tills = await profile("Tills");
   const waiters = await profile("Waiters");
-  const grill = await station(venue, "Grill");
-  const bar = await station(venue, "Bar");
-  const fryer = await station(venue, "Fryer");
+  const grill = await station("Grill");
+  const bar = await station("Bar");
+  const fryer = await station("Fryer");
 
   const barTill = (
     await enrolDeviceForTest(suite.db, cfg, {
@@ -297,9 +296,9 @@ async function seed() {
     })
   ).deviceId;
 
-  const handheldP = await printer(venue, "Handheld P", true);
-  const counterP = await printer(venue, "Counter P");
-  const passP = await printer(venue, "Pass P", true);
+  const handheldP = await printer("Handheld P", true);
+  const counterP = await printer("Counter P");
+  const passP = await printer("Pass P", true);
   await suite.db
     .update(devices)
     .set({
@@ -349,7 +348,6 @@ async function seed() {
   await suite.db.insert(joinRequests).values({
     id: barTill,
     nodeId: cfg.nodeId,
-    locationId: cfg.locationId,
     kind: "device",
     label: "Bar till",
     tokenHash: "returning",

@@ -9,7 +9,6 @@ import {
   kitchenCourses,
   kitchenStations,
   products,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -23,7 +22,7 @@ import {
   nodeId as brandNodeId,
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import {
   createCourse,
   createStation,
@@ -48,17 +47,15 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function setupVenue(): Promise<WithVenueRowId> {
+async function setupVenue(): Promise<TradingContext> {
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -507,16 +504,16 @@ describe("kitchen-station config", () => {
   });
 
   it("a station row given no minutes takes the schema's defaults, equal to DEFAULT_STATION_THRESHOLDS", async () => {
-    const cfg = await setupVenue();
+    await setupVenue();
     const id = randomUUID();
-    await db.insert(kitchenStations).values({ id, locationId: cfg.locationId, name: "Bare" });
+    await db.insert(kitchenStations).values({ id, name: "Bare" });
     expect(await storedMinutes(id)).toEqual(DEFAULT_STATION_THRESHOLDS);
   });
 
   it("a station row given no ready warning takes the schema's default, equal to DEFAULT_READY_WARNING_AFTER_MINUTES", async () => {
-    const cfg = await setupVenue();
+    await setupVenue();
     const id = randomUUID();
-    await db.insert(kitchenStations).values({ id, locationId: cfg.locationId, name: "Bare" });
+    await db.insert(kitchenStations).values({ id, name: "Bare" });
     const [row] = await db
       .select({ readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes })
       .from(kitchenStations)

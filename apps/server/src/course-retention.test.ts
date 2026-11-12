@@ -12,7 +12,6 @@ import {
   workingOrderLines,
   workingOrders,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -34,7 +33,7 @@ import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import "./errors.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
@@ -43,6 +42,7 @@ import { republishMenus } from "./testing/publish-menu.js";
 import { priceTabRound } from "./working-order.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import type { Draft } from "./order-drafts.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -70,13 +70,11 @@ async function setup() {
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
-  const stationId = await seedKitchenStation(db, { locationId });
+
+  const stationId = await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
-  const cfg: WithVenueRowId = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
-    locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

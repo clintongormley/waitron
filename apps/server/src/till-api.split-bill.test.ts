@@ -15,7 +15,6 @@ import {
   ticketItems,
   partyTables,
   parties,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -45,7 +44,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
@@ -61,7 +60,7 @@ import {
 // Merging a check that Move dishes made back into its tab, through the merge route: the kitchen
 // tickets, kitchen notices and print jobs it leaves, and the refusals that leave the check as it was.
 // One case finds such a check in Held orders and pays it through the sale route.
-let cfg: WithVenueRowId<OriginConfig>;
+let cfg: OriginConfig;
 let staffMember: { id: string };
 // One product so a tab can open with a real line to move — `openTab` prices it
 // and the `check_locales` trigger demands its `es-ES` description key match the venue's `es-ES` locale.
@@ -87,7 +86,7 @@ const suite = useVenueDb({
       .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     staffMember = { id: person!.id };
-    cfg = makeCfg(await venueLocationId(db), nodeId);
+    cfg = makeCfg(nodeId);
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Menu" });
       const drinksCategory = await createCategory(tx, { name: "Drinks" });
@@ -115,11 +114,10 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): WithVenueRowId<OriginConfig> {
+function makeCfg(nodeId: string): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -210,12 +208,12 @@ async function setupTabApp(
 }
 
 /** The suite shares one database, and an earlier case may already have seeded the default station. */
-async function kitchenStation(config: WithVenueRowId<OriginConfig>): Promise<string> {
+async function kitchenStation(): Promise<string> {
   const [existing] = await suite.db
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, config.locationId));
-  return existing?.id ?? seedKitchenStation(suite.db, { locationId: config.locationId });
+    .where(sql`true`);
+  return existing?.id ?? seedKitchenStation(suite.db, {});
 }
 
 /** The merge the till sends when a waiter leaves an unpaid split-off check without paying it. */
@@ -230,7 +228,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     ticket: { id: string; quantity: number | null };
   }> {
     const { app, tabA, cookie } = await setupTabApp("1");
-    const stationId = await kitchenStation(cfg);
+    const stationId = await kitchenStation();
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, { zone: "tables" }),
     );
@@ -391,7 +389,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
     await withTransaction(suite.db, (tx) =>
       writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, staffMember.id),
     );
-    await kitchenStation(cfg);
+    await kitchenStation();
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, { zone: "tables" }),
     );

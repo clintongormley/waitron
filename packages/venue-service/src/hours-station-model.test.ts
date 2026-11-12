@@ -57,15 +57,15 @@ async function festival() {
 
 describe("Calendar without a station-hours page model", () => {
   it("keeps local stations separate from special-day Calendar facts", async () => {
-    const f = await fixture();
+    await fixture();
     const special = await festival();
     const ids = await withTransaction(suite.db, async (tx) => {
       const [bar, prep, kitchen] = await tx
         .insert(kitchenStations)
         .values([
-          { locationId: f.cfg.locationId, name: "Bar" },
-          { locationId: f.cfg.locationId, name: "Prep", active: false },
-          { locationId: f.cfg.locationId, name: "Kitchen", isDefault: true },
+          { name: "Bar" },
+          { name: "Prep", active: false },
+          { name: "Kitchen", isDefault: true },
         ])
         .returning();
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };
@@ -82,7 +82,7 @@ describe("Calendar without a station-hours page model", () => {
     ]);
     expect(
       (await suite.db.select().from(kitchenStations)).find((row) => row.id === ids.prep),
-    ).toMatchObject({ id: ids.prep, name: "Prep", active: false, locationId: f.cfg.locationId });
+    ).toMatchObject({ id: ids.prep, name: "Prep", active: false });
     expect(routing.stationTimes.map((row) => row.stationId)).not.toContain(ids.prep);
     expect(model.days[0]!.specialDay).toEqual({ id: special, name: "Festival" });
     expect([model.timeZone, model.dayCutover, model.civilDate, model.clockReadable]).toEqual([

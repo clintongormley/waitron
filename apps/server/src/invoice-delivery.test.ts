@@ -158,11 +158,10 @@ describe("invoice delivery reservation", () => {
 
   it("reserves an A4 original with only the page-printer reference and replays it", async () => {
     const sale = await issue();
-    const [node] = await suite.db.select().from(nodes);
+    await suite.db.select().from(nodes);
     const [printer] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: node!.locationId,
         name: "Office",
         host: "192.0.2.20",
         port: 8631,
@@ -204,11 +203,10 @@ describe("invoice delivery reservation", () => {
 
   it.each(["disabled"])("refuses a %s A4 destination without queuing", async (kind) => {
     const sale = await issue();
-    const [node] = await suite.db.select().from(nodes);
+    await suite.db.select().from(nodes);
     const [printer] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: node!.locationId,
         name: "Office",
         host: "192.0.2.20",
         port: 8631,
@@ -234,11 +232,10 @@ describe("invoice delivery reservation", () => {
 
   it("records issuance's A4 original for a disabled printer as failed, and the next one is still an original", async () => {
     const sale = await issue();
-    const [node] = await suite.db.select().from(nodes);
+    await suite.db.select().from(nodes);
     const [printer] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: node!.locationId,
         name: "Office",
         host: "192.0.2.20",
         port: 8631,
@@ -290,11 +287,10 @@ describe("invoice delivery reservation", () => {
 
   it("queues issuance's A4 original for an active printer when inactive printers are allowed", async () => {
     const sale = await issue();
-    const [node] = await suite.db.select().from(nodes);
+    await suite.db.select().from(nodes);
     const [printer] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: node!.locationId,
         name: "Office",
         host: "192.0.2.20",
         port: 8631,
@@ -838,11 +834,10 @@ describe("receipt delivery reservation", () => {
     await expect(
       withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, email())),
     ).rejects.toMatchObject({ code: "invoice_delivery.active" });
-    const [location] = await suite.db.select().from(locations);
+    await suite.db.select().from(locations);
     const [agent] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: location!.id,
         name: "Receipt agent",
         tokenHash: "scrypt$fixture",
       })
@@ -890,10 +885,10 @@ describe("receipt delivery reservation", () => {
     const delivery = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
     );
-    const [location] = await suite.db.select().from(locations);
+    await suite.db.select().from(locations);
     const [agent] = await suite.db
       .insert(printAgents)
-      .values({ locationId: location!.id, name: "Receipt agent", tokenHash: "scrypt$fixture" })
+      .values({ name: "Receipt agent", tokenHash: "scrypt$fixture" })
       .returning();
     const pick = (nextAttemptAt: Date) =>
       withTransaction(suite.db, async (tx) => {
@@ -1068,7 +1063,6 @@ describe("receipt delivery reservation", () => {
     const [agent] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: location!.id,
         name: "Receipt agent",
         tokenHash: "scrypt$fixture",
       })
@@ -1136,7 +1130,6 @@ describe("receipt delivery reservation", () => {
     const [otherAgent] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: ctx.locationId,
         name: "Another receipt agent",
         tokenHash: "scrypt$other-fixture",
       })
@@ -1309,7 +1302,6 @@ describe("receipt delivery reservation", () => {
     const [seeded] = await suite.db
       .insert(printJobs)
       .values({
-        locationId: (await jobById(job.jobId)).locationId,
         printerId,
         payload: new Uint8Array([27, 64]),
         saleId: sale.saleId,
@@ -1634,11 +1626,10 @@ describe("receipt agent correlation key", () => {
 describe("invoice email automatic retries", () => {
   it("does not automatically retry a definite receipt refusal", async () => {
     const sale = await issue();
-    const [location] = await suite.db.select().from(locations);
+    await suite.db.select().from(locations);
     const [agent] = await suite.db
       .insert(printAgents)
       .values({
-        locationId: location!.id,
         name: "Receipt agent",
         tokenHash: "scrypt$retry-fixture",
       })

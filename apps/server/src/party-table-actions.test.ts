@@ -156,7 +156,7 @@ useVenueDb({
     terraceZone = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Terrace" })
+        .values({ name: "Terrace" })
         .returning({ id: floorZones.id });
       return (await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" }))
         .zoneId;

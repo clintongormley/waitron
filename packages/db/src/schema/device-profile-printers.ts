@@ -14,8 +14,7 @@ export const deviceProfilePrinterRole = enumType([
 
 /**
  * The printers a profile's devices may print receipts, payment slips or full invoices to, or open
- * the cash drawer of, in display order, with at most one default per role. Not location-scoped: a
- * printer listed here is offered only to devices at its own location. A row names exactly one
+ * the cash drawer of, in display order, with at most one default per role. A row names exactly one
  * target, and only the invoice role may name a page printer.
  */
 export const deviceProfilePrinters = table(

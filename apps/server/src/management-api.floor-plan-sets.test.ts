@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorPlanSets, withTransaction, venueLocationId } from "@waitron/db";
+import { floorPlanSets, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
@@ -13,7 +13,8 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
+import type { TradingContext } from "./trading-context.js";
 
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
@@ -28,7 +29,7 @@ const suite = useVenueDb({
 
 const noopLog: Logger = () => {};
 
-async function provisionTenant(): Promise<WithVenueRowId> {
+async function provisionTenant(): Promise<TradingContext> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -73,10 +74,8 @@ async function provisionTenant(): Promise<WithVenueRowId> {
       });
     }
   });
-  const venueId = await venueLocationId(suite.db);
   return {
     nodeId: nodeId(venue.nodeId),
-    locationId: venueId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -94,17 +93,14 @@ async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
       name: `Inside-${randomUUID().slice(0, 6)}`,
       departmentId: dept.id,
     });
-    const [set] = await tx
-      .insert(floorPlanSets)
-      .values({ locationId: cfg.locationId })
-      .returning({ id: floorPlanSets.id });
+    const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
     await linkFloorPlanSet(tx, { setId: set!.id, departmentId: dept.id, name: "Dinner" });
     return { setId: set!.id, zoneId: zone.id };
   });
 }
 
 let app: Hono;
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let managerCookie: string;
 let staffCookie: string;
 

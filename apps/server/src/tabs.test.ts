@@ -21,7 +21,6 @@ import {
   parties,
   withTransaction,
   workingOrderLines,
-  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -51,7 +50,7 @@ import {
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter } from "@waitron/printing";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -80,6 +79,7 @@ import { readScopedPassBoard } from "./pass-board.js";
 import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
+import type { TradingContext } from "./trading-context.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
@@ -95,7 +95,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   coffeeId: string;
   waterId: string;
   coffeeMenuItemId: string;
@@ -116,16 +116,14 @@ async function setupVenue(): Promise<Seeded> {
     operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
-  const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId: locationId });
+  await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies WithVenueRowId);
+  } satisfies TradingContext);
   const {
     coffeeId,
     waterId,
@@ -204,7 +202,7 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): P
 /** `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
 async function attachExtras(
   tx: Transaction,
-  cfg: WithVenueRowId<OriginConfig>,
+  cfg: OriginConfig,
   dishId: string,
   extraProductId: string,
 ): Promise<string> {

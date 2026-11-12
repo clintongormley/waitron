@@ -298,7 +298,10 @@ describe("deleted service targets", () => {
     await run((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { ...f.cfg, nodeId }));
     const ds = await run((tx) => tx.select().from(departments));
     const zs = await run((tx) =>
-      tx.select().from(floorZones).where(eq(floorZones.locationId, f.cfg.locationId)),
+      tx
+        .select()
+        .from(floorZones)
+        .where(sql`true`),
     );
     expect(ds.find((row) => row.id === f.gone)).toMatchObject({
       active: false,

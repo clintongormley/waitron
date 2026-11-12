@@ -37,13 +37,14 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable, switchOff } from "./testing/live-table.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { mountManagementApi } from "./management-api.js";
 import { generateSync } from "otplib";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
+import type { TradingContext } from "./trading-context.js";
 
 /**
  * Floor zones, dining tables, table placement, kitchen stations and kitchen courses on the
@@ -177,10 +178,9 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
   return { venue, managerId, staffId };
 }
 
-function tillConfigFromVenue(venue: VenueResult): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -876,7 +876,6 @@ describe("/management-api/tables", () => {
         tx
           .insert(floorZones)
           .values({
-            locationId: venueId,
             name: unique("Unassigned disabled"),
             active: false,
           })
@@ -1170,7 +1169,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     const original = await suite.db
       .select({ id: kitchenStations.id, colour: kitchenStations.colour })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, venueId));
+      .where(sql`true`);
     onTestFinished(() =>
       withTransaction(suite.db, async (tx) => {
         for (const row of original)
@@ -1184,7 +1183,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       tx
         .update(kitchenStations)
         .set({ colour: "red" })
-        .where(eq(kitchenStations.locationId, venueId)),
+        .where(sql`true`),
     );
     const id = await createStation(unique("No colour"));
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
@@ -2261,7 +2260,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       const [row] = await suite.db
         .insert(printers)
         .values({
-          locationId: venueId,
           name: unique("Ticket printer"),
           transport: "network_tcp",
           host: "10.0.0.20",
@@ -3584,7 +3582,7 @@ describe("retired table writes", () => {
     );
     const rows = () =>
       suite.db.all(sql`
-      select * from dining_tables where location_id = ${venueId} order by id`);
+      select * from dining_tables order by id`);
     const before = rows();
     const response = await req(
       path.replace(":id", id),

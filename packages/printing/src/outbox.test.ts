@@ -24,8 +24,8 @@ import {
 } from "./outbox.js";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
-type PrintConfig = { locationId: string };
 import "./errors.js";
+type PrintConfig = { locationId: string };
 
 // The central assertion is the NEVER-BLOCK invariant (CLAUDE.md §5): enqueue opens NO socket.
 // `node:sqlite` reaches the venue file in-process, so the database work inside the spy's window
@@ -71,21 +71,19 @@ function spyOnNoSocketOpened() {
 }
 
 describe("enqueuePrintJob (never-block outbox)", () => {
-  it("files a job under the venue id its caller read once for several jobs, reading only the printer", async () => {
-    const cfg = await setup();
+  it("enqueues a job after reading only the printer", async () => {
+    await setup();
     await withTransaction(suite.db, async (tx) => {
       const p = await createPrinter(tx, { name: "Bar", transport: "usb", localKey: "SER-ONCE" });
       const selects = vi.spyOn(suite.db, "select");
-      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1]), "document", {
-        venueId: cfg.locationId,
-      });
+      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1]), "document");
       expect(selects).toHaveBeenCalledTimes(1);
       selects.mockRestore();
       const [row] = await tx
-        .select({ locationId: printJobs.locationId })
+        .select({ printerId: printJobs.printerId })
         .from(printJobs)
         .where(eq(printJobs.id, jobId));
-      expect(row).toEqual({ locationId: cfg.locationId });
+      expect(row).toEqual({ printerId: p.id });
     });
   });
 
@@ -180,7 +178,7 @@ describe("resendPrintJob", () => {
   it.each(["done", "failed"] as const)(
     "copies a terminal %s job byte-for-byte into a new queue entry",
     async (status) => {
-      const cfg = await setup();
+      await setup();
       await withTransaction(suite.db, async (tx) => {
         const printer = await createPrinter(tx, {
           name: "Resend",
@@ -199,14 +197,11 @@ describe("resendPrintJob", () => {
           })
           .where(eq(printJobs.id, original.jobId));
         const [before] = await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId));
-        // The copy goes back to the ORIGINAL job's location, which `resendPrintJob` reads off the
-        // job row itself.
         const result = await resendPrintJob(tx, original.jobId);
         expect(result.jobId).not.toBe(original.jobId);
         const [copy] = await tx.select().from(printJobs).where(eq(printJobs.id, result.jobId));
         expect(copy).toMatchObject({
           kind: "document",
-          locationId: cfg.locationId,
           printerId: printer.id,
           status: "queued",
           attempts: 0,

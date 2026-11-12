@@ -10,14 +10,33 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { locations } from "./tenants.js";
 
 // What this suite proves is the column mapping, the threshold CHECK and the partial unique index.
-let LOCATION_A: string;
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
+
+describe("default station without a location", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("a second default station is refused, and two non-defaults are not", async () => {
+    const insert = (id: string, isDefault: number) =>
+      suite.db.run(sql`insert into kitchen_stations (id, name, is_default, created_at)
+        values (${id}, ${id}, ${isDefault}, '2026-11-11')`);
+    await insert("default", 1);
+    await insert("first-non-default", 0);
+    await insert("second-non-default", 0);
+    const error = await captureError(() => insert("second-default", 1));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: kitchen_stations.is_default");
+    expect(suite.db.all(sql`select id from kitchen_stations order by id`)).toEqual([
+      { id: "default" },
+      { id: "first-non-default" },
+      { id: "second-non-default" },
+    ]);
+  });
+});
 
 describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
@@ -28,7 +47,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(suite.db);
     await suite.db.insert(locations).values([
       {
         id: LOCATION_A2,
@@ -43,11 +61,11 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
 
   // Drizzle rather than raw SQL: `id` and `created_at` are `$defaultFn` columns a raw insert does
   // not fill.
-  async function seedStation(location: string, name: string, isDefault = false): Promise<string> {
+  async function seedStation(name: string, isDefault = false): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(kitchenStations)
-        .values({ locationId: location, name, isDefault })
+        .values({ name, isDefault })
         .returning({ id: kitchenStations.id });
       return row!.id;
     });
@@ -67,11 +85,11 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
 
   it("deleted station names are reusable under new ids", async () => {
     const name = "Reusable station";
-    const oldId = await seedStation(LOCATION_A, name);
+    const oldId = await seedStation(name);
     await inTx((tx) =>
       tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, oldId)),
     );
-    const replacementId = await seedStation(LOCATION_A, name);
+    const replacementId = await seedStation(name);
     expect(replacementId).not.toBe(oldId);
     const rows = await inTx((tx) =>
       tx
@@ -87,20 +105,16 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     );
     expect(rows).toHaveLength(2);
 
-    const collision = await captureError(() => seedStation(LOCATION_A, name));
+    const collision = await captureError(() => seedStation(name));
     expect(isRefusal(collision, UNIQUE_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(collision)).toBe(
-      "UNIQUE constraint failed: kitchen_stations.location_id, kitchen_stations.name",
-    );
-    const elsewhereId = await seedStation(LOCATION_A2, name);
-    expect(elsewhereId).not.toBe(replacementId);
+    expect(engineErrorMessage(collision)).toBe("UNIQUE constraint failed: kitchen_stations.name");
     await inTx((tx) =>
       tx
         .update(kitchenStations)
         .set({ active: false })
         .where(eq(kitchenStations.id, replacementId)),
     );
-    const thirdId = await seedStation(LOCATION_A, name);
+    const thirdId = await seedStation(name);
     expect([oldId, replacementId]).not.toContain(thirdId);
 
     const [index] = suite.db.all<{ sql: string }>(
@@ -110,7 +124,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("exposes every column through the Drizzle export, with the is_default and active defaults", async () => {
-    const id = await seedStation(LOCATION_A, "Kitchen");
+    const id = await seedStation("Kitchen");
     const [row] = await inTx((tx) =>
       tx.select().from(kitchenStations).where(eq(kitchenStations.id, id)),
     );
@@ -122,7 +136,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("A773 phases: a new station does not wait for the pass", async () => {
-    const id = await seedStation(LOCATION_A, "Pass waiting default");
+    const id = await seedStation("Pass waiting default");
     const [row] = await inTx((tx) =>
       tx.select().from(kitchenStations).where(eq(kitchenStations.id, id)),
     );
@@ -130,7 +144,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("a station row given no printing choices groups identical dishes, prints no held work in advance, leaves MOVED slips null, is done one item at a time and allows changes while held or waiting", async () => {
-    const id = await seedStation(LOCATION_A, "Printing defaults");
+    const id = await seedStation("Printing defaults");
     const [row] = await inTx((tx) =>
       tx
         .select({
@@ -153,7 +167,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("carries ordered timing thresholds with sane defaults (KDS order-timing alerts)", async () => {
-    const id = await seedStation(LOCATION_A, "Timing station");
+    const id = await seedStation("Timing station");
     const [row] = await inTx((tx) =>
       tx
         .select({
@@ -176,7 +190,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("a station row given no ready warning holds 3, and the database holds it in no order with the late flags", async () => {
-    const id = await seedStation(LOCATION_A, "Ready warning station");
+    const id = await seedStation("Ready warning station");
     const readyWarning = async () =>
       (
         await inTx((tx) =>
@@ -207,16 +221,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     }
   });
 
-  it("rejects a SECOND default station per location (the WHERE is_default partial unique)", async () => {
-    // A non-default sibling and a default at another location are both accepted, so the refusal is
-    // the partial predicate and not a plain unique.
-    await seedStation(LOCATION_A, "Default one", true);
-    await seedStation(LOCATION_A, "Non-default sibling", false);
-    await seedStation(LOCATION_A2, "Default elsewhere", true);
-    const e = await captureError(() => seedStation(LOCATION_A, "Default two", true));
-    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
-  });
-
   it("the partial unique index is what blocks the second default (proof by deletion of the index)", async () => {
     // The index is recreated in a `finally` so every other case still meets it.
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
@@ -225,26 +229,24 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     });
     await seedVenueSettings(suite.db, { operationDescription: "Hostelería" });
     await seedBusinessDay(suite.db, {});
-    await seedStation(probeLocation, "Probe default", true);
+    await seedStation("Probe default", true);
     const [index] = suite.db.all<{ sql: string }>(
       sql`select sql from sqlite_master where type = 'index' and name = 'kitchen_stations_default_key'`,
     );
     expect(index?.sql).toContain("is_default");
     try {
       suite.db.run(sql`drop index kitchen_stations_default_key`);
-      await seedStation(probeLocation, "Probe default two", true);
+      await seedStation("Probe default two", true);
       const [counted] = await inTx((tx) =>
         tx
           .select({ n: sql<number>`cast(count(*) as int)` })
           .from(kitchenStations)
-          .where(
-            and(eq(kitchenStations.locationId, probeLocation), eq(kitchenStations.isDefault, true)),
-          ),
+          .where(and(eq(kitchenStations.isDefault, true))),
       );
       expect(counted!.n).toBe(2);
     } finally {
       // The probe rows go first: recreating the index over their two defaults would fail.
-      await suite.db.delete(kitchenStations).where(eq(kitchenStations.locationId, probeLocation));
+      await suite.db.delete(kitchenStations).where(eq(kitchenStations.isDefault, true));
       suite.db.run(sql.raw(index!.sql));
     }
   });

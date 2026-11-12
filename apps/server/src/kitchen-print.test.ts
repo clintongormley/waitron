@@ -37,7 +37,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter, endDeletedPrinterJobs } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import {
   createCourse,
   createStation,
@@ -498,7 +498,7 @@ async function makeSharedPrinter(
  */
 async function fireContextlessDish(
   tx: Transaction,
-  cfg: WithVenueRowId<OriginConfig>,
+  cfg: OriginConfig,
   dishId: string,
   pickIds: string[],
 ): Promise<string> {
@@ -698,7 +698,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "Table 5", zoneId: offers.zoneId })
+        .values({ label: "Table 5", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
       await tx.insert(floorTodayTables).values({ tableId: table!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
@@ -758,7 +758,6 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
       const [table] = await tx
         .insert(diningTables)
         .values({
-          locationId: cfg.locationId,
           label: "Bar 3",
           zoneId: (await offerProducts(tx, cfg)).zoneId,
         })
@@ -1103,7 +1102,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "T1", zoneId: offers.zoneId })
+        .values({ label: "T1", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
       await tx.insert(floorTodayTables).values({ tableId: table!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
@@ -2542,11 +2541,7 @@ describe("the table a slip names (spec decision 9)", () => {
 });
 
 describe("a station printer that was deleted", () => {
-  async function stationWithTwo(
-    tx: Transaction,
-    cfg: WithVenueRowId<OriginConfig>,
-    catalogueId: string,
-  ) {
+  async function stationWithTwo(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
     const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
     const p = await makePrinter(tx, "Old kitchen");
     const q = await makePrinter(tx, "Kitchen Q");
@@ -2735,7 +2730,7 @@ describe("the party's name on a kitchen ticket", () => {
       const [station] = await tx
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
-        .where(eq(kitchenStations.locationId, v.cfg.locationId));
+        .where(sql`true`);
       const id = await makePrinter(tx, "Kitchen");
       await attachPrinterToStation(tx, {
         stationId: station!.id,
@@ -2856,8 +2851,8 @@ it("A725 shared kitchen paper lists stations in Spanish alphabetical order", asy
     const late = { id: "00000000-0000-4000-8000-000000000001" };
     const early = { id: "00000000-0000-4000-8000-000000000002" };
     await tx.insert(kitchenStations).values([
-      { ...late, locationId: cfg.locationId, name: "Ñandú", isDefault: true, colour: "red" },
-      { ...early, locationId: cfg.locationId, name: "Naranja", colour: "red" },
+      { ...late, name: "Ñandú", isDefault: true, colour: "red" },
+      { ...early, name: "Naranja", colour: "red" },
     ]);
     const printerId = await makeSharedPrinter(tx, "Shared paper", [late.id, early.id]);
     const lateDish = await makeProduct(tx, catalogueId, "LateDish", { stationId: late.id });
@@ -2876,11 +2871,7 @@ describe("A803 portion grouping", () => {
   /** Kitchen (with a printer, showing the rest of the order) and Fryer (with its own printer); a
    * Burger with a Cheese extra of up to two and Oysters at Kitchen, Chips and Octopus (sold by
    * weight) at Fryer; and a party's open bill at a fresh table. */
-  async function portionKitchen(
-    tx: Transaction,
-    cfg: WithVenueRowId<OriginConfig>,
-    catalogueId: string,
-  ) {
+  async function portionKitchen(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
     const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
     const fryer = await createStation(tx, { name: "Fryer" });
     await updateStation(tx, kitchen.id, { showsRestOfOrder: true });
@@ -2909,7 +2900,7 @@ describe("A803 portion grouping", () => {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [table] = await tx
       .insert(diningTables)
-      .values({ locationId: cfg.locationId, label: "P1", zoneId: offers.zoneId })
+      .values({ label: "P1", zoneId: offers.zoneId })
       .returning({ id: diningTables.id });
     await tx.insert(floorTodayTables).values({ tableId: table!.id });
     const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });

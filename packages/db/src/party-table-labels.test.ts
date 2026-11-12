@@ -20,9 +20,7 @@ import { parties, partyTables } from "./schema/parties.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
-import { venueLocationId } from "./venue.js";
 
-let LOCATION: string;
 const OPERATOR = "cccccccc-2222-4000-8000-000000000001";
 
 describe("party table labels", () => {
@@ -39,7 +37,6 @@ describe("party table labels", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(suite.db);
   });
 
   /**
@@ -63,11 +60,11 @@ describe("party table labels", () => {
       for (const table of tables) {
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: LOCATION, name: table.label })
+          .values({ name: table.label })
           .returning({ id: floorZones.id });
         const [created] = await tx
           .insert(diningTables)
-          .values({ id: table.id, locationId: LOCATION, label: table.label, zoneId: zone!.id })
+          .values({ id: table.id, label: table.label, zoneId: zone!.id })
           .returning({ id: diningTables.id });
         await tx.insert(partyTables).values({
           id: table.rowId ?? table.id,
@@ -594,11 +591,11 @@ describe("party table labels", () => {
     const [row] = await inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION, name: label })
+        .values({ name: label })
         .returning({ id: floorZones.id });
       return tx
         .insert(diningTables)
-        .values({ locationId: LOCATION, label, zoneId: zone!.id })
+        .values({ label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
     });
     return row!.id;

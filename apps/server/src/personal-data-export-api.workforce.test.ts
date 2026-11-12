@@ -619,7 +619,6 @@ async function seedActions(colleague: string): Promise<void> {
       source: "device",
       deviceId,
       nodeId: NODE_ID,
-      locationId,
       method: "cash",
       manual: false,
       appliedAmount: a.refundAmountCents,

@@ -40,8 +40,6 @@ CREATE TABLE `locations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`bump_mode` text DEFAULT 'line' NOT NULL,
 	`fire_control` text DEFAULT 'waiter' NOT NULL,
-	`catalogue_id` text,
-	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "locations_bump_mode_ck" CHECK("locations"."bump_mode" in ('line', 'ticket')),
 	CONSTRAINT "locations_fire_control_ck" CHECK("locations"."fire_control" in ('waiter', 'kitchen', 'expo'))
 );
@@ -139,7 +137,6 @@ CREATE TABLE `working_orders` (
 	`id` text PRIMARY KEY NOT NULL,
 	`source` text NOT NULL,
 	`device_id` text,
-	`location_id` text NOT NULL,
 	`node_id` text,
 	`order_number` integer NOT NULL,
 	`label` text,
@@ -162,7 +159,6 @@ CREATE TABLE `working_orders` (
 	`payment_attempt_at` text,
 	`party_id` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`delivery_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
@@ -249,7 +245,6 @@ CREATE TABLE `working_line_portions` (
 CREATE UNIQUE INDEX `working_line_portions_portion_key` ON `working_line_portions` (`portion_id`);--> statement-breakpoint
 CREATE TABLE `dining_tables` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`label` text NOT NULL,
 	`short_name` text,
 	`short_name_key` text,
@@ -258,12 +253,11 @@ CREATE TABLE `dining_tables` (
 	`needs_clearing_since` text,
 	`plan_table_id` text,
 	FOREIGN KEY (`plan_table_id`) REFERENCES `floor_plan_tables`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `dining_tables_location_short_name_key_uq` ON `dining_tables` (`location_id`,`short_name_key`);--> statement-breakpoint
-CREATE UNIQUE INDEX `dining_tables_location_label_key` ON `dining_tables` (`location_id`,`label`);--> statement-breakpoint
+CREATE UNIQUE INDEX `dining_tables_short_name_key_uq` ON `dining_tables` (`short_name_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `dining_tables_label_key` ON `dining_tables` (`label`);--> statement-breakpoint
 CREATE TABLE `floor_plan_placements` (
 	`id` text PRIMARY KEY NOT NULL,
 	`plan_id` text NOT NULL,
@@ -287,9 +281,7 @@ CREATE TABLE `floor_plan_placements` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `floor_plan_placements_table_key` ON `floor_plan_placements` (`plan_id`,`plan_table_id`);--> statement-breakpoint
 CREATE TABLE `floor_plan_sets` (
-	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
+	`id` text PRIMARY KEY NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `floor_plan_table_parts` (
@@ -628,18 +620,15 @@ CREATE TABLE `line_service_cancellations` (
 --> statement-breakpoint
 CREATE TABLE `floor_zones` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
+	`created_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `floor_zones_name_key` ON `floor_zones` (`location_id`,`name`) WHERE "floor_zones"."active" = 1;--> statement-breakpoint
+CREATE UNIQUE INDEX `floor_zones_name_key` ON `floor_zones` (`name`) WHERE "floor_zones"."active" = 1;--> statement-breakpoint
 CREATE TABLE `kitchen_stations` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`warm_after_minutes` integer DEFAULT 5 NOT NULL,
 	`overdue_after_minutes` integer DEFAULT 10 NOT NULL,
@@ -656,24 +645,21 @@ CREATE TABLE `kitchen_stations` (
 	`changes_after_sending` text DEFAULT 'held-or-waiting' NOT NULL,
 	`waits_for_pass` integer DEFAULT false NOT NULL,
 	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "kitchen_stations_thresholds_ordered" CHECK("kitchen_stations"."warm_after_minutes" < "kitchen_stations"."overdue_after_minutes" and "kitchen_stations"."overdue_after_minutes" < "kitchen_stations"."forgotten_after_minutes")
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `kitchen_stations_name_key` ON `kitchen_stations` (`location_id`,`name`) WHERE "kitchen_stations"."active" = 1;--> statement-breakpoint
-CREATE UNIQUE INDEX `kitchen_stations_default_key` ON `kitchen_stations` (`location_id`) WHERE "kitchen_stations"."is_default";--> statement-breakpoint
+CREATE UNIQUE INDEX `kitchen_stations_name_key` ON `kitchen_stations` (`name`) WHERE "kitchen_stations"."active" = 1;--> statement-breakpoint
+CREATE UNIQUE INDEX `kitchen_stations_default_key` ON `kitchen_stations` (`is_default`) WHERE "kitchen_stations"."is_default";--> statement-breakpoint
 CREATE TABLE `kitchen_courses` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`held_until_fired` integer DEFAULT true NOT NULL,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
+	`created_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `kitchen_courses_name_key` ON `kitchen_courses` (`location_id`,`name`) WHERE "kitchen_courses"."active" = 1;--> statement-breakpoint
+CREATE UNIQUE INDEX `kitchen_courses_name_key` ON `kitchen_courses` (`name`) WHERE "kitchen_courses"."active" = 1;--> statement-breakpoint
 CREATE TABLE `ticket_items` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
@@ -708,7 +694,6 @@ CREATE INDEX `ticket_items_waiting_idx` ON `ticket_items` (`station_id`,`state`,
 CREATE UNIQUE INDEX `ticket_items_working_order_line_id_key` ON `ticket_items` (`working_order_line_id`);--> statement-breakpoint
 CREATE TABLE `devices` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`device_profile_id` text NOT NULL,
 	`receipt_printer_id` text,
 	`payment_slip_printer_id` text,
@@ -725,7 +710,6 @@ CREATE TABLE `devices` (
 	`battery_reported_at` text,
 	`enrolled_at` text NOT NULL,
 	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`receipt_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`payment_slip_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -734,7 +718,7 @@ CREATE TABLE `devices` (
 	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `devices_location_label_active_key` ON `devices` (`location_id`,`label`) WHERE "devices"."active" = 1;--> statement-breakpoint
+CREATE UNIQUE INDEX `devices_label_active_key` ON `devices` (`label`) WHERE "devices"."active" = 1;--> statement-breakpoint
 CREATE TABLE `device_made_here_stations` (
 	`device_id` text NOT NULL,
 	`station_id` text NOT NULL,
@@ -754,7 +738,6 @@ CREATE TABLE `device_approved_profiles` (
 CREATE TABLE `join_requests` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
-	`location_id` text NOT NULL,
 	`kind` text NOT NULL,
 	`label` text NOT NULL,
 	`token_hash` text NOT NULL,
@@ -766,7 +749,6 @@ CREATE TABLE `join_requests` (
 --> statement-breakpoint
 CREATE TABLE `print_agents` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`host` text,
 	`setup_url` text,
@@ -775,14 +757,12 @@ CREATE TABLE `print_agents` (
 	`token_hash` text NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`last_seen_at` text,
-	`enrolled_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict
+	`enrolled_at` text NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `print_agents_tenant_node_key` ON `print_agents` (`node_id`);--> statement-breakpoint
 CREATE TABLE `printers` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`transport` text NOT NULL,
 	`local_key` text,
@@ -798,7 +778,6 @@ CREATE TABLE `printers` (
 	`pickup_roles` text DEFAULT '["receipt","payment_slip"]' NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`deleted_at` text,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "printers_transport_ck" CHECK("printers"."transport" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')),
 	CONSTRAINT "printers_ticket_scope_ck" CHECK("printers"."ticket_scope" in ('station', 'order')),
 	CONSTRAINT "printers_paper_width_ck" CHECK("printers"."paper_width" in ('58mm', '80mm')),
@@ -809,10 +788,9 @@ CREATE TABLE `printers` (
           or ("printers"."transport" = 'cloud_poll' and "printers"."poll_id" is not null))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `printers_local_key_key` ON `printers` (`location_id`,`local_key`) WHERE "printers"."local_key" is not null and "printers"."deleted_at" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX `printers_local_key_key` ON `printers` (`local_key`) WHERE "printers"."local_key" is not null and "printers"."deleted_at" is null;--> statement-breakpoint
 CREATE TABLE `print_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`printer_id` text NOT NULL,
 	`claimed_by` text,
 	`payload` blob NOT NULL,
@@ -827,7 +805,6 @@ CREATE TABLE `print_jobs` (
 	`delivered_at` text,
 	`resend_of` text,
 	`sale_id` text,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`claimed_by`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`resend_of`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE no action,
@@ -952,11 +929,13 @@ CREATE TABLE `catalogues` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
+	`is_default` integer DEFAULT false NOT NULL,
 	`version` integer DEFAULT 1 NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `catalogues_one_default_uq` ON `catalogues` (`is_default`) WHERE "catalogues"."is_default" = 1;--> statement-breakpoint
 CREATE TABLE `categories` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -1492,7 +1471,6 @@ CREATE UNIQUE INDEX `invoice_deliveries_generation_uq` ON `invoice_deliveries` (
 CREATE UNIQUE INDEX `invoice_deliveries_active_uq` ON `invoice_deliveries` (`sale_id`) WHERE "invoice_deliveries"."status" in ('queued', 'sending');--> statement-breakpoint
 CREATE TABLE `page_printers` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`host` text NOT NULL,
 	`port` integer NOT NULL,
@@ -1503,7 +1481,6 @@ CREATE TABLE `page_printers` (
 	`resolution_dpi` integer NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`agent_id` text,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`agent_id`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "page_printers_format_ck" CHECK("page_printers"."document_format" in ('application/pdf', 'image/pwg-raster', 'image/urf')),
 	CONSTRAINT "page_printers_media_ck" CHECK("page_printers"."media" in ('iso_a4_210x297mm', 'na_letter_8.5x11in')),
@@ -1511,7 +1488,7 @@ CREATE TABLE `page_printers` (
 	CONSTRAINT "page_printers_resolution_ck" CHECK("page_printers"."resolution_dpi" > 0)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `page_printers_endpoint_uq` ON `page_printers` (`location_id`,`host`,`port`,`resource_path`);--> statement-breakpoint
+CREATE UNIQUE INDEX `page_printers_endpoint_uq` ON `page_printers` (`host`,`port`,`resource_path`);--> statement-breakpoint
 CREATE TABLE `tender_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
@@ -1528,7 +1505,6 @@ CREATE TABLE `tender_refunds` (
 	`source` text NOT NULL,
 	`device_id` text,
 	`node_id` text NOT NULL,
-	`location_id` text NOT NULL,
 	`method` text NOT NULL,
 	`manual` integer DEFAULT false NOT NULL,
 	`provider` text,
@@ -1548,7 +1524,6 @@ CREATE TABLE `tender_refunds` (
 	FOREIGN KEY (`tender_id`) REFERENCES `tenders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "tender_refunds_source_ck" CHECK("tender_refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "tender_refunds_source_device_ck" CHECK(("tender_refunds"."source" = 'device') = ("tender_refunds"."device_id" is not null)),
 	CONSTRAINT "tender_refunds_state_ck" CHECK("tender_refunds"."state" in ('pending', 'completed', 'failed')),
@@ -3290,7 +3265,6 @@ BEGIN
     AND new.source IS old.source
     AND new.device_id IS old.device_id
     AND new.node_id IS old.node_id
-    AND new.location_id IS old.location_id
     AND new.method IS old.method
     AND new.manual IS old.manual
     AND new.provider IS old.provider
@@ -3514,7 +3488,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -3540,7 +3513,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -3565,7 +3537,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -3592,7 +3563,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -3618,7 +3588,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label

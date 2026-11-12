@@ -13,9 +13,7 @@ import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines } from "./orders.js";
 import { ticketItemMoves } from "./ticket-item-moves.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION: string;
 const AT = "2026-10-01T10:00:00.000Z";
 
 describe("ticket_item_moves schema", () => {
@@ -31,13 +29,9 @@ describe("ticket_item_moves schema", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(db);
     const [station, other] = await db
       .insert(kitchenStations)
-      .values([
-        { locationId: LOCATION, name: "Grill" },
-        { locationId: LOCATION, name: "Fryer" },
-      ])
+      .values([{ name: "Grill" }, { name: "Fryer" }])
       .returning({ id: kitchenStations.id });
     grill = station!.id;
     fryer = other!.id;
@@ -82,7 +76,6 @@ describe("ticket_item_moves schema", () => {
     await db.insert(deviceProfiles).values({ id: "till", name: "Till", formFactor: "till" });
     await db.insert(devices).values({
       id: "device-a",
-      locationId: LOCATION,
       deviceProfileId: "till",
       label: "device-a",
       tokenHash: "hash",

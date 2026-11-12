@@ -32,11 +32,10 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 
 describe("seedMedia", () => {
   it("stores committed tiles in the library and attaches content-addressed product references", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
 
     const { productsByImage, images } = await withTransaction(suite.db, async (tx) => {
       const { productsByImage } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -93,10 +92,9 @@ describe("seedMedia", () => {
   });
 
   it("reuses existing image bytes when the media step runs twice", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     await withTransaction(suite.db, async (tx) => {
       const { productsByImage } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });

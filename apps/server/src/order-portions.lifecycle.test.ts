@@ -1,10 +1,11 @@
 import { cancelItemForTest } from "./testing/cancel-line.js";
+import { readDefaultCatalogueId } from "@waitron/catalogue";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
-import { readVenue, parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -49,7 +50,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ids = await inTx(venue, async (tx) => {
-      const catalogueId = (await readVenue(tx)).defaultCatalogueId!;
+      const catalogueId = (await readDefaultCatalogueId(tx))!;
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {

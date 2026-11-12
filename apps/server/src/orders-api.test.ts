@@ -351,11 +351,10 @@ describe("Orders routes", () => {
     expect(rows.find((row) => row.id === full)?.invoiceType).toBe("F1");
   });
   it.each([false, true])(
-    "reprints a saved invoice with its trading context's printer, write location and practice marking (%s)",
+    "reprints a saved invoice with its trading context's printer and practice marking (%s)",
     async (practiceMode) => {
       const billId = await placedIssuedBill(venue, "Paella");
       const ownNode = await seedNode(venue.db);
-      const ownLocation = venue.cfg.locationId;
       const printer = { id: venue.printerId };
       const app = new Hono();
       mountOrdersApi(
@@ -398,7 +397,6 @@ describe("Orders routes", () => {
         .from(printJobs)
         .where(eq(printJobs.id, (answer.json as { jobId: string }).jobId));
       expect(job).toMatchObject({
-        locationId: ownLocation,
         printerId: printer.id,
         kind: "document",
       });

@@ -91,7 +91,6 @@ async function seedPrinter(
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: opts.locationId ?? venue.cfg.locationId,
       name,
       transport: "network_tcp",
       host: "10.0.0.9",
@@ -106,7 +105,6 @@ async function seedPagePrinter(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: venue.cfg.locationId,
       name,
       host: "10.0.0.8",
       port: 631,
@@ -1601,7 +1599,6 @@ describe("GET /api/device/equipment's notices", () => {
       const [row] = await suite.db
         .insert(printJobs)
         .values({
-          locationId: venue.cfg.locationId,
           printerId,
           payload: Uint8Array.from([1]),
           kind: "document",
@@ -1617,7 +1614,7 @@ describe("GET /api/device/equipment's notices", () => {
       const id = await seedPrinter("Kitchen");
       const [station] = await suite.db
         .insert(kitchenStations)
-        .values({ locationId: venue.cfg.locationId, name: "Kitchen", isDefault: false })
+        .values({ name: "Kitchen", isDefault: false })
         .returning({ id: kitchenStations.id });
       await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId: id });
       return id;
@@ -1645,7 +1642,6 @@ describe("GET /api/device/equipment's notices", () => {
       const [agent] = await suite.db
         .insert(printAgents)
         .values({
-          locationId: venue.cfg.locationId,
           name: "Expiry test",
           tokenHash: "scrypt$expiry-fixture",
         })
@@ -1771,7 +1767,6 @@ describe("GET /api/device/equipment's notices", () => {
           (await noticesOf(app, venue.cookie)).filter((n) => n.owner === "drawers"),
         ).toHaveLength(1);
         await suite.db.insert(printJobs).values({
-          locationId: venue.cfg.locationId,
           printerId: dr,
           payload: Uint8Array.from([1]),
           kind: "drawer",

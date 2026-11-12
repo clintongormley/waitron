@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
@@ -7,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { venueLocationId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setRoutingCell } from "@waitron/venue-service";
@@ -25,7 +26,6 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -37,7 +37,7 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
 // The schema is the whole manifest: the tables here span modules that FK into core.
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let ana: { id: string };
 /** A supervisor, who holds the refund permission a sent dish's cancel needs. */
 let sara: { id: string };
@@ -69,8 +69,8 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    const locationId = await venueLocationId(db);
-    await seedKitchenStation(db, { locationId: locationId });
+
+    await seedKitchenStation(db, {});
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db);
     const [person] = await db
@@ -107,7 +107,7 @@ const suite = useVenueDb({
       return { id: p.id, breadId: bread.id };
     });
     productId = product.id;
-    cfg = makeCfg(locationId, nodeId);
+    cfg = makeCfg(nodeId);
     const zone = await withTransaction(db, (tx) => createZone(tx, { name: "Terraza" }));
     seededZoneId = zone.id;
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
@@ -131,10 +131,9 @@ function collect(
 }
 
 /** `seriesId` is unused by these routes (no fiscal write on the tab/table path), so it carries a fresh uuid. */
-function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
+function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -501,12 +500,10 @@ describe("table + tab routes", () => {
 
   it("each tab line carries its own station's changes after sending, and a line with no kitchen work carries none", async () => {
     const grill = await seedKitchenStation(suite.db, {
-      locationId: cfg.locationId,
       name: `Grill ${randomUUID().slice(0, 6)}`,
       isDefault: false,
     });
     const bar = await seedKitchenStation(suite.db, {
-      locationId: cfg.locationId,
       name: `Bar ${randomUUID().slice(0, 6)}`,
       isDefault: false,
     });
@@ -781,7 +778,7 @@ it.each(["PUT", "DELETE"])(
       );
       const rows = () =>
         suite.db.all(sql`
-        select * from dining_tables where location_id = ${cfg.locationId} order by id`);
+        select * from dining_tables order by id`);
       const before = rows();
       const response = await request(`/api/tables/${id}/placement`, {
         method,

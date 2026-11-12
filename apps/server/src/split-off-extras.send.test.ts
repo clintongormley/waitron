@@ -1,7 +1,7 @@
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
@@ -1006,7 +1006,10 @@ describe("sending split-off extras", () => {
       expect(extra).toMatchObject({ madeHere: true, state: "ready", firedAt: expect.any(String) });
       expect(sink.has(lines.find((line) => line.parentLineId !== null)!.id)).toBe(true);
       expect(
-        await tx.select().from(printJobs).where(eq(printJobs.locationId, cfg.locationId)),
+        await tx
+          .select()
+          .from(printJobs)
+          .where(sql`true`),
       ).toEqual([]);
     });
   });

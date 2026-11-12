@@ -55,7 +55,6 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(pagePrinters).values({
       id: pagePrinterId,
-      locationId: venue.cfg.locationId,
       name: "Office",
       host: pagePrinterId,
       port: 631,

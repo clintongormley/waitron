@@ -60,16 +60,16 @@ describe("floor plan tables", () => {
     });
     LOCATION = await venueLocationId(db);
     await db.insert(floorZones).values([
-      { id: ZONE, locationId: LOCATION, name: "Dining room" },
-      { id: OTHER_ZONE, locationId: LOCATION, name: "Terrace" },
+      { id: ZONE, name: "Dining room" },
+      { id: OTHER_ZONE, name: "Terrace" },
     ]);
-    await db.insert(floorPlanSets).values({ id: SET, locationId: LOCATION });
+    await db.insert(floorPlanSets).values({ id: SET });
     await db
       .insert(floorPlans)
       .values({ id: PLAN, zoneId: ZONE, setId: SET, savedAt: "2026-10-08T10:00:00Z" });
     await db.insert(diningTables).values([
-      { id: TABLE_1, locationId: LOCATION, label: "T1", zoneId: ZONE },
-      { id: TABLE_2, locationId: LOCATION, label: "T2", zoneId: ZONE },
+      { id: TABLE_1, label: "T1", zoneId: ZONE },
+      { id: TABLE_2, label: "T2", zoneId: ZONE },
     ]);
   });
 
@@ -82,10 +82,7 @@ describe("floor plan tables", () => {
 
   async function insertSet(): Promise<string> {
     return inTx(async (tx) => {
-      const [row] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: LOCATION })
-        .returning({ id: floorPlanSets.id });
+      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       return row!.id;
     });
   }
@@ -165,7 +162,7 @@ describe("floor plan tables", () => {
     const extra = await inTx(async (tx) => {
       const [row] = await tx
         .insert(diningTables)
-        .values({ locationId: LOCATION, label: "U1", zoneId: OTHER_ZONE })
+        .values({ label: "U1", zoneId: OTHER_ZONE })
         .returning({ id: diningTables.id });
       return row!.id;
     });
@@ -935,7 +932,7 @@ describe("floor plan tables", () => {
     const zone = await inTx(async (tx) => {
       const [row] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION, name: "Bar" })
+        .values({ name: "Bar" })
         .returning({ id: floorZones.id });
       return row!.id;
     });

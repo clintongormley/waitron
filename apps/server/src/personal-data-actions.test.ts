@@ -60,7 +60,7 @@ async function seedPlace(db: Database): Promise<Place> {
   }
   const [printer] = await db
     .insert(printers)
-    .values({ locationId, name: "Bar printer", transport: "network_tcp", host: "10.0.0.1" })
+    .values({ name: "Bar printer", transport: "network_tcp", host: "10.0.0.1" })
     .returning();
   return { locationId, nodeId, deviceId, printerId: printer!.id, series };
 }
@@ -142,7 +142,6 @@ async function seedTenderRefund(
     source: "device",
     deviceId: at.deviceId,
     nodeId: at.nodeId,
-    locationId: at.locationId,
     manual: row.manual ?? false,
     ...(row.method === "card" && row.manual !== true
       ? { provider: "sumup", providerPaymentRef: `ref-${row.id}` }

@@ -60,12 +60,11 @@ useVenueDb({
       fullSeriesId = series!.id;
       const [agent] = await tx
         .insert(printAgents)
-        .values({ locationId: venue.cfg.locationId, name: "Back office agent", tokenHash: "x" })
+        .values({ name: "Back office agent", tokenHash: "x" })
         .returning({ id: printAgents.id });
       const [office] = await tx
         .insert(pagePrinters)
         .values({
-          locationId: venue.cfg.locationId,
           name: "Oficina",
           host: "192.0.2.20",
           port: 631,
@@ -161,12 +160,11 @@ const printBody = (requestKey: string = randomUUID(), printerId: string = office
 
 let hostCounter = 30;
 /** Another A4 printer, at the venue's location unless `locationId` names another. */
-async function extraOffice(name: string, locationId: string = venue.cfg.locationId) {
+async function extraOffice(name: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
       .insert(pagePrinters)
       .values({
-        locationId,
         name,
         host: `192.0.2.${hostCounter++}`,
         port: 631,
@@ -1000,36 +998,6 @@ describe("dashboard print on a receipt printer", () => {
       deliveries: { originalPrinterId: venue.printerId },
     });
     expect(await reprintsOf(saleId)).toHaveLength(1);
-  });
-
-  it("prints an invoice on an active receipt printer whatever its location column holds", async () => {
-    const { billId, saleId } = await fullInvoice();
-    await venue.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await venue.db
-        .update(printers)
-        .set({ locationId: randomUUID() })
-        .where(eq(printers.id, venue.printerId));
-      const response = await printInvoice(
-        venue.adminDashboard,
-        billId,
-        printBody(randomUUID(), venue.printerId),
-      );
-      expect(response.status).toBe(200);
-      expect(await jobsOfSale(saleId)).toEqual([
-        expect.objectContaining({
-          printerId: venue.printerId,
-          kind: "document",
-          receiptCopy: false,
-        }),
-      ]);
-    } finally {
-      await venue.db
-        .update(printers)
-        .set({ locationId: venue.cfg.locationId })
-        .where(eq(printers.id, venue.printerId));
-      await venue.db.execute(sql`pragma foreign_keys = on`);
-    }
   });
 
   it("refuses a receipt printer switched off or deleted, writing nothing", async () => {

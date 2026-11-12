@@ -4,29 +4,48 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { restrictRefused } from "../constraint-target.js";
-import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
-import { captureError } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 import { locations } from "./tenants.js";
 
-// What this suite proves is the column mapping and the location foreign key.
-let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
 const KDS_PROFILE_B = "eeeeeeee-0000-4000-8000-000000000002";
-const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 const RECEIPT_PRINTER = "11111111-0000-4000-8000-0000000000a1";
 const PAGE_PRINTER = "11111111-0000-4000-8000-0000000000a2";
 const GHOST_PRINTER = "11111111-0000-4000-8000-0000000000ff";
 const TOKEN_HASH = "scrypt$00$00";
+
+describe("device labels without a location", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("two active devices cannot share a label, and an inactive one can", async () => {
+    await suite.db
+      .insert(deviceProfiles)
+      .values({ id: KDS_PROFILE_A, name: "Till profile", formFactor: "till" });
+    const insert = (id: string, active: number) =>
+      suite.db.run(sql`insert into devices
+        (id, device_profile_id, label, token_hash, active, enrolled_at, created_at)
+        values (${id}, ${KDS_PROFILE_A}, 'Till', 'hash', ${active}, '2026-11-11', '2026-11-11')`);
+    await insert("active", 1);
+    await insert("inactive", 0);
+    const error = await captureError(() => insert("duplicate", 1));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: devices.label");
+    expect(suite.db.all(sql`select id from devices order by id`)).toEqual([
+      { id: "active" },
+      { id: "inactive" },
+    ]);
+  });
+});
 
 describe("devices schema (columns, FKs, unique)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -40,7 +59,6 @@ describe("devices schema (columns, FKs, unique)", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(db);
     await db.insert(locations).values({
       id: LOCATION_B,
     });
@@ -60,16 +78,11 @@ describe("devices schema (columns, FKs, unique)", () => {
     return withTransaction(suite.db, fn);
   }
 
-  async function seedDevice(
-    label: string,
-    location: string = LOCATION_A,
-    profile: string = KDS_PROFILE_A,
-  ): Promise<string> {
+  async function seedDevice(label: string, profile: string = KDS_PROFILE_A): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(devices)
         .values({
-          locationId: location,
           deviceProfileId: profile,
           label,
           tokenHash: TOKEN_HASH,
@@ -86,7 +99,7 @@ describe("devices schema (columns, FKs, unique)", () => {
     );
     const [row] = await inTx((tx) => tx.select().from(devices).where(eq(devices.id, id)));
     expect(row!.deviceProfileId).toBe(KDS_PROFILE_A);
-    expect(row!.locationId).toBe(LOCATION_A);
+
     expect(row!.label).toBe("Kitchen screen");
     expect(row!.active).toBe(true);
     expect(row!.lastSeenAt).not.toBeNull();
@@ -134,25 +147,16 @@ describe("devices schema (columns, FKs, unique)", () => {
     expect(second).not.toBe(first);
   });
 
-  it("devices: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
-    // Positive control first, so the rejection below is the location FK and not a malformed row.
-    await seedDevice("Real location", LOCATION_B);
-    const e = await captureError(() => seedDevice("Ghost location", GHOST_LOCATION));
-    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
-  });
-
   describe("the invoice printer choice", () => {
     beforeEach(async () => {
       await suite.db.insert(printers).values({
         id: RECEIPT_PRINTER,
-        locationId: LOCATION_A,
         name: "Receipt printer",
         transport: "cloud_poll",
         pollId: "poll-a",
       });
       await suite.db.insert(pagePrinters).values({
         id: PAGE_PRINTER,
-        locationId: LOCATION_A,
         name: "Office printer",
         host: "10.0.0.9",
         port: 631,

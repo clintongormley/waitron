@@ -217,7 +217,6 @@ describe("kitchen service attendance", () => {
     await withTransaction(suite.db, (tx) =>
       bumpGroupReady(
         tx,
-        v.cfg,
         party.partyId,
         line!.groupId!,
         {
@@ -244,7 +243,6 @@ describe("kitchen service attendance", () => {
       withTransaction(suite.db, (tx) =>
         bumpGroupReady(
           tx,
-          v.cfg,
           order.partyId,
           order.groupId,
           {

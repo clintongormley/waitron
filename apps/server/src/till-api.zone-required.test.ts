@@ -3,13 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  floorZones,
-  deviceProfiles,
-  venueLocationId,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { floorZones, deviceProfiles, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -29,7 +23,7 @@ import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -47,7 +41,7 @@ const suite = useVenueDb({
 });
 
 interface Venue {
-  cfg: WithVenueRowId<OriginConfig>;
+  cfg: OriginConfig;
   cookie: string;
   water: string;
   // Its only variant is Inactive, so it sells as itself.
@@ -65,16 +59,14 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Retail",
   });
-  const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId });
+  await seedKitchenStation(db, {});
   const [person] = await db
     .insert(persons)
     .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
     .returning({ id: persons.id });
-  const cfg: WithVenueRowId<OriginConfig> = {
+  const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
-    locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -125,7 +117,7 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     await writeProductModifiers(tx, water.id, [{ kind: "extras", id: list.id }]);
     const [zone] = await tx
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Tables" })
+      .values({ name: "Tables" })
       .returning({ id: floorZones.id });
     const table = await createTable(tx, cfg, { label: "T1", zoneId: zone!.id });
     return { water: water.id, coffee: coffee.id, extrasListId: list.id, tableId: table.id };

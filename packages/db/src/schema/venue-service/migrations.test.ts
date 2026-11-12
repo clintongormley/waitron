@@ -16,7 +16,6 @@ import {
   UNIQUE_VIOLATION,
   withTransaction,
   locations,
-  venueLocationId,
   zoneServicePolicies,
 } from "../../index.js";
 import { randomUUID } from "node:crypto";
@@ -466,7 +465,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const locationId = location!.id;
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId, name: "Terrace" })
+      .values({ name: `Terrace ${locationId}` })
       .returning({ id: floorZones.id });
     const [department] = await db
       .insert(departments)
@@ -696,13 +695,10 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   });
 
   it("stores a station's chosen destination while accepting a day with no destination", async () => {
-    const v = await venue();
+    await venue();
     const [station, destination] = await db
       .insert(kitchenStations)
-      .values([
-        { locationId: v.locationId, name: "Grill" },
-        { locationId: v.locationId, name: "Bar" },
-      ])
+      .values([{ name: "Grill" }, { name: "Bar" }])
       .returning({ id: kitchenStations.id });
     const state = (day: string, sendsTo: string | null) =>
       sql`insert into station_day_states (id, station_id, business_day, open, sends_to_station_id)
@@ -730,7 +726,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await venue();
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: v.locationId, name: "Grill" })
+      .values({ name: `Grill ${v.zoneId}` })
       .returning({ id: kitchenStations.id });
     const cellId = randomUUID();
     await db.execute(sql`insert into routing_cells (id, zone_id, station_id)
@@ -1037,15 +1033,14 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, location_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${venueId}, 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
     const notice = (kind: string, quantity: number, stationId: string) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at)
@@ -1088,15 +1083,14 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, location_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${venueId}, 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
     const notice = (kind: string, direction: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, direction,
@@ -1135,15 +1129,14 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, source, location_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${venueId}, 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, order_number, opened_at)
+      values (${orderId}, 'dashboard', 1, ${new Date().toISOString()})`);
     const notice = (kind: string, cancelledExtra: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity,
@@ -1181,14 +1174,13 @@ describe("the kitchen screen tables refuse what their rules forbid", () => {
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: venueId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: venueId, name: "Terrace" })
+      .values({ name: "Terrace" })
       .returning({ id: floorZones.id });
     const [profile] = await db
       .insert(deviceProfiles)
@@ -1374,13 +1366,12 @@ describe("single-venue defaults", () => {
       invoiceLocales: ["en"],
       operationDescription: "Sale on premises",
     });
-    const locationId = await venueLocationId(single.db);
     const [department] = await single.db
       .insert(departments)
       .values({ name: "Main", tradingName: "Main" })
       .returning();
     async function add(name: string, isCounterDefault: boolean) {
-      const [zone] = await single.db.insert(floorZones).values({ locationId, name }).returning();
+      const [zone] = await single.db.insert(floorZones).values({ name }).returning();
       return single.db
         .insert(zoneServicePolicies)
         .values({ zoneId: zone!.id, departmentId: department!.id, isCounterDefault });

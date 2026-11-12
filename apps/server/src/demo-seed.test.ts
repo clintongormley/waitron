@@ -1,7 +1,6 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { sql } from "drizzle-orm";
-import { venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createDemoVenueProvisioner } from "../scripts/demo-seed/testing/provision-venue.js";
@@ -43,7 +42,6 @@ function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueReques
 }
 
 let RESULT: VenueResult;
-let venueId: string;
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 beforeEach(async () => {
   seedDemoRestaurant.mockReset();
@@ -58,7 +56,6 @@ beforeEach(async () => {
     seriesIds: [ids.seriesId],
     seeded: [],
   };
-  venueId = await venueLocationId(suite.db);
 });
 
 describe("demoSeedLocale", () => {
@@ -119,7 +116,6 @@ describe("seedInstalledDemo", () => {
       venue: {
         nodeId: RESULT.nodeId,
         seriesId: RESULT.seriesIds[0],
-        locationId: venueId,
       },
       locale: "es",
       salesDays: 30,
@@ -176,7 +172,6 @@ describe("seedInstalledDemo", () => {
       venue: {
         nodeId: RESULT.nodeId,
         seriesId: RESULT.seriesIds[0],
-        locationId: venueId,
       },
       locale: "en",
       salesDays: 30,

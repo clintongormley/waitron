@@ -10,9 +10,7 @@ import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION: string;
 let deviceA = "";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 
@@ -26,7 +24,6 @@ describe("receipt reprint record", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(db);
     const nodeId = await seedNode(db);
     ({ deviceId: deviceA } = await seedDevice(db));
     const [series] = await db
@@ -35,11 +32,11 @@ describe("receipt reprint record", () => {
       .returning({ id: invoiceSeries.id });
     const [printer] = await db
       .insert(printers)
-      .values({ locationId: LOCATION, name: "Printer", transport: "network_tcp", host: "10.0.0.5" })
+      .values({ name: "Printer", transport: "network_tcp", host: "10.0.0.5" })
       .returning({ id: printers.id });
     const [job] = await db
       .insert(printJobs)
-      .values({ locationId: LOCATION, printerId: printer!.id, payload: new Uint8Array([1]) })
+      .values({ printerId: printer!.id, payload: new Uint8Array([1]) })
       .returning({ id: printJobs.id });
     const [sale] = await db
       .insert(sales)

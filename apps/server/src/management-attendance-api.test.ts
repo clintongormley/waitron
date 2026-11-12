@@ -233,7 +233,7 @@ it("rejects forged actors, extra scope, worker actions, malformed JSON and suspe
   }
   for (const path of [
     "lookups?personId=x",
-    `${route("queue")}?locationId=${venue.cfg.locationId}`,
+    `${route("queue")}?locationId=${"10000000-0000-4000-8000-000000000001"}`,
     `${route("day")}&date=2026-01-06`,
     "commands/not-an-id",
   ]) {

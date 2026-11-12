@@ -1,4 +1,4 @@
-import { venueLocationId, type Database } from "@waitron/db";
+import { type Database } from "@waitron/db";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { seedDemoRestaurant } from "../scripts/demo-seed/seed.js";
 import type { SeedLocale } from "../scripts/demo-seed/locale.js";
@@ -25,7 +25,6 @@ export async function seedInstalledDemo(
     venue: {
       nodeId: result.nodeId,
       seriesId: result.seriesIds[0]!,
-      locationId: await venueLocationId(db),
     },
     // A pack with no data set of its own gets English staff names (owner decision, W109 plan).
     locale: identity.dataSet === undefined ? "en" : demoSeedLocale(venue),

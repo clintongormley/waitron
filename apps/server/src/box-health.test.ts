@@ -85,10 +85,10 @@ async function seedSales(issued: { id: string; at: string; corrects?: string }[]
   }
 }
 
-async function seedPrinter(locationId: string, name: string, over: object = {}): Promise<string> {
+async function seedPrinter(name: string, over: object = {}): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
-    .values({ locationId, name, transport: "network_tcp", host: "10.0.0.1", ...over })
+    .values({ name, transport: "network_tcp", host: "10.0.0.1", ...over })
     .returning({ id: printers.id });
   return row!.id;
 }
@@ -165,18 +165,18 @@ describe("collectBoxHealth", () => {
   });
 
   it("lists only printers that are switched on and not deleted", async () => {
-    const location = await seedLocation();
-    const active = await seedPrinter(location, "Bar");
-    await seedPrinter(location, "Off", { active: false });
-    await seedPrinter(location, "Gone", { active: true, deletedAt: "2026-10-01T00:00:00.000Z" });
+    await seedLocation();
+    const active = await seedPrinter("Bar");
+    await seedPrinter("Off", { active: false });
+    await seedPrinter("Gone", { active: true, deletedAt: "2026-10-01T00:00:00.000Z" });
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.printers).toEqual([{ id: active, name: "Bar" }]);
   });
 
   it("lists printers by name", async () => {
-    const location = await seedLocation();
-    const second = await seedPrinter(location, "Kitchen");
-    const first = await seedPrinter(location, "Bar");
+    await seedLocation();
+    const second = await seedPrinter("Kitchen");
+    const first = await seedPrinter("Bar");
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.printers).toEqual([
       { id: first, name: "Bar" },
@@ -246,15 +246,13 @@ describe("collectBoxHealth", () => {
   });
 
   it("counts a source that writes a row as unavailable, and its row does not stay", async () => {
-    const location = await seedLocation();
+    await seedLocation();
     const sources: OwnedStaffNoticeSource[] = [
       {
         owner: "writer",
         source: {
           read: async ({ tx }) => {
-            await tx
-              .insert(printers)
-              .values({ locationId: location, name: "Sneaky", transport: "network_tcp" });
+            await tx.insert(printers).values({ name: "Sneaky", transport: "network_tcp" });
             return [];
           },
         },

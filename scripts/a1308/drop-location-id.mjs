@@ -137,6 +137,7 @@ export function transformSource(path, source, options) {
       dropProperties(node.arguments[0], "locationId");
     if (
       ["onConflictDoNothing", "onConflictDoUpdate"].includes(name) &&
+      node.arguments[0] !== undefined &&
       ts.isObjectLiteralExpression(node.arguments[0])
     ) {
       for (const property of node.arguments[0].properties) {

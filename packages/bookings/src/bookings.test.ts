@@ -59,18 +59,14 @@ interface Venue {
 }
 
 /** Raw inserts supply the id and timestamp; the helper optionally gives the table a today row. */
-async function insertDiningTable(
-  locationId: string,
-  label: string,
-  active = true,
-): Promise<string> {
+async function insertDiningTable(label: string, active = true): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId, name: label })
+    .values({ name: label })
     .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (id, created_at, location_id, zone_id, label)
-    values (${newId()}, ${nowIso()}, ${locationId}, ${zone!.id}, ${label})
+    insert into dining_tables (id, created_at, zone_id, label)
+    values (${newId()}, ${nowIso()}, ${zone!.id}, ${label})
     returning id`);
   if (active) await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
   return row.rows[0]!.id;
@@ -89,8 +85,8 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
-  return insertDiningTable(cfg.locationId, "12", active);
+async function makeTable(active = true): Promise<string> {
+  return insertDiningTable("12", active);
 }
 
 function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -256,8 +252,8 @@ describe("createBooking + listBookings", () => {
 
 describe("createBooking — optional table link", () => {
   it("accepts an ACTIVE table id", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const tableId = await makeTable(cfg);
+    const { createdBy } = await setupVenue();
+    const tableId = await makeTable();
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -289,8 +285,8 @@ describe("createBooking — optional table link", () => {
   });
 
   it("rejects an INACTIVE table with table.not_found", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const tableId = await makeTable(cfg, false);
+    const { createdBy } = await setupVenue();
+    const tableId = await makeTable(false);
     await expect(
       scoped((tx) =>
         createBooking(tx, {
@@ -363,8 +359,8 @@ describe("updateBooking", () => {
   });
 
   it("assigns an ACTIVE table on edit", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const tableId = await makeTable(cfg);
+    const { createdBy } = await setupVenue();
+    const tableId = await makeTable();
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -459,8 +455,8 @@ describe("getBooking", () => {
 
 /** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
  * verb lives in apps/server, which a module cannot import). */
-async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
-  return insertDiningTable(cfg.locationId, label);
+async function seedTable(label: string): Promise<string> {
+  return insertDiningTable(label);
 }
 
 // `core.seatTable` is `fakeCore` (`./testing/fake-core.ts`): the real verb lives in apps/server. It
@@ -488,8 +484,8 @@ describe("seatBooking", () => {
   }
 
   it("seats a booking: opens a tab on the assigned table and links it", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "4");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("4");
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -507,8 +503,8 @@ describe("seatBooking", () => {
   });
 
   it("seats the party for the booking's size, as the person who seated it", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "8");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("8");
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -532,8 +528,8 @@ describe("seatBooking", () => {
   });
 
   it("uses req.tableId when the booking has no table, and stores it", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "7");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("7");
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -584,8 +580,8 @@ describe("seatBooking", () => {
   });
 
   it("refuses a non-booked booking with booking.invalid_transition", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "9");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("9");
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -605,8 +601,8 @@ describe("seatBooking", () => {
   // Refused by the check before `seatTable`. Deleting that check leaves this green: the
   // compare-and-swap then refuses it and the rollback removes the tab.
   it("seating a no-longer-booked booking throws invalid_transition and opens no tab", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "3");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("3");
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -630,8 +626,8 @@ describe("seatBooking", () => {
   // Cancels INSIDE `seatTable`, after the pre-`seatTable` check has passed, so only the final write's
   // compare-and-swap can refuse it. The rollback must take the tab and the cancel with it.
   it("CAS guard: a booking that leaves `booked` during seatTable is refused and the tab rolled back", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "3b");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("3b");
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -668,8 +664,8 @@ describe("seatBooking", () => {
   });
 
   it("bubbles tab.already_open when the target table already has an open tab", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "5");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("5");
     await scoped((tx) => core.seatTable(tx, { tableId, guestCount: null, operatorId: seatedBy }));
     const { id } = await scoped((tx) =>
       createBooking(tx, {
@@ -687,8 +683,8 @@ describe("seatBooking", () => {
   });
 
   it("seats then completes end-to-end (booked → seated → completed)", async () => {
-    const { cfg, core, createdBy, seatedBy } = await setupTillVenue();
-    const tableId = await seedTable(cfg, "6");
+    const { core, createdBy, seatedBy } = await setupTillVenue();
+    const tableId = await seedTable("6");
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",
@@ -706,8 +702,8 @@ describe("seatBooking", () => {
 });
 
 it("refuses booking a table with no today's row", async () => {
-  const { cfg, createdBy } = await setupVenue();
-  const tableId = await makeTable(cfg, false);
+  const { createdBy } = await setupVenue();
+  const tableId = await makeTable(false);
   await expect(
     scoped((tx) =>
       createBooking(tx, {
@@ -724,17 +720,12 @@ it("refuses booking a table with no today's row", async () => {
 
 describe("a part of a joined table on a layout", () => {
   /** Long table (10 seats) made of Counter 3 (2), 4 (6) and 5 (4) on a layout, each with a live table on today's plan. */
-  async function longTable(
-    locationId: string,
-  ): Promise<Record<"long" | "c3" | "c4" | "c5", string>> {
+  async function longTable(): Promise<Record<"long" | "c3" | "c4" | "c5", string>> {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId, name: "Counter" })
+      .values({ name: "Counter" })
       .returning({ id: floorZones.id });
-    const [set] = await db
-      .insert(floorPlanSets)
-      .values({ locationId })
-      .returning({ id: floorPlanSets.id });
+    const [set] = await db.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
     await db.insert(floorPlans).values({ zoneId: zone!.id, setId: set!.id, savedAt: nowIso() });
     const seats = { long: 10, c3: 2, c4: 6, c5: 4 } as const;
     const labels = { long: "Long table", c3: "Counter 3", c4: "Counter 4", c5: "Counter 5" };
@@ -747,8 +738,8 @@ describe("a part of a joined table on a layout", () => {
         .returning({ id: floorPlanTables.id });
       master[key] = row!.id;
       const table = await db.execute<{ id: string }>(sql`
-        insert into dining_tables (id, created_at, location_id, zone_id, label, plan_table_id)
-        values (${newId()}, ${nowIso()}, ${locationId}, ${zone!.id}, ${labels[key]}, ${row!.id})
+        insert into dining_tables (id, created_at, zone_id, label, plan_table_id)
+        values (${newId()}, ${nowIso()}, ${zone!.id}, ${labels[key]}, ${row!.id})
         returning id`);
       live[key] = table.rows[0]!.id;
       await db.insert(floorTodayTables).values({ tableId: live[key] });
@@ -776,8 +767,8 @@ describe("a part of a joined table on a layout", () => {
   }
 
   it("refuses a booking at Counter 4, for any date", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const table = await longTable(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const table = await longTable();
     for (const date of ["2026-08-20", "2027-01-15"]) {
       await expect(book(createdBy, date, table.c4)).rejects.toMatchObject({
         code: "table.in_joined_table",
@@ -789,15 +780,15 @@ describe("a part of a joined table on a layout", () => {
   });
 
   it("books Long table", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const table = await longTable(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const table = await longTable();
     const { id } = await book(createdBy, "2026-08-20", table.long);
     expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(table.long);
   });
 
   it("refuses an edit that moves a booking to Counter 5", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const table = await longTable(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const table = await longTable();
     const { id } = await book(createdBy, "2026-08-20", table.long);
     await expect(
       scoped((tx) => updateBooking(tx, id, { tableId: table.c5 })),
@@ -817,14 +808,14 @@ describe("books table 4 while today's recorded layout stands it", () => {
    * Zone Inside with 4, 5 and 4+5 made of them; Standard places 4 and 5 and leaves 4+5 off,
    * Dinner places 4+5. Today's plan records Standard for TODAY.
    */
-  async function inside(locationId: string) {
+  async function inside() {
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId, name: "Inside" })
+      .values({ name: "Inside" })
       .returning({ id: floorZones.id });
     const [standard, dinner] = await db
       .insert(floorPlanSets)
-      .values([{ locationId }, { locationId }])
+      .values([{}, {}])
       .returning({ id: floorPlanSets.id });
     const [standardPlan, dinnerPlan] = await db
       .insert(floorPlans)
@@ -847,8 +838,8 @@ describe("books table 4 while today's recorded layout stands it", () => {
         .returning({ id: floorPlanTables.id });
       master[key] = row!.id;
       const table = await db.execute<{ id: string }>(sql`
-        insert into dining_tables (id, created_at, location_id, zone_id, label, plan_table_id)
-        values (${newId()}, ${nowIso()}, ${locationId}, ${zone!.id}, ${label}, ${row!.id})
+        insert into dining_tables (id, created_at, zone_id, label, plan_table_id)
+        values (${newId()}, ${nowIso()}, ${zone!.id}, ${label}, ${row!.id})
         returning id`);
       live[key] = table.rows[0]!.id;
       await db.insert(floorTodayTables).values({ tableId: live[key] });
@@ -922,23 +913,23 @@ describe("books table 4 while today's recorded layout stands it", () => {
   });
 
   it("accepts a booking for today at 4 and refuses one at 4+5", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { live } = await inside(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const { live } = await inside();
     const { id } = await book(createdBy, TODAY, live.t4);
     expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
     await expect(book(createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
   });
 
   it("refuses 4 with Dinner recorded", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { live, recordDinner } = await inside(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const { live, recordDinner } = await inside();
     await recordDinner();
     await expect(book(createdBy, TODAY, live.t4)).rejects.toMatchObject(inJoined(live.t4));
   });
 
   it("books 4 for today after a save of Standard that no reset has applied", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { live, saveStandardJoined } = await inside(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const { live, saveStandardJoined } = await inside();
     await saveStandardJoined();
     const { id } = await book(createdBy, TODAY, live.t4);
     expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
@@ -946,14 +937,14 @@ describe("books table 4 while today's recorded layout stands it", () => {
   });
 
   it("refuses a booking for tomorrow at 4", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { live } = await inside(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const { live } = await inside();
     await expect(book(createdBy, TOMORROW, live.t4)).rejects.toMatchObject(inJoined(live.t4));
   });
 
   it("judges an edit by the patch's date, else the stored booking's", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { live } = await inside(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const { live } = await inside();
     const { id } = await book(createdBy, TOMORROW, live.t45);
     await expect(scoped((tx) => updateBooking(tx, id, { tableId: live.t5 }))).rejects.toMatchObject(
       inJoined(live.t5),
@@ -965,8 +956,8 @@ describe("books table 4 while today's recorded layout stands it", () => {
   });
 
   it("judges an edit that changes only the date against the booking's table", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const { live } = await inside(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    const { live } = await inside();
     const { id } = await book(createdBy, TODAY, live.t4);
     await expect(
       scoped((tx) => updateBooking(tx, id, { bookingDate: TOMORROW })),
@@ -978,8 +969,8 @@ describe("books table 4 while today's recorded layout stands it", () => {
   });
 
   it("moves a booking with no table to any date", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    await inside(cfg.locationId);
+    const { createdBy } = await setupVenue();
+    await inside();
     const { id } = await scoped((tx) =>
       createBooking(tx, {
         bookingDate: TODAY,

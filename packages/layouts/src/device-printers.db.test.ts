@@ -49,19 +49,18 @@ async function seedLocation(name: string): Promise<string> {
   return venueId;
 }
 
-async function seedPrinter(location: string, name: string): Promise<string> {
+async function seedPrinter(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
-    .values({ locationId: location, name, transport: "network_tcp", host: "10.0.0.1" })
+    .values({ name, transport: "network_tcp", host: "10.0.0.1" })
     .returning({ id: printers.id });
   return row!.id;
 }
 
-async function seedPagePrinter(location: string, name: string): Promise<string> {
+async function seedPagePrinter(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: location,
       name,
       host: "10.0.0.9",
       port: 631,
@@ -91,17 +90,16 @@ async function setActive(printerId: string, active: boolean): Promise<void> {
 }
 
 describe("a profile's printer lists and each device's current printers", () => {
-  let loc: string;
   let p1: string;
   let p2: string;
   let p3: string;
 
   // `useVenueDb` empties every table after each test.
   beforeEach(async () => {
-    loc = await seedLocation("Here");
-    p1 = await seedPrinter(loc, "Bar");
-    p2 = await seedPrinter(loc, "Counter");
-    p3 = await seedPrinter(loc, "Portable");
+    await seedLocation("Here");
+    p1 = await seedPrinter("Bar");
+    p2 = await seedPrinter("Counter");
+    p3 = await seedPrinter("Portable");
   });
 
   it("stores both lists in the order given and reads them back", async () => {
@@ -543,7 +541,7 @@ describe("a profile's printer lists and each device's current printers", () => {
       .insert(deviceProfiles)
       .values({ name: "Deletable", formFactor: "till", capabilities: [] })
       .returning({ id: deviceProfiles.id });
-    const lonely = await seedPrinter(loc, "Listed only");
+    const lonely = await seedPrinter("Listed only");
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -571,17 +569,15 @@ describe("a profile's printer lists and each device's current printers", () => {
 });
 
 describe("a deleted printer on a profile's lists", () => {
-  let loc: string;
   let live: string;
   let gone: string;
 
   beforeEach(async () => {
-    loc = await seedLocation("Here");
-    live = await seedPrinter(loc, "Bar");
+    await seedLocation("Here");
+    live = await seedPrinter("Bar");
     const [row] = await suite.db
       .insert(printers)
       .values({
-        locationId: loc,
         name: "Gone",
         transport: "network_tcp",
         host: "10.0.0.2",
@@ -706,14 +702,13 @@ describe("a deleted printer on a profile's lists", () => {
 });
 
 describe("a profile's invoice printer list", () => {
-  let loc: string;
   let receipt: string;
   let office: string;
 
   beforeEach(async () => {
-    loc = await seedLocation("Here");
-    receipt = await seedPrinter(loc, "Bar");
-    office = await seedPagePrinter(loc, "Office");
+    await seedLocation("Here");
+    receipt = await seedPrinter("Bar");
+    office = await seedPagePrinter("Office");
   });
 
   it("stores a page printer and a receipt printer in the order given, with the default", async () => {

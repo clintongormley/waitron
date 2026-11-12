@@ -271,12 +271,10 @@ export async function receiveReturnedOriginals(
   for (const id of needed) includeParent(id);
   for (const device of returned.devices) {
     if (held(tx, "devices", device.id)) continue;
-    const location = held(tx, "nodes", sourceNodeId)?.location_id;
     const [profile] = tx.all<ReturnRow>(sql`select id from device_profiles order by id limit 1`);
     await insertRow(tx, "devices", {
       id: device.id!,
       label: device.label!,
-      location_id: location!,
       device_profile_id: profile!.id!,
       token_hash: "",
       active: 0,

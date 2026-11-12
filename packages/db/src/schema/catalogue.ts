@@ -3,16 +3,25 @@ import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { bigCount, count, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
 import type { AllergenMap, ProductOrdering } from "@waitron/shared";
 import { kitchenCourses } from "./kitchen-courses.js";
+import { uniqueIndex } from "drizzle-orm/sqlite-core";
 
-/** A named, shareable menu. Many locations may point at one catalogue. */
-export const catalogues = table("catalogues", {
-  id: id("id").primaryKey().$defaultFn(newId),
-  name: label("name").notNull(),
-  active: flag("active").notNull().default(true),
-  version: bigCount("version").notNull().default(1),
-  createdAt: ts("created_at").notNull().$defaultFn(now),
-  updatedAt: ts("updated_at").notNull().$defaultFn(now),
-});
+export const catalogues = table(
+  "catalogues",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    name: label("name").notNull(),
+    active: flag("active").notNull().default(true),
+    isDefault: flag("is_default").notNull().default(false),
+    version: bigCount("version").notNull().default(1),
+    createdAt: ts("created_at").notNull().$defaultFn(now),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
+  },
+  (t) => [
+    uniqueIndex("catalogues_one_default_uq")
+      .on(t.isDefault)
+      .where(sql`${t.isDefault} = 1`),
+  ],
+);
 
 /** The analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
  * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */

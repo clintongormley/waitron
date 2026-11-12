@@ -49,7 +49,7 @@ useVenueDb({
       await assignCatalogueToVenue(tx, cat.id);
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Free counter" })
+        .values({ name: "Free counter" })
         .returning({ id: floorZones.id });
       free = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },

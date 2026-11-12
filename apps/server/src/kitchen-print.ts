@@ -21,7 +21,6 @@ import {
   partyTables,
   partySurvivors,
   workingOrderLines,
-  venueLocationId,
   readVenueClock,
   workingOrders,
 } from "@waitron/db";
@@ -833,12 +832,6 @@ function foldWholePortions(
   }));
 }
 
-/** Reads, at most once, the venue id a run of print jobs is filed under. */
-function venueOnce(tx: Transaction): () => Promise<string> {
-  let read: Promise<string> | undefined;
-  return () => (read ??= venueLocationId(tx));
-}
-
 /** Enqueue each job with its bill, station and line links. */
 async function enqueueKitchenJobs(
   tx: Transaction,
@@ -846,11 +839,8 @@ async function enqueueKitchenJobs(
   jobs: readonly KitchenJob[],
   reprint: boolean,
 ): Promise<void> {
-  const venue = venueOnce(tx);
   for (const job of jobs) {
-    const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes, "document", {
-      venueId: await venue(),
-    });
+    const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes, "document");
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
     await insertInChunks(
       tx,
@@ -1033,7 +1023,6 @@ export async function enqueuePartyNameChange(
     compareStationNames(stations.get(a)!.name, stations.get(b)!.name),
   );
   const at = new Date().toISOString();
-  const venue = venueOnce(tx);
   for (const route of routeKitchenTickets(sorted, mappingsByStation(mappings))) {
     const visible = [
       ...new Set(
@@ -1057,7 +1046,7 @@ export async function enqueuePartyNameChange(
       timeZone,
     );
     for (const printer of route.printers)
-      await enqueuePrintJob(tx, printer.printerId, bytes, "document", { venueId: await venue() });
+      await enqueuePrintJob(tx, printer.printerId, bytes, "document");
   }
 }
 
@@ -1188,7 +1177,6 @@ async function printKitchenNoteChanges(
   const sorted = [...stationIds].sort((a, b) =>
     compareStationNames(stations.get(a)!.name, stations.get(b)!.name),
   );
-  const venue = venueOnce(tx);
   for (const route of routeKitchenTickets(sorted, mappingsByStation(mappings))) {
     const visible = [
       ...new Set(route.stationIds.flatMap((id) => byStation.get(id)!.map((item) => item.orderId))),
@@ -1225,7 +1213,7 @@ async function printKitchenNoteChanges(
       timeZone,
     );
     for (const printer of route.printers)
-      await enqueuePrintJob(tx, printer.printerId, bytes, "document", { venueId: await venue() });
+      await enqueuePrintJob(tx, printer.printerId, bytes, "document");
   }
 }
 
@@ -1569,7 +1557,6 @@ async function printCorrectionSlips(
   }
 
   const at = new Date().toISOString();
-  const venue = venueOnce(tx);
 
   // Identical whole portions at a station with the same correction share one slip, whatever the
   // station's grouping, as one line of their summed quantity would.
@@ -1634,9 +1621,7 @@ async function printCorrectionSlips(
         timeZone,
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
-          venueId: await venue(),
-        });
+        await enqueuePrintJob(tx, printer.printerId, bytes, "document");
       }
     }
   }
@@ -2022,7 +2007,6 @@ async function printMovedSlips(
   const at = new Date().toISOString();
   const { timeZone } = await readVenueClock(tx);
 
-  const venue = venueOnce(tx);
   for (const stationId of stationIds) {
     const targets = byStation.get(stationId);
     if (targets === undefined) continue;
@@ -2070,9 +2054,7 @@ async function printMovedSlips(
         timeZone,
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
-          venueId: await venue(),
-        });
+        await enqueuePrintJob(tx, printer.printerId, bytes, "document");
       }
     }
   }

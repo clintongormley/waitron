@@ -31,7 +31,7 @@ useVenueDb({
     zoneId = await inTx(venue, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Counter, pays after sending" })
+        .values({ name: "Counter, pays after sending" })
         .returning({ id: floorZones.id });
       await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
       await tx.execute(

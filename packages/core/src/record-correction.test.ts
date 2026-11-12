@@ -30,7 +30,6 @@ import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
-let locationId: string;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
@@ -53,7 +52,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
@@ -74,7 +73,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
-  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
+  const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );

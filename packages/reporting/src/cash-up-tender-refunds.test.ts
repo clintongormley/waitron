@@ -54,7 +54,7 @@ describe("computeCashUp — settled-tender refunds", () => {
     "subtracts a %s return and its tip on completion day and the returning device",
     async (method) => {
       const paid = await target(method);
-      const deviceId = await seedVenueDevice(suite.db, venue.locationId);
+      const deviceId = await seedVenueDevice(suite.db);
       await seedTenderRefund(suite.db, paid, {
         applied: "100.00",
         tip: "7.25",

@@ -8,7 +8,6 @@ import {
   floorPlanSets,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -26,27 +25,22 @@ async function venue(tx: Transaction) {
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
-  const placeId = await venueLocationId(tx);
-  const cfg = { locationId: placeId };
   const restaurant = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
   const bar = await createDepartment(tx, { name: "Bar", orderStart: "table" });
-  return { cfg, restaurant: restaurant.id, bar: bar.id };
+  return { restaurant: restaurant.id, bar: bar.id };
 }
 
-async function newSet(tx: Transaction, cfg: { locationId: string }): Promise<string> {
-  const [row] = await tx
-    .insert(floorPlanSets)
-    .values({ locationId: cfg.locationId })
-    .returning({ id: floorPlanSets.id });
+async function newSet(tx: Transaction): Promise<string> {
+  const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
   return row!.id;
 }
 
 describe("a department's floor plan sets", () => {
   it("makes a department's first set its default", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const { cfg, restaurant } = await venue(tx);
-      const standard = await newSet(tx, cfg);
-      const dinner = await newSet(tx, cfg);
+      const { restaurant } = await venue(tx);
+      const standard = await newSet(tx);
+      const dinner = await newSet(tx);
       await linkFloorPlanSet(tx, {
         setId: standard,
         departmentId: restaurant,
@@ -63,10 +57,10 @@ describe("a department's floor plan sets", () => {
 
   it("lists the default first, then the others by name", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const { cfg, restaurant } = await venue(tx);
+      const { restaurant } = await venue(tx);
       for (const name of ["Standard", "Dinner", "Brunch"])
         await linkFloorPlanSet(tx, {
-          setId: await newSet(tx, cfg),
+          setId: await newSet(tx),
           departmentId: restaurant,
           name,
         });
@@ -81,13 +75,13 @@ describe("a department's floor plan sets", () => {
 
   it("refuses a name the department already has", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const { cfg, restaurant } = await venue(tx);
+      const { restaurant } = await venue(tx);
       await linkFloorPlanSet(tx, {
-        setId: await newSet(tx, cfg),
+        setId: await newSet(tx),
         departmentId: restaurant,
         name: "Dinner",
       });
-      const again = await newSet(tx, cfg);
+      const again = await newSet(tx);
       await expect(
         linkFloorPlanSet(tx, { setId: again, departmentId: restaurant, name: "Dinner" }),
       ).rejects.toMatchObject({
@@ -99,9 +93,9 @@ describe("a department's floor plan sets", () => {
 
   it("allows the same name in two departments", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const { cfg, restaurant, bar } = await venue(tx);
-      const a = await newSet(tx, cfg);
-      const b = await newSet(tx, cfg);
+      const { restaurant, bar } = await venue(tx);
+      const a = await newSet(tx);
+      const b = await newSet(tx);
       await linkFloorPlanSet(tx, { setId: a, departmentId: restaurant, name: "Standard" });
       await linkFloorPlanSet(tx, { setId: b, departmentId: bar, name: "Standard" });
       const sets = await readFloorPlanSets(tx, { setIds: [a, b] });
@@ -119,7 +113,7 @@ describe("a department's floor plan sets", () => {
 
   it("lists a set with its department's zones", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const { cfg, restaurant, bar } = await venue(tx);
+      const { restaurant, bar } = await venue(tx);
       const terrace = await createServiceZone(tx, {
         name: "Terrace",
         departmentId: restaurant,
@@ -131,7 +125,7 @@ describe("a department's floor plan sets", () => {
         displayOrder: 1,
       });
       await createServiceZone(tx, { name: "Counter", departmentId: bar, displayOrder: 0 });
-      const set = await newSet(tx, cfg);
+      const set = await newSet(tx);
       await linkFloorPlanSet(tx, { setId: set, departmentId: restaurant, name: "Standard" });
       const [summary] = await readFloorPlanSets(tx, { setIds: [set] });
       expect(summary).toEqual({
@@ -146,14 +140,14 @@ describe("a department's floor plan sets", () => {
 
   it("leaves out an inactive department's sets and refuses to link one to it", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const { cfg, restaurant, bar } = await venue(tx);
-      const kept = await newSet(tx, cfg);
-      const hidden = await newSet(tx, cfg);
+      const { restaurant, bar } = await venue(tx);
+      const kept = await newSet(tx);
+      const hidden = await newSet(tx);
       await linkFloorPlanSet(tx, { setId: kept, departmentId: restaurant, name: "Standard" });
       await linkFloorPlanSet(tx, { setId: hidden, departmentId: bar, name: "Standard" });
       await tx.update(departments).set({ active: false }).where(eq(departments.id, bar));
       expect((await readFloorPlanSets(tx)).map(({ setId }) => setId)).toEqual([kept]);
-      const another = await newSet(tx, cfg);
+      const another = await newSet(tx);
       await expect(
         linkFloorPlanSet(tx, { setId: another, departmentId: bar, name: "Dinner" }),
       ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: bar } });
@@ -162,20 +156,20 @@ describe("a department's floor plan sets", () => {
 
   it("holds one default per department in the database", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const { cfg, restaurant } = await venue(tx);
+      const { restaurant } = await venue(tx);
       await tx.insert(departmentFloorPlanSets).values({
-        setId: await newSet(tx, cfg),
+        setId: await newSet(tx),
         departmentId: restaurant,
         name: "Standard",
         isDefault: true,
       });
       await tx.insert(departmentFloorPlanSets).values({
-        setId: await newSet(tx, cfg),
+        setId: await newSet(tx),
         departmentId: restaurant,
         name: "Brunch",
         isDefault: false,
       });
-      const second = await newSet(tx, cfg);
+      const second = await newSet(tx);
       await expect(
         tx.insert(departmentFloorPlanSets).values({
           setId: second,

@@ -89,7 +89,6 @@ beforeEach(async () => {
   const [page] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: venue.cfg.locationId,
       name: "Office",
       host: "10.0.0.9",
       port: 631,
@@ -104,7 +103,6 @@ beforeEach(async () => {
   const [portable] = await suite.db
     .insert(printers)
     .values({
-      locationId: venue.cfg.locationId,
       name: "Terrace",
       transport: "network_tcp",
       host: "10.0.0.8",
@@ -336,7 +334,6 @@ it.each(["ended", "suspended", "wrong-device", "disabled", "rotated-token"])(
 it("refuses an ambiguous printer id instead of choosing its kind", async () => {
   await suite.db.insert(pagePrinters).values({
     id: terrace,
-    locationId: venue.cfg.locationId,
     name: "Other office",
     host: "10.0.0.10",
     port: 631,

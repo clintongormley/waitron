@@ -30,10 +30,10 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: venueId };
 }
 
-async function seedAgent(cfg: PrintConfig): Promise<string> {
+async function seedAgent(): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId: cfg.locationId, name: "Kitchen", tokenHash: "scrypt$fixture" })
+    .values({ name: "Kitchen", tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -70,8 +70,8 @@ async function seedPrinterAndJob(): Promise<string> {
 
 describe("print-job lease reclaim", () => {
   it("stamps claimed_at on claim, then RECLAIMS a stuck printing job once the lease has expired", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     const jobId = await seedPrinterAndJob();
 
     // The agent CLAIMS the job (queued → printing, claimed_at stamped) in its own committed transaction,
@@ -112,8 +112,8 @@ describe("print-job lease reclaim", () => {
   });
 
   it("RECLAIMS an anomalous printing job whose claimed_at is NULL (no live lease)", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     const jobId = await seedPrinterAndJob();
 
     // Force the row into the anomalous state the lease's own guarantee must cover: `printing` with NO
@@ -152,8 +152,8 @@ describe("print-job lease reclaim", () => {
   });
 
   it("does NOT steal a live claim: a freshly-claimed printing job (lease not expired) is not re-selected", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
     const jobId = await seedPrinterAndJob();
 
     const claimed = await withTransaction(suite.db, (tx: Transaction) =>

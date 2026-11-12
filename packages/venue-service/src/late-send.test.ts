@@ -31,7 +31,7 @@ async function seedLocation(name: string): Promise<string> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
   const locationId = venueId;
-  await db.insert(kitchenStations).values({ locationId, name: "Default prep", isDefault: true });
+  await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
   return locationId;
 }
 

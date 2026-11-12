@@ -9,7 +9,6 @@ import {
   parties,
   partyTables,
   serviceCommands,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -28,13 +27,14 @@ import {
 } from "@waitron/venue-service";
 import type { KitchenNoteSnapshot } from "@waitron/module";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let deviceId: string;
 let profileId: string;
 let tableZoneId: string;
@@ -53,7 +53,6 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     tipsEnabled: false,

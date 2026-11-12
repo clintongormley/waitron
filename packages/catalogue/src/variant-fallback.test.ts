@@ -105,10 +105,7 @@ beforeEach(async () => {
     );
     const [course, ownCourse] = await tx
       .insert(kitchenCourses)
-      .values([
-        { locationId: venue.locationId, name: "Drinks" },
-        { locationId: venue.locationId, name: "Dessert wine" },
-      ])
+      .values([{ name: "Drinks" }, { name: "Dessert wine" }])
       .returning({ id: kitchenCourses.id });
     const parent = await createProduct(tx, {
       catalogueId: catalogue.id,

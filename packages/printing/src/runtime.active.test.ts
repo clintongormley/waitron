@@ -28,10 +28,10 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: venueId };
 }
 
-async function seedAgent(cfg: PrintConfig): Promise<string> {
+async function seedAgent(): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId: cfg.locationId, name: "Kitchen", tokenHash: "scrypt$fixture" })
+    .values({ name: "Kitchen", tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -52,8 +52,8 @@ async function deactivate(printerId: string): Promise<void> {
 
 describe("claimPrintJobs respects printers.active", () => {
   it("does NOT claim a queued job for a DEACTIVATED printer, but DOES for an active one", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
 
     // Both jobs are enqueued while ACTIVE (enqueue itself rejects an inactive printer), then one
     // printer is deactivated.
@@ -84,8 +84,8 @@ describe("claimPrintJobs respects printers.active", () => {
   });
 
   it("does NOT lease-reclaim a stuck printing job for a DEACTIVATED printer", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    await setup();
+    const agentId = await seedAgent();
 
     const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, {
@@ -129,7 +129,7 @@ describe("a print job's claim stamped ahead of the clock", () => {
     claimedAt: Date,
   ): Promise<{ cfg: PrintConfig; agentId: string; jobId: string }> {
     const cfg = await setup();
-    const agentId = await seedAgent(cfg);
+    const agentId = await seedAgent();
     const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, {
         name: "Kitchen",

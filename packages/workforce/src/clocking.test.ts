@@ -127,7 +127,7 @@ describe("clock state machine", () => {
   it("records the device and the recorder when supplied", async () => {
     const p = await freshPerson("attribution");
     const supervisor = await freshPerson("supervisor");
-    const { deviceId } = await seedDevice(suite.db, { locationId: locationId });
+    const { deviceId } = await seedDevice(suite.db, {});
     await run((tx) =>
       backend.clockIn(tx, {
         nodeId,

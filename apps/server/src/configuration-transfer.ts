@@ -1,6 +1,5 @@
 export {
   buildConfigurationBundle,
-  applyPreparedVenue,
   exportConfigurationTables,
   encodeConfigurationBundle,
   decodeConfigurationBundle,

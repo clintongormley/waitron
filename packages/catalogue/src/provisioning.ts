@@ -19,6 +19,7 @@ import { readSavedContentLanguages, writeContentLanguages } from "./content-lang
 import { createMenuShell } from "./menu-structure.js";
 import { assignCatalogueToVenue } from "./operations.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
+import { readDefaultCatalogueId } from "./operations.js";
 
 /** The starter units, by their English staff names; their words in other languages are in
  * `starter-content.ts`. */
@@ -111,7 +112,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           }),
         );
       }
-      let catalogueId = venue.defaultCatalogueId;
+      let catalogueId = await readDefaultCatalogueId(tx);
       if (catalogueId === null) {
         const [created] = await tx
           .insert(catalogues)

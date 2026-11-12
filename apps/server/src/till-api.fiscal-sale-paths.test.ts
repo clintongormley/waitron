@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
@@ -19,7 +20,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -70,8 +70,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OrderFlow } from "./till-config.js";
-import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -128,10 +127,9 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -144,7 +142,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
  * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(): Promise<{
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   catalogueId: string;
   available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
@@ -180,8 +178,7 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
-  const cfg = tillConfigFromVenue(venue, venueId);
+  const cfg = tillConfigFromVenue(venue);
   const [department] = await suite.db.select().from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
@@ -227,7 +224,7 @@ async function setupVenue(): Promise<{
     await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     const defaultStation = sql`(select id from kitchen_stations
-           where location_id = ${cfg.locationId} and is_default)`;
+           where is_default)`;
     await tx.insert(routingCells).values([
       { categoryId: foodCategory.id, stationId: defaultStation },
       { categoryId: drinkCategory.id, stationId: defaultStation },
@@ -3067,7 +3064,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     // the prep call lets that call send the same stored dish.
     await suite.db.execute(sql`
       update kitchen_stations set active = 0
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sale = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -3088,7 +3085,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
 
     await suite.db.execute(sql`
       update kitchen_stations set active = 1
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -3111,7 +3108,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     // the prep call lets that call send the same stored dish.
     await suite.db.execute(sql`
       update kitchen_stations set active = 0
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sale = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -3126,7 +3123,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
 
     await suite.db.execute(sql`
       update kitchen_stations set active = 1
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -3208,7 +3205,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   async function venueWithTill(orderFlow: OrderFlow = "prepay") {
     const venue = await setupVenue();
-    const cfg: WithVenueRowId = { ...venue.cfg };
+    const cfg: TradingContext = { ...venue.cfg };
     await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, {
         orderStart: "counter",

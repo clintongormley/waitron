@@ -59,9 +59,9 @@ useVenueDb({
 const NOW = new Date("2026-10-11T12:00:00Z");
 const seatFor = () => floorDeletionFor([BOOKINGS_TABLE_REMOVAL]);
 
-async function zone(name: string, locationId = v.cfg.locationId as string) {
+async function zone(name: string) {
   const id = randomUUID();
-  await inTx(v, (tx) => tx.insert(floorZones).values({ id, locationId, name: `${name} ${id}` }));
+  await inTx(v, (tx) => tx.insert(floorZones).values({ id, name: `${name} ${id}` }));
   return id;
 }
 async function impact(zoneIds: string[]) {
@@ -110,9 +110,9 @@ async function snapshot(tx: Transaction) {
   return result;
 }
 
-async function planned(z: string, prefix: string, locationId = v.cfg.locationId as string) {
+async function planned(z: string, prefix: string) {
   return inTx(v, async (tx) => {
-    const [set] = await tx.insert(floorPlanSets).values({ locationId }).returning();
+    const [set] = await tx.insert(floorPlanSets).values({}).returning();
     const [plan] = await tx
       .insert(floorPlans)
       .values({ zoneId: z, setId: set!.id, savedAt: NOW.toISOString() })
@@ -130,7 +130,6 @@ async function planned(z: string, prefix: string, locationId = v.cfg.locationId 
       .insert(diningTables)
       .values(
         masters.map((master, i) => ({
-          locationId,
           zoneId: z,
           label: `${prefix} live ${["C", "A", "B"][i]}`,
           planTableId: master.id,
@@ -178,7 +177,7 @@ async function planned(z: string, prefix: string, locationId = v.cfg.locationId 
       .returning();
     const [noToday] = await tx
       .insert(diningTables)
-      .values({ locationId, zoneId: z, label: `${prefix} no today` })
+      .values({ zoneId: z, label: `${prefix} no today` })
       .returning();
     return {
       plan: plan!,

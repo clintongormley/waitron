@@ -1,17 +1,17 @@
+import type { TradingContext } from "./trading-context.js";
 /**
  * Device join-and-accept, plus direct cases over `resolveDeviceKitchenScreens` and `insertDevice`.
  */
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, withTransaction, venueLocationId } from "@waitron/db";
+import { deviceProfiles, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { insertDevice, resolveDeviceKitchenScreens } from "./device.js";
@@ -28,7 +28,7 @@ const suite = useVenueDb({
 });
 
 interface SeededVenue {
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   stationId: string;
 }
 
@@ -41,11 +41,9 @@ async function setupVenue(): Promise<SeededVenue> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(admin);
   const nodeId = await seedNode(admin);
-  const cfg: WithVenueRowId = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -92,15 +90,15 @@ function changedCounts(
   );
 }
 
-async function activeNamed(locationId: string, label: string): Promise<number> {
+async function activeNamed(label: string): Promise<number> {
   const { rows } = await suite.db.execute<{ n: number }>(sql`
     select count(*) as n from devices
-    where location_id = ${locationId} and label = ${label} and active = 1`);
+    where label = ${label} and active = 1`);
   return rows[0]!.n;
 }
 
-function deviceValues(locationId: string, deviceProfileId: string, label: string) {
-  return { id: randomUUID(), locationId, deviceProfileId, label, tokenHash: "x", active: true };
+function deviceValues(deviceProfileId: string, label: string) {
+  return { id: randomUUID(), deviceProfileId, label, tokenHash: "x", active: true };
 }
 
 /** The enrolled device's profile and label, read straight off the table rather than out of the
@@ -428,7 +426,7 @@ describe("device names among a location's active devices", () => {
     ).rejects.toMatchObject({ code: "device.name_taken" });
 
     expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token, window)).toBe("pending");
-    expect(await activeNamed(cfg.locationId, "Bar")).toBe(1);
+    expect(await activeNamed("Bar")).toBe(1);
   });
 
   it("accepts the name of a revoked device there", async () => {
@@ -440,7 +438,7 @@ describe("device names among a location's active devices", () => {
     const second = await enrolDeviceForTest(suite.db, cfg, { name: "Bar", profileId });
 
     expect(second.deviceId).not.toBe(first.deviceId);
-    expect(await activeNamed(cfg.locationId, "Bar")).toBe(1);
+    expect(await activeNamed("Bar")).toBe(1);
   });
 });
 
@@ -456,10 +454,8 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
 
   it("rethrows a device insert that fails for a reason other than a duplicate name, untranslated", async () => {
     await setupVenue();
-    const profileId = await seedProfile("till", "Till profile");
-    // A location id no `locations` row carries, so the insert breaks its foreign key.
     const refusal = await withTransaction(suite.db, (tx) =>
-      insertDevice(tx, deviceValues(randomUUID(), profileId, "Till 9")),
+      insertDevice(tx, deviceValues(randomUUID(), "Till 9")),
     ).then(
       () => undefined,
       (error: unknown) => error,
@@ -473,23 +469,21 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Till profile");
     await enrolDeviceForTest(suite.db, cfg, { name: "Till 1", profileId });
-    // One device per location makes a differently named device collide on a key that is not the
-    // name key.
     await suite.db.execute(
-      sql`create unique index devices_one_per_location on devices (location_id)`,
+      sql`create unique index devices_one_per_profile on devices (device_profile_id)`,
     );
     try {
       const refusal = await withTransaction(suite.db, (tx) =>
-        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Till 2")),
+        insertDevice(tx, deviceValues(profileId, "Till 2")),
       ).then(
         () => undefined,
         (error: unknown) => error,
       );
       expect(refusal).toBeInstanceOf(Error);
       expect(refusal).not.toHaveProperty("code", "device.name_taken");
-      expect(String(refusal)).toMatch(/UNIQUE constraint failed: devices\.location_id/);
+      expect(String(refusal)).toMatch(/UNIQUE constraint failed: devices\.device_profile_id/);
     } finally {
-      await suite.db.execute(sql`drop index devices_one_per_location`);
+      await suite.db.execute(sql`drop index devices_one_per_profile`);
     }
   });
 
@@ -499,11 +493,11 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
     await enrolDeviceForTest(suite.db, cfg, { name: "Till 1", profileId });
     // An index over an expression: its refusal names the index, not a table and columns.
     await suite.db.execute(
-      sql`create unique index devices_one_per_location_expr on devices (lower(location_id))`,
+      sql`create unique index devices_one_per_profile_expr on devices (lower(device_profile_id))`,
     );
     try {
       const refusal = await withTransaction(suite.db, (tx) =>
-        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Till 2")),
+        insertDevice(tx, deviceValues(profileId, "Till 2")),
       ).then(
         () => undefined,
         (error: unknown) => error,
@@ -511,10 +505,10 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
       expect(refusal).toBeInstanceOf(Error);
       expect(refusal).not.toHaveProperty("code", "device.name_taken");
       expect(String(refusal)).toMatch(
-        /UNIQUE constraint failed: index 'devices_one_per_location_expr'/,
+        /UNIQUE constraint failed: index 'devices_one_per_profile_expr'/,
       );
     } finally {
-      await suite.db.execute(sql`drop index devices_one_per_location_expr`);
+      await suite.db.execute(sql`drop index devices_one_per_profile_expr`);
     }
   });
 });

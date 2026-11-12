@@ -13,7 +13,6 @@ import {
   products,
   kitchenStations,
   nextStationColour,
-  venueLocationId,
 } from "@waitron/db";
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -97,7 +96,6 @@ export async function createStation(
     const [row] = await tx
       .insert(kitchenStations)
       .values({
-        locationId: await venueLocationId(tx),
         name: input.name,
         isDefault: input.isDefault ?? false,
         printMovedSlips: true,
@@ -286,7 +284,6 @@ export async function createCourse(
     const [row] = await tx
       .insert(kitchenCourses)
       .values({
-        locationId: await venueLocationId(tx),
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
         heldUntilFired: input.heldUntilFired ?? true,

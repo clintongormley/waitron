@@ -7,7 +7,6 @@ import {
   categories,
   products,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -21,7 +20,7 @@ import {
 } from "@waitron/catalogue";
 import type { MenuPreview, MenuStatus } from "@waitron/catalogue";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/catalogue";
-import { nodeId as brandNodeId, type ContentLanguageRules } from "@waitron/shared";
+import { type ContentLanguageRules } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { libraryImageName, seedLibraryImages } from "@waitron/catalogue/test/library-images.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -31,7 +30,7 @@ import { venueFiscalSelection } from "@waitron/provisioning";
 import { createCourse } from "./kitchen.js";
 import { setRoutingCell, createDepartment, configureZone } from "@waitron/venue-service";
 import { floorZones, kitchenStations } from "@waitron/db";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
@@ -600,7 +599,6 @@ describe("GET /management-api/products/menus", () => {
   });
 });
 
-let locationId: string;
 let managerCookie: string;
 let managerPersonId: string;
 let staffCookie: string;
@@ -614,7 +612,7 @@ const suite = useVenueDb({
     await seedLegacySellingUnits(db);
     // The venue's one `locations` row: the venue menu routes act on it and `venueCfg` names its id.
     await seedVenue(db, { name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" });
-    locationId = await venueLocationId(db);
+
     // A MANAGER (holds `catalogue.manage`) and a STAFF person (holds no `catalogue.manage`), each with a
     // live management session.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
@@ -656,27 +654,13 @@ beforeEach(async () => {
   );
 });
 
-/**
- * The venue's location id, for the kitchen stations and zones these cases insert and look up
- * directly; the other fields only fill the type.
- */
-function venueCfg(): WithVenueRowId {
-  return {
-    nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-    locationId: locationId,
-    locale: "es-ES",
-    tipsEnabled: false,
-    simplifiedInvoiceLimit: null,
-  };
-}
-
 function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageRules): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
     {
       db: suite.db,
-      venueCfg: venueCfg(),
+
       venueLocale,
       ...(contentLanguageRules === undefined ? {} : { contentLanguageRules }),
     },
@@ -1412,7 +1396,7 @@ describe("mountCatalogueApi — catalogues", () => {
 
 describe("mountCatalogueApi — the venue's menus", () => {
   beforeEach(async () => {
-    await suite.db.execute(sql`update locations set catalogue_id = null`);
+    await suite.db.execute(sql`update catalogues set is_default = 0`);
   });
 
   const defaultPath = () => "/management-api/venue/default-catalogue";
@@ -1425,7 +1409,7 @@ describe("mountCatalogueApi — the venue's menus", () => {
     const res = await send(app, "PUT", defaultPath(), { body: { catalogueId: day } });
     expect(res.status).toBe(204);
     const rows = await suite.db.execute<{ catalogue_id: string }>(
-      sql`select catalogue_id from locations`,
+      sql`select id as catalogue_id from catalogues where is_default = 1`,
     );
     expect(rows.rows).toEqual([{ catalogue_id: day }]);
   });
@@ -1729,23 +1713,16 @@ describe("mountCatalogueApi — products", () => {
     const mojito = await create("Mojito", cocktails);
     const bread = await create("Bread", null);
     await withTransaction(suite.db, async (tx) => {
-      const cfg = venueCfg();
       const [bar, cocktailBar] = await tx
         .insert(kitchenStations)
-        .values([
-          { locationId: cfg.locationId, name: "Bar", isDefault: true },
-          { locationId: cfg.locationId, name: "Cocktail bar" },
-        ])
+        .values([{ name: "Bar", isDefault: true }, { name: "Cocktail bar" }])
         .returning();
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId: drinks }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
-      const [terrace] = await tx
-        .insert(floorZones)
-        .values({ locationId: cfg.locationId, name: "Terrace" })
-        .returning();
+      const [terrace] = await tx.insert(floorZones).values({ name: "Terrace" }).returning();
       const department = await createDepartment(tx, {
         name: "Dining",
         orderStart: "table",
@@ -1764,16 +1741,10 @@ describe("mountCatalogueApi — products", () => {
     expect(body[mojito]).toMatchObject({ stationName: "Bar", variesByZone: true });
     expect(body[bread]).toMatchObject({ stationName: "Bar", variesByZone: false });
     const cocktailBarId = await withTransaction(suite.db, async (tx) => {
-      const cfg = venueCfg();
       const [cocktailBar] = await tx
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
-        .where(
-          and(
-            eq(kitchenStations.locationId, cfg.locationId),
-            eq(kitchenStations.name, "Cocktail bar"),
-          ),
-        );
+        .where(and(eq(kitchenStations.name, "Cocktail bar")));
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId: drinks }, zoneId: null },

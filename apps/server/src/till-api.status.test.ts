@@ -3,7 +3,7 @@ import { createZone } from "./testing/service-zone.js";
 
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { venueLocationId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -16,13 +16,14 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import "./errors.js";
 import { seedSessionDevice } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // Venue-made table statuses are retired: the till API serves neither the status list nor the
 // set-status route, and the floor read carries no manual status.
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let ana: { id: string };
 let TABLE_ID: string;
 
@@ -38,14 +39,14 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    const locationId = await venueLocationId(db);
+
     const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(locationId, nodeId);
+    cfg = makeCfg(nodeId);
     TABLE_ID = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, {
         label: "T1",
@@ -62,10 +63,9 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
+function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

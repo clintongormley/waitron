@@ -2,7 +2,7 @@ import type { ConfigurationBundle } from "../src/configuration-transfer.js";
 
 export function configurationBundle(): ConfigurationBundle {
   return {
-    version: 18,
+    version: 19,
     contentLanguages: null,
     holidayArea: null,
     settings: {},
@@ -28,7 +28,6 @@ export function configurationBundle(): ConfigurationBundle {
       timeZone: "Europe/London",
       dayCutover: "06:00:00",
     },
-    defaultCatalogueId: null,
     privacyContact: {
       privacyNoticeUrl: "https://example.com/privacy",
       privacyEmail: "privacy@example.com",

@@ -50,6 +50,9 @@ import {
   sealedStateAlertSource,
 } from "./alert-sources.js";
 import { createTtlCache } from "./ttl-cache.js";
+import { createAlertRegistry } from "./alerts.js";
+import { ALL_ALERT_CLAIMS } from "./modules.js";
+import "./errors.js";
 
 // No real role holds hardware.manage without fiscal.view and system.manage, so a test replaces
 // one role's held set while the real alert claims stay in force.
@@ -65,9 +68,6 @@ vi.mock("@waitron/identity", async (importOriginal) => {
 afterEach(() => {
   roleOverride.clear();
 });
-import { createAlertRegistry } from "./alerts.js";
-import { ALL_ALERT_CLAIMS } from "./modules.js";
-import "./errors.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -721,7 +721,7 @@ async function seedLowReader(name = "Card reader"): Promise<void> {
 
 /** A document print job old enough to count as stuck, on an active printer. */
 async function seedStuckPrintJob(): Promise<void> {
-  const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+  await db.insert(locations).values({}).returning({ id: locations.id });
   await seedVenueSettings(db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
@@ -731,7 +731,6 @@ async function seedStuckPrintJob(): Promise<void> {
   const [printer] = await db
     .insert(printers)
     .values({
-      locationId: loc!.id,
       name: "Bar",
       transport: "network_tcp",
       host: "10.0.0.1",
@@ -739,7 +738,6 @@ async function seedStuckPrintJob(): Promise<void> {
     })
     .returning({ id: printers.id });
   await db.insert(printJobs).values({
-    locationId: loc!.id,
     printerId: printer!.id,
     payload: Uint8Array.from([0x01]),
     kind: "document",

@@ -74,7 +74,7 @@ async function venue() {
   const locationId = venueId;
   const [station] = await db
     .insert(kitchenStations)
-    .values({ locationId, name: "Kitchen", isDefault: true })
+    .values({ name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
   return scoped(async (tx) => {
     const seasons = await ensureDefaultSeasons(tx);
@@ -364,7 +364,7 @@ describe("deleting a period", () => {
     const v = await venue();
     const [barStation] = await db
       .insert(kitchenStations)
-      .values({ locationId: v.locationId, name: "Bar" })
+      .values({ name: "Bar" })
       .returning({ id: kitchenStations.id });
     const [cocktails] = await db
       .insert(categories)

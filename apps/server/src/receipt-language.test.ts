@@ -63,7 +63,6 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,
@@ -119,7 +118,7 @@ const MADRID = { postalCode: "28013", city: "Madrid", province: "Madrid" };
 
 interface Venue {
   app: Hono;
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   session: string;
   /** The session plus an enrolled till device, as a sale is sent. */
   till: string;
@@ -168,7 +167,6 @@ async function venueWith(
     }),
     ...loadTillAppSettings({}),
     locale: await readVenueLocale(db),
-    locationId: venueId,
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {
@@ -176,7 +174,7 @@ async function venueWith(
       defaultContentLanguage: "es",
       contentLanguages: ["es", "ca", "gl"],
     });
-    const menu = await createCatalogue(tx, { name: `Receipt language menu ${cfg.locationId}` });
+    const menu = await createCatalogue(tx, { name: `Receipt language menu ${venueId}` });
     const category = await createCategory(tx, { name: "Tapas" });
     // The staff, customer-facing and kitchen names all differ (docs/developers/products.md).
     const product = await createProduct(tx, {

@@ -1,9 +1,10 @@
+import type { TradingContext } from "./trading-context.js";
 import { createZone } from "./testing/service-zone.js";
 
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { withTransaction, venueLocationId } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -19,7 +20,6 @@ import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import type { ModuleRouteContext } from "@waitron/module";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import {
   finishTable,
@@ -54,7 +54,7 @@ const LOCALE = "es-ES";
 const noopLog: Logger = () => {};
 
 interface Venue {
-  tillCfg: WithVenueRowId;
+  tillCfg: TradingContext;
   ctx: ModuleRouteContext;
   managerId: string;
   managerCookie: string;
@@ -66,11 +66,9 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
-  const tillCfg: WithVenueRowId = {
+  const tillCfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -189,9 +187,8 @@ describe("bookings seat route → real seatTable", () => {
     const order = await db.execute<{
       source: string;
       device_id: string | null;
-      location_id: string;
     }>(
-      sql`select wo.source, wo.device_id, wo.location_id
+      sql`select wo.source, wo.device_id
             from working_orders wo join bookings b on b.tab_id = wo.id
            where wo.id = ${tabId}`,
     );
@@ -199,7 +196,6 @@ describe("bookings seat route → real seatTable", () => {
       {
         source: "dashboard",
         device_id: null,
-        location_id: v.tillCfg.locationId,
       },
     ]);
   });

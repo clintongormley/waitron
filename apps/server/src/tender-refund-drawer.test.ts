@@ -13,7 +13,6 @@ import {
   sales,
   tenderRefunds,
   tenders,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -21,13 +20,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { enqueueTenderRefundDrawer } from "./receipt-print.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 const store = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const AUTH = { authorizedBy: "cccccccc-0000-4000-8000-000000000002", viaOverride: true };
 const AT = "2026-10-16T09:00:00.000Z";
-let cfg: WithVenueRowId<DeviceRequestConfig>;
+let cfg: DeviceRequestConfig;
 let profileId: string;
 let saleId: string;
 let tenderId: string;
@@ -36,13 +34,11 @@ let receiptId: string;
 beforeEach(async () => {
   const db = store.db;
   await seedVenue(db, { name: "Returns", invoiceLocales: ["en"], operationDescription: "Meals" });
-  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: ["take-cash", "open-cash-drawer"] });
   profileId = device.profileId;
   cfg = {
     nodeId,
-    locationId: placeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en",
     tipsEnabled: true,
@@ -80,14 +76,12 @@ beforeEach(async () => {
     .insert(printers)
     .values([
       {
-        locationId: placeId,
         name: "Drawer",
         transport: "cloud_poll",
         pollId: randomUUID(),
         hasCashDrawer: true,
       },
       {
-        locationId: placeId,
         name: "Receipt",
         transport: "cloud_poll",
         pollId: randomUUID(),
@@ -130,7 +124,6 @@ async function refund(patch: Partial<typeof tenderRefunds.$inferInsert> = {}) {
       source: "device",
       deviceId: cfg.origin.deviceId,
       nodeId: cfg.nodeId,
-      locationId: cfg.locationId,
       method: "cash",
       manual: false,
       state: "completed",

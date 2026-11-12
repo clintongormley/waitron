@@ -9,7 +9,6 @@ import {
   joinRequests,
   nowIso,
   printAgents,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { deviceTokenMatches, endDeviceSessions, hashDeviceToken } from "@waitron/identity";
@@ -205,7 +204,6 @@ export async function createJoinRequest(
     .values({
       ...(returningId === undefined ? {} : { id: returningId }),
       nodeId: cfg.nodeId,
-      locationId: await venueLocationId(tx),
       kind: input.kind,
       label: input.label,
       tokenHash,
@@ -556,7 +554,6 @@ export async function acceptDeviceJoinRequest(
 
   await insertDevice(tx, {
     id: row.id,
-    locationId: await venueLocationId(tx),
     deviceProfileId: input.profileId,
     label: input.label,
     tokenHash: row.tokenHash,
@@ -603,7 +600,6 @@ export async function acceptPrintAgentJoinRequest(
 
   await tx.insert(printAgents).values({
     id: row.id,
-    locationId: await venueLocationId(tx),
     name: row.label,
     tokenHash: row.tokenHash,
     active: true,
@@ -716,7 +712,6 @@ export async function selfEnrolNodeAgent(
   const agentId = randomUUID();
   await tx.insert(printAgents).values({
     id: agentId,
-    locationId: await venueLocationId(tx),
     nodeId: input.nodeId,
     name: input.name,
     tokenHash,

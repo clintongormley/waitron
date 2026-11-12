@@ -84,11 +84,7 @@ async function enrolTill(): Promise<string> {
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  await inTx(v, async (tx) =>
-    tx.run(
-      sql`update kitchen_stations set active = 0 where location_id = ${v.cfg.locationId} and is_default`,
-    ),
-  );
+  await inTx(v, async (tx) => tx.run(sql`update kitchen_stations set active = 0 where is_default`));
   app = new Hono();
   mountTillApi(
     app,
@@ -131,7 +127,7 @@ async function station(name: string): Promise<string> {
   const [row] = await inTx(v, (tx) =>
     tx
       .insert(kitchenStations)
-      .values({ locationId: v.cfg.locationId, name: `${name} ${randomUUID()}` })
+      .values({ name: `${name} ${randomUUID()}` })
       .returning({ id: kitchenStations.id }),
   );
   return row!.id;
@@ -451,7 +447,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const zoneId = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: `Barra ticket ${randomUUID()}` })
+        .values({ name: `Barra ticket ${randomUUID()}` })
         .returning({ id: floorZones.id });
       return (
         await offerProducts(tx, v.cfg, {
@@ -947,9 +943,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     });
 
     await inTx(v, async (tx) =>
-      tx.run(
-        sql`update kitchen_stations set active = 1 where location_id = ${v.cfg.locationId} and is_default`,
-      ),
+      tx.run(sql`update kitchen_stations set active = 1 where is_default`),
     );
 
     for (const sent of [await round(missing), await round(stranded)])
@@ -1683,7 +1677,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       await tx
         .update(kitchenStations)
         .set({ isDefault: false })
-        .where(eq(kitchenStations.locationId, v.cfg.locationId));
+        .where(sql`true`);
       await tx
         .update(kitchenStations)
         .set({ isDefault: true })

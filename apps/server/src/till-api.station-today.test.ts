@@ -94,12 +94,10 @@ beforeEach(async () => {
   });
   ({ manager, staff, bar, grill, pastry } = fixture);
   const managerDevice = await seedDevice(suite.db, {
-    locationId: v.cfg.locationId,
     capabilities: [],
   });
   managerDeviceId = managerDevice.deviceId;
   const waiterDevice = await seedDevice(suite.db, {
-    locationId: v.cfg.locationId,
     capabilities: ["take-orders", "open-cash-drawer"],
   });
   staffDevice = waiterDevice.deviceId;

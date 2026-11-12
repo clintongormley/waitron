@@ -210,8 +210,8 @@ afterAll(async () => {
 
 /** One filed sale and a chain head pointing at it, as `restore-fiscal-e2e.test.ts` seeds them. */
 async function seedFiscalRecord(db: Database): Promise<void> {
-  await seedDevice(db, { locationId: ids.location });
-  const device = sql`(select id from devices where location_id = ${ids.location})`;
+  await seedDevice(db, {});
+  const device = sql`(select id from devices)`;
   await db.insert(sales).values({
     id: ids.sale,
     source: "device",
@@ -628,6 +628,7 @@ describe("waitron-restore restore --from-archive", () => {
     const f = await fixture();
     f.get = (_key, _out, call) =>
       new Promise((_resolve, reject) => {
+        if (call.signal.aborted) return reject(new Error("aborted"));
         call.signal.addEventListener("abort", () => reject(new Error("aborted")));
       });
     const { code, out } = await run(f, [], { archiveTimeoutMs: 20 });

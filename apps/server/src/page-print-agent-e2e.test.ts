@@ -505,7 +505,6 @@ async function officePrinter(
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: v.locationId,
       name,
       host: "127.0.0.1",
       port: printer.port,

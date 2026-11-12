@@ -11,7 +11,6 @@ import {
   openVenueDatabase,
   printAgents,
   products,
-  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
@@ -60,11 +59,12 @@ import { fixturePasswordHash, fixturePinHash } from "../../src/testing/known-sec
 import { createTable } from "../../src/testing/live-table.js";
 import { BASIC_ACTIONS } from "../../src/testing/session-device.js";
 import { testTradingAdmission } from "../../src/testing/trading-admission.js";
-import type { WithVenueRowId } from "../../src/testing/venue-row-id.js";
+
 import { offerProducts, routeCategoryTo } from "../../src/testing/zone-offers.js";
 import { mountTillApi } from "../../src/till-api.js";
 import { systemClock } from "../../src/till-backend.js";
 import { BENCH_PROFILE } from "./profile.js";
+import type { TradingContext } from "../../src/trading-context.js";
 
 const LOCALE = "es-ES";
 const TILL_CAPABILITIES = [
@@ -123,7 +123,7 @@ export interface BenchVenue {
   seed: number;
   db: Database;
   nodeId: NodeId;
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   /** Till, device, print, report, me and management routes. */
   app: Hono;
   tills: BenchTill[];
@@ -180,9 +180,8 @@ export async function openBenchVenue(
     const nodeId = brandNodeId(
       db.all<{ id: string }>(sql`select id from nodes order by rowid limit 1`)[0]!.id,
     );
-    const cfg: WithVenueRowId = {
+    const cfg: TradingContext = {
       nodeId,
-      locationId: await venueLocationId(db),
       locale: LOCALE,
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
@@ -277,7 +276,7 @@ async function renewDeviceTokens(db: Database): Promise<Record<string, string>> 
  * The bench's one print agent, joined and accepted as the dashboard accepts one on first open, and
  * given a new token on every later open: like a device's, its token is stored hashed.
  */
-async function printAgentToken(db: Database, cfg: WithVenueRowId): Promise<string> {
+async function printAgentToken(db: Database, cfg: TradingContext): Promise<string> {
   const [agent] = await db
     .select({ id: printAgents.id })
     .from(printAgents)
@@ -322,7 +321,7 @@ const COURSES = [
 /** Seeds the venue and answers each enrolled device's cookie by id. */
 async function seed(
   db: Database,
-  cfg: WithVenueRowId,
+  cfg: TradingContext,
   seedValue: number,
 ): Promise<Record<string, string>> {
   const random = seededRandom(seedValue);
@@ -384,7 +383,7 @@ async function seed(
       const departmentId = departmentIds[Math.floor(z / zonesPerDepartment)]!;
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: cfg.locationId, name: `Bench zone ${z + 1}` })
+        .values({ name: `Bench zone ${z + 1}` })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: zone!.id, departmentId, orderStart: "table" });
       await offerProducts(tx, cfg, { zone: { zoneId: zone!.id }, orderStart: "table" });
@@ -560,7 +559,7 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
   };
 }
 
-function mount(db: Database, cfg: WithVenueRowId, log: Logger): Hono {
+function mount(db: Database, cfg: TradingContext, log: Logger): Hono {
   const clock = systemClock();
   const environment = deploymentEnvironment({});
   const backend = new VerifactuBackend({

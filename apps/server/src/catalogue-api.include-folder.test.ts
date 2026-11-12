@@ -6,7 +6,7 @@ import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { DocumentMember, MenuPreview, MenuStructureNode } from "@waitron/catalogue";
 import { mediaImages } from "@waitron/media";
-import { nodeId as brandNodeId } from "@waitron/shared";
+
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -59,12 +59,7 @@ function mountApp(): Hono {
     app,
     {
       db: suite.db,
-      venueCfg: {
-        nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-        locale: "es-ES",
-        tipsEnabled: false,
-        simplifiedInvoiceLimit: null,
-      },
+
       venueLocale: "es-ES",
     },
     noopLog,

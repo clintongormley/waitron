@@ -23,7 +23,6 @@ import {
   workingOrders,
   products,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -76,7 +75,7 @@ import type { TranslationItemPage } from "@waitron/catalogue/src/content-transla
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { CAPABILITY_FLAGS, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
@@ -158,10 +157,9 @@ function nextNif(): string {
   return nifWithControlLetter(64_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -173,7 +171,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
  *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
  *  against. */
 async function setupVenue(): Promise<{
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   each: AvailableProduct & { menuItemId: string };
   operatorId: string;
   supervisorId: string;
@@ -209,8 +207,7 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
-  const cfg = tillConfigFromVenue(venue, venueId);
+  const cfg = tillConfigFromVenue(venue);
   venueReceiptPrinter = null;
   const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -296,10 +293,7 @@ let venueReceiptPrinter: string | null = null;
 
 /** Puts every device of the venue, and each one enrolled after, on `printerId` for receipts and
  *  payment slips; `null` leaves them with no printer. */
-async function configureReceipt(
-  cfg: WithVenueRowId,
-  opts: { printerId?: string | null },
-): Promise<void> {
+async function configureReceipt(opts: { printerId?: string | null }): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     if (opts.printerId !== undefined) {
       venueReceiptPrinter = opts.printerId;
@@ -310,7 +304,7 @@ async function configureReceipt(
           paymentSlipPrinterId: opts.printerId,
           cashDrawerPrinterId: opts.printerId,
         })
-        .where(eq(devices.locationId, cfg.locationId));
+        .where(sql`true`);
     }
   });
 }
@@ -368,15 +362,13 @@ async function drawerOpensFor(cfg: TradingContext): Promise<
   });
 }
 
-async function fiscalRecordCount(cfg: TradingContext): Promise<number> {
-  void cfg;
+async function fiscalRecordCount(): Promise<number> {
   return withTransaction(suite.db, async (tx) => {
     return (await tx.select().from(registrosFacturacion)).length;
   });
 }
 
-async function saleCount(cfg: TradingContext): Promise<number> {
-  void cfg;
+async function saleCount(): Promise<number> {
   return withTransaction(suite.db, async (tx) => {
     return (await tx.select({ id: sales.id }).from(sales)).length;
   });
@@ -502,7 +494,7 @@ it.each(["cash", "card"] as const)(
   async (method) => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -527,7 +519,7 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
   it("reopens a filed ticket from another device without payment, filing, printing or drawer writes", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -600,7 +592,7 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
 describe("GET /api/sales/:id/receipt (original print status)", () => {
   it("reads printerless issuance and later queued original without filing or printing on GET", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: null });
+    await configureReceipt({ printerId: null });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -610,7 +602,7 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
     expect(missing.status).toBe(200);
     expect(await missing.json()).toEqual({ status: "not_queued" });
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const queued = await app.request(`/api/sales/${orderId}/receipt`, {
       method: "POST",
       headers: { cookie },
@@ -622,8 +614,8 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
     expect(await status.json()).toEqual({ status: "queued", jobId: job!.id, canRetry: false });
     await get();
     expect(await suite.db.select().from(printJobs)).toEqual([job]);
-    expect(await saleCount(cfg)).toBe(1);
-    expect(await fiscalRecordCount(cfg)).toBe(1);
+    expect(await saleCount()).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
   });
 
   it("requires a session and refuses unknown or malformed order ids", async () => {
@@ -646,7 +638,7 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
 describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
   it("persists the first staff confirmation without refiling or changing original bytes and print status", async () => {
     const { cfg, each, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -709,7 +701,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
 
   it("refuses unprinted originals even when a duplicate has completed", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: null });
+    await configureReceipt({ printerId: null });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -725,7 +717,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
       });
     };
     await refused();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     expect(
       (
         await app.request(`/api/sales/${orderId}/reprint`, {
@@ -752,7 +744,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
 
   it("requires an active session and refuses unknown order ids before recording handover", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -884,8 +876,8 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
         resendOf: original.jobId,
         receiptCopy: false,
       });
-      expect(await saleCount(cfg)).toBe(1);
-      expect(await fiscalRecordCount(cfg)).toBe(1);
+      expect(await saleCount()).toBe(1);
+      expect(await fiscalRecordCount()).toBe(1);
       expect(await drawerOpensFor(cfg)).toEqual([]);
     },
   );
@@ -893,7 +885,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
   it("resends exhausted originals with the same bytes and printer without refiling or opening the drawer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -907,7 +899,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       .update(printJobs)
       .set({ status: "failed", attempts: 5 })
       .where(eq(printJobs.id, original!.id));
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const retry = () =>
       app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST", headers: { cookie } });
     const responses = await Promise.all([retry(), retry()]);
@@ -931,14 +923,14 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     expect(repeated.status).toBe(409);
     expect(await repeated.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
     expect(await suite.db.select().from(printJobs)).toEqual(jobs);
-    expect(await saleCount(cfg)).toBe(1);
-    expect(await fiscalRecordCount(cfg)).toBe(1);
+    expect(await saleCount()).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
   it("refuses absent, automatically retrying and completed originals even when a duplicate has failed", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: null });
+    await configureReceipt({ printerId: null });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -949,7 +941,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     expect(absent.status).toBe(404);
     expect(absent.headers.get("content-type")).toContain("application/json");
     expect(await absent.json()).toMatchObject({ error: { code: "print_job.not_found" } });
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     expect(
       (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
         .status,
@@ -985,7 +977,6 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       .set({ status: "failed", attempts: 5 })
       .where(eq(printJobs.receiptCopy, true));
     await suite.db.insert(printJobs).values({
-      locationId: original!.locationId,
       printerId: original!.printerId,
       saleId: original!.saleId,
       payload: original!.payload,
@@ -1004,7 +995,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
 
   it("requires a session and the device's printing capability before retrying", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -1057,7 +1048,7 @@ describe("an original receipt whose printer was deleted", () => {
 
   async function open(): Promise<{
     app: Hono;
-    cfg: WithVenueRowId;
+    cfg: TradingContext;
     orderId: string;
     cookie: string;
     printerId: string;
@@ -1065,7 +1056,7 @@ describe("an original receipt whose printer was deleted", () => {
   }> {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -1144,7 +1135,7 @@ describe("an original receipt whose printer was deleted", () => {
   });
 
   it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint answers as with none", async () => {
-    const { app, cfg, cookie, printerId, menuItemId } = await open();
+    const { app, cookie, printerId, menuItemId } = await open();
     await deleteVia(printerId);
     const jobsBefore = await suite.db.select().from(printJobs);
 
@@ -1159,7 +1150,7 @@ describe("an original receipt whose printer was deleted", () => {
     const deletedAnswer = [deletedReprint.status, await deletedReprint.text()];
     expect(await suite.db.select().from(printJobs)).toEqual(jobsBefore);
 
-    await configureReceipt(cfg, { printerId: null });
+    await configureReceipt({ printerId: null });
     const noneReprint = await app.request(`/api/sales/${orderId}/reprint`, {
       method: "POST",
       headers: { cookie },
@@ -1174,7 +1165,6 @@ describe("an original receipt whose printer was deleted", () => {
     const [original] = await suite.db.select().from(printJobs);
     await suite.db.update(printJobs).set({ status: "done" });
     await suite.db.insert(printJobs).values({
-      locationId: original!.locationId,
       printerId,
       saleId: original!.saleId,
       payload: original!.payload,
@@ -1202,7 +1192,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       await publishWorkingMenu(tx, each.catalogueId);
     });
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     mountCatalogueApi(
@@ -1301,7 +1291,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       sql`update department_sale_policies set print_trading_name = 1 where department_id in (select id from departments )`,
     );
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -1376,15 +1366,15 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
   it("re-enqueues the filed receipt to the device's printer WITHOUT re-filing", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
 
     const workingOrderId = await ringSale(app, cookie, each.menuItemId);
-    expect(await fiscalRecordCount(cfg)).toBe(1);
-    expect(await saleCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
+    expect(await saleCount()).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]);
 
     const res = await app.request(`/api/sales/${workingOrderId}/reprint`, {
@@ -1394,8 +1384,8 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(res.status).toBe(200);
 
     // NO re-filing: the immutable fiscal record + sale row counts are unchanged.
-    expect(await fiscalRecordCount(cfg)).toBe(1);
-    expect(await saleCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
+    expect(await saleCount()).toBe(1);
 
     // Exactly ONE new outbox job, to the device's printer, carrying the full receipt and NO drawer kick
     // (a reprint never opens the drawer).
@@ -1413,7 +1403,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
   it("reprints again on a second request, still filing nothing (each reprint is paper only)", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1429,13 +1419,13 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     }
     // Two paper jobs, one immutable fiscal record — a reprint never re-files.
     expect(await printJobsFor(cfg)).toHaveLength(2);
-    expect(await fiscalRecordCount(cfg)).toBe(1);
-    expect(await saleCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
+    expect(await saleCount()).toBe(1);
   });
 
   it("is a 200 no-op when the id names no filed sale (unknown / never-settled order)", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1452,7 +1442,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
   it("is a 200 no-op when the device has no receipt printer set (nothing to print to)", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     // A real filed sale, but no printer on the device.
-    await configureReceipt(cfg, { printerId: null });
+    await configureReceipt({ printerId: null });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1465,7 +1455,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     });
     expect(res.status).toBe(200);
     expect(await printJobsFor(cfg)).toEqual([]); // no printer → nothing enqueued
-    expect(await fiscalRecordCount(cfg)).toBe(1); // and still no re-file
+    expect(await fiscalRecordCount()).toBe(1); // and still no re-file
   });
 
   it("refuses a malformed id with working_order.not_found (404) before any query", async () => {
@@ -1497,7 +1487,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   it("enqueues a KICK-ONLY job to the device's printer and records drawer_opens('manual')", async () => {
     const { cfg, supervisorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1547,7 +1537,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   it("refuses an unattached cash drawer without writing a command or audit", async () => {
     const { cfg, supervisorId } = await setupVenue();
     const printerId = await makePrinter(false);
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await loginAtTill(app, cfg, supervisorId);
@@ -1570,7 +1560,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 
   it("refuses an operator session whose device has been revoked with device.unauthorized, writing nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1665,7 +1655,7 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
   it("a device with its own drawer printer opens its own drawer, not the one the venue's other devices use", async () => {
     const { cfg, press } = await venueWithAuthorizedOperator();
     const boxPrinter = await makePrinter();
-    await configureReceipt(cfg, { printerId: boxPrinter });
+    await configureReceipt({ printerId: boxPrinter });
     const till = await enrolDrawerTill(cfg);
     const ownPrinter = await makePrinter();
     await setDevicePrinter(till.deviceId, ownPrinter);
@@ -1705,7 +1695,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
     ["suspended supervisor", "suspended", 401, "pin.invalid"],
   ] as const)("refuses %s without a drawer command or audit", async (_, kind, status, code) => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1745,7 +1735,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
     async (viaOverride) => {
       const { cfg, operatorId, supervisorId } = await setupVenue();
       const printerId = await makePrinter();
-      await configureReceipt(cfg, { printerId });
+      await configureReceipt({ printerId });
 
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1795,7 +1785,6 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
       expect(Object.keys(jobs[0]!).sort()).toEqual(
         [
           "id",
-          "locationId",
           "printerId",
           "saleId",
           "payload",
@@ -1830,7 +1819,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
   it("a supervisor opens directly (holds cash.drawer) — via_override false, authorized_by self", async () => {
     const { cfg, supervisorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1853,7 +1842,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
   it("a staff operator opens with a VALID supervisor override — via_override true, authorized_by the supervisor", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1885,7 +1874,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
   it("a staff operator with NO override is refused (403 authorization.not_permitted) and writes nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1917,7 +1906,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a WRONG override PIN is 401 pin.invalid (valid supervisor id, bad PIN) and writes nothing", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1939,7 +1928,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("an override by a VALID staff credential (correct PIN, lacks cash.drawer) is 403 — proves the PERMISSION is checked", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1962,7 +1951,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a malformed override.personId (not a UUID) is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1981,7 +1970,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("an override with a NON-STRING pin is 401 pin.invalid — never reaches verifyPin", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2003,7 +1992,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a well-formed-but-unknown override.personId is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2022,7 +2011,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("an override that cannot sign in gets one answer, whether the person is unknown, suspended, malformed or gave a wrong PIN", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const [suspended] = await suite.db
       .insert(persons)
       .values({
@@ -2061,7 +2050,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a well-formed body with NO override, sent by staff, is still 403 (an empty body is no override)", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2115,7 +2104,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("after four wrong PINs even the right one is 429 pin.throttled and writes nothing, until the wait is over", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const { app, clockAt } = throttledApp(cfg);
     const cookie = await loginAtTill(app, cfg, operatorId);
 
@@ -2143,7 +2132,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("a right PIN before the limit opens the drawer and starts the count again", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const { app } = throttledApp(cfg);
     const cookie = await loginAtTill(app, cfg, operatorId);
     const wrongThrice = async () => {
@@ -2162,7 +2151,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("signing in again on the same till does not start the count again", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const { app } = throttledApp(cfg);
     const device = await enrolConfiguredTillCookie(cfg);
     const first = await loginOn(app, device, operatorId);
@@ -2181,7 +2170,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("an override sent by an operator who may open the drawer is never checked, so it neither counts nor clears", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const { app } = throttledApp(cfg);
     const device = await enrolConfiguredTillCookie(cfg);
     const staff = await loginOn(app, device, operatorId);
@@ -2257,7 +2246,7 @@ afterEach(async () => {
 describe("original receipt and payment slip actions", () => {
   it("prints an original then a marked duplicate without additional fiscal records", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2286,8 +2275,8 @@ describe("original receipt and payment slip actions", () => {
     expect(Buffer.concat(duplicate.filter((c) => c.text !== marker).map((c) => c.bytes))).toEqual(
       Buffer.from(original),
     );
-    expect(await fiscalRecordCount(cfg)).toBe(1);
-    expect(await saleCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
+    expect(await saleCount()).toBe(1);
   });
   it("refuses unknown and malformed payment-slip ids", async () => {
     const { cfg, operatorId } = await setupVenue();
@@ -2318,7 +2307,7 @@ describe("payment slip persisted capture facts", () => {
       await withTransaction(suite.db, (tx) =>
         writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
       );
-      await configureReceipt(cfg, { printerId: await makePrinter() });
+      await configureReceipt({ printerId: await makePrinter() });
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -2384,7 +2373,7 @@ describe("payment slip persisted capture facts", () => {
     "prints an integrated capture with card facts=%s and preserves fiscal rows",
     async (withCard) => {
       const { cfg, each, operatorId } = await setupVenue();
-      await configureReceipt(cfg, { printerId: await makePrinter() });
+      await configureReceipt({ printerId: await makePrinter() });
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -2407,15 +2396,15 @@ describe("payment slip persisted capture facts", () => {
       else expect(text).not.toContain("Tarjeta");
       expect(text).not.toContain("VERI*FACTU");
       expect(commandNames(new Uint8Array(jobs[0]!.payload))).not.toContain("GS ( k");
-      expect(await fiscalRecordCount(cfg)).toBe(1);
-      expect(await saleCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount()).toBe(1);
+      expect(await saleCount()).toBe(1);
     },
   );
   it.each([true, false])(
     "reader automatic slip=%s excludes only its own Waitron payment slip",
     async (automatic) => {
       const { cfg, each, operatorId } = await setupVenue();
-      await configureReceipt(cfg, { printerId: await makePrinter() });
+      await configureReceipt({ printerId: await makePrinter() });
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -2432,14 +2421,14 @@ describe("payment slip persisted capture facts", () => {
       });
       expect(response.status).toBe(200);
       expect(await printJobsFor(cfg)).toHaveLength(automatic ? 0 : 1);
-      expect(await fiscalRecordCount(cfg)).toBe(1);
-      expect(await saleCount(cfg)).toBe(1);
+      expect(await fiscalRecordCount()).toBe(1);
+      expect(await saleCount()).toBe(1);
     },
   );
 
   it("does not print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2459,7 +2448,7 @@ describe("payment slip persisted capture facts", () => {
         resolution: "203dpi",
       });
     });
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2491,7 +2480,7 @@ describe("payment slip persisted capture facts", () => {
 describe("payment slip with nothing to print", () => {
   it("prints nothing when the device has no payment slip printer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: null });
+    await configureReceipt({ printerId: null });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2509,7 +2498,7 @@ describe("payment slip with nothing to print", () => {
 
   it("prints nothing for a capture that records no settlement instant", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2570,7 +2559,7 @@ describe("persisted cash receipt facts", () => {
 
   it("replays and reprints the original cash handed over and change", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2603,13 +2592,13 @@ describe("persisted cash receipt facts", () => {
     const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
     expect(text).toMatch(/Efectivo\s+20,00/);
     expect(text).toMatch(/Cambio\s+18,50/);
-    expect(await fiscalRecordCount(cfg)).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
   });
 });
 
 it("duplicates use the filed issuer identity while optional trim follows the current layout", async () => {
   const { cfg, each, operatorId } = await setupVenue();
-  await configureReceipt(cfg, { printerId: await makePrinter() });
+  await configureReceipt({ printerId: await makePrinter() });
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await login(app, cfg, operatorId);
@@ -2657,7 +2646,7 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   expect(text).not.toContain("Changed venue identity");
   expect(text).toContain("Current welcome");
   expect(text).toContain("Current farewell");
-  expect(await fiscalRecordCount(cfg)).toBe(1);
+  expect(await fiscalRecordCount()).toBe(1);
 });
 
 describe("the till's sign-in and drawer override derive the PIN's key outside the write lock", () => {
@@ -2695,7 +2684,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
   /** A staff operator signed in at the configured till, whose printer has a drawer. */
   async function staffAtDrawerTill(pinThrottle = createPinThrottle()) {
     const venue = await setupVenue();
-    await configureReceipt(venue.cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, { ...apiDeps(venue.cfg), pinThrottle }, noopLog);
     const cookie = await loginAtTill(app, venue.cfg, venue.operatorId);
@@ -2761,7 +2750,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
 
   it("derives no key for an override sent by an operator who holds cash.drawer", async () => {
     const { cfg, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await loginAtTill(app, cfg, supervisorId);
@@ -2878,7 +2867,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   async function venueWithPrinters() {
     const venue = await setupVenue();
-    await configureReceipt(venue.cfg, {});
+    await configureReceipt({});
     // No drawers, so a cash sale on these printers queues documents only.
     const [r1, r2, s1] = [
       await makePrinter(false),
@@ -3148,7 +3137,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
   async function issued() {
     const { cfg, each, operatorId, supervisorId } = await setupVenue();
     const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
+    await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, supervisorId);
@@ -3369,7 +3358,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
 
   it("keeps an F2 explicit receipt outside invoice delivery tracking", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -3383,8 +3372,8 @@ describe("explicit F1 receipt delivery enrollment", () => {
   });
 
   it("queues no delivery when the explicit original has no active printer", async () => {
-    const { cfg, post } = await issued();
-    await configureReceipt(cfg, { printerId: null });
+    const { post } = await issued();
+    await configureReceipt({ printerId: null });
     expect((await post("receipt")).status).toBe(200);
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);

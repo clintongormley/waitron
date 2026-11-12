@@ -43,10 +43,10 @@ export function requireDeviceName(value: unknown): string {
   return name;
 }
 
-/** `devices_location_label_active_key`, as the table and columns a refusal on it names. */
+/** `devices_label_active_key`, as the table and columns a refusal on it names. */
 const DEVICE_NAME_UNIQUE: ConstraintTarget = {
   table: "devices",
-  columns: ["location_id", "label"],
+  columns: ["label"],
 };
 
 /** A refusal on {@link DEVICE_NAME_UNIQUE} as `device.name_taken`; any other error unchanged. */

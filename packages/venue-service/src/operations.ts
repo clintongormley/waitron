@@ -34,8 +34,6 @@ import {
   saleReceiptHeaders,
   UNIQUE_VIOLATION,
   kitchenStations,
-  readVenue,
-  venueLocationId,
   workingLineContexts,
   workingOrderLines,
   zoneSalePolicies,
@@ -61,6 +59,7 @@ import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu
 import { readStarterStaffLanguage } from "./starter-language.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
+import { readDefaultCatalogueId } from "@waitron/catalogue";
 
 export interface Department {
   id: string;
@@ -191,7 +190,7 @@ export async function createDepartment(
     .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
   const staffLanguage = await readStarterStaffLanguage(tx);
   await addStarterServiceSteps(tx, row!.id, staffLanguage);
-  const menuId = (await readVenue(tx)).defaultCatalogueId;
+  const menuId = await readDefaultCatalogueId(tx);
   if (menuId !== null) await placeOpenPeriod(tx, row!.id, menuId, staffLanguage);
   return row!;
 }
@@ -454,7 +453,6 @@ export async function createServiceZone(
     const [zone] = await tx
       .insert(floorZones)
       .values({
-        locationId: await venueLocationId(tx),
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
       })
@@ -464,7 +462,7 @@ export async function createServiceZone(
     if (
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "floor_zones",
-        columns: ["location_id", "name"],
+        columns: ["name"],
       })
     ) {
       throw new AppError("zone.name_taken", { name: input.name });
@@ -744,7 +742,7 @@ export async function saveZoneSettings(
     if (
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "floor_zones",
-        columns: ["location_id", "name"],
+        columns: ["name"],
       })
     )
       throw new AppError("zone.name_taken", { name: input.name });

@@ -16,7 +16,7 @@ import { readLayout } from "../../src/floor-plan.js";
 import { defaultLayout } from "../../src/testing/floor-sets.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 import { createTable } from "../../src/testing/live-table.js";
-import type { WithVenueRowId } from "../../src/testing/venue-row-id.js";
+
 import { DEMO_TABLES } from "./testing/data.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -40,7 +40,7 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 
 describe("seedFloor", () => {
   it("keeps dataset station names and reporting-category overrides together", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const dataSet = {
       ...CASA_DELGADO_ES,
       stations: {
@@ -68,9 +68,8 @@ describe("seedFloor", () => {
       },
     };
     const rows = await withTransaction(suite.db, async (tx) => {
-      const { menuIds } = await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet });
+      const { menuIds } = await seedCatalogues(tx, { locale: LOCALE, dataSet });
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         dataSet,
         menuIds,
@@ -93,15 +92,13 @@ describe("seedFloor", () => {
   });
 
   it("seeds no station hours and routes drinks downstairs without an evening period", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const result = await withTransaction(suite.db, async (tx) => {
       const { menuIds } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
@@ -113,9 +110,9 @@ describe("seedFloor", () => {
         select p.name from menu_periods p join departments d on d.id = p.department_id
          order by d.name`);
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
-        select id from floor_zones where location_id = ${locationId} and name = 'Upstairs bar'`);
+        select id from floor_zones where name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string }>(sql`
-        select id from kitchen_stations where location_id = ${locationId} and name = 'Downstairs bar'`);
+        select id from kitchen_stations where name = 'Downstairs bar'`);
       const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       const makers = [];
@@ -140,15 +137,13 @@ describe("seedFloor", () => {
   });
 
   it("seeds no configured station fallback", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const rows = await withTransaction(suite.db, async (tx) => {
       const { menuIds } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
@@ -163,11 +158,10 @@ describe("seedFloor", () => {
   });
 
   it("leaves every seeded department and service zone with a sale policy for management reads", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
 
     const policies = await withTransaction(suite.db, async (tx) => {
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
@@ -187,11 +181,10 @@ describe("seedFloor", () => {
   });
 
   it("each demo department starts with the three starter steps", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
 
     const steps = await withTransaction(suite.db, async (tx) => {
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
@@ -218,18 +211,17 @@ describe("seedFloor", () => {
   });
 
   it("creates restaurant and deli service zones and the placed restaurant floor", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
       });
 
       const { rows: zones } = await tx.execute<{ name: string; active: number }>(
-        sql`select name, active from floor_zones where location_id = ${locationId} order by display_order`,
+        sql`select name, active from floor_zones  order by display_order`,
       );
       const { rows: tables } = await tx.execute<{
         label: string;
@@ -242,7 +234,7 @@ describe("seedFloor", () => {
         sql`select d.label, d.zone_id, p.seats, pl.x, pl.y, pl.shape
             from dining_tables d left join floor_plan_tables p on p.id = d.plan_table_id
             left join floor_plan_placements pl on pl.plan_table_id = p.id
-            where d.location_id = ${locationId} order by d.label`,
+             order by d.label`,
       );
       return { zones, tables };
     });
@@ -267,26 +259,20 @@ describe("seedFloor", () => {
   });
 
   it("gives every zone with tables a default set layout and today's plan, every table placed and none overlapping", async () => {
-    const { locationId } = await provisionVenue();
-    const cfg = {
-      nodeId: "unused",
-      seriesId: "unused",
-      locationId: locationId,
-    } as unknown as Parameters<typeof defaultLayout>[1];
+    await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
       });
       const { rows: zones } = await tx.execute<{ zone_id: string }>(
-        sql`select distinct zone_id from dining_tables where location_id = ${locationId}`,
+        sql`select distinct zone_id from dining_tables `,
       );
       const plans = [];
       for (const { zone_id } of zones)
-        plans.push(await readLayout(tx, await defaultLayout(tx, cfg, zone_id)));
+        plans.push(await readLayout(tx, await defaultLayout(tx, undefined, zone_id)));
       const { rows: today } = await tx.execute<{
         label: string;
         zone_id: string;
@@ -300,7 +286,7 @@ describe("seedFloor", () => {
       }>(
         sql`select d.label, d.zone_id, t.fixed, t.x, t.y, t.width, t.height, t.shape, t.rotation
             from dining_tables d join floor_today_tables t on t.table_id = d.id
-            where d.location_id = ${locationId}`,
+            `,
       );
       const { rows: todayZones } = await tx.execute<{ zone_id: string }>(
         sql`select zone_id from floor_today_zones`,
@@ -376,10 +362,9 @@ describe("seedFloor", () => {
   ] as const)(
     "gives each department a Standard set holding its zones' tables (%s)",
     async (locale, setName) => {
-      const { locationId } = await provisionVenue();
+      await provisionVenue();
       const res = await withTransaction(suite.db, async (tx) => {
         await seedFloor(tx, {
-          locationId,
           locale,
           departmentTradingNames: TRADING_NAMES,
           dataSet: CASA_DELGADO_ES,
@@ -399,7 +384,7 @@ describe("seedFloor", () => {
           }
         }
         const { rows: seeded } = await tx.execute<{ zone_id: string; label: string }>(
-          sql`select zone_id, label from dining_tables where location_id = ${locationId}`,
+          sql`select zone_id, label from dining_tables `,
         );
         return { departments, sets, placed, seeded };
       });
@@ -435,18 +420,21 @@ describe("seedFloor", () => {
   });
 
   it("refuses, naming it, a table in a seeded zone that the seed did not create", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const seeding = withTransaction(suite.db, async (tx) => {
       const { rows } = await tx.execute<{ zone_id: string }>(
         sql`select zone_id from zone_service_policies
             where is_counter_default limit 1`,
       );
-      await createTable(tx, { locationId: locationId } as WithVenueRowId, {
-        label: "Stray",
-        zoneId: rows[0]!.zone_id,
-      });
+      await createTable(
+        tx,
+        {},
+        {
+          label: "Stray",
+          zoneId: rows[0]!.zone_id,
+        },
+      );
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: CASA_DELGADO_ES,
@@ -456,19 +444,18 @@ describe("seedFloor", () => {
   });
 
   it("refuses a stray table outside today's plan even in a seeded zone without seed tables", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const seeding = withTransaction(suite.db, async (tx) => {
       const { rows } = await tx.execute<{ zone_id: string }>(sql`
         select zone_id from zone_service_policies
         where is_counter_default limit 1`);
       await createTable(
         tx,
-        { locationId: locationId } as WithVenueRowId,
+        {},
         { label: "Disabled stray", zoneId: rows[0]!.zone_id },
         { today: false },
       );
       await seedFloor(tx, {
-        locationId,
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
         dataSet: {
@@ -486,11 +473,10 @@ describe("seedFloor", () => {
   it.each(["en", "es"] as const)(
     "gives the departments the trading names it is handed, whatever the seed language (%s)",
     async (locale) => {
-      const { locationId } = await provisionVenue();
+      await provisionVenue();
 
       const rows = await withTransaction(suite.db, async (tx) => {
         await seedFloor(tx, {
-          locationId,
           locale,
           departmentTradingNames: TRADING_NAMES,
           dataSet: CASA_DELGADO_ES,

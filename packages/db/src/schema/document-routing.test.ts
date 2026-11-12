@@ -7,7 +7,6 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
 import { pagePrinters } from "./page-printers.js";
@@ -152,7 +151,6 @@ describe("document routing schema", () => {
     const [printer] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: await venueLocationId(suite.db),
         name: "Office",
         host: "10.0.0.9",
         port: 631,

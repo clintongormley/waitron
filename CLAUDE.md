@@ -426,7 +426,7 @@ called weaker than its name, the topic file lists what it does not see.
   weaker than its name (it reads text) — shrink its allowlist, never grow it.
   `@waitron/dashboard-modules` is the browser-side twin.
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
-  default menu travels as the top-level `defaultCatalogueId`). Cost: from #1752 to A980 S1a2
+  privacy contact and content languages travel as top-level fields). Cost: from #1752 to A980 S1a2
   no production box could be set up from an export. Guards:
   `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
   weaker than the rule: one export shape.

@@ -16,7 +16,6 @@ import {
   menuPeriods,
   withTransaction,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -48,7 +47,7 @@ const BASE = "/management-api/venue-service/floor-plan-sets";
 const noopLog: Logger = () => {};
 
 /** Core's two ports as the route sees them: sets are real rows, layouts are what the test says. */
-function fakeCore(locationId: string) {
+function fakeCore() {
   const counts = new Map<string, { onPlan: number; spare: number }>();
   const showing = new Map<string, string[]>();
   const copies: [string, string][] = [];
@@ -56,10 +55,7 @@ function fakeCore(locationId: string) {
   const asked: string[][] = [];
   const floorPlanSetsPort: CoreServices["floorPlanSets"] = {
     async create(tx) {
-      const [row] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId })
-        .returning({ id: floorPlanSets.id });
+      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       return row!.id;
     },
     async copyLayouts(_tx, fromSetId, toSetId) {
@@ -121,8 +117,7 @@ async function casaMarina() {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });
-  const locationId = await venueLocationId(db);
-  const fake = fakeCore(locationId);
+  const fake = fakeCore();
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(
     app,

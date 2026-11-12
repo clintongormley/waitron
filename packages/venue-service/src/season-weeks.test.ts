@@ -61,7 +61,7 @@ async function venue() {
   const cfg: { locationId: string } = { locationId: venueId };
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })
+    .values({ name: "Dining room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   return scoped(async (tx) => {
     const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))

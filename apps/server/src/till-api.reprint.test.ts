@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, printJobs, venueLocationId, withTransaction } from "@waitron/db";
+import { deviceProfiles, printJobs, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -19,18 +19,19 @@ import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
 // is pinned in `kitchen-print.test.ts`.
 const COFFEE = "Cafe con leche";
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let ana: { id: string };
 let stationId: string;
 let coffeeOffer: string;
@@ -46,16 +47,16 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "On-premises sale",
     });
-    const locationId = await venueLocationId(db);
+
     // The default station serves an item no routing cell covers.
-    stationId = await seedKitchenStation(db, { locationId });
+    stationId = await seedKitchenStation(db, {});
     const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(locationId, nodeId);
+    cfg = makeCfg(nodeId);
 
     // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
@@ -74,10 +75,9 @@ const suite = useVenueDb({
   },
 });
 
-function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
+function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

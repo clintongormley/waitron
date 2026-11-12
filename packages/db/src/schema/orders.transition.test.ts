@@ -14,13 +14,11 @@ import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
 import { locations } from "./tenants.js";
-import { venueLocationId } from "../venue.js";
 
 // A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
 // no constraint name — so it is compared by EQUALITY against the literal the migration owns
 // (`packages/db/src/trigger-refusals.ts`).
 
-let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // Matches LOCATION_A's invoice_locales (es, ca), so check_locales lets the draft line reach
@@ -56,7 +54,6 @@ describe("working_orders state machine (enforce_transition)", () => {
       .insert(workingOrders)
       .values({
         ...origin,
-        locationId: LOCATION_A,
         nodeId: nodeA,
         orderNumber,
         status: "open",
@@ -124,7 +121,6 @@ describe("working_orders state machine (enforce_transition)", () => {
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(db);
     nodeA = await seedNode(db);
     ({ deviceId: deviceA } = await seedDevice(db));
     ({ deviceId: deviceB } = await seedDevice(db));
@@ -502,7 +498,6 @@ describe("working_orders state machine (enforce_transition)", () => {
             source: "device",
             deviceId: deviceA,
             nodeId: nodeA,
-            locationId: LOCATION_A,
             orderNumber: nextOrderNumber++,
             status: "open",
             openedAt: AT,
@@ -515,8 +510,8 @@ describe("working_orders state machine (enforce_transition)", () => {
     const error = await captureError(() =>
       inTx(async (tx) =>
         tx.run(sql`
-      insert into working_orders (id, source, device_id, node_id, location_id, order_number, status, opened_at, invoice_type)
-      values ('invalid-invoice-choice', 'device', ${deviceA}, ${nodeA}, ${LOCATION_A}, ${nextOrderNumber++}, 'open', ${AT}, 'other')
+      insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at, invoice_type)
+      values ('invalid-invoice-choice', 'device', ${deviceA}, ${nodeA}, ${nextOrderNumber++}, 'open', ${AT}, 'other')
     `),
       ),
     );
@@ -538,7 +533,6 @@ describe("working_orders state machine (enforce_transition)", () => {
   it.each([
     ["the device that opened it", "device", () => ({ deviceId: deviceB })],
     ["its source", "dashboard", () => ({ source: "kitchen_timer" as const })],
-    ["its location", "device", () => ({ locationId: LOCATION_B })],
   ] as const)("rejects changing %s on a placed order", async (_what, opener, change) => {
     const id = await open(
       opener === "device"

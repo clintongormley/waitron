@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 18,
+  version: 19,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -71,7 +71,6 @@ const bundle: ConfigurationBundle = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
-  defaultCatalogueId: null,
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1" }] },
@@ -213,7 +212,7 @@ describe("staged configuration import", () => {
     ],
     ["pre-payment-policy-retirement export without it", { version: 16 }],
     ["pre-receipt-policy-retirement export", { version: 17 }],
-    ["future version", { version: 19 }],
+    ["future version", { version: 20 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
@@ -663,10 +662,7 @@ describe("routing cells in a staged import", () => {
           name: "Terrace",
           departmentId: department.id,
         });
-        const [station] = await tx
-          .insert(kitchenStations)
-          .values({ locationId: cfg.locationId, name: "Bar" })
-          .returning();
+        const [station] = await tx.insert(kitchenStations).values({ name: "Bar" }).returning();
         const category = await createCategory(tx, { name: "Drinks" });
         const menu = await createCatalogue(tx, {
           name: `Configuration import menu ${cfg.locationId}`,

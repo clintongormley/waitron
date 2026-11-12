@@ -3834,10 +3834,7 @@ describe("a counter order (B11c)", () => {
 
   async function counterZoneNamed(name: string) {
     return inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name })
-        .returning({ id: floorZones.id });
+      const [zone] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
       return (
         await offerProducts(tx, venue.cfg, {
           zone: { zoneId: zone!.id },

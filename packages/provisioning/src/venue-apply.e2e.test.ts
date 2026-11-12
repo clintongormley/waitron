@@ -5,7 +5,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { nodes, tenants, venueLocationId, withTransaction } from "@waitron/db";
+import { nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
@@ -129,9 +129,7 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
     });
 
     const standardSeriesId = venue.seriesIds[0]!;
-    const { deviceId } = await seedDevice(suite.db, {
-      locationId: await venueLocationId(suite.db),
-    });
+    const { deviceId } = await seedDevice(suite.db, {});
 
     const { saleId, fiscal } = await withTransaction(suite.db, async (tx) => {
       return recordSale(

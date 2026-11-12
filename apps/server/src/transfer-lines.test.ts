@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { venueLocationId, withTransaction, workingOrderLines } from "@waitron/db";
+import { withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -22,7 +22,7 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { parkOrder, moveOrderLines } from "./working-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -48,7 +48,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: WithVenueRowId<OriginConfig>;
+  cfg: OriginConfig;
   coffeeId: string;
   waterId: string;
   hamId: string;
@@ -69,12 +69,10 @@ async function setupVenue(): Promise<Seeded> {
     operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
-  const cfg: WithVenueRowId<OriginConfig> = {
+  const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -133,8 +131,7 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /** Run `fn` on a fresh transaction, like production. */
-function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
@@ -183,7 +180,7 @@ async function openTabWith(
   tableId: string,
   lines: { menuItemId: string; quantity: string }[],
 ): Promise<string> {
-  return asApp(cfg, async (tx) => {
+  return asApp(async (tx) => {
     const { tabId } = await openPartyTab(tx, cfg, { tableId });
     await writeGroupedLines(tx, cfg, tabId, lines);
     return tabId;
@@ -197,7 +194,7 @@ async function openBeside(
   lines: { menuItemId: string; quantity: string }[],
   zoneless = false,
 ): Promise<string> {
-  return asApp(cfg, async (tx) => {
+  return asApp(async (tx) => {
     const party = (await partyRevisionOfOrder(tx, tabId))!;
     const context = await VENUE_SERVICE.findOrderContext(tx, tabId);
     const id = randomUUID();
@@ -236,7 +233,7 @@ describe("moveOrderLines — subset", () => {
     ]);
     const tabB = await openBeside(cfg, tabA, [{ menuItemId: waterOffer, quantity: "3" }]);
 
-    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, tabA, tabB, [1]));
+    await asApp((tx) => moveOrderLines(tx, cfg, tabA, tabB, [1]));
 
     const a = await linesOf(tabA);
     const b = await linesOf(tabB);
@@ -258,7 +255,7 @@ describe("transfer — whole line", () => {
     const tabB = await openBeside(cfg, tabA, [{ menuItemId: waterOffer, quantity: "1" }]);
 
     // Whole line = `quantity` omitted.
-    await asApp(cfg, (tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 1 }]));
+    await asApp((tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 1 }]));
 
     const a = await linesOf(tabA);
     const b = await linesOf(tabB);
@@ -276,7 +273,7 @@ describe("transfer — whole line", () => {
     const { cfg, tableAId, coffeeOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: coffeeOffer, quantity: "2" }]);
     await expect(
-      asApp(cfg, (tx) => transfer(tx, cfg, tabA, tabA, [{ lineNo: 1 }])),
+      asApp((tx) => transfer(tx, cfg, tabA, tabA, [{ lineNo: 1 }])),
     ).rejects.toMatchObject({ code: "tab.transfer_self", params: { tabId: tabA } });
     expect(await linesOf(tabA)).toHaveLength(1); // untouched
   });
@@ -286,7 +283,7 @@ describe("transfer — whole line", () => {
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: coffeeOffer, quantity: "2" }]);
     const notATab = randomUUID(); // no working_orders row
     await expect(
-      asApp(cfg, (tx) => transfer(tx, cfg, tabA, notATab, [{ lineNo: 1 }])),
+      asApp((tx) => transfer(tx, cfg, tabA, notATab, [{ lineNo: 1 }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: notATab } });
     expect(await linesOf(tabA)).toHaveLength(1); // untouched
   });
@@ -304,7 +301,7 @@ describe("transfer — whole line", () => {
       lines: [{ menuItemId: waterOffer, quantity: "1" }],
     });
     await expect(
-      asApp(cfg, (tx) => transfer(tx, cfg, tabA, parkedId, [{ lineNo: 1 }])),
+      asApp((tx) => transfer(tx, cfg, tabA, parkedId, [{ lineNo: 1 }])),
     ).rejects.toMatchObject({ code: "bill.other_party", params: { workingOrderId: parkedId } });
     expect(await linesOf(tabA)).toHaveLength(1);
     expect(await linesOf(parkedId)).toHaveLength(1);
@@ -318,7 +315,7 @@ describe("transfer — full-quantity partial is a whole-line move", () => {
     const tabB = await openBeside(cfg, tabA, [{ menuItemId: waterOffer, quantity: "1" }]);
 
     // Explicit quantity "2" == the whole line — must behave exactly like an omitted quantity.
-    await asApp(cfg, (tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "2" }]));
+    await asApp((tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "2" }]));
 
     const a = await linesOf(tabA);
     const b = await linesOf(tabB);
@@ -339,7 +336,7 @@ describe("transfer — guards", () => {
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: coffeeOffer, quantity: "2" }]);
     const empty = await openBeside(cfg, tabA, [], true);
     await expect(
-      asApp(cfg, (tx) => transfer(tx, cfg, tabA, empty, [{ lineNo: 1 }])),
+      asApp((tx) => transfer(tx, cfg, tabA, empty, [{ lineNo: 1 }])),
     ).rejects.toMatchObject({
       code: "service_zone.mode_incompatible",
       params: { zoneId: "unscoped", expected: "table_tab", actual: "unscoped" },
@@ -356,7 +353,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
    *  line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
   async function addExtra(
     tx: Transaction,
-    cfg: WithVenueRowId<OriginConfig>,
+    cfg: OriginConfig,
     dishId: string,
     extraProductId: string,
   ): Promise<string> {
@@ -386,7 +383,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
     partyId: string,
     lines: { menuItemId: string; quantity: string; extras?: ExtraSelection[] }[],
   ): Promise<string> {
-    return asApp(cfg, async (tx) => {
+    return asApp(async (tx) => {
       const id = randomUUID();
       await openGroupedCounterOrder(tx, cfg, id, lines, { zoneId, partyId });
       return id;
@@ -395,7 +392,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
 
   /** A party seated at `tableId`, whose bills the extras cases open. */
   async function partyAt(cfg: OriginConfig, tableId: string): Promise<string> {
-    return (await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).partyId;
+    return (await asApp((tx) => openPartyTab(tx, cfg, { tableId }))).partyId;
   }
 
   /** Lines of a tab with the parent↔child linkage columns, owner-read, by `line_no`. A child line is
@@ -423,7 +420,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
   it("carries a parent dish's extras children along on a whole-line transfer", async () => {
     const { cfg, coffeeId, waterId, baconId, tableAId, zoneId, coffeeOffer, waterOffer } =
       await setupVenue();
-    const extraListId = await asApp(cfg, (tx) => addExtra(tx, cfg, coffeeId, baconId));
+    const extraListId = await asApp((tx) => addExtra(tx, cfg, coffeeId, baconId));
     const partyId = await partyAt(cfg, tableAId);
     const tabA = await openExtrasTab(cfg, zoneId, partyId, [
       {
@@ -437,7 +434,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
     ]);
 
     // Transfer the PARENT dish (line 1) whole — its child must follow, not orphan on the source.
-    await asApp(cfg, (tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 1 }]));
+    await asApp((tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 1 }]));
 
     expect(await modLinesOf(tabA)).toEqual([]); // both left the source
     const b = await modLinesOf(tabB);
@@ -452,7 +449,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
   it("refuses transferring an extra's CHILD line on its own (tab.transfer_modifier_line)", async () => {
     const { cfg, coffeeId, waterId, baconId, tableAId, zoneId, coffeeOffer, waterOffer } =
       await setupVenue();
-    const extraListId = await asApp(cfg, (tx) => addExtra(tx, cfg, coffeeId, baconId));
+    const extraListId = await asApp((tx) => addExtra(tx, cfg, coffeeId, baconId));
     const partyId = await partyAt(cfg, tableAId);
     const tabA = await openExtrasTab(cfg, zoneId, partyId, [
       {
@@ -466,7 +463,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
     ]);
 
     await expect(
-      asApp(cfg, (tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 2 }])),
+      asApp((tx) => transfer(tx, cfg, tabA, tabB, [{ lineNo: 2 }])),
     ).rejects.toMatchObject({
       code: "tab.transfer_modifier_line",
       params: { tabId: tabA, lineNo: 2 },

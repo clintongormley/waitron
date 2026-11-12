@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { kitchenStations, ticketItems, workingOrderLines, products } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -62,7 +62,7 @@ beforeEach(async () => {
   const [station] = await v.db
     .select()
     .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, v.cfg.locationId));
+    .where(sql`true`);
   stationId = station!.id;
   await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } }));
 });

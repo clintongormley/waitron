@@ -28,7 +28,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -54,7 +53,7 @@ import { persons } from "@waitron/identity";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -99,7 +98,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: WithVenueRowId<OriginConfig>;
+  cfg: OriginConfig;
   productId: Record<Dish, string>;
   courseId: string;
   sauceListId: string;
@@ -124,13 +123,11 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurante",
   });
-  const locationId = await venueLocationId(db);
-  await seedKitchenStation(db, { locationId: locationId });
+  await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
-  const cfg: WithVenueRowId<OriginConfig> = {
+  const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

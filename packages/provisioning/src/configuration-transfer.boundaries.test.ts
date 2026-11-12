@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { readVenue, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -26,6 +26,7 @@ import {
   importConfigurationTables,
   validateConfigurationBundle,
 } from "./configuration-transfer.js";
+import { readDefaultCatalogueId } from "@waitron/catalogue";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const passphrase = "SYNTHETIC transfer passphrase";
@@ -489,10 +490,9 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
     ),
     { db: suite.db, modules },
   );
-  const venueId = await venueLocationId(suite.db);
   await scratch(async (tx) => {
     await tx.execute(
-      sql`create table zz_parents (id text primary key, location_id text references locations(id), name text, bytes blob, enabled integer)`,
+      sql`create table zz_parents (id text primary key, name text, bytes blob, enabled integer)`,
     );
     await tx.execute(
       sql`create table zz_children (id text primary key, parent_id text references zz_parents(id), note text)`,
@@ -502,7 +502,6 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
       zz_parents: [
         {
           id: "old-id",
-          location_id: "source-location",
           name: "old-id",
           bytes: "\\x0001ff",
           enabled: true,
@@ -518,12 +517,11 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
     await importConfigurationTables(tx, bundle, [module], bundle.modules);
     const parent = (
       await tx.execute<Record<string, unknown>>(
-        sql`select id, location_id, name, hex(bytes) as bytes, typeof(bytes) as storage, enabled from zz_parents`,
+        sql`select id, name, hex(bytes) as bytes, typeof(bytes) as storage, enabled from zz_parents`,
       )
     ).rows[0]!;
     expect(parent).toEqual({
       id: expect.any(String),
-      location_id: venueId,
       name: "old-id",
       bytes: "0001FF",
       storage: "blob",
@@ -656,7 +654,7 @@ it.each([" Europe/London ", "GB"])(
 );
 
 function formatNineBundle(): Record<string, unknown> {
-  const { venue, defaultCatalogueId, ...rest } = configurationBundle();
+  const { venue, ...rest } = configurationBundle();
   const { country, taxId, legalName, taxpayerDomicile, ...fields } = venue;
   const { seriesCode, fullSeriesCode, rectificativeSeriesCode, ...location } = fields;
   return {
@@ -674,7 +672,7 @@ function formatNineBundle(): Record<string, unknown> {
         ...location,
         id: "source-location",
         fireControl: "waiter",
-        catalogueId: defaultCatalogueId,
+        catalogueId: null,
       },
     },
   };
@@ -706,15 +704,15 @@ const gbVenue = {
   },
 };
 
-it("exports the venue's own fields and the default menu outside them", async () => {
+it("exports the venue's own fields and the default flag in its menu rows", async () => {
   const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
   const target = await applyVenue(planVenue(gbVenue, modules), { db: suite.db, modules });
-  const { defaultCatalogueId } = await readVenue(suite.db);
+  const defaultCatalogueId = await readDefaultCatalogueId(suite.db);
   expect(defaultCatalogueId).toEqual(expect.any(String));
   const bundle = await buildConfigurationBundle(
     suite.db,
     target,
-    [],
+    modules,
     new Date("2026-10-16T11:40:00Z"),
     {},
   );
@@ -740,7 +738,10 @@ it("exports the venue's own fields and the default menu outside them", async () 
       "rectificativeSeriesCode",
     ].sort(),
   );
-  expect(bundle.defaultCatalogueId).toBe(defaultCatalogueId);
+  expect(bundle).not.toHaveProperty("defaultCatalogueId");
+  expect(bundle.tables.catalogues!.find((row) => row.id === defaultCatalogueId)?.is_default).toBe(
+    1,
+  );
 });
 
 it("lists only the exported modules' versions, so setup accepts a box's export that names its switched-off modules", async () => {
@@ -760,29 +761,33 @@ it("lists only the exported modules' versions, so setup accepts a box's export t
   expect(() => validateConfigurationBundle(bundle, modules, enabledVersions)).not.toThrow();
 });
 
-it("puts every row under the importing venue whatever location id it names", async () => {
-  await applyVenue(planVenue(gbVenue, []), { db: suite.db, modules: [] });
-  const bundle = configurationBundle();
-  bundle.modules = { "synthetic-transfer": 1 };
-  bundle.tables = {
-    floor_zones: [
-      {
-        id: "source-department",
-        location_id: "not-a-location-here",
-        name: "Bar",
-        created_at: "2026-10-16T11:40:00.000Z",
-      },
-    ],
-  };
-  await withTransaction(suite.db, async (tx) => {
-    await importConfigurationTables(
-      tx,
-      bundle,
-      [moduleWith([{ name: "floor_zones" }])],
-      bundle.modules,
-    );
-    expect((await tx.execute(sql`select location_id from floor_zones`)).rows).toEqual([
-      { location_id: await venueLocationId(tx) },
-    ]);
-  });
+it("exports the default menu flag in catalogue rows without a top-level defaultCatalogueId", async () => {
+  const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
+  const target = await applyVenue(planVenue(gbVenue, modules), { db: suite.db, modules });
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    target,
+    modules,
+    new Date("2026-11-11T12:00:00Z"),
+    {},
+  );
+  expect(Object.hasOwn(bundle, "defaultCatalogueId")).toBe(false);
+  expect(bundle.tables.catalogues).toEqual([expect.objectContaining({ is_default: 1 })]);
+});
+
+it("refuses the previous configuration format before reading its contents", () => {
+  expect(() =>
+    decodeConfigurationBundle(
+      encryptArtifact(
+        packArchive([
+          {
+            name: "configuration.json",
+            bytes: Buffer.from(JSON.stringify({ ...configurationBundle(), version: 18 })),
+          },
+        ]),
+        passphrase,
+      ),
+      passphrase,
+    ),
+  ).toThrow(expect.objectContaining({ code: "setup.configuration_outdated" }));
 });

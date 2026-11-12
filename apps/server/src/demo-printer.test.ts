@@ -47,10 +47,10 @@ async function venue(): Promise<{ locationId: string; deviceId: string; profileI
   return { locationId: venueId, deviceId, profileId };
 }
 
-async function realPrinter(locationId: string, name: string): Promise<string> {
+async function realPrinter(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
-    .values({ locationId, name, transport: "usb", localKey: name.toUpperCase() })
+    .values({ name, transport: "usb", localKey: name.toUpperCase() })
     .returning({ id: printers.id });
   return row!.id;
 }
@@ -63,11 +63,10 @@ async function devicePrinters(deviceId: string) {
   return row;
 }
 
-async function pagePrinter(locationId: string, name: string): Promise<string> {
+async function pagePrinter(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId,
       name,
       host: "10.0.0.9",
       port: 631,
@@ -101,13 +100,13 @@ function profileLists(profileId: string) {
 
 describe("the Demo printer", () => {
   it("delivers its receipt and drawer jobs without claiming an unrelated printer's job", async () => {
-    const { locationId, deviceId, profileId } = await venue();
+    const { deviceId, profileId } = await venue();
     const demo = await configureDemoPrinter(suite.db, true);
     expect(demo).not.toBeNull();
     const otherId = await withTransaction(suite.db, async (tx) => {
       const [other] = await tx
         .insert(printers)
-        .values({ locationId, name: "Other", transport: "usb", localKey: "OTHER" })
+        .values({ name: "Other", transport: "usb", localKey: "OTHER" })
         .returning({ id: printers.id });
       await enqueuePrintJob(
         tx,
@@ -137,10 +136,10 @@ describe("the Demo printer", () => {
   });
 
   it("removes the pretend printer in Live mode and cannot claim its waiting jobs", async () => {
-    const { locationId, deviceId, profileId } = await venue();
+    const { deviceId, profileId } = await venue();
     const [station] = await suite.db
       .insert(kitchenStations)
-      .values({ locationId, name: "Grill" })
+      .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
     const demo = await configureDemoPrinter(suite.db, true);
     await withTransaction(suite.db, (tx) =>
@@ -183,7 +182,7 @@ describe("the Demo printer", () => {
     expect(job?.status).toBe("failed");
   });
 
-  it("finds its printer on the venue and local-key index, not a scan", async () => {
+  it("finds its printer on the local-key index, not a scan", async () => {
     await venue();
     await configureDemoPrinter(suite.db, true);
     const session = (
@@ -210,9 +209,7 @@ describe("the Demo printer", () => {
     });
     const plan = await withTransaction(suite.db, (tx) => tx.execute<{ detail: string }>(statement));
     expect(plan.rows.map((row) => row.detail)).toEqual([
-      expect.stringContaining(
-        "SEARCH printers USING INDEX printers_local_key_key (location_id=? AND local_key=?)",
-      ),
+      expect.stringContaining("SEARCH printers USING INDEX printers_local_key_key (local_key=?)"),
     ]);
   });
 
@@ -245,8 +242,8 @@ describe("the Demo printer", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Restaurant sale",
     });
-    const locationId = await venueLocationId(suite.db);
-    const gone = await realPrinter(locationId, "Gone");
+
+    const gone = await realPrinter("Gone");
     await withTransaction(suite.db, (tx) => deletePrinter(tx, gone));
 
     await expect(
@@ -255,9 +252,9 @@ describe("the Demo printer", () => {
   });
 
   it("a deleted printer's route writes no list, default or station link", async () => {
-    const { locationId, profileId } = await venue();
-    await suite.db.insert(kitchenStations).values({ locationId, name: "Grill" });
-    const gone = await realPrinter(locationId, "Gone");
+    const { profileId } = await venue();
+    await suite.db.insert(kitchenStations).values({ name: "Grill" });
+    const gone = await realPrinter("Gone");
     await withTransaction(suite.db, (tx) => deletePrinter(tx, gone));
     const lists = await profileLists(profileId);
 
@@ -283,8 +280,8 @@ describe("the Demo printer", () => {
   });
 
   it("adds itself after a profile's real printers, leaving held printers and revoked devices alone", async () => {
-    const { locationId, deviceId, profileId } = await venue();
-    const bar = await realPrinter(locationId, "Bar");
+    const { deviceId, profileId } = await venue();
+    const bar = await realPrinter("Bar");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
         ...emptyPrinterLists(),
@@ -350,8 +347,8 @@ describe("the Demo printer", () => {
   });
 
   it("leaves a profile's own default in place", async () => {
-    const { locationId, profileId } = await venue();
-    const bar = await realPrinter(locationId, "Bar");
+    const { profileId } = await venue();
+    const bar = await realPrinter("Bar");
     await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, bar));
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
@@ -381,8 +378,8 @@ describe("the Demo printer", () => {
   });
 
   it("puts a device back on Use default when Live mode takes it off the list", async () => {
-    const { locationId, deviceId, profileId } = await venue();
-    const bar = await realPrinter(locationId, "Bar");
+    const { deviceId, profileId } = await venue();
+    const bar = await realPrinter("Bar");
     // Listed after the device paired, so the device still holds none.
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
@@ -442,8 +439,8 @@ describe("the Demo printer", () => {
   });
 
   it("keeps a profile's invoice list and its page printer default, listing itself after them", async () => {
-    const { locationId, profileId } = await venue();
-    const office = await pagePrinter(locationId, "Office");
+    const { profileId } = await venue();
+    const office = await pagePrinter("Office");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
         ...emptyPrinterLists(),
@@ -462,9 +459,9 @@ describe("the Demo printer", () => {
   });
 
   it("joins every live profile's invoice list, as its default only where there was none", async () => {
-    const { locationId, profileId } = await venue();
+    const { profileId } = await venue();
     const { profileId: otherId } = await seedDevice(suite.db);
-    const office = await pagePrinter(locationId, "Office");
+    const office = await pagePrinter("Office");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, otherId, {
         ...emptyPrinterLists(),
@@ -481,8 +478,8 @@ describe("the Demo printer", () => {
   });
 
   it("takes itself off the invoice list and default in Live mode, keeping a page printer listed", async () => {
-    const { locationId, profileId } = await venue();
-    const office = await pagePrinter(locationId, "Office");
+    const { profileId } = await venue();
+    const office = await pagePrinter("Office");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
         ...emptyPrinterLists(),
@@ -501,10 +498,10 @@ describe("the Demo printer", () => {
   });
 
   it("uses its own inactive agent even when a real agent has the same display name", async () => {
-    const { locationId } = await venue();
+    await venue();
     const [realAgent] = await suite.db
       .insert(printAgents)
-      .values({ locationId, name: "Demo printer", tokenHash: "real-agent-hash" })
+      .values({ name: "Demo printer", tokenHash: "real-agent-hash" })
       .returning({ id: printAgents.id });
     const demo = await configureDemoPrinter(suite.db, true);
     expect(demo?.agentId).not.toBe(realAgent!.id);

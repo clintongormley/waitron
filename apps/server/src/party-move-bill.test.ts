@@ -79,10 +79,7 @@ async function zoneNamed(
   name: string,
   serviceMode: "ticket_then_pay" | "table_tab",
 ): Promise<string> {
-  const [zone] = await tx
-    .insert(floorZones)
-    .values({ locationId: v.cfg.locationId, name })
-    .returning({ id: floorZones.id });
+  const [zone] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
   return (
     await offerProducts(tx, v.cfg, {
       zone: { zoneId: zone!.id },
@@ -787,7 +784,7 @@ describe("kitchen groups when a bill leaves its party", () => {
       operatorId: OPERATOR,
     });
     const readyArgs = await args();
-    await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, ana.partyId, wine!.groupId!, readyArgs));
+    await inTx(v, (tx) => bumpGroupReady(tx, ana.partyId, wine!.groupId!, readyArgs));
     const servedArgs = await args();
     await inTx(v, (tx) =>
       markServed(tx, v.cfg, ana.partyId, [{ lineId: wine!.id, quantity: "1" }], servedArgs),

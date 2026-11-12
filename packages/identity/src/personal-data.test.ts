@@ -51,12 +51,7 @@ async function seedLocation(db: Database): Promise<string> {
 }
 
 /** A person with a distinct value in every exported column, and rows in every table. */
-async function seedFull(
-  db: Database,
-  locationId: string,
-  who: string,
-  year: number,
-): Promise<Seeded> {
+async function seedFull(db: Database, who: string, year: number): Promise<Seeded> {
   const s = (name: string) => `${who}-${name}`;
   const t = (n: number) => at(year, n);
   const secrets = {
@@ -144,11 +139,9 @@ async function seedFull(
   );
 
   const { deviceId } = await seedDevice(db, {
-    locationId,
     label: s("Bar tablet"),
   });
   const { deviceId: secondDeviceId } = await seedDevice(db, {
-    locationId,
     label: s("Kitchen phone"),
   });
   // Later-first, as for every list below.
@@ -337,9 +330,9 @@ async function downloadParsed(personId: string): Promise<{ profile: unknown; sig
 }
 
 async function seedBoth() {
-  const locationId = await seedLocation(suite.db);
-  const marta = await seedFull(suite.db, locationId, "marta", 2021);
-  const colleague = await seedFull(suite.db, locationId, "colleague", 2022);
+  await seedLocation(suite.db);
+  const marta = await seedFull(suite.db, "marta", 2021);
+  const colleague = await seedFull(suite.db, "colleague", 2022);
   const nobody = await seedSignInsWithNoPerson(suite.db);
   return { marta, colleague, nobody };
 }

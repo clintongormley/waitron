@@ -112,7 +112,7 @@ async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedP
     offeredBefore: true,
   }));
   const freshIds = drafts.flatMap((draft) => draft.lines.map((line) => line.menuItemId));
-  const zoneId = await partyZone(tx, cfg, partyId);
+  const zoneId = await partyZone(tx, partyId);
   const offers = new Map(
     zoneId === null || freshIds.length === 0
       ? []

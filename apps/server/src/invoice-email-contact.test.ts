@@ -1,14 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  invoiceSeries,
-  sales,
-  floorZones,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, sales, floorZones, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
@@ -28,8 +21,7 @@ async function fixture(nullHeader = false) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Hospitality",
   });
-  const venueId = await venueLocationId(suite.db);
-  const cfg = { locationId: venueId };
+
   const nodeId = await seedNode(suite.db);
   const [primary] = await suite.db
     .insert(departments)
@@ -49,10 +41,7 @@ async function fixture(nullHeader = false) {
     source: "readiness_test",
     orderNumber: 1,
   });
-  const [zone] = await suite.db
-    .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Dining zone" })
-    .returning();
+  const [zone] = await suite.db.insert(floorZones).values({ name: "Dining zone" }).returning();
   await suite.db.insert(orderServiceContexts).values({
     workingOrderId: order!.id,
     zoneId: zone!.id,

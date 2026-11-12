@@ -11,10 +11,8 @@ import { withTransaction } from "../tenancy.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { printers } from "./printers.js";
 import { stationPrinters } from "./station-printers.js";
-import { venueLocationId } from "../venue.js";
 
 // What this suite proves is the column mapping and the composite primary key.
-let LOCATION_A: string;
 
 describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
@@ -25,7 +23,6 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(suite.db);
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -38,7 +35,7 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(kitchenStations)
-        .values({ locationId: LOCATION_A, name })
+        .values({ name })
         .returning({ id: kitchenStations.id });
       return row!.id;
     });
@@ -49,7 +46,7 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(printers)
-        .values({ locationId: LOCATION_A, name, transport: "cloud_poll", pollId })
+        .values({ name, transport: "cloud_poll", pollId })
         .returning({ id: printers.id });
       return row!.id;
     });

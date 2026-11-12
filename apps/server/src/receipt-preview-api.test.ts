@@ -146,7 +146,6 @@ async function withPrinters(
       const [printer] = await suite.db
         .insert(printers)
         .values({
-          locationId: venue.cfg.locationId,
           name: `Printer ${row.device}`,
           transport: "network_tcp",
           host: "192.0.2.10",
@@ -156,7 +155,6 @@ async function withPrinters(
         })
         .returning({ id: printers.id });
       const { deviceId } = await seedDevice(suite.db, {
-        locationId: venue.cfg.locationId,
         label: row.device,
       });
       await suite.db
@@ -445,7 +443,6 @@ describe("POST /management-api/receipt-preview", () => {
             .from(devices)
             .where(eq(devices.label, "Till 1"));
           const { deviceId } = await seedDevice(suite.db, {
-            locationId: venue.cfg.locationId,
             label: "Till 2",
           });
           try {
@@ -481,7 +478,6 @@ describe("POST /management-api/receipt-preview", () => {
           const [unusedPrinter] = await suite.db
             .insert(printers)
             .values({
-              locationId: venue.cfg.locationId,
               name: "Printer no device uses",
               transport: "network_tcp",
               host: "192.0.2.11",
@@ -503,7 +499,6 @@ describe("POST /management-api/receipt-preview", () => {
       const [printer] = await suite.db
         .insert(printers)
         .values({
-          locationId: venue.cfg.locationId,
           name: "Default receipt printer",
           transport: "network_tcp",
           host: "192.0.2.12",
@@ -512,7 +507,6 @@ describe("POST /management-api/receipt-preview", () => {
         })
         .returning({ id: printers.id });
       const { deviceId, profileId } = await seedDevice(suite.db, {
-        locationId: venue.cfg.locationId,
         label: "Till on the default printer",
       });
       try {

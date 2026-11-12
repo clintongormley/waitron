@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 /** The device join, enrolment and management surface end to end. */
@@ -27,8 +28,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { deploymentEnvironment } from "./config.js";
-import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createStation } from "./kitchen.js";
 import { deleteStation } from "./station-delete.js";
 import { parkOrder } from "./working-order.js";
@@ -152,11 +152,10 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
 /** Seed a `cloud_poll` printer for the venue — needs only a poll id, so no print agent has to be
  *  seeded to satisfy the transport CHECK. Through the table definition: `printers.id` comes from a
  *  `$defaultFn` raw SQL never reaches. */
-async function seedPrinter(cfg: WithVenueRowId): Promise<string> {
+async function seedPrinter(): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
-      locationId: cfg.locationId,
       name: "Receipts",
       transport: "cloud_poll",
       pollId: "poll-abc",
@@ -189,12 +188,11 @@ async function deviceBindings(deviceId: string): Promise<{
   return row!;
 }
 
-async function seedNamedPrinters(cfg: WithVenueRowId, names: string[]): Promise<string[]> {
+async function seedNamedPrinters(names: string[]): Promise<string[]> {
   const rows = await suite.db
     .insert(printers)
     .values(
       names.map((name) => ({
-        locationId: cfg.locationId,
         name,
         transport: "network_tcp" as const,
         host: "10.0.0.7",
@@ -205,11 +203,10 @@ async function seedNamedPrinters(cfg: WithVenueRowId, names: string[]): Promise<
 }
 
 /** An office (page) printer at the venue's location; its id is never a receipt printer's. */
-async function seedPagePrinter(cfg: WithVenueRowId): Promise<string> {
+async function seedPagePrinter(): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
-      locationId: cfg.locationId,
       name: "Office",
       host: "10.0.0.8",
       port: 631,
@@ -1051,15 +1048,14 @@ describe("Device API — the device-guarded routes", () => {
 
     const { deviceId, jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
 
-    const ownPrinter = await seedPrinter(venue.cfg);
-    const foreignPrinter = await seedPrinter(venue.cfg);
+    const ownPrinter = await seedPrinter();
+    const foreignPrinter = await seedPrinter();
     await suite.db.insert(stationPrinters).values([
       { stationId: venue.defaultStationId, printerId: ownPrinter },
       { stationId: cold.id, printerId: foreignPrinter },
     ]);
     for (const printerId of [ownPrinter, foreignPrinter]) {
       await suite.db.insert(printJobs).values({
-        locationId: venue.cfg.locationId,
         printerId,
         payload: Uint8Array.of(1),
         status: "failed",
@@ -1368,10 +1364,9 @@ describe("Device API — the device-guarded routes", () => {
 
     it("keeps its printers-down line with its waiting dishes", async () => {
       const { venue, app, cold, items } = await seed();
-      const printerId = await seedPrinter(venue.cfg);
+      const printerId = await seedPrinter();
       await suite.db.insert(stationPrinters).values({ stationId: cold, printerId });
       await suite.db.insert(printJobs).values({
-        locationId: venue.cfg.locationId,
         printerId,
         payload: Uint8Array.of(1),
         status: "failed",
@@ -1438,11 +1433,10 @@ describe("Device API — the device-guarded routes", () => {
       const [zone] = await suite.db
         .select({ id: floorZones.id })
         .from(floorZones)
-        .where(eq(floorZones.locationId, venue.cfg.locationId));
+        .where(sql`true`);
       const [table] = await suite.db
         .insert(diningTables)
         .values({
-          locationId: venue.cfg.locationId,
           label: "Garden 4",
           zoneId: zone!.id,
           ...shortNameColumns("G4"),
@@ -1589,11 +1583,10 @@ describe("Device API — the device-guarded routes", () => {
       .where(eq(kitchenStations.id, cold!.id));
     const printerAt = new Map<string, string>();
     for (const stationId of [venue.defaultStationId, pastry!.id]) {
-      const printerId = await seedPrinter(venue.cfg);
+      const printerId = await seedPrinter();
       printerAt.set(stationId, printerId);
       await suite.db.insert(stationPrinters).values({ stationId, printerId });
       await suite.db.insert(printJobs).values({
-        locationId: venue.cfg.locationId,
         printerId,
         payload: Uint8Array.of(1),
         status: "failed",
@@ -2004,7 +1997,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
 
   /** A till on a profile listing receipt [Bar, Counter] and slip [Bar, Counter], choosing Bar for both. */
   async function tillOnListedProfile(venue: Venue, app: Hono, name = "Till") {
-    const [bar, counter] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter"]);
+    const [bar, counter] = await seedNamedPrinters(["Bar", "Counter"]);
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
@@ -2137,7 +2130,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
   it("changes the profile and sets the printers in the same request", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const [p1, p2, p3] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter", "Portable"]);
+    const [p1, p2, p3] = await seedNamedPrinters(["Bar", "Counter", "Portable"]);
     const from = await seedProfile("till");
     const to = await seedProfile("till");
     await withTransaction(suite.db, async (tx) => {
@@ -2195,7 +2188,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await tillOnListedProfile(venue, app);
-    const [elsewhere] = await seedNamedPrinters(venue.cfg, ["Terrace"]);
+    const [elsewhere] = await seedNamedPrinters(["Terrace"]);
     const other = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, other, {
@@ -2227,7 +2220,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await tillOnListedProfile(venue, app);
-    const office = await seedPagePrinter(venue.cfg);
+    const office = await seedPagePrinter();
     for (const field of ["receiptPrinterId", "paymentSlipPrinterId", "cashDrawerPrinterId"]) {
       const res = await edit(app, venue.managerCookie, t.deviceId, { [field]: office });
       expect(res.status, field).toBe(400);
@@ -2262,7 +2255,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await tillOnListedProfile(venue, app);
-    const office = await seedPagePrinter(venue.cfg);
+    const office = await seedPagePrinter();
     await withTransaction(suite.db, async (tx) =>
       setProfilePrinterLists(tx, t.profileId, {
         ...(await readProfilePrinterLists(tx, t.profileId)),
@@ -2309,7 +2302,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await tillOnListedProfile(venue, app);
-    const office = await seedPagePrinter(venue.cfg);
+    const office = await seedPagePrinter();
     for (const unlisted of [office, t.bar]) {
       const res = await edit(app, venue.managerCookie, t.deviceId, {
         name: "Renamed",
@@ -2593,10 +2586,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       const app = mountApp(venue.cfg);
       const [offered, other] = await suite.db
         .insert(floorZones)
-        .values([
-          { locationId: venue.cfg.locationId, name: "Terrace" },
-          { locationId: venue.cfg.locationId, name: "Bar" },
-        ])
+        .values([{ name: "Terrace" }, { name: "Bar" }])
         .returning({ id: floorZones.id });
       const profileId = await seedProfile("kds");
       await withTransaction(suite.db, (tx) =>
@@ -2625,7 +2615,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       const app = mountApp(venue.cfg);
       const [zone] = await suite.db
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Deleted pass zone" })
+        .values({ name: "Deleted pass zone" })
         .returning({ id: floorZones.id });
       const profileId = await seedProfile("kds");
       const screen: DeviceKitchenScreen = {
@@ -3292,7 +3282,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("names the device without its printers, which its equipment carries", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const printerId = await seedPrinter(venue.cfg);
+    const printerId = await seedPrinter();
     const { deviceId, jar, profileId } = await enrolTill(app, venue, "HW till");
     const [profile] = await suite.db
       .select({ name: deviceProfiles.name })
@@ -3345,11 +3335,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
 describe("a device's current printers", () => {
   /** A till on a profile listing receipt [Counter, Bar] and slip [Portable, Bar], choosing the first of each. */
   async function listedTill(venue: Venue, app: Hono) {
-    const [bar, counter, portable] = await seedNamedPrinters(venue.cfg, [
-      "Bar",
-      "Counter",
-      "Portable",
-    ]);
+    const [bar, counter, portable] = await seedNamedPrinters(["Bar", "Counter", "Portable"]);
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
@@ -3396,7 +3382,6 @@ describe("a device's current printers", () => {
     const [drawer] = await suite.db
       .insert(printers)
       .values({
-        locationId: venue.cfg.locationId,
         name: "Separate drawer",
         transport: "network_tcp",
         host: "10.0.0.99",
@@ -3576,7 +3561,7 @@ describe("a device's current printers", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
-    const office = await seedPagePrinter(venue.cfg);
+    const office = await seedPagePrinter();
     for (const [role, field] of [
       ["receipt", "receiptPrinterId"],
       ["payment_slip", "paymentSlipPrinterId"],
@@ -4417,11 +4402,7 @@ describe("a device's approved profiles and switching its active one", () => {
     /** A till on profile `from`, with `to` approved; `from` lists [Bar, Counter] for receipts and
      * [Bar] for slips, and the device holds Counter and Bar. */
     async function switchable(app: Hono, venue: Venue) {
-      const [bar, counter, kitchen] = await seedNamedPrinters(venue.cfg, [
-        "Bar",
-        "Counter",
-        "Kitchen",
-      ]);
+      const [bar, counter, kitchen] = await seedNamedPrinters(["Bar", "Counter", "Kitchen"]);
       const from = await seedProfile("till");
       const to = await seedProfile("till");
       await withTransaction(suite.db, async (tx) => {

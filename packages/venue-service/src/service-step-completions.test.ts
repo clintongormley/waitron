@@ -38,7 +38,7 @@ async function seedLocation(name: string): Promise<string> {
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
   const locationId = venueId;
-  await db.insert(kitchenStations).values({ locationId, name: "Default prep", isDefault: true });
+  await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
   return locationId;
 }
 
@@ -119,11 +119,11 @@ describe("readTableStepRules", () => {
     const a = await departmentWithTables(cfg, "A");
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "No department" })
+      .values({ name: "No department" })
       .returning({ id: floorZones.id });
     const [table] = await db
       .insert(diningTables)
-      .values({ locationId: cfg.locationId, zoneId: zone!.id, label: randomUUID() })
+      .values({ zoneId: zone!.id, label: randomUUID() })
       .returning({ id: diningTables.id });
 
     const read = await scoped((tx) => readTableStepRules(tx, [a.tableIds[0]!, table!.id]));

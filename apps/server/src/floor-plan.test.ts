@@ -98,9 +98,7 @@ async function zone(): Promise<string> {
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    await tx
-      .insert(floorZones)
-      .values({ id, locationId: v.cfg.locationId, name: `Zone ${id.slice(0, 8)}` });
+    await tx.insert(floorZones).values({ id, name: `Zone ${id.slice(0, 8)}` });
     await tx.insert(zoneServicePolicies).values({
       zoneId: id,
       departmentId: tables!.departmentId,
@@ -1468,10 +1466,7 @@ describe("short names", () => {
       });
       const setIds: string[] = [];
       for (const name of ["Standard", "Dinner"]) {
-        const [row] = await tx
-          .insert(floorPlanSets)
-          .values({ locationId: v.cfg.locationId })
-          .returning({ id: floorPlanSets.id });
+        const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
         await linkFloorPlanSet(tx, { setId: row!.id, departmentId: dept.id, name });
         setIds.push(row!.id);
       }

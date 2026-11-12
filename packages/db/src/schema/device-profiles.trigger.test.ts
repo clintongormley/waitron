@@ -11,7 +11,6 @@ import { FORM_FACTOR_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 
@@ -20,7 +19,6 @@ const TOKEN_HASH = "scrypt$00$00";
 describe("device_profiles form-factor drift guard (locked while an active device uses it)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let db: Database;
-  let locationId: string;
   let profileSeq = 0;
 
   beforeAll(async () => {
@@ -30,7 +28,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    locationId = (await venueLocationId(db)) as string;
   });
 
   async function freshKdsProfile(): Promise<string> {
@@ -44,7 +41,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
 
   async function insertKdsDevice(profileId: string, active: boolean, label: string): Promise<void> {
     await db.insert(devices).values({
-      locationId,
       deviceProfileId: profileId,
       label,
       tokenHash: TOKEN_HASH,

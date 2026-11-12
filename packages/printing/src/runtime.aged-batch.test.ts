@@ -27,8 +27,8 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
   const agents = await suite.db
     .insert(printAgents)
     .values([
-      { locationId, name: "A", tokenHash: "scrypt$fixture-a" },
-      { locationId, name: "B", tokenHash: "scrypt$fixture-b" },
+      { name: "A", tokenHash: "scrypt$fixture-a" },
+      { name: "B", tokenHash: "scrypt$fixture-b" },
     ])
     .returning({ id: printAgents.id });
   const ids = await withTransaction(suite.db, async (tx) => {

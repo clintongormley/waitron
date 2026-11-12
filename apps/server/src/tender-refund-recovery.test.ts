@@ -66,7 +66,6 @@ async function retained(sent = false) {
       requestedBy: v.adminId,
       ...v.cfg.origin,
       nodeId: v.cfg.nodeId,
-      locationId: v.cfg.locationId,
       method: "card",
       provider: "fake",
       providerPaymentRef: t.payment.paymentRef,

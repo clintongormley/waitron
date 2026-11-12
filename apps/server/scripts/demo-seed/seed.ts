@@ -35,7 +35,6 @@ import { DEMO_PRINTER_KEY, routeToDemoPrinter } from "../../src/demo-printer.js"
 export interface SeedDemoVenue {
   nodeId: string;
   seriesId: string;
-  locationId: string;
 }
 
 export interface SeedDemoInput {
@@ -71,13 +70,11 @@ export async function seedDemoRestaurant(
   db: Database,
   { venue, locale, salesDays, departmentTradingNames, dataSet }: SeedDemoInput,
 ): Promise<SeedDemoResult> {
-  const { locationId } = venue;
   demoSeedEnvironment(process.env);
   await withTransaction(db, (tx) => readIssueZone(tx, { nodeId: venue.nodeId }));
 
   const { products, invoiceLocale, passStationIds } = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds, stationIds } = await seedCatalogues(tx, {
-      locationId,
       locale,
       dataSet,
     });
@@ -91,7 +88,7 @@ export async function seedDemoRestaurant(
     await routeToDemoPrinter(tx, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
     await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
-    await seedFloor(tx, { locationId, locale, departmentTradingNames, dataSet, menuIds });
+    await seedFloor(tx, { locale, departmentTradingNames, dataSet, menuIds });
     await giveKitchenDisplaysThePass(tx);
     await seedStaff(tx, { dataSet });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
@@ -132,12 +129,7 @@ export async function seedDemoRestaurant(
     const [zone] = await tx
       .select({ id: floorZones.id })
       .from(floorZones)
-      .where(
-        and(
-          eq(floorZones.locationId, locationId),
-          eq(floorZones.name, demoPlainText(terrace.name, dataSet, locale)),
-        ),
-      );
+      .where(and(eq(floorZones.name, demoPlainText(terrace.name, dataSet, locale))));
     if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
     const clock = await readVenueClock(tx);
     await replaceZoneClosedWeek(

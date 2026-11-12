@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -15,7 +16,6 @@ import {
   sales,
   parties,
   serviceCommands,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -37,7 +37,6 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -46,7 +45,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
 // the status each refusal answers. The verbs themselves are pinned in `parties.test.ts`.
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let ana: { id: string };
 
 // `resetPerTest: false`: the venue, till, node and person are seeded once; each case seats its own
@@ -69,7 +68,6 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = {
       nodeId: brandNodeId(nodeId),
-      locationId: await venueLocationId(db),
       locale: "es-ES",
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
@@ -191,7 +189,7 @@ describe("POST /api/tables/:id/seat", () => {
     expect(tab!.partyId).toBe(seated.partyId);
   });
 
-  it("opens the tab as the device that seated it, at the venue's location", async () => {
+  it("opens the tab as the device that seated it", async () => {
     const deviceId = await seedSessionDevice(suite.db);
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
@@ -211,12 +209,11 @@ describe("POST /api/tables/:id/seat", () => {
         .select({
           source: workingOrders.source,
           deviceId: workingOrders.deviceId,
-          locationId: workingOrders.locationId,
         })
         .from(workingOrders)
         .where(eq(workingOrders.id, tabId)),
     );
-    expect(tab).toEqual({ source: "device", deviceId, locationId: cfg.locationId });
+    expect(tab).toEqual({ source: "device", deviceId });
   });
 
   it("seats without a guest count, absent or null", async () => {

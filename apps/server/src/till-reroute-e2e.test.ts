@@ -197,7 +197,6 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
     .insert(devices)
     .values({
       id: DEVICE_ID,
-      locationId: LOCATION,
       deviceProfileId: DEVICE_PROFILE,
       label: "Counter till",
       tokenHash: hashDeviceToken(DEVICE_TOKEN),

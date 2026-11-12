@@ -57,6 +57,11 @@ const fixtures = [
     "db.insert(shifts).values({ personId }).onConflictDoNothing({ target: [shifts.personId] });",
   ],
   [
+    "conflict nothing without arguments",
+    "db.insert(shifts).values({ locationId, personId }).onConflictDoNothing();",
+    "db.insert(shifts).values({ personId }).onConflictDoNothing();",
+  ],
+  [
     "helper property",
     "seedKitchenStation(db, { locationId, name });",
     "seedKitchenStation(db, { name });",

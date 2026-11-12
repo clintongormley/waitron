@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { takeReaderBillPayment } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
 import { settleFromProviderRow } from "./bill-payments-loop.js";
@@ -42,7 +43,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -72,7 +72,6 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
 import {
@@ -162,10 +161,9 @@ function nextNif(): string {
   return nifWithControlLetter(70_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -177,7 +175,7 @@ type OfferedProduct = AvailableProduct & { menuItemId: string; zoneId: string };
 
 interface SeededVenue {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   coffee: OfferedProduct;
 }
 
@@ -215,8 +213,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const rows = await suite.db.select().from(departments);
   for (const department of rows)
     await suite.db.insert(departmentReceipts).values({
@@ -394,11 +391,7 @@ async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
 }
 
 /** The receipt payloads enqueued to `printerId`, as the shared `binary` column hands them back. */
-async function printJobPayloads(
-  cfg: DeviceRequestConfig,
-  printerId: string,
-): Promise<Uint8Array[]> {
-  void cfg;
+async function printJobPayloads(printerId: string): Promise<Uint8Array[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
       .select({ payload: printJobs.payload })
@@ -409,8 +402,7 @@ async function printJobPayloads(
 }
 
 /** The count of `drawer_opens` rows. */
-async function drawerOpenCount(cfg: DeviceRequestConfig): Promise<number> {
-  void cfg;
+async function drawerOpenCount(): Promise<number> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select().from(drawerOpens);
     return rows.length;
@@ -436,9 +428,9 @@ async function collectedAtSet(id: string): Promise<boolean> {
 /** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location). Every
  *  fixture line here carries no product/category route, so `placeOrder` fires it to this
  *  station. */
-async function defaultStationId(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
+async function defaultStationId(): Promise<string> {
   const rows = suite.db.all<{ id: string }>(sql`
-    select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active
+    select id from kitchen_stations where is_default and active
   `);
   return rows[0]!.id;
 }
@@ -1476,22 +1468,22 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const first = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(first.outcome).toBe("captured");
 
-    expect(await printJobPayloads(cfg, printerId)).toHaveLength(0);
+    expect(await printJobPayloads(printerId)).toHaveLength(0);
     await printSaleReceipt(deps, cfg, id, false);
-    const afterFirst = await printJobPayloads(cfg, printerId);
+    const afterFirst = await printJobPayloads(printerId);
     expect(afterFirst).toHaveLength(1);
     const payload = new Uint8Array(afterFirst[0]!);
     expect(decodeTicket(payload)).toContain("VERI*FACTU");
     expect(opensDrawer(payload)).toBe(false);
-    expect(await drawerOpenCount(cfg)).toBe(0);
+    expect(await drawerOpenCount()).toBe(0);
     expect(await fiscalRecordCount(id)).toBe(1);
 
     // A lost-response retry replays and never prints a second receipt.
     const second = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(second.outcome).toBe("captured");
     expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await printJobPayloads(cfg, printerId)).toHaveLength(1);
-    expect(await drawerOpenCount(cfg)).toBe(0);
+    expect(await printJobPayloads(printerId)).toHaveLength(1);
+    expect(await drawerOpenCount()).toBe(0);
   });
 
   it("tips on: charges total+tip, files the sale at the total, records the tip on the tender", async () => {
@@ -1583,7 +1575,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
   it("a sold-out open ticket_then_pay counter order paid by card sends its dish once, and a replay sends nothing more", async () => {
     const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1608,7 +1600,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
   it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2), records no handover, stays on the station queue", async () => {
     const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const app = suite.db;
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -2051,7 +2043,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("recovers a lost-T2 capture on a PLACED order: files, records no handover, stays on the station queue", async () => {
     const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const app = suite.db;
     // A placed ticket_then_pay order whose card collect captured but lost P3. With no outstanding
     // invoice this is `recover`, not `recover-settle`.
@@ -2245,7 +2237,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
 
   it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale), records no handover, stays on the station queue", async () => {
     const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const app = suite.db;
     const { id, saleId } = await placedIssuedBill(cfg, coffee);
     // The seeded invoice is outstanding; placement fired the order to the default station.
@@ -2381,7 +2373,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     it("closes the bill without asking the reader, writing no tender and no payment", async () => {
       const { cfg: baseCfg, coffee } = await modeVenue("ticket_then_pay");
       const cfg = { ...baseCfg, tipsEnabled: true };
-      const station = await defaultStationId(cfg);
+      const station = await defaultStationId();
       const { id, saleId } = await placedIssuedBill(cfg, coffee);
       await correctToZero(cfg, saleId);
       expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
@@ -2524,7 +2516,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
 
     it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row, records no handover, stays on the station queue", async () => {
       const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const station = await defaultStationId(cfg);
+      const station = await defaultStationId();
       const app = suite.db;
       const { id } = await placedIssuedBill(cfg, coffee); // placing fires the ticket item to the station
       const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total

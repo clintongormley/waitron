@@ -82,3 +82,61 @@ it("rekeys routing cells and their references when location leaves their identit
     "@periods:one": { id: "@periods:one", cell_id: key },
   });
 });
+
+it("rekeys a floor zone and its table references when its location column goes", () => {
+  const old = '@floor_zones:["@locations:venue","Bar"]';
+  const capture: CanonicalMadridSemantics = {
+    tables: {
+      floor_zones: {
+        columns: [column("id"), column("location_id"), column("name")],
+        foreignKeys: [],
+        rows: { [old]: { id: old, location_id: "@locations:venue", name: "Bar" } },
+      },
+      dining_tables: {
+        columns: [],
+        foreignKeys: [],
+        rows: { table: { id: "table", zone_id: old, label: "One" } },
+      },
+    },
+  };
+  const planId = `@floor_plans:${JSON.stringify([old, "set"])}`;
+  capture.tables.floor_plans = {
+    columns: [],
+    foreignKeys: [],
+    rows: { [planId]: { id: planId, zone_id: old } },
+  };
+  const routeId = `@routing_cells:${JSON.stringify(["category", null, old])}`;
+  capture.tables.routing_cells = {
+    columns: [],
+    foreignKeys: [],
+    rows: {
+      [routeId]: {
+        id: routeId,
+        location_id: "@locations:venue",
+        category_id: "category",
+        product_id: null,
+        zone_id: old,
+      },
+    },
+  };
+  const before = structuredClone(capture);
+  const result = madridWithDroppedColumns(capture, {
+    floor_zones: ["location_id"],
+    routing_cells: ["location_id"],
+  });
+  const key = '@floor_zones:["Bar"]';
+  expect(result.tables.floor_zones!.rows).toEqual({ [key]: { id: key, name: "Bar" } });
+  expect(result.tables.dining_tables!.rows.table).toEqual({
+    id: "table",
+    zone_id: key,
+    label: "One",
+  });
+  expect(Object.values(result.tables.floor_plans!.rows)).toEqual([
+    { id: `@floor_plans:${JSON.stringify([key, "set"])}`, zone_id: key },
+  ]);
+  const routeKey = `@routing_cells:${JSON.stringify(["category", null, key])}`;
+  expect(result.tables.routing_cells!.rows).toEqual({
+    [routeKey]: { id: routeKey, category_id: "category", product_id: null, zone_id: key },
+  });
+  expect(capture).toEqual(before);
+});

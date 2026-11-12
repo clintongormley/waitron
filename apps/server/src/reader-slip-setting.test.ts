@@ -13,7 +13,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 
 it("refreshes the saved reader slip setting in setup revision and every equipment projection", async () => {
   const { cfg } = await setupVenue(suite.db);
-  const { deviceId, profileId } = await seedDevice(suite.db, { locationId: cfg.locationId });
+  const { deviceId, profileId } = await seedDevice(suite.db, {});
   const [reader] = await suite.db
     .insert(cardReaders)
     .values({ provider: "sumup", providerRef: "own-slip-reader", name: "Counter" })

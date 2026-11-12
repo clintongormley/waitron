@@ -144,7 +144,6 @@ describe("the venue document", () => {
       fiscalTerritory: "ES-common",
       timeZone: "Europe/London",
       dayCutover: "04:00:00",
-      defaultCatalogueId: null,
     });
     expect((await withTransaction(suite.db, api.readVenueClockAndPlace)).place).toEqual({
       province: "Coast",

@@ -179,10 +179,7 @@ describe("readStaffingMonth", () => {
   it("lists an active area with no paint, on no day", async () => {
     const v = await painted();
     const [pastry] = await inTx((tx) =>
-      tx
-        .insert(kitchenStations)
-        .values({ locationId: v.cfg.locationId, name: "Pastry" })
-        .returning({ id: kitchenStations.id }),
+      tx.insert(kitchenStations).values({ name: "Pastry" }).returning({ id: kitchenStations.id }),
     );
     const month = await read();
     const area: AreaRef = { kind: "station", id: pastry!.id };

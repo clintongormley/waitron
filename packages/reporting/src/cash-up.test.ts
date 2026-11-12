@@ -132,7 +132,7 @@ describe("computeCashUp", () => {
   });
 
   it("breaks down by device", async () => {
-    const device2 = await seedVenueDevice(suite.db, venue.locationId);
+    const device2 = await seedVenueDevice(suite.db);
     await saleWithTenders(1, [{ method: "cash", amount: "30.00", settledAt: settledNoon }]);
     const s2 = await seedSale(
       suite.db,
@@ -155,7 +155,7 @@ describe("computeCashUp", () => {
   });
 
   it("counts cash per device: sales on two devices and a bill payment on the first", async () => {
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
     await saleWithTenders(1, [{ method: "cash", amount: "30.00", settledAt: settledNoon }]);
     const onB = await seedSale(
       suite.db,
@@ -331,7 +331,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
   }
 
   it("counts a received payment on its own device and day as applied plus tip, never the change", async () => {
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
     const bill = await openBill();
     // €60.00 handed over for €50.00 applied and a €5.00 tip: €5.00 change went back to the payer.
     await seedBillPayment(
@@ -378,7 +378,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
     // Design §8 tests 24 and 26: €50.00 cash on device A on day 1 and €70.00 card on device B on day 2
     // against one €120.00 bill; the invoice is issued on day 2 on device B, with one tender per
     // payment settled when its money moved. A walk-up cash sale on device B on day 2 sits beside it.
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
     const bill = await openBill();
     const cashPayment = await seedBillPayment(
       suite.db,
@@ -458,7 +458,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
 
   it("subtracts a completed refund on its own device and day, under its payment's method", async () => {
     // Design §8 test 25, and a whole card payment given back with its tip.
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
     const bill = await openBill();
     const cashPayment = await seedBillPayment(
       suite.db,

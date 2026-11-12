@@ -23,7 +23,6 @@ import {
 import {
   catalogues,
   categories,
-  locations,
   menuItems,
   menuItemVariantOverrides,
   now,
@@ -1206,8 +1205,17 @@ export async function deactivateProduct(tx: Transaction, id: string): Promise<vo
   await archiveProducts(tx, [id]);
 }
 
+export async function readDefaultCatalogueId(tx: Transaction): Promise<string | null> {
+  const [row] = await tx
+    .select({ id: catalogues.id })
+    .from(catalogues)
+    .where(eq(catalogues.isDefault, true));
+  return row?.id ?? null;
+}
+
 export async function assignCatalogueToVenue(tx: Transaction, catalogueId: string): Promise<void> {
-  await tx.update(locations).set({ catalogueId });
+  await tx.update(catalogues).set({ isDefault: false }).where(eq(catalogues.isDefault, true));
+  await tx.update(catalogues).set({ isDefault: true }).where(eq(catalogues.id, catalogueId));
 }
 
 export async function setVenueDefaultCatalogue(

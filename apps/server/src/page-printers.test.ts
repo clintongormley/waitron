@@ -82,15 +82,15 @@ async function venue() {
   });
   const venueId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
-  const agentOne = await agent(venueId, "Back office agent");
-  const agentTwo = await agent(venueId, "Re-paired agent");
+  const agentOne = await agent("Back office agent");
+  const agentTwo = await agent("Re-paired agent");
   return { locationId: venueId, nodeId, agentOne, agentTwo };
 }
 
-async function agent(locationId: string, name: string): Promise<string> {
+async function agent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name, tokenHash: "scrypt$fixture" })
+    .values({ name, tokenHash: "scrypt$fixture" })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -185,7 +185,6 @@ describe("registering a page printer from discovery", () => {
     expect(await printerRows()).toEqual([
       {
         id: result.id,
-        locationId: v.locationId,
         name: "Back office",
         host: "192.0.2.40",
         port: 8631,
@@ -362,7 +361,6 @@ describe("listing and renaming page printers", () => {
     const unattached = randomUUID();
     await suite.db.insert(pagePrinters).values({
       id: unattached,
-      locationId: v.locationId,
       name: "Imported",
       host: "192.0.2.43",
       port: 631,
@@ -406,7 +404,6 @@ describe("deleting a page printer", () => {
       .values({ name: "Counter", formFactor: "till" })
       .returning();
     const { deviceId } = await seedDevice(suite.db, {
-      locationId: v.locationId,
       label: "Counter till",
       profileId: profile!.id,
     });

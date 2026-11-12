@@ -121,10 +121,7 @@ async function updateToDue(zoneId: string, at: Date): Promise<void> {
 /** A layout row of the zone in a set no department holds, which a lookup by zone alone counts. */
 async function unlinkedPlanRow(zoneId: string): Promise<void> {
   await inTx(v, async (tx) => {
-    const [set] = await tx
-      .insert(floorPlanSets)
-      .values({ locationId: v.cfg.locationId })
-      .returning({ id: floorPlanSets.id });
+    const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
     await tx
       .insert(floorPlans)
       .values({ zoneId, setId: set!.id, revision: 1, savedAt: LUNCH.toISOString() });
@@ -191,10 +188,7 @@ describe("GET /api/zones offers the due layout", () => {
     const { d } = await twoSets();
     await updateToDue(d.zoneId, AFTER_LUNCH);
     const party = await inTx(v, async (tx) => {
-      const [row] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: v.cfg.locationId })
-        .returning({ id: floorPlanSets.id });
+      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       await linkFloorPlanSet(tx, {
         setId: row!.id,
         departmentId: d.departmentId,
@@ -287,9 +281,7 @@ describe("hasPlan says the department has a set", () => {
   it("is false for a zone in no department", async () => {
     const zoneId = randomUUID();
     await inTx(v, (tx) =>
-      tx
-        .insert(floorZones)
-        .values({ id: zoneId, locationId: v.cfg.locationId, name: `Loose ${zoneId.slice(0, 8)}` }),
+      tx.insert(floorZones).values({ id: zoneId, name: `Loose ${zoneId.slice(0, 8)}` }),
     );
     await unlinkedPlanRow(zoneId);
 

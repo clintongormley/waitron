@@ -15,7 +15,6 @@ describe("test live tables", () => {
       const [zone] = await tx
         .insert(floorZones)
         .values({
-          locationId: v.cfg.locationId,
           name: "Fixture zone",
         })
         .returning({ id: floorZones.id });
@@ -27,7 +26,6 @@ describe("test live tables", () => {
       return { row, zoneId: zone!.id };
     });
     expect(result.row).toMatchObject({
-      locationId: v.cfg.locationId,
       label: "Fixture table",
       zoneId: result.zoneId,
     });

@@ -1,7 +1,7 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_TIME_ZONE, withTransaction, venueLocationId } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -9,7 +9,7 @@ import { bookings } from "@waitron/bookings";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
 import { ALL_MODULES, enabledFloorAnnotators } from "./modules.js";
@@ -29,33 +29,30 @@ beforeAll(() => {
 
 const LOCALE = "es-ES";
 
-async function setupVenue(): Promise<WithVenueRowId> {
+async function setupVenue(): Promise<TradingContext> {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],
     operationDescription: "In-store sales",
     timeZone: DEFAULT_TIME_ZONE,
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
 }
 
-function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
 }
 
-async function insertBooking(cfg: WithVenueRowId, tableId: string, time: string): Promise<void> {
-  await asApp(cfg, (tx) =>
+async function insertBooking(tableId: string, time: string): Promise<void> {
+  await asApp((tx) =>
     tx.insert(bookings).values({
       tableId,
       bookingDate: "2026-09-15",
@@ -74,17 +71,17 @@ const MADRID_NOON = new Date("2026-09-15T10:00:00Z");
 describe("listTablesWithState — floor-annotator merge", () => {
   it("surfaces a table's imminent booked reservation through the bookings floor annotator", async () => {
     const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, async (tx) =>
+    const { id: tableId } = await asApp(async (tx) =>
       createTable(tx, cfg, {
         label: "7",
         zoneId: (await createZone(tx, { name: "Tables" })).id,
       }),
     );
-    await insertBooking(cfg, tableId, "14:00");
+    await insertBooking(tableId, "14:00");
 
     // The REAL enabled-set annotators (bookings among them) — the exact assembly boot passes.
     const annotators = enabledFloorAnnotators(ALL_MODULES);
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, annotators, MADRID_NOON))).find(
+    const row = (await asApp((tx) => listTablesWithState(tx, annotators, MADRID_NOON))).find(
       (t) => t.id === tableId,
     )!;
     expect(row.nextReservation).toEqual({ time: "14:00" });
@@ -94,19 +91,19 @@ describe("listTablesWithState — floor-annotator merge", () => {
     // A descriptor whose `floorAnnotations` seat is OMITTED: the badge flows ONLY through the seat, so
     // the booked row never reaches the floor.
     const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, async (tx) =>
+    const { id: tableId } = await asApp(async (tx) =>
       createTable(tx, cfg, {
         label: "8",
         zoneId: (await createZone(tx, { name: "Tables" })).id,
       }),
     );
-    await insertBooking(cfg, tableId, "14:00");
+    await insertBooking(tableId, "14:00");
 
     const withoutSeat = ALL_MODULES.map((m) => ({ ...m, floorAnnotations: undefined }));
     const annotators = enabledFloorAnnotators(withoutSeat);
     expect(annotators).toHaveLength(0);
 
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx, annotators, MADRID_NOON))).find(
+    const row = (await asApp((tx) => listTablesWithState(tx, annotators, MADRID_NOON))).find(
       (t) => t.id === tableId,
     )!;
     expect(row.nextReservation).toBeNull();

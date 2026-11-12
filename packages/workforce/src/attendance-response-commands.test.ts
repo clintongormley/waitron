@@ -783,7 +783,7 @@ it("replay survives closing and reopening a persisted venue copy", async () => {
   }
 });
 it("a till decision on another node keeps the selected manager and device origin", async () => {
-  const { deviceId } = await seedDevice(suite.db, { locationId });
+  const { deviceId } = await seedDevice(suite.db, {});
   const capture = deviceOrigin(deviceId);
   const value = await command(pair());
   const requested = await send(value, personId, personId, capture);

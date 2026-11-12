@@ -116,7 +116,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
       tradingName: "Dining",
       printTradingName: true,
     });
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
     const first = await record("2026-08-04", [
       { deviceId: venue.deviceId, openingFloat: "0.00", payouts: "0.00", countedCash: "100.00" },
     ]);
@@ -216,8 +216,8 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     // Three devices at one node, each with cash takings, crafted so the reconciliation exercises all
     // three signs: A over, B short, C exact.
     const deviceA = venue.deviceId;
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
-    const deviceC = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
+    const deviceC = await seedVenueDevice(suite.db);
     await seedCashSale(deviceA, "123.45");
     await seedCashSale(deviceB, "48.00");
     await seedCashSale(deviceC, "20.00");
@@ -524,7 +524,7 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
 
   it("counts day 1's cash contribution on its own device, unchanged by the invoice issued on day 2", async () => {
     const deviceA = venue.deviceId;
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
     const bill = await openBill();
     const cash = await seedBillPayment(
       suite.db,
@@ -594,7 +594,7 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
 
   it("forces a count for a device that only gave cash back, reconciled against its negative takings", async () => {
     const deviceA = venue.deviceId;
-    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceB = await seedVenueDevice(suite.db);
     const bill = await openBill();
     const payment = await seedBillPayment(
       suite.db,
@@ -618,8 +618,8 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
   });
 
   it("forces a count for a device whose cash nets to zero, and not for a device that took only cards", async () => {
-    const deviceC = await seedVenueDevice(suite.db, venue.locationId);
-    const deviceD = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceC = await seedVenueDevice(suite.db);
+    const deviceD = await seedVenueDevice(suite.db);
     const bill = await openBill();
     const payment = await seedBillPayment(
       suite.db,

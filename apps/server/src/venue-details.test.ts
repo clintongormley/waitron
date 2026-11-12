@@ -1126,9 +1126,9 @@ describe("venue detail consumer reads", () => {
       const rows = await tx
         .insert(kitchenStations)
         .values([
-          { locationId: venue.cfg.locationId, name: "Ordinary station" },
-          { locationId: venue.cfg.locationId, name: "Old-day override" },
-          { locationId: venue.cfg.locationId, name: "New-day override" },
+          { name: "Ordinary station" },
+          { name: "Old-day override" },
+          { name: "New-day override" },
         ])
         .returning({ id: kitchenStations.id });
       await tx.insert(stationDayStates).values([
@@ -1136,7 +1136,7 @@ describe("venue detail consumer reads", () => {
         { stationId: rows[2]!.id, businessDay: "2026-10-02", open: false },
       ]);
       const defaults = await tx.execute<{ id: string }>(
-        sql`select id from kitchen_stations where location_id = ${venue.cfg.locationId} and is_default`,
+        sql`select id from kitchen_stations where is_default`,
       );
       expect(defaults.rows).toHaveLength(1);
       return [...rows.map((row) => row.id), defaults.rows[0]!.id];
@@ -1144,12 +1144,11 @@ describe("venue detail consumer reads", () => {
     const [table] = await suite.db
       .insert(diningTables)
       .values({
-        locationId: venue.cfg.locationId,
         label: "Booking clock control",
         zoneId: (
           await suite.db
             .insert(floorZones)
-            .values({ locationId: venue.cfg.locationId, name: "Booking tables" })
+            .values({ name: "Booking tables" })
             .returning({ id: floorZones.id })
         )[0]!.id,
       })

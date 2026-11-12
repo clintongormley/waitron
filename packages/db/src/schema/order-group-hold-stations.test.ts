@@ -10,9 +10,7 @@ import { kitchenStations } from "./kitchen-stations.js";
 import { orderGroupHoldStations } from "./order-group-hold-stations.js";
 import { orderGroups } from "./order-groups.js";
 import { parties } from "./parties.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION: string;
 const STATION = "aaaaaaaa-0000-4000-8000-000000000004";
 const PARTY = "aaaaaaaa-0000-4000-8000-000000000006";
 const GROUP = "aaaaaaaa-0000-4000-8000-000000000007";
@@ -28,10 +26,7 @@ describe("order group hold stations schema", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(suite.db);
-    await suite.db
-      .insert(kitchenStations)
-      .values({ id: STATION, locationId: LOCATION, name: "Kitchen A" });
+    await suite.db.insert(kitchenStations).values({ id: STATION, name: "Kitchen A" });
     await suite.db.insert(parties).values({ id: PARTY, openedBy: OPERATOR });
     await suite.db
       .insert(orderGroups)

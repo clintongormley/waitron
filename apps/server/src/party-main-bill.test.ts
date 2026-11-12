@@ -226,7 +226,7 @@ describe("the bill a table opens on", () => {
 
 describe("a party service zone", () => {
   it("names no zone for a party that does not exist", async () => {
-    expect(await inTx(v, (tx) => partyZone(tx, v.cfg, randomUUID()))).toBeNull();
+    expect(await inTx(v, (tx) => partyZone(tx, randomUUID()))).toBeNull();
   });
 });
 

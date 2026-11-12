@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
@@ -16,7 +17,6 @@ import {
   ticketItems,
   workingOrderLines,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -62,7 +62,6 @@ import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/share
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -126,7 +125,7 @@ function nextNif(): string {
 
 interface Lunch {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   zoneId: string;
   menuId: string;
   rootId: string;
@@ -182,10 +181,9 @@ async function setupLunch(): Promise<Lunch> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
+
+  const cfg: TradingContext = {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -256,7 +254,7 @@ async function setupLunch(): Promise<Lunch> {
     await offerMenuThroughZone(tx, zoneId, lunch.id, { makeDefault: true });
     await tx.execute(sql`
       insert into routing_cells (id, category_id, station_id)
-      values (${randomUUID()}, ${category.id}, (select id from kitchen_stations where location_id = ${cfg.locationId} and is_default))`);
+      values (${randomUUID()}, ${category.id}, (select id from kitchen_stations where is_default))`);
     const [person] = await tx
       .insert(persons)
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
@@ -941,7 +939,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       });
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Test tables" })
+        .values({ name: "Test tables" })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: zone!.id, departmentId: department.id });
     });

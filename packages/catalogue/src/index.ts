@@ -29,6 +29,7 @@ export {
   listMenuOffers,
   listProducts,
   menuPrices,
+  readDefaultCatalogueId,
   readInvoiceLocales,
   readReceiptLanguage,
   setVenueDefaultCatalogue,

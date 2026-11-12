@@ -50,7 +50,6 @@ describe("device_profile_printers defaults", () => {
     const [madePage] = await db
       .insert(pagePrinters)
       .values({
-        locationId: venueId,
         name: "Office printer",
         host: "10.0.0.9",
         port: 631,

@@ -3,7 +3,7 @@ import jsQR from "jsqr";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { printers, printJobs, withTransaction, venueLocationId } from "@waitron/db";
+import { printers, printJobs, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -32,14 +32,12 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Sale",
   });
-  const venueId = await venueLocationId(suite.db);
   const makePrinter = async (name: string) =>
     (
       await suite.db
         .insert(printers)
         .values({
           name,
-          locationId: venueId,
           transport: "network_tcp",
           host: "10.0.0.9",
           paperWidth: "58mm",

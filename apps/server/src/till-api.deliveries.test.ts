@@ -16,7 +16,6 @@ import {
   printers,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -59,7 +58,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deletePrinter } from "./printer-delete.js";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createOpenOrder } from "./working-order.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -114,7 +113,7 @@ interface Venue {
   /** Whether the till's mail transport check answers available; true unless a case says. */
   email: { transport: boolean | Error };
   logged: unknown[][];
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   scriptCfg: TradingContext & { origin: ReturnType<typeof jobOrigin> };
   app: Hono;
   cookie: string;
@@ -161,10 +160,8 @@ async function venue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const venueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(result.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -191,7 +188,7 @@ async function venue(): Promise<Venue> {
       .returning({ id: persons.id });
     const [agent] = await tx
       .insert(printAgents)
-      .values({ locationId: cfg.locationId, name: "Back office agent", tokenHash: "scrypt$x" })
+      .values({ name: "Back office agent", tokenHash: "scrypt$x" })
       .returning({ id: printAgents.id });
     const receiptPrinter = await createPrinter(tx, {
       name: "Recibos",
@@ -201,7 +198,6 @@ async function venue(): Promise<Venue> {
     const [office] = await tx
       .insert(pagePrinters)
       .values({
-        locationId: cfg.locationId,
         name: "Back office",
         host: "192.0.2.20",
         port: 631,
@@ -388,7 +384,6 @@ async function upstairsOffice(v: Venue): Promise<string> {
     const [upstairs] = await tx
       .insert(pagePrinters)
       .values({
-        locationId: v.cfg.locationId,
         name: "Upstairs office",
         host: "192.0.2.21",
         port: 631,
@@ -403,13 +398,13 @@ async function upstairsOffice(v: Venue): Promise<string> {
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
       .from(devices)
-      .where(eq(devices.locationId, v.cfg.locationId))) {
+      .where(sql`true`)) {
       await listInvoicePrinter(tx, { profileId, pagePrinterId: upstairs!.id, isDefault: false });
     }
     await tx
       .update(devices)
       .set({ invoicePrinterId: null, invoicePagePrinterId: upstairs!.id })
-      .where(eq(devices.locationId, v.cfg.locationId));
+      .where(sql`true`);
     return upstairs!.id;
   });
 }
@@ -944,7 +939,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
 });
 
 /** A 58mm receipt printer listed on every till profile and chosen by every till for invoices. */
-async function invoiceReceiptPrinter(v: Venue): Promise<string> {
+async function invoiceReceiptPrinter(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const printer = await createPrinter(tx, {
       name: "Facturas mostrador",
@@ -955,13 +950,13 @@ async function invoiceReceiptPrinter(v: Venue): Promise<string> {
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
       .from(devices)
-      .where(eq(devices.locationId, v.cfg.locationId))) {
+      .where(sql`true`)) {
       await listInvoicePrinter(tx, { profileId, printerId: printer.id, isDefault: false });
     }
     await tx
       .update(devices)
       .set({ invoicePrinterId: printer.id, invoicePagePrinterId: null })
-      .where(eq(devices.locationId, v.cfg.locationId));
+      .where(sql`true`);
     return printer.id;
   });
 }
@@ -970,7 +965,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("saves the authenticated Equipment choice, offers it and prints there without opening a drawer", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const select = async (selection: unknown) => {
       const response = await v.app.request("/api/device/equipment", {
         method: "PUT",
@@ -1009,7 +1004,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("is offered as a receipt printer", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     expect((await readStatus(v, orderId)).body).toMatchObject({
       actions: {
         print: {
@@ -1023,7 +1018,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("queues the full invoice as an original document job on that printer, never the receipt printer, opening no drawer", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const answer = await printInvoice(v, orderId, randomUUID(), undefined, counter);
     expect(answer.status).toBe(200);
     const [job, ...moreJobs] = await jobsOf(saleId);
@@ -1057,7 +1052,7 @@ describe("a receipt printer as the till's invoice printer", () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     await receiptOriginal(v, saleId, { status: "done", attempts: 1 });
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const answer = await printInvoice(v, orderId, randomUUID(), undefined, counter);
     expect(answer.body).toMatchObject({ medium: "receipt", designation: "duplicate" });
     const [, copy, ...more] = await jobsOf(saleId);
@@ -1071,7 +1066,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("answers a replayed request key with the same attempt, queueing nothing more", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const key = randomUUID();
     const first = await printInvoice(v, orderId, key, undefined, counter);
     expect(first.status).toBe(200);
@@ -1083,7 +1078,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("refuses a request key reused once the till's invoice printer changed to A4, queueing nothing", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const key = randomUUID();
     expect((await printInvoice(v, orderId, key, undefined, counter)).status).toBe(200);
     const rows = await deliveryRows(saleId);
@@ -1100,7 +1095,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("refuses the till's receipt printer, which is not its invoice printer", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    await invoiceReceiptPrinter(v);
+    await invoiceReceiptPrinter();
     expect(await printInvoice(v, orderId, randomUUID(), undefined, v.receiptPrinterId)).toEqual(
       refusal(409, "invoice_delivery.printer_invalid"),
     );
@@ -1114,7 +1109,7 @@ describe("a receipt printer as the till's invoice printer", () => {
       status: "failed",
       attempts: MAX_DELIVERY_ATTEMPTS,
     });
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const printed = await printInvoice(v, orderId, randomUUID(), undefined, counter);
     expect(printed.body).toMatchObject({ medium: "receipt", designation: "original" });
     const [, original] = await jobsOf(saleId);
@@ -1180,7 +1175,7 @@ describe("a receipt printer as the till's invoice printer", () => {
       for (const { profileId } of await tx
         .selectDistinct({ profileId: devices.deviceProfileId })
         .from(devices)
-        .where(eq(devices.locationId, v.cfg.locationId))) {
+        .where(sql`true`)) {
         const lists = await readProfilePrinterLists(tx, profileId!);
         await setProfilePrinterLists(tx, profileId!, {
           ...lists,
@@ -1194,7 +1189,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("neither offers nor accepts the receipt retry of an original on a printer the till no longer prints invoices on", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const original = await failedOriginalOn(v, orderId, saleId, counter);
     const upstairs = await withdraw(v, counter);
     expect((await readStatus(v, orderId)).body).toMatchObject({
@@ -1221,7 +1216,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("refuses the retry of a resend once its original's printer is no longer the till's", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     await failedOriginalOn(v, orderId, saleId, counter);
     const retried = await send(v, "POST", `/api/sales/${orderId}/receipt/retry`, {});
     expect(retried.status).toBe(200);
@@ -1243,7 +1238,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("switches a waiting A4 original to paper on the till's invoice printer the receipt original went to", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const original = await failedOriginalOn(v, orderId, saleId, counter);
     // Queued from Orders, which may print on any printer at the location.
     const a4 = await withTransaction(suite.db, (tx) =>
@@ -1268,7 +1263,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("does not switch a waiting A4 original to a receipt original on a printer the till no longer prints invoices on", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     await failedOriginalOn(v, orderId, saleId, counter);
     const upstairs = await withdraw(v, counter);
     const a4 = await printInvoice(v, orderId, randomUUID(), undefined, upstairs);
@@ -1288,7 +1283,7 @@ describe("a receipt printer as the till's invoice printer", () => {
   it("refuses paper instead as the receipt retry does once the original's printer was deleted", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    const counter = await invoiceReceiptPrinter(v);
+    const counter = await invoiceReceiptPrinter();
     const original = await failedOriginalOn(v, orderId, saleId, counter);
     const upstairs = await withdraw(v, counter);
     await withTransaction(suite.db, (tx) => deletePrinter(tx, counter));
@@ -1341,7 +1336,7 @@ describe("a receipt printer as the till's invoice printer", () => {
     await suite.db
       .update(devices)
       .set({ receiptPrinterId: replacement.id })
-      .where(eq(devices.locationId, v.cfg.locationId));
+      .where(sql`true`);
     expect((await readStatus(v, orderId)).body).toMatchObject({
       actions: { retryOriginal: { medium: "receipt" } },
     });

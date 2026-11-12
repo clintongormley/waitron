@@ -114,7 +114,6 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
       "source",
       "device_id",
       "node_id",
-      "location_id",
       "manual",
       "provider",
       "provider_payment_ref",
