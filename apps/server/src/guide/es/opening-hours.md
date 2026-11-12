@@ -14,3 +14,7 @@ Algunos festivos dependen de la isla o de la parte de la provincia donde se encu
 
 Cambiar el idioma de la pantalla mantiene la zona elegida. Para cambiar los festivos que se aplican, cambia la propia zona.
 Revisa los festivos después de cambiar la ciudad del local. Si eliges otra zona de festivos, se sustituye la elección anterior.
+
+## Consulta dónde se usa un periodo {#periods}
+
+Abre **Periodos** desde Calendario. En **Pintado en**, elige una temporada o un día especial para consultar su horario. Cierra ese horario para volver a Periodos.

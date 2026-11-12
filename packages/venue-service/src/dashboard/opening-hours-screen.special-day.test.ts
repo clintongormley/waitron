@@ -141,7 +141,10 @@ function request(recorded: Recorded): DashboardRequest {
           .split(",")
           .map((date) => ({ date, seasonId: "winter", dayCutover: "06:00", departments: [] })),
       } satisfies SeasonDays;
-    if (path.endsWith("/menu-periods/painted-in")) return [];
+    if (path.endsWith("/menu-periods/painted-in"))
+      return [
+        { periodId: "p1", seasons: [], specialDays: [{ id: "sd1", name: "Christmas dinners" }] },
+      ];
     return painterModel();
   }) as DashboardRequest;
 }
@@ -1026,6 +1029,38 @@ describe("the special-day painter's Periods link", () => {
     painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
   const periodsWindow = (el: Screen) =>
     el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods] periods-list");
+
+  it("a viewer returns from a Painted in special day to the Periods window", async () => {
+    const origin = "/manage/opening-hours/view/year/year/2026/window/periods";
+    const { el } = await mount(origin, true);
+    const guard = new NavigationGuard(window, {
+      isDirty: () => false,
+      request: async () => "kept",
+    });
+    const stop = captureShellLinks(el);
+    try {
+      await expect
+        .poll(() =>
+          periodsWindow(el)
+            ?.shadowRoot?.querySelector("wt-data-table")
+            ?.shadowRoot?.querySelector("a[part~=chip]"),
+        )
+        .toBeTruthy();
+      periodsWindow(el)!
+        .shadowRoot!.querySelector("wt-data-table")!
+        .shadowRoot!.querySelector<HTMLAnchorElement>("a[part~=chip]")!
+        .click();
+      await expect.poll(() => location.pathname).toBe(base);
+      const painter = await shownPainter(el);
+      expect(painter.readOnly).toBe(true);
+      await userEvent.click(frame(painter).shadowRoot!.querySelector<HTMLElement>(".close")!);
+      await expect.poll(() => location.pathname).toBe(origin);
+      await expect.poll(() => periodsWindow(el)).not.toBeNull();
+    } finally {
+      stop();
+      guard.dispose();
+    }
+  });
 
   it("the special-day painter's Periods link opens the window over it and keeps its unsaved day", async () => {
     history.replaceState(null, "", base);

@@ -6697,8 +6697,8 @@ handled by the link itself (`periodsLink`, `period-editing.ts`), which sends `ca
 as the Year's button does, and the screen pushes the current address with `window/periods` added,
 so the window opens over the painter and its unsaved paint stays. A click with a modifier key or
 with a button other than the left is left to the browser, and a click something above the link has
-already cancelled opens nothing. The window is an unsized, so wide,
-`wt-modal` with no heading, named "Periods" by its `aria-label` (`data-window="periods"`), and
+already cancelled opens nothing. The window is a wide `wt-modal` with `height="medium"`, so a longer list scrolls
+inside it while Close stays visible. It has no heading, named "Periods" by its `aria-label` (`data-window="periods"`), and
 ends with a footer Close.
 
 Its body, `periods-list` (`periods-list.ts`), starts with a toolbar: an `h2` "Periods", styled as a
@@ -6714,10 +6714,12 @@ another set shows that set's name, a period of a department with no zone holding
 nothing, and any other period shows its department's default set's name followed by a muted
 "(default)". Painted in shows a chip per season,
 opening that season's painter on the period's department, and a chip per special day, opening its
-painter, or "Not painted anywhere". The chips wrap onto further lines within one and a quarter
+painter, or "Not painted anywhere". A plain chip click, including one in the period editor,
+pushes its painter over the full Periods address; closing the painter returns to that window.
+Modified clicks keep their normal browser behavior. The chips wrap onto further lines within one and a quarter
 times `--wt-cell-name-max-width`, each chip on one line, and the table is `wrapToFit`, so its
 headings and text wrap where they must. Guard: the M1 cases in `periods-list.test.ts`, which check
-that the table and every cell fit inside an unsized `wt-modal` at 1280 px, in English and Spanish,
+that the table and every cell fit inside a wide, medium-height `wt-modal` at 1280 px, in English and Spanish,
 each again in Verdana — with no department offering a floor plan, so without the Floor plan column;
 no case checks that the table fits with that column. A period row
 opens the period dialog (the table's `rowClick`, its activator named "Edit {name}"); a department

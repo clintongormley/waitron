@@ -641,7 +641,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Seasons window** (bundle of 5, size S). [Detail](backlog/service-periods.md#bundle-seasons-window)
 
-- **Period dialogs** (bundle of 4, size S). [Detail](backlog/service-periods.md#bundle-period-dialogs)
+- **Period dialogs** (1 entry, size S). [Detail](backlog/service-periods.md#bundle-period-dialogs)
 
 - **Service moment cost** (bundle of 2, size S). [Detail](backlog/service-periods.md#bundle-service-moment-cost)
 

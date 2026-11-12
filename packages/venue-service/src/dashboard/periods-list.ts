@@ -77,6 +77,7 @@ export class PeriodsList extends LitElement {
       }
       wt-data-table::part(swatch) {
         display: inline-block;
+        flex-shrink: 0;
         inline-size: var(--wt-space-4);
         block-size: var(--wt-space-4);
         margin-inline-end: var(--wt-space-2);
@@ -212,12 +213,18 @@ export class PeriodsList extends LitElement {
         (season) =>
           html`<a
             part=${`chip tint-${tints.get(season.id) ?? "grey"}`}
+            data-own-click
+            data-painted-in
             href=${seasonPainterPath({ seasonId: season.id, departmentId: row.departmentId })}
             >${season.name}</a
           >`,
       )}${painted.specialDays.map(
         (day) =>
-          html`<a part="chip special-day" href=${specialDayPainterPath({ specialDayId: day.id })}
+          html`<a
+            part="chip special-day"
+            data-own-click
+            data-painted-in
+            href=${specialDayPainterPath({ specialDayId: day.id })}
             >${day.name}</a
           >`,
       )}</span

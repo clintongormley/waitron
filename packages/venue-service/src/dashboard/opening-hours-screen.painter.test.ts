@@ -44,7 +44,8 @@ function request(model: () => OpeningHoursModel, writes: unknown[] = []): Dashbo
     const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
     if (year) return yearRead(Number(year[1]));
     if (path.endsWith("/special-days")) return [];
-    if (path.endsWith("/menu-periods/painted-in")) return [];
+    if (path.endsWith("/menu-periods/painted-in"))
+      return [{ periodId: "p1", seasons: [{ id: "spring", name: "Spring" }], specialDays: [] }];
     if (path.includes("/service-times?"))
       return {
         always: null,
@@ -1156,6 +1157,60 @@ describe("the Calendar window address", () => {
     expect(drawnView(el)).toBe("year");
     expect(el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
   });
+  it.each([false, true])(
+    "a Periods chip returns to its full window address (over painter: %s)",
+    async (overPainter) => {
+      const origin = overPainter
+        ? "/manage/opening-hours/view/season/season/winter/department/d3/window/periods"
+        : "/manage/opening-hours/view/year/year/2027/window/periods";
+      const { app, el } = await mountApp(
+        overPainter ? origin.replace("/window/periods", "") : origin,
+      );
+      if (overPainter) {
+        const painter = await shownPainter(el);
+        await userEvent.click(
+          painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!,
+        );
+      }
+      const guard = screenGuard(() => app);
+      try {
+        const { list, table } = await periodsWindow(el);
+        await expect.poll(() => table.shadowRoot!.querySelector("a[part~=chip]")).not.toBeNull();
+        const chip = table.shadowRoot!.querySelector<HTMLAnchorElement>("a[part~=chip]")!;
+        const pushes = pushedPaths();
+        const modified = new MouseEvent("click", {
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+          ctrlKey: true,
+        });
+        const cancel = (event: Event) => {
+          expect(event.defaultPrevented).toBe(false);
+          event.preventDefault();
+        };
+        window.addEventListener("click", cancel, { once: true });
+        chip.dispatchEvent(modified);
+        expect(pushes()).toEqual([]);
+        if (overPainter) {
+          const { dialog } = await openPeriod(el);
+          await expect.poll(() => dialog.shadowRoot!.querySelector(".chip")).toBeTruthy();
+          dialog.shadowRoot!.querySelector<HTMLAnchorElement>(".chip")!.click();
+        } else await userEvent.click(chip);
+        await expect
+          .poll(() => location.pathname)
+          .toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+        const painter = await shownPainter(el);
+        expect(painter.departmentId).toBe("d1");
+        await userEvent.click(
+          frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!,
+        );
+        await expect.poll(() => location.pathname).toBe(origin);
+        await periodsWindow(el);
+      } finally {
+        guard.dispose();
+      }
+    },
+  );
   it("a viewer's Periods window lists periods with nothing to change", async () => {
     const el = await mount(
       "/manage/opening-hours/view/year/window/periods",
@@ -1292,11 +1347,10 @@ describe("the Calendar window address", () => {
     const painter = await shownPainter(el);
     expect([painter.seasonId, painter.departmentId]).toEqual(["winter", "d1"]);
   });
-  it("draws Periods and Seasons as wide windows", async () => {
+  it("keeps both windows wide and makes only Periods medium-height", async () => {
     const el = await mount("/manage/opening-hours/view/year/window/periods");
     const { modal } = await periodsWindow(el);
-    expect(modal.hasAttribute("size")).toBe(false);
-    expect(modal.size).toBeUndefined();
+    expect([modal.size, modal.height]).toEqual(["wide", "medium"]);
     history.replaceState(null, "", "/manage/opening-hours/view/year/window/seasons");
     window.dispatchEvent(new PopStateEvent("popstate"));
     const win = await seasonsWindow(el);

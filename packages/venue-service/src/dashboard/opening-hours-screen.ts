@@ -435,6 +435,8 @@ export class OpeningHoursScreen extends LitElement {
       return html`<wt-modal
         data-test="calendar-window"
         data-window="periods"
+        size="wide"
+        height="medium"
         aria-label=${t("period.title")}
         .open=${true}
         .beforeClose=${this.beforeWindowClose}
@@ -443,6 +445,7 @@ export class OpeningHoursScreen extends LitElement {
           .api=${this.api}
           .readOnly=${this.readOnly}
           .draftParent=${this.windowDraftRoot}
+          @click=${this.paintedInClicked}
         ></periods-list
         >${this.windowFooter()}</wt-modal
       >`;
@@ -984,6 +987,27 @@ export class OpeningHoursScreen extends LitElement {
     this.sentHolidays = address.date ? { date: address.date, holidays } : undefined;
     await this.writeAddress(this.specialUrl(address));
     this.markPushedPainter(false);
+  }
+  private async paintedInClicked(event: MouseEvent) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    const link = event
+      .composedPath()
+      .find(
+        (node): node is HTMLAnchorElement =>
+          node instanceof HTMLAnchorElement && node.hasAttribute("data-painted-in"),
+      );
+    if (!link) return;
+    event.preventDefault();
+    await this.writeAddress(new URL(link.href));
+    if (!this.windowId) this.markPushedPainter(false);
   }
   private markPushedPainter(wasOpen: boolean) {
     if (wasOpen || !this.isConnected || !this.overlaid()) return;
