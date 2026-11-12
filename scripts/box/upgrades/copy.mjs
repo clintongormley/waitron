@@ -38,6 +38,7 @@ export async function copyStoppedTree(source, destination) {
   const parent = await fs.realpath(dirname(resolve(destination)));
   const target = join(parent, basename(destination));
   const sourceStat = await fs.lstat(sourcePath);
+  if (sourceStat.isSymbolicLink()) throw new Error("upgrade copy source is a symlink");
   if (sourceStat.isDirectory()) {
     if (contains(await fs.realpath(sourcePath), target)) {
       throw new Error("upgrade copy destination is inside source");
@@ -56,21 +57,39 @@ export async function copyStoppedTree(source, destination) {
 }
 
 /** Keep the snapshot intact so a restore interrupted before completion can repeat. */
-export async function restoreStoppedTree(snapshot, destination) {
+export async function restoreStoppedTree(snapshot, destination, preserve = []) {
   const source = resolve(snapshot);
   const sourceStat = await fs.lstat(source);
+  if (sourceStat.isSymbolicLink()) throw new Error("upgrade recovery copy is a symlink");
   const parent = await fs.realpath(dirname(resolve(destination)));
   const target = join(parent, basename(destination));
   const sourceRoot = await fs.realpath(source);
   if (contains(sourceRoot, target) || contains(target, sourceRoot)) {
     throw new Error("upgrade recovery copy and destination overlap");
   }
+  try {
+    if ((await fs.lstat(target)).isSymbolicLink()) {
+      throw new Error("upgrade restore destination is a symlink");
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   if (sourceStat.isDirectory()) {
     await fs.mkdir(target, { recursive: true });
     for (const child of await fs.readdir(target)) {
-      await fs.rm(join(target, child), { recursive: true, force: true });
+      if (!preserve.includes(child))
+        await fs.rm(join(target, child), { recursive: true, force: true });
     }
-    await run("cp", ["-a", "--", source + "/.", target]);
+    if (preserve.length === 0) {
+      await run("cp", ["-a", "--", source + "/.", target]);
+    } else {
+      const children = (await fs.readdir(source)).filter((child) => !preserve.includes(child));
+      if (children.length > 0)
+        await run("cp", ["-a", "--", ...children.map((child) => join(source, child)), target]);
+      await fs.chown(target, sourceStat.uid, sourceStat.gid);
+      await fs.chmod(target, sourceStat.mode & 0o7777);
+      await fs.utimes(target, sourceStat.atime, sourceStat.mtime);
+    }
   } else {
     await fs.rm(target, { force: true });
     await run("cp", ["-a", "--", source, target]);

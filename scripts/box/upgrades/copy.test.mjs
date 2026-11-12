@@ -187,3 +187,23 @@ it("leaves the live volume intact when the recovery copy cannot be read", async 
   });
   expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
 });
+
+it("refuses a linked snapshot root rather than reporting a rollback with candidate bytes", async () => {
+  const { root, source, destination } = await fixture();
+  const link = join(root, "linked-state");
+  await fs.symlink(source, link);
+  const { restoreStoppedTree } = await import("./copy.mjs");
+  await expect(copyStoppedTree(link, destination)).rejects.toThrow("symlink");
+  await expect(restoreStoppedTree(link, destination)).rejects.toThrow("symlink");
+  expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
+});
+
+it("refuses a linked restore destination without clearing the linked folder", async () => {
+  const { root, source, destination } = await fixture();
+  await copyStoppedTree(source, destination);
+  const link = join(root, "linked-state");
+  await fs.symlink(source, link);
+  const { restoreStoppedTree } = await import("./copy.mjs");
+  await expect(restoreStoppedTree(destination, link)).rejects.toThrow("symlink");
+  expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
+});

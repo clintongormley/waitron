@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { expect, it, onTestFinished, vi } from "vitest";
 import { applyUpgrade, recoverUpgrade, upgradeStatus } from "./transaction.mjs";
+import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
+import { RECOVERY_LOCK_FILE } from "../../../packages/store/src/state-layout.js";
 
 const gnuCopy =
   process.platform === "darwin"
@@ -163,7 +165,7 @@ it("records a manual keep before reopening without replacing failed checks with 
   });
 });
 
-it("resumes an interrupted restore using the intact saved copy", async () => {
+it("an interrupted restore beats Keep and resumes using the intact saved copy", async () => {
   const f = await fixture();
   f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
   await applyUpgrade({ ...f.input, mode: "manual" });
@@ -178,7 +180,7 @@ it("resumes an interrupted restore using the intact saved copy", async () => {
   await fs.rm(f.config, { recursive: true });
   await fs.writeFile(join(f.state, "venue.db"), "half restored");
 
-  await recoverUpgrade(f.input);
+  await recoverUpgrade({ ...f.input, choice: "keep" });
 
   expect(f.events.find((event) => event.resume)).toMatchObject({
     resume: { app: "sha256:old" },
@@ -205,7 +207,9 @@ it.each(["manual", "automatic"])(
       }),
     );
 
-    const result = await recoverUpgrade(f.input);
+    const result = await recoverUpgrade(
+      mode === "automatic" ? { ...f.input, choice: "keep" } : f.input,
+    );
 
     if (mode === "manual") {
       expect(result).toMatchObject({ phase: "awaiting-choice", failure: "checks interrupted" });
@@ -274,7 +278,15 @@ it("flushes the completion file and its parent before cleanup or business servic
   const observations = [];
   const spy = vi.spyOn(prototype, "sync").mockImplementation(async function () {
     const stat = await this.stat();
-    observations.push({ inode: stat.ino, marker: await upgradeStatus(f.directory) });
+    let stagedPhase = null;
+    try {
+      stagedPhase = JSON.parse(
+        await fs.readFile(join(f.directory, "attempt.json.tmp"), "utf8"),
+      ).phase;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    observations.push({ inode: stat.ino, stagedPhase, marker: await upgradeStatus(f.directory) });
     return sync.call(this);
   });
   onTestFinished(() => spy.mockRestore());
@@ -283,7 +295,9 @@ it("flushes the completion file and its parent before cleanup or business servic
   await applyUpgrade({ ...f.input, mode: "manual" });
 
   const inode = (await fs.stat(join(f.directory, "attempt.json"))).ino;
-  const fileFlush = observations.findIndex((o) => o.inode === inode);
+  const fileFlush = observations.findIndex(
+    (o) => o.inode === inode && o.stagedPhase === "committed",
+  );
   const parentFlush = observations.findIndex((o) => o.marker?.phase === "committed");
   expect(fileFlush).toBeGreaterThanOrEqual(0);
   expect(parentFlush).toBeGreaterThan(fileFlush);
@@ -368,4 +382,113 @@ it("rejects an invalid mode before allocating an attempt", async () => {
   );
   expect(await recoverUpgrade(f.input)).toBeNull();
   expect(f.events).toEqual([]);
+});
+
+it.each([[], ["relative-state"]])(
+  "refuses invalid paths %j before stopping or installing",
+  async (paths) => {
+    const f = await fixture();
+    await expect(applyUpgrade({ ...f.input, paths, mode: "manual" })).rejects.toThrow(
+      "invalid upgrade marker",
+    );
+    expect(f.events).toEqual([]);
+    expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
+    expect(await upgradeStatus(f.directory)).toBeNull();
+  },
+);
+
+it.each([{}, "sha256:old", ["sha256:old"]])(
+  "refuses malformed image maps %j before stopping",
+  async (old) => {
+    const f = await fixture();
+    f.host.prepareImages = async () => ({ old, candidate: { app: "sha256:new" } });
+    await expect(applyUpgrade({ ...f.input, mode: "manual" })).rejects.toThrow(
+      "invalid upgrade marker",
+    );
+    expect(f.events).toEqual([]);
+    expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
+    expect(await upgradeStatus(f.directory)).toBeNull();
+  },
+);
+
+it("retains image pins through a failed reopen and cleans them only after a successful one", async () => {
+  const f = await fixture();
+  const resume = f.host.resume;
+  f.host.resume = async () => {
+    throw new Error("start failed");
+  };
+  await expect(applyUpgrade({ ...f.input, mode: "manual" })).rejects.toThrow("start failed");
+  expect(f.events.filter((e) => Array.isArray(e) && e[0] === "cleanup")).toEqual([]);
+  f.host.resume = resume;
+  await recoverUpgrade(f.input);
+  expect(f.events.findIndex((e) => e.resume)).toBeLessThan(
+    f.events.findIndex((e) => Array.isArray(e) && e[0] === "cleanup"),
+  );
+});
+
+it.each([null, "listener refused"])(
+  "restores automatically and retains a non-Error failure %j",
+  async (failure) => {
+    const f = await fixture();
+    f.host.checkCandidate = async () => {
+      throw failure;
+    };
+    expect(await applyUpgrade({ ...f.input, mode: "automatic" })).toMatchObject({
+      phase: "committed",
+      target: "old",
+      failure: String(failure),
+    });
+    expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
+  },
+);
+
+it("keeps incomplete-check evidence when Keep follows an interrupted candidate", async () => {
+  const f = await fixture();
+  f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
+  await applyUpgrade({ ...f.input, mode: "manual" });
+  const marker = await upgradeStatus(f.directory);
+  await fs.writeFile(
+    join(f.directory, "attempt.json"),
+    JSON.stringify({
+      ...marker,
+      phase: "candidate",
+      checks: null,
+      failure: null,
+    }),
+  );
+  expect(await recoverUpgrade({ ...f.input, choice: "keep" })).toMatchObject({
+    phase: "committed",
+    target: "candidate",
+    checks: null,
+    failure: "checks interrupted",
+  });
+});
+
+it("removes only an empty unpublished attempt directory during recovery", async () => {
+  const f = await fixture();
+  await fs.mkdir(f.directory);
+  expect(await recoverUpgrade(f.input)).toBeNull();
+  await expect(fs.stat(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
+  await fs.mkdir(f.directory);
+  await fs.writeFile(join(f.directory, "unknown"), "do not discard");
+  await expect(recoverUpgrade(f.input)).rejects.toMatchObject({ code: "ENOTEMPTY" });
+  expect(await fs.readFile(join(f.directory, "unknown"), "utf8")).toBe("do not discard");
+});
+
+it("restores data without unlinking or replacing the host's retained lock files", async () => {
+  const f = await fixture();
+  const names = [VENUE_LOCK_FILE, RECOVERY_LOCK_FILE];
+  for (const name of names) await fs.writeFile(join(f.state, name), "original lock bytes");
+  const inodes = await Promise.all(
+    names.map(async (name) => (await fs.stat(join(f.state, name))).ino),
+  );
+  f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
+  await applyUpgrade({ ...f.input, mode: "manual", preserve: { [f.state]: names } });
+  for (const name of names) await fs.writeFile(join(f.state, name), "retained lock bytes");
+  await recoverUpgrade({ ...f.input, choice: "restore" });
+  for (const [index, name] of names.entries()) {
+    expect((await fs.stat(join(f.state, name))).ino).toBe(inodes[index]);
+    expect(await fs.readFile(join(f.state, name), "utf8")).toBe("retained lock bytes");
+  }
+  expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
 });

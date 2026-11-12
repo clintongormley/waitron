@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { copyStoppedTree, restoreStoppedTree } from "./copy.mjs";
 
 async function syncDirectory(path) {
@@ -25,6 +25,51 @@ async function writeFileDurable(path, value) {
   await syncDirectory(dirname(path));
 }
 
+const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const failureText = (error) => String(error?.message ?? error);
+
+function validateInputs({ mode, paths, preserve }) {
+  if (
+    !["manual", "automatic"].includes(mode) ||
+    !Array.isArray(paths) ||
+    paths.length === 0 ||
+    !paths.every((path) => typeof path === "string" && isAbsolute(path)) ||
+    !object(preserve) ||
+    !Object.entries(preserve).every(
+      ([path, names]) =>
+        paths.includes(path) &&
+        Array.isArray(names) &&
+        names.every(
+          (name) =>
+            typeof name === "string" &&
+            name.length > 0 &&
+            name !== "." &&
+            name !== ".." &&
+            basename(name) === name,
+        ),
+    )
+  )
+    throw new Error("invalid upgrade marker");
+}
+
+function validateMarker(marker) {
+  if (!object(marker)) throw new Error("invalid upgrade marker");
+  validateInputs(marker);
+  if (
+    !["copying", "candidate", "awaiting-choice", "restoring", "committed"].includes(marker.phase) ||
+    typeof marker.copied !== "boolean" ||
+    !["old", "candidate"].every(
+      (key) =>
+        object(marker.images?.[key]) &&
+        Object.keys(marker.images[key]).length > 0 &&
+        Object.values(marker.images[key]).every((id) => typeof id === "string" && id.length > 0),
+    ) ||
+    (marker.phase === "candidate" && !marker.copied) ||
+    (marker.phase === "committed" && !["old", "candidate"].includes(marker.target))
+  )
+    throw new Error("invalid upgrade marker");
+}
+
 export async function upgradeStatus(directory) {
   let marker;
   try {
@@ -33,37 +78,21 @@ export async function upgradeStatus(directory) {
     if (error.code === "ENOENT") return null;
     throw error;
   }
-  if (
-    marker === null ||
-    !["manual", "automatic"].includes(marker.mode) ||
-    !["copying", "candidate", "awaiting-choice", "restoring", "committed"].includes(marker.phase) ||
-    typeof marker.copied !== "boolean" ||
-    !Array.isArray(marker.paths) ||
-    marker.paths.length === 0 ||
-    !marker.paths.every((path) => typeof path === "string" && isAbsolute(path)) ||
-    !["old", "candidate"].every(
-      (key) =>
-        marker.images?.[key] &&
-        Object.keys(marker.images[key]).length > 0 &&
-        Object.values(marker.images[key]).every((id) => typeof id === "string" && id.length > 0),
-    ) ||
-    (marker.phase === "candidate" && !marker.copied) ||
-    (marker.phase === "committed" && !["old", "candidate"].includes(marker.target))
-  )
-    throw new Error("invalid upgrade marker");
+  validateMarker(marker);
   return marker;
 }
 
 async function record(directory, marker) {
+  validateMarker(marker);
   await writeFileDurable(join(directory, "attempt.json"), marker);
   return marker;
 }
 
 async function reopen(directory, host, marker) {
+  await host.resume(marker.images[marker.target]);
   await fs.rm(join(directory, "copies"), { recursive: true, force: true });
   await syncDirectory(directory);
   await host.cleanup(marker.images);
-  await host.resume(marker.images[marker.target]);
   return marker;
 }
 
@@ -77,7 +106,11 @@ async function restore(directory, host, marker) {
   marker = await record(directory, { ...marker, phase: "restoring" });
   if (marker.copied) {
     for (const [index, path] of marker.paths.entries()) {
-      await restoreStoppedTree(join(directory, "copies", String(index)), path);
+      await restoreStoppedTree(
+        join(directory, "copies", String(index)),
+        path,
+        marker.preserve[path] ?? [],
+      );
     }
   }
   return commit(directory, host, marker, "old");
@@ -88,14 +121,17 @@ async function restore(directory, host, marker) {
  * before pulling and returns exact old/candidate IDs; stop verifies every writer drained.
  * installCandidate/checkCandidate stay contained; resume uses ordinary boot's fiscal guards.
  * The host owns the fixed volume/config inventory and its free-space check before this call.
+ * It supplies a fresh attempt directory and retained lock names from the store's constants.
  */
-export async function applyUpgrade({ directory, paths, mode, host }) {
+export async function applyUpgrade({ directory, paths, preserve = {}, mode, host }) {
   if (!["manual", "automatic"].includes(mode)) throw new Error("invalid upgrade mode");
+  validateInputs({ mode, paths, preserve });
   await fs.mkdir(directory, { mode: 0o700 });
   await syncDirectory(dirname(directory));
   let images;
   try {
     images = await host.prepareImages();
+    validateMarker({ mode, paths, preserve, images, phase: "copying", copied: false });
   } catch (error) {
     await fs.rmdir(directory);
     await syncDirectory(dirname(directory));
@@ -106,6 +142,7 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
     phase: "copying",
     copied: false,
     paths,
+    preserve,
     images,
     checks: null,
     failure: null,
@@ -113,7 +150,7 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
   try {
     await host.stop();
   } catch (error) {
-    return commit(directory, host, { ...marker, failure: error.message }, "old");
+    return commit(directory, host, { ...marker, failure: failureText(error) }, "old");
   }
   try {
     await fs.mkdir(join(directory, "copies"), { mode: 0o700 });
@@ -135,7 +172,7 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
     marker = await record(directory, {
       ...marker,
       phase: "awaiting-choice",
-      failure: error.message,
+      failure: failureText(error),
     });
     return mode === "automatic" ? restore(directory, host, marker) : marker;
   }
@@ -145,8 +182,23 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
 /** A new process resumes the recorded decision; committed attempts never restore a snapshot. */
 export async function recoverUpgrade({ directory, host, choice }) {
   let marker = await upgradeStatus(directory);
-  if (marker === null) return null;
+  if (marker === null) {
+    try {
+      await fs.rmdir(directory);
+      await syncDirectory(dirname(directory));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    return null;
+  }
   if (marker.phase === "committed") return reopen(directory, host, marker);
+  if (["copying", "candidate"].includes(marker.phase)) {
+    marker = await record(directory, {
+      ...marker,
+      phase: "awaiting-choice",
+      failure: "checks interrupted",
+    });
+  }
   if (marker.phase === "restoring" || choice === "restore" || marker.mode === "automatic") {
     return restore(directory, host, marker);
   }
@@ -158,12 +210,5 @@ export async function recoverUpgrade({ directory, host, choice }) {
   }
   if (choice !== undefined) throw new Error("invalid upgrade choice");
   await host.stop();
-  if (marker.phase !== "awaiting-choice") {
-    marker = await record(directory, {
-      ...marker,
-      phase: "awaiting-choice",
-      failure: "checks interrupted",
-    });
-  }
   return marker;
 }
