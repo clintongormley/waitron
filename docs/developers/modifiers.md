@@ -69,6 +69,13 @@ returns, only a list with no available label, which only an inactive list may be
 Configuration transfer copies rows without going through that parser, so a stored null default is
 still possible, and a reader of `defaultLabelId` has to accept one.
 
+On dashboard update, `OptionListSaveBody` omits availability flags unchanged from the
+opening draft, matched by choice id. The server fills omitted existing flags from its stored
+labels and defaults new choices to available; explicit booleans still apply and null is refused.
+The form retains full values for saved and discarded drafts. An older open form can still show
+a choice as available after the till marks it sold out: saving preserves the stored flag, and
+the server can refuse a list that the older form still considers answerable.
+
 Till dish information keeps every published modifier row in `modifierAvailability`; the ordering
 picker uses the filtered `offeredModifiers`. Its availability routes admit published extras and
 choices, including unavailable rows, and apply the change across menus. The option setter changes

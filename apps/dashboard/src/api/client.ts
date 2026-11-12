@@ -201,6 +201,7 @@ import type {
   OptionList,
   OptionListDependants,
   OptionListInput,
+  OptionListSaveBody,
   OptionListRow,
 } from "@waitron/shared";
 import type {
@@ -370,6 +371,7 @@ export type {
   OptionList,
   OptionListDependants,
   OptionListInput,
+  OptionListSaveBody,
   OptionListRow,
 };
 
@@ -3293,7 +3295,7 @@ export class DashboardApi {
       )
     ).optionList;
   }
-  async updateOptionList(id: string, input: OptionListInput): Promise<OptionList> {
+  async updateOptionList(id: string, input: OptionListSaveBody): Promise<OptionList> {
     return (
       await this.#request<{ optionList: OptionList }>(
         `/management-api/modifiers/options/${id}`,

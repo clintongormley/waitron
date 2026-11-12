@@ -38,6 +38,11 @@ export interface OptionListRow extends OptionList {
 export type OptionLabelInput = Omit<OptionLabel, "id"> & { id?: string };
 export type OptionListInput = Omit<OptionList, "id" | "labels"> & { labels: OptionLabelInput[] };
 
+/** An omitted existing choice flag preserves its stored availability on update. */
+export type OptionListSaveBody = Omit<OptionListInput, "labels"> & {
+  labels: (Omit<OptionLabelInput, "available"> & { available?: boolean })[];
+};
+
 /**
  * One product a list offers. The row holds nothing that duplicates the product: its three names,
  * VAT class, allergens, dietary labels and photo all come from the product it names, so this

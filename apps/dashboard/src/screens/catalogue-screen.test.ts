@@ -1103,7 +1103,7 @@ describe("catalogue-screen", () => {
     await el.updateComplete;
     const form = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
     expect(form.open).toBe(true);
-    emit(form, "wt-submit", { value: optionInput });
+    emit(form, "wt-submit", { value: optionInput, body: optionInput });
     await flush(el);
     expect(api.createOptionList).toHaveBeenCalledWith(optionInput);
     expect(form.open).toBe(false);
@@ -1160,9 +1160,21 @@ describe("catalogue-screen", () => {
     expect(unsaved()).toEqual(expected);
 
     await openFromRow();
-    emit(form, "wt-submit", { value: optionInput });
+    const closeSaved = vi.spyOn(form, "closeSaved");
+    const value = {
+      ...optionInput,
+      labels: [
+        { id: "rare", name: "Rare", customerName: null, kitchenName: null, available: true },
+      ],
+    };
+    const body = {
+      ...value,
+      labels: value.labels.map(({ available: _available, ...label }) => label),
+    };
+    emit(form, "wt-submit", { value, body });
     await flush(el);
-    expect(api.updateOptionList).toHaveBeenCalledWith("opt-list-1", optionInput);
+    expect(api.updateOptionList).toHaveBeenCalledWith("opt-list-1", body);
+    expect(closeSaved).toHaveBeenCalledWith(value);
     expect(form.open).toBe(false);
     expect(product.open).toBe(true);
     expect(unsaved()).toEqual(expected);
@@ -1210,7 +1222,8 @@ describe("catalogue-screen", () => {
       row.querySelector<HTMLElement>(`[data-test="open-modifier-${row.dataset.modifier}"]`)!;
     const closes = (kind: Kind) => [
       (form: HTMLElement) => emit(form, "wt-cancel", {}),
-      (form: HTMLElement) => emit(form, "wt-submit", { value: kinds[kind].input }),
+      (form: HTMLElement) =>
+        emit(form, "wt-submit", { value: kinds[kind].input, body: kinds[kind].input }),
     ];
 
     // The click case focuses the name field and calls `click()`, which leaves focus there, so only
@@ -1354,7 +1367,7 @@ describe("catalogue-screen", () => {
     const options = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
     expect(options.open).toBe(true);
     expect(options.value).toEqual(optionLists[0]);
-    emit(options, "wt-submit", { value: optionInput });
+    emit(options, "wt-submit", { value: optionInput, body: optionInput });
     await flush(el);
     expect(api.updateOptionList).toHaveBeenCalledWith("opt-list-1", optionInput);
     expect(api.createOptionList).not.toHaveBeenCalled();
@@ -1408,7 +1421,7 @@ describe("catalogue-screen", () => {
     await el.updateComplete;
     const options = el.shadowRoot!.querySelector("dashboard-option-list-form")!;
     expect([options.open, options.fieldErrors, editor(el).childOpen]).toEqual([true, {}, true]);
-    emit(options, "wt-submit", { value: optionInput });
+    emit(options, "wt-submit", { value: optionInput, body: optionInput });
     await flush(el);
     expect([options.open, options.fieldErrors]).toEqual([
       true,
