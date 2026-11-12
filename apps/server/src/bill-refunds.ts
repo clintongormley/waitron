@@ -59,7 +59,6 @@ import {
   refusePendingPartPayment,
   refuseRefundInProgress,
 } from "./working-order.js";
-import { refusePlacedPaymentInFlight } from "./till-sale.js";
 import type { TillSaleDeps } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
@@ -725,7 +724,6 @@ export async function refundBillPayment(
         if ((await requireRefundableBill(tx, workingOrderId)) === "placed") {
           await refuseRefundInProgress(tx, [workingOrderId]);
           await refusePendingPartPayment(tx, [workingOrderId], "any");
-          await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId]);
         } else {
           await refusePaymentInFlight(tx, [workingOrderId]);
         }
