@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { afterAll, expect, it, vi } from "vitest";
+import { afterAll, expect, it, onTestFinished, vi } from "vitest";
 
 const bin = mkdtempSync(join(tmpdir(), "b3-network-host-"));
 afterAll(() => rmSync(bin, { recursive: true, force: true }));
@@ -162,36 +162,79 @@ it("refuses a canonical write request without starting a host command", async ()
 
 it("reads connected Ethernet and exact Wi-Fi bytes, preferring its active infrastructure profile", async () => {
   const { handleNetworkRead } = await import("./network-host.mjs");
+  const journal = vi.spyOn(console, "error").mockImplementation(() => {});
+  onTestFinished(() => journal.mockRestore());
   expect(JSON.parse(await handleNetworkRead(line, { run: host() }))).toEqual({
     ...empty,
     wired: { connected: true, address: "192.0.2.8" },
     wifi: { connectedSsidHex: "00ffc3285c", savedSsidHex: "00ffc3285c" },
   });
+  expect(journal.mock.calls.map(([entry]) => JSON.parse(entry))).toEqual([
+    {
+      verb: "network.read",
+      actor: { source: "person", person: "waiter-1" },
+      permission: "system.manage",
+    },
+  ]);
 });
 
-it("uses a global IPv6 address when Ethernet has no IPv4, excluding link-local", async () => {
+it("logs no person's permission for a server-initiated observation", async () => {
   const { handleNetworkRead } = await import("./network-host.mjs");
-  const reply = JSON.parse(await handleNetworkRead(line, { run: host({ addresses: [] }) }));
-  expect(reply.wired).toEqual({ connected: true, address: "2001:db8::8" });
+  const journal = vi.spyOn(console, "error").mockImplementation(() => {});
+  onTestFinished(() => journal.mockRestore());
+  await handleNetworkRead('network.read {"actor":{"source":"server"}}', { run: host() });
+  expect(journal.mock.calls.map(([entry]) => JSON.parse(entry))).toEqual([
+    {
+      verb: "network.read",
+      actor: { source: "server" },
+      permission: null,
+    },
+  ]);
 });
+
+it.each([{ addresses: [] }, { addresses: ["169.254.3.4"] }])(
+  "uses global IPv6 without usable IPv4 (%j)",
+  async ({ addresses }) => {
+    const { handleNetworkRead } = await import("./network-host.mjs");
+    const reply = JSON.parse(await handleNetworkRead(line, { run: host({ addresses }) }));
+    expect(reply.wired).toEqual({ connected: true, address: "2001:db8::8" });
+  },
+);
 
 it.each([
   [
     "a saved normal profile without a connection",
     { active: false, profiles: ["normal"] },
     { connectedSsidHex: null, savedSsidHex: "00ffc3285c" },
+    false,
   ],
-  ["ambiguous normal profiles", { active: false }, { connectedSsidHex: null, savedSsidHex: null }],
+  [
+    "ambiguous normal profiles",
+    { active: false },
+    { connectedSsidHex: null, savedSsidHex: null },
+    true,
+  ],
   [
     "a hotspot alongside a normal saved profile",
     { mode: 3, profiles: ["hotspot", "normal"] },
     { connectedSsidHex: null, savedSsidHex: "00ffc3285c" },
+    false,
   ],
-])("keeps readable Ethernet status with %s", async (_name, config, wifi) => {
+])("keeps readable Ethernet status with %s", async (_name, config, wifi, ambiguous) => {
   const { handleNetworkRead } = await import("./network-host.mjs");
+  const journal = vi.spyOn(console, "error").mockImplementation(() => {});
+  onTestFinished(() => journal.mockRestore());
   const reply = JSON.parse(await handleNetworkRead(line, { run: host(config) }));
   expect(reply.wired).toEqual({ connected: true, address: "192.0.2.8" });
   expect(reply.wifi).toEqual(wifi);
+  expect(journal.mock.calls.map(([entry]) => JSON.parse(entry))).toEqual([
+    {
+      verb: "network.read",
+      actor: { source: "person", person: "waiter-1" },
+      permission: "system.manage",
+      ...(ambiguous ? { ambiguousProfiles: true } : {}),
+    },
+  ]);
 });
 
 it.each(["failure", "invalid-json"])("sanitises an observation %s", async (kind) => {

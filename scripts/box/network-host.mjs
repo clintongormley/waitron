@@ -36,7 +36,7 @@ export async function handleNetworkRead(line, { run = networkCommand() } = {}) {
   const journal = {
     verb: "network.read",
     actor: parsed.request.actor,
-    permission: VERB_PERMISSION["network.read"],
+    permission: parsed.request.actor.source === "person" ? VERB_PERMISSION["network.read"] : null,
   };
   try {
     const bus = async (...args) =>
