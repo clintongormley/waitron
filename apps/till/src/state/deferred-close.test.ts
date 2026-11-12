@@ -4,6 +4,7 @@ import {
   type DeferredDishRow,
   type DeferredOfferInput,
   deferredCloseRequest,
+  deferredGoneReason,
   deferredOffered,
 } from "./deferred-close.js";
 
@@ -96,6 +97,25 @@ describe("deferredOffered", () => {
     ];
     for (const [name, over, expected] of cases)
       expect([name, deferredOffered(input(over))]).toEqual([name, expected]);
+  });
+});
+
+describe("deferredGoneReason", () => {
+  it("names why the bill can no longer be closed this way, the first that applies", () => {
+    const cases: [string, Parameters<typeof deferredGoneReason>[0], string | undefined][] = [
+      ["the bill is gone", undefined, undefined],
+      [
+        "a payment settled it",
+        billOf({ hasPayments: true, status: "settled", outstanding: "0.00" }),
+        "prior_payment",
+      ],
+      ["settled with no payment", billOf({ status: "settled" }), "final_without_deferral"],
+      ["abandoned", billOf({ status: "abandoned" }), "void"],
+      ["owes nothing", billOf({ outstanding: "0.00" }), "non_positive"],
+      ["still closable", billOf({ outstanding: "120.00" }), undefined],
+    ];
+    for (const [name, bill, expected] of cases)
+      expect([name, deferredGoneReason(bill)]).toEqual([name, expected]);
   });
 });
 

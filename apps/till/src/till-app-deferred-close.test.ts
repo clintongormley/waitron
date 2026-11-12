@@ -405,6 +405,93 @@ it("a lost answer on a bill whose total changed shows the new total and the conf
   );
 });
 
+it("a lost answer on a bill another payment settled closes the window saying so, sending nothing", async () => {
+  const { api, el } = await afterLostAnswer(
+    {},
+    billOf({ hasPayments: true, status: "settled", outstanding: "0.00" }),
+  );
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).toBeNull();
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(
+    codeMessage("deferred_close.ineligible", "en", { reason: "prior_payment" }),
+  );
+});
+
+const unservedOrders: CurrentOrders = {
+  ...noOrders,
+  ungrouped: [
+    {
+      billStatus: "open",
+      netAmount: "12.00",
+      readyAt: null,
+      requestedAt: null,
+      firedAt: "2026-11-12T20:00:00.000Z",
+      lineId: "line-1",
+      workingOrderId: "wo-4",
+      lineNo: 1,
+      courseId: null,
+      name: "Squid",
+      quantity: "1.000",
+      unitPrecision: 0,
+      servedQuantity: "0.000",
+      servedAt: null,
+      released: true,
+      kitchen: null,
+      note: null,
+      extras: [],
+    },
+  ],
+};
+
+const showOrders = (el: TillApp, orders: CurrentOrders) => {
+  (el as unknown as { currentOrders: CurrentOrders }).currentOrders = orders;
+};
+
+it("a lost answer on a bill with a dish now unserved keeps the window open saying why; once served, confirming sends", async () => {
+  const { api, el } = await afterLostAnswer(
+    {
+      closeDeferred: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(closedAs("open")),
+    },
+    billOf(),
+  );
+  vi.mocked(api.readCurrentOrders).mockResolvedValue(unservedOrders);
+  showOrders(el, unservedOrders);
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  const window = closing(el)!;
+  expect(window.open).toBe(true);
+  expect(window.busy).toBe(false);
+  expect(window.refusal).toBe(t("deferred_close.unserved"));
+  vi.mocked(api.readCurrentOrders).mockResolvedValue(noOrders);
+  showOrders(el, noOrders);
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledTimes(2);
+  expect(documents(el)).not.toBeNull();
+});
+
+it("a refusal on a bill with a dish now unserved keeps the window open on the refusal; the next confirm reads the bill again", async () => {
+  const api = deferredApi({
+    closeDeferred: vi.fn().mockRejectedValue({ code: "deferred_close.conflict", status: 409 }),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openClosing(el);
+  vi.mocked(api.readCurrentOrders).mockResolvedValue(unservedOrders);
+  showOrders(el, unservedOrders);
+  await confirm(el);
+  const window = closing(el)!;
+  expect(window.open).toBe(true);
+  expect(window.busy).toBe(false);
+  expect(window.refusal).toBe(codeMessage("deferred_close.conflict"));
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(closing(el)!.refusal).toBe(t("deferred_close.unserved"));
+});
+
 const payDialog = (el: TillApp) => el.shadowRoot!.querySelector("till-bill-pay-dialog");
 const deferredReason = (el: TillApp) =>
   text(payDialog(el)?.shadowRoot!.querySelector("[data-pay-deferred-reason]"));

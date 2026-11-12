@@ -230,6 +230,7 @@ import type { DeferredCloseBill } from "./widgets/deferred-close-dialog.js";
 import type { CloseDeferredResult } from "./api/deferred-close-types.js";
 import {
   deferredCloseRequest,
+  deferredGoneReason,
   deferredOffered,
   type DeferredOffer,
 } from "./state/deferred-close.js";
@@ -11427,8 +11428,9 @@ export class TillApp extends LitElement {
    * Reads the party's bills again for window `id`. Returns the window on the re-read bill while it
    * can still be closed this way, showing `said` (or, when `said` is null, a conflict if what the
    * request carries changed); `"deferred"`, with the window untouched, when the bill is closed as
-   * a deferred payment; null when the window stays as it was (the read failed, or the bill
-   * changed); undefined when the window closed.
+   * a deferred payment; null when the window stays open showing why (the read failed, the bill
+   * changed, or something on the till blocks the close for now, after which the next confirm reads
+   * the bill again); undefined when the window closed, the screen saying why when `said` is null.
    */
   async #rereadDeferred(
     id: number,
@@ -11450,8 +11452,27 @@ export class TillApp extends LitElement {
     }
     const bill = bills.find((row) => row.workingOrderId === now.billId);
     if (bill?.deferred === true) return "deferred";
-    if (bill === undefined || this.#deferredOfferOn(bill).state !== "offered") {
+    const offer = bill === undefined ? undefined : this.#deferredOfferOn(bill);
+    if (bill === undefined || offer?.state !== "offered") {
+      if (offer?.state === "off") {
+        // The bill stays as the window last showed it, so the next confirm's re-read still
+        // compares against it.
+        this.deferredClosing = {
+          ...now,
+          busy: false,
+          refusal: said ?? t(offer.reason),
+          reread: true,
+        };
+        return null;
+      }
       this.deferredClosing = null;
+      if (said === null) {
+        const reason = deferredGoneReason(bill);
+        this.errorKey =
+          reason === undefined
+            ? { code: "deferred_close.ineligible" }
+            : { code: "deferred_close.ineligible", reason };
+      }
       return undefined;
     }
     const changed =

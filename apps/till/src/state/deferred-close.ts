@@ -56,6 +56,21 @@ export function deferredOffered(input: DeferredOfferInput): DeferredOffer {
   return { state: "offered" };
 }
 
+/**
+ * Why `bill` can no longer be closed as a deferred payment, as a `deferred_close.ineligible` reason
+ * the till words (`codeMessage`); undefined when none of them fits.
+ */
+export function deferredGoneReason(
+  bill: Pick<PartyBill, "status" | "outstanding" | "hasPayments"> | undefined,
+): string | undefined {
+  if (bill === undefined) return undefined;
+  if (bill.hasPayments) return "prior_payment";
+  if (bill.status === "settled") return "final_without_deferral";
+  if (bill.status === "abandoned") return "void";
+  if (compareDecimal(decimal(bill.outstanding), decimal("0")) <= 0) return "non_positive";
+  return undefined;
+}
+
 export interface DeferredRequestInput {
   bill: PartyBill;
   offeredLanguages: readonly string[];
