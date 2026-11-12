@@ -14,6 +14,12 @@ declare module "@waitron/shared" {
     "sale.correction_scope_invalid": { reason: "empty" | "missing" | "duplicate" | "required" };
     "sale.correction_history_unusable": Record<string, never>;
     "sale.correction_breakdown_invalid": Record<string, never>;
+    /** Thrown by `authorizeCorrectionApproval` when the correction a corrective invoice is filed on
+     * cannot carry its approval. */
+    "sale.correction_approval_invalid": {
+      invoiceCorrectionId: string;
+      reason: "not_found" | "not_open" | "other_sale" | "over_amount";
+    };
     "sale.correction_not_admitted": {
       reason:
         | Extract<CorrectionAdmission, { eligible: false }>["reason"]

@@ -28,6 +28,7 @@ import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
+import { authorizeCorrectionApproval } from "./correction-approval.js";
 import {
   checkPartialCorrectionBreakdown,
   checkPartialCorrectionHistory,
@@ -81,8 +82,9 @@ export interface RecordCorrectionInput {
    */
   partialVatBreakdown?: readonly VatBreakdownLine[];
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
-   * recorded on `sales.authorized_by`. */
-  authz: AuthzInput | { managementSessionId: string };
+   * recorded on `sales.authorized_by`. An `invoiceCorrectionId` files on the approval given when
+   * that correction was opened (`authorizeCorrectionApproval`), with nobody signed in. */
+  authz: AuthzInput | { managementSessionId: string } | { invoiceCorrectionId: string };
   clock: TrustedClock;
 }
 
@@ -193,16 +195,22 @@ export async function recordCorrection(
   }
 
   const authorization =
-    "managementSessionId" in input.authz
-      ? await authorizeManager(tx, {
-          managementSessionId: input.authz.managementSessionId,
-          permission: "sale.rectify",
+    "invoiceCorrectionId" in input.authz
+      ? await authorizeCorrectionApproval(tx, {
+          invoiceCorrectionId: input.authz.invoiceCorrectionId,
+          correctsSaleId: input.correctsSaleId,
+          total: input.total,
         })
-      : await authorize(tx, {
-          sessionId: input.authz.sessionId,
-          permission: "sale.rectify",
-          override: input.authz.override,
-        });
+      : "managementSessionId" in input.authz
+        ? await authorizeManager(tx, {
+            managementSessionId: input.authz.managementSessionId,
+            permission: "sale.rectify",
+          })
+        : await authorize(tx, {
+            sessionId: input.authz.sessionId,
+            permission: "sale.rectify",
+            override: input.authz.override,
+          });
 
   requireSupportedCorrection(original.counterpartyTaxId, input.correctsSaleId);
 

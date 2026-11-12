@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it, vi } from "vitest";
-import { authorize, authorizeByPin } from "./authorize.js";
+import { authorize, authorizeApproval, authorizeByPin } from "./authorize.js";
 import { registerModulePermissions } from "./permissions.js";
 import { checkPin } from "./credential.js";
 import { endSession, loginWithPin } from "./login.js";
@@ -362,5 +362,31 @@ describe("module permission authorization", () => {
       permission: "test.module_manage",
       viaOverride: true,
     });
+  });
+});
+
+describe("authorizeApproval", () => {
+  it("accepts an earlier approval by an active manager", async () => {
+    const managerId = await seedPerson(suite.db, "manager");
+    expect(
+      await run((tx) => authorizeApproval(tx, { personId: managerId, permission: "sale.rectify" })),
+    ).toEqual({ authorizedBy: managerId, permission: "sale.rectify", viaOverride: false });
+  });
+
+  it("refuses one whose role no longer holds the permission, and a suspended person", async () => {
+    const staffId = await seedPerson(suite.db, "staff");
+    const suspendedId = await seedPerson(suite.db, "manager", "suspended");
+    const pendingId = await seedPerson(suite.db, "manager", "pending");
+    for (const personId of [staffId, suspendedId, pendingId, crypto.randomUUID()]) {
+      expect(
+        await refusalOf(() =>
+          run((tx) => authorizeApproval(tx, { personId, permission: "sale.rectify" })),
+        ),
+      ).toEqual({
+        code: "authorization.not_permitted",
+        params: { permission: "sale.rectify" },
+        reason: undefined,
+      });
+    }
   });
 });
