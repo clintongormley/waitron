@@ -44,7 +44,7 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
   await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
   const node = config.node;
   if (node === undefined)
-    throw new Error("Upgrade readiness needs a configured node for its test sale");
+    throw new Error("Upgrade checks require completed first setup and a configured node");
   const available = firstSetupHost.modules;
   const modules = enabledModules(available, moduleConfig);
   const options = migrationOptionsFor(orderedMigrationSets(modules), config.migrationsRoot);

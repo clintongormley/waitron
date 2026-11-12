@@ -339,11 +339,11 @@ describe("contained upgrade data checks", () => {
     }
   }, 220_000);
 
-  it("does not pass a setup-only box by skipping the required test sale", async () => {
+  it("refuses a setup-only box before creating database state", async () => {
     const { checkUpgradeData } = await import("./upgrade-checks.js");
     const env = { WAITRON_STATE_DIR: root };
     await expect(checkUpgradeData(loadConfig(env, migrations, root), env)).rejects.toThrow(
-      "Upgrade readiness needs a configured node for its test sale",
+      "Upgrade checks require completed first setup and a configured node",
     );
     expect(await readdir(root)).toEqual([]);
   });
@@ -373,7 +373,7 @@ describe("contained upgrade data checks", () => {
       },
     );
     await expect(checkUpgradeData(config, env)).rejects.toThrow(
-      "Upgrade readiness needs a configured node for its test sale",
+      "Upgrade checks require completed first setup and a configured node",
     );
   });
 });
