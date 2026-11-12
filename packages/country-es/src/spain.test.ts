@@ -372,8 +372,8 @@ describe("receipt labels", () => {
     expect(labels?.invoiceHeading).toBe("FACTURA");
   });
 
-  it("names a bill closed by transfer as still to be paid, in Spanish", () => {
-    expect(SPAIN.receiptLabels?.["es-ES"]?.toBePaidByTransfer).toBe("Pago aplazado");
+  it("names a bill closed as a deferred payment as still to be paid, in Spanish", () => {
+    expect(SPAIN.receiptLabels?.["es-ES"]?.deferredPayment).toBe("Pago aplazado");
   });
 });
 

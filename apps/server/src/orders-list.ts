@@ -56,7 +56,7 @@ export const ORDER_STATUSES = [
   "left_without_paying",
   "waiting_for_payment",
   "paid",
-  "to_be_paid_by_transfer",
+  "deferred_payment",
   "cancelled",
 ] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -129,7 +129,7 @@ const BILL_STATUS = sql`case
   when wo.status = 'abandoned' then 'cancelled'
   when ud.id is not null and ss.id is null and wo.status = 'placed' then 'left_without_paying'
   when wo.status = 'placed' and ss.id is null then 'waiting_for_payment'
-  when tc.id is not null then 'to_be_paid_by_transfer'
+  when tc.id is not null then 'deferred_payment'
   when wo.status = 'settled' or ss.id is not null then 'paid'
   else 'cancelled' end`;
 
@@ -181,7 +181,7 @@ function rowsSql(filter: OrderListFilter): SQL {
   left join sale_settlements ss on ss.sale_id = s.id
   left join sale_voids sv on sv.sale_id = s.id
   left join unpaid_departures ud on ud.working_order_id = wo.id
-  left join transfer_closures tc on tc.working_order_id = wo.id
+  left join deferred_closures tc on tc.working_order_id = wo.id
   where ${LISTED_BILL}${billScope(filter)}
   union all
   select 'sale', s.id, s.issued_at, null, null, null, null, null, s.id, sr.code, s.invoice_number,

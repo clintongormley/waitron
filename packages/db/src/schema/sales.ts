@@ -41,7 +41,7 @@ import { invoiceSeries } from "./series.js";
  */
 export const fiscalState = enumType(["recorded", "not_applicable"]);
 
-export const tenderMethod = enumType(["cash", "card", "voucher", "transfer", "other"]);
+export const tenderMethod = enumType(["cash", "card", "voucher", "deferred", "other"]);
 
 /**
  * The immutable commercial record of a completed sale — written once, at

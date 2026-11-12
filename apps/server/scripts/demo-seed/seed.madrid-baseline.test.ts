@@ -88,7 +88,7 @@ const ADDED_TABLES = [
   "order_portions",
   "recovery_packs",
   "sale_line_portions",
-  "transfer_closures",
+  "deferred_closures",
   "working_line_portions",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];

@@ -32,7 +32,7 @@ export interface ActivityKindData {
   };
   /** Who downloaded the file of deferred payments, for which business days, and its row
    * count; never a customer named in the file. */
-  readonly "transfer_export.downloaded": {
+  readonly "deferred_payment_export.downloaded": {
     readonly from: string;
     readonly to: string;
     readonly rows: number;
@@ -47,7 +47,7 @@ export const ACTIVITY_KINDS = {
   "settings.saved": { subject: "settings" },
   "membership.node_removed": { subject: "node" },
   "membership.node_cleared": { subject: "node" },
-  "transfer_export.downloaded": { subject: "report" },
+  "deferred_payment_export.downloaded": { subject: "report" },
   "accountant_export.downloaded": { subject: "report" },
 } as const satisfies Record<ActivityKind, ActivityKindRule>;
 export type ActivitySubjectKind = (typeof ACTIVITY_KINDS)[ActivityKind]["subject"];

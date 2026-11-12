@@ -330,7 +330,7 @@ it("offers an existing pending refund for status without offering another refund
   expect(asks).toEqual([]);
 });
 
-it.each(["voucher", "transfer", "other"] as const)(
+it.each(["voucher", "deferred", "other"] as const)(
   "does not offer unsupported %s money",
   async (method) => {
     const el = await mount({ tenders: [{ ...card, method }] });

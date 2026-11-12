@@ -1062,8 +1062,8 @@ describe("till-ticket-view", () => {
       expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
     });
 
-    it("names a bill closed by transfer as still to be paid, with no card row or payment slip", async () => {
-      const { el } = await mount({ tender: { method: "transfer" } });
+    it("names a bill closed as a deferred payment as still to be paid, with no card row or payment slip", async () => {
+      const { el } = await mount({ tender: { method: "deferred" } });
       const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((row) =>
         norm(row.textContent ?? "").trim(),
       );

@@ -42,7 +42,7 @@ const close: DailyCloseDto = {
   departmentTakings: [],
   closureSummary: {
     billsClosed: { count: 10, total: "176.00" },
-    toBePaidByTransfer: "0.00",
+    deferredPayments: "0.00",
     received: "176.00",
   },
   counts: { sales: 10, corrections: 1, voids: 2 },
@@ -81,7 +81,7 @@ function overview(businessDay: string): SalesOverview {
     departmentTakings: [],
     closureSummary: {
       billsClosed: { count: 0, total: "0.00" },
-      toBePaidByTransfer: "0.00",
+      deferredPayments: "0.00",
       received: "0.00",
     },
     counts: { sales: 0, corrections: 0, voids: 0 },
@@ -364,8 +364,8 @@ describe("dashboard-sales-screen", () => {
     expect(cells('[data-test="seller-row-0-variant-0"]')).toEqual(["Coffee, Double", "3", "€7.50"]);
   });
 
-  it("leaves a transfer out of the tender table and shows it, and the bills closed, on their own lines", async () => {
-    const transferDay: DailyCloseDto = {
+  it("leaves a deferred payment out of the tender table and shows it, and the bills closed, on their own lines", async () => {
+    const deferredDay: DailyCloseDto = {
       ...close,
       cash: {
         byOrigin: [
@@ -375,7 +375,7 @@ describe("dashboard-sales-screen", () => {
             deviceName: "Bar 1",
             byMethod: [
               { method: "cash", amount: "10.00", tip: "0.00" },
-              { method: "transfer", amount: "220.00", tip: "0.00" },
+              { method: "deferred", amount: "220.00", tip: "0.00" },
             ],
             cashTakings: "10.00",
           },
@@ -386,20 +386,20 @@ describe("dashboard-sales-screen", () => {
       departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 2, total: "320.00" },
-        toBePaidByTransfer: "220.00",
+        deferredPayments: "220.00",
         received: "110.00",
       },
     };
-    const api = stubApi({ getDailyClose: vi.fn().mockResolvedValue(transferDay) });
+    const api = stubApi({ getDailyClose: vi.fn().mockResolvedValue(deferredDay) });
     setLocale("en-GB");
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
     await flush(el);
     const root = el.shadowRoot!;
     const text = (test: string) => root.querySelector(`[data-test=${test}]`)!.textContent;
     expect(root.querySelector("[data-test=tender-row-device-1-cash]")).not.toBeNull();
-    expect(root.querySelector("[data-test=tender-row-device-1-transfer]")).toBeNull();
+    expect(root.querySelector("[data-test=tender-row-device-1-deferred]")).toBeNull();
     expect(text("tender-total")).toBe("€110.00");
-    expect(text("transfer-total")).toBe("€220.00");
+    expect(text("deferred-total")).toBe("€220.00");
     expect(text("bills-closed")).toBe("2 · €320.00");
 
     setLocale("es-ES");
@@ -409,7 +409,7 @@ describe("dashboard-sales-screen", () => {
       spanish.el
         .shadowRoot!.querySelector(`[data-test=${test}]`)!
         .parentElement!.querySelector(".label")!.textContent;
-    expect(label("transfer-total")).toBe(es["sales.to_be_paid_by_transfer"]);
+    expect(label("deferred-total")).toBe(es["sales.deferred_payments"]);
     expect(label("bills-closed")).toBe("Cuentas cerradas");
   });
 
@@ -758,7 +758,7 @@ describe("dashboard-sales-screen date fields", () => {
 describe("dashboard-sales-screen deferred-payments file", () => {
   const FILE = new Blob(["﻿header\r\n"]);
   const exportButton = (el: SalesScreen) =>
-    el.shadowRoot!.querySelector<WtButton>("[data-test=export-transfer]");
+    el.shadowRoot!.querySelector<WtButton>("[data-test=export-deferred]");
   const exportError = (el: SalesScreen) =>
     el.shadowRoot!.querySelector("[data-test=export-error]")?.textContent?.trim() ?? null;
   const fieldValue = (el: SalesScreen, test: string) =>
@@ -782,7 +782,7 @@ describe("dashboard-sales-screen deferred-payments file", () => {
   });
 
   it("offers no deferred-payments file to a session that may not export reports", async () => {
-    const el = await mount(stubApi({ downloadClosedByTransfer: vi.fn() }), false);
+    const el = await mount(stubApi({ downloadDeferredPayments: vi.fn() }), false);
     expect(exportButton(el)).toBeNull();
   });
 
@@ -793,35 +793,35 @@ describe("dashboard-sales-screen deferred-payments file", () => {
   });
 
   it("downloads the range the fields show, named for that range", async () => {
-    const downloadClosedByTransfer = vi.fn().mockResolvedValue(FILE);
-    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:transfer");
+    const downloadDeferredPayments = vi.fn().mockResolvedValue(FILE);
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:deferred");
     const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const { clicked } = catchDownloads();
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
     setDate(el, "from-picker", "2030-06-01");
     setDate(el, "to-picker", "2030-06-15");
     await flush(el);
 
-    expect(exportButton(el)!.textContent!.trim()).toBe(t("sales.export_transfer"));
+    expect(exportButton(el)!.textContent!.trim()).toBe(t("sales.export_deferred"));
     exportButton(el)!.click();
     await flush(el);
 
-    expect(downloadClosedByTransfer).toHaveBeenCalledWith({ from: "2030-06-01", to: "2030-06-15" });
+    expect(downloadDeferredPayments).toHaveBeenCalledWith({ from: "2030-06-01", to: "2030-06-15" });
     expect(createObjectURL).toHaveBeenCalledWith(FILE);
     expect(clicked).toHaveLength(1);
     expect(clicked[0]!.download).toBe("deferred-payments-2030-06-01-2030-06-15.csv");
-    expect(clicked[0]!.href).toBe("blob:transfer");
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:transfer");
+    expect(clicked[0]!.href).toBe("blob:deferred");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:deferred");
     expect(exportError(el)).toBeNull();
   });
 
   it("names the file for the range it asked for, even when the fields change before the answer", async () => {
     let answer!: (file: Blob) => void;
-    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>((r) => (answer = r)));
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:transfer");
+    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>((r) => (answer = r)));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:deferred");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const { clicked } = catchDownloads();
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
     setDate(el, "from-picker", "2030-06-01");
     setDate(el, "to-picker", "2030-06-15");
     await flush(el);
@@ -837,8 +837,8 @@ describe("dashboard-sales-screen deferred-payments file", () => {
   });
 
   it("shows the action busy while the file is asked for, and sends one request however often it is pressed", async () => {
-    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>(() => {}));
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>(() => {}));
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
 
     exportButton(el)!.click();
     await flush(el);
@@ -846,14 +846,14 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     await flush(el);
 
     expect(exportButton(el)!.loading).toBe(true);
-    expect(downloadClosedByTransfer).toHaveBeenCalledOnce();
+    expect(downloadDeferredPayments).toHaveBeenCalledOnce();
   });
 
   it("shows a refusal under the action, keeps both dates, and asks again when pressed again", async () => {
-    const downloadClosedByTransfer = vi
+    const downloadDeferredPayments = vi
       .fn()
       .mockRejectedValue({ code: "authorization.not_permitted" });
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
     setDate(el, "from-picker", "2030-06-01");
     setDate(el, "to-picker", "2030-06-15");
     await flush(el);
@@ -870,19 +870,19 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     exportButton(el)!.click();
     await flush(el);
 
-    expect(downloadClosedByTransfer).toHaveBeenCalledTimes(2);
-    expect(downloadClosedByTransfer).toHaveBeenLastCalledWith({
+    expect(downloadDeferredPayments).toHaveBeenCalledTimes(2);
+    expect(downloadDeferredPayments).toHaveBeenLastCalledWith({
       from: "2030-06-01",
       to: "2030-06-15",
     });
   });
 
   it("is disabled while a date field is cleared, and downloads what the fields show once it holds a date again", async () => {
-    const downloadClosedByTransfer = vi.fn().mockResolvedValue(FILE);
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:transfer");
+    const downloadDeferredPayments = vi.fn().mockResolvedValue(FILE);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:deferred");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     catchDownloads();
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
     setDate(el, "from-picker", "2030-06-01");
     setDate(el, "to-picker", "2030-06-15");
     await flush(el);
@@ -897,7 +897,7 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     expect(exportButton(el)!.disabled).toBe(true);
     exportButton(el)!.click();
     await flush(el);
-    expect(downloadClosedByTransfer).not.toHaveBeenCalled();
+    expect(downloadDeferredPayments).not.toHaveBeenCalled();
 
     await userEvent.fill(nativeTo, "2030-06-20");
     await flush(el);
@@ -905,7 +905,7 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     expect(exportButton(el)!.disabled).toBe(false);
     exportButton(el)!.click();
     await flush(el);
-    expect(downloadClosedByTransfer).toHaveBeenCalledExactlyOnceWith({
+    expect(downloadDeferredPayments).toHaveBeenCalledExactlyOnceWith({
       from: "2030-06-01",
       to: "2030-06-20",
     });
@@ -914,8 +914,8 @@ describe("dashboard-sales-screen deferred-payments file", () => {
   it("is enabled again when the business day fills a field cleared before it arrived", async () => {
     let answer!: (value: SalesOverview) => void;
     const getSalesOverview = vi.fn(() => new Promise<SalesOverview>((r) => (answer = r)));
-    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>(() => {}));
-    const el = await mount(stubApi({ getSalesOverview, downloadClosedByTransfer }), true);
+    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>(() => {}));
+    const el = await mount(stubApi({ getSalesOverview, downloadDeferredPayments }), true);
     setDate(el, "to-picker", "");
     await flush(el);
     expect(exportButton(el)!.disabled).toBe(true);
@@ -927,14 +927,14 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     expect(exportButton(el)!.disabled).toBe(false);
     exportButton(el)!.click();
     await flush(el);
-    expect(downloadClosedByTransfer).toHaveBeenCalledWith({ from: "2030-06-15", to: "2030-06-15" });
+    expect(downloadDeferredPayments).toHaveBeenCalledWith({ from: "2030-06-15", to: "2030-06-15" });
   });
 
   it("takes a refusal away once the dates change", async () => {
-    const downloadClosedByTransfer = vi
+    const downloadDeferredPayments = vi
       .fn()
       .mockRejectedValue({ code: "authorization.not_permitted" });
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
     exportButton(el)!.click();
     await flush(el);
     expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
@@ -947,8 +947,8 @@ describe("dashboard-sales-screen deferred-payments file", () => {
 
   it("shows no refusal for a range the fields no longer hold", async () => {
     let refuse!: (reason: unknown) => void;
-    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>((_, r) => (refuse = r)));
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>((_, r) => (refuse = r)));
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
     exportButton(el)!.click();
     await flush(el);
 
@@ -963,10 +963,10 @@ describe("dashboard-sales-screen deferred-payments file", () => {
   it("takes a refusal away once the business day replaces both dates", async () => {
     let answer!: (value: SalesOverview) => void;
     const getSalesOverview = vi.fn(() => new Promise<SalesOverview>((r) => (answer = r)));
-    const downloadClosedByTransfer = vi
+    const downloadDeferredPayments = vi
       .fn()
       .mockRejectedValue({ code: "authorization.not_permitted" });
-    const el = await mount(stubApi({ getSalesOverview, downloadClosedByTransfer }), true);
+    const el = await mount(stubApi({ getSalesOverview, downloadDeferredPayments }), true);
     exportButton(el)!.click();
     await flush(el);
     expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
@@ -980,8 +980,8 @@ describe("dashboard-sales-screen deferred-payments file", () => {
   });
 
   it("is disabled while the range runs backwards", async () => {
-    const downloadClosedByTransfer = vi.fn().mockResolvedValue(FILE);
-    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    const downloadDeferredPayments = vi.fn().mockResolvedValue(FILE);
+    const el = await mount(stubApi({ downloadDeferredPayments }), true);
     expect(exportButton(el)!.disabled).toBe(false);
 
     setDate(el, "from-picker", "2030-06-15");

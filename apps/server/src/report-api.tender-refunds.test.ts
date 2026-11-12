@@ -196,7 +196,7 @@ it("publishes a named negative cash-up once despite the provider evidence, prese
     },
     closureSummary: {
       billsClosed: { count: 0, total: "0.00" },
-      toBePaidByTransfer: "0.00",
+      deferredPayments: "0.00",
       received: "-107.25",
     },
     departmentTakings: [

@@ -2542,7 +2542,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
       departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 37, total: "1234.50" },
-        toBePaidByTransfer: "0.00",
+        deferredPayments: "0.00",
         received: "1234.50",
       },
       counts: { sales: 37, corrections: 1, voids: 2 },
@@ -2587,7 +2587,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
       departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 8, total: "121.00" },
-        toBePaidByTransfer: "0.00",
+        deferredPayments: "0.00",
         received: "121.00",
       },
       counts: { sales: 12, corrections: 0, voids: 1 },

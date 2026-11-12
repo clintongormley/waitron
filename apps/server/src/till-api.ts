@@ -254,7 +254,7 @@ import { mountFindBillApi } from "./find-bill-api.js";
 import { mountTransactionReceiptApi } from "./transaction-receipt-api.js";
 import { mountTenderRefundApi } from "./tender-refund-api.js";
 import { mountInvoiceCorrectionApi } from "./invoice-correction-api.js";
-import { mountTransferCloseApi } from "./transfer-close-api.js";
+import { mountDeferredCloseApi } from "./deferred-close-api.js";
 import {
   readInvoiceDeliveries,
   readInvoiceDeliveryState,
@@ -613,9 +613,9 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "unpaid_departure.unfired_dishes": 409,
   "unpaid_departure.bill_holds_payment": 409,
   "submission.id_reused": 409,
-  "transfer_close.ineligible": 409,
-  "transfer_close.conflict": 409,
-  "transfer_close.day_frozen": 409,
+  "deferred_close.ineligible": 409,
+  "deferred_close.conflict": 409,
+  "deferred_close.day_frozen": 409,
   "draft.taken_over": 409,
   "draft.already_submitted": 409,
   "draft.out_of_date": 409,
@@ -1341,7 +1341,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountTransactionReceiptApi(app, deps, log, run);
   mountTenderRefundApi(app, deps, log, pinThrottle);
   mountInvoiceCorrectionApi(app, deps, log, pinThrottle);
-  mountTransferCloseApi(app, deps, log, run);
+  mountDeferredCloseApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it.

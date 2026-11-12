@@ -1,13 +1,13 @@
 import { asc, between, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { invoiceSeries, sales, transferClosures, type Transaction } from "@waitron/db";
+import { invoiceSeries, sales, deferredClosures, type Transaction } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
 import { centsToDecimal, decimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { csvCell } from "./attendance-export-csv.js";
-import { TRANSFER_EXPORT_WORDS } from "./i18n/transfer-export.js";
+import { DEFERRED_PAYMENT_EXPORT_WORDS } from "./i18n/deferred-payment-export.js";
 import { amountCell } from "./misdated-sales-csv.js";
 
-export interface TransferClosedInvoice {
+export interface DeferredPaymentInvoice {
   invoiceNumber: string;
   invoiceType: "F1" | "F2";
   issueDate: string;
@@ -27,11 +27,11 @@ function moneySum(values: readonly string[]): Decimal {
 
 /** Every invoice whose bill was closed as a deferred payment on a business day in the range,
  * venue-wide. */
-export async function listTransferClosedInvoices(
+export async function listDeferredPaymentInvoices(
   tx: Transaction,
   range: { from: string; to: string },
-): Promise<TransferClosedInvoice[]> {
-  const inRange = between(transferClosures.businessDay, range.from, range.to);
+): Promise<DeferredPaymentInvoice[]> {
+  const inRange = between(deferredClosures.businessDay, range.from, range.to);
   const rows = await tx
     .select({
       saleId: sales.id,
@@ -39,20 +39,20 @@ export async function listTransferClosedInvoices(
       number: sales.invoiceNumber,
       issuedAt: sales.issuedAt,
       offset: sales.issuedOffsetMinutes,
-      closedOn: transferClosures.businessDay,
+      closedOn: deferredClosures.businessDay,
       recipientName: sales.counterpartyLegalName,
       recipientTaxId: sales.counterpartyTaxId,
       vatBreakdown: sales.vatBreakdown,
       total: sales.total,
     })
-    .from(transferClosures)
-    .innerJoin(sales, eq(sales.id, transferClosures.saleId))
+    .from(deferredClosures)
+    .innerJoin(sales, eq(sales.id, deferredClosures.saleId))
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(inRange)
     .orderBy(
-      asc(transferClosures.businessDay),
-      asc(transferClosures.closedAt),
-      asc(transferClosures.id),
+      asc(deferredClosures.businessDay),
+      asc(deferredClosures.closedAt),
+      asc(deferredClosures.id),
     );
 
   // No date limit on the corrections: one issued weeks after the close is still named.
@@ -60,13 +60,13 @@ export async function listTransferClosedInvoices(
   const correctionSeries = alias(invoiceSeries, "correction_series");
   const corrections = await tx
     .select({
-      saleId: transferClosures.saleId,
+      saleId: deferredClosures.saleId,
       code: correctionSeries.code,
       number: correction.invoiceNumber,
       total: correction.total,
     })
-    .from(transferClosures)
-    .innerJoin(correction, eq(correction.correctsSaleId, transferClosures.saleId))
+    .from(deferredClosures)
+    .innerJoin(correction, eq(correction.correctsSaleId, deferredClosures.saleId))
     .innerJoin(correctionSeries, eq(correctionSeries.id, correction.seriesId))
     .where(inRange)
     .orderBy(asc(correction.issuedAt), asc(correction.id));
@@ -103,11 +103,11 @@ function dayCell(isoDay: string): string {
   return csvCell(`${day}/${month}/${year}`);
 }
 
-export function renderTransferClosedCsv(
-  rows: readonly TransferClosedInvoice[],
+export function renderDeferredPaymentCsv(
+  rows: readonly DeferredPaymentInvoice[],
   language: "en" | "es",
 ): Uint8Array<ArrayBuffer> {
-  const w = TRANSFER_EXPORT_WORDS[language];
+  const w = DEFERRED_PAYMENT_EXPORT_WORDS[language];
   const lines = [
     [
       w.invoiceNumber,

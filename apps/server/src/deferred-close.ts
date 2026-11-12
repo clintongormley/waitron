@@ -8,7 +8,7 @@ import {
   saleVoids,
   sales,
   tenders,
-  transferClosures,
+  deferredClosures,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -38,7 +38,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { refusePlacedPaymentInFlight, settleIssuedOrder } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { CloseByTransferRequest, CloseByTransferResult } from "./transfer-close-types.js";
+import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import {
@@ -52,7 +52,7 @@ import {
 } from "./working-order.js";
 import "./errors.js";
 
-export interface TransferCloseDeps {
+export interface DeferredCloseDeps {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
@@ -70,17 +70,17 @@ export interface TransferCloseDeps {
 
 /**
  * Close one bill, final in Waitron, as a deferred payment: issue its invoice unless it has
- * one, settle it with one transfer tender for the whole total, finish its party when every check
+ * one, settle it with one deferred tender for the whole total, finish its party when every check
  * passes, and keep the answer. Runs in the caller's issuance transaction; any failure rolls back
  * all of it, the invoice included.
  */
-export async function closeBillByTransferTx(
+export async function closeBillDeferredTx(
   tx: Transaction,
-  deps: TransferCloseDeps,
+  deps: DeferredCloseDeps,
   cfg: DeviceRequestConfig,
-  sent: CloseByTransferRequest,
+  sent: CloseDeferredRequest,
   actorId: string,
-): Promise<CloseByTransferResult> {
+): Promise<CloseDeferredResult> {
   const request = normalised(deps.backend, sent);
   const fingerprint = requestFingerprint(cfg, request, actorId);
   const replayed = await replay(tx, cfg, request, actorId, fingerprint);
@@ -103,19 +103,19 @@ export async function closeBillByTransferTx(
     .where(and(eq(dailyCloses.nodeId, cfg.nodeId), eq(dailyCloses.businessDay, businessDay)))
     .limit(1);
   if (frozen !== undefined)
-    throw new AppError("transfer_close.day_frozen", { nodeId: cfg.nodeId, businessDay });
+    throw new AppError("deferred_close.day_frozen", { nodeId: cfg.nodeId, businessDay });
 
   const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
   if (order === undefined) throw new AppError("working_order.not_open", { workingOrderId: billId });
   const ineligible = (reason: IneligibleReason) =>
-    new AppError("transfer_close.ineligible", { workingOrderId: billId, reason });
+    new AppError("deferred_close.ineligible", { workingOrderId: billId, reason });
   if (order.nodeId !== cfg.nodeId) throw ineligible("other_node");
   const finishing = request.partyFinish;
   const family =
     finishing === null || order.partyId === null ? null : await partyFamily(tx, finishing.partyId);
   if (finishing !== null && (order.partyId === null || !family!.includes(order.partyId)))
     throw invalid("partyFinish");
-  if (order.status === "settled") throw ineligible("final_without_transfer");
+  if (order.status === "settled") throw ineligible("final_without_deferral");
   if (order.status === "abandoned") throw ineligible("void");
   if (order.revision !== request.expectedRevision)
     throw new AppError("working_order.out_of_date", {
@@ -138,7 +138,7 @@ export async function closeBillByTransferTx(
     await refuseTouchedSale(tx, issued.id, ineligible);
   }
   if ((await stagedChoice(tx, order, issued)) !== requestedChoice(request))
-    throw new AppError("transfer_close.conflict", { workingOrderId: billId });
+    throw new AppError("deferred_close.conflict", { workingOrderId: billId });
   let invoice: PricedInvoice | undefined;
   let total: Decimal;
   if (issued !== undefined) {
@@ -151,7 +151,7 @@ export async function closeBillByTransferTx(
   const cents = decimalToCents(total);
   if (cents <= 0) throw ineligible("non_positive");
   if (centsToDecimal(cents) !== request.expectedTotal)
-    throw new AppError("transfer_close.conflict", { workingOrderId: billId });
+    throw new AppError("deferred_close.conflict", { workingOrderId: billId });
   const saleId =
     invoice === undefined
       ? (issued!.id as SaleId)
@@ -178,7 +178,7 @@ export async function closeBillByTransferTx(
     { workingOrderId: billId, saleId, label },
     [
       {
-        method: "transfer",
+        method: "deferred",
         amount: total,
         tipAmount: "0.00",
         cashTendered: null,
@@ -204,19 +204,19 @@ export async function closeBillByTransferTx(
   if (!placedHere)
     await captureKitchenActivity(tx, attendance, actorId, [billId], request.submissionId);
 
-  const result: CloseByTransferResult = {
+  const result: CloseDeferredResult = {
     submissionId: request.submissionId,
     workingOrderId: billId,
     saleId,
     invoiceNumber: (await readInvoiceNumbers(tx, [saleId])).get(saleId)!,
-    classification: "to_be_paid_by_transfer",
+    classification: "deferred_payment",
     closedAt: closedAt.toISOString(),
     businessDay,
     total,
     currency: "EUR",
     party,
   };
-  await tx.insert(transferClosures).values({
+  await tx.insert(deferredClosures).values({
     id: request.submissionId,
     workingOrderId: billId,
     saleId,
@@ -232,18 +232,18 @@ export async function closeBillByTransferTx(
   return result;
 }
 
-export async function readTransferClosure(
+export async function readDeferredClosure(
   tx: Transaction,
   workingOrderId: string,
-): Promise<CloseByTransferResult | null> {
+): Promise<CloseDeferredResult | null> {
   const [row] = await tx
-    .select({ result: transferClosures.result })
-    .from(transferClosures)
-    .where(eq(transferClosures.workingOrderId, workingOrderId));
+    .select({ result: deferredClosures.result })
+    .from(deferredClosures)
+    .where(eq(deferredClosures.workingOrderId, workingOrderId));
   return row?.result ?? null;
 }
 
-type IneligibleReason = ErrorParams["transfer_close.ineligible"]["reason"];
+type IneligibleReason = ErrorParams["deferred_close.ineligible"]["reason"];
 
 const corrections = alias(sales, "corrections");
 
@@ -257,7 +257,7 @@ async function refuseTouchedSale(
   const reasons: [boolean, IneligibleReason][] = [
     [touched!.corrected, "correction"],
     [touched!.tendered, "prior_tender"],
-    [touched!.settled, "final_without_transfer"],
+    [touched!.settled, "final_without_deferral"],
     [touched!.voided, "void"],
     [touched!.substituted, "substitution"],
   ];
@@ -303,7 +303,7 @@ function touchedSaleQuery(tx: Transaction, saleId: string) {
 
 async function finishParty(
   tx: Transaction,
-  deps: TransferCloseDeps,
+  deps: DeferredCloseDeps,
   cfg: DeviceRequestConfig,
   partyId: string | null,
   /**
@@ -311,10 +311,10 @@ async function finishParty(
    * family: merging moves every open and presented bill to the surviving party.
    */
   family: string[] | null,
-  request: CloseByTransferRequest,
+  request: CloseDeferredRequest,
   actorId: string,
   attendance: { recorder: AttendanceRecorder; clock: TrustedClock } | undefined,
-): Promise<CloseByTransferResult["party"]> {
+): Promise<CloseDeferredResult["party"]> {
   if (partyId === null) return { state: "not_applicable", blockers: [] };
   const bills = await readFamilyBills(tx, family ?? (await partyFamily(tx, partyId)));
   const admitted = await deps.admitPartyRelease(
@@ -343,19 +343,19 @@ async function finishParty(
 async function replay(
   tx: Transaction,
   cfg: DeviceRequestConfig,
-  request: CloseByTransferRequest,
+  request: CloseDeferredRequest,
   actorId: string,
   fingerprint: string,
-): Promise<CloseByTransferResult | null> {
+): Promise<CloseDeferredResult | null> {
   const kept = {
-    id: transferClosures.id,
-    fingerprint: transferClosures.fingerprint,
-    result: transferClosures.result,
+    id: deferredClosures.id,
+    fingerprint: deferredClosures.fingerprint,
+    result: deferredClosures.result,
   };
   const [byId] = await tx
     .select(kept)
-    .from(transferClosures)
-    .where(eq(transferClosures.id, request.submissionId));
+    .from(deferredClosures)
+    .where(eq(deferredClosures.id, request.submissionId));
   if (byId !== undefined) {
     if (byId.fingerprint !== fingerprint)
       throw new AppError("submission.id_reused", { submissionId: request.submissionId });
@@ -363,20 +363,17 @@ async function replay(
   }
   const [byBill] = await tx
     .select(kept)
-    .from(transferClosures)
-    .where(eq(transferClosures.workingOrderId, request.id));
+    .from(deferredClosures)
+    .where(eq(deferredClosures.workingOrderId, request.id));
   if (byBill === undefined) return null;
   if (
     requestFingerprint(cfg, { ...request, submissionId: byBill.id }, actorId) !== byBill.fingerprint
   )
-    throw new AppError("transfer_close.conflict", { workingOrderId: request.id });
+    throw new AppError("deferred_close.conflict", { workingOrderId: request.id });
   return byBill.result;
 }
 
-function normalised(
-  backend: FiscalBackend,
-  request: CloseByTransferRequest,
-): CloseByTransferRequest {
+function normalised(backend: FiscalBackend, request: CloseDeferredRequest): CloseDeferredRequest {
   const uuid = (value: string) => value.toLowerCase();
   const edit = (expected: BillEditExpected): BillEditExpected => ({
     billId: uuid(expected.billId),
@@ -418,7 +415,7 @@ function normalisedDelivery(delivery: BillInvoiceDelivery | null): BillInvoiceDe
   return { medium: "email", recipient: delivery.recipient.trim() };
 }
 
-function requestedChoice(request: CloseByTransferRequest): string {
+function requestedChoice(request: CloseDeferredRequest): string {
   return canonicalJson({
     invoiceType: request.invoiceType,
     recipient: request.recipient,
@@ -478,7 +475,7 @@ async function stagedChoice(
 /** The request's SHA-256, bound to who sent it from where. */
 function requestFingerprint(
   cfg: DeviceRequestConfig,
-  request: CloseByTransferRequest,
+  request: CloseDeferredRequest,
   actorId: string,
 ): string {
   const canonical = { actorId, origin: cfg.origin, nodeId: cfg.nodeId, request };

@@ -2,7 +2,7 @@ import type { CutoverChange, Decimal, DeviceId, NodeId, Source, TimingBand } fro
 import type { LiquidationPeriod } from "./period.js";
 
 /** A tender method, mirroring `tenderMethod` in packages/db/src/schema/sales.ts. */
-export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
+export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
 
 export interface DailyCloseInput {
   /** The boxes whose records count; omit → every box in the database (the whole venue). */

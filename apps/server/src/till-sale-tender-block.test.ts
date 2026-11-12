@@ -169,7 +169,7 @@ beforeAll(async () => {
 async function seedSale(
   tx: Transaction,
   tender: {
-    method: "cash" | "card" | "transfer";
+    method: "cash" | "card" | "deferred";
     amount: string;
     tipAmount: string;
     cashTendered?: string;
@@ -330,16 +330,16 @@ describe("readTenderBlock", () => {
     });
   });
 
-  it("names a transfer closure with no amount, tip or reference, never as card", async () => {
+  it("names a deferred closure with no amount, tip or reference, never as card", async () => {
     const block = await withTransaction(suite.db, async (tx) => {
       const { saleId, workingOrderId } = await seedSale(tx, {
-        method: "transfer",
+        method: "deferred",
         amount: "1.00",
         tipAmount: "0.00",
       });
       return readTenderBlock(tx, saleId, workingOrderId);
     });
-    expect(block).toEqual({ method: "transfer" });
+    expect(block).toEqual({ method: "deferred" });
   });
 
   it("shows the tender taken first when two were taken in the same millisecond", async () => {

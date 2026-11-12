@@ -18,7 +18,7 @@ const overview: SalesOverview = {
   ],
   closureSummary: {
     billsClosed: { count: 42, total: "1279.50" },
-    toBePaidByTransfer: "0.00",
+    deferredPayments: "0.00",
     received: "1234.50",
   },
   counts: { sales: 42, corrections: 2, voids: 1 },

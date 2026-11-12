@@ -164,12 +164,12 @@ describe("till-counter-waiting", () => {
     expect(buttons(row)).toEqual([t("waiting.hand_over")]);
   });
 
-  it("an order closed by transfer and not yet handed over never says paid", async () => {
+  it("an order closed as a deferred payment and not yet handed over never says paid", async () => {
     const previousLocale = currentLocale();
     setLocale("en-GB");
     try {
       const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
-        orders: [{ ...paid, closedByTransfer: true }],
+        orders: [{ ...paid, closedDeferred: true }],
       });
       const row = rowOf(el, "wo-paid");
       expect(row.querySelector("[data-waiting-state]")!.textContent).toBe(

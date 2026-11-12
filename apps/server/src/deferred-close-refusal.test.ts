@@ -19,7 +19,7 @@ import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraft } from "./order-drafts.js";
-import { readTransferClosure } from "./transfer-close.js";
+import { readDeferredClosure } from "./deferred-close.js";
 import { readOrderRevision } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import {
@@ -35,21 +35,21 @@ import {
   RECIPIENT,
   clockAt,
   refusal,
-  transferCloseVenue,
-  type TransferCloseKit,
-} from "./testing/transfer-close-fixture.js";
+  deferredCloseVenue,
+  type DeferredCloseKit,
+} from "./testing/deferred-close-fixture.js";
 import "./errors.js";
 
-// Every refusal of a close by transfer leaves the ledger as it was; beside each, where
+// Every refusal of a deferred close leaves the ledger as it was; beside each, where
 // one exists, the legitimate close that must still be served.
-let t: TransferCloseKit;
+let t: DeferredCloseKit;
 
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    t = await transferCloseVenue(db);
+    t = await deferredCloseVenue(db);
   },
 });
 
@@ -72,7 +72,7 @@ async function issuedSaleOf(billId: string) {
 }
 
 function ineligible(billId: string, reason: string) {
-  return { code: "transfer_close.ineligible", params: { workingOrderId: billId, reason } };
+  return { code: "deferred_close.ineligible", params: { workingOrderId: billId, reason } };
 }
 
 async function correct(saleId: string) {
@@ -134,7 +134,7 @@ function payPart(
   );
 }
 
-describe("closeBillByTransferTx refuses, before writing anything", () => {
+describe("closeBillDeferredTx refuses, before writing anything", () => {
   it("a stopped disk, whether the route saw it or the state notes it", async () => {
     const billId = await t.counterOrder("placed");
     const request = await counterRequest(billId);
@@ -208,7 +208,7 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
       t.close({ ...request, expectedRevision: request.expectedRevision + 1 }),
     );
 
-    expect(error).toMatchObject(ineligible(billId, "final_without_transfer"));
+    expect(error).toMatchObject(ineligible(billId, "final_without_deferral"));
   });
 
   it("an abandoned bill", async () => {
@@ -232,7 +232,7 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
 
     expect(error.code).toBe("working_order.out_of_date");
     expect(error.params).toEqual({ workingOrderId: billId, revision: request.expectedRevision });
-    expect(await inTx(t.venue, (tx) => readTransferClosure(tx, billId))).toBeNull();
+    expect(await inTx(t.venue, (tx) => readDeferredClosure(tx, billId))).toBeNull();
   });
 
   it("a stale bill edit, another person's draft, and the closer's own unsent dishes", async () => {
@@ -352,7 +352,7 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
   it("a request whose invoice type or total is not the bill's", async () => {
     const billId = await t.counterOrder("placed");
     const request = await counterRequest(billId);
-    const conflict = { code: "transfer_close.conflict", params: { workingOrderId: billId } };
+    const conflict = { code: "deferred_close.conflict", params: { workingOrderId: billId } };
 
     const type = await refusedWithNothingWritten(() =>
       t.close({ ...request, invoiceType: "F1", recipient: RECIPIENT }),
@@ -383,7 +383,7 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
   });
 });
 
-describe("closeBillByTransferTx refuses an issued invoice that is no longer whole", () => {
+describe("closeBillDeferredTx refuses an issued invoice that is no longer whole", () => {
   it("one a corrective invoice has corrected", async () => {
     const billId = await t.counterOrder("placed", true);
     await correct((await issuedSaleOf(billId)).id);
@@ -442,7 +442,7 @@ describe("closeBillByTransferTx refuses an issued invoice that is no longer whol
       t.close(await t.requestFor(billId, "0.00", null)),
     );
 
-    expect(error).toMatchObject(ineligible(billId, "final_without_transfer"));
+    expect(error).toMatchObject(ineligible(billId, "final_without_deferral"));
   });
 
   it("a request naming another recipient than an issued full invoice froze, serving the same one", async () => {
@@ -473,7 +473,7 @@ describe("closeBillByTransferTx refuses an issued invoice that is no longer whol
     );
 
     expect(error).toMatchObject({
-      code: "transfer_close.conflict",
+      code: "deferred_close.conflict",
       params: { workingOrderId: party.tabId },
     });
     expect((await t.close(request)).saleId).toBe((await issuedSaleOf(party.tabId)).id);
@@ -507,13 +507,13 @@ describe("closeBillByTransferTx refuses an issued invoice that is no longer whol
     );
 
     expect(error).toMatchObject({
-      code: "transfer_close.conflict",
+      code: "deferred_close.conflict",
       params: { workingOrderId: billId },
     });
   });
 });
 
-describe("closeBillByTransferTx compares the staged invoice choice", () => {
+describe("closeBillDeferredTx compares the staged invoice choice", () => {
   async function stagedF1() {
     const party = await seatedWith(t.venue, "House salad");
     await setOrderInvoiceChoice(t.venue.db, t.venue.backend, t.venue.cfg, party.tabId, {
@@ -550,7 +550,7 @@ describe("closeBillByTransferTx compares the staged invoice choice", () => {
     const error = await refusedWithNothingWritten(() => t.close(request));
 
     expect(error).toMatchObject({
-      code: "transfer_close.conflict",
+      code: "deferred_close.conflict",
       params: { workingOrderId: party.tabId },
     });
   });
@@ -582,12 +582,12 @@ describe("closeBillByTransferTx compares the staged invoice choice", () => {
       t.close({ ...request, recipient: RECIPIENT }),
     );
 
-    expect(error.code).toBe("transfer_close.conflict");
+    expect(error.code).toBe("deferred_close.conflict");
     expect((await t.close(request)).workingOrderId).toBe(billId);
   });
 });
 
-describe("closeBillByTransferTx on a frozen day", () => {
+describe("closeBillDeferredTx on a frozen day", () => {
   // Freezes today's business day, so it runs last.
   it("refuses new work on a business day this node has frozen", async () => {
     const billId = await t.counterOrder("placed");
@@ -600,7 +600,7 @@ describe("closeBillByTransferTx on a frozen day", () => {
 
     const error = await refusedWithNothingWritten(() => t.close(request, sameDay));
 
-    expect(error.code).toBe("transfer_close.day_frozen");
+    expect(error.code).toBe("deferred_close.day_frozen");
     expect(error.params).toEqual({ nodeId: t.venue.cfg.nodeId, businessDay });
   });
 });

@@ -39,7 +39,7 @@ import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
 } from "./testing/whole-payment-fixture.js";
-import { transferCloseKit } from "./testing/transfer-close-fixture.js";
+import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import "./errors.js";
 
 // Counter service (spec §5): a counter order may be handed over before or after it is paid.
@@ -824,20 +824,20 @@ describe("GET /api/orders/counter-waiting", () => {
     });
   });
 
-  it("marks a counter order closed by transfer, and only that one, while it waits for handover", async () => {
-    const kit = transferCloseKit(venue, zones.ticket_then_pay);
-    const byTransfer = await placed("issued", "Tarta");
-    await kit.close(await kit.requestFor(byTransfer, "18.00", null));
+  it("marks a counter order closed as a deferred payment, and only that one, while it waits for handover", async () => {
+    const kit = deferredCloseKit(venue, zones.ticket_then_pay);
+    const deferredBill = await placed("issued", "Tarta");
+    await kit.close(await kit.requestFor(deferredBill, "18.00", null));
     const paid = await placed("issued", "Tarta");
     await collectCash(paid);
 
     const rows = await listCounterWaiting({ db: venue.db });
-    expect(rows.find((row) => row.id === byTransfer)).toMatchObject({
+    expect(rows.find((row) => row.id === deferredBill)).toMatchObject({
       status: "settled",
-      closedByTransfer: true,
+      closedDeferred: true,
       canHandOver: true,
     });
-    expect(rows.find((row) => row.id === paid)).not.toHaveProperty("closedByTransfer");
+    expect(rows.find((row) => row.id === paid)).not.toHaveProperty("closedDeferred");
   });
 
   it("lists sent-not-paid, handed-over-not-paid and paid-not-handed-over counter orders, with what can be handed over now", async () => {

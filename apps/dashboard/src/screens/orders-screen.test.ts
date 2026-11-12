@@ -617,8 +617,8 @@ describe("dashboard Orders", () => {
     expect(table.shadowRoot!.textContent).toContain("Left without paying on");
   });
 
-  it("names a bill closed by transfer and keeps its earlier departure visible", async () => {
-    const closed = { ...ROW, status: "to_be_paid_by_transfer" as const, stillOwed: null };
+  it("names a bill closed as a deferred payment and keeps its earlier departure visible", async () => {
+    const closed = { ...ROW, status: "deferred_payment" as const, stillOwed: null };
     const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [closed] }) });
     const { el } = await loaded(api);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

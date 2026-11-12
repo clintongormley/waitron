@@ -30,7 +30,7 @@ import {
   type UnpaidDepartureRequest,
   type UnpaidDepartureResult,
 } from "./client.js";
-import type { CloseByTransferRequest, CloseByTransferResult } from "./transfer-close-types.js";
+import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -6175,8 +6175,8 @@ describe("TillApi: the tab's person on every request", () => {
   });
 });
 
-describe("TillApi: closing a bill by transfer", () => {
-  const request: CloseByTransferRequest = {
+describe("TillApi: closing a bill as a deferred payment", () => {
+  const request: CloseDeferredRequest = {
     submissionId: "sub-1",
     expectedRevision: 3,
     expectedEdit: null,
@@ -6187,12 +6187,12 @@ describe("TillApi: closing a bill by transfer", () => {
     delivery: { medium: "receipt" },
     partyFinish: null,
   };
-  const result: CloseByTransferResult = {
+  const result: CloseDeferredResult = {
     submissionId: "sub-1",
     workingOrderId: "wo-1",
     saleId: "s-1",
     invoiceNumber: "F-0007",
-    classification: "to_be_paid_by_transfer",
+    classification: "deferred_payment",
     closedAt: "2026-11-10T12:00:00.000Z",
     businessDay: "2026-11-10",
     total: "18.00",
@@ -6200,7 +6200,7 @@ describe("TillApi: closing a bill by transfer", () => {
     party: { state: "not_applicable", blockers: [] },
   };
 
-  it("closeByTransfer POSTs the request to the bill's /close-by-transfer route, naming the person", async () => {
+  it("closeDeferred POSTs the request to the bill's /close-deferred route, naming the person", async () => {
     const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(result));
     const api = new TillApi("", fetchStub);
     api.namePersonFrom(
@@ -6208,16 +6208,16 @@ describe("TillApi: closing a bill by transfer", () => {
       () => {},
     );
 
-    await expect(api.closeByTransfer("wo-1", request)).resolves.toEqual(result);
+    await expect(api.closeDeferred("wo-1", request)).resolves.toEqual(result);
 
     const [url, init] = fetchStub.mock.calls[0]!;
-    expect(url).toBe("/api/working-orders/wo-1/close-by-transfer");
+    expect(url).toBe("/api/working-orders/wo-1/close-deferred");
     expect(init).toMatchObject({ method: "POST", credentials: "include" });
     expect(JSON.parse(init!.body as string)).toEqual(request);
     expect(new Headers(init!.headers).get(PERSON_HEADER)).toBe("p1");
   });
 
-  it("getTransferClosure GETs the bill's closure with the abort signal, and null for a bill not closed", async () => {
+  it("getDeferredClosure GETs the bill's closure with the abort signal, and null for a bill not closed", async () => {
     const fetchStub = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ closure: result }))
@@ -6225,12 +6225,12 @@ describe("TillApi: closing a bill by transfer", () => {
     const api = new TillApi("", fetchStub);
     const signal = new AbortController().signal;
 
-    await expect(api.getTransferClosure("wo-1", { signal })).resolves.toEqual({ closure: result });
-    await expect(api.getTransferClosure("wo-2")).resolves.toEqual({ closure: null });
+    await expect(api.getDeferredClosure("wo-1", { signal })).resolves.toEqual({ closure: result });
+    await expect(api.getDeferredClosure("wo-2")).resolves.toEqual({ closure: null });
 
     expect(fetchStub.mock.calls.map(([url]) => url)).toEqual([
-      "/api/working-orders/wo-1/transfer-closure",
-      "/api/working-orders/wo-2/transfer-closure",
+      "/api/working-orders/wo-1/deferred-closure",
+      "/api/working-orders/wo-2/deferred-closure",
     ]);
     expect(fetchStub.mock.calls[0]![1]).toMatchObject({ method: "GET", signal });
     expect(fetchStub.mock.calls[0]![1]!.body).toBeUndefined();

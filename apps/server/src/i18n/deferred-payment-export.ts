@@ -1,5 +1,5 @@
 /** The column headings of the file of deferred payments, in the venue's language. */
-export const TRANSFER_EXPORT_WORDS = {
+export const DEFERRED_PAYMENT_EXPORT_WORDS = {
   en: {
     invoiceNumber: "Invoice number",
     invoiceType: "Type",

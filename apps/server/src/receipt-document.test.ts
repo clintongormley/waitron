@@ -544,11 +544,11 @@ describe("the simplified receipt's own layout (A663)", () => {
         }
   });
 
-  it("names a bill closed by transfer as still to be paid, never as card or charged", () => {
+  it("names a bill closed as a deferred payment as still to be paid, never as card or charged", () => {
     const printed = JSON.stringify(
       buildReceiptDocument({
         ...SIMPLIFIED,
-        result: { ...SIMPLIFIED.result, tender: { method: "transfer" } },
+        result: { ...SIMPLIFIED.result, tender: { method: "deferred" } },
       }).elements,
     );
     expect(printed).toContain("Pago aplazado");

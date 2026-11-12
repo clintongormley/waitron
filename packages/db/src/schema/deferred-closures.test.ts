@@ -13,7 +13,7 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { sales } from "./sales.js";
 import { persons } from "./identity/persons.js";
 import { invoiceSeries } from "./series.js";
-import { transferClosures, type TransferClosureResult } from "./transfer-closures.js";
+import { deferredClosures, type DeferredClosureResult } from "./deferred-closures.js";
 
 const ACTOR = "cccccccc-0000-4000-8000-000000000001";
 const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
@@ -32,7 +32,7 @@ interface Bill {
   saleId: string;
 }
 
-describe("transfer_closures", () => {
+describe("deferred_closures", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -92,13 +92,13 @@ describe("transfer_closures", () => {
     });
   }
 
-  function resultFor(submissionId: string, bill: Bill): TransferClosureResult {
+  function resultFor(submissionId: string, bill: Bill): DeferredClosureResult {
     return {
       submissionId,
       workingOrderId: bill.billId,
       saleId: bill.saleId,
       invoiceNumber: "FA-1",
-      classification: "to_be_paid_by_transfer",
+      classification: "deferred_payment",
       closedAt: AT,
       businessDay: DAY,
       total: "30.00",
@@ -109,8 +109,8 @@ describe("transfer_closures", () => {
 
   function closure(
     bill: Bill,
-    overrides: Partial<typeof transferClosures.$inferInsert> = {},
-  ): typeof transferClosures.$inferInsert {
+    overrides: Partial<typeof deferredClosures.$inferInsert> = {},
+  ): typeof deferredClosures.$inferInsert {
     const id = overrides.id ?? randomUUID();
     return {
       id,
@@ -128,8 +128,8 @@ describe("transfer_closures", () => {
     };
   }
 
-  function insert(row: typeof transferClosures.$inferInsert) {
-    return inTx((tx) => tx.insert(transferClosures).values(row));
+  function insert(row: typeof deferredClosures.$inferInsert) {
+    return inTx((tx) => tx.insert(deferredClosures).values(row));
   }
 
   it("keeps the closure exactly as written, its result included", async () => {
@@ -137,7 +137,7 @@ describe("transfer_closures", () => {
     const row = closure(bill);
     await insert(row);
     const [read] = await inTx((tx) =>
-      tx.select().from(transferClosures).where(eq(transferClosures.id, row.id)),
+      tx.select().from(deferredClosures).where(eq(deferredClosures.id, row.id)),
     );
     expect(read).toEqual({
       id: row.id,
@@ -159,7 +159,7 @@ describe("transfer_closures", () => {
     const row = closure(bill, { source: "dashboard", deviceId: null, nodeId: otherNodeId });
     await insert(row);
     const rows = await inTx((tx) =>
-      tx.select().from(transferClosures).where(eq(transferClosures.id, row.id)),
+      tx.select().from(deferredClosures).where(eq(deferredClosures.id, row.id)),
     );
     expect(rows).toHaveLength(1);
   });
@@ -169,7 +169,7 @@ describe("transfer_closures", () => {
     const second = closure(await invoicedBill());
     await insert(second);
     const rows = await inTx((tx) =>
-      tx.select().from(transferClosures).where(eq(transferClosures.id, second.id)),
+      tx.select().from(deferredClosures).where(eq(deferredClosures.id, second.id)),
     );
     expect(rows).toHaveLength(1);
   });
@@ -180,7 +180,7 @@ describe("transfer_closures", () => {
     const other = await invoicedBill();
     const error = await captureError(() => insert(closure(other, { id: first.id })));
     expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "transfer_closures", columns: ["id"] }),
+      refusalOn(error, UNIQUE_VIOLATION, { table: "deferred_closures", columns: ["id"] }),
     ).toBe(true);
   });
 
@@ -193,7 +193,7 @@ describe("transfer_closures", () => {
     );
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
-        table: "transfer_closures",
+        table: "deferred_closures",
         columns: ["working_order_id"],
       }),
     ).toBe(true);
@@ -207,7 +207,7 @@ describe("transfer_closures", () => {
       insert(closure({ billId: other.billId, saleId: bill.saleId })),
     );
     expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "transfer_closures", columns: ["sale_id"] }),
+      refusalOn(error, UNIQUE_VIOLATION, { table: "deferred_closures", columns: ["sale_id"] }),
     ).toBe(true);
   });
 
@@ -229,12 +229,12 @@ describe("transfer_closures", () => {
   });
 
   it.each([
-    ["an unknown source", { source: "nowhere" as "device" }, "transfer_closures_source_ck"],
-    ["a device source naming no device", { deviceId: null }, "transfer_closures_source_device_ck"],
+    ["an unknown source", { source: "nowhere" as "device" }, "deferred_closures_source_ck"],
+    ["a device source naming no device", { deviceId: null }, "deferred_closures_source_device_ck"],
     [
       "a dashboard source naming a device",
       { source: "dashboard" as const },
-      "transfer_closures_source_device_ck",
+      "deferred_closures_source_device_ck",
     ],
   ] as const)("refuses %s", async (_, overrides, constraint) => {
     const bill = await invoicedBill();
@@ -250,6 +250,6 @@ describe("transfer_closures", () => {
   ])("refuses %s as the business day", async (_, businessDay) => {
     const bill = await invoicedBill();
     const error = await captureError(() => insert(closure(bill, { businessDay })));
-    expect(checkFailed(error, "transfer_closures_business_day_ck")).toBe(true);
+    expect(checkFailed(error, "deferred_closures_business_day_ck")).toBe(true);
   });
 });

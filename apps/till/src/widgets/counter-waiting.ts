@@ -123,7 +123,7 @@ export class TillCounterWaiting extends LitElement {
   }
 
   #state(order: CounterWaitingOrder): StringKey {
-    if (order.closedByTransfer) return "waiting.transfer_not_handed_over";
+    if (order.closedDeferred) return "waiting.deferred_not_handed_over";
     if (order.status === "settled") return "waiting.paid_not_handed_over";
     return order.collectedAt === null ? "waiting.sent_not_paid" : "waiting.handed_over_not_paid";
   }

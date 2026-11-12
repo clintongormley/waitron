@@ -1312,7 +1312,7 @@ CREATE TABLE `tenders` (
 	CONSTRAINT "tenders_amount_ck" CHECK("tenders"."amount" > 0),
 	CONSTRAINT "tenders_cash_tendered_ck" CHECK("tenders"."cash_tendered" is null or ("tenders"."method" = 'cash' and "tenders"."cash_tendered" >= "tenders"."amount")),
 	CONSTRAINT "tenders_tip_amount_ck" CHECK("tenders"."tip_amount" >= 0 and "tenders"."tip_amount" <= "tenders"."amount"),
-	CONSTRAINT "tenders_method_ck" CHECK("tenders"."method" in ('cash', 'card', 'voucher', 'transfer', 'other'))
+	CONSTRAINT "tenders_method_ck" CHECK("tenders"."method" in ('cash', 'card', 'voucher', 'deferred', 'other'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `tenders_bill_payment_key` ON `tenders` (`bill_payment_id`) WHERE "tenders"."bill_payment_id" is not null;--> statement-breakpoint
@@ -1350,7 +1350,7 @@ CREATE TABLE `unpaid_departures` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `unpaid_departures_working_order_key` ON `unpaid_departures` (`working_order_id`);--> statement-breakpoint
-CREATE TABLE `transfer_closures` (
+CREATE TABLE `deferred_closures` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
 	`sale_id` text NOT NULL,
@@ -1367,14 +1367,14 @@ CREATE TABLE `transfer_closures` (
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "transfer_closures_business_day_ck" CHECK(length("transfer_closures"."business_day") = 10 and "transfer_closures"."business_day" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-	CONSTRAINT "transfer_closures_source_ck" CHECK("transfer_closures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
-	CONSTRAINT "transfer_closures_source_device_ck" CHECK(("transfer_closures"."source" = 'device') = ("transfer_closures"."device_id" is not null))
+	CONSTRAINT "deferred_closures_business_day_ck" CHECK(length("deferred_closures"."business_day") = 10 and "deferred_closures"."business_day" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+	CONSTRAINT "deferred_closures_source_ck" CHECK("deferred_closures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
+	CONSTRAINT "deferred_closures_source_device_ck" CHECK(("deferred_closures"."source" = 'device') = ("deferred_closures"."device_id" is not null))
 );
 --> statement-breakpoint
-CREATE INDEX `transfer_closures_node_day_idx` ON `transfer_closures` (`node_id`,`business_day`,`closed_at`,`id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `transfer_closures_working_order_key` ON `transfer_closures` (`working_order_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `transfer_closures_sale_key` ON `transfer_closures` (`sale_id`);--> statement-breakpoint
+CREATE INDEX `deferred_closures_node_day_idx` ON `deferred_closures` (`node_id`,`business_day`,`closed_at`,`id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `deferred_closures_working_order_key` ON `deferred_closures` (`working_order_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `deferred_closures_sale_key` ON `deferred_closures` (`sale_id`);--> statement-breakpoint
 CREATE TABLE `daily_close_chain` (
 	`node_id` text PRIMARY KEY NOT NULL,
 	`sequence_no` integer DEFAULT 0 NOT NULL,

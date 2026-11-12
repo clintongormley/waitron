@@ -37,7 +37,7 @@ import {
   type OrderCursor,
   type OrderListFilter,
 } from "./orders-list.js";
-import { transferCloseKit } from "./testing/transfer-close-fixture.js";
+import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import "./errors.js";
 
 let venue: OrderVenue;
@@ -238,20 +238,18 @@ describe("each status, from the product's own write paths", () => {
 
 describe("a bill closed as a deferred payment", () => {
   it("reads as Deferred payment, found by its own filter and never by Paid", async () => {
-    const kit = transferCloseKit(venue, venue.counterZone);
+    const kit = deferredCloseKit(venue, venue.counterZone);
     const id = await placedIssuedBill(venue, "Tarta");
     await kit.close(await kit.requestFor(id, "18.00", null));
     const cash = await placedIssuedBill(venue, "Tarta");
     expect((await collect(venue, cash, "18.00")).status).toBe(200);
 
-    expect(await rowOf(id)).toMatchObject({ status: "to_be_paid_by_transfer", stillOwed: null });
+    expect(await rowOf(id)).toMatchObject({ status: "deferred_payment", stillOwed: null });
     const paid = ids((await list("status=paid&anyDate=true&limit=200")).rows);
     expect(paid).toContain(cash);
     expect(paid).not.toContain(id);
-    const byTransfer = ids(
-      (await list("status=to_be_paid_by_transfer&anyDate=true&limit=200")).rows,
-    );
-    expect(byTransfer).toEqual([id]);
+    const deferredIds = ids((await list("status=deferred_payment&anyDate=true&limit=200")).rows);
+    expect(deferredIds).toEqual([id]);
   });
 });
 

@@ -1497,7 +1497,7 @@ export interface SalesCounts {
 
 export interface ClosureSummaryDto {
   billsClosed: { count: number; total: string };
-  toBePaidByTransfer: string;
+  deferredPayments: string;
   received: string;
 }
 
@@ -2311,7 +2311,7 @@ export const ORDER_STATUS_FILTERS = [
   "left_without_paying",
   "unpaid",
   "paid",
-  "to_be_paid_by_transfer",
+  "deferred_payment",
   "cancelled",
   "voided",
 ] as const;
@@ -4434,9 +4434,9 @@ export class DashboardApi {
     );
   }
 
-  downloadClosedByTransfer(range: { from: string; to: string }): Promise<Blob> {
+  downloadDeferredPayments(range: { from: string; to: string }): Promise<Blob> {
     return this.#request<Blob>(
-      `/management-api/reports/closed-by-transfer?from=${range.from}&to=${range.to}`,
+      `/management-api/reports/deferred-payment-export?from=${range.from}&to=${range.to}`,
       "POST",
       undefined,
       { as: "blob" },

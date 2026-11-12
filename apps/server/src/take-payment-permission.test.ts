@@ -310,8 +310,8 @@ describe("POST /api/working-orders/:id/payments needs payment.take on every entr
   });
 });
 
-describe("POST /api/working-orders/:id/close-by-transfer needs payment.take", () => {
-  /** An open counter order of one Tarta (18.00), on a till whose profile may close by transfer. */
+describe("POST /api/working-orders/:id/close-deferred needs payment.take", () => {
+  /** An open counter order of one Tarta (18.00), on a till whose profile may close a bill as a deferred payment. */
   async function openTarta(): Promise<{ id: string; body: Record<string, unknown> }> {
     await inTx(venue, async (tx) => {
       const [device] = await tx
@@ -323,10 +323,10 @@ describe("POST /api/working-orders/:id/close-by-transfer needs payment.take", ()
         .from(deviceProfiles)
         .where(eq(deviceProfiles.id, device!.profileId));
       const capabilities = profile!.capabilities as readonly string[];
-      if (!capabilities.includes("close-by-transfer"))
+      if (!capabilities.includes("close-deferred"))
         await tx
           .update(deviceProfiles)
-          .set({ capabilities: [...capabilities, "close-by-transfer"] })
+          .set({ capabilities: [...capabilities, "close-deferred"] })
           .where(eq(deviceProfiles.id, device!.profileId));
     });
     const id = randomUUID();
@@ -360,24 +360,18 @@ describe("POST /api/working-orders/:id/close-by-transfer needs payment.take", ()
   }
 
   function closures(id: string) {
-    return venue.db.all(sql`select id from transfer_closures where working_order_id = ${id}`);
+    return venue.db.all(sql`select id from deferred_closures where working_order_id = ${id}`);
   }
 
-  function closeByTransfer(id: string, body: Record<string, unknown>) {
-    return send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${id}/close-by-transfer`,
-      body,
-    );
+  function closeDeferred(id: string, body: Record<string, unknown>) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/close-deferred`, body);
   }
 
   it("refuses and leaves the order open, with no invoice and no closure", async () => {
     const { id, body } = await openTarta();
     gate.deny = true;
 
-    expectRefused(await closeByTransfer(id, body));
+    expectRefused(await closeDeferred(id, body));
 
     expectAsked();
     expect(await statusOf(venue, id)).toBe("open");
@@ -391,7 +385,7 @@ describe("POST /api/working-orders/:id/close-by-transfer needs payment.take", ()
     gate.deny = true;
     gate.allowFirst = 1;
 
-    expectRefused(await closeByTransfer(id, body));
+    expectRefused(await closeDeferred(id, body));
 
     expect(gate.calls.filter(({ permission }) => permission === "payment.take")).toEqual([
       { sessionId, permission: "payment.take" },

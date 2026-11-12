@@ -42,6 +42,7 @@ const EXPECTED = [
   "clock_confirmations",
   "clock_stop_restarts",
   "daily_closes",
+  "deferred_closures",
   "document_page_reprints",
   "filing_case_events",
   "filing_cases",
@@ -77,7 +78,6 @@ const EXPECTED = [
   "sales",
   "tenders",
   "time_entries",
-  "transfer_closures",
   "unpaid_departures",
 ];
 

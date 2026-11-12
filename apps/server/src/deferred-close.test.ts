@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceDeliveries, sales, transferClosures, workingOrders } from "@waitron/db";
+import { invoiceDeliveries, sales, deferredClosures, workingOrders } from "@waitron/db";
 import { markServed, readOrderRevision } from "./working-order.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import {
@@ -16,25 +16,25 @@ import {
 import {
   RECIPIENT,
   refusal,
-  transferCloseVenue,
-  type TransferCloseKit,
-} from "./testing/transfer-close-fixture.js";
+  deferredCloseVenue,
+  type DeferredCloseKit,
+} from "./testing/deferred-close-fixture.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { readTransferClosure } from "./transfer-close.js";
+import { readDeferredClosure } from "./deferred-close.js";
 import { readSettledTicket } from "./till-sale.js";
 import "./errors.js";
 
-// Close one bill by transfer, new work only: every case calls the writer directly on
+// Close one bill as a deferred payment, new work only: every case calls the writer directly on
 // a real venue that files Veri*Factu records, in its own transaction.
-let t: TransferCloseKit;
+let t: DeferredCloseKit;
 
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    t = await transferCloseVenue(db);
+    t = await deferredCloseVenue(db);
   },
 });
 
@@ -73,8 +73,8 @@ async function serveAll(party: { partyId: string; tabId: string }): Promise<void
   );
 }
 
-describe("closeBillByTransferTx, new work", () => {
-  it("issues a table bill's new F1 once, reserves its delivery and settles it as one transfer", async () => {
+describe("closeBillDeferredTx, new work", () => {
+  it("issues a table bill's new F1 once, reserves its delivery and settles it as one deferred tender", async () => {
     const party = await seatedWith(t.venue, "House salad");
     await setOrderInvoiceChoice(t.venue.db, t.venue.backend, t.venue.cfg, party.tabId, {
       revision: await inTx(t.venue, (tx) => readOrderRevision(tx, party.tabId)),
@@ -118,7 +118,7 @@ describe("closeBillByTransferTx, new work", () => {
     ).toEqual([{ medium: "email" }]);
     expect(await tendersOfBill(t.venue, party.tabId)).toEqual([
       {
-        method: "transfer",
+        method: "deferred",
         amount: 1200,
         tip: 0,
         billPaymentId: null,
@@ -139,16 +139,16 @@ describe("closeBillByTransferTx, new work", () => {
       workingOrderId: party.tabId,
       saleId: sale!.id,
       invoiceNumber: expect.any(String),
-      classification: "to_be_paid_by_transfer",
+      classification: "deferred_payment",
       closedAt: expect.any(String),
       businessDay: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       total: "12.00",
       currency: "EUR",
       party: { state: "open", blockers: ["service"] },
     });
-    expect(await inTx(t.venue, (tx) => readTransferClosure(tx, party.tabId))).toEqual(result);
+    expect(await inTx(t.venue, (tx) => readDeferredClosure(tx, party.tabId))).toEqual(result);
     const [row] = await inTx(t.venue, (tx) =>
-      tx.select().from(transferClosures).where(eq(transferClosures.workingOrderId, party.tabId)),
+      tx.select().from(deferredClosures).where(eq(deferredClosures.workingOrderId, party.tabId)),
     );
     expect(row).toMatchObject({
       id: request.submissionId,
@@ -186,18 +186,18 @@ describe("closeBillByTransferTx, new work", () => {
       party: { state: "not_applicable", blockers: [] },
     });
     expect(await tendersOfBill(t.venue, billId)).toMatchObject([
-      { method: "transfer", amount: 1800, tip: 0 },
+      { method: "deferred", amount: 1800, tip: 0 },
     ]);
   });
 
-  it("gives the closed bill's receipt a transfer tender, never a card one", async () => {
+  it("gives the closed bill's receipt a deferred tender, never a card one", async () => {
     const billId = await t.counterOrder("placed", true);
     await t.close(await t.requestFor(billId, "18.00", null));
 
     const ticket = await inTx(t.venue, (tx) =>
       readSettledTicket(t.venue.backend, tx, t.venue.cfg, billId),
     );
-    expect(ticket.tender).toEqual({ method: "transfer" });
+    expect(ticket.tender).toEqual({ method: "deferred" });
   });
 
   it("freezes the receipt grouping of a presented party bill it issues", async () => {

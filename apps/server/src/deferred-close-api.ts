@@ -30,13 +30,13 @@ import type { BillInvoiceDelivery } from "./parties.js";
 import { requestCfg } from "./request-config.js";
 import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
-import { closeBillByTransferTx, readTransferClosure } from "./transfer-close.js";
-import type { CloseByTransferRequest } from "./transfer-close-types.js";
+import { closeBillDeferredTx, readDeferredClosure } from "./deferred-close.js";
+import type { CloseDeferredRequest } from "./deferred-close-types.js";
 import { checkZones, inScope, readZoneScope } from "./zone-access.js";
 import "./errors.js";
 
 type Session = Awaited<ReturnType<typeof requireSession>>;
-type Body = Omit<CloseByTransferRequest, "id">;
+type Body = Omit<CloseDeferredRequest, "id">;
 
 const FIELDS: readonly (keyof Body)[] = [
   "submissionId",
@@ -87,7 +87,7 @@ function parseDelivery(value: unknown): BillInvoiceDelivery | null {
   throw invalid("delivery.medium");
 }
 
-function parsePartyFinish(value: unknown): CloseByTransferRequest["partyFinish"] {
+function parsePartyFinish(value: unknown): CloseDeferredRequest["partyFinish"] {
   if (value === null) return null;
   const finish = object(value, "partyFinish");
   onlyFields(finish, ["partyId", "expectedPartyRevision", "expectedEdits"], "partyFinish.");
@@ -99,7 +99,7 @@ function parsePartyFinish(value: unknown): CloseByTransferRequest["partyFinish"]
 }
 
 /** Every field is required; `null` stands only where the request type allows it. */
-function parseClose(id: string, body: Record<string, unknown>): CloseByTransferRequest {
+function parseClose(id: string, body: Record<string, unknown>): CloseDeferredRequest {
   onlyFields(body, FIELDS);
   const expectedTotal = optionalMoney(body.expectedTotal, "expectedTotal");
   if (expectedTotal === undefined) throw invalid("expectedTotal");
@@ -137,7 +137,7 @@ async function stillAllowed(tx: Transaction, session: Session, billId: string) {
     .where(and(eq(devices.id, session.deviceId), isNull(deviceProfiles.retiredAt)));
   if (row === undefined) throw new AppError("device.unauthorized", {});
   const device = toDeviceBinding(session.deviceId, row);
-  assertProfileAction(device, "close-by-transfer");
+  assertProfileAction(device, "close-deferred");
   if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
     throw new AppError("device_profile.not_admitted", {});
   await authorize(tx, { sessionId: session.sessionId, permission: "payment.take" });
@@ -158,12 +158,12 @@ function partyReleaseFor(device: DeviceBinding) {
 }
 
 /** Close one bill, final in Waitron, as a deferred payment. */
-export function mountTransferCloseApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
-  app.post("/api/working-orders/:id/close-by-transfer", (c) =>
+export function mountDeferredCloseApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
+  app.post("/api/working-orders/:id/close-deferred", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, {
         permission: "payment.take",
-        action: "close-by-transfer",
+        action: "close-deferred",
       });
       const rawId = c.req.param("id");
       if (!isUuid(rawId)) throw new AppError("working_order.not_open", { workingOrderId: rawId });
@@ -177,7 +177,7 @@ export function mountTransferCloseApi(app: Hono, deps: TillApiDeps, log: Logger,
         deps.db,
         async (tx) => {
           const device = await stillAllowed(tx, session, id);
-          return closeBillByTransferTx(
+          return closeBillDeferredTx(
             tx,
             {
               db: deps.db,
@@ -201,14 +201,14 @@ export function mountTransferCloseApi(app: Hono, deps: TillApiDeps, log: Logger,
     }),
   );
 
-  app.get("/api/working-orders/:id/transfer-closure", (c) =>
+  app.get("/api/working-orders/:id/deferred-closure", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
       const closure = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ orderId: id }]);
-        const found = await readTransferClosure(tx, id);
+        const found = await readDeferredClosure(tx, id);
         if (found !== null) return found;
         const [bill] = await tx
           .select({ id: workingOrders.id })

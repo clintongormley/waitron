@@ -8,8 +8,8 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { deploymentEnvironment } from "./config.js";
 import { systemClock } from "./till-backend.js";
-import { readTransferClosure } from "./transfer-close.js";
-import type { CloseByTransferRequest } from "./transfer-close-types.js";
+import { readDeferredClosure } from "./deferred-close.js";
+import type { CloseDeferredRequest } from "./deferred-close-types.js";
 import { readOrderRevision } from "./working-order.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import {
@@ -25,22 +25,22 @@ import {
   RECIPIENT,
   clockAt,
   refusal,
-  transferCloseVenue,
-  type TransferCloseKit,
-} from "./testing/transfer-close-fixture.js";
+  deferredCloseVenue,
+  type DeferredCloseKit,
+} from "./testing/deferred-close-fixture.js";
 import type { AppError } from "@waitron/shared";
 import "./errors.js";
 
-// Strict replay of a close by transfer: the same submission answers with what it
+// Strict replay of a deferred close: the same submission answers with what it
 // answered first, and anything that is not the same request is refused before it writes.
-let t: TransferCloseKit;
+let t: DeferredCloseKit;
 
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    t = await transferCloseVenue(db);
+    t = await deferredCloseVenue(db);
   },
 });
 
@@ -54,7 +54,7 @@ function recorded() {
 }
 
 function closures(billId: string) {
-  return t.venue.db.all(sql`select id from transfer_closures where working_order_id = ${billId}`);
+  return t.venue.db.all(sql`select id from deferred_closures where working_order_id = ${billId}`);
 }
 
 async function closedCounterBill(deps = t.depsWith()) {
@@ -91,7 +91,7 @@ function stageDelivery(billId: string, delivery: StagedInvoiceDelivery) {
   );
 }
 
-const changes: [string, (request: CloseByTransferRequest) => CloseByTransferRequest][] = [
+const changes: [string, (request: CloseDeferredRequest) => CloseDeferredRequest][] = [
   ["total", (r) => ({ ...r, expectedTotal: "12.01" })],
   ["revision", (r) => ({ ...r, expectedRevision: r.expectedRevision + 1 })],
   ["invoice type", (r) => ({ ...r, invoiceType: "F2", recipient: null, delivery: null })],
@@ -116,7 +116,7 @@ const changes: [string, (request: CloseByTransferRequest) => CloseByTransferRequ
   ],
 ];
 
-describe("closeBillByTransferTx, replay", () => {
+describe("closeBillDeferredTx, replay", () => {
   it("answers an exact replay with the stored result and writes nothing more", async () => {
     const { facts, attendance } = recorded();
     const billId = await t.counterOrder("placed");
@@ -160,7 +160,7 @@ describe("closeBillByTransferTx, replay", () => {
     const billId = await t.counterOrder("placed");
     const request = await t.requestFor(billId, "18.00", null);
     await t.close(request);
-    const kept = await inTx(t.venue, (tx) => readTransferClosure(tx, billId));
+    const kept = await inTx(t.venue, (tx) => readDeferredClosure(tx, billId));
 
     expect(await t.close(request)).toEqual(kept);
     expect(closures(billId)).toHaveLength(1);
@@ -170,7 +170,7 @@ describe("closeBillByTransferTx, replay", () => {
     const { party, request, result } = await closedStagedF1(true);
     const [first, ...rest] = request.partyFinish!.expectedEdits;
     expect(rest).toHaveLength(1);
-    const respelled: CloseByTransferRequest = {
+    const respelled: CloseDeferredRequest = {
       ...request,
       id: request.id.toUpperCase(),
       submissionId: request.submissionId.toUpperCase(),
@@ -207,7 +207,7 @@ describe("closeBillByTransferTx, replay", () => {
 
       const error = await refusal(t.close({ ...change(request), submissionId: randomUUID() }));
 
-      expect(error.code).toBe("transfer_close.conflict");
+      expect(error.code).toBe("deferred_close.conflict");
       expect(error.params).toEqual({ workingOrderId: request.id });
       expect(await t.ledger()).toEqual(before);
     },
@@ -255,7 +255,7 @@ describe("closeBillByTransferTx, replay", () => {
     );
     expect(served).toHaveLength(1);
     expect(refused.map((error): [string, unknown] => [error.code, error.params])).toEqual([
-      ["transfer_close.conflict", { workingOrderId: billId }],
+      ["deferred_close.conflict", { workingOrderId: billId }],
     ]);
     expect(fiscalRecordCount(t.venue, billId)).toBe(1);
     expect(closures(billId)).toHaveLength(1);
@@ -316,7 +316,7 @@ describe("closeBillByTransferTx, replay", () => {
 
     expect(await t.close(request, sameDay)).toEqual(result);
     const error = await refusal(t.close(fresh, sameDay));
-    expect(error.code).toBe("transfer_close.day_frozen");
+    expect(error.code).toBe("deferred_close.day_frozen");
     expect(error.params).toEqual({ nodeId: t.venue.cfg.nodeId, businessDay: result.businessDay });
     expect(await t.ledger()).toEqual(before);
   });

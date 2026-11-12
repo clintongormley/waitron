@@ -306,8 +306,8 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
   }
   const t = result.tender;
   if (t.method === "unpaid") return nothing;
-  if (t.method === "transfer")
-    return html`<div class="tender-row"><span>${labels.toBePaidByTransfer}</span></div>`;
+  if (t.method === "deferred")
+    return html`<div class="tender-row"><span>${labels.deferredPayment}</span></div>`;
   if (t.method === "cash") {
     return html`
       <div class="tender-row">

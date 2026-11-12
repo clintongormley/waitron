@@ -238,7 +238,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 0, total: "0.00" },
-        toBePaidByTransfer: "0.00",
+        deferredPayments: "0.00",
         received: "0.00",
       },
       counts: { sales: 0, corrections: 0, voids: 0 },
@@ -252,7 +252,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 0, total: "0.00" },
-        toBePaidByTransfer: "0.00",
+        deferredPayments: "0.00",
         received: "0.00",
       },
       counts: { sales: 0, corrections: 0, voids: 0 },
@@ -5313,7 +5313,7 @@ it("keeps an overflowing read-only Overview accessible and scrollable by keyboar
         departmentTakings: [],
         closureSummary: {
           billsClosed: { count: 40, total: "80.00" },
-          toBePaidByTransfer: "0.00",
+          deferredPayments: "0.00",
           received: "80.00",
         },
         counts: { sales: 40, corrections: 0, voids: 0 },
