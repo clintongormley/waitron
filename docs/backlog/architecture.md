@@ -824,15 +824,8 @@ existing event, guest-count and payment assertion. These are observed assertion 
 reference substitutions from the naming review need triage before treating them as gaps:
 some changes can legitimately preserve the observation a case makes.
 
-The grouped-drink fixture in `made-here.routes.test.ts` needs quantity observations before and
-following a partial split. On 6 November 2026, driver probes in an installed disposable checkout
-changed the split case's source quantity from two to one: all 34 cases still passed. Forcing the
-partial-split ticket copy to lose `madeHere` failed the existing result assertion, but combining
-that fault with the one-drink fixture passed all 34 cases because the transfer takes the whole-line
-path. Pin the source quantity and check the quantities left on each bill while retaining the existing
-made-here assertion. The cancellation case's quantity-two branch also needs an observed count;
-the helper's constant status is not evidence of the write. These are test gaps, not demonstrated
-product failures.
+In `made-here.routes.test.ts`, the cancellation case's quantity-two branch needs an observed count;
+the helper's constant status is not evidence of the write.
 
 ## A976. Finish the server's English test-venue defaults.
 
@@ -1547,7 +1540,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Tighten the checks the A974 review probed
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Strengthen the server group and fiscal-sale fixture checks.** The named no-kitchen
   setup and several fixture/reference substitutions survived the A974 review’s probes.
@@ -1560,10 +1553,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   group twice, choosing the other split table or paying one bill twice can leave the two
   complete suites passing.
   Add observations that distinguish those identities without changing the existing checks.
-  [Detail](architecture.md#a974-review-assertion-gaps).
-- **Pin the grouped-drink fixture quantity before testing partial splits.** The made-here
-  route suite can still pass with a whole-line transfer that bypasses the partial-split copy.
-  Keep the existing made-here assertions and check the source and remaining quantities.
   [Detail](architecture.md#a974-review-assertion-gaps).
 
 ## Bundle: Recovery wording into `i18n`, with table names to match

@@ -90,8 +90,8 @@ async function wholeDishIds(
 }
 
 /**
- * Cuts each entry's part off its line inside the bill, as a part discount or a move to another
- * course group does, and names the row each part now is, so the parts can move as whole dishes.
+ * Cuts each entry's part off its line inside the bill and names the row each part now is, so the
+ * parts can move as whole dishes.
  */
 export async function cutParts(
   tx: Transaction,

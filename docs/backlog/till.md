@@ -4077,7 +4077,7 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 
 **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-ticket/receipt grouping, has landed. What it leaves open is A1191–A1198, A1201, A1217 and the store limit under
+ticket/receipt grouping, has landed. What it leaves open is A1191, A1193–A1195, A1197, A1198, A1201, A1217 and the store limit under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261, A1265–A1267 and A1269. Slice
