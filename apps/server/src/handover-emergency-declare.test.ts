@@ -1,7 +1,7 @@
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
@@ -27,6 +27,7 @@ import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 import {
   ADMIN_EMAIL,
   PASSWORD,
@@ -92,7 +93,10 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-function service(origin = "https://spare.example") {
+function service(
+  origin = "https://spare.example",
+  overrides: Partial<Parameters<typeof mountHandoverEmergencyApi>[1]> = {},
+) {
   const app = new Hono();
   const log = vi.fn();
   const emergency = mountHandoverEmergencyApi(
@@ -102,6 +106,7 @@ function service(origin = "https://spare.example") {
       node: placed.node,
       nodeId: standby.nodeId,
       ring,
+      stateDir: dirs().spareState,
       venueDir: dirs().spareVenue,
       modules: fiscalModules,
       origin,
@@ -129,6 +134,7 @@ function service(origin = "https://spare.example") {
           ),
         );
       },
+      ...overrides,
     },
     log,
   );
@@ -353,6 +359,54 @@ it.each(["https://spare.example", "https://dashboard.example"])(
     );
     expect(external.calls).toBe(0);
     expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+  },
+);
+
+it.each([
+  ["the venue authority it holds signed", true, "handover.source_still_answering"],
+  ["another authority signed", false, "handover.source_not_established"],
+])(
+  "asks its source only under the venue authority it holds: a source whose certificate %s",
+  async (_label, venueSigned, code) => {
+    const [venue, other] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
+    await mkdir(join(dirs().spareState, "tls"), { recursive: true });
+    await writeFile(join(dirs().spareState, "tls", "ca.crt"), venue.caPem);
+    const source = await startBoxServer(venueSigned ? venue : other, (req) => {
+      const query = JSON.parse(req.body) as { body: { nonce: string } };
+      const status = {
+        nonce: query.body.nonce,
+        heldMembership: null,
+        restriction: null,
+        openOperation: null,
+        requestedOperation: null,
+      };
+      return {
+        status: 200,
+        body: JSON.stringify(
+          signEnvelope("status", status, { nodeId: primary.nodeId, privateKey: mainKey }),
+        ),
+      };
+    });
+    try {
+      const held = (await readNodeMembership(placed.venue))!;
+      const body = {
+        ...held.body,
+        nodes: held.body.nodes.map((node) =>
+          node.nodeId === primary.nodeId ? { ...node, contactUrl: source.url } : node,
+        ),
+      };
+      await writeNodeMembership(placed.venue, {
+        ...held,
+        body,
+        signature: signDocumentBody(body, mainKey),
+      });
+      const answer = await service(undefined, { fetch: undefined }).post();
+      expect(answer.body.error?.code).toBe(code);
+      expect(source.requests).toHaveLength(venueSigned ? 1 : 0);
+      expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+    } finally {
+      await source.close();
+    }
   },
 );
 

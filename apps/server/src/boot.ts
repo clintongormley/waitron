@@ -1994,6 +1994,7 @@ async function bootServer(
             node: store.node,
             ring,
             nodeId: node.nodeId,
+            stateDir: config.stateDir,
             advertisedOrigin: config.managementOrigin,
             log,
           })
@@ -3810,6 +3811,7 @@ async function bootServer(
     app,
     {
       ...peerDeps,
+      stateDir: config.stateDir,
       venueDir: config.venueDir,
       modules: enabledModules(ALL_MODULES, moduleConfig),
       origin: config.managementOrigin,

@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -55,6 +58,8 @@ const PEER = { nodeId: "00000000-0000-4000-8000-0000000000cc", ...generateNodeKe
 const OWN_URL = "https://box.example";
 const PEER_URL = "https://peer.example";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+// Holds no `tls/ca.crt`: a box with no venue authority to check a peer under.
+const NO_STATE_DIR = join(tmpdir(), "start-peer-check-no-state");
 
 interface Box {
   nodeId: string;
@@ -172,12 +177,14 @@ function check(
   b: Pick<Box, "nodeId">,
   fetch: typeof globalThis.fetch | undefined,
   log = vi.fn(),
+  stateDir = NO_STATE_DIR,
 ) {
   return runStartPeerCheck({
     db: suite.db,
     node: suite.node,
     ring: RING,
     nodeId: b.nodeId,
+    stateDir,
     advertisedOrigin: OWN_URL,
     log,
     timeoutMs: 1000,
@@ -593,6 +600,7 @@ describe("the real start check's inputs", () => {
       node: suite.node,
       ring: RING,
       nodeId: b.nodeId,
+      stateDir: NO_STATE_DIR,
       advertisedOrigin: "https://another-spelling.example",
       log: vi.fn(),
       timeoutMs: 1000,
@@ -809,9 +817,20 @@ describe("the real start check's transport", () => {
   beforeAll(async () => {
     [x, y] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
   });
+  const stateDirs: string[] = [];
   afterEach(async () => {
     while (servers.length > 0) await servers.pop()!.close();
+    while (stateDirs.length > 0) await rm(stateDirs.pop()!, { recursive: true, force: true });
   });
+
+  /** A state folder whose `tls/ca.crt` is `authority`'s, as on a box holding that venue authority. */
+  async function holding(authority: BoxAuthority): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "start-peer-check-state-"));
+    stateDirs.push(dir);
+    await mkdir(join(dir, "tls"));
+    await writeFile(join(dir, "tls", "ca.crt"), authority.caPem);
+    return dir;
+  }
 
   /** PEER at `localhost` over HTTPS, serving `x`'s leaf and echoing the box's held chart. */
   async function httpsPeer(held: () => SignedMembershipDocument): Promise<string> {
@@ -839,12 +858,61 @@ describe("the real start check's transport", () => {
     });
   }
 
-  it("asks a box with no pinned authority over HTTPS without a certificate check, and judges its signed answer", async () => {
+  it("a main box verifies its spare's certificate under the venue authority", async () => {
     const held: { chart?: SignedMembershipDocument } = {};
     const url = await httpsPeer(() => held.chart!);
     const b = await box(suite, { peerUrl: url });
     held.chart = b.held;
-    expect((await check(suite, b, undefined)).result).toBe("proceed");
+    const log = vi.fn();
+    expect((await check(suite, b, undefined, log, await holding(x))).result).toBe("proceed");
+    expect(log).toHaveBeenCalledWith("info", "handover.start_check", {
+      result: "proceed",
+      peers: [{ nodeId: PEER.nodeId, answer: "=", counted: true }],
+    });
+    expect(servers[0]!.requests).toHaveLength(1);
+  });
+
+  it("a peer whose certificate another authority signed is silent, with the reason certificate", async () => {
+    const held: { chart?: SignedMembershipDocument } = {};
+    const url = await httpsPeer(() => held.chart!);
+    const b = await box(suite, { peerUrl: url });
+    held.chart = b.held;
+    const log = vi.fn();
+    expect((await check(suite, b, undefined, log, await holding(y))).result).toBe("wait");
+    expect(log).toHaveBeenCalledWith("info", "handover.start_check", {
+      result: "wait",
+      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "certificate" }],
+    });
+    expect(servers[0]!.requests).toHaveLength(0);
+  });
+
+  it("a spare trusts its main box under the venue authority it holds, not the mirror link's copy", async () => {
+    const held: { chart?: SignedMembershipDocument } = {};
+    const url = await httpsPeer(() => held.chart!);
+    const b = await box(suite, { peerUrl: url });
+    held.chart = b.held;
+    await linkTo(b, x.caPem);
+    const log = vi.fn();
+    expect((await check(suite, b, undefined, log, await holding(y))).result).toBe("wait");
+    expect(log).toHaveBeenCalledWith("info", "handover.start_check", {
+      result: "wait",
+      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "certificate" }],
+    });
+    expect(servers[0]!.requests).toHaveLength(0);
+  });
+
+  it("a box holding no venue authority asks no box over HTTPS: each is silent, with the reason certificate", async () => {
+    const held: { chart?: SignedMembershipDocument } = {};
+    const url = await httpsPeer(() => held.chart!);
+    const b = await box(suite, { peerUrl: url });
+    held.chart = b.held;
+    const log = vi.fn();
+    expect((await check(suite, b, undefined, log)).result).toBe("wait");
+    expect(log).toHaveBeenCalledWith("info", "handover.start_check", {
+      result: "wait",
+      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "certificate" }],
+    });
+    expect(servers[0]!.requests).toHaveLength(0);
   });
 
   it("pins the main box's authority a spare holds, and its answer counts", async () => {
@@ -853,20 +921,20 @@ describe("the real start check's transport", () => {
     const b = await box(suite, { peerUrl: url });
     held.chart = b.held;
     await linkTo(b, x.caPem);
-    expect((await check(suite, b, undefined)).result).toBe("proceed");
+    expect((await check(suite, b, undefined, vi.fn(), await holding(x))).result).toBe("proceed");
   });
 
-  it("control: a pinned authority the box does not present refuses it, logged as not established", async () => {
+  it("control: a pinned authority the box does not present refuses it, logged as certificate", async () => {
     const held: { chart?: SignedMembershipDocument } = {};
     const url = await httpsPeer(() => held.chart!);
     const b = await box(suite, { peerUrl: url });
     held.chart = b.held;
     await linkTo(b, y.caPem);
     const log = vi.fn();
-    expect((await check(suite, b, undefined, log)).result).toBe("wait");
+    expect((await check(suite, b, undefined, log, await holding(y))).result).toBe("wait");
     expect(log).toHaveBeenCalledWith("info", "handover.start_check", {
       result: "wait",
-      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "not_established" }],
+      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "certificate" }],
     });
     expect(servers[0]!.requests).toHaveLength(0);
   });

@@ -270,6 +270,7 @@ async function emergencySpare(gate = true) {
     node: placed.node,
     nodeId: standby.nodeId,
     ring,
+    stateDir: dirs().spareState,
     venueDir: dirs().spareVenue,
     modules: fiscalModules,
     origin: "https://box.test",

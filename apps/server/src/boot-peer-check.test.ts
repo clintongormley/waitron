@@ -1280,6 +1280,7 @@ describe("askPeerStatus", () => {
       sign: async (b) =>
         signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
       publicKeyOf: (id) => keys[id],
+      authorityOf: () => authorityX.caPem,
     });
     const before = Date.now();
     const peer = { ...PEER, url: server.url };
@@ -1356,11 +1357,12 @@ describe("askPeerStatus", () => {
           throw Object.assign(new Error("synthetic exchange timeout"), { code: "ETIMEDOUT" });
         });
       try {
-        await expect(postToBox({ timeoutMs: 100 }, SPARE, PEER.url, "{}")).rejects.toThrow(
-          "synthetic exchange timeout",
-        );
+        const authorityOf = () => authorityX.caPem;
+        await expect(
+          postToBox({ timeoutMs: 100, authorityOf }, SPARE, PEER.url, "{}"),
+        ).rejects.toThrow("synthetic exchange timeout");
         const onSilent = vi.fn();
-        expect(await realAsk({ onSilent })(PEER)).toBeNull();
+        expect(await realAsk({ authorityOf, onSilent })(PEER)).toBeNull();
         expect(onSilent).toHaveBeenCalledWith(SPARE, reason);
       } finally {
         exchange.mockRestore();
@@ -1505,10 +1507,13 @@ describe("askPeerStatus", () => {
       expect(server.requests).toHaveLength(1);
     });
 
-    it("with no authority known, the certificate is not checked and the signed answer verifies", async () => {
+    it("with no authority known, the box is silent with the reason certificate and is sent nothing", async () => {
       const server = await statusServer(authorityX, (q) => sign(body(q.nonce)));
-      const real = realAsk({});
-      expect(await real({ ...PEER, url: server.url })).toEqual(body(server.lastNonce()));
+      const onSilent = vi.fn();
+      const real = realAsk({ onSilent });
+      expect(await real({ ...PEER, url: server.url })).toBeNull();
+      expect(server.requests).toHaveLength(0);
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "certificate");
     });
 
     it("with the authority pinned, a box presenting another authority's leaf is refused before the query is sent", async () => {
@@ -1517,12 +1522,14 @@ describe("askPeerStatus", () => {
       const real = realAsk({ authorityOf: () => authorityX.caPem, onSilent });
       expect(await real({ ...PEER, url: server.url })).toBeNull();
       expect(server.requests).toHaveLength(0);
-      expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "certificate");
     });
 
-    it("with no authority known, an unsigned answer is still null", async () => {
+    it("with the authority pinned, an unsigned answer is still null", async () => {
       const server = await statusServer(authorityX, (q) => body(q.nonce));
-      expect(await realAsk({})({ ...PEER, url: server.url })).toBeNull();
+      expect(
+        await realAsk({ authorityOf: () => authorityX.caPem })({ ...PEER, url: server.url }),
+      ).toBeNull();
     });
 
     it("an answer larger than the limit is null", async () => {
@@ -1530,7 +1537,9 @@ describe("askPeerStatus", () => {
         ...sign(body(q.nonce)),
         padding: "x".repeat(2 * 1024 * 1024),
       }));
-      expect(await realAsk({})({ ...PEER, url: server.url })).toBeNull();
+      expect(
+        await realAsk({ authorityOf: () => authorityX.caPem })({ ...PEER, url: server.url }),
+      ).toBeNull();
     });
 
     it("control: the global fetch gets no answer from the same box", async () => {
