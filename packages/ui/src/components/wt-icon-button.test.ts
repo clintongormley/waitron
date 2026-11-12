@@ -30,6 +30,7 @@ test("names the native action, and updates and removes its toggle state", async 
   expect(buttonOf(el)).toBeInstanceOf(HTMLButtonElement);
   const button = buttonOf(el)!;
   expect(button.type).toBe("button");
+  expect(button.part.contains("button")).toBe(true);
   expect(button.getAttribute("aria-label")).toBe("Select");
   expect(button.getAttribute("aria-pressed")).toBe("false");
   el.pressed = true;
@@ -113,6 +114,7 @@ test.each(["light", "dark"])(
     expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(52);
     expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
     expect(el.getBoundingClientRect().width).toBe(button.getBoundingClientRect().width);
+    expect(el.getBoundingClientRect().height).toBe(button.getBoundingClientRect().height);
     el.pressed = true;
     await el.updateComplete;
     expect(paint().fill).toBe("rgb(14, 15, 16)");

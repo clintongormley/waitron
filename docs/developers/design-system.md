@@ -2330,8 +2330,8 @@ initial `false`, and omit it for an action. Set `disabled` while the action is u
 The consumer changes the pressed state; the component emits the native click once.
 
 Native controls with their own count or trigger paths retain `iconButtonStyles` and
-`trackIconTooltip`: the table's Filters and Customise buttons, the folded sidebar strip and
-the floor-plan table panel. The primitive reuses the same helpers
+`trackIconTooltip`: the table's Filters and Customise buttons and the folded sidebar strip.
+The primitive reuses the same helpers
 (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
 least `--wt-tap-min` each way, with the toolbar's border and surface, and pressed —
 `--wt-color-primary` border, `--wt-color-surface-lifted` fill, `--wt-color-primary-text` icon —

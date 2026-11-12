@@ -21,7 +21,7 @@ export class WtIconButton extends LitElement {
   @property() label = "";
   @property() icon = "";
   @property({ attribute: false }) pressed?: boolean;
-  @property({ type: Boolean }) disabled = false;
+  @property({ type: Boolean, reflect: true }) disabled = false;
 
   override render() {
     return html`<button
