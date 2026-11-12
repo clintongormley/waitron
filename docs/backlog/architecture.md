@@ -853,7 +853,7 @@ the helper's constant status is not evidence of the write.
   Local alert, box-host call, attendance-fact, bill-editor transition, transfer-close and orders
   route fixtures use English staff display-name samples.
   Local portion-sale projection, station-queue and station-move staff samples use Anna and Lewis.
-  Local adjustment-report, session-person and box-alert-email staff samples use English display names.
+  Local adjustment-report staff use Lucy, Paul and Rose; session-person and box-alert-email samples use Anna.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot

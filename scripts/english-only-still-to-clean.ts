@@ -191,7 +191,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/scripts/throwaway-venue.test.ts",
   "apps/server/src/account-email.test.ts",
   "apps/server/src/adjustments-bill-payments.test.ts",
-  "apps/server/src/adjustments-report.test.ts",
   "apps/server/src/adopt.test.ts",
   "apps/server/src/adoption-allocation-refusal.test.ts",
   "apps/server/src/aeat.preprod.test.ts",
