@@ -59,8 +59,6 @@ const PIN_REFUSALS: Record<string, StringKey> = {
 const REASONS: Record<string, { key: StringKey; checkAgain: boolean }> = {
   not_stopped: { key: "box_time.refused.not_stopped", checkAgain: false },
   not_start_up: { key: "box_time.refused.not_start_up", checkAgain: false },
-  authority_pending: { key: "box_time.refused.authority_pending", checkAgain: true },
-  witnessed: { key: "box_time.refused.witnessed", checkAgain: false },
   target_invalid: { key: "box_time.refused.target_invalid", checkAgain: true },
   synchronised: { key: "box_time.refused.synchronised", checkAgain: false },
   host_unavailable: { key: "box_time.refused.host_unavailable", checkAgain: false },

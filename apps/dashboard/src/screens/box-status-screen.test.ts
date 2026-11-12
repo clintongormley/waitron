@@ -1002,12 +1002,6 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
         false,
       ],
       [
-        "witnessed",
-        "box_status.clock.admin.set.refused.witnessed",
-        "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from a device's. If a try fails, it tries again later.",
-        true,
-      ],
-      [
         "stale",
         "box_status.clock.admin.set.refused.stale",
         "The box's clock changed while this was being checked. Close this and check again.",

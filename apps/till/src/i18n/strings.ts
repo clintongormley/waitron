@@ -2027,10 +2027,6 @@ export const en = {
   "box_time.refused.not_stopped": "The server's clock no longer needs checking.",
   "box_time.refused.not_start_up":
     "The server has been running since its clock was last right, so a staff member can no longer set it from a device. An administrator can, here.",
-  "box_time.refused.authority_pending":
-    "The server is still trying the tax agency's time over the internet. Check again in a minute.",
-  "box_time.refused.witnessed":
-    "The server has the tax agency's time, so it confirms or sets its clock from that time itself, not from this device's. If a try fails, it tries again later.",
   "box_time.refused.target_invalid":
     "This device's clock reads {till}, which cannot be right. Correct this device's date and time in its settings, then check again.",
   "box_time.refused.synchronised":
@@ -4061,10 +4057,6 @@ export const es: Record<StringKey, string> = {
   "box_time.refused.not_stopped": "Ya no hace falta comprobar el reloj del servidor.",
   "box_time.refused.not_start_up":
     "El servidor lleva en marcha desde la última vez que su reloj estaba bien, así que un empleado ya no puede ponerlo en hora desde un dispositivo. Un administrador sí puede, aquí.",
-  "box_time.refused.authority_pending":
-    "El servidor aún está intentando obtener la hora de Hacienda por internet. Vuelve a comprobarlo dentro de un minuto.",
-  "box_time.refused.witnessed":
-    "El servidor tiene la hora de Hacienda, así que confirma o pone su reloj en hora con esa hora él solo, no con la de este dispositivo. Si un intento falla, lo vuelve a intentar más tarde.",
   "box_time.refused.target_invalid":
     "El reloj de este dispositivo marca {till}, y eso no puede ser correcto. Corrige la fecha y la hora de este dispositivo en sus ajustes y vuelve a comprobarlo.",
   "box_time.refused.synchronised":

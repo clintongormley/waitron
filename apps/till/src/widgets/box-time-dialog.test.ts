@@ -313,18 +313,6 @@ describe("till-box-time-dialog", () => {
       ["close", "admin"],
     ],
     [
-      "authority_pending",
-      { code: "clock.set_refused", reason: "authority_pending" },
-      "box_time.refused.authority_pending",
-      ["close", "check-again"],
-    ],
-    [
-      "witnessed",
-      { code: "clock.set_refused", reason: "witnessed" },
-      "box_time.refused.witnessed",
-      ["close"],
-    ],
-    [
       "synchronised",
       { code: "clock.set_refused", reason: "synchronised" },
       "box_time.refused.synchronised",
@@ -437,7 +425,7 @@ describe("till-box-time-dialog", () => {
 
   it("closes on Close after a refusal", async () => {
     const el = await open(
-      fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "witnessed" })),
+      fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "synchronised" })),
     );
     let closed = 0;
     el.addEventListener("box-time-close", () => closed++);

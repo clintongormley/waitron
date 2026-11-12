@@ -4076,8 +4076,6 @@ export const en = {
   "box_status.clock.admin.set.sign_in_again": "Sign in again to go on.",
   "box_status.clock.admin.set.refused.synchronised":
     "The box keeps its clock in time over the internet and says it is right, so it does not take a time from a device. If your device's time is right, check the box's internet connection.",
-  "box_status.clock.admin.set.refused.witnessed":
-    "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from a device's. If a try fails, it tries again later.",
   "box_status.clock.admin.set.refused.stale":
     "The box's clock changed while this was being checked. Close this and check again.",
   "box_status.clock.admin.set.refused.host_unavailable":
@@ -8290,8 +8288,6 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.admin.set.sign_in_again": "Vuelve a iniciar sesión para seguir.",
   "box_status.clock.admin.set.refused.synchronised":
     "El servidor se pone en hora por internet y dice que su hora es correcta, así que no toma la hora de un dispositivo. Si la hora de tu dispositivo es correcta, comprueba la conexión a internet del servidor.",
-  "box_status.clock.admin.set.refused.witnessed":
-    "El servidor tiene la hora de Hacienda, así que confirma o corrige su reloj con esa hora por sí mismo, no con la de un dispositivo. Si un intento falla, vuelve a intentarlo más tarde.",
   "box_status.clock.admin.set.refused.stale":
     "El reloj del servidor ha cambiado mientras se comprobaba. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock.admin.set.refused.host_unavailable":

@@ -38,7 +38,6 @@ const SET_REFUSALS = {
   same_machine: "box_status.clock.admin.set.refused.same_machine",
   not_stopped: "box_status.clock.admin.set.refused.not_stopped",
   synchronised: "box_status.clock.admin.set.refused.synchronised",
-  witnessed: "box_status.clock.admin.set.refused.witnessed",
   stale: "box_status.clock.admin.set.refused.stale",
   host_unavailable: "box_status.clock.admin.set.refused.host_unavailable",
   target_invalid: "box_status.clock.admin.set.refused.target_invalid",
@@ -54,7 +53,6 @@ const SET_FAILURES = {
 const SET_ENDS_THE_QUESTION: ReadonlySet<string> = new Set([
   "same_machine",
   "not_stopped",
-  "witnessed",
   "stale",
 ]);
 
