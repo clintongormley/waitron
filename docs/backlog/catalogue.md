@@ -161,14 +161,8 @@ contract are in [design-system.md](../developers/design-system.md)._
 
 A desktop window narrow enough to leave the table under
 768px gets the full-screen panel — at which window width that happens with the sidebar shown was
-not measured. Also left open by W83's review, none started: (1) the table's Customise columns
-button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
-and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
-component — the Products table's Select is a native `<button>` because `wt-button` does not pass `aria-pressed`
-through, and the Structure tab's Reorder and Select toggles are hand-built icon buttons for the same
-reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
-(3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
-above the table's 440px narrow-tree width).
+not measured. The 768px side-panel threshold is tied by hand to token sizes
+(768 − 7×44 − 12 = 448, just above the table's 440px narrow-tree width).
 
 ## Products at phone width: a long name runs under the pinned Actions column (W85b, W85c, W85e): left open
 
@@ -707,15 +701,6 @@ through it, `packages/venue-service/src/routing-store.test.ts` and `service.test
 (`catalogue-screen.test.ts:363` asserts it is never called). Delete them together, or give the
 read a screen.
 
-## The data table's columns button has no tooltip
-
-**The data table's columns button has no tooltip** (found by A655's on-screen check, 2026-10-21).
-The icon-only button at the end of a list's search box opens **Customise**, but hovering or
-focusing it shows nothing, while the Filters button beside it shows "Filters"
-(`packages/ui/src/components/wt-data-table.ts`, the columns button near :2965 against the Filters
-button's tooltip near :2791). Give it the same tooltip; the Products guide currently calls it "the
-columns button at the right-hand end of the list's search box".
-
 ## The Products tree's hidden counts may be placed against the page at narrow width
 
 **The Products tree's hidden counts may be placed against the page at narrow width** — not
@@ -917,8 +902,8 @@ tests. Media still validates required image names and translates its refusal to
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
   slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
   `packages/ui/src/components/wt-data-table.ts`). Left open by A499.
-- **Loose ends left by W83's review (#1193), not started.**
-  [Detail](dashboard.md#loose-ends-left-by-w83s-review-1193-not-started)
+- **Products' full-screen Filters threshold remains unmeasured with the sidebar shown and tied to token sizes.**
+  [Detail](catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
   [Detail](dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
 - **A543. During a flat tree search without `collapseDescendants`, `wt-data-table`'s `isExpanded()`
@@ -1064,15 +1049,6 @@ tests. Media still validates required image names and translates its refusal to
   [Detail](catalogue.md#modifiers-spanish-opciones-tab-was-cut-at-a-310-px-screen-on-cis-linux-fonts)
 - **A selected tab that grows while its strip keeps its width is not scrolled back into view** — left open by A487a (#1540).
   [Detail](kitchen.md#a-selected-tab-that-grows-while-its-strip-keeps-its-width-is-not-scrolled-back-into-view)
-
-## Bundle: Icon button
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The data table's columns button has no tooltip**
-  [Detail](catalogue.md#the-data-tables-columns-button-has-no-tooltip)
-- **Loose ends left by W83 (#1193).**
-  [Detail](catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
 ## Bundle: Tree drag shared
 

@@ -507,8 +507,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   The owner brought its basic guest-menu design forward on 11 November through A1517.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
-- **Icon button** (bundle of 2, size M). [Detail](backlog/catalogue.md#bundle-icon-button)
-
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 11, size M). Holds A1318, A543, A890. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
 - **One language fallback rule** (bundle of 5, 1 important, size M). [Detail](backlog/catalogue.md#bundle-one-language-fallback-rule)

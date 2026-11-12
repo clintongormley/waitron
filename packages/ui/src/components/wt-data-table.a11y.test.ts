@@ -480,6 +480,10 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
       .getBoundingClientRect();
     expect(search.right).toBeLessThan(chooser.left);
     expect(chooser.top).toBeLessThan(search.bottom);
+    await userEvent.keyboard("{Tab}");
+    const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
+    trigger.focus();
+    expect(getComputedStyle(trigger.querySelector(".icon-tooltip")!).display).toBe("block");
     await expectNoA11yViolations(host);
   });
 

@@ -30,6 +30,7 @@ export { WtButton } from "./components/wt-button.js";
 export type { WtButtonVariant, WtButtonSize, WtButtonAlign } from "./components/wt-button.js";
 export { NUTRITION_ICONS } from "./nutrition-icons.js";
 export { WtIcon, registerIcons } from "./components/wt-icon.js";
+export { WtIconButton } from "./components/wt-icon-button.js";
 export type { WtIconSize } from "./components/wt-icon.js";
 export { WtSpinner } from "./components/wt-spinner.js";
 export type { WtSpinnerSize } from "./components/wt-spinner.js";

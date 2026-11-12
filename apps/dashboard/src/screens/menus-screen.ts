@@ -6,8 +6,6 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import {
   baseStyles,
-  iconButtonStyles,
-  trackIconTooltip,
   leaveCoordinatorFor,
   draftScopeFor,
   saveActionState,
@@ -24,6 +22,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-icon-button.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -336,7 +335,6 @@ export class MenusScreen extends LitElement {
   @property({ attribute: false }) reportLateSave?: (name: string) => void;
   static override styles = [
     baseStyles,
-    iconButtonStyles,
     css`
       .field-error {
         color: var(--wt-color-danger);
@@ -2742,28 +2740,19 @@ export class MenusScreen extends LitElement {
             this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
           this.deleteSectionError = "";
         }}
-        ><!-- A native button: wt-button does not pass aria-pressed to its inner button. -->
-        <button
-          type="button"
+        ><wt-icon-button
           slot="toolbar-start"
-          class="icon-button"
           data-test="select"
-          aria-label=${t("folders.select")}
-          aria-pressed=${String(this.structureSelecting)}
+          label=${t("folders.select")}
+          icon="select-rows"
+          .pressed=${this.structureSelecting}
           ?disabled=${this.busy}
           @click=${() => {
             if (this.busy) return;
             this.structureSelected = [];
             this.structureSelecting = !this.structureSelecting;
           }}
-          @pointerenter=${trackIconTooltip}
-          @pointerleave=${trackIconTooltip}
-          @focus=${trackIconTooltip}
-          @blur=${trackIconTooltip}
-        >
-          <wt-icon name="select-rows"></wt-icon
-          ><span class="icon-tooltip" aria-hidden="true">${t("folders.select")}</span>
-        </button>
+        ></wt-icon-button>
         <wt-input
           slot="toolbar-search"
           name="structure-search"

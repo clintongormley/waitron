@@ -570,9 +570,13 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
 
   it("accessible Structure tab in combined Select and reorder mode, the toggle pressed and Done shown", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    q(el, '[data-test="select"]').click();
+    q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() => expect(q(el, '[data-test="selection-done"]')).not.toBeNull());
-    expect(q(el, '[data-test="select"]').getAttribute("aria-pressed")).toBe("true");
+    expect(
+      q(el, '[data-test="select"]')
+        .shadowRoot!.querySelector("button")!
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     await vi.waitFor(() =>
       expect(treeRows(el).querySelector('[part~="drag-grip"]')).not.toBeNull(),
     );
@@ -581,7 +585,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
 
   it("accessible Structure tab in Select mode, the bar showing with a section and an included menu selected and its note", async () => {
     const { el, host } = await mount("included", theme, LUNCH);
-    q(el, '[data-test="select"]').click();
+    q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() => expect(q(el, '[data-test="selection-bar"]')).not.toBeNull());
     await vi.waitFor(() =>
       treeRows(el).querySelector<HTMLInputElement>('[data-test="select-m-drinks"]')!.click(),
@@ -593,13 +597,17 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       treeRows(el).querySelector<HTMLInputElement>('[data-test="select-included-wine"]')!.click(),
     );
     await vi.waitFor(() => expect(q(el, '[data-test="selection-sections-note"]')).not.toBeNull());
-    expect(q(el, '[data-test="select"]').getAttribute("aria-pressed")).toBe("true");
+    expect(
+      q(el, '[data-test="select"]')
+        .shadowRoot!.querySelector("button")!
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     await expectNoA11yViolations(host);
   });
 
   it("accessible Remove confirm for the selected rows", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    q(el, '[data-test="select"]').click();
+    q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() =>
       treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
     );
@@ -624,7 +632,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
 
   it("accessible Delete confirm for a selected section with a section below it", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    q(el, '[data-test="select"]').click();
+    q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() =>
       treeRows(el).querySelector<HTMLInputElement>('[data-test="select-m-drinks"]')!.click(),
     );
@@ -651,7 +659,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
 
   it("accessible Move dialog for the selected rows, a destination chosen", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
-    q(el, '[data-test="select"]').click();
+    q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() =>
       treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
     );
@@ -680,7 +688,9 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     for (let i = 0; i < 30 && el.shadowRoot!.activeElement !== toggle; i += 1)
       await userEvent.tab();
     expect(el.shadowRoot!.activeElement).toBe(toggle);
-    expect(getComputedStyle(toggle.querySelector(".icon-tooltip")!).display).toBe("block");
+    expect(getComputedStyle(toggle.shadowRoot!.querySelector(".icon-tooltip")!).display).toBe(
+      "block",
+    );
     await expectNoA11yViolations(host);
   });
 

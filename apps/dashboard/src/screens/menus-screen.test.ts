@@ -839,7 +839,7 @@ function deferred<T>() {
 }
 
 async function click(el: MenusScreen, testId: string): Promise<void> {
-  q(el, `[data-test="${testId}"]`)!.click();
+  (testId === "select" ? modeToggle(el) : q(el, `[data-test="${testId}"]`))!.click();
   await el.updateComplete;
 }
 
@@ -876,8 +876,9 @@ function rowOf(el: MenusScreen, key: string): HTMLElement | null {
   return inStructure(el, `tr[data-row-key="${CSS.escape(key)}"]`);
 }
 
+const modeHost = (el: MenusScreen) => q(el, 'wt-icon-button[data-test="select"]')!;
 function modeToggle(el: MenusScreen): HTMLButtonElement {
-  return q<HTMLButtonElement>(el, '[data-test="select"]')!;
+  return modeHost(el).shadowRoot!.querySelector("button")!;
 }
 
 async function pressMode(el: MenusScreen): Promise<void> {
@@ -4902,11 +4903,12 @@ describe("the Structure tree", () => {
     it("offers Select as an icon button with a tooltip; pressed, every owned row has a grip, and an arrow on one moves it", async () => {
       const client = api();
       const el = await mountLunch(client);
+      expect(el.shadowRoot!.querySelector('wt-icon-button[data-test="select"]')).not.toBeNull();
       await toggleRow(el, "m-drinks");
       const toggle = modeToggle(el);
       expect(toggle.localName).toBe("button");
       expect(toggle.getAttribute("type")).toBe("button");
-      expect(toggle.getAttribute("slot")).toBe("toolbar-start");
+      expect(modeHost(el).getAttribute("slot")).toBe("toolbar-start");
       expect(toggle.getAttribute("aria-label")).toBe("Select");
       const tooltip = toggle.querySelector<HTMLElement>(".icon-tooltip")!;
       expect(tooltip.textContent!.trim()).toBe("Select");
@@ -4916,7 +4918,7 @@ describe("the Structure tree", () => {
       expect(getComputedStyle(toggle).borderTopStyle).toBe("solid");
       expect(getComputedStyle(toggle).borderTopWidth).toBe("1px");
       expect(getComputedStyle(tooltip).display).toBe("none");
-      expect(toggle.assignedSlot).not.toBeNull();
+      expect(modeHost(el).assignedSlot).not.toBeNull();
       expect(toggle.getBoundingClientRect().width).toBeGreaterThan(0);
 
       await pressMode(el);
@@ -4974,7 +4976,8 @@ describe("the Structure tree", () => {
       expect(grips(el)).toEqual([]);
       expect(q(el, '[data-test="selection-done"]')).toBeNull();
       expect(modeToggle(el).getAttribute("aria-pressed")).toBe("false");
-      expect(el.shadowRoot!.activeElement).toBe(modeToggle(el));
+      expect(el.shadowRoot!.activeElement).toBe(modeHost(el));
+      expect(modeHost(el).shadowRoot!.activeElement).toBe(modeToggle(el));
 
       await pressMode(el);
       expect(grips(el).length).toBeGreaterThan(0);
@@ -5096,7 +5099,7 @@ describe("the Structure tree", () => {
       onTestFinished(() => setLocale(before));
     });
 
-    const selectToggle = (el: MenusScreen) => q<HTMLButtonElement>(el, '[data-test="select"]')!;
+    const selectToggle = modeToggle;
     const bar = (el: MenusScreen) => q(el, '[data-test="selection-bar"]');
     const removeButton = (el: MenusScreen) =>
       q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-remove"]')!;
@@ -5126,14 +5129,14 @@ describe("the Structure tree", () => {
       const toggle = selectToggle(el);
       expect(toggle.localName).toBe("button");
       expect(toggle.getAttribute("type")).toBe("button");
-      expect(toggle.getAttribute("slot")).toBe("toolbar-start");
+      expect(modeHost(el).getAttribute("slot")).toBe("toolbar-start");
       expect(toggle.classList.contains("icon-button")).toBe(true);
       expect(toggle.querySelector("wt-icon")!.getAttribute("name")).toBe("select-rows");
       expect(toggle.getAttribute("aria-label")).toBe("Select");
       expect(toggle.querySelector(".icon-tooltip")!.textContent!.trim()).toBe("Select");
       expect(toggle.getAttribute("aria-pressed")).toBe("false");
       expect(q(el, '[data-test="reorder"]')).toBeNull();
-      expect(toggle.assignedSlot).not.toBeNull();
+      expect(modeHost(el).assignedSlot).not.toBeNull();
       expect(toggle.getBoundingClientRect().width).toBeGreaterThan(0);
       expect(rowBoxes(el)).toEqual([]);
       expect(bar(el)).toBeNull();
@@ -5384,7 +5387,8 @@ describe("the Structure tree", () => {
         expect(structure(el).selected).toEqual([]);
         expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
         expect(selectToggle(el).getAttribute("aria-pressed")).toBe("true");
-        expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+        expect(el.shadowRoot!.activeElement).toBe(modeHost(el));
+        expect(modeHost(el).shadowRoot!.activeElement).toBe(selectToggle(el));
       });
 
       it("lists a section ticked in two places once and sends its id once", async () => {
@@ -5653,7 +5657,8 @@ describe("the Structure tree", () => {
       expect(structure(el).selected).toEqual([]);
       expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
       expect(selectToggle(el).getAttribute("aria-pressed")).toBe("true");
-      expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+      expect(el.shadowRoot!.activeElement).toBe(modeHost(el));
+      expect(modeHost(el).shadowRoot!.activeElement).toBe(selectToggle(el));
     });
 
     it("names one item in the singular", async () => {
@@ -5777,7 +5782,8 @@ describe("the Structure tree", () => {
       expect(structure(el).selecting).toBe(false);
       expect(structure(el).selected).toEqual([]);
       expect(selectToggle(el).getAttribute("aria-pressed")).toBe("false");
-      expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+      expect(el.shadowRoot!.activeElement).toBe(modeHost(el));
+      expect(modeHost(el).shadowRoot!.activeElement).toBe(selectToggle(el));
       await pressSelect(el);
       expect(rowBoxes(el).filter((box) => box.checked)).toEqual([]);
     });
@@ -6601,7 +6607,8 @@ describe("the Structure tree", () => {
         await vi.waitFor(() => expect(rowOf(el, "m-fav/m-burger")).not.toBeNull());
         expect(structure(el).selected).toEqual([]);
         expect(selectToggle(el).getAttribute("aria-pressed")).toBe("true");
-        expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+        expect(el.shadowRoot!.activeElement).toBe(modeHost(el));
+        expect(modeHost(el).shadowRoot!.activeElement).toBe(selectToggle(el));
       });
 
       it("sends only a selected section, not its selected child, which stays inside it", async () => {
@@ -12868,7 +12875,7 @@ it.each(
     type(q(el, 'wt-input[name="structure-search"]')!, value);
     await settleStructure(el);
   };
-  q<HTMLElement>(el, '[data-test="select"]')!.click();
+  modeToggle(el).click();
   await settleStructure(el);
   await search("Lemonade");
   const boxes = allInStructure<HTMLInputElement>(el, "td.select input");
@@ -12898,7 +12905,7 @@ it.each(["en", "es"])("A462 Structure has one Select mode in %s", async (locale)
   setLocale(locale);
   onTestFinished(() => setLocale(before));
   const el = await mountLunch();
-  const select = q<HTMLButtonElement>(el, '[data-test="select"]')!;
+  const select = modeToggle(el);
   expect(select.getAttribute("aria-label")).toBe(locale === "es" ? "Seleccionar" : "Select");
   expect(q(el, '[data-test="reorder"]')).toBeNull();
   await userEvent.click(select);
@@ -12917,7 +12924,8 @@ it.each(["en", "es"])("A462 Structure has one Select mode in %s", async (locale)
   expect(structure(el).reordering).toBe(false);
   expect(inStructure(el, '[data-test="select-m-burger"]')).toBeNull();
   expect(inStructure(el, '[data-test="drag-m-burger"]')).toBeNull();
-  expect(el.shadowRoot!.activeElement).toBe(select);
+  expect(el.shadowRoot!.activeElement).toBe(modeHost(el));
+  expect(modeHost(el).shadowRoot!.activeElement).toBe(select);
 });
 
 it("A462 Structure root updates editor without reopening the root", async () => {
@@ -12983,7 +12991,7 @@ it.each(
       path: `__screenshots__/a462-task5/structure-${width}-${locale}-${theme}-${state}.png`,
     });
   };
-  const select = q<HTMLButtonElement>(el, '[data-test="select"]')!;
+  const select = modeToggle(el);
   select.focus();
   await userEvent.keyboard("{Enter}");
   await settleStructure(el);

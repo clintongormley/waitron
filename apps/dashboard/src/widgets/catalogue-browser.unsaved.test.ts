@@ -41,7 +41,10 @@ async function fixture(operation: "move" | "delete", overrides: Partial<Dashboar
   const { el: app } = await mountWidget<CatalogueLeaveApp>("catalogue-leave-test-app", { api });
   const browser = app.shadowRoot!.querySelector<CatalogueBrowser>("dashboard-catalogue-browser")!;
   await browser.updateComplete;
-  browser.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
+  browser
+    .shadowRoot!.querySelector("wt-icon-button[data-test=select]")!
+    .shadowRoot!.querySelector("button")!
+    .click();
   await browser.updateComplete;
   const list = browser.shadowRoot!.querySelector("dashboard-product-list")!;
   await list.updateComplete;

@@ -63,6 +63,40 @@ async function table(props: Partial<WtDataTable<Row>> = {}): Promise<WtDataTable
   return el;
 }
 
+test.each(["Customise columns", "Personalizar columnas"])(
+  "Columns tooltip appears on hover/focus and fits at 390px: %s",
+  async (label) => {
+    onTestFinished(() => commands.parkPointer());
+    await inWindow(390, 844, async () => {
+      const el = await table({
+        columns: [columns[0], { ...columns[1], choosable: "shown" }, columns[2]],
+        customiseColumnsLabel: label,
+      });
+      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
+      const tooltip = trigger.querySelector<HTMLElement>(".icon-tooltip");
+      expect(tooltip).not.toBeNull();
+      await userEvent.hover(trigger);
+      expect(tooltip!.textContent).toBe(label);
+      expect(tooltip!.getAttribute("aria-hidden")).toBe("true");
+      expect(getComputedStyle(tooltip!).display).toBe("block");
+      expect(tooltip!.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      expect(tooltip!.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+      await userEvent.click(tooltip!);
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      await userEvent.keyboard("{Escape}");
+      expect(getComputedStyle(tooltip!).display).toBe("none");
+      trigger.blur();
+      await commands.parkPointer();
+      await userEvent.keyboard("{Tab}");
+      trigger.focus();
+      expect(getComputedStyle(tooltip!).display).toBe("block");
+      await userEvent.click(trigger.querySelector("wt-icon")!);
+      await el.updateComplete;
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    });
+  },
+);
+
 test("groups adjacent visible columns above their individual headings", async () => {
   const el = await table({
     columns: [
