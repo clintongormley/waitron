@@ -39,6 +39,7 @@ function install(knobs = {}) {
   const folder = mkdtempSync(join(root, "case-"));
   const host = join(folder, "host");
   const box = join(folder, "box");
+  if (knobs.WT_HELD === "1") mkdirSync(join(`${box}.upgrades`, "attempt"), { recursive: true });
   const result = spawnSync("bash", [script, host, box], {
     encoding: "utf8",
     env: {
@@ -72,6 +73,7 @@ it.each([
   [{ WT_BAD_SUM: "1" }, "checksum mismatch"],
   [{ WT_ARCH: "unknown" }, "unsupported host architecture"],
   [{ WT_BUSY: "1" }, "another host operation"],
+  [{ WT_HELD: "1" }, "resolve the upgrade attempt"],
 ])("does not publish an unverified runtime for %j", (knobs, reason) => {
   const r = install(knobs);
   expect(r.status).not.toBe(0);
