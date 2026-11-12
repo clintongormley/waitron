@@ -1,80 +1,96 @@
-# A950: usable manual upgrade, draft
+# A950: usable manual upgrade, revised draft
 
 **Request:** "A950. First remote venue: safe manual upgrades, then automation".
-Drafted by the separate GPT-6.1 Sol plan writer. Owner 22:04 grouping is recorded in
-[the historical plan](2026-11-09-a950-shorter-upgrades.md). Watcher 12 November 18:55
-cleared proposing remaining 3b plus 8 before advisory trial 4, with A790's fix round first.
-This draft has no Claude review, watcher build clearance or owner approval. The driver
-gets Claude's plan read, then posts PLAN FOR APPROVAL to the watcher before code.
+Separate GPT-6.1 Sol draft; first Claude read: 418 seconds. Revisions await
+one reread, not build clearance. Watcher 12 November 19:40 settles scope and
+grants one PR roughly 2,300 changed lines/10 working hours; 19:46 requires the
+restart experiment below first. Build follows reread
+unless Critical. A790's fix round comes first. No owner approval of this design;
+[historical grouping](2026-11-09-a950-shorter-upgrades.md) remains input.
 
-**Usable result:** You run `sudo bash waitron.sh install <ref>` at an installed
-single-box host console. Open orders and data survive. Required checks include a
-successful actual primary cash sale on a fresh disposable copy using the configured
-backend. Success commits before reopening; failure offers manual restore/keep.
-The live venue receives no test sale. No other project, signing, window, automation
-or pair prerequisite applies.
+**Result:** `sudo bash waitron.sh install <ref>` preserves single-box orders/data,
+requires a successful actual primary cash sale on a disposable copy, then
+commits/reopens or holds for manual restore/keep. No live test sale or other project prerequisite.
 
-Paths below: H=`scripts/box/upgrades/`, S=`apps/server/src/`, B=`deploy/box/`.
+H=`scripts/box/upgrades/`; S=`apps/server/src/`; B=`deploy/box/`.
 
-1. **Executable stopped-copy qualification (3b).** Extend
-   S/`upgrade-check-entry.ts:runUpgradeChecks` and
-   S/`upgrade-checks.ts:{checkUpgradeData,openUpgradeListener}`; add
-   S/`upgrade-sale.ts:checkUpgradeSale`. Reuse S/`boot.ts:startServer` and
-   S/`first-setup-launch.ts:startServerOrFirstSetupResolution`, two-file state,
-   first-setup and existing menu/Orders readers. Contain background effects before
-   starting them; preserve ordinary admission, accepted-copy placement, legacy-workspace,
-   peer and start-clock checks. Keep the real TLS listener and menu/history reads.
-   Create the operator/session, device/profile and offered item only in the disposable
-   copy; use the ordinary cash-payment route and require invoice/totals, backend
-   persistence and VeriFactu chain continuation. Use separate disposable readiness/sale
-   trees; never mount the intact restore copy writable. Discard both trees.
-   Every sale must succeed; refusal and setup-only cannot pass. Start the print agent
-   without sending jobs. Extend H/`host.mjs:createUpgradeHost` to invoke this candidate
-   entry in isolation. Add its read-only clock forwarder there. Forward only real host `clock.status`, using
-   S/`box-host-client.ts:boxHostClient` and the existing wire format; refuse setting,
-   missing and unsynchronised answers. Reuse the existing bundle in `deploy/Dockerfile`.
+1. **Host.** Add H/`cli.mjs` apply/status/restore/keep/offline-recovery dispatch through
+   H/`host.mjs:{createUpgradeHost,recoverInstalledUpgrade}` and
+   H/`transaction.mjs:{applyUpgrade,recoverUpgrade,upgradeStatus}`. Install
+   H/`bootstrap.sh` and H/`{cli,host,transaction,copy}.mjs` from `RAW_BASE/<resolved-sha>/scripts/box/upgrades/`
+   into `/opt/waitron-host/box/upgrades/`; use `/opt/waitron-host/node-v26.7.0/bin/node`.
+   Keep attempt-writing code/runtime for recovery. Run `bootstrap.sh /opt/waitron-host "$WAITRON_DIR"` first, releasing its
+   lock, then acquire/recheck the attempt lock. Status only discovers/reads
+   `upgradeStatus`; status/restore/keep never bootstrap.
+   Update `deploy/waitron.sh:{main,usage,cmd_install,cmd_status,cmd_reset,select_image,fetch_box_files}`:
+   stage candidate Compose/environment; pin/tag old IDs before builds/pulls, including
+   stopped sources. After old tagging, a candidate-preparation callback returns explicit
+   candidate-ID maps and Compose, bypassing registry resolution for built/local
+   images; retain the active tunnel's resolved ID
+   across previously pinned Compose. Resolve candidate interpolation from candidate
+   environment. Refresh AppArmor/Bluetooth/host service before attempts. Fresh/reset
+   installs bypass apply; pending attempts block refresh/reset. Setup-only fails
+   readiness and stays held, never skips the sale.
 
-2. **Installed manual activation (8).** In `deploy/waitron.sh`, change
-   `cmd_install`, `select_image`, `fetch_box_files`, `cmd_status` and `cmd_reset`:
-   stage candidate inputs before installed-file mutation and call
-   H/`transaction.mjs:{applyUpgrade,recoverUpgrade,upgradeStatus}` through
-   H/`host.mjs:{createUpgradeHost,recoverInstalledUpgrade}`. Add H/`cli.mjs` as their
-   installed caller, including status/restore/keep. Pin resolved source/candidate IDs,
-   including the existing ref-build path. Reuse H/`bootstrap.sh`, host lock,
-   marker, image pins, shutdown-completion refusal and
-   H/`copy.mjs:{copyStoppedTree,restoreStoppedTree}`. Interrupted restore always starts
-   again from the intact copy. Bootstrap/recovery stay independent of Docker; host
-   runtime refresh stays outside attempts. Add B/`waitron-app.service` and
-   B/`waitron-upgrade-recovery.service`; update B/`{build.sh,start-dev.sh,waitron-dev.service}`
-   and S/`run-server.ts`'s restart explanation. Remove all four `deploy/compose.yml`
-   restart policies only in this same activation change, when services own restart,
-   hold unresolved attempts and preserve the B3 AppArmor environment.
+2. **Copy checks.** Extend S/`upgrade-check-entry.ts:runUpgradeChecks` with executable
+   main and explicit `--entrypoint`; retain existing `deploy/Dockerfile` bundle.
+   Extend S/`upgrade-checks.ts`; add S/`upgrade-sale.ts:checkUpgradeSale`.
+   Use one fresh disposable tree: readiness, then separate sale process, plus intact
+   restore copy. Extend H/`host.mjs:assertCopyRoom` for both/reserve; reuse H/`copy.mjs`.
+   Pass real Compose environment/deployment/backup settings with explicit isolated
+   state, `venue.db`/`node.db`, logs, backups and agent mounts; never `compose run`.
+   Sale app: `--network none`; agent: `--network container:<app>`, no hardware mounts.
+   Block `/print-api/agent/jobs` dispatch before polling; prove agent startup without sending jobs.
+   Use loopback TLS cash requests. Reuse S/`first-setup-launch.ts:startServerOrFirstSetupResolution`,
+   S/`boot.ts:startServer`, real listener/menu/Orders readers; retain ordinary admission,
+   accepted-copy placement, legacy-workspace and peer/start-clock checks.
 
-**Tests and qualification:** Use failing behavioral tests first. Server admission,
-containment and sale assertions belong in S/`boot.upgrade.test.ts` and new
-S/`upgrade-sale.test.ts`; reuse `testing/{order-venue,bill-venue,tab-person-setup}.ts`; retain
-S/`run-server.test.ts`. Sender/host/transaction tests own failures once; shell tests
-assert wiring/answers only. Run `pnpm --filter @waitron/server exec vitest run
-src/boot.upgrade.test.ts src/upgrade-sale.test.ts src/run-server.test.ts` and `pnpm exec vitest run
-scripts/box/upgrades/{host,transaction,copy,bootstrap,cli}.test.mjs
-scripts/waitron-sh.test.mjs scripts/box/{installed-start,recipe-setup,rig-contract}.test.mjs`.
-Extend existing `bench/box-installer/run.mjs` QEMU ownership/restart support and
-`scripts/box/rig-contract{,.test}.mjs`; add planned cases `upgrade-readiness`,
-`upgrade-manual`, `upgrade-power-cut`. Run each with `node bench/box-installer/run.mjs
---case <case> --run-dir <owned-directory>` on Linux before activation. Check interrupted
-copy/restore, reboot holds, open-order preservation and absence of test-sale changes
-in live data. Update `deploy/README.md` and `bench/real-upgrade/README.md`; leave
-`index.json` unqualified. Normal hook and current-head scoped CI follow.
+   Seed before startup; use HTTP once running. Fixture: insert a new copy-only admin
+   operator into `@waitron/db:persons` using
+   `@waitron/identity:{hashPin,foldForUniqueness}`; `verifyPersonCredential` precedes
+   `startManagementSession`. Use `@waitron/layouts:createDeviceProfile`, identity
+   `setProfileAdmission`, catalogue
+   `createCatalogue/createProduct/addProductToMenu/previewMenu/publishMenu`.
+   Use venue-service `operations.ts:{createDepartment,createServiceZone}`,
+   `menu-timetable.ts:{saveMenuPeriod,replaceMenuWeek}` and
+   `business-day-schedule.ts:readBusinessDayScheduleRevision` for a copy-only counter
+   open throughout the week; `profile-access.ts:setProfileServiceScope` binds its profile.
+   Normal device/join HTTP routes preserve window/number/claim checks; `loginWithPin`
+   then `/api/sales` with `x-waitron-person`. No test-helper imports/existing-identity
+   edits. Require invoice/totals, configured-backend persistence and VeriFactu chain
+   continuation; every refusal fails.
+   H/`host.mjs` forwards only literal `clock.status\n` to the real host socket,
+   relaying one reply line through a socket accessible to uid10001; setting refused.
+   S/`box-host-client.ts:boxHostClient` interprets replies; missing/unsynchronised fails.
 
-**Limits:** Never change fiscal writers, hashes, chains, number allocation or identity;
-fake/confirm time, sell as a spare, bypass guards, or reach AEAT/providers/hardware/live
-mounts. Add no protocol, durable record, ledger, deadline, email/support surface or
-foundation cleanup. Online advisory trial follows this manual result; automation,
-windows, reporting, signing and pairs remain later.
+3. **Activation.** Before writing replacement services, run the Linux power-cut
+   case once with today's Docker restart rules (watcher 19:46). Retain the log:
+   if reboot leaves the box safely held, drop the systemd change; otherwise keep
+   it with that receipt. Reuse marker/lock/shutdown-completion refusal; interrupted
+   restore restarts from intact copy. Bootstrap/offline recovery remain Docker-independent.
+   Only if the experiment requires replacement owners, add B/`waitron-{app,upgrade-recovery}.service`; update
+   B/`{build.sh,start-dev.sh,waitron-dev.service}`, including marker holds/AppArmor,
+   and S/`run-server.ts` restart prose. Remove four `deploy/compose.yml` restart
+   policies only with replacement owners and Linux qualification.
 
-**Estimate:** Production +850/−150; tests +650/−80; support +400/−20; prose +110/−45
-lines. Allow 9–13 hours: runnable qualification PR 4–6, activation/qualification PR
-5–7. These are estimates, not measurements. No credible three-hour usable PR fits:
-the smallest independently usable split is the executable qualification followed by
-installed activation, not another dormant library. Watcher must settle this larger
-boundary; three-hour checkpoints are progress checks, not permission to omit work.
+**Verification:** TDD; S/`boot.upgrade.test.ts`/new `upgrade-sale.test.ts` own admission/sale;
+H sibling tests own sender/host/transaction failures once; shell tests wiring/answers,
+without repeated matrices. Run
+`pnpm --filter @waitron/server exec vitest run src/{boot.upgrade,upgrade-sale,run-server}.test.ts`;
+`pnpm exec vitest run scripts/box/upgrades/{host,transaction,copy,bootstrap,cli}.test.mjs scripts/waitron-sh.test.mjs scripts/box/{installed-start,recipe-setup,rig-contract}.test.mjs`.
+Extend `bench/box-installer/run.mjs` and `scripts/box/rig-contract{,.test}.mjs`:
+planned `upgrade-manual`/`upgrade-power-cut` cases use owned Linux QEMU resources,
+tar-loaded pinned images and installed CLI against `/opt/waitron`; qualify interrupted
+copy/restore, reboot holds, preserved orders and no live test-sale changes before
+activation. Docker power-cut behavior remains runtime unverified until that
+experiment. Normal hook/current-head CI follow.
+
+Update `deploy/README.md`, `bench/real-upgrade/README.md`; leave `index.json` unqualified.
+Online trial follows; automation/windows/reporting/signing/pairs remain later.
+Never change fiscal writers/hash/chain/numbers, fake/confirm time, sell as spare,
+bypass guards or reach AEAT/providers/hardware/live mounts. No new upgrade protocol/record/ledger/deadline/support surface/cleanup.
+
+**Estimate:** production +850/−150, tests +650/−80, support +400/−20, prose +110/−45:
+2,305 changed lines, approximately the ceiling; 9–13 hours, so ten-hour completion
+is uncertain. One PR; signed commit after each task; report production/tests/support
+at checkpoints. Past either ceiling, stop/report to watcher; no rig-only or sale-free split.
