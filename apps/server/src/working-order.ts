@@ -4448,8 +4448,7 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
  * the part split, and refused the same when an extra is not a whole count a dish. Returns each
- * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
- * by the row it came from, a dish before its extras.
+ * row a split made, keyed by the row it came from, a dish before its extras.
  */
 export async function carveOffLines(
   tx: Transaction,
@@ -4458,7 +4457,7 @@ export async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
   opts: { splitExtras?: boolean; actorId?: string },
-): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
+): Promise<{ splitLines: Map<string, SplitRow> }> {
   return carveLines(tx, cfg, fromTabId, toTabId, transfers, opts);
 }
 
@@ -4469,7 +4468,7 @@ async function carveLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
   opts: { splitExtras?: boolean; splitIntoUnits?: boolean; actorId?: string },
-): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
+): Promise<{ splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
@@ -4623,7 +4622,6 @@ async function carveLines(
       ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { actorId: opts.actorId })
       : [];
 
-  const splitFrom = new Map<string, string>();
   const splitLines = new Map<string, SplitRow>();
   const carried: { from: string; to: string }[] = [];
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
@@ -4715,10 +4713,7 @@ async function carveLines(
               splitChildId,
               child.moved,
             );
-            if (splitTicketId !== null) {
-              splitFrom.set(splitTicketId, child.row.ticketItemId);
-              await copyKitchenJobLines(tx, child.row.id, splitChildId);
-            }
+            if (splitTicketId !== null) await copyKitchenJobLines(tx, child.row.id, splitChildId);
           }
         }
         if (line.ticketItemId !== null) {
@@ -4730,10 +4725,7 @@ async function carveLines(
             splitLineId,
             quantity,
           );
-          if (splitTicketId !== null) {
-            splitFrom.set(splitTicketId, line.ticketItemId);
-            await copyKitchenJobLines(tx, line.id, splitLineId);
-          }
+          if (splitTicketId !== null) await copyKitchenJobLines(tx, line.id, splitLineId);
         }
 
         line = {
@@ -4747,7 +4739,7 @@ async function carveLines(
     await carryLineReductions(tx, carried);
   }
   if (fromTabId !== toTabId) await copyKitchenPrintLinks(tx, fromTabId, toTabId, movedLineIds);
-  return { splitFrom, splitLines };
+  return { splitLines };
 }
 
 /**

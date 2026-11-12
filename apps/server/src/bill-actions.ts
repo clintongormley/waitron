@@ -267,11 +267,11 @@ export async function moveDishes(
       );
   }
   const before = await readSentWork(tx, fromBillId);
-  const splitFrom = await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
+  await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     actorId: command.operatorId,
   });
   await assertBillInvariant(tx, [fromBillId]);
-  await enqueueMovedSlips(tx, cfg, before, destinationId, splitFrom);
+  await enqueueMovedSlips(tx, cfg, before, destinationId);
   return { billId: destinationId };
 }
 
@@ -287,8 +287,7 @@ export async function moveCheckedDishes(
   toBillId: string,
   transfers: Transfers,
   options: { actorId: string },
-): Promise<Map<string, string>> {
-  const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
+): Promise<void> {
+  await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
   await bumpRevision(tx, [fromBillId, toBillId]);
-  return splitFrom;
 }

@@ -244,7 +244,19 @@ describe("financial splits with charged service cancellations", () => {
         {},
       ),
     );
-    expect(moved.splitFrom.size).toBe(0);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ id: ticketItems.id })
+          .from(ticketItems)
+          .where(
+            inArray(
+              ticketItems.workingOrderLineId,
+              [...moved.splitLines.values()].map(({ id }) => id),
+            ),
+          ),
+      ),
+    ).toEqual([]);
     const source = await projection(order.billId);
     const target = await projection(billId);
     expect(
