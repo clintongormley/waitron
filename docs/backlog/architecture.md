@@ -859,6 +859,7 @@ the helper's constant status is not evidence of the write.
   local reprint and restore-archive staff samples use Anna.
   The shared clock venue uses Anna for its staff sample and matching attendance, approver and profile-export checks.
   The shared signed-in-till venue uses Anna and Administrator for its staff display samples.
+  The shared adjustment venue uses Anna and Martha for its staff and manager samples.
   Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot

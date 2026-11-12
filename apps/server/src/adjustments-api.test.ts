@@ -1413,7 +1413,7 @@ describe("what the till reads", () => {
     expect(comps.status).toBe(200);
     expect(comps.json).toEqual([
       { personId: expect.any(String), displayName: "Administrator" },
-      { personId: venue.managerId, displayName: "Marta" },
+      { personId: venue.managerId, displayName: "Martha" },
       { personId: venue.supervisorId, displayName: "Sara" },
     ]);
     expect((await approvers("?permission=sale.refund")).json).toEqual(comps.json);
