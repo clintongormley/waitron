@@ -20,7 +20,8 @@ export interface DeferredCloseBill {
 /**
  * Asks before a whole bill is closed as a deferred payment. It only asks: `deferred-close-confirm`
  * and `deferred-close-cancel` go to the app, which answers with {@link busy} and {@link refusal}.
- * The app cancels a `deferred-close-confirm` it refused without sending, so the next one goes.
+ * The app cancels a `deferred-close-confirm` only when it refuses at once for unsent dishes, before
+ * going busy, so the next one goes; any later answer re-arms Confirm through `busy` or `refusal`.
  */
 @customElement("till-deferred-close-dialog")
 export class TillDeferredCloseDialog extends LitElement {

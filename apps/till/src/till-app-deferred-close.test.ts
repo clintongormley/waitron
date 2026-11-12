@@ -490,7 +490,7 @@ it("a lost answer on a bill with a dish now unserved keeps the window open sayin
   expect(documents(el)).not.toBeNull();
 });
 
-it("a refusal on a bill with a dish now unserved keeps the window open on the refusal; the next confirm reads the bill again", async () => {
+it("a refusal on a bill with a dish now unserved keeps the window open saying why it is blocked, not what the server said; the next confirm reads the bill again", async () => {
   const api = deferredApi({
     closeDeferred: vi.fn().mockRejectedValue({ code: "deferred_close.conflict", status: 409 }),
   });
@@ -502,7 +502,7 @@ it("a refusal on a bill with a dish now unserved keeps the window open on the re
   const window = closing(el)!;
   expect(window.open).toBe(true);
   expect(window.busy).toBe(false);
-  expect(window.refusal).toBe(codeMessage("deferred_close.conflict"));
+  expect(window.refusal).toBe(t("deferred_close.unserved"));
   await confirm(el);
   expect(api.closeDeferred).toHaveBeenCalledOnce();
   expect(closing(el)!.refusal).toBe(t("deferred_close.unserved"));

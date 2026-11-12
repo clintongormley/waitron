@@ -6552,9 +6552,9 @@ On an open table bill, Whole bill also offers Close as deferred payment as a sec
 hidden when the device profile lacks the action, the bill has payments or owes nothing, and
 disabled with its reason shown until it can be used. It opens a confirmation window
 (`till-deferred-close-dialog`) listing the bill, the invoice and the total above the final-close
-sentence, with Cancel, which returns to Pay (after a send that got no answer, it reads the bill again
-instead), and a primary Issue invoice and close (Close bill
-when the invoice is already issued).
+sentence, with Cancel, which returns to Pay (after a send that got no answer, or while the bill is
+blocked or could not be read again, it reads the bill again instead), and a primary Issue invoice
+and close (Close bill when the invoice is already issued).
 
 ### Final payment documents
 

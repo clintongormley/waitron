@@ -42,6 +42,13 @@ CLEARED with three changes"), and the owner's two answers. These win over the te
   lost-reply recovery: after a send that got no answer, the till reads `getDeferredClosure` and
   matches this window's submission ids, so it never resends a close the server already made. This
   replaces decision 5's "the till never calls `getDeferredClosure`" and the two-PR order below.
+- **Finish-branch review 2026-11-12 (not an owner decision):** after a refusal or a lost reply, a
+  bill that can no longer be closed this way closes the window and the screen says why; a bill only
+  blocked for now (a dish unserved, a payment unconfirmed, Current orders unread) keeps the window
+  open with that reason, and the next Confirm reads the bill again first. Decided in the
+  finish-branch review wave after a Codex reviewer found the window closing with no message. This
+  replaces decision 3's "If it can't, the window closes and the screen shows the refusal" for the
+  blocked-for-now case.
 - **#2907 (A275-declined, waiting for the owner):** a declined card no longer refuses the close on
   the server; whether `hasPayments` counts a declined card decides whether PR B hides the button for
   such a bill. Check it when building B1.

@@ -11220,8 +11220,8 @@ export class TillApp extends LitElement {
     ></till-deferred-close-dialog>`;
   }
 
-  /** Cancel goes back to Pay on the bill; after a send that got no answer, it reads the bills
-   * instead, as the bill may be closed. */
+  /** Cancel goes back to Pay on the bill. After a send that got no answer, or while the bill is
+   * blocked or could not be read again, it reads the bills again instead. */
   #onDeferredCancel(): void {
     const open = this.deferredClosing;
     if (open === null || open.busy) return;
@@ -11277,8 +11277,9 @@ export class TillApp extends LitElement {
    * payment, it is not sent again ({@link #onDeferredFound}). Once a request is sent, its answer
    * settles the window even when the till has since left the bill; a refusal is then shown without
    * reading the bill again. A confirm from a window whose bill the till has left sends nothing and
-   * closes it. A confirm refused before anything is sent cancels `event`, so the window takes the
-   * next one.
+   * closes it. Only a confirm refused at once for unsent dishes, before the window goes busy, cancels
+   * `event`, so the window takes the next one; any later answer re-arms it through `busy` or
+   * `refusal`.
    */
   async #onDeferredConfirm(event: Event): Promise<void> {
     const asked = this.deferredClosing;
@@ -11418,8 +11419,9 @@ export class TillApp extends LitElement {
     return said?.text ?? codeMessage("draft.out_of_date");
   }
 
-  /** A coded refusal: the bill is read again and the window stays open on it if it can still be
-   * closed this way, showing why; otherwise the window closes and the screen says why. */
+  /** A coded refusal: the bill is read again. The window stays open, showing why, while the bill
+   * can still be closed this way, is blocked only for now, or could not be read; closed as a
+   * deferred payment, the closure is read; otherwise the window closes and the screen says why. */
   async #onDeferredRefused(id: number, error: unknown, send: DeferredSend): Promise<void> {
     const { code, reason, said } = deferredRefusal(error);
     const shown = await this.#rereadDeferred(id, said);
@@ -11429,12 +11431,13 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Reads the party's bills again for window `id`. Returns the window on the re-read bill while it
-   * can still be closed this way, showing `said` (or, when `said` is null, a conflict if what the
-   * request carries changed); `"deferred"`, with the window untouched, when the bill is closed as
-   * a deferred payment; null when the window stays open showing why (the read failed, the bill
-   * changed, or something on the till blocks the close for now, after which the next confirm reads
-   * the bill again); undefined when the window closed, the screen saying why when `said` is null.
+   * Reads the party's bills again for window `id`. Returns the window on the re-read bill when it
+   * can still be closed this way, `said` is null and nothing the request carries changed;
+   * `"deferred"`, with the window untouched, when the bill is closed as a deferred payment; null
+   * when window `id` had closed or been replaced, or when the window stays open showing why: `said`
+   * or a conflict on the re-read bill, the read failing, or something on the till blocking the
+   * close for now (its reason, on the bill last shown); after the last two the next confirm reads
+   * the bill again. Undefined when the window closed, the screen saying why when `said` is null.
    */
   async #rereadDeferred(
     id: number,
@@ -11464,7 +11467,7 @@ export class TillApp extends LitElement {
         this.deferredClosing = {
           ...now,
           busy: false,
-          refusal: said ?? t(offer.reason),
+          refusal: t(offer.reason),
           reread: true,
         };
         return null;
