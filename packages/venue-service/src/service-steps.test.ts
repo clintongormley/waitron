@@ -63,12 +63,7 @@ async function seedVenueCfg(
   return { locationId: await venueLocationId(db) };
 }
 
-async function seedCourse(
-  cfg: { locationId: string },
-  name: string,
-  displayOrder: number,
-  active = true,
-): Promise<string> {
+async function seedCourse(name: string, displayOrder: number, active = true): Promise<string> {
   const [row] = await db
     .insert(kitchenCourses)
     .values({ name, displayOrder, active })
@@ -194,10 +189,10 @@ describe("service steps", () => {
   });
 
   it("lists the venue's live courses in firing order", async () => {
-    const cfg = await seedVenueCfg("Listing courses");
-    const mains = await seedCourse(cfg, "Mains", 2);
-    const starters = await seedCourse(cfg, "Starters", 1);
-    await seedCourse(cfg, "Retired", 0, false);
+    await seedVenueCfg("Listing courses");
+    const mains = await seedCourse("Mains", 2);
+    const starters = await seedCourse("Starters", 1);
+    await seedCourse("Retired", 0, false);
     expect(await scoped((tx) => listStepCourses(tx))).toEqual([
       { id: starters, name: "Starters" },
       { id: mains, name: "Mains" },
@@ -205,8 +200,8 @@ describe("service steps", () => {
   });
 
   it("keeps a renamed or moved step's id, deletes one not sent, and gives a new one an id", async () => {
-    const cfg = await seedVenueCfg("Change set");
-    const mains = await seedCourse(cfg, "Mains", 1);
+    await seedVenueCfg("Change set");
+    const mains = await seedCourse("Mains", 1);
     const department = await scoped((tx) =>
       createDepartment(tx, { name: "Dining", orderStart: "table" }),
     );
@@ -275,9 +270,8 @@ describe("service steps", () => {
   it.each(["inactive", "of no venue"] as const)(
     "refuses a course that is %s, naming it, and writes nothing",
     async (kind) => {
-      const cfg = await seedVenueCfg(`Bad course ${kind}`);
-      const courseId =
-        kind === "inactive" ? await seedCourse(cfg, "Retired", 0, false) : randomUUID();
+      await seedVenueCfg(`Bad course ${kind}`);
+      const courseId = kind === "inactive" ? await seedCourse("Retired", 0, false) : randomUUID();
       const department = await scoped((tx) =>
         createDepartment(tx, { name: "Dining", orderStart: "table" }),
       );

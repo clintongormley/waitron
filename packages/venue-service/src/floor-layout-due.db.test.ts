@@ -40,12 +40,7 @@ async function newZone(tx: Transaction, cfg: { locationId: string }, name: strin
   return zone!.id;
 }
 
-async function newSet(
-  tx: Transaction,
-  cfg: { locationId: string },
-  departmentId: string,
-  name: string,
-) {
+async function newSet(tx: Transaction, departmentId: string, name: string) {
   const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
   await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
   return row!.id;
@@ -93,8 +88,8 @@ async function fixture() {
       at("10:00"),
       1,
     );
-    const standard = await newSet(tx, cfg, restaurant, "Standard");
-    const dinnerSet = await newSet(tx, cfg, restaurant, "Dinner");
+    const standard = await newSet(tx, restaurant, "Standard");
+    const dinnerSet = await newSet(tx, restaurant, "Dinner");
     await tx
       .update(menuPeriods)
       .set({ floorPlanSetId: dinnerSet })
@@ -184,8 +179,8 @@ describe("which floor layout is due", () => {
         at("08:00"),
         1,
       );
-      const standard = await newSet(tx, f.cfg, f.bar, "Standard");
-      const late = await newSet(tx, f.cfg, f.bar, "Late");
+      const standard = await newSet(tx, f.bar, "Standard");
+      const late = await newSet(tx, f.bar, "Late");
       await tx.update(menuPeriods).set({ floorPlanSetId: late }).where(eq(menuPeriods.id, evening));
       return { standard, late, evening };
     });
@@ -279,7 +274,7 @@ describe("which floor layout is due", () => {
   it("says whether each zone's department has a set and names the recorded set", async () => {
     const f = await fixture();
     const [barSet, gone] = await run(async (tx) => {
-      const barSet = await newSet(tx, f.cfg, f.bar, "Bar standard");
+      const barSet = await newSet(tx, f.bar, "Bar standard");
       const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       return [barSet, row!.id];
     });

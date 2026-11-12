@@ -13,9 +13,7 @@ import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines } from "./orders.js";
 import { ticketItemMoves } from "./ticket-item-moves.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION: string;
 const AT = "2026-10-01T10:00:00.000Z";
 
 describe("ticket_item_moves schema", () => {
@@ -31,7 +29,6 @@ describe("ticket_item_moves schema", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(db);
     const [station, other] = await db
       .insert(kitchenStations)
       .values([{ name: "Grill" }, { name: "Fryer" }])

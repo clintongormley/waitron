@@ -302,7 +302,7 @@ async function seedLocation(name: string): Promise<string> {
   return venueId;
 }
 
-async function seedStation(locationId: string, name: string): Promise<string> {
+async function seedStation(name: string): Promise<string> {
   const [row] = await db
     .insert(kitchenStations)
     .values({ name })
@@ -372,8 +372,8 @@ async function seedOrder(
 
 async function venue() {
   const locationId = await seedLocation("Venue");
-  const grill = await seedStation(locationId, "Grill");
-  const bar = await seedStation(locationId, "Bar");
+  const grill = await seedStation("Grill");
+  const bar = await seedStation("Bar");
   return { locationId, grill, bar };
 }
 
@@ -1315,7 +1315,7 @@ describe.each([
 
     it("reads three stations' notices in one statement, and sends no more statements than for one station", async () => {
       const v = await venue();
-      const third = await seedStation(v.locationId, "Dessert");
+      const third = await seedStation("Dessert");
       const one = await statementsOf((tx) => listStationsNotices(tx, [v.grill]));
       const three = await statementsOf((tx) => listStationsNotices(tx, [v.grill, v.bar, third]));
 

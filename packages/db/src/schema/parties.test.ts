@@ -12,9 +12,7 @@ import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { parties, partyTables, serviceCommands } from "./parties.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION: string;
 /** An order opened from the dashboard, needing no device. */
 const DASHBOARD = { source: "dashboard", deviceId: null } as const;
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000001";
@@ -34,7 +32,6 @@ describe("parties, party_tables and service_commands", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(db);
     nodeId = await seedNode(db);
   });
 

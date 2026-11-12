@@ -28,12 +28,10 @@ import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
-import { venueLocationId } from "./venue.js";
 import { orderAmendments } from "./schema/order-amendments.js";
 import { workingOrders } from "./schema/orders.js";
 import { locations } from "./schema/tenants.js";
 
-let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const OPERATOR_A = "aaaaaaaa-2222-4000-8000-000000000001";
 const OTHER_ACTOR = "cccccccc-2222-4000-8000-000000000001";
@@ -59,7 +57,6 @@ describe("order_amendments append helper", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(admin);
     nodeA = await seedNode(admin);
     ({ deviceId: deviceA1 } = await seedDevice(admin));
     ({ deviceId: deviceA2 } = await seedDevice(admin));

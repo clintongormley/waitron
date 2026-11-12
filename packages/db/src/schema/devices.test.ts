@@ -10,19 +10,15 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 import { locations } from "./tenants.js";
 
-// What this suite proves is the column mapping and the location foreign key.
-let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const KDS_PROFILE_A = "eeeeeeee-0000-4000-8000-000000000001";
 const KDS_PROFILE_B = "eeeeeeee-0000-4000-8000-000000000002";
-const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 const RECEIPT_PRINTER = "11111111-0000-4000-8000-0000000000a1";
 const PAGE_PRINTER = "11111111-0000-4000-8000-0000000000a2";
 const GHOST_PRINTER = "11111111-0000-4000-8000-0000000000ff";
@@ -63,7 +59,6 @@ describe("devices schema (columns, FKs, unique)", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(db);
     await db.insert(locations).values({
       id: LOCATION_B,
     });
@@ -83,11 +78,7 @@ describe("devices schema (columns, FKs, unique)", () => {
     return withTransaction(suite.db, fn);
   }
 
-  async function seedDevice(
-    label: string,
-    location: string = LOCATION_A,
-    profile: string = KDS_PROFILE_A,
-  ): Promise<string> {
+  async function seedDevice(label: string, profile: string = KDS_PROFILE_A): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(devices)

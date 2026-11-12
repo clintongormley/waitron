@@ -41,11 +41,7 @@ async function setupVenue(
 
 /** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in
  * apps/server, which a module cannot import). */
-async function seedTable(
-  db: Database,
-  cfg: { locationId: string },
-  label: string,
-): Promise<string> {
+async function seedTable(db: Database, label: string): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
     .values({ name: label })
@@ -62,8 +58,8 @@ describe("seatBooking compare-and-swap guard", () => {
   it("guard proof by deletion: the CAS's `status = 'booked'` predicate rejects a non-booked row (0 rows)", async () => {
     // This proves the WHERE clause's semantics, not the wiring inside `seatBooking`; the wiring is
     // the `bookings.test.ts` case that cancels the booking inside `seatTable`.
-    const { cfg, createdBy } = await setupVenue(suite.db);
-    const tableId = await seedTable(suite.db, cfg, "CAS-2");
+    const { createdBy } = await setupVenue(suite.db);
+    const tableId = await seedTable(suite.db, "CAS-2");
     const { id: bookingId } = await withTransaction(suite.db, (tx: Transaction) =>
       createBooking(tx, {
         bookingDate: "2026-08-20",

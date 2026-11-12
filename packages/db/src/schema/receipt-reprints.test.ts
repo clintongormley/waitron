@@ -10,9 +10,7 @@ import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION: string;
 let deviceA = "";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 
@@ -26,7 +24,6 @@ describe("receipt reprint record", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(db);
     const nodeId = await seedNode(db);
     ({ deviceId: deviceA } = await seedDevice(db));
     const [series] = await db

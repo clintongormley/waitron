@@ -11,10 +11,8 @@ import { withTransaction } from "../tenancy.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { printers } from "./printers.js";
 import { stationPrinters } from "./station-printers.js";
-import { venueLocationId } from "../venue.js";
 
 // What this suite proves is the column mapping and the composite primary key.
-let LOCATION_A: string;
 
 describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
@@ -25,7 +23,6 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(suite.db);
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

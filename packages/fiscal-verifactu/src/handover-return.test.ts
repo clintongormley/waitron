@@ -470,7 +470,6 @@ it("creates only a dead missing device and clears the order link on an imported 
       active: 0,
       deleted_at: now.toISOString(),
       device_profile_id: existing[0]!.device_profile_id,
-      location_id: existing[0]!.location_id,
     }),
   ]);
   expect(
@@ -1167,9 +1166,6 @@ it.each([60000, 60001])(
 it("selects a pending refund and preserves its completed outcome on return", async () => {
   const source = await original("Source", 1, copyBase);
   const device = await addDeviceToNode(suite.db, source);
-  const [location] = suite.db.all<{ location_id: string }>(
-    sql`select location_id from nodes where id = ${source.nodeId}`,
-  );
   await suite.db.insert(tenders).values({
     id: "refunded-tender",
     saleId: source.saleId,
@@ -1293,9 +1289,6 @@ it.each([
     await suite.db
       .insert(saleSettlements)
       .values({ saleId: source.saleId, settledAt: "2026-07-20T17:21:00.000Z" });
-    const [location] = suite.db.all<{ location_id: string }>(
-      sql`select location_id from nodes where id = ${source.nodeId}`,
-    );
     const refund = {
       id: "source-refund",
       saleId: source.saleId,
@@ -1310,7 +1303,6 @@ it.each([
       source: "device" as const,
       deviceId: source.deviceId,
       nodeId: source.nodeId,
-      locationId: location!.location_id,
       method: "cash" as const,
       state: "completed" as const,
       createdAt: "2026-07-20T17:21:01.000Z",
@@ -1323,9 +1315,6 @@ it.each([
     const now = new Date("2026-07-20T17:22:00.000Z");
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, { ...returned, refunds: [] }, now),
-    );
-    const [currentLocation] = receiver.db.all<{ location_id: string }>(
-      sql`select location_id from nodes where id = ${currentNode.nodeId}`,
     );
     await receiver.db.insert(tenderRefunds).values({
       ...refund,

@@ -7,7 +7,6 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { isRefusal } from "../unique-violation.js";
 import { NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
@@ -16,7 +15,6 @@ import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { locations } from "./tenants.js";
 
-let LOCATION_A: string;
 const LOCATION_B = "aaaaaaaa-0000-4000-8000-000000000002";
 
 describe("table labels without a location", () => {
@@ -50,7 +48,6 @@ describe("dining_tables columns", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(db);
     await db.insert(locations).values({
       id: LOCATION_B,
     });
@@ -69,7 +66,7 @@ describe("dining_tables columns", () => {
   // Through the Drizzle builder rather than raw SQL: `dining_tables.id` takes its value from a
   // `$defaultFn` that Drizzle applies CLIENT-side, so a raw `insert` never reaches it and the row
   // is refused `NOT NULL constraint failed: dining_tables.id`.
-  async function seedTable(location: string, label: string, shortName?: string): Promise<string> {
+  async function seedTable(label: string, shortName?: string): Promise<string> {
     return inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
@@ -88,7 +85,7 @@ describe("dining_tables columns", () => {
   }
 
   it("accepts a dining table in its zone", async () => {
-    const id = await seedTable(LOCATION_A, "T-zoned");
+    const id = await seedTable("T-zoned");
     const [row] = await inTx((tx) => tx.select().from(diningTables).where(eq(diningTables.id, id)));
     expect(row).toMatchObject({
       id,
@@ -128,8 +125,8 @@ describe("dining_tables columns", () => {
   });
 
   it("refuses two tables of one venue whose short names differ only in case", async () => {
-    await seedTable(LOCATION_A, "Terrace 1", "T1");
-    const error = await captureError(() => seedTable(LOCATION_A, "Tower 1", "t1"));
+    await seedTable("Terrace 1", "T1");
+    const error = await captureError(() => seedTable("Tower 1", "t1"));
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toBe(
       "UNIQUE constraint failed: dining_tables.short_name_key",
@@ -137,7 +134,7 @@ describe("dining_tables columns", () => {
   });
 
   it("a key a writer did not fold is not refused", async () => {
-    await seedTable(LOCATION_A, "Terrace 1", "t1");
+    await seedTable("Terrace 1", "t1");
     const id = await inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
@@ -164,9 +161,9 @@ describe("dining_tables columns", () => {
   });
 
   it("allows any number of tables without a short name", async () => {
-    const other = await seedTable(LOCATION_A, "Garden 1", "G1");
-    const first = await seedTable(LOCATION_A, "Unnamed 1");
-    const second = await seedTable(LOCATION_A, "Unnamed 2");
+    const other = await seedTable("Garden 1", "G1");
+    const first = await seedTable("Unnamed 1");
+    const second = await seedTable("Unnamed 2");
     const rows = await inTx((tx) =>
       tx
         .select({ id: diningTables.id, shortName: diningTables.shortName })

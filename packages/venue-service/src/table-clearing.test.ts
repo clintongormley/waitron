@@ -42,7 +42,7 @@ async function switchOn(departmentId: string): Promise<void> {
   await db.execute(sql`update departments set needs_clearing = 1 where id = ${departmentId}`);
 }
 
-async function departmentWithTable(cfg: { locationId: string }, name: string) {
+async function departmentWithTable(name: string) {
   return scoped(async (tx) => {
     const department = await createDepartment(tx, { name, orderStart: "table" });
     const zone = await createServiceZone(tx, { name, departmentId: department.id });
@@ -56,9 +56,9 @@ async function departmentWithTable(cfg: { locationId: string }, name: string) {
 
 describe("readTablesNeedingClearing", () => {
   it("reads a table in a department with Needs clearing on, and not one in a department with it off", async () => {
-    const cfg = { locationId: await seedLocation("Clearing on and off") };
-    const a = await departmentWithTable(cfg, "A");
-    const b = await departmentWithTable(cfg, "B");
+    await seedLocation("Clearing on and off");
+    const a = await departmentWithTable("A");
+    const b = await departmentWithTable("B");
     await switchOn(a.departmentId);
     expect(await scoped((tx) => readTablesNeedingClearing(tx, [a.tableId, b.tableId]))).toEqual(
       new Set([a.tableId]),
@@ -66,8 +66,8 @@ describe("readTablesNeedingClearing", () => {
   });
 
   it("leaves out a table whose zone has no department", async () => {
-    const cfg = { locationId: await seedLocation("Clearing without department") };
-    const a = await departmentWithTable(cfg, "A");
+    await seedLocation("Clearing without department");
+    const a = await departmentWithTable("A");
     const [zone] = await db
       .insert(floorZones)
       .values({ name: "No department" })
@@ -92,8 +92,8 @@ describe("readTablesNeedingClearing", () => {
   });
 
   it("leaves out an id that is no table", async () => {
-    const cfg = { locationId: await seedLocation("Clearing unknown id") };
-    const a = await departmentWithTable(cfg, "A");
+    await seedLocation("Clearing unknown id");
+    const a = await departmentWithTable("A");
     await switchOn(a.departmentId);
     const unknown = randomUUID();
     const found = await scoped((tx) => readTablesNeedingClearing(tx, [a.tableId, unknown]));
@@ -104,10 +104,10 @@ describe("readTablesNeedingClearing", () => {
 
 describe("listNeedsClearingDepartmentIds", () => {
   it("lists the active departments with Needs clearing on", async () => {
-    const cfg = { locationId: await seedLocation("Clearing list") };
-    const a = await departmentWithTable(cfg, "A");
-    await departmentWithTable(cfg, "B");
-    const c = await departmentWithTable(cfg, "C");
+    await seedLocation("Clearing list");
+    const a = await departmentWithTable("A");
+    await departmentWithTable("B");
+    const c = await departmentWithTable("C");
     await switchOn(a.departmentId);
     await switchOn(c.departmentId);
     await db.execute(sql`update departments set active = 0 where id = ${c.departmentId}`);

@@ -767,7 +767,7 @@ describe("whole service settings saves", () => {
     expect(minutes[other.id]).toBe(10);
   });
 
-  async function seedCourse(fx: { locationId: string }, name: string, active = true) {
+  async function seedCourse(name: string, active = true) {
     const [row] = await db
       .insert(kitchenCourses)
       .values({ name, displayOrder: 1, active })
@@ -783,7 +783,7 @@ describe("whole service settings saves", () => {
 
   it("saves a department's service steps and lists them in the model", async () => {
     const fx = await settingsFixture();
-    const mains = await seedCourse(fx, "Mains");
+    const mains = await seedCourse("Mains");
     const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
       serviceSteps: [
@@ -927,7 +927,7 @@ describe("whole service settings saves", () => {
       .from(serviceSteps)
       .where(eq(serviceSteps.departmentId, fx.departmentId));
     expect(stepsBefore).toHaveLength(1);
-    const retired = await seedCourse(fx, "Retired", false);
+    const retired = await seedCourse("Retired", false);
     const before = await rawSettingsSnapshot();
     const unchanged = async () => {
       expect(await rawSettingsSnapshot()).toEqual(before);
@@ -1272,7 +1272,6 @@ describe("venue service management routes", () => {
       const { id } = (await response.json()) as { id: string };
       expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toMatchObject([
         {
-          locationId: fx.locationId,
           name: "Garden",
           active: true,
           displayOrder: displayOrder ?? 0,
@@ -1556,13 +1555,16 @@ describe("venue service management routes", () => {
     );
     expect(response.status).toBe(404);
     expect(await db.select().from(diningTables)).toEqual(tables);
-    const otherVenue = await fixture();
+    const [otherVenue] = await db
+      .insert(floorZones)
+      .values({ name: "Other terrace" })
+      .returning({ zoneId: floorZones.id });
     expect(
       (
         await send(
           fx.app,
           "GET",
-          `/management-api/venue-service/zones/${otherVenue.zoneId}/removal-impact`,
+          `/management-api/venue-service/zones/${otherVenue!.zoneId}/removal-impact`,
           fx.managerCookie,
         )
       ).status,

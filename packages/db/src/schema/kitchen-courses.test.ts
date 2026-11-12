@@ -41,7 +41,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       operationDescription: "Hostelería",
     });
     await seedBusinessDay(db, {});
-    courseA = await seedCourse(LOCATION_A, "Starters");
+    courseA = await seedCourse("Starters");
     const [cat] = await db
       .insert(catalogues)
       .values({ name: "Deli A" })
@@ -65,7 +65,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
 
   // Drizzle rather than raw SQL: `id` and `created_at` are `$defaultFn` columns a raw insert does
   // not fill.
-  async function seedCourse(location: string, name: string, displayOrder = 0): Promise<string> {
+  async function seedCourse(name: string, displayOrder = 0): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(kitchenCourses)
@@ -77,11 +77,11 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
 
   it("deleted course names are reusable under new ids", async () => {
     const name = "Reusable course";
-    const oldId = await seedCourse(LOCATION_A, name);
+    const oldId = await seedCourse(name);
     await inTx((tx) =>
       tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, oldId)),
     );
-    const replacementId = await seedCourse(LOCATION_A, name);
+    const replacementId = await seedCourse(name);
     expect(replacementId).not.toBe(oldId);
     const rows = await inTx((tx) =>
       tx
@@ -97,13 +97,13 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     );
     expect(rows).toHaveLength(2);
 
-    const collision = await captureError(() => seedCourse(LOCATION_A, name));
+    const collision = await captureError(() => seedCourse(name));
     expect(isRefusal(collision, UNIQUE_VIOLATION)).toBe(true);
     expect(engineErrorMessage(collision)).toBe("UNIQUE constraint failed: kitchen_courses.name");
     await inTx((tx) =>
       tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, replacementId)),
     );
-    const thirdId = await seedCourse(LOCATION_A, name);
+    const thirdId = await seedCourse(name);
     expect([oldId, replacementId]).not.toContain(thirdId);
 
     const [index] = suite.db.all<{ sql: string }>(
@@ -113,7 +113,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   });
 
   it("maps display_order and name through the Drizzle export, with the active default", async () => {
-    const id = await seedCourse(LOCATION_A, "Mains", 1);
+    const id = await seedCourse("Mains", 1);
     await inTx((tx) =>
       tx.update(kitchenCourses).set({ displayOrder: 5 }).where(eq(kitchenCourses.id, id)),
     );

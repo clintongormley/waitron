@@ -186,7 +186,7 @@ const setDepartmentActive = (department: { id: string }, active: boolean) =>
     tx.update(departments).set({ active }).where(eq(departments.id, department.id)),
   );
 
-async function addSubjects(f: Fixture) {
+async function addSubjects() {
   return withTransaction(db, async (tx) => {
     const [terrace] = await tx
       .insert(departments)
@@ -272,7 +272,7 @@ describe("the calendar's Closed colour", () => {
       });
       expect(await toneAndClosed(date)).toEqual(["special_day", !open]);
     }
-    const { terraceDepartment: terrace } = await addSubjects(f);
+    const { terraceDepartment: terrace } = await addSubjects();
     expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", true]);
     await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();

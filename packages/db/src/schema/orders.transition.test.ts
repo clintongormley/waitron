@@ -14,13 +14,11 @@ import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
 import { sales } from "./sales.js";
 import { locations } from "./tenants.js";
-import { venueLocationId } from "../venue.js";
 
 // A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
 // no constraint name — so it is compared by EQUALITY against the literal the migration owns
 // (`packages/db/src/trigger-refusals.ts`).
 
-let LOCATION_A: string;
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // Matches LOCATION_A's invoice_locales (es, ca), so check_locales lets the draft line reach
@@ -123,7 +121,6 @@ describe("working_orders state machine (enforce_transition)", () => {
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(db);
     nodeA = await seedNode(db);
     ({ deviceId: deviceA } = await seedDevice(db));
     ({ deviceId: deviceB } = await seedDevice(db));

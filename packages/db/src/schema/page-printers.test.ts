@@ -8,7 +8,6 @@ import { pagePrinters } from "./page-printers.js";
 import { printAgents } from "./print-agents.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { seedVenue } from "../testing/seed.js";
-import { venueLocationId } from "../venue.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -24,10 +23,9 @@ it("stores a page destination and its advertised formats outside the receipt-pri
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale",
   });
-  const locationId = await venueLocationId(suite.db);
   await suite.db.execute(sql`insert into page_printers
-    (id, location_id, name, host, port, resource_path, document_format, supported_formats, media, resolution_dpi, active)
-    values ('office', ${locationId}, 'Invoice office', '192.0.2.10', 8631, '/ipp/printer',
+    (id, name, host, port, resource_path, document_format, supported_formats, media, resolution_dpi, active)
+    values ('office', 'Invoice office', '192.0.2.10', 8631, '/ipp/printer',
       'application/pdf', '["application/pdf","image/urf"]', 'iso_a4_210x297mm', 600, 1)`);
   expect(
     (
@@ -50,16 +48,11 @@ it("stores a page destination and its advertised formats outside the receipt-pri
 });
 
 describe("the agent that reaches a page printer", () => {
-  async function seedLocation(name: string): Promise<string> {
+  async function seedLocation(name: string): Promise<void> {
     await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"], operationDescription: "Sale" });
-    return venueLocationId(suite.db);
   }
 
-  async function insertPrinter(
-    locationId: string,
-    host: string,
-    extra: { agentId?: string | null } = {},
-  ) {
+  async function insertPrinter(host: string, extra: { agentId?: string | null } = {}) {
     const [row] = await suite.db
       .insert(pagePrinters)
       .values({
@@ -78,22 +71,22 @@ describe("the agent that reaches a page printer", () => {
   }
 
   it("starts a page printer reached by no recorded agent", async () => {
-    const location = await seedLocation("Bar");
-    const row = await insertPrinter(location, "192.0.2.30");
+    await seedLocation("Bar");
+    const row = await insertPrinter("192.0.2.30");
     expect(row).toMatchObject({ agentId: null });
   });
 
   it("records an existing agent, and refuses an agent id that names no agent", async () => {
-    const location = await seedLocation("Bar");
+    await seedLocation("Bar");
     const [agent] = await suite.db
       .insert(printAgents)
       .values({ name: "Back office", tokenHash: "hash" })
       .returning({ id: printAgents.id });
-    const reached = await insertPrinter(location, "192.0.2.35", { agentId: agent!.id });
+    const reached = await insertPrinter("192.0.2.35", { agentId: agent!.id });
     expect(reached.agentId).toBe(agent!.id);
 
     const error = await captureError(() =>
-      insertPrinter(location, "192.0.2.36", { agentId: "99999999-9999-4999-8999-999999999999" }),
+      insertPrinter("192.0.2.36", { agentId: "99999999-9999-4999-8999-999999999999" }),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
     expect(

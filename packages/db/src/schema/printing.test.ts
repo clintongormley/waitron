@@ -11,11 +11,8 @@ import { withTransaction } from "../tenancy.js";
 import { printAgents } from "./print-agents.js";
 import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
-import { venueLocationId } from "../venue.js";
 
 // What this suite proves is the column mapping, the defaults, the CHECKs and the foreign keys.
-let LOCATION_A: string;
-const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 const TOKEN_HASH = "scrypt$00$00";
 const HELLO = new TextEncoder().encode("Hello");
 
@@ -28,7 +25,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(suite.db);
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

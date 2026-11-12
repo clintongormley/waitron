@@ -92,8 +92,8 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     values (${randomUUID()}, ${locationId}, 'Node 2', ${stamp}) returning id`);
   const { deviceId } = await seedDevice(suite.db, {});
   const wo2 = await suite.db.execute<{ id: string }>(sql`
-    insert into working_orders (id, source, device_id, location_id, order_number, opened_at)
-    values (${randomUUID()}, 'device', ${deviceId}, ${locationId}, 1, ${stamp}) returning id`);
+    insert into working_orders (id, source, device_id, order_number, opened_at)
+    values (${randomUUID()}, 'device', ${deviceId}, 1, ${stamp}) returning id`);
   return {
     locationId,
     deviceId,

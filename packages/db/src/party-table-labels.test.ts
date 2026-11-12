@@ -20,9 +20,7 @@ import { parties, partyTables } from "./schema/parties.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
-import { venueLocationId } from "./venue.js";
 
-let LOCATION: string;
 const OPERATOR = "cccccccc-2222-4000-8000-000000000001";
 
 describe("party table labels", () => {
@@ -39,7 +37,6 @@ describe("party table labels", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(suite.db);
   });
 
   /**

@@ -8,9 +8,7 @@ import { locations } from "./schema/tenants.js";
 import { tableInService } from "./table-in-service.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { venueLocationId } from "./venue.js";
 
-let LOCATION: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
 const PRESENT = "cccccccc-0000-4000-8000-000000000001";
@@ -27,7 +25,6 @@ describe("table in service", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(suite.db);
     await suite.db.insert(floorZones).values([
       { id: ZONE, name: "On" },
       { id: OTHER_ZONE, name: "Off", active: false },

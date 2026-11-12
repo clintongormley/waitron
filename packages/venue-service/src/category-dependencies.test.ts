@@ -37,7 +37,7 @@ async function venue() {
 }
 
 it("deleting a category removes its own and its subtree's category cells and keeps product cells", async () => {
-  const { locationId } = await venue();
+  await venue();
   const { negroniId, barId, foodId } = await withTransaction(suite.db, async (tx) => {
     const [kitchen, bar] = (
       await tx

@@ -1470,8 +1470,8 @@ async function recordedLine(v: Timed) {
     await publish(tx, v.menus.Desayunos);
     const orderId = randomUUID();
     await tx.execute(sql`
-      insert into working_orders (id, source, location_id, node_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${v.locationId}, ${nodeId}, 1, ${AT.toISOString()})`);
+      insert into working_orders (id, source, node_id, order_number, opened_at)
+      values (${orderId}, 'dashboard', ${nodeId}, 1, ${AT.toISOString()})`);
     await recordOrderServiceContext(tx, orderId, v.sala);
     const lineId = randomUUID();
     await tx.insert(workingOrderLines).values({

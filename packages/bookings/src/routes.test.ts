@@ -89,7 +89,6 @@ function mountApp(ctx: ModuleRouteContext): Hono {
 }
 
 async function seedTable(label = "12"): Promise<string> {
-  const locationId = await venueLocationId(suite.db);
   const [zone] = await suite.db
     .insert(floorZones)
     .values({ name: label })

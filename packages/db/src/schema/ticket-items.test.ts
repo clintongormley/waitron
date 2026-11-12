@@ -12,9 +12,7 @@ import { catalogues, products } from "./catalogue.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines } from "./orders.js";
 import { ticketItems } from "./ticket-items.js";
-import { venueLocationId } from "../venue.js";
 
-let LOCATION_A: string;
 const AT = "2026-07-20T19:20:30+00:00";
 // The locale trigger checks description KEYS against the venue's invoice_locales (['es'] here).
 const DESCRIPTIONS_A = { es: "Café solo" };
@@ -34,7 +32,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(db);
     nodeA = await seedNode(db);
     const [catA] = await db
       .insert(catalogues)

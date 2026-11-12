@@ -201,8 +201,6 @@ it("daily station status refreshes routing and special days refresh Opening hour
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: venueId };
     const [bar] = await tx
       .insert(kitchenStations)
       .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }])

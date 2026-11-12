@@ -361,8 +361,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
-    const locationId = venueId;
     const nodeId = await seedNode(db);
     const node = { nodeId };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -373,7 +371,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       .values([{ name: "Provisioned" }, { name: "Authored" }])
       .returning({ id: catalogues.id });
     await db.execute(sql`
-      update locations set catalogue_id = ${menus[0]!.id} where id = ${locationId}`);
+      update catalogues set is_default = (id = ${menus[0]!.id})`);
     await db.execute(sql`
       insert into menu_periods (id, department_id, name, menu_id)
       select ${randomUUID()}, department_id, 'Authored', ${menus[1]!.id}
@@ -580,7 +578,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
 
     it("keeps stored kitchen screen bindings while hiding deleted stations from scoped profile choices", async () => {
-      const { locationId, profiles, runSeed } = await venue();
+      const { profiles, runSeed } = await venue();
       const [grill] = await db
         .insert(kitchenStations)
         .values({ name: `Grill ${randomUUID()}`, active: false })
@@ -648,8 +646,6 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
   const node = { nodeId: await seedNode(db) };
   const [old] = await db.insert(floorZones).values({ name: "Counter", active: false }).returning();
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));

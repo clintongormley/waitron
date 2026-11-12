@@ -20,7 +20,6 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { venueLocationId } from "../venue.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -58,13 +57,11 @@ afterEach(async () => {
   });
 });
 
-let LOCATION_A: string;
 const AT = "2026-07-20T19:20:30+00:00";
 /** An order opened from the dashboard at location A: no device to seed. */
 let DASHBOARD_ORDER: {
   readonly source: "dashboard";
   readonly deviceId: null;
-  readonly locationId: string;
 };
 
 let productA = "";
@@ -83,7 +80,6 @@ async function seed(db: Database): Promise<void> {
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });
-  LOCATION_A = await venueLocationId(db);
   DASHBOARD_ORDER = { source: "dashboard", deviceId: null };
   const [catA] = await db
     .insert(catalogues)

@@ -16,7 +16,6 @@ import {
   serviceSteps,
   withTransaction,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -37,8 +36,6 @@ beforeAll(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Hospitality",
   });
-  const venueId = await venueLocationId(db);
-  const cfg = { locationId: venueId };
   const [department] = await db
     .insert(departments)
     .values({ name: "Restaurant", tradingName: "Restaurant" })

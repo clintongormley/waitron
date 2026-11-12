@@ -86,7 +86,7 @@ async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promi
   return row!.id;
 }
 
-async function seedStation(locationId: string, name: string) {
+async function seedStation(name: string) {
   const [row] = await db
     .insert(kitchenStations)
     .values({ name })
@@ -101,9 +101,9 @@ async function seedStation(locationId: string, name: string) {
 async function seedVenueWithStations() {
   const locationId = await seedLocation();
   const cfg = { locationId };
-  const grill = await seedStation(locationId, "Grill");
-  const cold = await seedStation(locationId, "Cold");
-  const pastry = await seedStation(locationId, "Pastry");
+  const grill = await seedStation("Grill");
+  const cold = await seedStation("Cold");
+  const pastry = await seedStation("Pastry");
   const zones = await scoped(async (tx) => {
     const restaurant = await createDepartment(tx, {
       name: "Restaurant",
@@ -277,7 +277,7 @@ describe("a profile's kitchen screens", () => {
 
   it("refuses an unknown station or zone, or one switched off", async () => {
     const venue = await seedVenueWithStations();
-    const offStation = await seedStation(venue.cfg.locationId, "Old grill");
+    const offStation = await seedStation("Old grill");
     await db
       .update(kitchenStations)
       .set({ active: false })
@@ -1556,7 +1556,7 @@ describe("a profile save narrowing its devices", () => {
     const all = await seedDevice(venue.kds, "All");
     await choose(all, venue.kds, [station(null)]);
     await recordRemoval(all, "station", { stationId: venue.cold });
-    const off = await seedStation(venue.cfg.locationId, "Bar");
+    const off = await seedStation("Bar");
     await db.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, off));
     await expect(
       set(venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } }),
