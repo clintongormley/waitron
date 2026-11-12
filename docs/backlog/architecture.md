@@ -839,6 +839,7 @@ the helper's constant status is not evidence of the write.
   The cancel-invoiced-order and unpaid-departure suites use Sophia for their local supervisor samples.
   The device-equipment and device-levers suites use English staff display-name samples.
   Local floor-signal, pairing and till clock-state staff samples use Lucy, Anna and Lewis.
+  The attendance-discovery, attendance-obligations, boot.mirror, boot.clock-watch and standalone tab-person suites use Anna and Martha for their main staff sample.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot

@@ -198,7 +198,7 @@ describe("boot's clock watch", () => {
       });
       const [person] = await suite.db
         .insert(persons)
-        .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+        .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
         .returning();
       const device = await seedDevice(suite.db, {
         locationId: venue.cfg.locationId,

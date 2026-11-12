@@ -52,7 +52,7 @@ async function signIn(): Promise<{ token: string; personId: string }> {
   const v = await setupPartyVenue(suite.db);
   const [row] = await suite.db
     .insert(persons)
-    .values({ displayName: "Ana", pinHash: fixturePinHash("4411"), role: "staff" })
+    .values({ displayName: "Anna", pinHash: fixturePinHash("4411"), role: "staff" })
     .returning({ id: persons.id });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId: v.cfg.origin.deviceId, personId: row!.id, pin: "4411" }),
