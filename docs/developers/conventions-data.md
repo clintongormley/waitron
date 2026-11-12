@@ -5432,9 +5432,10 @@ floor) and `availableBytes`. If not, it deletes toward the aim when the sum reac
 the floor.
 
 **What may be deleted** (A1127 §4's set, `listDeletableArchives`). In each listed folder: plain
-files (`lstat`, so a link is never followed or counted) named as archives (`parseBackupArchiveKey`),
-never the newest in that folder, and only those taken strictly after the current installation
-began. The installation start comes from the fiscal seat's optional `installationStartedAt`
+files (`lstat`, so a link is never followed or counted) whose archive names carry this node's ID
+(`ownArchiveStamp`), never the newest of those in that folder, and only those taken strictly after
+the current installation began. The installation start comes from the fiscal seat's optional
+`installationStartedAt`
 (`packages/fiscal/src/contribution.ts`); the Veri\*Factu module answers the live `registro_sif`
 row's `registrado_en` (`packages/fiscal-verifactu/src/slot.ts`), or null when the node has none.
 `createBackupRoomHooks` (`apps/server/src/backup-deletion-alert.ts`) reads it inside

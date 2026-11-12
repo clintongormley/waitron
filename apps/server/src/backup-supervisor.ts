@@ -361,7 +361,7 @@ export class BackupSupervisor {
   /** Leaves no note when the installation start is unknown or a `stop()` lands meanwhile. */
   async #writeNote(backends: readonly StorageBackend[]): Promise<void> {
     const { nodeId, readInstallationStart } = this.#deps;
-    if (nodeId === undefined || readInstallationStart === undefined) return;
+    if (readInstallationStart === undefined) return;
     let installationStartedAt: Date | null;
     let folders;
     try {

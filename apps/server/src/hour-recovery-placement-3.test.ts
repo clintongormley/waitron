@@ -49,6 +49,8 @@ import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { runRestore } from "./restore-command.js";
 import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
+import { backupArchiveKey } from "./backup-keys.js";
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { runStagedRestore, stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
 import { eq } from "drizzle-orm";
 import { execFile } from "node:child_process";
@@ -536,7 +538,9 @@ describe("selected-hour admission before archive placement", () => {
     const f = await archiveHost();
     const command = await archiveCommand(f);
     const packPath = join(root, "archive-pack.txt");
-    const archiveKey = "waitron-20261016T114000Z-00000000-0000-4000-8000-000000000001.backup.enc";
+    const archiveKey = backupArchiveKey(new Date("2026-10-16T11:40:00Z"), {
+      nodeId: BACKUP_NODE_ID,
+    });
     await writeFile(
       packPath,
       encodeArchiveRecoveryPack({
