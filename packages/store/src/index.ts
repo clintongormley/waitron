@@ -98,8 +98,8 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    * database unchanged since the last report, checkpoint, or first subscription. An inconclusive
    * observation reports the change. Returns the unsubscribe. A transaction that began while no
    * listener was registered is not reported, nor a schema-only commit or a transaction issued as
-   * raw begin/commit statements. The schema-only commit leaves the baseline unchanged, so a
-   * same-value update immediately after it is reported.
+   * raw begin/commit statements. With a conclusive observation, a same-value update is silent,
+   * except immediately after a schema-only commit that left the baseline unchanged.
    */
   onCommit: (listener: CommitListener) => () => void;
   /**

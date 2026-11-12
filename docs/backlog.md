@@ -12,9 +12,6 @@ its first lines here and its whole text in its area's detail file under `docs/ba
 
 **Companion documents, not duplicated here:**
 
-- **[Live SQLite reads](developers/conventions-data.md#read-live-sqlite-state-through-sqlite)** —
-  inspect an open database through SQLite so a diagnostic does not release the engine’s locks.
-
 - **[Cloud documentation ownership](cloud-ownership.md)** and the
   **[Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)**
   own cloud services and infrastructure. This backlog retains the node application's

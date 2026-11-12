@@ -1048,8 +1048,6 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(6);
   });
 
-  // The fold-back changes the side file without a commit; compared with the file as it was at the
-  // last report, a same-value update right after it would read as a change.
   it("does not tell listeners about a same-value update right after the side file was folded back", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);

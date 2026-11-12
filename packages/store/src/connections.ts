@@ -80,6 +80,8 @@ export interface Connections {
   /**
    * Opened read-only, so it sees committed rows only and cannot write to the database FILE. It can
    * still write a TEMPORARY table, which SQLite keeps outside that file — see `./index.ts`.
+   * Callers must finish each read statement; this is not enforced here. A partial iterator
+   * pins an old database version and can hide commits from the observer.
    */
   readonly read: DatabaseSync;
   /**
@@ -169,8 +171,8 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
   const version =
     write.location() === null || read === write ? undefined : read.prepare("pragma data_version");
   const dataVersion = (): number | undefined => {
-    // Read statements must finish before observing commits. An explicit read transaction
-    // can still hold an older snapshot, so its version cannot rule out a later commit.
+    // An explicit read transaction can hold an older snapshot, so its version cannot rule
+    // out a later commit.
     if (version === undefined) return undefined;
     try {
       if (read.isTransaction) return undefined;
