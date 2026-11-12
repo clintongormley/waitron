@@ -1,13 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import {
-  diningTables,
-  floorTodayTables,
-  floorTodayZones,
-  floorZones,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { diningTables, floorZones, withTransaction, type Transaction } from "@waitron/db";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid, JOIN_SIDES, normalisePartyName, type JoinSide } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
@@ -125,10 +118,9 @@ async function refuseStaleZone(
 
 async function hasTodayRow(tx: Transaction, zoneId: string): Promise<boolean> {
   const [row] = await tx
-    .select({ id: floorTodayTables.id })
-    .from(floorTodayTables)
-    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .where(eq(diningTables.zoneId, zoneId))
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(and(eq(diningTables.zoneId, zoneId), eq(diningTables.onFloor, true)))
     .limit(1);
   return row !== undefined;
 }
@@ -326,9 +318,9 @@ async function recordedOnto(
   const sets = await VENUE_SERVICE.readFloorPlanSets(tx);
   if (!plannedZones(sets).has(zoneId)) return null;
   const [record] = await tx
-    .select({ setId: floorTodayZones.setId, occurrence: floorTodayZones.occurrence })
-    .from(floorTodayZones)
-    .where(and(eq(floorTodayZones.zoneId, zoneId), eq(floorTodayZones.businessDay, day)));
+    .select({ setId: floorZones.todaySetId, occurrence: floorZones.todayOccurrence })
+    .from(floorZones)
+    .where(and(eq(floorZones.id, zoneId), eq(floorZones.todayBusinessDay, day)));
   if (record === undefined) return null;
   const { setId, occurrence } = record;
   if (setId === null || !sets.some((set) => set.setId === setId && set.zoneIds.includes(zoneId))) {

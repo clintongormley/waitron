@@ -2,7 +2,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorTodayTables } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { locations } from "./schema/tenants.js";
 import { tableInService } from "./table-in-service.js";
@@ -33,13 +32,11 @@ describe("table in service", () => {
       { id: ABSENT, zoneId: ZONE, label: "Absent" },
       { id: DISABLED_ZONE, zoneId: OTHER_ZONE, label: "Disabled zone" },
     ]);
-    await suite.db
-      .insert(floorTodayTables)
-      .values([
-        { tableId: PRESENT },
-        { tableId: TAKEN_OFF, takenOff: true },
-        { tableId: DISABLED_ZONE },
-      ]);
+    for (const id of [PRESENT, TAKEN_OFF, DISABLED_ZONE])
+      await suite.db
+        .update(diningTables)
+        .set({ onFloor: true, takenOff: id === TAKEN_OFF })
+        .where(eq(diningTables.id, id));
   });
 
   async function read() {

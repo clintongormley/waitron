@@ -10,7 +10,6 @@ import {
 } from "drizzle-orm/sqlite-core";
 import {
   count,
-  day,
   enumCheck,
   enumType,
   flag,
@@ -25,7 +24,9 @@ import { diningTables } from "./dining-tables.js";
 import { departments } from "./venue-service/service.js";
 import { floorZones } from "./floor-zones.js";
 
-export const floorPlanShape = enumType(["rect", "round"]);
+export function floorPlanShape(name: string) {
+  return enumType(["rect", "round"])(name);
+}
 
 const placementColumns = () => ({
   x: smallCount("x"),
@@ -62,7 +63,7 @@ const seatsCheck = (name: string, seats: SQLiteColumn) =>
   check(`${name}_seats_ck`, rangeCheck(seats, 0, 999));
 
 /** The checks every table carrying a place shares: all six placement columns set, or none. */
-const placeChecks = (name: string, t: Placed) => {
+export const placeChecks = (name: string, t: Placed) => {
   const six = [t.x, t.y, t.width, t.height, t.shape, t.rotation];
   return [
     check(`${name}_x_ck`, rangeCheck(t.x, 0, 999)),
@@ -234,58 +235,6 @@ export const floorResetTables = table(
     index("floor_reset_tables_part_of_idx").on(t.partOfResetTableId),
     check("floor_reset_tables_part_of_not_self_ck", sql`${t.partOfResetTableId} <> ${t.id}`),
     ...placeChecks("floor_reset_tables", t),
-  ],
-);
-
-/** Today's plan for one zone: the business day it was built for. */
-export const floorTodayZones = table(
-  "floor_today_zones",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    zoneId: id("zone_id").notNull(),
-    businessDay: day("business_day").notNull(),
-    // Stored as `generation`: renaming the column would need a migration.
-    revision: count("generation").notNull().default(0),
-    setId: id("set_id"),
-    layoutRevision: count("layout_revision").notNull().default(0),
-    occurrence: label("occurrence"),
-  },
-  (t) => [
-    unique("floor_today_zones_zone_key").on(t.zoneId),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "floor_today_zones_zone_fk",
-    }),
-    foreignKey({
-      columns: [t.setId],
-      foreignColumns: [floorPlanSets.id],
-      name: "floor_today_zones_set_fk",
-    }),
-  ],
-);
-
-/** A live table's state for the day; with all six placement columns null it is an unplaced spare. */
-export const floorTodayTables = table(
-  "floor_today_tables",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    tableId: id("table_id").notNull(),
-    seats: count("seats"),
-    fixed: flag("fixed").notNull().default(false),
-    ...placementColumns(),
-    takenOff: flag("taken_off").notNull().default(false),
-    name: label("name"),
-  },
-  (t) => [
-    unique("floor_today_tables_table_key").on(t.tableId),
-    foreignKey({
-      columns: [t.tableId],
-      foreignColumns: [diningTables.id],
-      name: "floor_today_tables_table_fk",
-    }),
-    seatsCheck("floor_today_tables", t.seats),
-    ...placeChecks("floor_today_tables", t),
   ],
 );
 

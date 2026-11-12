@@ -1,12 +1,12 @@
 import { eq } from "drizzle-orm";
 import {
   diningTables,
-  floorTodayTables,
   newId,
   shortNameColumns,
   withTransaction,
   type Database,
   type Transaction,
+  OFF_FLOOR,
 } from "@waitron/db";
 
 export async function createTable(
@@ -24,12 +24,13 @@ export async function createTable(
       ...shortNameColumns(input.shortName ?? null),
     })
     .returning({ id: diningTables.id });
-  if (options.today !== false) await tx.insert(floorTodayTables).values({ tableId: row!.id });
+  if (options.today !== false)
+    await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, row!.id));
   return { id: row!.id };
 }
 
 export async function switchOff(v: { db: Database }, tableId: string): Promise<void> {
   await withTransaction(v.db, async (tx) => {
-    await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
+    await tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, tableId));
   });
 }

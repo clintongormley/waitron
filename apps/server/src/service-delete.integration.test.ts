@@ -7,7 +7,7 @@ import { startManagementSession, persons, registerModulePermissions } from "@wai
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql, and } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bookings, BOOKINGS_ROUTES, BOOKINGS_PERMISSIONS } from "@waitron/bookings";
 import {
@@ -16,7 +16,6 @@ import {
   floorPlanSets,
   floorPlanTables,
   floorResetTables,
-  floorTodayTables,
   tableInService,
   floorPlans,
   floorZones,
@@ -25,6 +24,7 @@ import {
   withTransaction,
   workingOrders,
   type Transaction,
+  todayColumns,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -847,8 +847,6 @@ const FLOOR_ROWS = [
   "floor_plan_tables",
   "floor_plan_placements",
   "floor_reset_tables",
-  "floor_today_tables",
-  "floor_today_zones",
   "floor_today_joins",
   "floor_today_join_tables",
   "floor_today_split_parts",
@@ -969,7 +967,10 @@ it.each(["zone", "department"] as const)(
     await run((tx) => resetZone(tx, removals, f.zoneId, NOW, "due"));
     expect(
       await run((tx) =>
-        tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, f.tableId)),
+        tx
+          .select(todayColumns)
+          .from(diningTables)
+          .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, f.tableId))),
       ),
     ).toEqual([]);
     expect(

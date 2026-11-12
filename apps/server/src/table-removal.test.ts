@@ -15,13 +15,14 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
   partyTables,
   ticketItems,
   withTransaction,
   workingOrders,
   type Transaction,
   floorZones,
+  todayColumns,
+  todaySet,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -160,7 +161,10 @@ async function resetRowOf(tableId: string) {
 
 async function todayRow(tableId: string) {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+    tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, tableId))),
   );
   return row;
 }
@@ -366,7 +370,6 @@ describe("what a removed table's delete waits on", () => {
     "floor_today_join_tables.table_id": "leaveMerges",
     "floor_today_split_parts.joined_table_id": "empty dormant table; no runtime writer",
     "floor_today_split_parts.part_table_id": "empty dormant table; no runtime writer",
-    "floor_today_tables.table_id": "removeLiveTables deletes it",
     "party_tables.table_id": "closePartyTables when the party closes; an open party ties the table",
     "working_orders.delivery_table_id": "releaseDeliveries",
   };
@@ -643,7 +646,7 @@ describe("a catch-up that removes two tables", () => {
     expect(await tableExists(t1!)).toBe(false);
     expect(await tableExists(t2!)).toBe(false);
     expect(await pendingOf(zoneId)).toEqual([]);
-    expect(statements).toBe(27);
+    expect(statements).toBe(25);
   });
 });
 
@@ -659,9 +662,9 @@ describe("removeLiveTables", () => {
         .values({ zoneId, seats: 8 })
         .returning({ id: floorTodayJoins.id });
       await tx
-        .update(floorTodayTables)
-        .set({ x: 50, y: 50, width: 8, height: 8, shape: "rect", rotation: 0 })
-        .where(eq(floorTodayTables.tableId, t2!));
+        .update(diningTables)
+        .set(todaySet({ x: 50, y: 50, width: 8, height: 8, shape: "rect", rotation: 0 }))
+        .where(eq(diningTables.id, t2!));
       for (const tableId of [t1!, t2!]) {
         await tx
           .insert(floorTodayJoinTables)

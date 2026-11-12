@@ -2,7 +2,6 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import {
   diningTables,
   floorResetTables,
-  floorTodayTables,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
   parties,
@@ -88,7 +87,6 @@ export async function removeLiveTables(
     for (const removal of removals) await removal.release(tx, tableId, label);
     await releaseDeliveries(tx, tableId, label);
     await leaveMerges(tx, [tableId]);
-    await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
     const resetRows = await tx
       .delete(floorResetTables)
       .where(eq(floorResetTables.tableId, tableId))

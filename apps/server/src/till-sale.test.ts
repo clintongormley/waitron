@@ -3,7 +3,6 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
-import { floorTodayTables } from "@waitron/db";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -1997,7 +1996,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
       });
-      await tx.insert(floorTodayTables).values({ tableId: tableId });
+      await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
     });
 
     const tabId = await withTransaction(suite.db, async (tx) => {
@@ -2056,7 +2055,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
       });
-      await tx.insert(floorTodayTables).values({ tableId: tableId });
+      await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
       const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]);
       return tabId;
@@ -2088,7 +2087,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.tablesZoneId,
         label: "Mesa NC",
       });
-      await tx.insert(floorTodayTables).values({ tableId: tableId });
+      await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
     });
 
     // Tab: dish#1 (line_no 1) + bacon child (line_no 2); dish#2 (line_no 3) + queso child (line_no 4).
@@ -2347,7 +2346,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.tablesZoneId,
         label: `Mesa ${tableId.slice(0, 4)}`,
       });
-      await tx.insert(floorTodayTables).values({ tableId });
+      await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
       const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [line]);
       return tabId;
@@ -2834,7 +2833,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.tablesZoneId,
         label: "Mesa V",
       });
-      await tx.insert(floorTodayTables).values({ tableId: tableId });
+      await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
       const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]);
       return tabId;

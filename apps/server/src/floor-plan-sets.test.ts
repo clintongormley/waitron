@@ -9,9 +9,10 @@ import {
   floorPlans,
   floorPlanSets,
   floorResetTables,
-  floorTodayTables,
-  floorTodayZones,
   type Transaction,
+  todayColumns,
+  diningTables,
+  floorZones,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
@@ -419,7 +420,10 @@ describe("the floor plan sets port", () => {
         .select()
         .from(floorResetTables)
         .where(eq(floorResetTables.zoneId, d.zoneId));
-      const live = await tx.select().from(floorTodayTables);
+      const live = await tx
+        .select(todayColumns)
+        .from(diningTables)
+        .where(eq(diningTables.onFloor, true));
       return { reset, live };
     });
     expect(before.reset.length).toBe(2);
@@ -453,9 +457,19 @@ describe("the floor plan sets port", () => {
         .select()
         .from(floorPlanPlacements)
         .where(and(inArray(floorPlanPlacements.planId, planIds), isNull(floorPlanPlacements.x))),
-      today: await tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, d.zoneId)),
+      today: await tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, d.zoneId))),
       reset: await tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, d.zoneId)),
-      live: await tx.select().from(floorTodayTables),
+      live: await tx.select(todayColumns).from(diningTables).where(eq(diningTables.onFloor, true)),
       standard: await tx.select().from(floorPlans).where(eq(floorPlans.setId, d.standard)),
     }));
     expect(after.sets).toEqual([]);

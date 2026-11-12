@@ -81,7 +81,7 @@ import {
 import type { PassRow } from "./pass-card.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { needsMoving, tableInService } from "@waitron/db";
+import { needsMoving, tableInService, floorZones } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import {
@@ -170,8 +170,6 @@ import {
   diningTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
-  floorTodayZones,
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
@@ -8892,28 +8890,28 @@ export async function listTablesWithState(
 async function readTodayTables(tx: Transaction): Promise<Map<string, TableToday>> {
   const rows = await tx
     .select({
-      tableId: floorTodayTables.tableId,
-      seats: floorTodayTables.seats,
-      fixed: floorTodayTables.fixed,
-      takenOff: floorTodayTables.takenOff,
-      x: floorTodayTables.x,
-      y: floorTodayTables.y,
-      width: floorTodayTables.width,
-      height: floorTodayTables.height,
-      shape: floorTodayTables.shape,
-      rotation: floorTodayTables.rotation,
+      tableId: diningTables.id,
+      seats: diningTables.todaySeats,
+      fixed: diningTables.todayFixed,
+      takenOff: diningTables.takenOff,
+      x: diningTables.todayX,
+      y: diningTables.todayY,
+      width: diningTables.todayWidth,
+      height: diningTables.todayHeight,
+      shape: diningTables.todayShape,
+      rotation: diningTables.todayRotation,
       joinId: floorTodayJoins.id,
       joinSeats: floorTodayJoins.seats,
-      zoneRevision: floorTodayZones.revision,
-      name: floorTodayTables.name,
+      zoneRevision: floorZones.todayRevision,
+      name: diningTables.todayName,
       joinName: floorTodayJoins.name,
-      needsMoving: needsMoving(floorTodayTables.tableId).mapWith(Boolean),
+      needsMoving: needsMoving(diningTables.id).mapWith(Boolean),
     })
-    .from(floorTodayTables)
-    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, diningTables.zoneId))
-    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
-    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId));
+    .from(diningTables)
+    .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
+    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
+    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .where(eq(diningTables.onFloor, true));
   return new Map(
     rows.map((row) => [
       row.tableId,

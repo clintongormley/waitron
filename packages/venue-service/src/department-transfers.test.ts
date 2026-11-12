@@ -6,7 +6,6 @@ import { addProductToMenu, createCatalogue, createProduct, units } from "@waitro
 import {
   departments,
   departmentTransferRequests,
-  floorTodayTables,
   CORE_MIGRATIONS,
   billPayments,
   billPaymentRefunds,
@@ -116,7 +115,10 @@ describe("departmental tab transfers", () => {
           .insert(diningTables)
           .values({ zoneId: v.az, label: "Saved patio" })
           .returning();
-        await tx.insert(floorTodayTables).values({ tableId: table!.id, name: tableName });
+        await tx
+          .update(diningTables)
+          .set({ todayName: tableName, onFloor: true })
+          .where(eq(diningTables.id, table!.id));
         await tx
           .update(workingOrders)
           .set({ deliveryTableId: table!.id, label: "Alex" })
@@ -1148,7 +1150,10 @@ describe("departmental tab transfers", () => {
     const [table] = await withTransaction(suite.db, (tx) =>
       tx.insert(diningTables).values({ zoneId: v.bz, label: randomUUID() }).returning(),
     );
-    await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
+    await suite.db
+      .update(diningTables)
+      .set({ onFloor: true })
+      .where(eq(diningTables.id, table!.id));
     await accept(v, 0, v.bz, table!.id);
     const [tab] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab));
     expect(tab).toMatchObject({ deliveryTableId: table!.id, partyId: null, revision: 1 });

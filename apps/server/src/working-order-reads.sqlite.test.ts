@@ -1,4 +1,4 @@
-import { floorTodayTables } from "@waitron/db";
+import { OFF_FLOOR } from "@waitron/db";
 import {
   diningTables,
   floorZones,
@@ -93,7 +93,7 @@ beforeAll(async () => {
   const zone = await seedZone(db, { name: "Tables" });
   tableId = randomUUID();
   await db.insert(diningTables).values({ id: tableId, zoneId: zone!.id, label: "Table 1" });
-  await db.insert(floorTodayTables).values({ tableId: tableId });
+  await db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
   cfg = {
@@ -116,9 +116,11 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
         { zoneId: normalZone!.id, label: "Spare" },
       ])
       .returning();
-    await db
-      .insert(floorTodayTables)
-      .values([{ tableId: closed!.id }, { tableId: takenOff!.id, takenOff: true }]);
+    for (const table of [closed!, takenOff!])
+      await db
+        .update(diningTables)
+        .set({ onFloor: true, takenOff: table.id === takenOff!.id })
+        .where(eq(diningTables.id, table.id));
     await withTransaction(db, async (tx) => {
       const floor = await listTablesWithState(tx);
       const plain = await listTables(tx, new Date());
@@ -129,9 +131,9 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       expect(all.some((t) => t.id === closed!.id)).toBe(false);
       expect(floor.find((t) => t.id === takenOff!.id)?.today?.takenOff).toBe(true);
     });
-    await db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, takenOff!.id));
+    await db.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, takenOff!.id));
     await db.delete(diningTables).where(eq(diningTables.id, takenOff!.id));
-    await db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, closed!.id));
+    await db.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, closed!.id));
     await db.delete(diningTables).where(eq(diningTables.id, closed!.id));
     await db.delete(diningTables).where(eq(diningTables.id, absent!.id));
     await db.delete(floorZones).where(eq(floorZones.id, zone!.id));

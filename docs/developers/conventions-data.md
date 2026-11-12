@@ -2202,7 +2202,7 @@ seats, "Moveable" or parts) moves the revision of every layout of the zone in th
 writing the missing rows (`saveLayout`, `changedShared`), so an editor open on another set cannot
 save a stale table list. A set is removed only through `FloorDeletion.removeSets`
 (`apps/server/src/floor-plan-sets.ts`), which deletes its layouts and empties
-`floor_today_zones.set_id` wherever it was recorded. A zone in no set's department has no plan on
+`floor_zones.today_set_id` wherever it was recorded. A zone in no set's department has no plan on
 the till (`plannedZones`, `apps/server/src/floor-layout-due.ts`).
 
 A table's short name (`short_name`) is on the plan's tables (`floor_plan_tables`), the reset rows
@@ -2238,13 +2238,13 @@ Which set is due at a moment is venue-service's answer (`dueFloorLayouts`,
 else the next run later today, else the last that ran, never one starting earlier than the
 recorded run while that still matches; with no run, the department's default. A zone's own closed
 times and keep open play no part. Every reset records what it was made from on
-`floor_today_zones`: the business day, `set_id`, `layout_revision` and the run's `occurrence`
+`floor_zones`: `today_business_day`, `today_set_id`, `today_layout_revision` and the run's `today_occurrence`
 (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). The zones read offers Update layout
 while the due set, or its revision, differs from today's record (`layoutOffer`).
 
 A zone is reset onto one set's layout by four paths. The day's first floor read or change
 (`ensureToday`) resets onto the due layout, and only when the due set has a `floor_plans` row for
-the zone; otherwise the zone is left as it is. A save of a zone with no `floor_today_zones` row
+the zone; otherwise the zone is left as it is. A save of a zone with no recorded `today_business_day`
 resets it onto the layout due then (`firstSaveReset`, `apps/server/src/floor-plan.ts`). Reset to
 {set} plan (`POST /api/zones/:id/today/reset`) resets onto the recorded set, and is refused
 `floor_today.layout_changed` when that set is gone or is not the zone's department's
@@ -2329,11 +2329,11 @@ selected members, `splitOff` compares the observed holders and revisions before 
 stranding, seats and placement checks or writes. A free read sends `[]`. Seating stays outside
 the room's revision.
 
-Each room's plan for the day has a revision (`floor_today_zones.generation`, read as `revision`). A
+Each room's plan for the day has a revision (`floor_zones.today_revision`, read as `revision`). A
 reset adds one to it (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). Any other request
 moves it by one for its own writes, however many rows they touch, when they change the room: the
 request compares the room's print before and after its writes (`roomPrints`,
-`apps/server/src/floor-revision.ts`: each table's name and short name, today's row, group and
+`apps/server/src/floor-revision.ts`: each table's name and short name, `on_floor` and today's values, group and
 reset row's `ready_to_move`). So a read whose catch-up marks a table "Needs moving" moves the
 revision. The catch-up in `ensureToday`, which runs first, moves a room it did not reset by one when
 it changes it; a room it resets moves only by the reset's one. The table routes, the two zone routes
@@ -2346,14 +2346,18 @@ route, a zone route and a party join with a merge, and any of those that sends n
 (`management.request_invalid`, `requiredRevision` in `apps/server/src/floor-revision.ts`); a zone
 route alone may send `null`, for a read that held no table of the zone with a today's row.
 
-A table's name for today is `floor_today_tables.name`, a group's is
+A live table carries today's state in its `today_*` columns, `on_floor` and `taken_off`.
+`on_floor` distinguishes an unplaced spare from a table outside today's map. Clearing that flag
+also clears the other today values; `dining_tables_off_floor_ck` refuses a partial clear.
+
+A table's name for today is `dining_tables.today_name`, a group's is
 `floor_today_joins.name`; null means the saved name. `POST /api/tables/:id/today/name` writes it
 (`nameToday`, `apps/server/src/floor-today-name.ts`); a table in a group names the group. A name is
 refused `table.label_taken` when, compared after `normalize("NFC")` and `toLowerCase()` in
 JavaScript (`sameName`), it is the saved name of another table or the today's name
 of another group or of another table on the map, spare or taken off; a group's own tables count as
 other tables. Saved joined-group names remain reserved after a full split; a remaining group can restore its
-saved name. A reset clears a table's name when it puts the table back (`todayColumns`). A group's name goes
+saved name. A reset clears a table's name when it puts the table back (`todayValues`). A group's name goes
 with its row when the group ends; a remaining group keeps it after a split. The room's print reads both columns, so a rename moves the revision.
 Bills, receipts, kitchen tickets and MOVED slips, the expo board and pass screens, overdue orders
 and the floor's party name read a table's shown name — its group's today's name, else its own, else
@@ -2375,6 +2379,7 @@ Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to
 Cascading here would allow removal to discard the records the release and refusal paths must
 handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table_status`.
 **2026-10-19:** A757 slice 2 dropped `parties_clear_table_status` (core 0180).
+**2026-11-12:** fk4 removes the `floor_today_tables.table_id` key: today's values now live on the table itself. The earlier measurement above remains historical.
 
 > Added 2026-10-13 by A503 part 3: two more incoming keys, `floor_today_split_parts.joined_table_id`
 > and `.part_table_id`, both `no action`.

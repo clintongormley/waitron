@@ -1,5 +1,5 @@
 import { and, inArray } from "drizzle-orm";
-import { floorPlans, floorTodayZones, type Transaction } from "@waitron/db";
+import { floorPlans, type Transaction, floorZones } from "@waitron/db";
 import type { FloorPlanSetSummary, PreparedServiceDay } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
@@ -63,14 +63,14 @@ export async function zoneLayoutsOn(
   if (zoneIds.length === 0) return { states, rows };
   const records = await tx
     .select({
-      zoneId: floorTodayZones.zoneId,
-      businessDay: floorTodayZones.businessDay,
-      setId: floorTodayZones.setId,
-      revision: floorTodayZones.layoutRevision,
-      occurrence: floorTodayZones.occurrence,
+      zoneId: floorZones.id,
+      businessDay: floorZones.todayBusinessDay,
+      setId: floorZones.todaySetId,
+      revision: floorZones.todayLayoutRevision,
+      occurrence: floorZones.todayOccurrence,
     })
-    .from(floorTodayZones)
-    .where(inArray(floorTodayZones.zoneId, [...zoneIds]));
+    .from(floorZones)
+    .where(inArray(floorZones.id, [...zoneIds]));
   const recordOf = new Map<string, LayoutRecord>();
   for (const row of records) {
     if (day === null || row.businessDay !== day) continue;

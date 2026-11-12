@@ -2,7 +2,7 @@ import { type SQL, and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { partyTablesName } from "@waitron/shared";
 import type { Transaction } from "./client.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
+import { floorTodayJoins, floorTodayJoinTables } from "./schema/floor-plans.js";
 import { partyTables } from "./schema/parties.js";
 
 function shown(row: { label: string; name: string | null; joinName: string | null }): string {
@@ -14,11 +14,10 @@ function readShownNames(tx: Transaction, where: SQL | undefined) {
     .select({
       id: diningTables.id,
       label: diningTables.label,
-      name: floorTodayTables.name,
+      name: diningTables.todayName,
       joinName: floorTodayJoins.name,
     })
     .from(diningTables)
-    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(where);
@@ -45,13 +44,12 @@ async function readActiveTables(
       partyId: partyTables.partyId,
       id: partyTables.tableId,
       label: diningTables.label,
-      name: floorTodayTables.name,
+      name: diningTables.todayName,
       joinId: floorTodayJoins.id,
       joinName: floorTodayJoins.name,
     })
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, partyTables.tableId))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, partyTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))

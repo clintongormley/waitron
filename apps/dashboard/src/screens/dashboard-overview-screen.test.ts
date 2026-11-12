@@ -590,7 +590,7 @@ it("updates today's sales cards after a sale elsewhere", async () => {
   );
 });
 
-it.each(["floor_today_tables", "floor_zones"])(
+it.each(["dining_tables", "floor_zones"])(
   "refreshes open tables after %s changes",
   async (type) => {
     const liveData = new LiveData();

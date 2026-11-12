@@ -8,7 +8,8 @@ import {
   floorPlanTables,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodayTables,
+  todaySet,
+  diningTables,
 } from "@waitron/db";
 import { moveToday, placeSpareToday, resetZone, rotateToday } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -38,10 +39,10 @@ const placeSpare = (tableId: string, at: { x: number; y: number }) =>
 
 async function setToday(
   tableId: string,
-  values: Partial<typeof floorTodayTables.$inferInsert>,
+  values: Partial<import("@waitron/db").TodayRow>,
 ): Promise<void> {
   await inTx(v, (tx) =>
-    tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+    tx.update(diningTables).set(todaySet(values)).where(eq(diningTables.id, tableId)),
   );
 }
 

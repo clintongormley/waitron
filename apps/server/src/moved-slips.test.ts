@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, floorTodayTables } from "@waitron/db";
+import { floorTodayJoins, todaySet, diningTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { kitchenNotices } from "@waitron/venue-service";
 import { writeMerge } from "./floor-today-merges.js";
@@ -41,7 +41,7 @@ async function noticesOn(billIds: string[]) {
 }
 
 const renameToday = (tx: Transaction, tableId: string, name: string) =>
-  tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, tableId));
+  tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId));
 
 /** A party at Table A with a Burger sent to the kitchen. */
 async function partyWithBurger() {

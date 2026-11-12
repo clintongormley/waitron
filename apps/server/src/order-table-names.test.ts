@@ -4,11 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
   parties,
   partyTables,
   workingOrders,
   withTransaction,
+  todaySet,
+  diningTables,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -108,9 +109,9 @@ describe("A765 table names in order lists", () => {
           zoneId: venue.zoneId,
         });
         await tx
-          .update(floorTodayTables)
-          .set({ name: `Today ${status}` })
-          .where(eq(floorTodayTables.tableId, table.id));
+          .update(diningTables)
+          .set(todaySet({ name: `Today ${status}` }))
+          .where(eq(diningTables.id, table.id));
         await seedWorkingOrder(tx, {
           id,
           source: "dashboard",

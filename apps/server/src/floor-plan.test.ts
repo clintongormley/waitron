@@ -12,12 +12,11 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayTables,
-  floorTodayZones,
   shortNameColumns,
   floorZones,
   installChangeFeed,
   removeChangeFeed,
+  todayColumns,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -565,7 +564,10 @@ describe("saveLayout", () => {
 
   async function todayOf(tableId: string) {
     const [row] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+      tx
+        .select(todayColumns)
+        .from(diningTables)
+        .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, tableId))),
     );
     return row;
   }
@@ -591,21 +593,34 @@ describe("saveLayout", () => {
         .where(eq(diningTables.zoneId, zoneId))
         .orderBy(asc(diningTables.id));
       const today = await tx
-        .select()
-        .from(floorTodayTables)
+        .select(todayColumns)
+        .from(diningTables)
         .where(
-          inArray(
-            floorTodayTables.tableId,
-            tables.map((t) => t.id),
+          and(
+            eq(diningTables.onFloor, true),
+            inArray(
+              diningTables.id,
+              tables.map((t) => t.id),
+            ),
           ),
         )
-        .orderBy(asc(floorTodayTables.id));
+        .orderBy(asc(diningTables.id));
       const reset = await tx
         .select()
         .from(floorResetTables)
         .where(eq(floorResetTables.zoneId, zoneId))
         .orderBy(asc(floorResetTables.id));
-      const day = await tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId));
+      const day = await tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, zoneId)));
       return { tables, today, reset, day };
     });
   }
@@ -845,7 +860,17 @@ describe("saveLayout", () => {
     expect(await todayOf(live)).toMatchObject({ x: 0, seats: 4, fixed: false });
     expect(await todayOf(barRow!.id)).toMatchObject({ x: 20, seats: null, fixed: true });
     const [today] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, z)),
+      tx
+        .select({
+          zoneId: floorZones.id,
+          businessDay: floorZones.todayBusinessDay,
+          revision: floorZones.todayRevision,
+          setId: floorZones.todaySetId,
+          layoutRevision: floorZones.todayLayoutRevision,
+          occurrence: floorZones.todayOccurrence,
+        })
+        .from(floorZones)
+        .where(and(isNotNull(floorZones.todayBusinessDay), eq(floorZones.id, z))),
     );
     expect(today).toBeDefined();
     const plan = await readDefault(z);

@@ -7,12 +7,12 @@ import {
   diningTables,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodayTables,
   parties,
   partyTables,
   shortNameColumns,
   workingOrderLines,
   workingOrders,
+  todaySet,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -226,9 +226,9 @@ describe("a table named for today keeps its short name on the pass", () => {
     const tableId = await table("Terrace", "R");
     await inTx(v, (tx) =>
       tx
-        .update(floorTodayTables)
-        .set({ name: `García birthday ${serial}` })
-        .where(eq(floorTodayTables.tableId, tableId)),
+        .update(diningTables)
+        .set(todaySet({ name: `García birthday ${serial}` }))
+        .where(eq(diningTables.id, tableId)),
     );
     const { billId } = await seatedWithBurger(tableId);
 

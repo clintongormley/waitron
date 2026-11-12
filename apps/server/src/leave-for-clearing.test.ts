@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { captureError, diningTables, floorTodayTables } from "@waitron/db";
+import { captureError, diningTables } from "@waitron/db";
 import { createDepartment, createServiceZone, departments } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { leaveForClearing, markTableCleared } from "./parties.js";
@@ -56,7 +56,7 @@ describe("leaveForClearing", () => {
         label: "Table in inactive zone",
         zoneId,
       });
-      await tx.insert(floorTodayTables).values({ tableId });
+      await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
     });
     return tableId;
   }

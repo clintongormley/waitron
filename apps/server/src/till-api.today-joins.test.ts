@@ -15,9 +15,9 @@ import {
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodaySplitParts,
-  floorTodayTables,
   partyTables,
   workingOrders,
+  todayColumns,
 } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { and, asc, eq, ne } from "drizzle-orm";
@@ -671,7 +671,11 @@ describe("a party change that changes a room answers its revision", () => {
   /** Every today's row, split row, group row and party table, to show a refusal wrote nothing. */
   async function everything() {
     const today = await inTx(v, (tx) =>
-      tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
+      tx
+        .select(todayColumns)
+        .from(diningTables)
+        .where(eq(diningTables.onFloor, true))
+        .orderBy(asc(diningTables.id)),
     );
     const split = await inTx(v, (tx) =>
       tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),

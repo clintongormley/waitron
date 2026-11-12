@@ -7,7 +7,6 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayZones,
   parties,
   partyTables,
   workingOrders,
@@ -172,7 +171,16 @@ export function floorDeletionFor(removals: readonly TableRemoval[]): FloorDeleti
         .delete(floorTodayJoinTables)
         .where(inArray(floorTodayJoinTables.joinId, todayJoinIds));
       await tx.delete(floorTodayJoins).where(inArray(floorTodayJoins.id, todayJoinIds));
-      await tx.delete(floorTodayZones).where(inArray(floorTodayZones.zoneId, floor.ids));
+      await tx
+        .update(floorZones)
+        .set({
+          todayBusinessDay: null,
+          todayRevision: 0,
+          todaySetId: null,
+          todayLayoutRevision: 0,
+          todayOccurrence: null,
+        })
+        .where(inArray(floorZones.id, floor.ids));
       const masterIds = floor.saved.map((table) => table.id);
       await tx
         .update(diningTables)

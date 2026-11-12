@@ -9,9 +9,9 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
-  floorTodayZones,
   floorZones,
+  todaySet,
+  diningTables,
 } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
@@ -113,9 +113,9 @@ describe("the till's table-state answer carries today's plan", () => {
     const [a, b, spare, off] = [la, lb, ls, lo].map(liveId) as [string, string, string, string];
     const joinId = await inTx(v, async (tx) => {
       await tx
-        .update(floorTodayTables)
-        .set({ takenOff: true })
-        .where(eq(floorTodayTables.tableId, off));
+        .update(diningTables)
+        .set(todaySet({ takenOff: true }))
+        .where(eq(diningTables.id, off));
       const [join] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId, seats: 7 })
@@ -276,9 +276,9 @@ async function onNextDay(act: () => Promise<void>): Promise<void> {
   } finally {
     await inTx(v, (tx) =>
       tx
-        .update(floorTodayZones)
-        .set({ businessDay: "2026-10-10" })
-        .where(eq(floorTodayZones.businessDay, "2026-10-11")),
+        .update(floorZones)
+        .set({ todayBusinessDay: "2026-10-10" })
+        .where(eq(floorZones.todayBusinessDay, "2026-10-11")),
     );
   }
 }
@@ -330,9 +330,9 @@ describe("the till's table-state answer carries today's names", () => {
     const groupName = fresh("García birthday");
     await inTx(v, async (tx) => {
       await tx
-        .update(floorTodayTables)
-        .set({ name: tableName })
-        .where(eq(floorTodayTables.tableId, named.table.bar!));
+        .update(diningTables)
+        .set(todaySet({ name: tableName }))
+        .where(eq(diningTables.id, named.table.bar!));
       await tx
         .update(floorTodayJoins)
         .set({ name: groupName })
@@ -476,7 +476,10 @@ describe("the till's table-state answer says what needs moving", () => {
     await s.onto(s.d.standard);
     const [t4, t5] = [s.live("t4"), s.live("t5")];
     await inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ seats: 2 }).where(eq(floorTodayTables.tableId, t4)),
+      tx
+        .update(diningTables)
+        .set(todaySet({ seats: 2 }))
+        .where(eq(diningTables.id, t4)),
     );
     await seatAndFinishAcross(t4, () => s.onto(s.d.dinner));
 
@@ -503,7 +506,10 @@ describe("the till's table-state answer says what needs moving", () => {
     await s.onto(s.d.standard);
     const [t4, t5] = [s.live("t4"), s.live("t5")];
     await inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ seats: 2 }).where(eq(floorTodayTables.tableId, t4)),
+      tx
+        .update(diningTables)
+        .set(todaySet({ seats: 2 }))
+        .where(eq(diningTables.id, t4)),
     );
     await seatAndFinishAcross(t4, () => s.onto(s.d.dinner));
     await catchUp();

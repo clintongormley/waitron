@@ -1,7 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
-import { floorTodayTables, venueLocationId } from "@waitron/db";
+import { venueLocationId } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -292,7 +292,7 @@ async function openTableTab(v: Venue, lines: { menuItemId: string; quantity: str
       zoneId: v.tables.zoneId,
       label: `Mesa ${tableId.slice(0, 4)}`,
     });
-    await tx.insert(floorTodayTables).values({ tableId: tableId });
+    await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
     const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
     await addTabRound(tx, v.cfg, tabId, lines);
     return tabId;

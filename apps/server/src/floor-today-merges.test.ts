@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, floorTodayJoins, floorTodayTables } from "@waitron/db";
+import { diningTables, floorTodayJoins, todaySet } from "@waitron/db";
 import type { JoinSide } from "@waitron/shared";
 import { leaveMergesRestoring, mergeMembers, writeMerge } from "./floor-today-merges.js";
 import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -33,10 +33,10 @@ const merge = (
 
 async function setToday(
   tableId: string,
-  values: Partial<typeof floorTodayTables.$inferInsert>,
+  values: Partial<import("@waitron/db").TodayRow>,
 ): Promise<void> {
   await inTx(v, (tx) =>
-    tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+    tx.update(diningTables).set(todaySet(values)).where(eq(diningTables.id, tableId)),
   );
 }
 

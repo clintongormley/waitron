@@ -8,7 +8,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { floorTodayTables, diningTables, withTransaction, venueLocationId } from "@waitron/db";
+import { diningTables, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
@@ -41,7 +41,7 @@ async function seedTable(db: Database, label: string): Promise<string> {
     .insert(diningTables)
     .values({ label, zoneId: zone!.id })
     .returning({ id: diningTables.id });
-  await db.insert(floorTodayTables).values({ tableId: row!.id });
+  await db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, row!.id));
   return row!.id;
 }
 

@@ -6,7 +6,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, floorResetTables, floorTodayTables } from "@waitron/db";
+import { diningTables, floorResetTables, todayColumns, todaySet } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
@@ -160,20 +160,27 @@ async function rowStateOf(tableId: string | null, zoneId?: string) {
 
 async function todayRow(tableId: string) {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+    tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, tableId))),
   );
   return row;
 }
 
-const setToday = (tableId: string, values: Partial<typeof floorTodayTables.$inferInsert>) =>
+const setToday = (tableId: string, values: Partial<import("@waitron/db").TodayRow>) =>
   inTx(v, (tx) =>
-    tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+    tx.update(diningTables).set(todaySet(values)).where(eq(diningTables.id, tableId)),
   );
 
 /** Every today's row, reset row and split row, to show a refusal wrote nothing. */
 async function everything() {
   return inTx(v, async (tx) => ({
-    today: await tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
+    today: await tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(eq(diningTables.onFloor, true))
+      .orderBy(asc(diningTables.id)),
     reset: await tx.select().from(floorResetTables).orderBy(asc(floorResetTables.id)),
   }));
 }

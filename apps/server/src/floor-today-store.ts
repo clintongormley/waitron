@@ -21,8 +21,6 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodayTables,
-  floorTodayZones,
   floorZones,
   needsMoving,
   resetRowMoves,
@@ -30,6 +28,9 @@ import {
   shortNameColumns,
   statementChunks,
   workingOrders,
+  OFF_FLOOR,
+  todaySet,
+  todayColumns,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
@@ -198,22 +199,20 @@ async function resetZoneFor(
   { keepTakenOff }: ResetOptions,
 ): Promise<number> {
   const [today] = await tx
-    .select({ id: floorTodayZones.id, revision: floorTodayZones.revision })
-    .from(floorTodayZones)
-    .where(eq(floorTodayZones.zoneId, zoneId));
+    .select({ id: floorZones.id, revision: floorZones.todayRevision })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
   const revision = (today?.revision ?? 0) + 1;
-  const record = {
-    businessDay,
-    revision,
-    setId: onto.setId,
-    layoutRevision: layout?.revision ?? 0,
-    occurrence: onto.occurrence,
-  };
-  if (today === undefined) {
-    await tx.insert(floorTodayZones).values({ zoneId, ...record });
-  } else {
-    await tx.update(floorTodayZones).set(record).where(eq(floorTodayZones.id, today.id));
-  }
+  await tx
+    .update(floorZones)
+    .set({
+      todayBusinessDay: businessDay,
+      todayRevision: revision,
+      todaySetId: onto.setId,
+      todayLayoutRevision: layout?.revision ?? 0,
+      todayOccurrence: onto.occurrence,
+    })
+    .where(eq(floorZones.id, zoneId));
 
   const recorded = await layoutTables(tx, zoneId, layout?.id ?? null);
   const master = placedAsRead(recorded);
@@ -277,15 +276,15 @@ async function takenOffIn(
 ): Promise<Set<string>> {
   if (tables.length === 0) return new Set();
   const rows = await tx
-    .select({ tableId: floorTodayTables.tableId })
-    .from(floorTodayTables)
+    .select({ tableId: diningTables.id })
+    .from(diningTables)
     .where(
       and(
         inArray(
-          floorTodayTables.tableId,
+          diningTables.id,
           tables.map((table) => table.id),
         ),
-        eq(floorTodayTables.takenOff, true),
+        eq(diningTables.takenOff, true),
       ),
     );
   return new Set(rows.map((row) => row.tableId));
@@ -447,9 +446,9 @@ async function catchUpPass(
   const todayRows = new Map(
     (
       await tx
-        .select(getTableColumns(floorTodayTables))
-        .from(floorTodayTables)
-        .where(inArray(floorTodayTables.tableId, ids))
+        .select(todayColumns)
+        .from(diningTables)
+        .where(and(inArray(diningTables.id, ids), eq(diningTables.onFloor, true)))
     ).map((row) => [row.tableId, row]),
   );
   const merges = await mergesOf(tx, ids);
@@ -725,8 +724,9 @@ async function catchUpPass(
       .returning({ id: diningTables.id });
     createdIds.set(target, created!.id);
     await tx
-      .insert(floorTodayTables)
-      .values({ tableId: created!.id, ...todayColumns(target, false) });
+      .update(diningTables)
+      .set(todaySet(todayValues(target, false)))
+      .where(eq(diningTables.id, created!.id));
   }
   const placedNow = new Set<Target>();
   for (const { target, label } of plan.apply) {
@@ -739,16 +739,14 @@ async function catchUpPass(
     // A table still taken off stays off at its new place when its row says so, or when the row was
     // marked, as staff then took it off after the reset.
     const keepOff = rowOf.get(target)!.takenOff || rowOf.get(target)!.readyToMove;
-    const columns = todayColumns(target, keepOff && todayRows.get(tableId)?.takenOff === true);
-    await tx
-      .insert(floorTodayTables)
-      .values({ tableId, ...columns })
-      .onConflictDoUpdate({ target: floorTodayTables.tableId, set: columns });
+    const columns = todayValues(target, keepOff && todayRows.get(tableId)?.takenOff === true);
+    await tx.update(diningTables).set(todaySet(columns)).where(eq(diningTables.id, tableId));
   }
   for (const target of plan.seed) {
     await tx
-      .insert(floorTodayTables)
-      .values({ tableId: target.tableId!, ...todayColumns(target, false) });
+      .update(diningTables)
+      .set(todaySet(todayValues(target, false)))
+      .where(eq(diningTables.id, target.tableId!));
   }
   const stillPending = new Set(plan.pending);
   let changed = false;
@@ -781,9 +779,9 @@ async function catchUpPass(
       continue;
     const memberIds = parts.map((row) => row.tableId!);
     const [takenOff] = await tx
-      .select({ id: floorTodayTables.id })
-      .from(floorTodayTables)
-      .where(and(inArray(floorTodayTables.tableId, memberIds), eq(floorTodayTables.takenOff, true)))
+      .select({ id: diningTables.id })
+      .from(diningTables)
+      .where(and(inArray(diningTables.id, memberIds), eq(diningTables.takenOff, true)))
       .limit(1);
     if (takenOff !== undefined) continue;
     if (joined.x !== null) {
@@ -857,7 +855,7 @@ function readyToMove(
   return [...marked];
 }
 
-function todayColumns(target: Target, takenOff: boolean) {
+function todayValues(target: Target, takenOff: boolean) {
   return {
     seats: target.seats,
     fixed: target.fixed,
@@ -869,7 +867,7 @@ function todayColumns(target: Target, takenOff: boolean) {
 
 async function hideTable(tx: Transaction, tableId: string): Promise<void> {
   await leaveMerges(tx, [tableId]);
-  await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
+  await tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, tableId));
 }
 
 /**
@@ -978,9 +976,8 @@ export async function ensureToday(
   const day = await todayBusinessDay(tx, now);
   if (day === null) return null;
   const zones = await tx
-    .select({ zoneId: floorZones.id, businessDay: floorTodayZones.businessDay })
+    .select({ zoneId: floorZones.id, businessDay: floorZones.todayBusinessDay })
     .from(floorZones)
-    .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, floorZones.id))
     .where(
       and(
         eq(floorZones.active, true),
@@ -999,8 +996,8 @@ export async function ensureToday(
           ),
         ),
         or(
-          isNull(floorTodayZones.businessDay),
-          lt(floorTodayZones.businessDay, day),
+          isNull(floorZones.todayBusinessDay),
+          lt(floorZones.todayBusinessDay, day),
           catchUpDue(floorZones.id),
         ),
       ),
@@ -1133,25 +1130,25 @@ function placeTaken(r: ResetAlias): SQL {
   return sql`(
     ${r.placed} = 0 and ${r.x} is not null
     and not exists (
-      select 1 from ${floorTodayTables} ${own}
-      where ${col(own, "table_id")} = ${r.tableId}
+      select 1 from ${diningTables} ${own}
+      where ${col(own, "id")} = ${r.tableId} and ${col(own, "on_floor")} = 1
         and (
-          (${col(own, "x")} is not null and ${col(own, "taken_off")} = 0)
+          (${col(own, "today_x")} is not null and ${col(own, "taken_off")} = 0)
           or ((${r.readyToMove} = 1 or ${r.takenOff} = 1) and ${col(own, "taken_off")} = 1)
         )
     )
     and exists (
-      select 1 from ${floorTodayTables} ${blocker}
-      inner join ${diningTables} ${blockerTable} on ${col(blockerTable, "id")} = ${b("table_id")}
+      select 1 from ${diningTables} ${blocker}
+      inner join ${diningTables} ${blockerTable} on ${col(blockerTable, "id")} = ${b("id")}
       left join ${floorResetTables} ${blockerRow}
-        on ${col(blockerRow, "table_id")} = ${b("table_id")} and ${col(blockerRow, "zone_id")} = ${r.zoneId}
-      where ${col(blockerTable, "zone_id")} = ${r.zoneId}
-        and ${b("x")} is not null and ${b("taken_off")} = 0
-        and not ${needsMoving(b("table_id"))}
-        and not ${pendingGroupMember(r.id, "place", (member) => sql`${member.tableId} = ${b("table_id")}`)}
+        on ${col(blockerRow, "table_id")} = ${b("id")} and ${col(blockerRow, "zone_id")} = ${r.zoneId}
+      where ${col(blockerTable, "zone_id")} = ${r.zoneId} and ${b("on_floor")} = 1
+        and ${b("today_x")} is not null and ${b("taken_off")} = 0
+        and not ${needsMoving(b("id"))}
+        and not ${pendingGroupMember(r.id, "place", (member) => sql`${member.tableId} = ${b("id")}`)}
         and ${blocksPlaceSql(
           { x: r.x, y: r.y, width: r.width, height: r.height, rotation: r.rotation },
-          placeOf((name) => b(name)),
+          placeOf((name) => b(`today_${name}`)),
           placeOf((name) => col(blockerRow, name)),
         )}
     )
@@ -1173,9 +1170,9 @@ export async function moveToday(
   );
   for (const member of members) {
     await tx
-      .update(floorTodayTables)
-      .set({ x: member.x! + dx, y: member.y! + dy })
-      .where(eq(floorTodayTables.id, member.id));
+      .update(diningTables)
+      .set(todaySet({ x: member.x! + dx, y: member.y! + dy }))
+      .where(eq(diningTables.id, member.tableId));
   }
 }
 
@@ -1185,9 +1182,9 @@ export async function rotateToday(tx: Transaction, tableId: string): Promise<voi
   refuseUnmovable(today);
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
   await tx
-    .update(floorTodayTables)
-    .set({ rotation: (today.row.rotation! + 15) % 360 })
-    .where(eq(floorTodayTables.id, today.row.id));
+    .update(diningTables)
+    .set(todaySet({ rotation: (today.row.rotation! + 15) % 360 }))
+    .where(eq(diningTables.id, today.row.tableId));
 }
 
 /** Puts a spare on the map with its top-left corner at `at`; a table with a place is left alone. */
@@ -1201,16 +1198,18 @@ export async function placeSpareToday(
   if (row.x !== null) return;
   if (row.fixed) throw new AppError("table.fixed", { tableId });
   await tx
-    .update(floorTodayTables)
-    .set({
-      x: at.x,
-      y: at.y,
-      width: NEW_TABLE_SIZE,
-      height: NEW_TABLE_SIZE,
-      shape: "rect",
-      rotation: 0,
-    })
-    .where(eq(floorTodayTables.id, row.id));
+    .update(diningTables)
+    .set(
+      todaySet({
+        x: at.x,
+        y: at.y,
+        width: NEW_TABLE_SIZE,
+        height: NEW_TABLE_SIZE,
+        shape: "rect",
+        rotation: 0,
+      }),
+    )
+    .where(eq(diningTables.id, row.tableId));
 }
 
 /** Those of `tableIds` an order with food on its way is delivered to. */
@@ -1243,14 +1242,17 @@ export async function takeOffToday(tx: Transaction, tableId: string): Promise<vo
   await refuseUnfree(tx, [tableId]);
   await refuseDeliveryPending(tx, tableId);
   await tx
-    .update(floorTodayTables)
-    .set({ takenOff: true })
-    .where(eq(floorTodayTables.id, today.row.id));
+    .update(diningTables)
+    .set(todaySet({ takenOff: true }))
+    .where(eq(diningTables.id, today.row.tableId));
 }
 
 export async function putBackToday(tx: Transaction, tableId: string): Promise<void> {
   const { row } = await todayOf(tx, tableId);
-  await tx.update(floorTodayTables).set({ takenOff: false }).where(eq(floorTodayTables.id, row.id));
+  await tx
+    .update(diningTables)
+    .set(todaySet({ takenOff: false }))
+    .where(eq(diningTables.id, row.tableId));
 }
 
 /** Today's seats for the table, or for its merge when it is in one. */
@@ -1264,7 +1266,10 @@ export async function seatsToday(tx: Transaction, tableId: string, seats: number
       .where(eq(floorTodayJoins.id, today.merge.joinId));
     return;
   }
-  await tx.update(floorTodayTables).set({ seats }).where(eq(floorTodayTables.id, today.row.id));
+  await tx
+    .update(diningTables)
+    .set(todaySet({ seats }))
+    .where(eq(diningTables.id, today.row.tableId));
 }
 
 /**
@@ -1294,13 +1299,15 @@ export async function backToSaved(
   await withMovedSlips(tx, cfg, members.length === 0 ? null : { tables: members }, async () => {
     await leaveMerges(tx, [tableId]);
     await tx
-      .update(floorTodayTables)
-      .set({
-        seats: saved.seats,
-        fixed: saved.fixed,
-        ...placementColumns(place),
-        takenOff: false,
-      })
-      .where(eq(floorTodayTables.id, row.id));
+      .update(diningTables)
+      .set(
+        todaySet({
+          seats: saved.seats,
+          fixed: saved.fixed,
+          ...placementColumns(place),
+          takenOff: false,
+        }),
+      )
+      .where(eq(diningTables.id, row.tableId));
   });
 }

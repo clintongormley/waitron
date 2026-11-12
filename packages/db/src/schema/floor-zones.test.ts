@@ -229,3 +229,28 @@ describe("today's zone keep-open constraints", () => {
     }
   });
 });
+
+describe("today's map on floor_zones", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  it("a new zone reads revision zero and no business day", async () => {
+    const zone = await seedZone(suite.db, { name: "Today" });
+    expect(
+      suite.db.get(
+        sql`select today_business_day, today_revision, today_set_id, today_layout_revision, today_occurrence from floor_zones where id=${zone.id}`,
+      ),
+    ).toEqual({
+      today_business_day: null,
+      today_revision: 0,
+      today_set_id: null,
+      today_layout_revision: 0,
+      today_occurrence: null,
+    });
+  });
+  it("refuses a recorded set that does not exist", async () => {
+    const zone = await seedZone(suite.db, { name: "Today" });
+    const error = await captureError(() =>
+      suite.db.execute(sql`update floor_zones set today_set_id='absent' where id=${zone.id}`),
+    );
+    expect(engineErrorMessage(error)).toContain("FOREIGN KEY constraint failed");
+  });
+});

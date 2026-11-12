@@ -1,5 +1,11 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
-import { partyTables, floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "@waitron/db";
+import {
+  partyTables,
+  floorTodayJoins,
+  floorTodayJoinTables,
+  todaySet,
+  diningTables,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
@@ -50,9 +56,9 @@ async function putBack(
   member: { tableId: string; beforeX: number; beforeY: number; beforeRotation: number },
 ): Promise<void> {
   await tx
-    .update(floorTodayTables)
-    .set({ x: member.beforeX, y: member.beforeY, rotation: member.beforeRotation })
-    .where(and(eq(floorTodayTables.tableId, member.tableId), isNotNull(floorTodayTables.x)));
+    .update(diningTables)
+    .set(todaySet({ x: member.beforeX, y: member.beforeY, rotation: member.beforeRotation }))
+    .where(and(eq(diningTables.id, member.tableId), isNotNull(diningTables.todayX)));
 }
 
 /** Each table leaves its merge and goes back to where it stood before; a merge left with one member ends as leaveMerges ends it. */
@@ -177,7 +183,7 @@ export async function writeMerge(
   const at = touchingPlace(against, goes, side);
 
   await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, moving));
-  await tx.update(floorTodayTables).set(at).where(eq(floorTodayTables.id, moving.row.id));
+  await tx.update(diningTables).set(todaySet(at)).where(eq(diningTables.id, moving.row.tableId));
 }
 
 function placeOf(row: Today["row"]): JoinPlace {

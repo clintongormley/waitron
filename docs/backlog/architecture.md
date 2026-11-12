@@ -1122,7 +1122,8 @@ the helper's constant status is not evidence of the write.
   Floor splits now check the parties the till read, separately from the room layout revision;
   saved joined designs form ordinary live groups. Zones now carry their department and sale overrides;
   saved designs now carry membership, placements retain off-layout sizes, and sets carry their
-  department, name and default. The remaining live-floor storage folds stay open.
+  department, name and default. Today's map now lives on the live table and zone rows;
+  the remaining group storage fold stays open.
   Management and device events share one loop with read-only wake checks; device events carry types
   only. The dashboard detects a silent connection, quiets audited database-only re-read timers
   while connected and receives pairing, discovery, practice-inbox and backup state changes.

@@ -12,11 +12,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
   floorResetTables,
-  floorTodayTables,
-  floorTodayZones,
   floorZones,
   withTransaction,
   workingOrders,
+  todayColumns,
+  todaySet,
+  OFF_FLOOR,
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -177,14 +178,17 @@ const reset = (zoneId: string) => inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId
 
 async function todayRow(tableId: string) {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+    tx
+      .select(todayColumns)
+      .from(diningTables)
+      .where(and(eq(diningTables.onFloor, true), eq(diningTables.id, tableId))),
   );
   return row;
 }
 
 async function moveToday(tableId: string, x: number): Promise<void> {
   await inTx(v, (tx) =>
-    tx.update(floorTodayTables).set({ x }).where(eq(floorTodayTables.tableId, tableId)),
+    tx.update(diningTables).set(todaySet({ x })).where(eq(diningTables.id, tableId)),
   );
 }
 
@@ -366,9 +370,9 @@ async function onNextDay(act: () => Promise<void>): Promise<void> {
     await withTransaction(v.db, async (tx) => {
       await seedBusinessDay(tx, { dayCutover: cutover });
       await tx
-        .update(floorTodayZones)
-        .set({ businessDay: "2026-10-10" })
-        .where(eq(floorTodayZones.businessDay, "2026-10-11"));
+        .update(floorZones)
+        .set({ todayBusinessDay: "2026-10-10" })
+        .where(eq(floorZones.todayBusinessDay, "2026-10-11"));
     });
   }
 }
@@ -508,7 +512,9 @@ describe("the reset waiting rules", () => {
   it("a table needing clearing with no today's row gets one at Reset to {set} plan, as a held one does", async () => {
     const { zoneId, tableId } = await plannedTable(fresh("Unrowed"));
     await reset(zoneId);
-    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)));
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, tableId)),
+    );
     await markNeedsClearing(tableId);
 
     await reset(zoneId);
@@ -635,7 +641,10 @@ describe("the reset waiting rules", () => {
     await s.onto(s.d.standard);
     const t9 = s.live("t9");
     await inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ takenOff: true }).where(eq(floorTodayTables.tableId, t9)),
+      tx
+        .update(diningTables)
+        .set(todaySet({ takenOff: true }))
+        .where(eq(diningTables.id, t9)),
     );
     return { ...s, t9 };
   }
@@ -798,7 +807,9 @@ describe("a table that frees up after a reset needs moving", () => {
     const label = fresh("Unrowed seat");
     const { zoneId, tableId, masterId, revision } = await plannedTable(label);
     const partyId = await seatAt(tableId);
-    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)));
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, tableId)),
+    );
     await save(zoneId, revision, [entry("t", label, { id: masterId, placement: place(50, 0) })]);
 
     await reset(zoneId);
@@ -905,7 +916,10 @@ describe("a table that frees up after a reset needs moving", () => {
     expect(await due()).toBe(0);
 
     await inTx(v, (tx) =>
-      tx.update(floorTodayTables).set({ takenOff: true }).where(eq(floorTodayTables.tableId, z.t3)),
+      tx
+        .update(diningTables)
+        .set(todaySet({ takenOff: true }))
+        .where(eq(diningTables.id, z.t3)),
     );
     expect(await due()).toBe(1);
   });
@@ -921,9 +935,9 @@ describe("a table that frees up after a reset needs moving", () => {
     return rows.length;
   }
 
-  const setToday = (tableId: string, values: Partial<typeof floorTodayTables.$inferInsert>) =>
+  const setToday = (tableId: string, values: Partial<import("@waitron/db").TodayRow>) =>
     inTx(v, (tx) =>
-      tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+      tx.update(diningTables).set(todaySet(values)).where(eq(diningTables.id, tableId)),
     );
 
   it("a marked table moved by hand onto its new place applies by itself, but not while turned", async () => {
@@ -966,9 +980,9 @@ describe("a table that frees up after a reset needs moving", () => {
 });
 
 describe("no reset puts a table down on another", () => {
-  const setToday = (tableId: string, values: Partial<typeof floorTodayTables.$inferInsert>) =>
+  const setToday = (tableId: string, values: Partial<import("@waitron/db").TodayRow>) =>
     inTx(v, (tx) =>
-      tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+      tx.update(diningTables).set(todaySet(values)).where(eq(diningTables.id, tableId)),
     );
   const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
 

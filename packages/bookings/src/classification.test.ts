@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import {
   CORE_CHANGE_SOURCES,
   diningTables,
-  floorTodayTables,
   installChangeFeed,
   subscribeToChanges,
   withTransaction,
@@ -73,7 +72,10 @@ describe("booking change interests", () => {
       )
       .returning();
     for (const table of tables)
-      await suite.db.insert(floorTodayTables).values({ tableId: table.id });
+      await suite.db
+        .update(diningTables)
+        .set({ onFloor: true })
+        .where(eq(diningTables.id, table.id));
     const oldId = tables[0]!.id;
     const newId = tables[1]!.id;
     await installChangeFeed(suite.db, [...CORE_CHANGE_SOURCES, ...BOOKINGS_CHANGE_SOURCES]);

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, floorTodayTables, floorTodayZones } from "@waitron/db";
+import { diningTables, OFF_FLOOR, floorTodayJoins, todaySet, floorZones } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -122,9 +122,9 @@ async function onNextDay(act: () => Promise<void>): Promise<void> {
   } finally {
     await inTx(v, (tx) =>
       tx
-        .update(floorTodayZones)
-        .set({ businessDay: "2026-10-10" })
-        .where(eq(floorTodayZones.businessDay, "2026-10-11")),
+        .update(floorZones)
+        .set({ todayBusinessDay: "2026-10-10" })
+        .where(eq(floorZones.todayBusinessDay, "2026-10-11")),
     );
   }
 }
@@ -275,7 +275,7 @@ describe("roomPrints", () => {
     const name = `Window seat ${floorLabelSuffix()}`;
     const nameBar = () =>
       inTx(v, (tx) =>
-        tx.update(floorTodayTables).set({ name }).where(eq(floorTodayTables.tableId, table.bar!)),
+        tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, table.bar!)),
       );
 
     await nameBar();
@@ -432,4 +432,25 @@ describe("sentRevision", () => {
     expect((error as AppError).code).toBe("management.request_invalid");
     expect((error as AppError).params).toEqual({ field: "zoneRevision" });
   });
+});
+
+it("taking a spare off today's map changes the room print and revision", async () => {
+  const { zoneId, table } = await plannedZone(
+    v,
+    [{ key: "spare", label: "Spare", seats: null, place: null }],
+    NOW,
+  );
+  await inTx(v, (tx) =>
+    tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table.spare!)),
+  );
+  const before = await inTx(v, (tx) => roomPrints(tx, [zoneId]));
+  const revisions = await inTx(v, (tx) => roomRevisions(tx, [zoneId]));
+  await inTx(v, (tx) =>
+    tx.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, table.spare!)),
+  );
+  const after = await inTx(v, (tx) => roomPrints(tx, [zoneId]));
+  expect(after.get(zoneId)).not.toBe(before.get(zoneId));
+  expect(await inTx(v, (tx) => moveChangedRooms(tx, revisions, before, after))).toEqual(
+    new Map([[zoneId, 2]]),
+  );
 });

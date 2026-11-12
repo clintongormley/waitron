@@ -34,8 +34,6 @@ const HIERARCHY_DELETE_READS = [
   "floor_plans",
   "floor_plan_tables",
   "floor_reset_tables",
-  "floor_today_zones",
-  "floor_today_tables",
   "floor_today_joins",
   "floor_today_join_tables",
   "parties",
@@ -189,7 +187,7 @@ export const QUERY_DEPENDENCIES = {
     "bill_payment_refunds",
     "working_orders",
     "dining_tables",
-    "floor_today_tables",
+
     "floor_zones",
     "party_tables",
     "products",
@@ -206,7 +204,7 @@ export const QUERY_DEPENDENCIES = {
     "dining_tables",
     "party_tables",
     "parties",
-    "floor_today_tables",
+
     "floor_today_join_tables",
     "floor_today_joins",
   ],
@@ -474,7 +472,7 @@ export const QUERY_DEPENDENCIES = {
     "routing_cells",
     "routing_cell_periods",
     "floor_zones",
-    "floor_today_tables",
+
     "floor_today_join_tables",
     "floor_today_joins",
   ],

@@ -508,7 +508,7 @@ describe("what a move refuses, changing nothing", () => {
       await inTx(v, async (tx) =>
         tx.execute(
           state === "missing today"
-            ? sql`delete from floor_today_tables where table_id = ${target}`
+            ? sql`update dining_tables set on_floor=0, today_seats=null, today_fixed=0, today_x=null, today_y=null, today_width=null, today_height=null, today_shape=null, today_rotation=null, taken_off=0, today_name=null where id = ${target}`
             : sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${target})`,
         ),
       );

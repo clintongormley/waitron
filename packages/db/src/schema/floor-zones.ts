@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   count,
   day,
@@ -14,6 +14,7 @@ import {
   tsString,
 } from "./columns.js";
 
+import { floorPlanSets } from "./floor-plans.js";
 import { departments } from "./venue-service/service.js";
 import { orderStart, paidWhen, collectionNumber } from "./sale-rule-types.js";
 
@@ -30,6 +31,11 @@ export const floorZones = table(
     orderStart: orderStart("order_start"),
     paidWhen: paidWhen("paid_when"),
     collectionNumber: collectionNumber("collection_number"),
+    todayBusinessDay: day("today_business_day"),
+    todayRevision: count("today_revision").notNull().default(0),
+    todaySetId: id("today_set_id").references((): AnySQLiteColumn => floorPlanSets.id),
+    todayLayoutRevision: count("today_layout_revision").notNull().default(0),
+    todayOccurrence: label("today_occurrence"),
     keptOpenDay: day("kept_open_day"),
     keptOpenFrom: timeOfDay("kept_open_from"),
     keptOpenUntil: timeOfDay("kept_open_until"),

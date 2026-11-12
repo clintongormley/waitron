@@ -115,8 +115,6 @@ export {
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
-  floorTodayTables,
-  floorTodayZones,
 } from "./schema/floor-plans.js";
 export {
   parties,
@@ -522,3 +520,5 @@ export type { VenueSettings, BusinessDaySettings } from "./venue-settings.js";
 export { dayCutoverChanges } from "./schema/day-cutover-changes.js";
 
 export { staffRoles, personStaffRoles } from "./schema/identity/staff-roles.js";
+
+export { todayColumns, todaySet, OFF_FLOOR, type TodayRow } from "./floor-today-columns.js";

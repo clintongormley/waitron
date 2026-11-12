@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9e872d11-b391-4112-a11e-3c0d35a227bc",
+  "id": "b2f15afd-75cc-4b70-a3f4-72b61a7a6406",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1685,6 +1685,86 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "on_floor": {
+          "name": "on_floor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "today_seats": {
+          "name": "today_seats",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_fixed": {
+          "name": "today_fixed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "today_x": {
+          "name": "today_x",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_y": {
+          "name": "today_y",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_width": {
+          "name": "today_width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_height": {
+          "name": "today_height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_shape": {
+          "name": "today_shape",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_rotation": {
+          "name": "today_rotation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "taken_off": {
+          "name": "taken_off",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "today_name": {
+          "name": "today_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1733,7 +1813,44 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "dining_tables_today_seats_ck": {
+          "name": "dining_tables_today_seats_ck",
+          "value": "\"dining_tables\".\"today_seats\" is null or \"dining_tables\".\"today_seats\" between 0 and 999"
+        },
+        "dining_tables_today_x_ck": {
+          "name": "dining_tables_today_x_ck",
+          "value": "\"dining_tables\".\"today_x\" is null or \"dining_tables\".\"today_x\" between 0 and 999"
+        },
+        "dining_tables_today_y_ck": {
+          "name": "dining_tables_today_y_ck",
+          "value": "\"dining_tables\".\"today_y\" is null or \"dining_tables\".\"today_y\" between 0 and 999"
+        },
+        "dining_tables_today_width_ck": {
+          "name": "dining_tables_today_width_ck",
+          "value": "\"dining_tables\".\"today_width\" is null or \"dining_tables\".\"today_width\" between 1 and 99"
+        },
+        "dining_tables_today_height_ck": {
+          "name": "dining_tables_today_height_ck",
+          "value": "\"dining_tables\".\"today_height\" is null or \"dining_tables\".\"today_height\" between 1 and 99"
+        },
+        "dining_tables_today_rotation_ck": {
+          "name": "dining_tables_today_rotation_ck",
+          "value": "\"dining_tables\".\"today_rotation\" is null or (\"dining_tables\".\"today_rotation\" between 0 and 345 and \"dining_tables\".\"today_rotation\" % 15 = 0)"
+        },
+        "dining_tables_today_shape_ck": {
+          "name": "dining_tables_today_shape_ck",
+          "value": "\"dining_tables\".\"today_shape\" in ('rect', 'round')"
+        },
+        "dining_tables_today_placement_ck": {
+          "name": "dining_tables_today_placement_ck",
+          "value": "(\"dining_tables\".\"today_x\" is null and \"dining_tables\".\"today_y\" is null and \"dining_tables\".\"today_width\" is null and \"dining_tables\".\"today_height\" is null and \"dining_tables\".\"today_shape\" is null and \"dining_tables\".\"today_rotation\" is null) or (\"dining_tables\".\"today_x\" is not null and \"dining_tables\".\"today_y\" is not null and \"dining_tables\".\"today_width\" is not null and \"dining_tables\".\"today_height\" is not null and \"dining_tables\".\"today_shape\" is not null and \"dining_tables\".\"today_rotation\" is not null)"
+        },
+        "dining_tables_off_floor_ck": {
+          "name": "dining_tables_off_floor_ck",
+          "value": "\"dining_tables\".\"on_floor\" = 1 or (\"dining_tables\".\"today_seats\" is null and \"dining_tables\".\"today_fixed\" = 0 and \"dining_tables\".\"today_x\" is null and \"dining_tables\".\"today_y\" is null and \"dining_tables\".\"today_width\" is null and \"dining_tables\".\"today_height\" is null and \"dining_tables\".\"today_shape\" is null and \"dining_tables\".\"today_rotation\" is null and \"dining_tables\".\"taken_off\" = 0 and \"dining_tables\".\"today_name\" is null)"
+        }
+      }
     },
     "floor_plan_placements": {
       "name": "floor_plan_placements",
@@ -2653,253 +2770,6 @@
           "value": "\"floor_today_split_parts\".\"joined_table_id\" <> \"floor_today_split_parts\".\"part_table_id\""
         }
       }
-    },
-    "floor_today_tables": {
-      "name": "floor_today_tables",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "table_id": {
-          "name": "table_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "seats": {
-          "name": "seats",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "fixed": {
-          "name": "fixed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "x": {
-          "name": "x",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "y": {
-          "name": "y",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "shape": {
-          "name": "shape",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "rotation": {
-          "name": "rotation",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "taken_off": {
-          "name": "taken_off",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "floor_today_tables_table_key": {
-          "name": "floor_today_tables_table_key",
-          "columns": [
-            "table_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "floor_today_tables_table_fk": {
-          "name": "floor_today_tables_table_fk",
-          "tableFrom": "floor_today_tables",
-          "tableTo": "dining_tables",
-          "columnsFrom": [
-            "table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "floor_today_tables_seats_ck": {
-          "name": "floor_today_tables_seats_ck",
-          "value": "\"floor_today_tables\".\"seats\" is null or \"floor_today_tables\".\"seats\" between 0 and 999"
-        },
-        "floor_today_tables_x_ck": {
-          "name": "floor_today_tables_x_ck",
-          "value": "\"floor_today_tables\".\"x\" is null or \"floor_today_tables\".\"x\" between 0 and 999"
-        },
-        "floor_today_tables_y_ck": {
-          "name": "floor_today_tables_y_ck",
-          "value": "\"floor_today_tables\".\"y\" is null or \"floor_today_tables\".\"y\" between 0 and 999"
-        },
-        "floor_today_tables_width_ck": {
-          "name": "floor_today_tables_width_ck",
-          "value": "\"floor_today_tables\".\"width\" is null or \"floor_today_tables\".\"width\" between 1 and 99"
-        },
-        "floor_today_tables_height_ck": {
-          "name": "floor_today_tables_height_ck",
-          "value": "\"floor_today_tables\".\"height\" is null or \"floor_today_tables\".\"height\" between 1 and 99"
-        },
-        "floor_today_tables_rotation_ck": {
-          "name": "floor_today_tables_rotation_ck",
-          "value": "\"floor_today_tables\".\"rotation\" is null or (\"floor_today_tables\".\"rotation\" between 0 and 345 and \"floor_today_tables\".\"rotation\" % 15 = 0)"
-        },
-        "floor_today_tables_shape_ck": {
-          "name": "floor_today_tables_shape_ck",
-          "value": "\"floor_today_tables\".\"shape\" in ('rect', 'round')"
-        },
-        "floor_today_tables_placement_ck": {
-          "name": "floor_today_tables_placement_ck",
-          "value": "(\"floor_today_tables\".\"x\" is null and \"floor_today_tables\".\"y\" is null and \"floor_today_tables\".\"width\" is null and \"floor_today_tables\".\"height\" is null and \"floor_today_tables\".\"shape\" is null and \"floor_today_tables\".\"rotation\" is null) or (\"floor_today_tables\".\"x\" is not null and \"floor_today_tables\".\"y\" is not null and \"floor_today_tables\".\"width\" is not null and \"floor_today_tables\".\"height\" is not null and \"floor_today_tables\".\"shape\" is not null and \"floor_today_tables\".\"rotation\" is not null)"
-        }
-      }
-    },
-    "floor_today_zones": {
-      "name": "floor_today_zones",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "zone_id": {
-          "name": "zone_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "business_day": {
-          "name": "business_day",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "generation": {
-          "name": "generation",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "set_id": {
-          "name": "set_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "layout_revision": {
-          "name": "layout_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "occurrence": {
-          "name": "occurrence",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "floor_today_zones_zone_key": {
-          "name": "floor_today_zones_zone_key",
-          "columns": [
-            "zone_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "floor_today_zones_zone_fk": {
-          "name": "floor_today_zones_zone_fk",
-          "tableFrom": "floor_today_zones",
-          "tableTo": "floor_zones",
-          "columnsFrom": [
-            "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "floor_today_zones_set_fk": {
-          "name": "floor_today_zones_set_fk",
-          "tableFrom": "floor_today_zones",
-          "tableTo": "floor_plan_sets",
-          "columnsFrom": [
-            "set_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "parties": {
       "name": "parties",
@@ -4143,6 +4013,43 @@
           "notNull": false,
           "autoincrement": false
         },
+        "today_business_day": {
+          "name": "today_business_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_revision": {
+          "name": "today_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "today_set_id": {
+          "name": "today_set_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "today_layout_revision": {
+          "name": "today_layout_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "today_occurrence": {
+          "name": "today_occurrence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "kept_open_day": {
           "name": "kept_open_day",
           "type": "text",
@@ -4184,6 +4091,19 @@
         }
       },
       "foreignKeys": {
+        "floor_zones_today_set_id_floor_plan_sets_id_fk": {
+          "name": "floor_zones_today_set_id_floor_plan_sets_id_fk",
+          "tableFrom": "floor_zones",
+          "tableTo": "floor_plan_sets",
+          "columnsFrom": [
+            "today_set_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "floor_zones_department_fk": {
           "name": "floor_zones_department_fk",
           "tableFrom": "floor_zones",

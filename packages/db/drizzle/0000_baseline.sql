@@ -250,8 +250,28 @@ CREATE TABLE `dining_tables` (
 	`created_at` text NOT NULL,
 	`needs_clearing_since` text,
 	`plan_table_id` text,
+	`on_floor` integer DEFAULT false NOT NULL,
+	`today_seats` integer,
+	`today_fixed` integer DEFAULT false NOT NULL,
+	`today_x` integer,
+	`today_y` integer,
+	`today_width` integer,
+	`today_height` integer,
+	`today_shape` text,
+	`today_rotation` integer,
+	`taken_off` integer DEFAULT false NOT NULL,
+	`today_name` text,
 	FOREIGN KEY (`plan_table_id`) REFERENCES `floor_plan_tables`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "dining_tables_today_seats_ck" CHECK("dining_tables"."today_seats" is null or "dining_tables"."today_seats" between 0 and 999),
+	CONSTRAINT "dining_tables_today_x_ck" CHECK("dining_tables"."today_x" is null or "dining_tables"."today_x" between 0 and 999),
+	CONSTRAINT "dining_tables_today_y_ck" CHECK("dining_tables"."today_y" is null or "dining_tables"."today_y" between 0 and 999),
+	CONSTRAINT "dining_tables_today_width_ck" CHECK("dining_tables"."today_width" is null or "dining_tables"."today_width" between 1 and 99),
+	CONSTRAINT "dining_tables_today_height_ck" CHECK("dining_tables"."today_height" is null or "dining_tables"."today_height" between 1 and 99),
+	CONSTRAINT "dining_tables_today_rotation_ck" CHECK("dining_tables"."today_rotation" is null or ("dining_tables"."today_rotation" between 0 and 345 and "dining_tables"."today_rotation" % 15 = 0)),
+	CONSTRAINT "dining_tables_today_shape_ck" CHECK("dining_tables"."today_shape" in ('rect', 'round')),
+	CONSTRAINT "dining_tables_today_placement_ck" CHECK(("dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null) or ("dining_tables"."today_x" is not null and "dining_tables"."today_y" is not null and "dining_tables"."today_width" is not null and "dining_tables"."today_height" is not null and "dining_tables"."today_shape" is not null and "dining_tables"."today_rotation" is not null)),
+	CONSTRAINT "dining_tables_off_floor_ck" CHECK("dining_tables"."on_floor" = 1 or ("dining_tables"."today_seats" is null and "dining_tables"."today_fixed" = 0 and "dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null and "dining_tables"."taken_off" = 0 and "dining_tables"."today_name" is null))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `dining_tables_short_name_key_uq` ON `dining_tables` (`short_name_key`);--> statement-breakpoint
@@ -391,44 +411,6 @@ CREATE TABLE `floor_today_split_parts` (
 --> statement-breakpoint
 CREATE INDEX `floor_today_split_parts_joined_idx` ON `floor_today_split_parts` (`joined_table_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `floor_today_split_parts_part_key` ON `floor_today_split_parts` (`part_table_id`);--> statement-breakpoint
-CREATE TABLE `floor_today_tables` (
-	`id` text PRIMARY KEY NOT NULL,
-	`table_id` text NOT NULL,
-	`seats` integer,
-	`fixed` integer DEFAULT false NOT NULL,
-	`x` integer,
-	`y` integer,
-	`width` integer,
-	`height` integer,
-	`shape` text,
-	`rotation` integer,
-	`taken_off` integer DEFAULT false NOT NULL,
-	`name` text,
-	FOREIGN KEY (`table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "floor_today_tables_seats_ck" CHECK("floor_today_tables"."seats" is null or "floor_today_tables"."seats" between 0 and 999),
-	CONSTRAINT "floor_today_tables_x_ck" CHECK("floor_today_tables"."x" is null or "floor_today_tables"."x" between 0 and 999),
-	CONSTRAINT "floor_today_tables_y_ck" CHECK("floor_today_tables"."y" is null or "floor_today_tables"."y" between 0 and 999),
-	CONSTRAINT "floor_today_tables_width_ck" CHECK("floor_today_tables"."width" is null or "floor_today_tables"."width" between 1 and 99),
-	CONSTRAINT "floor_today_tables_height_ck" CHECK("floor_today_tables"."height" is null or "floor_today_tables"."height" between 1 and 99),
-	CONSTRAINT "floor_today_tables_rotation_ck" CHECK("floor_today_tables"."rotation" is null or ("floor_today_tables"."rotation" between 0 and 345 and "floor_today_tables"."rotation" % 15 = 0)),
-	CONSTRAINT "floor_today_tables_shape_ck" CHECK("floor_today_tables"."shape" in ('rect', 'round')),
-	CONSTRAINT "floor_today_tables_placement_ck" CHECK(("floor_today_tables"."x" is null and "floor_today_tables"."y" is null and "floor_today_tables"."width" is null and "floor_today_tables"."height" is null and "floor_today_tables"."shape" is null and "floor_today_tables"."rotation" is null) or ("floor_today_tables"."x" is not null and "floor_today_tables"."y" is not null and "floor_today_tables"."width" is not null and "floor_today_tables"."height" is not null and "floor_today_tables"."shape" is not null and "floor_today_tables"."rotation" is not null))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `floor_today_tables_table_key` ON `floor_today_tables` (`table_id`);--> statement-breakpoint
-CREATE TABLE `floor_today_zones` (
-	`id` text PRIMARY KEY NOT NULL,
-	`zone_id` text NOT NULL,
-	`business_day` text NOT NULL,
-	`generation` integer DEFAULT 0 NOT NULL,
-	`set_id` text,
-	`layout_revision` integer DEFAULT 0 NOT NULL,
-	`occurrence` text,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`set_id`) REFERENCES `floor_plan_sets`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `floor_today_zones_zone_key` ON `floor_today_zones` (`zone_id`);--> statement-breakpoint
 CREATE TABLE `parties` (
 	`id` text PRIMARY KEY NOT NULL,
 	`guest_count` integer,
@@ -607,9 +589,15 @@ CREATE TABLE `floor_zones` (
 	`order_start` text,
 	`paid_when` text,
 	`collection_number` text,
+	`today_business_day` text,
+	`today_revision` integer DEFAULT 0 NOT NULL,
+	`today_set_id` text,
+	`today_layout_revision` integer DEFAULT 0 NOT NULL,
+	`today_occurrence` text,
 	`kept_open_day` text,
 	`kept_open_from` text,
 	`kept_open_until` text,
+	FOREIGN KEY (`today_set_id`) REFERENCES `floor_plan_sets`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "floor_zones_kept_open_ck" CHECK(("floor_zones"."kept_open_day" is null and "floor_zones"."kept_open_from" is null and "floor_zones"."kept_open_until" is null) or ("floor_zones"."kept_open_day" is not null and "floor_zones"."kept_open_from" is not null and "floor_zones"."kept_open_until" is not null)),
 	CONSTRAINT "floor_zones_kept_open_step_ck" CHECK(substr("floor_zones"."kept_open_from", 4, 2) in ('00', '15', '30', '45') and substr("floor_zones"."kept_open_until", 4, 2) in ('00', '15', '30', '45')),

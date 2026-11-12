@@ -302,7 +302,9 @@ describe("openTab", () => {
       code: "table.not_found",
       params: { tableId: missing },
     });
-    await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
+    await db.execute(
+      sql`update dining_tables set on_floor=0, today_seats=null, today_fixed=0, today_x=null, today_y=null, today_width=null, today_height=null, today_shape=null, today_rotation=null, taken_off=0, today_name=null where id = ${tableId}`,
+    );
     await expect(asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "table.inactive",
       params: { tableId },
@@ -328,7 +330,9 @@ describe("opening only tables in service", () => {
     async (state) => {
       const { cfg, tableId } = await setupVenue();
       if (state === "missing today") {
-        await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
+        await db.execute(
+          sql`update dining_tables set on_floor=0, today_seats=null, today_fixed=0, today_x=null, today_y=null, today_width=null, today_height=null, today_shape=null, today_rotation=null, taken_off=0, today_name=null where id = ${tableId}`,
+        );
       } else {
         await db.execute(
           sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${tableId})`,

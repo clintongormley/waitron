@@ -680,6 +680,18 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
+      const live = expected[phase].tables.dining_tables!;
+      const todayIds = new Set(
+        Object.values(expected[phase].tables.floor_today_tables!.rows).map((row) => row.table_id),
+      );
+      live.columns.push({
+        name: "on_floor",
+        type: "INTEGER",
+        notnull: 1,
+        dflt_value: "false",
+        pk: 0,
+      });
+      for (const row of Object.values(live.rows)) row.on_floor = todayIds.has(row.id) ? 1 : 0;
       expected[phase] = madridWithFoldedTables(expected[phase], [
         {
           from: "department_floor_plan_sets",
@@ -714,6 +726,35 @@ for (const locale of ["en", "es"] as const) {
           },
         },
         {
+          from: "floor_today_tables",
+          into: "dining_tables",
+          match: { from: "table_id", into: "id" },
+          columns: {
+            seats: "today_seats",
+            fixed: "today_fixed",
+            x: "today_x",
+            y: "today_y",
+            width: "today_width",
+            height: "today_height",
+            shape: "today_shape",
+            rotation: "today_rotation",
+            taken_off: "taken_off",
+            name: "today_name",
+          },
+        },
+        {
+          from: "floor_today_zones",
+          into: "floor_zones",
+          match: { from: "zone_id", into: "id" },
+          columns: {
+            business_day: "today_business_day",
+            generation: "today_revision",
+            set_id: "today_set_id",
+            layout_revision: "today_layout_revision",
+            occurrence: "today_occurrence",
+          },
+        },
+        {
           from: "station_day_states",
           into: "kitchen_stations",
           match: { from: "station_id", into: "id" },
@@ -723,6 +764,19 @@ for (const locale of ["en", "es"] as const) {
           },
         },
       ]);
+      const zoneColumns = expected[phase].tables.floor_zones!.columns;
+      const todayZoneColumns = zoneColumns.splice(-5);
+      todayZoneColumns.find((column) => column.name === "today_business_day")!.notnull = 0;
+      zoneColumns.splice(
+        zoneColumns.findIndex((column) => column.name === "kept_open_day"),
+        0,
+        ...todayZoneColumns,
+      );
+      expected[phase].tables.floor_zones!.foreignKeys = expected[phase].tables
+        .floor_zones!.foreignKeys.reverse()
+        .map((key, id) => ({ ...key, id }));
+      delete phases[phase]!.floor_today_tables;
+      delete phases[phase]!.floor_today_zones;
       for (const table of ["floor_zones", "kitchen_stations"])
         for (const column of expected[phase].tables[table]!.columns)
           if (

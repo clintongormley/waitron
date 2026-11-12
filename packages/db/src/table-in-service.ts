@@ -1,12 +1,11 @@
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 
-/** A table stays in service while it has a today's row in a switched-on zone, even if taken off. */
+/** A table stays in service while it is on today's map in a switched-on zone, even if taken off. */
 export function tableInService(tableId: SQLWrapper): SQL {
   return sql`${tableId} in (
-    select service_today.table_id
-    from floor_today_tables service_today
-    inner join dining_tables service_table on service_table.id = service_today.table_id
+    select service_table.id
+    from dining_tables service_table
     inner join floor_zones service_zone on service_zone.id = service_table.zone_id
-    where service_zone.active = 1
+    where service_table.on_floor = 1 and service_zone.active = 1
   )`;
 }

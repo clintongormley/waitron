@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { floorTodayTables } from "@waitron/db";
+import { OFF_FLOOR } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -119,7 +119,8 @@ async function seedDiningTables(db: Database): Promise<void> {
       { zoneId: zone!.id, label: "Table 3 (retired)" },
     ])
     .returning({ id: diningTables.id });
-  await db.insert(floorTodayTables).values([{ tableId: held!.id }, { tableId: left!.id }]);
+  for (const table of [held!, left!])
+    await db.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table.id));
   for (const [table, leftAt] of [
     [held!, null],
     [left!, new Date().toISOString()],
@@ -222,9 +223,12 @@ describe("mountReportApi — /reports/overview", () => {
         { zoneId: zone!.id, label: "Closed today" },
       ])
       .returning();
-    await suite.db.insert(floorTodayTables).values({ tableId: closed!.id });
+    await suite.db
+      .update(diningTables)
+      .set({ onFloor: true })
+      .where(eq(diningTables.id, closed!.id));
     onTestFinished(async () => {
-      await suite.db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, closed!.id));
+      await suite.db.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, closed!.id));
       await suite.db.delete(diningTables).where(eq(diningTables.id, closed!.id));
       await suite.db.delete(diningTables).where(eq(diningTables.id, absent!.id));
       await suite.db.delete(floorZones).where(eq(floorZones.id, zone!.id));
@@ -245,7 +249,11 @@ describe("mountReportApi — /reports/overview", () => {
         })),
       )
       .returning();
-    await suite.db.insert(floorTodayTables).values(tables.map((t) => ({ tableId: t.id })));
+    for (const table of tables)
+      await suite.db
+        .update(diningTables)
+        .set({ onFloor: true })
+        .where(eq(diningTables.id, table.id));
     const [group] = await suite.db
       .insert(floorTodayJoins)
       .values({ zoneId: zone!.id, name: "Long table", seats: 10 })
@@ -263,7 +271,7 @@ describe("mountReportApi — /reports/overview", () => {
       await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, group!.id));
       await suite.db.delete(floorTodayJoins).where(eq(floorTodayJoins.id, group!.id));
       for (const t of tables) {
-        await suite.db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t.id));
+        await suite.db.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, t.id));
         await suite.db.delete(diningTables).where(eq(diningTables.id, t.id));
       }
       await suite.db.delete(floorZones).where(eq(floorZones.id, zone!.id));
