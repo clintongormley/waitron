@@ -628,6 +628,7 @@ describe("waitron-restore restore --from-archive", () => {
     const f = await fixture();
     f.get = (_key, _out, call) =>
       new Promise((_resolve, reject) => {
+        if (call.signal.aborted) return reject(new Error("aborted"));
         call.signal.addEventListener("abort", () => reject(new Error("aborted")));
       });
     const { code, out } = await run(f, [], { archiveTimeoutMs: 20 });
