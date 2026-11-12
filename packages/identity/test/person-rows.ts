@@ -12,10 +12,7 @@ export async function seedPersons(
   values: PersonSeed | readonly PersonSeed[],
 ): Promise<(typeof persons.$inferSelect)[]> {
   const seeds = [values].flat();
-  const rows = await db
-    .insert(persons)
-    .values(seeds.map(({ jobRoles: _jobRoles, ...person }) => person))
-    .returning();
+  const rows = await db.insert(persons).values(seeds).returning();
   const fixtureRole = seeds.some((seed) => seed.jobRoles === undefined)
     ? await ensureFixtureJobRole(db)
     : null;
