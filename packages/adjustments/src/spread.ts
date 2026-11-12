@@ -33,10 +33,10 @@ export interface PricedRow {
  *
  * - `addedOrder` decides a tie between equal remainders, lower first: the line's `line_no`.
  * - `gross` must be `grossUnit × quantity ÷ priceQuantity` rounded to the cent.
- * - `exact` is true for a row the caller may split into at most two rows at whole-cent prices: a
- *   whole-number quantity on a dish with no extras. It is false for a weighed row, and for every row
- *   of a dish that has extras; such a row keeps one row and takes the nearest whole-cent unit price
- *   ({@link nearestWeighedUnitPrice}), so what it takes can differ from its share.
+ * - `exact` is true for a whole-number row the caller can split into at most two rows at
+ *   whole-cent prices. It is false for a weighed row and for any row the caller cannot split; such a
+ *   row keeps one row and takes the nearest whole-cent unit price ({@link nearestWeighedUnitPrice}),
+ *   so what it takes can differ from its share.
  */
 export interface SpreadLine {
   lineId: string;

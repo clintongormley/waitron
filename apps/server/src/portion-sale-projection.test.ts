@@ -1061,19 +1061,31 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
     });
   });
 
-  it("A803 monetary comparison: €1.00 off 3 burgers €9.50 with €1.00 cheese, and a €2.00 water", async () => {
+  // Owner decision 2026-11-12 (R6-4, "Exact"): the portions of a dish with extras take their exact
+  // share, two prices a cent apart, as a plain dish's do, where today's one line of three keeps one
+  // price, so the cent today's burgers miss no longer falls on the water; the bill's total is
+  // unchanged.
+  it("A803 monetary comparison: €1.00 off 3 burgers €9.50 with €1.00 cheese, and a €2.00 water, prices the burgers' portions two ways, total unchanged", async () => {
     await withTransaction(db, async (tx) => {
       const { today, bill } = await bills(tx, [burgersWithCheese(3), many(ids.water, 1)]);
       await discountBill(tx, today, "1.00");
       await discountBill(tx, bill, "1.00");
 
-      const expected = await filedOf(tx, today);
-      expect(expected.gross).toEqual([
+      const before = await filedOf(tx, today);
+      const after = await filedOf(tx, bill);
+      expect(before.gross).toEqual([
         "Burger 3.000 gross 27.66",
         "Cheese 3.000 gross 2.91",
         "Water 1.000 gross 1.93",
       ]);
-      expect(await filedOf(tx, bill)).toEqual(expected);
+      expect(after.rows).toEqual([
+        "Burger 1.000 gross 9.21 base 8.37 @10.00 list 9.50 each 9.50",
+        "Burger 2.000 gross 18.44 base 16.76 @10.00 list 19.00 each 9.50",
+        "Cheese 1.000 gross 0.97 base 0.88 @10.00 list 1.00 each 1.00",
+        "Cheese 2.000 gross 1.94 base 1.76 @10.00 list 2.00 each 1.00",
+        "Water 1.000 gross 1.94 base 1.76 @10.00 list 2.00 each 2.00",
+      ]);
+      expect(after.total).toBe(before.total);
     });
   });
 

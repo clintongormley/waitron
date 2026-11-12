@@ -820,20 +820,56 @@ describe("a bill discount with a weighed line (plan D15)", () => {
   });
 });
 
-describe("a bill discount over a dish with extras (ruling R7)", () => {
-  it("keeps each row of the dish whole at its nearest price and moves the cents it misses to a line with room", async () => {
+describe("a bill discount over a dish with extras", () => {
+  it("keeps the olives at their nearest price and moves the cent they miss onto the pizzas", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }, { name: "Salad" }]);
 
     await adjust(billId, { action: "discount_amount", amount: "3.01" });
 
     expect(await priced(billId)).toEqual([
-      ["Pizza", "1.000", "8.13", "9.00", "8.13"],
+      ["Pizza", "1.000", "8.12", "9.00", "8.12"],
       ["Olives", "1.000", "1.36", "1.50", "1.36"],
-      ["Pizza", "1.000", "8.13", "9.00", "8.13"],
+      ["Pizza", "1.000", "8.12", "9.00", "8.12"],
       ["Olives", "1.000", "1.36", "1.50", "1.36"],
-      ["Salad", "1.000", "9.01", "10.00", "9.01"],
+      ["Salad", "1.000", "9.03", "10.00", "9.03"],
     ]);
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 301 });
+  });
+
+  it("takes €0.01 off Pizza ×2 with an olive each off one pizza, and €0.01 off its two olives alone off one olive", async () => {
+    for (const [lineNo, expected] of [
+      [
+        1,
+        [
+          ["Pizza", "1.000", "9.00", "9.00", "9.00"],
+          ["Olives", "1.000", "1.50", null, "1.50"],
+          ["Pizza", "1.000", "8.99", "9.00", "8.99"],
+          ["Olives", "1.000", "1.50", null, "1.50"],
+        ],
+      ],
+      [
+        2,
+        [
+          ["Pizza", "1.000", "9.00", null, "9.00"],
+          ["Olives", "1.000", "1.50", "1.50", "1.50"],
+          ["Pizza", "1.000", "9.00", null, "9.00"],
+          ["Olives", "1.000", "1.49", "1.50", "1.49"],
+        ],
+      ],
+    ] as const) {
+      const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+      const ask: Ask = {
+        ...(await todayLine(venue, billId, lineNo)),
+        action: "discount_amount",
+        amount: "0.01",
+      };
+
+      expect((await preview(billId, ask)).reduction).toBe("0.01");
+      await adjust(billId, ask);
+
+      expect(await priced(billId)).toEqual(expected);
+      expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 1 });
+    }
   });
 });
 
@@ -3609,16 +3645,6 @@ describe("a give-away or a discount that takes nothing off", () => {
       what: "€0.01 off a bill of 2.5 kg of fish, whose price moves the total by more",
       lines: [{ name: "Fish", quantity: "2.5" }],
       ask: onBill({ action: "discount_amount", amount: "0.01" }),
-    },
-    {
-      what: "€0.01 off Pizza ×2 with an olive each, each row keeping a whole-cent price",
-      lines: [{ name: "Pizza", quantity: "2", olives: 1 }],
-      ask: onLine(1, { action: "discount_amount", amount: "0.01" }),
-    },
-    {
-      what: "€0.01 off the two olives of Pizza ×2 alone",
-      lines: [{ name: "Pizza", quantity: "2", olives: 1 }],
-      ask: onLine(2, { action: "discount_amount", amount: "0.01" }),
     },
   ] satisfies {
     what: string;
