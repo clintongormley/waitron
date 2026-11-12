@@ -4636,7 +4636,10 @@ the same, so no path through the seat writes a record. Both wrappers are needed:
 showed that wrapping the writers alone charged a card and then answered `507`. A card already
 charged when a writer refuses is answered `507 sale.charged_not_recorded` with reason
 `clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the two refund recovery loops leave
-pending refunds alone, and the bill payments loop leaves a card payment charged before the start
+pending refunds alone, a card refund on the till or the dashboard whose provider wait ends once the
+gate holds is left pending by `clockStopsRefund` (boot hands `clockUnconfirmed` to both route
+mounts; the refund-wait rows in `clock-unconfirmed-gate.test.ts` pass it themselves, and no test
+checks that boot does), and the bill payments loop leaves a card payment charged before the start
 pending and raises no `payment.bill_settle_failed` for it, also when the gate starts holding
 partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). The gate holds while the box files records (`filesRecords()`) and the start
 is `waiting` or a clock set is with the host, each asked at each call, so a box that starts filing while it waits is gated from

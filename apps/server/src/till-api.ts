@@ -311,8 +311,11 @@ export interface TillApiDeps {
    * supplies it.
    */
   disk?: DiskFullState;
-  /** The start clock gate, for a card refund's check after a provider wait; a live boot always
-   * supplies it. */
+  /**
+   * Read, through the deps they pass, by the tender refund and bill refund routes' check after a
+   * provider wait (`clockStopsRefund`). Unset, that check ignores the start clock gate; a live boot
+   * always supplies it.
+   */
   clockUnconfirmed?: () => boolean;
   /**
    * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
