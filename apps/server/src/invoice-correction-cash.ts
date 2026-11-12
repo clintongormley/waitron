@@ -125,7 +125,6 @@ export async function giveCorrectionCash(
       {
         requestedBy: actor.personId,
         authorizedBy: actor.authorization.authorizedBy,
-        viaOverride: actor.authorization.viaOverride,
       },
       createdAt,
       { correction, left: unclaimed },
