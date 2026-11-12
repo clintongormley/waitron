@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { incidents, sales, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
-import { previewCorrectionAmounts } from "@waitron/core";
+import { markIncidentHandled, previewCorrectionAmounts } from "@waitron/core";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -241,6 +241,35 @@ describe("the unfinished-correction alert", () => {
       at(61);
       await sweepInvoiceCorrections(v.deps, v.deps.clock.now().instant);
       expect(lock).toHaveBeenCalledOnce();
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
+  it("takes no write lock for a correction already alerted, and alerts again once it is handled", async () => {
+    const { saleId } = await fifteenBack();
+    at(61);
+    await sweepInvoiceCorrections(v.deps, v.deps.clock.now().instant);
+    const lock = vi.spyOn(v.db, "withWriteLock");
+    try {
+      at(62);
+      await sweepInvoiceCorrections(v.deps, v.deps.clock.now().instant);
+      expect(lock).not.toHaveBeenCalled();
+
+      const [raised] = await v.db
+        .select({ id: incidents.id })
+        .from(incidents)
+        .where(
+          and(eq(incidents.code, "invoice_correction.unfinished"), eq(incidents.saleId, saleId)),
+        );
+      await inTx(v, (tx) =>
+        markIncidentHandled(tx, { id: raised!.id, personId: v.adminId, handledAt: new Date() }),
+      );
+      lock.mockClear();
+      at(63);
+      await sweepInvoiceCorrections(v.deps, v.deps.clock.now().instant);
+      expect(lock).toHaveBeenCalledOnce();
+      expect(await alertsFor(saleId)).toHaveLength(2);
     } finally {
       lock.mockRestore();
     }
