@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9fe3fee0-b16a-425e-978a-06df05e0013e",
+  "id": "d8f41797-fe14-4dd1-8c5d-b86e5aa4b846",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1763,14 +1763,14 @@
           "name": "x",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "y": {
           "name": "y",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "width": {
@@ -1791,14 +1791,14 @@
           "name": "shape",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "rotation": {
           "name": "rotation",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         }
       },
@@ -1869,7 +1869,7 @@
         },
         "floor_plan_placements_placement_ck": {
           "name": "floor_plan_placements_placement_ck",
-          "value": "(\"floor_plan_placements\".\"x\" is null and \"floor_plan_placements\".\"y\" is null and \"floor_plan_placements\".\"width\" is null and \"floor_plan_placements\".\"height\" is null and \"floor_plan_placements\".\"shape\" is null and \"floor_plan_placements\".\"rotation\" is null) or (\"floor_plan_placements\".\"x\" is not null and \"floor_plan_placements\".\"y\" is not null and \"floor_plan_placements\".\"width\" is not null and \"floor_plan_placements\".\"height\" is not null and \"floor_plan_placements\".\"shape\" is not null and \"floor_plan_placements\".\"rotation\" is not null)"
+          "value": "(\"floor_plan_placements\".\"x\" is null and \"floor_plan_placements\".\"y\" is null and \"floor_plan_placements\".\"shape\" is null and \"floor_plan_placements\".\"rotation\" is null) or (\"floor_plan_placements\".\"x\" is not null and \"floor_plan_placements\".\"y\" is not null and \"floor_plan_placements\".\"shape\" is not null and \"floor_plan_placements\".\"rotation\" is not null)"
         }
       }
     },
@@ -1882,75 +1882,55 @@
           "primaryKey": true,
           "notNull": true,
           "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "floor_plan_table_parts": {
-      "name": "floor_plan_table_parts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
         },
-        "joined_table_id": {
-          "name": "joined_table_id",
+        "department_id": {
+          "name": "department_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "part_table_id": {
-          "name": "part_table_id",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {
-        "floor_plan_table_parts_joined_idx": {
-          "name": "floor_plan_table_parts_joined_idx",
+        "floor_plan_sets_name_key": {
+          "name": "floor_plan_sets_name_key",
           "columns": [
-            "joined_table_id"
-          ],
-          "isUnique": false
-        },
-        "floor_plan_table_parts_part_key": {
-          "name": "floor_plan_table_parts_part_key",
-          "columns": [
-            "part_table_id"
+            "department_id",
+            "name"
           ],
           "isUnique": true
+        },
+        "floor_plan_sets_one_default_key": {
+          "name": "floor_plan_sets_one_default_key",
+          "columns": [
+            "department_id"
+          ],
+          "isUnique": true,
+          "where": "\"floor_plan_sets\".\"is_default\""
         }
       },
       "foreignKeys": {
-        "floor_plan_table_parts_joined_fk": {
-          "name": "floor_plan_table_parts_joined_fk",
-          "tableFrom": "floor_plan_table_parts",
-          "tableTo": "floor_plan_tables",
+        "floor_plan_sets_department_id_departments_id_fk": {
+          "name": "floor_plan_sets_department_id_departments_id_fk",
+          "tableFrom": "floor_plan_sets",
+          "tableTo": "departments",
           "columnsFrom": [
-            "joined_table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "floor_plan_table_parts_part_fk": {
-          "name": "floor_plan_table_parts_part_fk",
-          "tableFrom": "floor_plan_table_parts",
-          "tableTo": "floor_plan_tables",
-          "columnsFrom": [
-            "part_table_id"
+            "department_id"
           ],
           "columnsTo": [
             "id"
@@ -1962,99 +1942,9 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "floor_plan_table_parts_not_self_ck": {
-          "name": "floor_plan_table_parts_not_self_ck",
-          "value": "\"floor_plan_table_parts\".\"joined_table_id\" <> \"floor_plan_table_parts\".\"part_table_id\""
-        }
-      }
-    },
-    "floor_plan_table_sizes": {
-      "name": "floor_plan_table_sizes",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "plan_id": {
-          "name": "plan_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "plan_table_id": {
-          "name": "plan_table_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "width": {
-          "name": "width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "height": {
-          "name": "height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "floor_plan_table_sizes_plan_table_key": {
-          "name": "floor_plan_table_sizes_plan_table_key",
-          "columns": [
-            "plan_id",
-            "plan_table_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "floor_plan_table_sizes_table_fk": {
-          "name": "floor_plan_table_sizes_table_fk",
-          "tableFrom": "floor_plan_table_sizes",
-          "tableTo": "floor_plan_tables",
-          "columnsFrom": [
-            "plan_table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "floor_plan_table_sizes_plan_fk": {
-          "name": "floor_plan_table_sizes_plan_fk",
-          "tableFrom": "floor_plan_table_sizes",
-          "tableTo": "floor_plans",
-          "columnsFrom": [
-            "plan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "floor_plan_table_sizes_width_ck": {
-          "name": "floor_plan_table_sizes_width_ck",
-          "value": "\"floor_plan_table_sizes\".\"width\" is null or \"floor_plan_table_sizes\".\"width\" between 1 and 99"
-        },
-        "floor_plan_table_sizes_height_ck": {
-          "name": "floor_plan_table_sizes_height_ck",
-          "value": "\"floor_plan_table_sizes\".\"height\" is null or \"floor_plan_table_sizes\".\"height\" between 1 and 99"
+        "floor_plan_sets_name_ck": {
+          "name": "floor_plan_sets_name_ck",
+          "value": "trim(\"floor_plan_sets\".\"name\") <> ''"
         }
       }
     },
@@ -2103,9 +1993,23 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "part_of_table_id": {
+          "name": "part_of_table_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
+        "floor_plan_tables_part_of_idx": {
+          "name": "floor_plan_tables_part_of_idx",
+          "columns": [
+            "part_of_table_id"
+          ],
+          "isUnique": false
+        },
         "floor_plan_tables_zone_label_key": {
           "name": "floor_plan_tables_zone_label_key",
           "columns": [
@@ -2116,6 +2020,19 @@
         }
       },
       "foreignKeys": {
+        "floor_plan_tables_part_of_table_id_floor_plan_tables_id_fk": {
+          "name": "floor_plan_tables_part_of_table_id_floor_plan_tables_id_fk",
+          "tableFrom": "floor_plan_tables",
+          "tableTo": "floor_plan_tables",
+          "columnsFrom": [
+            "part_of_table_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "floor_plan_tables_zone_fk": {
           "name": "floor_plan_tables_zone_fk",
           "tableFrom": "floor_plan_tables",
@@ -2136,6 +2053,10 @@
         "floor_plan_tables_seats_ck": {
           "name": "floor_plan_tables_seats_ck",
           "value": "\"floor_plan_tables\".\"seats\" is null or \"floor_plan_tables\".\"seats\" between 0 and 999"
+        },
+        "floor_plan_tables_part_of_not_self_ck": {
+          "name": "floor_plan_tables_part_of_not_self_ck",
+          "value": "\"floor_plan_tables\".\"part_of_table_id\" <> \"floor_plan_tables\".\"id\""
         }
       }
     },
@@ -2220,84 +2141,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "floor_reset_table_parts": {
-      "name": "floor_reset_table_parts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "joined_reset_table_id": {
-          "name": "joined_reset_table_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "part_reset_table_id": {
-          "name": "part_reset_table_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "floor_reset_table_parts_joined_idx": {
-          "name": "floor_reset_table_parts_joined_idx",
-          "columns": [
-            "joined_reset_table_id"
-          ],
-          "isUnique": false
-        },
-        "floor_reset_table_parts_part_key": {
-          "name": "floor_reset_table_parts_part_key",
-          "columns": [
-            "part_reset_table_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "floor_reset_table_parts_joined_fk": {
-          "name": "floor_reset_table_parts_joined_fk",
-          "tableFrom": "floor_reset_table_parts",
-          "tableTo": "floor_reset_tables",
-          "columnsFrom": [
-            "joined_reset_table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "floor_reset_table_parts_part_fk": {
-          "name": "floor_reset_table_parts_part_fk",
-          "tableFrom": "floor_reset_table_parts",
-          "tableTo": "floor_reset_tables",
-          "columnsFrom": [
-            "part_reset_table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "floor_reset_table_parts_not_self_ck": {
-          "name": "floor_reset_table_parts_not_self_ck",
-          "value": "\"floor_reset_table_parts\".\"joined_reset_table_id\" <> \"floor_reset_table_parts\".\"part_reset_table_id\""
-        }
-      }
     },
     "floor_reset_tables": {
       "name": "floor_reset_tables",
@@ -2440,6 +2283,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "part_of_reset_table_id": {
+          "name": "part_of_reset_table_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2448,6 +2298,13 @@
           "columns": [
             "zone_id",
             "pending"
+          ],
+          "isUnique": false
+        },
+        "floor_reset_tables_part_of_idx": {
+          "name": "floor_reset_tables_part_of_idx",
+          "columns": [
+            "part_of_reset_table_id"
           ],
           "isUnique": false
         },
@@ -2466,6 +2323,19 @@
           "tableTo": "floor_plan_tables",
           "columnsFrom": [
             "plan_table_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "floor_reset_tables_part_of_reset_table_id_floor_reset_tables_id_fk": {
+          "name": "floor_reset_tables_part_of_reset_table_id_floor_reset_tables_id_fk",
+          "tableFrom": "floor_reset_tables",
+          "tableTo": "floor_reset_tables",
+          "columnsFrom": [
+            "part_of_reset_table_id"
           ],
           "columnsTo": [
             "id"
@@ -2506,6 +2376,10 @@
         "floor_reset_tables_seats_ck": {
           "name": "floor_reset_tables_seats_ck",
           "value": "\"floor_reset_tables\".\"seats\" is null or \"floor_reset_tables\".\"seats\" between 0 and 999"
+        },
+        "floor_reset_tables_part_of_not_self_ck": {
+          "name": "floor_reset_tables_part_of_not_self_ck",
+          "value": "\"floor_reset_tables\".\"part_of_reset_table_id\" <> \"floor_reset_tables\".\"id\""
         },
         "floor_reset_tables_x_ck": {
           "name": "floor_reset_tables_x_ck",
@@ -18289,94 +18163,6 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "department_floor_plan_sets": {
-      "name": "department_floor_plan_sets",
-      "columns": {
-        "set_id": {
-          "name": "set_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "is_default": {
-          "name": "is_default",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        }
-      },
-      "indexes": {
-        "department_floor_plan_sets_name_key": {
-          "name": "department_floor_plan_sets_name_key",
-          "columns": [
-            "department_id",
-            "name"
-          ],
-          "isUnique": true
-        },
-        "department_floor_plan_sets_one_default_key": {
-          "name": "department_floor_plan_sets_one_default_key",
-          "columns": [
-            "department_id"
-          ],
-          "isUnique": true,
-          "where": "\"department_floor_plan_sets\".\"is_default\""
-        }
-      },
-      "foreignKeys": {
-        "department_floor_plan_sets_set_fk": {
-          "name": "department_floor_plan_sets_set_fk",
-          "tableFrom": "department_floor_plan_sets",
-          "tableTo": "floor_plan_sets",
-          "columnsFrom": [
-            "set_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "department_floor_plan_sets_department_fk": {
-          "name": "department_floor_plan_sets_department_fk",
-          "tableFrom": "department_floor_plan_sets",
-          "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "department_floor_plan_sets_name_ck": {
-          "name": "department_floor_plan_sets_name_ck",
-          "value": "trim(\"department_floor_plan_sets\".\"name\") <> ''"
-        }
-      }
     },
     "service_step_completions": {
       "name": "service_step_completions",

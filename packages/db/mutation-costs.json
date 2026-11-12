@@ -130,7 +130,6 @@
   "src/schema/venue-service/department-receipts.ts": 25.7,
   "src/schema/venue-service/department-transfers.ts": 132.6,
   "src/schema/venue-service/device-zone-selection.ts": 85.7,
-  "src/schema/venue-service/floor-plan-sets.ts": 52.5,
   "src/schema/venue-service/index.ts": 0.1,
   "src/schema/venue-service/kitchen-allergy.ts": 34.5,
   "src/schema/venue-service/kitchen-notices.ts": 121.6,
