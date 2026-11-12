@@ -59,14 +59,12 @@ CREATE TABLE `tenants` (
 CREATE UNIQUE INDEX `tenants_country_tax_id_key` ON `tenants` (`country`,`tax_id`);--> statement-breakpoint
 CREATE TABLE `nodes` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`filing_module` text,
 	`tax_module` text,
 	`public_key` text,
 	`endorsement` text,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
+	`created_at` text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `invoice_series` (

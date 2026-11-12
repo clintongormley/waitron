@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9b1276c8-f6f1-44af-89e3-5626304ca471",
+  "id": "2bd03c4e-d321-4f9a-b938-7386fa080c70",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -377,13 +377,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -428,21 +421,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "nodes_location_id_locations_id_fk": {
-          "name": "nodes_location_id_locations_id_fk",
-          "tableFrom": "nodes",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
