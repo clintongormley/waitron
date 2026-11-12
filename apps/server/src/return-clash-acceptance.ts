@@ -201,7 +201,9 @@ export async function acceptedReturnDecisions(
   for (const group of evidenceGroups(await events(deps, "return-clash-evidence"))) {
     if (
       ["venue", "sourceNodeId", "destinationNodeId", "module"].some(
-        (key) => canonicalize((group.event.detail[key] ?? null) as CanonicalValue) !== canonicalize(body[key]!),
+        (key) =>
+          canonicalize((group.event.detail[key] ?? null) as CanonicalValue) !==
+          canonicalize(body[key]!),
       )
     )
       continue;
