@@ -373,17 +373,6 @@ today (`deploy/` names none); a cloud profile can (`box-env.ts`). Decide whether
 record the key in use or refuse to copy, and whether a join should refuse before any write when
 the environment's key would hide the ring it receives.
 
-## A1223. A stored series pick that turns out taken
-
-From A1207. An attempt whose chosen name is found taken before it finishes is refused
-(`minute_in_use`). Left: start a new attempt by itself (Q1 in the A1385 PR, answered by the owner on
-2026-11-07: series are cheap and a retry may take a second series name). The refusal is already worded where it shows (A1385): both hour pages and the setup app at
-first setup's activation call it a fault in Waitron, and the restore page adds that reloading the
-page and starting the restore again makes a new restore with a new name
-(`packages/fiscal-verifactu/src/setup/clock-wait.ts`, `clockWaitStrings` `inUse`;
-`packages/fiscal-verifactu/src/setup/recovery-hour.ts`, its `inUse`; `apps/setup/src/setup-app.ts`,
-`firstSetupErrorKey`).
-
 ## A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).** Setup
@@ -475,15 +464,6 @@ that operation's reader. Do not remove exact-content checks to make a large file
   reinstall. Left open by A1131bc slice 3.
   [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read)
 
-## Bundle A1385: The A1207 leftovers in choosing a series name
-
-1 entry, size S. The other three were built by the A1385 PR.
-
-- **A1223. A stored series pick that turns out taken** (from A1207): start a new attempt by itself
-  (owner, 2026-11-07: series are cheap and a retry may take a second series name); the refusal is
-  already worded where it shows (A1385).
-  [Detail](setup.md#a1223-a-stored-series-pick-that-turns-out-taken)
-
 ## Bundle: The key ring after a join
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -541,10 +521,20 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   shipped backups, and of each box's retained
   `<state>/module-evidence/fiscal-verifactu/hour-history.json` (read by
   `apps/server/src/recovery-document-evidence.ts:26-31`), finds none carrying it.
-- **The setup and restore pages carry on by themselves, pressed or not, reloaded or not** (owner,
-  2026-11-07, on A1385): making a series and throwing it away unused costs nothing, because the first
-  invoice is what commits a series, so a page's countdown and second-clock checks make the series
-  without anyone being asked.
+- **The setup and restore pages, and the handover start, carry on to the invoice series by themselves once the person
+  confirms and presses Proceed** (owner, 2026-11-07, on A1385; 2026-11-09 and 2026-11-10, A1466):
+  making a series and throwing it away unused costs nothing, because the first invoice is what
+  commits a series, so nobody is asked whether a new one is needed. The person's part is the details
+  tick (setup) or the recovery key, both statements and the "These details are correct." tick (restore), or that tick alone (the handover start), then **Proceed**; everything after
+  that — the countdown, the second-clock checks and a used code's countdown — runs by itself. A
+  wait the setup box recorded before a reload carries on with no tick and no press.
+- **A stored series pick found taken is not retried (A1223 deleted, owner 2026-11-09):** the
+  pick-time check already skips every name in the invoice series and records
+  (`packages/fiscal-verifactu/src/hour-selection.ts`, the `used` loop over the history
+  `hour-history-reader.ts` reads). Reading the code found no path a venue can take to the later
+  refusal of a stored pick (`minute_in_use` with no time); this was read, not run; a bucket
+  restore while the old box still runs, and the callers of `registro-sif.ts`, were not traced
+  (A1466 plan, M10). The pages and the setup app keep calling it a fault in Waitron.
 - **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,
   plan OQ2's default).** The page keeps the choice in memory only, so after a reload it opens its
   first screen, and the person chooses **Join or recover** there to restore.
@@ -594,7 +584,8 @@ code in: 52 seconds", count down to it and check again by themselves; a promotio
 seconds and is otherwise refused with those values. The owner then chose (2026-10-30) the Spanish
 «Se generará un código nuevo en 00:52», the figure as two-digit minutes and seconds ("00:52", "02:30")
 in both languages, and that a check the page makes by itself and loses on the network keeps the
-countdown going and checks again about every 15 seconds. After a restore of a backup whose invoices are more than a minute later than the box's time,
+countdown going and checks again about every 15 seconds. (Those words were replaced on 2026-11-10 at the owner's
+request, A1466: "This invoice series code has already been used. Waitron creates a new one by itself when the countdown ends." and "New invoice series in 02:30", in Spanish «Este código de serie de facturas ya se ha usado. Waitron creará otro por sí solo cuando termine la cuenta atrás.» and «Nueva serie de facturas en 02:30».) After a restore of a backup whose invoices are more than a minute later than the box's time,
 payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
 more than a minute behind the last sale (Q5); a later name held only in a database a restore
 replaces is not in the database the restore places (Q6); a box whose clock went back behind

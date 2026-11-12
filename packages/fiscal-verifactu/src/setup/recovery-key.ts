@@ -26,7 +26,7 @@ function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
     if (held.received) return where;
     return en
       ? `${where} When this pack was made, the box that made it had not been told that pack ${held.number} arrived: if you do not have it, the key cannot be read from any pack.`
-      : `${where} Cuando se hizo este paquete, la caja que lo hizo no había recibido la confirmación de que el paquete ${held.number} había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.`;
+      : `${where} Cuando se hizo este paquete, el servidor que lo hizo no había recibido la confirmación de que el paquete ${held.number} había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.`;
   }
   if (error.serverKeyName !== null)
     return en

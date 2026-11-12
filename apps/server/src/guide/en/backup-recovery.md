@@ -103,8 +103,8 @@ Below the review, under "Recover this box", choose your recovery pack, or an old
 that holds the server key for this backup in **Recovery PDF**; or type the grouped key printed on it
 in **Recovery key**. If the pack does not hold the server key, the page says so and, when the pack
 records it, names the pack or the key name to look for. A pack or sheet with a newer server key may
-not open an older backup. Tick "The old box is stopped and will stay offline." and "I am the only
-person recovering this taxpayer, across all venues."
+not open an older backup. Tick "The old box is stopped and will stay offline.", "I am the only
+person recovering this taxpayer, across all venues." and "These details are correct."
 
 If **Backups** cannot confirm the saved key, keep both the previous key and the key you just
 saved. While changing a key, you can still copy or download both displayed keys after this
@@ -143,21 +143,28 @@ press **Test** to check the bucket.
 If the bucket copy says another box is writing this venue's copy to the same bucket and that box
 replaced this one, switch this box off: two boxes must never sell for one venue.
 
-## Make the new series {#series}
+## Make the new invoice series {#series}
 
 If this browser kept invoice observations for the selected taxpayer and environment, the recovery
 form shows **Invoices seen on this device**. Each entry gives the last invoice number the browser
 kept for that series, its issue date and its fingerprint. Compare these with the history you have:
 the list may be incomplete, and clearing browser data removes it. An older series in this list
-stays an observation; recovery still uses new series. You can recover with a fresh device or when
+stays an observation; recovery still uses new invoice series. You can recover with a fresh device or when
 browser storage is unavailable. The observations stay in this browser and are not sent with the
 recovery request. The report reads the storage available at this Waitron address; it does not
 fetch observations from other devices.
 
 Restoring replaces the database already on this box.
 
-Choose **Compare clocks**. Follow the clock and waiting instructions; there is no installation code
-to type. Choose **Make the series** once the page allows it; it then shows the new series name.
+Enter the node recovery key, tick both statements and "These details are correct.", then choose
+**Proceed**. The invoice series is
+the code at the start of every invoice number; recovery creates new ones so the box never repeats
+the old box's numbers. After **Proceed** the page compares the clocks and creates the invoice series
+by itself, including after any wait it shows; there is no installation code to type. It then shows
+**We've created these series** with the new invoice series. If you change the key or untick a box,
+the page stops until you choose **Proceed** again. Before **Proceed**, **Change these details** goes
+back to choosing the backup.
+
 Tick the confirmation the page shows — "I confirm no other running server has newer restaurant
 data." for a backup file or bucket copy (for a bucket copy, also "This is my business. Restore it
 onto this server."), or "I confirm the old server and surviving peers are stopped, and I accept
@@ -169,7 +176,9 @@ payments once the recovery finishes, until its clock catches up or is confirmed:
 [When payments stop because of the clock](box-status.md#clock-behind).
 
 A key that opens the backup does not bypass the history and clock checks. If the clock check
-refuses, resolve its cause and try again. If the box then shows a page saying it could not make
+refuses, resolve its cause and choose **Compare the clocks again**. If the clocks differ, the page
+shows each clock's time and asks which is correct; correct this device's time, reconnect to the box,
+then choose **Compare the clocks again**. If the box then shows a page saying it could not make
 its new invoice series, connect it to the internet and press **Retry a normal boot**.
 
 If the backup has no active administrator with a password, choose another backup.

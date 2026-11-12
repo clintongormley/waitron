@@ -1895,7 +1895,7 @@ export const en = {
   "servers.title": "Servers",
   "servers.hand_over": "Hand over the venue",
   "servers.handover_intro":
-    "Sales stop on this box while the final copy moves. On the spare, sign in again, compare clocks and start the venue. Payments already recorded stay in the copy. Keep both boxes connected.",
+    "Sales stop on this box while the final copy moves. On the spare, sign in again, confirm the details and start the venue. Payments already recorded stay in the copy. Keep both boxes connected.",
   "servers.handover_no_password":
     "This account has no password, which you will need to sign in on the spare.",
   "servers.handover_password":
@@ -5838,7 +5838,7 @@ export const es: Record<StringKey, string> = {
   "servers.title": "Servidores",
   "servers.hand_over": "Traspasar el local",
   "servers.handover_intro":
-    "Las ventas se detienen en este equipo mientras se mueve la copia final. En el de reserva, identifícate de nuevo, compara los relojes e inicia el local. Los pagos ya registrados se conservan en la copia. Mantén los dos equipos conectados.",
+    "Las ventas se detienen en este equipo mientras se mueve la copia final. En el de reserva, identifícate de nuevo, confirma los datos e inicia el local. Los pagos ya registrados se conservan en la copia. Mantén los dos equipos conectados.",
   "servers.handover_no_password":
     "Esta cuenta no tiene contraseña; la necesitarás para acceder en el equipo de reserva.",
   "servers.handover_password":

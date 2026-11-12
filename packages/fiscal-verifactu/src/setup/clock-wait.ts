@@ -1,6 +1,8 @@
 import { html, nothing, type ReactiveControllerHost } from "lit";
 import type { HourClockDecision } from "../hour-clock.js";
+import "@waitron/ui/src/components/wt-button.js";
 import { createWaitCountdown, formatRemaining, type WaitCountdown } from "./wait-countdown.js";
+import { detailRow } from "./check-venue.js";
 
 /** What a page explains instead of a name: design §6.5, "Every wait explains itself". */
 export type ClockProblem =
@@ -18,13 +20,33 @@ export interface ClockWords {
   secondClockDo: string;
   secondClockEnds: string;
   whyRefused: string;
-  differ: string;
-  differDo: string;
+  whichCorrect: string;
+  theServer: string;
+  bothWrong: string;
+  correctDevice: string;
+  boxTime: string;
+  thisDevice: string;
+  internetTime: string;
+  unavailable: string;
+  matchesDevice: string;
+  matchesInternet: string;
+  matchesBoth: string;
   later: string;
   inUse: string;
   minuteTaken: string;
   newCodeIn: string;
 }
+
+type ClockRowWords = Pick<
+  ClockWords,
+  | "boxTime"
+  | "thisDevice"
+  | "internetTime"
+  | "unavailable"
+  | "matchesDevice"
+  | "matchesInternet"
+  | "matchesBoth"
+>;
 
 export interface ClockComparison {
   id: string;
@@ -46,33 +68,53 @@ export const clockWaitStrings = {
     whySecondClock:
       "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
     onBox: "This screen is on the box itself, so it does not count.",
-    whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
-    differ: "This box's time and this device's differ by more than 30 seconds.",
-    later: "The series cannot be made yet: a later minute is already in use.",
-    inUse:
-      "The series cannot be made: the minute for these series is already in this box's records. This is a fault in Waitron.",
+    whyRefused: "No invoice series is created without a confirmed time, so none is ever repeated.",
+    whichCorrect: "Which is correct:",
+    theServer: "The server",
+    bothWrong: "Both times are wrong",
+    correctDevice: "Please correct the time on this device and then reconnect to the server.",
+    boxTime: "Box time",
+    thisDevice: "This device",
+    internetTime: "Internet",
+    unavailable: "Unavailable",
+    matchesDevice: "matches this device",
+    matchesInternet: "matches the internet time",
+    matchesBoth: "matches this device and the internet time",
+    later:
+      "The invoice series cannot be created yet: this box's clock is earlier than a time it has already used for invoice series.",
+    inUse: "The invoice series cannot be created. This is a fault in Waitron.",
     minuteTaken:
-      "The auto-generated invoice series code (which is time-based) already exists in the database.",
-    newCodeIn: "Generating a new code in:",
+      "This invoice series code has already been used. Waitron creates a new one by itself when the countdown ends.",
+    newCodeIn: "New invoice series in",
   },
   es: {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
     nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
     continuesIn: "Sigue en",
     whySecondClock:
-      "Para que ninguna serie de facturas se repita, la hora del equipo se compara con la de otro aparato o con internet.",
-    onBox: "Esta pantalla está en el propio equipo y no cuenta.",
-    whyRefused: "Sin una hora confirmada no se crean series, para que ninguna se repita.",
-    differ: "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
+      "Para que ninguna serie de facturas se repita, la hora del servidor se compara con la de otro aparato o con internet.",
+    onBox: "Esta pantalla está en el propio servidor y no cuenta.",
+    whyRefused:
+      "Sin una hora confirmada no se crea ninguna serie de facturas, para que ninguna se repita.",
+    whichCorrect: "¿Cuál es la correcta?",
+    theServer: "El servidor",
+    bothWrong: "Las dos horas están mal",
+    correctDevice: "Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
+    boxTime: "Hora del servidor",
+    thisDevice: "Este dispositivo",
+    internetTime: "Internet",
+    unavailable: "No disponible",
+    matchesDevice: "coincide con este dispositivo",
+    matchesInternet: "coincide con la hora de internet",
+    matchesBoth: "coincide con este dispositivo y con la hora de internet",
     later:
-      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
-    inUse:
-      "No se pueden crear las series: el minuto de estas series ya está en los registros de este equipo. Es un fallo de Waitron.",
+      "Todavía no se pueden crear las series de facturas: la hora de este servidor es anterior a una hora que ya usó para series de facturas.",
+    inUse: "No se pueden crear las series de facturas. Es un fallo de Waitron.",
     minuteTaken:
-      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
-    newCodeIn: "Se generará un código nuevo en",
+      "Este código de serie de facturas ya se ha usado. Waitron creará otro por sí solo cuando termine la cuenta atrás.",
+    newCodeIn: "Nueva serie de facturas en",
   },
-} satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds" | "differDo">>;
+} satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds">>;
 
 const formats = new Map<string, Intl.DateTimeFormat>();
 
@@ -184,6 +226,8 @@ export class ClockWait<Selected extends { status: "selected" }> {
   #result: Selected | ClockWaitAnswer | undefined;
   /** Reached this wait through a taken minute: kept by the box's wait that follows. */
   #minuteTaken = false;
+  /** The person answered which clock is correct, for the disagreement on screen. */
+  #answered = false;
 
   constructor(host: ReactiveControllerHost, recheck: () => void) {
     this.#host = host;
@@ -218,6 +262,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
       (this.#minuteTaken && problem === undefined && result?.status === "waiting");
     this.#problem = problem;
     this.#result = result;
+    this.#answered = false;
     this.#host.requestUpdate();
     if (problem?.kind === "next-minute")
       this.#countdown.start(problem.remainingMs, problem.recheckInMs);
@@ -270,12 +315,42 @@ export class ClockWait<Selected extends { status: "selected" }> {
   renderWait(words: ClockWords) {
     return renderWait(words, this.#countdown, this.#minuteTaken);
   }
+
+  renderProblem(words: ClockWords, clock: HourClockDecision | undefined) {
+    return renderClockProblem(this.#problem, words, clock, {
+      answered: this.#answered,
+      answer: () => {
+        this.#answered = true;
+        this.#host.requestUpdate();
+      },
+    });
+  }
+
+  /** The clock rows: one per clock while the clocks disagree or the box refused them as disagreeing. */
+  renderClockRows(
+    clock: HourClockDecision,
+    words: ClockRowWords,
+    locale: "en" | "es",
+    timeZone: string,
+  ) {
+    return renderClockRows(
+      clock,
+      this.#problem?.kind === "disagreement" || clock.disagreement,
+      words,
+      locale,
+      timeZone,
+    );
+  }
 }
+
+/** A page may leave a sentence empty, as the setup page does with `secondClockEnds` before Proceed. */
+const sentence = (words: string) => (words ? html`<p>${words}</p>` : nothing);
 
 export function renderClockProblem(
   problem: ClockProblem | undefined,
   words: ClockWords,
   clock: HourClockDecision | undefined,
+  choice: { answered: boolean; answer: () => void },
 ) {
   if (problem?.kind === "second-clock")
     return html`<section data-test="clock-wait">
@@ -285,14 +360,32 @@ export function renderClockProblem(
           ? html`<p>${words.onBox}</p>`
           : nothing
       }
-      <p>${words.secondClockDo}</p>
-      <p>${words.secondClockEnds}</p>
+      ${sentence(words.secondClockDo)} ${sentence(words.secondClockEnds)}
     </section>`;
   if (problem?.kind === "disagreement")
     return html`<section data-test="clock-refused">
       <p role="status">${words.whyRefused}</p>
-      <p>${words.differ}</p>
-      <p>${words.differDo}</p>
+      ${
+        choice.answered
+          ? html`<p data-test="correct-device">${words.correctDevice}</p>`
+          : html`<p id="which-correct">${words.whichCorrect}</p>
+              <div class="choices" role="group" aria-labelledby="which-correct">
+                ${(
+                  [
+                    ["server-correct", words.theServer],
+                    ["both-wrong", words.bothWrong],
+                  ] as const
+                ).map(
+                  ([test, label]) =>
+                    html`<wt-button
+                      data-test=${test}
+                      variant="secondary"
+                      @click=${() => choice.answer()}
+                      >${label}</wt-button
+                    >`,
+                )}
+              </div>`
+      }
     </section>`;
   if (problem?.kind === "later" || problem?.kind === "in-use")
     return html`<p
@@ -302,6 +395,49 @@ export function renderClockProblem(
       ${problem.kind === "later" ? words.later : words.inUse}
     </p>`;
   return nothing;
+}
+
+const middle = (reading: { lowerMs: number; upperMs: number }) =>
+  (reading.lowerMs + reading.upperMs) / 2;
+
+/**
+ * The clock rows of Check this venue: one Box time row naming the clocks that agreed with it, or,
+ * when they differ, one row per clock. The box refuses clocks more than 30 seconds apart, so when
+ * another clock reads the box's minute the rows show seconds too.
+ */
+export function renderClockRows(
+  clock: HourClockDecision,
+  differ: boolean,
+  words: ClockRowWords,
+  locale: "en" | "es",
+  timeZone: string,
+) {
+  const minutes = dateTimeFormat(locale, timeZone, { dateStyle: "long", timeStyle: "short" });
+  const box = clock.usable.find((r) => r.source === "box");
+  const boxMinute = box && minutes.format(middle(box));
+  const format =
+    differ && clock.usable.some((r) => r !== box && minutes.format(middle(r)) === boxMinute)
+      ? dateTimeFormat(locale, timeZone, { dateStyle: "long", timeStyle: "medium" })
+      : minutes;
+  const at = (source: HourClockDecision["usable"][number]["source"]) => {
+    const reading = clock.usable.find((r) => r.source === source);
+    return reading ? format.format(middle(reading)) : words.unavailable;
+  };
+  if (differ)
+    return html`${detailRow(words.boxTime, at("box"))}${detailRow(words.thisDevice, at("browser"))}${detailRow(
+      words.internetTime,
+      at("internet"),
+    )}`;
+  const agreed = new Set(clock.usable.map((r) => r.source));
+  const matches =
+    !clock.secondClock || !agreed.has("box")
+      ? undefined
+      : agreed.has("browser") && agreed.has("internet")
+        ? words.matchesBoth
+        : agreed.has("browser")
+          ? words.matchesDevice
+          : words.matchesInternet;
+  return detailRow(words.boxTime, matches ? `${at("box")} — ${matches}` : at("box"));
 }
 
 function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: boolean) {

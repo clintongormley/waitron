@@ -96,7 +96,8 @@ export class SetupHandoverScreen extends LitElement {
   @state() private attempted = false;
   @state() private actionError = "";
   @state() private busy = false;
-  @state() private ready = false;
+  /** The box refused the sign-in at activation; the chosen minute stays until it is sent again. */
+  @state() private signInRefused = false;
   @state() private entry?: ModulePromotionEntry;
   #signInChecked = false;
   #restorePage = (event: PageTransitionEvent): void => {
@@ -165,7 +166,7 @@ export class SetupHandoverScreen extends LitElement {
   #resetSelection(): void {
     this.entry?.clear();
     this.entry = undefined;
-    this.ready = false;
+    this.signInRefused = false;
   }
   #signIn(): HandoverSignIn {
     return {
@@ -177,14 +178,16 @@ export class SetupHandoverScreen extends LitElement {
   #valid(): boolean {
     return this.email.includes("@") && this.password !== "";
   }
-  async #authenticate(): Promise<void> {
+  /** Marks the fields and focuses the first one that fails; false means send nothing. */
+  async #checked(): Promise<boolean> {
     this.attempted = true;
-    if (this.busy || (this.#isEmergency && this.copyRefused)) return;
-    if (!this.#valid()) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!);
-      return;
-    }
+    if (this.#valid()) return true;
+    await this.updateComplete;
+    await focusFirstInvalid(this.shadowRoot!);
+    return false;
+  }
+  async #authenticate(): Promise<void> {
+    if (this.busy || (this.#isEmergency && this.copyRefused) || !(await this.#checked())) return;
     this.actionError = "";
     this.#resetSelection();
     this.#prepareClock();
@@ -205,20 +208,28 @@ export class SetupHandoverScreen extends LitElement {
       sourceId: status.sourceNodeId,
       targetNodeId: status.destinationNodeId,
     };
-    const signIn = this.#signIn();
+    // Each request reads the fields again: a code typed after a refusal carries on the same check.
     this.entry = contribution[0]!.createPromotion!({
       locale: currentLocale().startsWith("es") ? "es" : "en",
       binding,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       prepare: async (proposal) => {
         try {
-          return await this.api.prepareHandover(this.operationId, signIn, binding, proposal);
+          return await this.api.prepareHandover(
+            this.operationId,
+            this.#signIn(),
+            binding,
+            proposal,
+          );
         } catch (cause) {
           if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
           throw cause;
         }
       },
     });
+  }
+  async #retry(): Promise<void> {
+    if (!this.busy && (await this.#checked())) await this.#activate();
   }
   async #activate(): Promise<void> {
     const entry = this.entry;
@@ -227,6 +238,7 @@ export class SetupHandoverScreen extends LitElement {
     const controller = this.#controller;
     this.busy = true;
     this.actionError = "";
+    this.signInRefused = false;
     try {
       const answer = await this.api.activateHandover(
         this.operationId,
@@ -243,6 +255,10 @@ export class SetupHandoverScreen extends LitElement {
       this.actionError = this.#isEmergency
         ? this.#emergencyError(cause)
         : entry.refusalMessage(cause);
+      if ((cause as { code?: unknown } | null)?.code === "password.invalid") {
+        this.signInRefused = true;
+        return;
+      }
       this.#resetSelection();
       if (
         this.#isEmergency &&
@@ -492,7 +508,7 @@ export class SetupHandoverScreen extends LitElement {
         .error=${this.attempted && name !== "code" && (name === "email" ? !this.email.includes("@") : !this.password) ? t("handover.required") : ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           if (name !== "code") this.#signInChecked = false;
-          this.#resetSelection();
+          if (name === "email") this.#resetSelection();
           if (name === "email" && event.detail.value !== this.email) {
             this.password = this.code = "";
             this.copyPreview = undefined;
@@ -516,7 +532,8 @@ export class SetupHandoverScreen extends LitElement {
       ${
         this.entry
           ? html`<p>${t("handover.zone")}</p>
-              ${this.entry}`
+              ${this.entry}
+              ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
           : nothing
       }
       <wt-form-actions
@@ -540,13 +557,15 @@ export class SetupHandoverScreen extends LitElement {
                   >${t("handover.emergency.declare")}</wt-button
                 >`
               : this.entry
-                ? html`<wt-button
-                    data-test="activate"
-                    .disabled=${!this.ready || this.busy}
-                    variant=${this.ready ? "primary" : "secondary"}
-                    @click=${() => void this.#activate()}
-                    >${t("handover.activate")}</wt-button
-                  >`
+                ? this.signInRefused
+                  ? html`<wt-button
+                      data-test="retry-activation"
+                      .disabled=${this.busy || !this.#valid()}
+                      variant="primary"
+                      @click=${() => void this.#retry()}
+                      >${t("handover.try_again")}</wt-button
+                    >`
+                  : nothing
                 : html`<wt-button
                     data-test="authenticate"
                     .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
@@ -562,8 +581,12 @@ export class SetupHandoverScreen extends LitElement {
     const status = this.status;
     return html`<main
       lang=${currentLocale()}
+      @recovery-change-details=${(event: Event) => {
+        event.stopPropagation();
+        this.#resetSelection();
+      }}
       @promotion-change=${() => {
-        this.ready = this.entry?.readOperation() !== null && this.entry !== undefined;
+        if (!this.signInRefused && this.entry?.readOperation()) void this.#activate();
       }}
     >
       <h1>${t("handover.heading")}</h1>

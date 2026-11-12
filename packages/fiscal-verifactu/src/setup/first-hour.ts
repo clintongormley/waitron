@@ -9,19 +9,22 @@ import type { createRecoveryDelivery } from "../recovery-delivery.js";
 import { WAITRON_ID_SISTEMA } from "../software.js";
 import { isMinuteIdentity } from "../hour-identity.js";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   ClockWait,
-  clockProblem,
   clockWaitStrings,
-  dateTimeFormat,
   readClocks,
   record,
-  renderClockProblem,
   validWait,
   type ClockComparison,
 } from "./clock-wait.js";
+import {
+  checkVenueStrings,
+  checkVenueStyles,
+  detailRow,
+  focusNewScreen,
+  regionName,
+} from "./check-venue.js";
 
 interface Draft {
   reviewed: boolean;
@@ -51,49 +54,21 @@ interface Selected {
   };
 }
 const empty = (): Draft => ({ reviewed: false, recoveryRevision: 0 });
-const regionNames = new Map<string, Intl.DisplayNames>();
-function regionName(language: "en" | "es", region: string): string | undefined {
-  let names = regionNames.get(language);
-  if (!names) {
-    names = new Intl.DisplayNames([language], { type: "region" });
-    regionNames.set(language, names);
-  }
-  return names.of(region);
-}
 const strings = {
   en: {
     ...clockWaitStrings.en,
-    heading: "Check this venue",
-    environment: "Environment",
-    production: "Production",
-    preproduction: "Preproduction",
-    country: "Country",
+    ...checkVenueStrings.en,
     place: "Place",
-    zone: "Time zone",
-    now: "Box time",
-    taxId: "Taxpayer NIF",
-    review: "The country, place, time zone and displayed time are correct.",
-    compare: "Check again",
-    select: "Make the series",
-    readings: "Clock comparison",
-    agreed: "Clocks agree.",
-    box: "Box",
-    browser: "Browser",
-    internet: "Internet",
-    unavailable: "Unavailable",
-    blocked: "Box time precedes this Waitron release.",
-    range: "This date is outside the range of series names.",
+    seriesLine:
+      "When you press Proceed, Waitron creates this box's invoice series. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
     secondClockDo:
       "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
     secondClockEnds:
       "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.",
-    differDo:
-      "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.",
-    chosen: "Series name",
-    failed: "Could not complete this step. Check again.",
     next: "Keep your recovery pack.",
-    pdf: "Make recovery pack",
-    download: "Download PDF",
+    packWhy:
+      "The recovery pack is a PDF holding this box's server key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
+    download: "Download recovery pack",
     print: "Open to print",
     kept: "I kept the recovery pack.",
     confirmKept: "Continue",
@@ -102,36 +77,17 @@ const strings = {
   },
   es: {
     ...clockWaitStrings.es,
-    heading: "Comprueba este local",
-    environment: "Entorno",
-    production: "Producción",
-    preproduction: "Preproducción",
-    country: "País",
+    ...checkVenueStrings.es,
     place: "Lugar",
-    zone: "Zona horaria",
-    now: "Hora de la caja",
-    taxId: "NIF del contribuyente",
-    review: "El país, lugar, zona horaria y hora mostrada son correctos.",
-    compare: "Comprobar otra vez",
-    select: "Crear las series",
-    readings: "Comparación de relojes",
-    agreed: "Los relojes coinciden.",
-    box: "Servidor",
-    browser: "Navegador",
-    internet: "Internet",
-    unavailable: "No disponible",
-    blocked: "La hora de la caja es anterior a esta versión de Waitron.",
-    range: "Esta fecha está fuera del rango de nombres de serie.",
+    seriesLine:
+      "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
     secondClockDo:
-      "Conecta el equipo a internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
-    secondClockEnds: "Sigue sola cuando el equipo tenga internet, o en el móvil si sigues allí.",
-    differDo:
-      "Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
-    chosen: "Nombre de las series",
-    failed: "No se pudo completar este paso. Comprueba de nuevo.",
+      "Conecta el servidor a internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
+    secondClockEnds: "Sigue sola cuando el servidor tenga internet, o en el móvil si sigues allí.",
     next: "Guarda el paquete de recuperación.",
-    pdf: "Hacer paquete de recuperación",
-    download: "Descargar PDF",
+    packWhy:
+      "El paquete de recuperación es un PDF con la clave de este servidor. Si este servidor falla, restaurar las copias de este local en un servidor nuevo pide esa clave, así que guarda el paquete en un lugar seguro, lejos del servidor.",
+    download: "Descargar el paquete de recuperación",
     print: "Abrir para imprimir",
     kept: "He guardado el paquete de recuperación.",
     confirmKept: "Continuar",
@@ -167,23 +123,14 @@ export class FirstSetupHour extends LitElement {
         accent-color: var(--wt-color-primary);
         flex-shrink: 0;
       }
-      dl {
-        display: grid;
-        gap: var(--wt-space-2);
-      }
-      dd {
-        margin: 0;
-      }
       a {
         color: var(--wt-color-primary-text);
         min-height: var(--wt-tap-min);
         display: inline-flex;
         align-items: center;
       }
-      dt {
-        color: var(--wt-color-text-muted);
-      }
     `,
+    checkVenueStyles,
   ];
   @property({ attribute: false }) context!: Context;
   @property({ attribute: false }) api!: InitialSetupActions;
@@ -191,18 +138,42 @@ export class FirstSetupHour extends LitElement {
   @state() private draft = empty();
   @state() private comparison?: ClockComparison;
   @state() private busy = false;
+  /** The button whose own request is being sent, which stays on screen while it is. */
+  @state() private sending?: "proceed" | "compareAgain" | "tryAgain";
   @state() private error = false;
   @state() private pdfUrl?: string;
   @state() private pdfKept = false;
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
   #reference?: InitialSetupRecoveryReference;
-  #wait = new ClockWait<Selected>(this, () => void this.#select(true));
+  #wait = new ClockWait<Selected>(this, () => void this.#run(true));
+  /** Proceed was pressed and no field has changed since: the page carries on to the series. */
+  #confirmed = false;
+  /**
+   * The box had recorded a wait before this page asked it for one or any field changed, so while the
+   * page carries on by itself its own re-checks go on to the series without the tick or Proceed.
+   */
+  #recordedWait = false;
+  /**
+   * Since it loaded, the page asked the box for the series, a field changed, or it was taken off the
+   * screen.
+   */
+  #askedOrEdited = false;
   #generation = 0;
   #scope?: DraftScope<Draft>;
+  #seriesShown = false;
   override connectedCallback(): void {
     super.connectedCallback();
     this.requestUpdate();
+  }
+  override updated(): void {
+    const shown = this.#wait.result?.status === "selected";
+    if (shown && !this.#seriesShown)
+      focusNewScreen(
+        this.shadowRoot!,
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=selected-hour] h2"),
+      );
+    this.#seriesShown = shown;
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (this.isConnected && !this.#scope) {
@@ -221,15 +192,19 @@ export class FirstSetupHour extends LitElement {
     }
     if (changed.has("context") || changed.has("api")) {
       this.#clear();
-      void this.#compare();
+      void this.#run();
     }
   }
   override disconnectedCallback(): void {
     ++this.#generation;
     this.#disposeDelivery();
     this.busy = false;
+    this.sending = undefined;
     this.#scope?.dispose();
     this.#scope = undefined;
+    this.#confirmed = false;
+    this.#recordedWait = false;
+    this.#askedOrEdited = true;
     super.disconnectedCallback();
   }
   #disposeDelivery(): void {
@@ -244,8 +219,12 @@ export class FirstSetupHour extends LitElement {
     this.#disposeDelivery();
     ++this.#generation;
     this.busy = false;
+    this.sending = undefined;
     this.draft = empty();
     this.comparison = undefined;
+    this.#confirmed = false;
+    this.#recordedWait = false;
+    this.#askedOrEdited = false;
     this.#wait.show();
     this.error = false;
     this.#changed();
@@ -254,17 +233,22 @@ export class FirstSetupHour extends LitElement {
     this.#scope?.changed();
     this.dispatchEvent(new CustomEvent("initial-setup-changed", { bubbles: true, composed: true }));
   }
+  /**
+   * Stops a page that was carrying on to the series. Before that, what the clocks showed stays up,
+   * and a wait for a second clock keeps checking.
+   */
   #edit(change: Partial<Draft>): void {
+    const carrying = this.#confirmed || this.#recordedWait;
     ++this.#generation;
     this.busy = false;
+    this.sending = undefined;
     this.draft = { ...this.draft, ...change };
-    this.#wait.show();
+    this.#confirmed = false;
+    this.#recordedWait = false;
+    this.#askedOrEdited = true;
+    if (carrying) this.#wait.show();
     this.error = false;
     this.#changed();
-  }
-  get #canSelect(): boolean {
-    const clock = this.comparison?.clock;
-    return Boolean(this.draft.reviewed && clock && !clock.releaseBlocked && !clock.rangeBlocked);
   }
   #begin() {
     const generation = ++this.#generation,
@@ -282,43 +266,33 @@ export class FirstSetupHour extends LitElement {
     };
     return { api, context, current, send };
   }
-  async #compare(): Promise<void> {
-    if (!this.api?.preparation || this.busy) return;
-    const { context, current, send } = this.#begin();
-    this.busy = true;
-    this.error = false;
-    this.comparison = undefined;
-    this.#wait.show();
-    this.draft = { ...this.draft, reviewed: false };
-    this.#changed();
-    try {
-      const comparison = await readClocks(send);
-      this.comparison = comparison;
-      if (context.status !== "claimed" || comparison.clock.releaseBlocked) return;
-      this.#wait.showPreview(await send({ action: "selection" }));
-    } catch (error) {
-      if (current() && clockProblem(error) === undefined) this.error = true;
-    } finally {
-      if (current()) this.busy = false;
-    }
-  }
-  async #select(automatic = false): Promise<void> {
-    if (this.busy || this.#wait.result?.status === "selected") return;
-    if (!automatic && !this.#canSelect) return;
+  async #run(automatic = false): Promise<void> {
+    if (!this.api?.preparation || this.busy || this.#wait.result?.status === "selected") return;
     const { api, context, current, send } = this.#begin();
+    const recorded = this.#recordedWait;
     this.busy = true;
     this.error = false;
     // An automatic re-check leaves the current explanation up until its answer replaces it.
     if (!automatic) this.#wait.show();
     try {
+      const comparison = await readClocks(send);
+      this.comparison = comparison;
+      const { clock } = comparison;
+      if (clock.releaseBlocked || clock.rangeBlocked) return this.#wait.show();
+      const claimed = context.status === "claimed";
+      if (claimed && !clock.secondClock) return this.#wait.waitForSecondClock();
+      if (claimed && clock.disagreement) return this.#wait.show({ kind: "disagreement" });
+      if (!this.#confirmed && !recorded) {
+        this.#wait.show();
+        if (!claimed) return;
+        this.#wait.showPreview(await send({ action: "selection" }));
+        this.#recordedWait = !this.#askedOrEdited && this.#wait.counting;
+        return;
+      }
       let result: unknown;
-      if (context.status === "claimed") {
-        const comparison = await readClocks(send);
-        this.comparison = comparison;
-        if (!comparison.clock.secondClock) return this.#wait.waitForSecondClock();
-        if (comparison.clock.disagreement) return this.#wait.show({ kind: "disagreement" });
-        result = await api.candidates({ comparisonId: comparison.id });
-      } else result = await api.request();
+      this.#askedOrEdited = true;
+      if (claimed) result = await api.candidates({ comparisonId: comparison.id });
+      else result = await api.request();
       if (!current()) return;
       if (!record(result)) throw new Error("invalid selection");
       if (result.status === "waiting") {
@@ -330,7 +304,10 @@ export class FirstSetupHour extends LitElement {
           !record(result.input) ||
           !record(result.input.allocation) ||
           result.input.allocation.installationIdentity !== result.identity ||
-          !Array.isArray(result.input.allocation.series)
+          !Array.isArray(result.input.allocation.series) ||
+          !result.input.allocation.series.every(
+            (series) => record(series) && typeof series.code === "string" && series.code !== "",
+          )
         )
           throw new Error("invalid selection");
         await api.importInput(result.input);
@@ -343,7 +320,11 @@ export class FirstSetupHour extends LitElement {
           this.error = true;
         });
     } finally {
-      if (current()) this.busy = false;
+      if (current()) {
+        this.busy = false;
+        this.sending = undefined;
+        if (!this.#wait.waiting) this.#recordedWait = false;
+      }
     }
   }
   async #preparePdf(replace = false): Promise<void> {
@@ -424,6 +405,9 @@ export class FirstSetupHour extends LitElement {
       this.#delivery = delivery;
       delivery = undefined;
       this.pdfUrl = url;
+      await this.updateComplete;
+      if (current())
+        this.shadowRoot?.querySelector<HTMLAnchorElement>("a[data-test=download-pdf]")?.click();
     } catch {
       if (current()) this.error = true;
     } finally {
@@ -454,30 +438,141 @@ export class FirstSetupHour extends LitElement {
     const t = en ? strings.en : strings.es;
     const venue = this.context.venue,
       clock = this.comparison?.clock;
-    const format = (ms: number) =>
-      dateTimeFormat(en ? "en" : "es", venue.timeZone, {
-        dateStyle: "full",
-        timeStyle: "long",
-      }).format(ms);
-    const box = clock?.usable.find((r) => r.source === "box");
     const result = this.#wait.result;
     const locked = this.busy || result?.status === "selected";
-    const waits = this.#wait.waiting;
-    return html`<h2>${t.heading}</h2>
-      <dl data-test="venue-review">
-        <dt>${t.environment}</dt>
-        <dd>${t[this.context.environment]}</dd>
-        <dt>${t.country}</dt>
-        <dd>${regionName(en ? "en" : "es", venue.country)}</dd>
-        <dt>${t.place}</dt>
-        <dd>${venue.name} · ${venue.city}</dd>
-        <dt>${t.taxId}</dt>
-        <dd>${venue.taxId}</dd>
-        <dt>${t.zone}</dt>
-        <dd>${venue.timeZone}</dd>
-        <dt>${t.now}</dt>
-        <dd>${box ? format(box.lowerMs) : t.unavailable}</dd>
+    const carrying = this.#confirmed || this.#recordedWait;
+    const problem = this.#wait.problem?.kind;
+    const sending = this.busy ? this.sending : undefined;
+    const action =
+      sending ??
+      (locked || problem === "in-use"
+        ? undefined
+        : this.error
+          ? "tryAgain"
+          : clock?.releaseBlocked ||
+              clock?.rangeBlocked ||
+              problem === "disagreement" ||
+              problem === "later"
+            ? "compareAgain"
+            : carrying && this.#wait.waiting
+              ? undefined
+              : "proceed");
+    const enabled = !sending && (action !== "proceed" || this.draft.reviewed);
+    const failure = html`<wt-form-actions
+      data-failed=${String(this.error)}
+      .error=${this.error ? t.failed : ""}
+      >${
+        action
+          ? html`<wt-button
+              data-test="compare"
+              variant=${enabled || sending ? "primary" : "secondary"}
+              ?disabled=${!enabled}
+              ?loading=${Boolean(sending)}
+              @click=${() => {
+                if (this.busy) return;
+                if (action === "proceed") this.#confirmed = true;
+                void this.#run();
+                this.sending = this.busy ? action : undefined;
+              }}
+              >${t[action]}</wt-button
+            >`
+          : nothing
+      }${
+        result?.status === "selected" || carrying || sending
+          ? nothing
+          : html`<wt-button
+              slot="secondary"
+              data-test="change-details"
+              variant="secondary"
+              @click=${() =>
+                this.dispatchEvent(
+                  new CustomEvent("initial-change-details", { bubbles: true, composed: true }),
+                )}
+              >${t.changeDetails}</wt-button
+            >`
+      }
+    </wt-form-actions>`;
+    if (result?.status === "selected")
+      return html`<section data-test="selected-hour" role="status">
+          <h2 tabindex="-1">${t.chosen}</h2>
+          <ul>
+            ${result.input.allocation.series.map((s) => html`<li>${s.code}</li>`)}
+          </ul>
+        </section>
+        <section aria-label=${t.next}>
+          <h3>${t.next}</h3>
+          <p data-test="pack-why">${t.packWhy}</p>
+          ${
+            this.pdfUrl
+              ? html`<p>
+                    <a
+                      data-test="download-pdf"
+                      href=${this.pdfUrl}
+                      download="waitron-recovery-pack-1.pdf"
+                      >${t.download}</a
+                    >
+                  </p>
+                  <p>
+                    <a data-test="print-pdf" href=${this.pdfUrl} target="_blank" rel="noopener"
+                      >${t.print}</a
+                    >
+                  </p>
+                  <label
+                    ><input
+                      type="checkbox"
+                      name="setup-pdf-kept"
+                      required
+                      .checked=${this.pdfKept}
+                      ?disabled=${this.busy || this.kept}
+                      @change=${(e: Event) => {
+                        this.pdfKept = (e.currentTarget as HTMLInputElement).checked;
+                      }}
+                    />${t.kept} *</label
+                  ><wt-form-actions
+                    ><wt-button
+                      data-test="kept"
+                      variant=${this.pdfKept && !this.kept ? "primary" : "secondary"}
+                      ?disabled=${this.busy || !this.pdfKept || this.kept}
+                      @click=${() => void this.#keepPdf()}
+                      >${t.confirmKept}</wt-button
+                    ></wt-form-actions
+                  >${this.kept ? html`<p role="status">${t.complete}</p>` : nothing}`
+              : html`<wt-button
+                  data-test="prepare-pdf"
+                  variant="primary"
+                  ?disabled=${this.busy}
+                  @click=${() => void this.#preparePdf()}
+                  >${t.download}</wt-button
+                >`
+          }
+          ${
+            this.api.reissueNodeKey
+              ? html`<wt-button
+                  data-test="replace-key"
+                  variant=${this.busy ? "secondary" : "primary"}
+                  ?disabled=${this.busy}
+                  @click=${() => void this.#preparePdf(true)}
+                  >${t.replace}</wt-button
+                >`
+              : nothing
+          }
+        </section>
+        ${failure}`;
+    return html`<h2>${t.checkHeading}</h2>
+      <dl class="details" data-test="venue-review">
+        ${detailRow(t.environment, t[this.context.environment])}
+        ${detailRow(t.country, regionName(this.locale, venue.country))}
+        ${detailRow(t.place, `${venue.name} · ${venue.city}`)} ${detailRow(t.taxId, venue.taxId)}
+        ${detailRow(t.zone, venue.timeZone)}
       </dl>
+      ${
+        clock
+          ? html`<dl class="details" data-test="clock-readings">
+                ${this.#wait.renderClockRows(clock, t, this.locale, venue.timeZone)}
+              </dl>
+              ${clock.releaseBlocked ? html`<p role="status">${t.blocked}</p>` : nothing}${clock.rangeBlocked ? html`<p role="status">${t.rangeBlocked}</p>` : nothing}`
+          : nothing
+      }
       <label
         ><input
           name="setup-details-confirmed"
@@ -486,125 +581,11 @@ export class FirstSetupHour extends LitElement {
           .checked=${this.draft.reviewed}
           ?disabled=${locked || !clock}
           @change=${(e: Event) => this.#edit({ reviewed: (e.currentTarget as HTMLInputElement).checked })}
-        />${t.review} *</label
+        />${t.detailsCorrect} *</label
       >
-      ${
-        clock
-          ? html`<section data-test="clock-readings" aria-label=${t.readings}>
-              ${clock.secondClock && !clock.disagreement ? html`<p>${t.agreed}</p>` : nothing}
-              <wt-disclosure heading=${t.readings} .open=${clock.disagreement}>
-                <dl>
-                  ${clock.usable.map(
-                    (r) =>
-                      html`<dt>${t[r.source]}</dt>
-                        <dd>
-                          ${format(r.lowerMs)} – ${format(r.upperMs)}<br />${new Date(r.lowerMs).toISOString()}
-                          – ${new Date(r.upperMs).toISOString()}
-                        </dd>`,
-                  )}${clock.unavailable.map(
-                    (r) =>
-                      html`<dt>${t[r.source]}</dt>
-                        <dd>${t.unavailable}</dd>`,
-                  )}
-                </dl>
-              </wt-disclosure>
-              ${clock.releaseBlocked ? html`<p role="status">${t.blocked}</p>` : nothing}${clock.rangeBlocked ? html`<p role="status">${t.range}</p>` : nothing}
-            </section>`
-          : nothing
-      }
-      ${renderClockProblem(this.#wait.problem, t, clock)}
-      ${
-        this.#wait.counting
-          ? this.#wait.renderWait(t)
-          : result?.status === "selected"
-            ? html`<section data-test="selected-hour">
-                <p role="status">${t.chosen}: <strong>${result.identity}</strong></p>
-                <ul>
-                  ${result.input.allocation.series.map((s) => html`<li>${s.code}</li>`)}
-                </ul>
-              </section>`
-            : nothing
-      }
-      ${
-        result?.status === "selected"
-          ? html`<section aria-label=${t.next}>
-              <h3>${t.next}</h3>
-              ${
-                this.pdfUrl
-                  ? html`<p>
-                        <a
-                          data-test="download-pdf"
-                          href=${this.pdfUrl}
-                          download="waitron-recovery-pack-1.pdf"
-                          >${t.download}</a
-                        >
-                      </p>
-                      <p>
-                        <a data-test="print-pdf" href=${this.pdfUrl} target="_blank" rel="noopener"
-                          >${t.print}</a
-                        >
-                      </p>
-                      <label
-                        ><input
-                          type="checkbox"
-                          name="setup-pdf-kept"
-                          required
-                          .checked=${this.pdfKept}
-                          ?disabled=${this.busy || this.kept}
-                          @change=${(e: Event) => {
-                            this.pdfKept = (e.currentTarget as HTMLInputElement).checked;
-                          }}
-                        />${t.kept} *</label
-                      ><wt-form-actions
-                        ><wt-button
-                          data-test="kept"
-                          variant=${this.pdfKept && !this.kept ? "primary" : "secondary"}
-                          ?disabled=${this.busy || !this.pdfKept || this.kept}
-                          @click=${() => void this.#keepPdf()}
-                          >${t.confirmKept}</wt-button
-                        ></wt-form-actions
-                      >${this.kept ? html`<p role="status">${t.complete}</p>` : nothing}`
-                  : html`<wt-button
-                      data-test="prepare-pdf"
-                      variant="primary"
-                      ?disabled=${this.busy}
-                      @click=${() => void this.#preparePdf()}
-                      >${t.pdf}</wt-button
-                    >`
-              }
-              ${
-                this.api.reissueNodeKey
-                  ? html`<wt-button
-                      data-test="replace-key"
-                      variant=${this.busy ? "secondary" : "primary"}
-                      ?disabled=${this.busy}
-                      @click=${() => void this.#preparePdf(true)}
-                      >${t.replace}</wt-button
-                    >`
-                  : nothing
-              }
-            </section>`
-          : nothing
-      }
-      <wt-form-actions data-failed=${String(this.error)} .error=${this.error ? t.failed : ""}
-        >${
-          result?.status === "selected"
-            ? nothing
-            : html`<wt-button
-                  data-test="compare"
-                  variant="primary"
-                  ?disabled=${this.busy}
-                  @click=${() => void this.#compare()}
-                  >${t.compare}</wt-button
-                ><wt-button
-                  data-test="select"
-                  variant=${this.#canSelect && !locked && !waits ? "primary" : "secondary"}
-                  ?disabled=${locked || waits || !this.#canSelect}
-                  @click=${() => void this.#select()}
-                  >${t.select}</wt-button
-                >`
-        }
-      </wt-form-actions>`;
+      ${action === "proceed" && !sending ? html`<p data-test="series-line">${t.seriesLine}</p>` : nothing}
+      ${this.#wait.renderProblem(carrying ? t : { ...t, secondClockEnds: "" }, clock)}
+      ${this.#wait.counting ? this.#wait.renderWait(t) : nothing} ${failure}`;
   }
 }
 declare global {

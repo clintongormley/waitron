@@ -224,11 +224,11 @@ it.each(["en", "es"] as const)(
       await click("setup-email-screen [data-test=next]");
       const vf = "vf-first-setup-hour";
       await page.locator(`${vf} [data-test=clock-readings]`).waitFor();
-      await page.locator(`${vf} input[name=setup-details-confirmed]`).check();
       const waitingPromise = page.waitForResponse(
         (response) => new URL(response.url()).pathname === "/setup-api/first-setup/candidates",
       );
-      await click(`${vf} [data-test=select]`);
+      await page.locator(`${vf} input[name=setup-details-confirmed]`).check();
+      await click(`${vf} [data-test=compare]`);
       await prove();
       const { preparation } = (await (await waitingPromise).json()) as {
         preparation: { status: string; remainingMs: number };

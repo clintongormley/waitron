@@ -166,7 +166,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               'input[name="setup-details-confirmed"]',
             )!,
           );
-          await userEvent.click(control(hour, "select"));
+          await userEvent.click(control(hour, "compare"));
           await password();
           await expect.poll(() => control(hour, "selected-hour")).not.toBeNull();
           await userEvent.click(control(hour, "prepare-pdf"));

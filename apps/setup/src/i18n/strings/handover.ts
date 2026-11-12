@@ -17,15 +17,16 @@ export const handoverEn = {
   "handover.closed":
     "This handover ended without activating this box. Open Servers on the main box to see its current state.",
   "handover.sign_in":
-    "Sign in as an administrator to compare clocks and start the venue here. Use the same account for both steps. Enter a fresh authenticator code before starting the venue.",
+    "Sign in as an administrator to confirm the details and start the venue here. Use a fresh authenticator code.",
   "handover.email": "Administrator email",
   "handover.password": "Password",
   "handover.code": "Authenticator code, if set up",
   "handover.compare": "Continue to clock check",
-  "handover.activate": "Start the venue on this box",
+  "handover.starting": "Starting the venue on this box…",
+  "handover.try_again": "Try again",
   "handover.fix": "Complete the highlighted fields to continue.",
   "handover.required": "Complete this field.",
-  "handover.zone": "Times are shown in your device’s time zone and UTC.",
+  "handover.zone": "Times are shown in your device’s time zone.",
   "handover.emergency.sign_in":
     "Sign in as an administrator to check this spare and start the venue here. Enter your password and current authenticator code, if set up. You only need a new code if this one expires.",
   "handover.emergency.saved":
@@ -79,30 +80,31 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.heading": "Traspasar el local",
   "handover.loading": "Consultando el progreso del traspaso…",
   "handover.copy":
-    "Preparando la copia final. Mantén los dos equipos conectados. Las ventas siguen detenidas hasta que el nuevo equipo esté listo.",
+    "Preparando la copia final. Mantén los dos servidores conectados. Las ventas siguen detenidas hasta que el nuevo servidor esté listo.",
   "handover.read_failed":
     "No se pudo consultar el progreso. Mantén esta página abierta mientras se recupera la conexión.",
   "handover.wait":
-    "El último intento no pudo continuar. Mantén los dos equipos conectados; esta página vuelve a comprobarlo automáticamente.",
+    "El último intento no pudo continuar. Mantén los dos servidores conectados; esta página vuelve a comprobarlo automáticamente.",
   "handover.space":
-    "El último intento detectó poco espacio en este equipo. Libera espacio y mantén esta página abierta para volver a intentarlo.",
+    "El último intento detectó poco espacio en este servidor. Libera espacio y mantén esta página abierta para volver a intentarlo.",
   "handover.source":
-    "El último intento no pudo conectar con el equipo anterior. Comprueba su alimentación y conexión de red.",
-  "handover.done": "Este equipo ha pasado a llevar el local.",
-  "handover.restarting": "El local se ha iniciado aquí; este equipo se está reiniciando.",
-  "handover.continue": "Continuar en este equipo",
+    "El último intento no pudo conectar con el servidor anterior. Comprueba su alimentación y conexión de red.",
+  "handover.done": "Este servidor ha pasado a llevar el local.",
+  "handover.restarting": "El local se ha iniciado aquí; este servidor se está reiniciando.",
+  "handover.continue": "Continuar en este servidor",
   "handover.closed":
-    "Este traspaso terminó sin activar este equipo. Abre Servidores en el equipo principal para consultar su estado actual.",
+    "Este traspaso terminó sin activar este servidor. Abre Servidores en el servidor principal para consultar su estado actual.",
   "handover.sign_in":
-    "Identifícate como administrador para comparar los relojes e iniciar el local aquí. Usa la misma cuenta en los dos pasos. Introduce un código nuevo del autenticador antes de iniciar el local.",
+    "Identifícate como administrador para confirmar los datos e iniciar el local aquí. Usa un código nuevo del autenticador.",
   "handover.email": "Correo del administrador",
   "handover.password": "Contraseña",
   "handover.code": "Código de autenticador, si está configurado",
   "handover.compare": "Continuar a la comprobación del reloj",
-  "handover.activate": "Iniciar el local en este equipo",
+  "handover.starting": "Iniciando el local en este servidor…",
+  "handover.try_again": "Volver a intentarlo",
   "handover.fix": "Completa los campos resaltados para continuar.",
   "handover.required": "Completa este campo.",
-  "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo y en UTC.",
+  "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo.",
   "handover.emergency.sign_in":
     "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
   "handover.emergency.saved":

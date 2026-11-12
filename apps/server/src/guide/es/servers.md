@@ -53,10 +53,15 @@ de recuperación, debes confirmar con el código actual del autenticador. Necesi
 contraseña y tener a mano esa contraseña y el código actual del autenticador, si está configurado,
 para acceder en el equipo de reserva. Una llave de acceso no completa ese paso.
 
-Mantén los dos equipos conectados. La página de traspaso se abre en el equipo de reserva y sigue
-la transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador, compara
-los relojes y crea la nueva serie. Elige **Iniciar el local en este equipo**. Si la página indica
-que el equipo se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este equipo**.
+Mantén los dos equipos conectados. La página de traspaso se abre en el equipo de reserva y sigue la
+transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador y elige
+**Continuar a la comprobación del reloj**. Marca **Estos datos son correctos.** y elige
+**Continuar**: la página compara los relojes y crea las series de facturas nuevas sola, también tras
+cualquier espera, y después inicia el local en el equipo de reserva. Un código del autenticador dura
+menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página te pide revisar la contraseña y el código: introduce un código nuevo y elige
+**Volver a intentarlo** para seguir. Antes de **Continuar**,
+**Cambiar estos datos** vuelve a la identificación. Si la página indica que el
+servidor se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este servidor**.
 Los pagos ya registrados se conservan en la copia transferida.
 
 Si se pierde una respuesta en Servidores, mantén abierto el diálogo y elige **Consultar el

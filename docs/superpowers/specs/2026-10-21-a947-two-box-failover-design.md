@@ -4,6 +4,8 @@
 >
 > **A1385, 7 November 2026:** an attempt whose own pick turns up taken is called a fault in Waitron ([A1385 plan](../plans/2026-11-06-a1385-series-name-leftovers.md)).
 
+> **A1466, 10 November 2026:** neither page has Make the series or Check again. After the details tick (setup), or the key, both statements and the "These details are correct." tick (restore), the person presses **Proceed** (the handover start takes the details tick alone); the page then compares the clocks and makes the invoice series by itself, through any wait. Items 4, 8 and 10 below describe the earlier behaviour ([A1466 plan](../plans/2026-11-09-a1466-series-made-by-themselves.md)).
+
 > **A947 slice 3a, 1 November 2026:** each box's own state now lives in its `node.db`, and the
 > owner answered yes to both of the slice's questions on 31 October: the box's role is saved a
 > moment after the switch's other saves (so §6.3 step 2's role flip is no longer in the same

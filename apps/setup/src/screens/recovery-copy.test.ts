@@ -330,3 +330,15 @@ it("drops a bucket copy's clock answer that arrives after the kit changed", asyn
   await expect(pending).rejects.toMatchObject(changed);
   expect(sent).not.toContain("/setup-api/recovery/stage");
 });
+
+it("Change these details from the restore page goes back to choosing the backup and sends nothing", async () => {
+  const { el, calls } = await mounted();
+  const sent = calls.length;
+  el.shadowRoot!.querySelector("setup-recovery-allocation")!.dispatchEvent(
+    new CustomEvent("recovery-change-details", { bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=selected-copy]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=preview]")).not.toBeNull();
+  expect(calls).toHaveLength(sent);
+});

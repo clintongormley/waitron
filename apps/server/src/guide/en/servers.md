@@ -48,10 +48,15 @@ A recent confirmation is reused; a recovery-code confirmation must be replaced w
 authenticator code. You need an account with a password, and that password and your current
 authenticator code, if set up, ready to sign in on the spare. A passkey cannot complete that step.
 
-Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once
-the copy is ready, enter the same administrator account, compare the clocks and make the new
-series. Choose **Start the venue on this box**. If the page says this box is restarting, keep it
-open until **Continue to this box** appears. Payments already recorded remain in the transferred copy.
+Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once the
+copy is ready, enter the same administrator account and choose **Continue to clock check**. Tick
+**These details are correct.** and choose **Proceed**: the page compares the clocks and creates the
+new invoice series by itself, including after any wait, and then starts the venue on the spare.
+An authenticator code lasts under a minute. If yours runs out before the page uses it, the page asks
+you to check your password and code: enter a fresh code and choose **Try again** to carry on.
+Before **Proceed**, **Change these details** goes back to the sign-in.
+If the page says this box is restarting, keep it open until **Continue to this box** appears.
+Payments already recorded remain in the transferred copy.
 
 If an answer is lost in Servers, keep the dialog open and choose **Check handover progress**.
 On the spare’s handover page, you can reload to read progress. Do not start another handover.

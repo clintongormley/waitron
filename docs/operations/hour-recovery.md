@@ -81,7 +81,7 @@ and recover from a backup." (with the venue database missing, "Nothing was filed
 was sold.") and choose **Recover from backup** again. The box deletes the failed setup exactly as
 Start again does, and restarts. Press **Reconnect**: the page opens "Join or recover an existing
 restaurant". Choose the copy there, then follow [Check the selected copy](#check-the-selected-copy)
-above and [Make the new series](#make-the-new-series) below. If the page is reloaded before
+above and [Make the new invoice series](#make-the-new-invoice-series) below. If the page is reloaded before
 Reconnect, it opens its first screen; if that asks "Is this page secure?", press **Continue to
 setup**, then choose **Join or recover**.
 
@@ -97,14 +97,45 @@ from backup (both kept its records): its page says the box holds a setup from an
 Waitron and asks for Waitron to be reinstalled (`setup.workspace_unsupported`). Reinstalling deletes
 the backups kept on the box, so keep the backup you will restore from somewhere else first.
 
-## Make the new series
+## Make the new invoice series
 
-If the backup has no usable time zone, the clock comparison and a reissued recovery pack
+If the backup has no usable time zone, the clock times and a reissued recovery pack
 show UTC. Recovery keeps the saved zone unchanged.
 
+The page lists the backup's environment, country, taxpayer NIF and time zone one to a row, and after
+**Proceed** the clock rows the first-setup runbook describes (`recovery-hour.browser.test.ts`, "Check
+this venue lists the backup's details one to a row, then Box time naming the clocks that agreed" and
+"clocks that differ show one time per clock and ask which is correct; neither answer sends
+anything"). Before **Proceed**, **Change these details** sends nothing and goes back to choosing the
+backup (the same file's "Change these details sends nothing and asks to go back to choosing the
+backup", and `apps/setup/src/screens/recovery-copy.test.ts`, "Change these details from the restore
+page goes back to choosing the backup and sends nothing"). Once the series are made the page shows
+"We've created these series"; the key and statements stay on the page, hidden, for the restore to
+read.
+
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation"). Press **Compare clocks**: the box compares its own clock with the
-clock of the device showing the page and with the internet's, by itself; nobody types a time. A
+offers no clock confirmation"). Enter the recovery key, tick both statements and "These details are correct.", in any order, and
+press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
+creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
+to the box; while the button reads **Proceed** it says "When you press Proceed, Waitron creates new invoice series for this box, so
+its invoice numbers never repeat the old box's." with an example of an invoice series (the same
+file's "the key, both statements and the details tick send nothing until Proceed, and the page says what Proceed
+does"). After **Proceed** the box compares its own clock with the clock of the device showing the
+page and with the internet's, and when they agree the page asks the box for the invoice series, all
+by itself; nobody types a time (`recovery-hour.browser.test.ts`, "decodes the printed key and sends
+independent recovery declarations before selecting"). Changing or clearing the key, either
+statement or the details tick stops it, and putting it back sends nothing until **Proceed** is
+pressed again (the same file's "an edit to a declaration stops the wait, and putting it back sends
+nothing until Proceed" and "an edit to the details tick stops the wait, and putting it back sends
+nothing until Proceed, as a statement does").
+After the box refuses the key, the key's error shows under the key until the key changes, **Clear**
+is pressed or **Proceed** is pressed again, and **Proceed** stays enabled while the key, both statements and the details tick are in: pressing it
+sends the key again. Unticking a statement or the details tick disables it until it is ticked again
+(the same file's "after the box refuses the key, Proceed stays enabled, and pressing it sends the
+key again and makes the series" and "after the box refuses the key, unticking %s disables Proceed
+and ticking it again enables it, and the key's error stays under the key until the key changes").
+Besides **Clear** and **Change these details** the page has one main button; what it reads in each
+state is the same file's "while %s the restore page's one button reads %s". A
 page shown on the box's own screen runs on the box's clock, so it does not count as the second
 clock (`apps/server/src/request-from-box.test.ts`;
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "a browser on the box itself
@@ -144,26 +175,24 @@ event each time it opens (`apps/setup/src/screens/recovery-copy.ts` mounts the p
 binding, and `apps/setup/src/screens/recovery-allocation.ts` then uses
 `eventId: crypto.randomUUID()`), and the box keeps each event's wait apart
 (`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`). No test reloads a
-restore page end to end. The page goes back to the box by itself whether or not **Make the
-series** was pressed: a wait the box had recorded that **Compare clocks** shows makes the series at
-zero with no press (`recovery-hour.browser.test.ts`, "a recorded wait shown by Compare clocks makes
-the series by itself at zero, with no press"), and **Compare clocks** during a wait does not stop
-that (the same file's "Compare clocks after Make the series still makes the series by itself at the
-end of the wait"). What the page shows when it cannot go ahead, and what it asks for:
+restore page end to end. At zero the page goes back to the box by itself; during the countdown it
+shows no button but **Clear** (`recovery-hour.browser.test.ts`, "while %s the restore page's one
+button reads %s", its "a countdown after a press" row). Once the invoice series are made, the page lists
+them and no longer shows that button (the same file's "once the series are made, the page's one
+button is gone"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or laptop on the venue's network that has the backup. It
-  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`, "Compare
-  clocks with no second clock explains the wait and checks again by itself" and "with no second
-  clock it explains itself and carries on when the internet arrives").
-- **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
-  from another phone or laptop that has the backup; if they still differ, the box's time may be
-  wrong, so ask for help. It does not retry by itself; press **Check again**
-  (`recovery-hour.browser.test.ts`, "a clock refusal shows both readings and no countdown, and waits
-  for Check again").
-- **The minute this box would use is already taken**: after you press **Make the
-  series**, the page says "The auto-generated invoice series code (which is time-based) already
-  exists in the database." and "Generating a new code in: 03:00", counting down in minutes and
+  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
+  "with no second clock it explains itself and carries on when the internet arrives").
+- **The clocks differ by more than 30 seconds**: the page shows each clock's time and asks which is
+  correct; either answer says to correct this device's time and reconnect to the box. It does not
+  retry by itself; press **Compare the clocks again**, which
+  carries on to the invoice series once the clocks agree (`recovery-hour.browser.test.ts`, "a clock
+  refusal shows each clock's reading and no countdown, and waits for Compare the clocks again" and
+  "Compare the clocks again after Proceed carries on to the series once the clocks agree").
+- **The minute this box would use is already taken**: the page says "This invoice series code has already been used. Waitron creates a
+  new one by itself when the countdown ends." and "New invoice series in 03:00", counting down in minutes and
   seconds to the next free minute with no button to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`recovery-hour.browser.test.ts`,
   "a minute in use shows one countdown, checks again quietly and keeps saying why"). If one of those
   checks is lost on the network, the countdown carries on and the page checks again about every 15
@@ -176,12 +205,17 @@ end of the wait"). What the page shows when it cannot go ahead, and what it asks
   (`minute_in_use`, with no time; `packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is
   refused when a record naming its own minute appears after it"). The page says this is a fault in
   Waitron and that reloading the page and starting the restore again makes a new restore, which
-  chooses a new series name (`recovery-hour.browser.test.ts`, "a stored pick found taken names the
+  creates new invoice series (`recovery-hour.browser.test.ts`, "a stored pick found taken names the
   fault and how to start the restore again (%s)").
-- **A later minute is already in use** (no time given): the box's clock has gone back behind the
-  name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
-  its name
-  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backward clock refuses existing material and retains its spent hour").
+- **The box's clock is earlier than a time it has already used** (the page says "The invoice series
+  cannot be created yet: this box's clock is earlier than a time it has already used for invoice
+  series.", with no time given): the box's clock has gone back behind the name this attempt already
+  chose. It does not retry by itself; once the box's clock reaches the moment this attempt chose its
+  name, press **Compare the clocks again**
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backward clock refuses existing
+  material and retains its spent hour"; `recovery-hour.browser.test.ts`, "a later minute in use is
+  explained and does not count down", and the "a later minute is already in use" row of "while %s
+  the restore page's one button reads %s").
 
 For example, a restore whose clocks are compared at 09:00:04 UTC on 24 October 2026 waits until
 09:02:00 and takes `0D0RY` (`hour-selection.test.ts`, the same restore test). With prefixes `A`,

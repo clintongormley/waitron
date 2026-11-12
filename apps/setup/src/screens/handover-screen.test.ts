@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
+import { handoverEs } from "../i18n/strings/handover.js";
 import type { SetupHandoverScreen } from "./handover-screen.js";
 import "./handover-screen.js";
 
@@ -14,6 +15,10 @@ const status = {
   copyPlaced: true,
 };
 afterEach(() => vi.restoreAllMocks());
+it("the Spanish handover words call the box «servidor», never «equipo»", () => {
+  expect(Object.values(handoverEs).filter((words) => /equipo/i.test(words))).toEqual([]);
+  expect(handoverEs["handover.starting"]).toBe("Iniciando el local en este servidor…");
+});
 it("reads operation status without extending a session, and cancels on leaving", async () => {
   const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ body: status })));
   const controller = new AbortController();
