@@ -156,7 +156,7 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
+ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `server-queue-watchdog`, final `ci` summary, `publish` and `release` jobs stay on
 GitHub; the independent Server health workflow also stays hosted so rescue can run when server assignment stops. Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
 `server_route` into the reusable image workflow, but that input does not choose its runner.
@@ -1982,8 +1982,17 @@ to the app build only. In order, the publish job:
    fiscal module's `refuseSettings` seat checks the image's own environment as a production start
    does (for Veri\*Factu, the shared `software_producer.invalid` checks and its own
    `sif.producer_invalid` ones), and a refusal prints its code, setting and reason, never a value; a fiscal module with no such seat is skipped, and with none at all the step logs that and passes;
-7. builds again with `push: true` from the builder's cache, with the tags step's tags, then pushes
-   the print-agent image, which takes none of the three.
+7. pushes the print-agent image, which takes none of the three, then builds the app image again with
+   `push: true` from the builder's cache, with the tags step's tags. The app image goes last because
+   a release tag's check that the version is not yet published reads the app image alone: a version
+   whose app image is published is then a whole publication, and a run after either push failed
+   pushes both.
+
+On a `v*` tag it also refuses a commit that is not on `main` (before step 1) and a tag that is not
+`v` plus X.Y.Z (in the tags step), and runs `check-release <version>` in the loaded image and
+refuses a version the registry already holds (both before step 7); runs for one tag publish one at
+a time. A `release` job then attaches the declaration to the GitHub Release
+([runbook](../operations/release.md)).
 
 The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
 built from the same arguments but is not byte-for-byte the compared image. Guards:

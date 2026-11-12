@@ -174,7 +174,7 @@ const forbidden = (calls) =>
 
 describe("parseVersion", () => {
   it("answers the three numbers", () => {
-    expect(parseVersion("1.10.0")).toEqual([1, 10, 0]);
+    expect(parseVersion("1.10.0")).toEqual([1n, 10n, 0n]);
   });
 
   it("answers a version of 50 characters", () => {
@@ -200,6 +200,22 @@ describe("releasedVersions", () => {
       "",
     ].join("\n");
     expect(releasedVersions(output)).toEqual(["1.9.0", "1.10.0"]);
+  });
+
+  it("sorts versions past JavaScript's exact whole numbers", () => {
+    const output = [
+      `${OTHER_SHA}\trefs/tags/v9007199254740993.0.0`,
+      `${OTHER_SHA}\trefs/tags/v9007199254740992.0.0`,
+    ].join("\n");
+    expect(releasedVersions(output)).toEqual(["9007199254740992.0.0", "9007199254740993.0.0"]);
+  });
+
+  it("leaves out a tag whose version is longer than 50 characters", () => {
+    const output = [
+      `${OTHER_SHA}\trefs/tags/v1.0.${"9".repeat(47)}`,
+      `${OTHER_SHA}\trefs/tags/v1.0.0`,
+    ].join("\n");
+    expect(releasedVersions(output)).toEqual(["1.0.0"]);
   });
 });
 

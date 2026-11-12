@@ -14,16 +14,16 @@ name: CI
 # that would never report. Both of those are now free moves, which is what makes the scoping (#27)
 # possible at all.
 #
-# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`, with a
-# single deliberate exception. A job that does not is reporting to nothing — it could fail while the
-# pull request stays green. The exception is `publish`, which runs AFTER `ci` (it `needs: ci`) and so
-# cannot be in `ci`'s needs without a cycle; it is a post-gate leaf reporting no required status, and
-# scripts/ci-workflow.test.mjs pins it downstream of `ci` rather than absent from it.
+# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`, with two
+# deliberate exceptions. A job that does not is reporting to nothing — it could fail while the
+# pull request stays green. The exceptions are `publish`, which runs AFTER `ci` (it `needs: ci`), and
+# `release`, which needs `publish`; neither can be in `ci`'s needs without a cycle. They report no
+# required status, and scripts/ci-workflow.test.mjs pins them downstream of `ci` rather than absent from it.
 
 on:
   push:
     branches: [main]
-    # Release tags, for the `publish` job alone: a `v*` push is what publishes `ghcr.io/<owner>/waitron:<version>`.
+    # Release tags, for the `publish` and `release` jobs: a `v*` push is what publishes `ghcr.io/<owner>/waitron:<version>`.
     # The rest of the workflow running on that ref is the point rather than a cost — nothing should
     # be published from a commit whose suite has not run. Release tags take the full, unscoped path.
     tags: ["v*"]
@@ -479,6 +479,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-tags: true
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -493,6 +494,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-tags: true
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -4308,8 +4310,8 @@ jobs:
   # red never ships `:main` / `:sha-…` / `:<version>` to a box that follows it via
   # `docker compose pull` (spec §10). `changes` is needed for its `full` output.
   #
-  # It cannot appear in `ci`'s `needs` — that would be a cycle — so it is the ONE job the
-  # "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
+  # It cannot appear in `ci`'s `needs` — that would be a cycle — so it and `release` are the jobs
+  # the "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
   # of `ci` (needs `ci`, `if:` reads `needs.ci.result`) rather than merely absent.
   publish:
     needs: [changes, ci]
@@ -4317,10 +4319,18 @@ jobs:
     if: needs.changes.outputs.full == 'true' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.ci.result == 'success' && always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Runs for one release tag publish one at a time, so a later one finds the version published. Every
+    # other run keeps a group of its own: a group holds one waiting run and cancels an older waiting one.
+    concurrency:
+      group: ${{ github.workflow }}-publish-${{ startsWith(github.ref, 'refs/tags/v') && github.ref || github.run_id }}
+      cancel-in-progress: false
     # Naming any permission drops every default. `packages: write` is for the GHCR push.
     permissions:
       contents: read
       packages: write
+    outputs:
+      release_version: ${{ steps.tags.outputs.release_version }}
+      release_image: ${{ steps.tags.outputs.release_image }}
     steps:
       - id: checkout
         name: Check out the code
@@ -4350,6 +4360,32 @@ jobs:
         run: |
           git rev-parse --is-shallow-repository
           find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
+
+      # The checkout is one commit deep, and a shallow fetch of main answers "not an ancestor" for a
+      # tag behind main's tip, so main is fetched whole.
+      - name: Refuse a release tag that is not on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        timeout-minutes: 4
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+        run: |
+          set -euo pipefail
+          fetched=0
+          for attempt in 1 2; do
+            if timeout 90 git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main; then
+              fetched=1
+              break
+            fi
+            echo "fetching main failed (attempt $attempt)" >&2
+            for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+          done
+          [ "$fetched" -eq 1 ] || exit 1
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "the tag $GITHUB_REF_NAME is on $GITHUB_SHA, which is not a commit of main" >&2
+            exit 1
+          fi
+          echo "the tag $GITHUB_REF_NAME is on a commit of main"
 
       # The release image carries the software producer's settings from three repository secrets. A
       # fork has none of them until it sets its own, so its publish stops here.
@@ -4398,6 +4434,8 @@ jobs:
           short="sha-$(printf '%s' "$SHA" | cut -c1-7)"
           tags="$repo:$short"
           agent_tags="$agent_repo:$short"
+          release_version=""
+          release_image=""
           case "$REF" in
             # What deploy/compose.yml defaults to: `docker compose pull` on a box follows main.
             # Full runs can overlap; never move the stable tag behind an already published commit.
@@ -4420,9 +4458,14 @@ jobs:
                 *) echo "main-tag-guard.sh answered '$decision', which is neither move nor hold" >&2; exit 1 ;;
               esac
               ;;
-            # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
-            # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
             refs/tags/v*)
+              release_version=${REF#refs/tags/v}
+              # The same form the bundle build accepts (`isReleaseVersion`), refused here before any read.
+              if ! [[ $release_version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || [ "${#release_version}" -gt 50 ]; then
+                echo "the tag ${REF#refs/tags/} is not a release: a release tag is v followed by X.Y.Z" >&2
+                exit 1
+              fi
+              release_image="$repo:$release_version"
               # A release tag moves no `:main`, but the producer guard below still compares with
               # `:main`'s settings: the same single registry read, with no decision. Exit 3 means
               # nothing is published under `:main` yet, which leaves the file empty.
@@ -4432,12 +4475,14 @@ jobs:
                 echo "cannot read :main's settings for the producer guard (exit $read_status)" >&2
                 exit 1
               fi
-              tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}"
+              tags="$tags,$release_image"; agent_tags="$agent_tags,$agent_repo:$release_version"
               ;;
           esac
           echo "$tags"; echo "$agent_tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "release_image=$release_image" >> "$GITHUB_OUTPUT"
 
       # A production box refuses to start on a chain made under another producer tax number
       # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
@@ -4513,6 +4558,7 @@ jobs:
           tags: waitron-publish-check:local
           build-args: |
             WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
             WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
             WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
             WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
@@ -4556,23 +4602,39 @@ jobs:
           set -euo pipefail
           timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/server.js check-producer
 
-      - name: Publish to GHCR
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deploy/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          build-args: |
-            WAITRON_BUILD_ID=${{ github.sha }}
-            WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
-            WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
-            WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
-          labels: |
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
-            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+      - name: Check the release inside the built image
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          CHECK_IMAGE: waitron-publish-check:local
+          RELEASE_VERSION: ${{ steps.tags.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/server.js check-release "$RELEASE_VERSION"
+
+      # A published release is never replaced. Only these words mean "not published" (measured with
+      # docker 29.9.3 against ghcr.io, 2026-11-12: a missing tag answers `manifest unknown`;
+      # `no such manifest: ` is accepted as the same answer, unmeasured); any
+      # other failure, such as `denied`, stops the publish. The app image is pushed last, so a version
+      # whose app image exists is a whole publication and a retry after any failed push redoes both.
+      - name: Refuse a release version the registry already holds
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_IMAGE: ${{ steps.tags.outputs.release_image }}
+        run: |
+          set -euo pipefail
+          errors=$(mktemp)
+          status=0
+          timeout 60 docker manifest inspect "$RELEASE_IMAGE" >/dev/null 2>"$errors" || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "$RELEASE_IMAGE is already published; a release is never published twice" >&2
+            exit 1
+          elif grep -qE '^(manifest unknown|no such manifest: )' "$errors"; then
+            echo "$RELEASE_IMAGE is not published yet"
+          else
+            cat "$errors" >&2
+            echo "cannot ask the registry whether $RELEASE_IMAGE is published (exit $status)" >&2
+            exit 1
+          fi
 
       - name: Publish the print-agent image to GHCR
         uses: docker/build-push-action@v7
@@ -4583,8 +4645,102 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.agent_tags }}
-          build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
             org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
+      - name: Publish to GHCR
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
+            WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
+            WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+            WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
+  # The GitHub Release's two files are copied out of the image publish pushed, so they are the box's
+  # own, byte for byte. A re-run of this job alone replaces them; a re-run of the whole workflow
+  # stops at publish, which refuses a version the registry already holds.
+  release:
+    needs: [publish]
+    # As publish does, so an intended upstream skip cannot drop it.
+    if: always() && !cancelled() && needs.publish.result == 'success' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The only job given `contents: write`, which making a Release needs.
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the published release image
+        timeout-minutes: 6
+        env:
+          RELEASE_IMAGE: ${{ needs.publish.outputs.release_image }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 150 docker pull "$RELEASE_IMAGE"; then
+              exit 0
+            fi
+            echo "pulling $RELEASE_IMAGE failed (attempt $attempt)" >&2
+          done
+          exit 1
+
+      - name: Attach the declaration to the GitHub Release
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+          RELEASE_IMAGE: ${{ needs.publish.outputs.release_image }}
+        run: |
+          set -euo pipefail
+          timeout 150 scripts/release/github-release.sh "$RELEASE_VERSION" "$RELEASE_IMAGE"

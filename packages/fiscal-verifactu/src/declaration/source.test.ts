@@ -43,7 +43,7 @@ describe("prepareDeclarationSource", () => {
   });
 
   it("keeps the template's comment lines", () => {
-    expect(releaseBlockers(prepareDeclarationSource(input()))).toHaveLength(2);
+    expect(releaseBlockers(prepareDeclarationSource(input()))).toHaveLength(1);
   });
 
   it("joins the functions list as Spanish prose", () => {
@@ -94,9 +94,8 @@ describe("parseFunctions", () => {
 describe("releaseBlockers", () => {
   it("answers each blocker line's text in the real template", () => {
     const blockers = releaseBlockers(template);
-    expect(blockers).toHaveLength(2);
+    expect(blockers).toHaveLength(1);
     expect(blockers[0]).toMatch(/^Item 1\.d\) is the draft sent to the asesor as Q53\./);
-    expect(blockers[1]).toMatch(/^A940 slice 4 has not landed/);
   });
 
   it("answers nothing for a text with none", () => {

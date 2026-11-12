@@ -235,7 +235,7 @@ to the other service and the setup links.
 
 ```bash
 cd /opt/waitron
-docker compose pull && docker compose up -d --remove-orphans   # updates to the published :main, unless a branch install pinned an image in .env (run `waitron.sh install` with no ref to return to :main)
+docker compose pull && docker compose up -d --remove-orphans   # updates to the published :main, unless a branch or release install pinned an image in .env (run `waitron.sh install` with no ref to return to :main)
 docker compose ps                             # all the services, with health
 docker compose logs -f app                    # the server's JSON lines
 ```
@@ -388,12 +388,32 @@ back only while the marker exists. `waitron.sh reset` deletes the marker with th
 folder. A repair-stage start that releases the spare serves the repair page, which itself says when the
 disk is full.
 
+### Installing a release
+
+A box in production runs only a release: a build of a `v*` tag, which carries its version's
+declaration. Every other image is a test build, and its production start refuses with
+`server.unreleased_build`. To install release `1.2.3`, give `install` its tag:
+
+```bash
+sudo bash waitron.sh install v1.2.3
+```
+
+It takes `compose.yml` from that tag, pulls the published `ghcr.io/clintongormley/waitron:1.2.3`
+and `ghcr.io/clintongormley/waitron-print-agent:1.2.3`, and writes both into `.env` as
+`WAITRON_IMAGE` and `WAITRON_PRINT_AGENT_IMAGE`, so the box stays on that release across reboots
+and a bare `docker compose pull`. If the pull fails, check that the tag's CI run published the
+release ([Cut a release](../docs/operations/release.md)). Install the next release the same way.
+Running `install` with no ref moves the box to `:main`, which is a test build, so a production box
+then refuses to start. A release can carry a database migration too, and what is said below about
+migrating one way applies to it.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only the nightly run, a manual run on `main` and
 `v*` tags publish to GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
 instead of relying on the default `main`, and it builds that ref's image on the box instead of
-pulling. The script resolves the ref once through GitHub's commit API, then builds both Waitron
+pulling. A release tag such as `v1.2.3` is the exception: it pulls the published release (see
+Installing a release above). The script resolves the ref once through GitHub's commit API, then builds both Waitron
 images from that full commit. No checkout or `pnpm` is needed; a failed resolution stops the builds.
 
 ```bash
@@ -789,7 +809,8 @@ docker build -f deploy/Dockerfile -t waitron:pinned \
 
 CI prepares the same metadata in its build context. `waitron.sh install <ref>` supplies it for
 both image targets and needs `jq` to read the commit response; it installs `jq` through apt when
-absent. On a host without apt, install `jq` before using a branch or commit ref.
+absent. On a host without apt, install `jq` before using a branch or commit ref. A release install
+(`install v1.2.3`) builds nothing, so it needs neither.
 
 An image you build yourself names you as the software's producer: pass
 `--build-arg WAITRON_PRODUCER_NAME=…`, `--build-arg WAITRON_PRODUCER_TAX_ID=…` and

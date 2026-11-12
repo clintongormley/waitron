@@ -99,7 +99,7 @@ describe("writeReleaseFolder", () => {
 
     await expect(
       writeReleaseFolder(dir, declarationSourceFor("1.2.3"), producer),
-    ).rejects.toMatchObject({ code: "declaration.release_blocked", params: { count: 2 } });
+    ).rejects.toMatchObject({ code: "declaration.release_blocked", params: { count: 1 } });
     await expect(stat(dir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 

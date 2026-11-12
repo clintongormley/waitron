@@ -898,6 +898,14 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **One database per environment.** A pre-production database is never promoted. `WAITRON_ENV`
   governs this; unset means `preproduction`, `production` must be typed out, and `dev` is
   preproduction plus `config.devMode`.
+- **A production start on a bundle built without a release version refuses
+  `server.unreleased_build`; a start from source is not refused.** Guards:
+  `apps/server/src/release-check.test.ts` and `apps/server/src/unreleased-build.e2e.test.ts`,
+  weaker than the rule: a test bundle, never the image's; image-smoke's `check-release` step reads
+  the image's stamp but starts nothing. [Detail](docs/operations/release.md)
+- **A released version's declaration never changes: `v<version>.md` stays byte for byte what its
+  tag holds.** Guard: `scripts/released-declarations.test.ts`, weaker than the rule: a version's
+  missing tag is caught only once a higher version is declared.
 - **Nothing EXTERNAL may block a sale, though a start must have its time confirmed first — and a till
   needs the venue's PRIMARY.** AEAT, the card network and the internet are never on the sale path of
   whichever node is primary, except that, on a box that files records, a start the internet cannot

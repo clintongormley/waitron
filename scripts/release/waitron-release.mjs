@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { isMainScript } from "../is-main-script.mjs";
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const TAG = /^refs\/tags\/v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/;
+const TAG = /^refs\/tags\/v(.+)$/;
 const USAGE =
   "usage: pnpm release prepare <version> --place <place>\n       pnpm release tag <version>\n";
 // The push runs the pre-push hook, which typechecks; that can take minutes.
@@ -16,19 +16,29 @@ export function parseVersion(text) {
   // 50: the most a record's `SistemaInformatico.Version` holds (`isReleaseVersion` in @waitron/shared).
   const match = text.length <= 50 ? VERSION.exec(text) : null;
   if (!match) throw new Error(`${JSON.stringify(text)} is not a version like 1.2.3`);
-  return match.slice(1).map(Number);
+  return match.slice(1).map(BigInt);
 }
 
-function compareVersions(a, b) {
+export function isVersion(text) {
+  try {
+    parseVersion(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function compareVersions(a, b) {
   const [left, right] = [parseVersion(a), parseVersion(b)];
-  return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
+  for (let at = 0; at < 3; at++) if (left[at] !== right[at]) return left[at] < right[at] ? -1 : 1;
+  return 0;
 }
 
 export function releasedVersions(lsRemoteOutput) {
   return lsRemoteOutput
     .split("\n")
     .map((line) => TAG.exec(line.split("\t")[1] ?? "")?.[1])
-    .filter((version) => version !== undefined)
+    .filter((version) => version !== undefined && isVersion(version))
     .sort(compareVersions);
 }
 

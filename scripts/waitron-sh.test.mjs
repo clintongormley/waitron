@@ -925,6 +925,57 @@ describe("waitron.sh install <ref>", () => {
   });
 });
 
+describe("waitron.sh install of a release", () => {
+  it.each(["1.2.3", `1.2.${"1".repeat(46)}`])(
+    "pulls the published %s images, records them in .env, and builds nothing",
+    (version) => {
+      const sb = sandbox();
+      const r = run(sb, ["install", `v${version}`]);
+      expect(r.status, r.stderr).toBe(0);
+      const env = readFileSync(join(sb.boxDir, ".env"), "utf8").split("\n");
+      expect(env).toContain(`WAITRON_IMAGE=ghcr.io/clintongormley/waitron:${version}`);
+      expect(env).toContain(
+        `WAITRON_PRINT_AGENT_IMAGE=ghcr.io/clintongormley/waitron-print-agent:${version}`,
+      );
+      expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^pull\b/));
+      const calls = readFileSync(sb.log, "utf8");
+      expect(calls).not.toContain("docker build");
+      expect(calls).not.toContain("api.github.com");
+    },
+  );
+
+  it("names the release and suggests checking it was published when the pull fails", () => {
+    const sb = sandbox({ pullFail: true });
+    const r = run(sb, ["install", "v1.2.3"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("v1.2.3");
+    expect(r.stderr).toContain("published");
+    expect(composeCalls(sb).filter((call) => call.split(/\s+/).includes("up"))).toEqual([]);
+  });
+
+  it.each(["v1.2", "feat/x", "v01.2.3", "v1.2.3-rc1", `v1.2.${"1".repeat(47)}`])(
+    "builds %s from source, as any ref that is not a release",
+    (ref) => {
+      const sb = sandbox();
+      const r = run(sb, ["install", ref]);
+      expect(r.status, r.stderr).toBe(0);
+      const calls = readFileSync(sb.log, "utf8");
+      expect(calls.split("\n").filter((line) => line.startsWith("docker build "))).toHaveLength(2);
+      expect(calls).toContain("api.github.com");
+      expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain("ghcr.io");
+    },
+  );
+
+  it("install main still pulls compose.yml's own images and records no image override", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install", "main"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^pull\b/));
+    expect(readFileSync(sb.log, "utf8")).not.toContain("docker build");
+    expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
+  });
+});
+
 describe("waitron.sh install keeps the box's own copy of waitron.sh current", () => {
   const calls = (sb) => readFileSync(sb.log, "utf8").trimEnd().split("\n");
   const selfUrl = (ref) =>

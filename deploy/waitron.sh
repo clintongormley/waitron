@@ -5,6 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
 #   sudo bash waitron.sh install            # published main image
 #   sudo bash waitron.sh install <ref>      # build and run a branch or commit on the box
+#   sudo bash waitron.sh install v1.2.3     # pull and run a published release
 #   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate unless the box joined another, the start-again records and the files a Move set aside)
 #   sudo bash waitron.sh --reset install [ref]   # build or pull the ref's images, wipe the box, start it on them
 #
@@ -398,16 +399,30 @@ install_box_service() {
   rm -rf "$tmp"
 }
 
-# 3. main pulls every image in compose.yml and records no override; a branch/commit builds both
-#    Waitron images on the box from the git context and records the tags in .env so the box stays
-#    on them.
+# A release tag is v and isReleaseVersion's form (packages/shared/src/built-release.ts).
+is_release_tag() {
+  local version="${1#v}"
+  [ "$1" != "$version" ] && [ "${#version}" -le 50 ] \
+    && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+}
+
+# 3. main pulls every image in compose.yml and records no override; a release vX.Y.Z pulls its
+#    published images and records them in .env; any other branch/commit builds both Waitron images
+#    on the box from the git context and records the tags in .env so the box stays on them.
 select_image() {
   local ref="$1"
-  if [ "$ref" = "main" ]; then
-    env_unset WAITRON_IMAGE
-    env_unset WAITRON_PRINT_AGENT_IMAGE
+  if [ "$ref" = "main" ] || is_release_tag "$ref"; then
+    local why="check the network and that the image registries (GHCR, Docker Hub) are reachable, or whether an image is published for this machine's architecture ($(uname -m))"
+    if [ "$ref" = "main" ]; then
+      env_unset WAITRON_IMAGE
+      env_unset WAITRON_PRINT_AGENT_IMAGE
+    else
+      env_set WAITRON_IMAGE "ghcr.io/clintongormley/waitron:${ref#v}"
+      env_set WAITRON_PRINT_AGENT_IMAGE "ghcr.io/clintongormley/waitron-print-agent:${ref#v}"
+      why="check that release $ref was published (its images are ghcr.io/clintongormley/waitron:${ref#v} and waitron-print-agent:${ref#v}), and $why"
+    fi
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
-      || die "could not pull the box's images: check the network and that the image registries (GHCR, Docker Hub) are reachable, or whether an image is published for this machine's architecture ($(uname -m))"
+      || die "could not pull the box's images for $ref: $why"
   else
     local safe tag agent_tag sha created url metadata source_metadata
     if ! command -v jq >/dev/null 2>&1; then
