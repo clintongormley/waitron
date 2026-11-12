@@ -278,7 +278,12 @@ it("omits unchanged and toggled-back availability while keeping full draft value
   expect(value.labels.map(({ available }) => available)).toEqual([true, true, false]);
   expect(body).toEqual({
     ...value,
-    labels: value.labels.map(({ available: _available, ...label }) => label),
+    labels: value.labels.map(({ id, name, customerName, kitchenName }) => ({
+      id,
+      name,
+      customerName,
+      kitchenName,
+    })),
   });
 });
 

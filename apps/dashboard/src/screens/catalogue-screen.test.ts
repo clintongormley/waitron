@@ -1169,7 +1169,12 @@ describe("catalogue-screen", () => {
     };
     const body = {
       ...value,
-      labels: value.labels.map(({ available: _available, ...label }) => label),
+      labels: value.labels.map(({ id, name, customerName, kitchenName }) => ({
+        id,
+        name,
+        customerName,
+        kitchenName,
+      })),
     };
     emit(form, "wt-submit", { value, body });
     await flush(el);

@@ -1176,7 +1176,12 @@ it("updates the options list with its save body and commits the full draft", asy
   const value = { ...optionList, name: "Doneness" };
   const body = {
     ...value,
-    labels: value.labels.map(({ available: _available, ...label }) => label),
+    labels: value.labels.map(({ id, name, customerName, kitchenName }) => ({
+      id,
+      name,
+      customerName,
+      kitchenName,
+    })),
   };
   form.dispatchEvent(
     new CustomEvent("wt-submit", {
