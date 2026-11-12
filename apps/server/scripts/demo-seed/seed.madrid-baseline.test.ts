@@ -25,7 +25,7 @@ import { madridWithNameChanges, type MadridNameChange } from "./testing/madrid-n
 import {
   madridWithVatClassChanges,
   type MadridVatClassChange,
-} from "./testing/madrid-vat-classes.js";
+} from "./testing/madrid-vat-class-changes.js";
 import {
   madridWithRenamedColumns,
   type MadridColumnRenames,

@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
-import { madridWithVatClassChanges, type MadridVatClassChange } from "./madrid-vat-classes.js";
+import {
+  madridWithVatClassChanges,
+  type MadridVatClassChange,
+} from "./madrid-vat-class-changes.js";
 import { stable, type CanonicalMadridSemantics } from "./madrid-semantics.js";
 
 const digest = (value: unknown) => createHash("sha256").update(stable(value)).digest("hex");
