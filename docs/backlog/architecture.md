@@ -846,7 +846,7 @@ the helper's constant status is not evidence of the write.
   The attendance-discovery, attendance-obligations, boot.mirror, boot.clock-watch and standalone tab-person suites use Anna and Martha for their main staff sample.
   Local till table, zone-layout, zone-required, split-bill, floor-catch-up and today-names suites use Anna for their staff-role person.
   The device-join suite uses Server and Manager for its local staff-role display samples.
-  The main till API and profile-zone suites use Anna and Martha where present; local
+  The main till API and profile-zone suites use Anna, Martha and Beatrice where present; local
   delivery, published-menu sale and unroutable-dish staff samples use Cashier.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,

@@ -494,7 +494,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const [row] = await suite.db
       .insert(persons)
       .values({
-        displayName: "Beatriz",
+        displayName: "Beatrice",
         pinHash: hashPin("7777"),
         role: "staff",
         locale: "en-GB",
