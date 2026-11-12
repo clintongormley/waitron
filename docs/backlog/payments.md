@@ -409,6 +409,15 @@ Remaining Stripe qualification and maintenance.
 
 ## Decisions and deliberate limits
 
+- **Money moving locks only what changes what the bill charges** (owner, 2026-11-12, R7-1: "Yes,
+  kitchen carries on"). While a card is at the reader or a card refund waits on a bill, staff may
+  still fire a held course or dish, send held dishes, move dishes between stations, close or delete
+  a station, change or reorder courses, move a whole dish between held courses and choose Make at.
+  Adding, removing or repricing dishes, comps, discounts, moving dishes between bills, and a partial
+  move or split of a held dish (which rewrites the rows carrying its price) stay refused. Writers
+  that change no amount count their write with `bumpRevisionKeepingPayment`
+  (`apps/server/src/working-order.ts`).
+
 - **An uncertain bill payment keeps its original confirmation** (A1399, watcher answer,
   2026-11-06 23:12). A server error or code-less answer that does not prove the payment was refused
   uses the existing hold and **Check again**, with the same complete request. An empty balance

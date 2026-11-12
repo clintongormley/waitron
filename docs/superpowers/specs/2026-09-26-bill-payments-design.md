@@ -471,6 +471,9 @@ checks are the ones below.
   through while a card is at the reader is open point §11.3.
   _(2026-09-28: a served mark is no longer refused while a card payment is pending; owner ruling,
   campaign item A118.)_
+  _(2026-11-12: a write that changes no amount is no longer refused while a card payment or a card
+  refund is pending: firing, station moves and closing, course changes and reorders, Make at. Owner
+  ruling, campaign item R7-1; see `docs/backlog/payments.md` → Decisions and deliberate limits.)_
 - **Allowed while a card payment on the bill is pending:** a cash payment, and a second card payment
   on another reader, each against what is still available after the pending one's reservation
   (§3.1). So a second device may take cash while a card is at the terminal. **Why:** at a large
