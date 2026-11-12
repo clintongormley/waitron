@@ -749,7 +749,7 @@ edits the same files)
   members' short names joined for a today's join; see the build plan's slice 1, D8.)
 - A larger text size for kitchen screens read from a distance; a "My tables" filter on the handheld
   floor; whether a dish leaves a station's Ready column on its own; the venue's bump mode once a dish
-  tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order). (2026-10-26, slice 8: traced and settled in the build plan's slice 8, D8.)
+  tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order). (2026-10-26, slice 8: traced and settled in the build plan's slice 8, D8.) (2026-11-12, R2-2: a Ready dish still does not leave on its own; it leaves every column of its station's screen once the waiter marks it served; the owner's "yes" to R2 proposal 1 on 2026-11-11, relayed by the watcher.)
 - The wording of the fixed bottom bar and the opening rule's edge cases (a table with only served
   dishes opens on Order). (2026-11-09: settled in the build plan's slice 10, D5–D8.)
 

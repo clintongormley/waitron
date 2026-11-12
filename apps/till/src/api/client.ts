@@ -1527,7 +1527,7 @@ export interface StationQueueItem {
   /** The line's snapshotted KITCHEN name — the kitchen name falling back to the staff name, the
    * variant's own on a variant line. */
   name: string;
-  /** The line's quantity, as a three-place decimal string, e.g. "2.000". */
+  /** What is left to serve: the amount sent less the amount served, as a three-place decimal string, e.g. "2.000". */
   quantity: string;
   /** Unit values frozen with the line. Absent/null only on older payloads. */
   unitName?: Record<string, string> | null;

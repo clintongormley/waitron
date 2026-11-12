@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lt, min, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lt, min, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   deviceProfiles,
@@ -8,6 +8,8 @@ import {
   printers,
   stationPrinters,
   ticketItems,
+  workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
@@ -15,6 +17,7 @@ import { printJobInTrouble } from "./print-job-trouble.js";
 import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
+import { firedQuantity } from "./kitchen-print.js";
 
 export interface DownPrinter {
   stationId: string;
@@ -108,11 +111,16 @@ export function waitingDishesQuery(tx: Transaction, now: Date, stationIds?: read
     .selectDistinct({ stationId: kitchenStations.id })
     .from(kitchenStations)
     .innerJoin(ticketItems, eq(ticketItems.stationId, kitchenStations.id))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
     .where(
       and(
         stationIds === undefined ? undefined : inArray(kitchenStations.id, [...stationIds]),
         inArray(ticketItems.state, ["queued", "preparing"]),
         gte(ticketItems.firedAt, since),
+        gt(firedQuantity, workingOrderLines.servedQuantity),
+        ne(workingOrders.status, "abandoned"),
+        isNull(workingOrders.collectedAt),
       ),
     );
 }

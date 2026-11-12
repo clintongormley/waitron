@@ -732,8 +732,8 @@ describe("A773 requested lifecycle", () => {
   });
 });
 
-describe("a finished table's paid food leaves the kitchen screens (A1344)", () => {
-  it("takes the card off the station when the unserved remainder is cancelled at Finish", async () => {
+describe("a finished table's paid bills are collected (A1344)", () => {
+  it("takes the card off the station and collects the bill when the unserved remainder is cancelled at Finish", async () => {
     const p = await fixture(true, "fire");
     await inTx(venue, (tx) =>
       markServed(
@@ -756,11 +756,24 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
     const body = await confirm(p);
     body.cancellations = [body.cancellations[0]!];
     body.cancellations[0]!.quantity = "1.000";
+    const cardsOnStation = async () =>
+      (await inTx(venue, (tx) => listStationQueue(tx, venue.stationId))).filter(
+        (group) => group.orderId === p.billId,
+      );
+    const collectedAt = async () =>
+      (
+        await venue.db
+          .select({ collectedAt: workingOrders.collectedAt })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, p.billId))
+      )[0]!.collectedAt;
+    expect(await cardsOnStation()).toHaveLength(1);
+    expect(await collectedAt()).toBeNull();
 
     expect(await post(p, body)).toMatchObject({ status: 200 });
 
-    const cards = await inTx(venue, (tx) => listStationQueue(tx, venue.stationId));
-    expect(cards.filter((group) => group.orderId === p.billId)).toEqual([]);
+    expect(await cardsOnStation()).toEqual([]);
+    expect(await collectedAt()).not.toBeNull();
   });
 });
 
