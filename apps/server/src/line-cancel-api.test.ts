@@ -36,7 +36,14 @@ import { mountTillApi } from "./till-api.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { createStation } from "./kitchen.js";
 import { storePrepayMadeHere } from "./made-here.js";
-import { advanceTicketItem, markServed } from "./working-order.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import {
+  parkOrder,
+  fireLines,
+  unsentDishLines,
+  advanceTicketItem,
+  markServed,
+} from "./working-order.js";
 import {
   billWith,
   inTx,
@@ -153,7 +160,174 @@ async function notedVoidReason() {
   );
 }
 
+async function counterFixture() {
+  const offers = await inTx(venue, (tx) => offerProducts(tx, venue.cfg));
+  const id = randomUUID();
+  const table = await fixture("fire");
+  const [dish] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, table.parent.id));
+  await parkOrder({ db: venue.db }, venue.cfg, {
+    id,
+    zoneId: offers.zoneId,
+    lines: [{ menuItemId: offers.offerFor(dish!.productId!), quantity: "1" }],
+  });
+  const [line] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id));
+  await inTx(venue, async (tx) => fireLines(tx, venue.cfg, id, await unsentDishLines(tx, id)));
+  return { id, line: line!, table, zoneId: offers.zoneId };
+}
+
 describe("the public cancellation read and command", () => {
+  it.each(["GET", "POST"])(
+    "checks Counter take-orders, admission and zone for %s before acting",
+    async (method) => {
+      const { id, line } = await counterFixture();
+      const path = `/api/working-orders/${id}/lines/${line.id}/${method === "GET" ? "cancellation" : "cancel-item"}`;
+      const context = await readCancellationContext(venue.db, { billId: id }, line.id);
+      const body =
+        method === "GET"
+          ? undefined
+          : {
+              expectedEdit: null,
+              expectedBillRevision: 0,
+              expectedContext: context,
+              quantity: "1",
+              outcome: "remove_charge",
+              submissionId: randomUUID(),
+            };
+      const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
+      const [profile] = await venue.db
+        .select()
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, device!.deviceProfileId));
+      const elsewhere = await inTx(venue, (tx) =>
+        createZone(tx, { name: `Elsewhere-${randomUUID()}` }),
+      );
+      const [department] = await listDepartments(venue.db);
+      const call = () => send(venue.app, venue.cookie.staff, method, path, body);
+      const before = await frozen();
+      try {
+        await inTx(venue, (tx) =>
+          tx
+            .update(deviceProfiles)
+            .set({ capabilities: [] })
+            .where(eq(deviceProfiles.id, profile!.id)),
+        );
+        expect((await call()).json).toMatchObject({ code: "device.forbidden_action" });
+        await inTx(venue, (tx) =>
+          tx
+            .update(deviceProfiles)
+            .set({ capabilities: profile!.capabilities })
+            .where(eq(deviceProfiles.id, profile!.id)),
+        );
+        await inTx(venue, (tx) =>
+          setProfileAdmission(tx, profile!.id, {
+            personExceptions: [{ personId: venue.staffId, admitted: false }],
+          }),
+        );
+        expect((await call()).json).toMatchObject({ code: "device_profile.not_admitted" });
+        await inTx(venue, (tx) => setProfileAdmission(tx, profile!.id, { personExceptions: [] }));
+        await inTx(venue, (tx) =>
+          setProfileServiceAccess(tx, profile!.id, {
+            departmentId: department!.id,
+            allowedZoneIds: [elsewhere.id],
+            startingZoneId: elsewhere.id,
+          }),
+        );
+        expect((await call()).json).toMatchObject({ code: "service_zone.not_allowed" });
+        expect(await frozen()).toEqual(before);
+      } finally {
+        await inTx(venue, (tx) =>
+          tx
+            .update(deviceProfiles)
+            .set({ capabilities: profile!.capabilities })
+            .where(eq(deviceProfiles.id, profile!.id)),
+        );
+        await inTx(venue, (tx) => setProfileAdmission(tx, profile!.id, { personExceptions: [] }));
+        await inTx(venue, (tx) =>
+          setProfileServiceAccess(tx, profile!.id, {
+            departmentId: null,
+            allowedZoneIds: null,
+            startingZoneId: null,
+          }),
+        );
+      }
+      expect((await call()).status).toBe(200);
+    },
+  );
+
+  it.each(["GET", "POST"])("keeps placed Counter bills frozen on %s", async (method) => {
+    const { id, line } = await counterFixture();
+    const context = await readCancellationContext(venue.db, { billId: id }, line.id);
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const before = await frozen();
+    const answer = await send(
+      venue.app,
+      venue.cookie.staff,
+      method,
+      `/api/working-orders/${id}/lines/${line.id}/${method === "GET" ? "cancellation" : "cancel-item"}`,
+      method === "GET"
+        ? undefined
+        : {
+            expectedEdit: null,
+            expectedBillRevision: 0,
+            expectedContext: context,
+            quantity: "1",
+            outcome: "remove_charge",
+            submissionId: randomUUID(),
+          },
+    );
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code: "working_order.not_open" });
+    expect(await frozen()).toEqual(before);
+  });
+
+  it("cancels a sent Counter dish through its bill without a party observation, and replays it", async () => {
+    const { id, line, table } = await counterFixture();
+    const base = `/api/working-orders/${id}/lines/${line!.id}`;
+    const read = await send(venue.app, venue.cookie.staff, "GET", `${base}/cancellation`);
+    expect(read.status).toBe(200);
+    const observation = read.json as unknown as {
+      billRevision: number;
+      context: Awaited<ReturnType<typeof readCancellationContext>>;
+    };
+    expect(observation).toMatchObject({
+      billId: id,
+      billRevision: 0,
+      context: { billStatus: "open", stage: "not_started" },
+    });
+    const command = {
+      expectedEdit: null,
+      quantity: "1",
+      outcome: "remove_charge",
+      expectedBillRevision: observation.billRevision,
+      expectedContext: observation.context,
+      submissionId: randomUUID(),
+    };
+    const first = await send(venue.app, venue.cookie.staff, "POST", `${base}/cancel-item`, command);
+    expect(first.status).toBe(200);
+    expect(
+      (await send(venue.app, venue.cookie.staff, "POST", `${base}/cancel-item`, command)).json,
+    ).toEqual(first.json);
+    expect(
+      await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, line!.id)),
+    ).toEqual([]);
+    const wrong = await send(
+      venue.app,
+      venue.cookie.staff,
+      "GET",
+      `/api/working-orders/${id}/lines/${table.parent.id}/cancellation`,
+    );
+    expect(wrong.status).toBe(400);
+    expect(wrong.json).toMatchObject({ code: "management.request_invalid" });
+  });
+
   it.each([
     ["1", false],
     ["2", false],

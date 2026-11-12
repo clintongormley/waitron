@@ -50,7 +50,7 @@ export async function run(args: string[], options: { timeout: number; env?: Node
 const familyCases = [
   ["whole-order", 38, "till-sale-integrated.test.ts"],
   ["bill-payment", 35, "zone-bill-payment-boundaries.test.ts"],
-  ["auto-issue", 7, "zone-economic-boundaries.test.ts"],
+  ["auto-issue", 8, "zone-economic-boundaries.test.ts"],
   ["core-only", 11, "zone-core-capabilities.test.ts"],
   ["readiness", 1, "fiscal-readiness-runner.verifactu.test.ts"],
   ["scripts", 4, "zone-script-callers.test.ts"],

@@ -6019,6 +6019,38 @@ async function applyLineEdits(
     if (change) refuseChangesAfterSending(orderId, records, stationChanges);
     return records.some((record) => record.firedAt !== null);
   };
+  if (plan.refuseSentDrop) {
+    for (const parent of order.parents) {
+      const sent = [parent, ...parent.children].some(
+        (part) => part.sentAt !== null || part.ticket?.firedAt != null,
+      );
+      if (!sent) continue;
+      const edit = plan.edits.find((edit) => edit.parent.id === parent.id);
+      const picks = namedPicks(edit?.intent.extras?.set);
+      const drops =
+        edit === undefined ||
+        compareDecimal(decimal(edit.intent.quantity), parent.quantity) < 0 ||
+        parent.children.some((child) => {
+          const pick = picks.find(
+            (pick) => pick.listId === child.extraListId && pick.productId === child.productId,
+          );
+          return (
+            compareDecimal(
+              extraQuantityFor(
+                pick?.quantity ?? 0,
+                decimal(edit.intent.quantity),
+                child.priceQuantity,
+              ),
+              child.quantity,
+            ) < 0
+          );
+        });
+      if (!drops) continue;
+      refuseServed(parent);
+      refuseSent(parent, kitchenHas(parent, false));
+      throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+    }
+  }
   const menuItemOf = (line: EditableParent): string => {
     if (line.menuItemId === undefined) {
       throw new AppError("order.service_context_missing", { workingOrderId: orderId });
@@ -7258,6 +7290,9 @@ export async function abandonHeldOrder(
     await refusePaymentInFlight(tx, [id]);
     await refuseBillHoldingMoney(tx, [id]);
     await assertBillHasNoUnsent(tx, id);
+    const lines = await readEditableOrder(tx, id);
+    if (lines.lines.some((line) => line.sentAt !== null || line.ticket !== null))
+      throw new AppError("ticket.already_fired", { workingOrderId: id });
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
       await bumpPartyRevision(tx, locked.partyId);

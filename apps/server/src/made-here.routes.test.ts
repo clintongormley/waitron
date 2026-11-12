@@ -1671,6 +1671,60 @@ describe("made-here route wiring", () => {
     expect(replay.json.madeHere).toEqual(edited.json.madeHere);
   });
 
+  it("replays a made-here line added by a fully paid unsent edit with the device till", async () => {
+    const billId = randomUUID();
+    const submitted = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
+      id: billId,
+      lines: [{ menuItemId: counterPaellaOffer, quantity: "1" }],
+    });
+    expect(submitted.status).toBe(200);
+    const payment = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "3.00",
+      method: "cash",
+      tendered: "3.00",
+      applied: "3.00",
+      tip: "0.00",
+    };
+    expect(
+      (
+        await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/working-orders/${billId}/payments`,
+          payment,
+        )
+      ).status,
+    ).toBe(200);
+    const [order] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    const edited = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}`, {
+      lines: [{ menuItemId: counterOffer, quantity: "1" }],
+      revision: order!.revision,
+    });
+
+    expect(edited.status).toBe(200);
+    expect(edited.json.madeHere).toEqual([
+      expect.objectContaining({ name: "Caña", quantity: "1.000" }),
+    ]);
+    const replay = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      payment,
+    );
+    expect(replay.status).toBe(200);
+    expect(replay.json.madeHere).toEqual(edited.json.madeHere);
+  });
+
   it("replays a pay-first send when an adjustment completes a partly paid bill", async () => {
     const { orderId, lineId } = await parkedLager();
     const reasonId = await inTx(

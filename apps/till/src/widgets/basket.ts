@@ -967,7 +967,7 @@ export class TillBasket extends LitElement {
                         </wt-button>`
                   }
                   ${
-                    sent || this.readOnly || this.store.editsLocked
+                    (sent && adjustable === null) || this.readOnly || this.store.editsLocked
                       ? html`<wt-button class="remove-gap" variant="ghost" size="md" inert
                           ><span aria-hidden="true">×</span></wt-button
                         >`
@@ -977,8 +977,19 @@ export class TillBasket extends LitElement {
                           size="md"
                           aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
                           @click=${() => {
-                            if (!this.#lineReadOnly(line) && !this.orderInFlight)
-                              this.store.removeLine(index);
+                            if (this.orderInFlight) return;
+                            if (sent && listed !== undefined)
+                              this.#adjust(
+                                "cancel",
+                                this.#dishesTarget(
+                                  listedDishes(line, (id) =>
+                                    id === undefined ? undefined : this.#listedById.get(id),
+                                  )!,
+                                  this.storedLines!,
+                                  this.#lineName(line),
+                                ),
+                              );
+                            else if (!this.#lineReadOnly(line)) this.store.removeLine(index);
                           }}
                         >
                           <span aria-hidden="true">×</span>

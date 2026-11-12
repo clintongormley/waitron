@@ -480,10 +480,13 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
   {
     proof: "matching request (source)",
     actions: ["take-orders"],
-    basis: 'line-cancel-api.test.ts: "requires take-orders for %s and permits it once restored"',
+    basis:
+      'line-cancel-api.test.ts: "requires take-orders for %s and permits it once restored" and "checks Counter take-orders, admission and zone for %s before acting"',
     routes: [
       "GET /api/parties/:id/lines/:lineId/cancellation",
       "POST /api/parties/:id/lines/:lineId/cancel-item",
+      "GET /api/working-orders/:id/lines/:lineId/cancellation",
+      "POST /api/working-orders/:id/lines/:lineId/cancel-item",
     ],
   },
   {

@@ -2031,6 +2031,49 @@ describe("getHeldOrder", () => {
 });
 
 describe("updateHeldOrder", () => {
+  it.each(["omit", "replace", "reduce"])(
+    "refuses %s of a sent dish in a whole-basket save",
+    async (change) => {
+      const { cfg, coffeeId, waterId } = await setupVenue();
+      await withTransaction(db, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));
+      const id = randomUUID();
+      await parkProducts(cfg, {
+        id,
+        lines: [
+          { productId: coffeeId, quantity: "1" },
+          { productId: waterId, quantity: "1" },
+        ],
+      });
+      const before = await db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+      await db
+        .update(workingOrderLines)
+        .set({ sentAt: "2026-11-11T10:00:00.000Z", quantity: 2000, unitPrecision: 3 })
+        .where(eq(workingOrderLines.id, before[0]!.id));
+      const sent = await readOrder(id);
+      const kept = { workingOrderLineId: before[1]!.id, productId: waterId, quantity: "1" };
+      const changed =
+        change === "omit"
+          ? [kept]
+          : [
+              kept,
+              {
+                workingOrderLineId: before[0]!.id,
+                productId: change === "replace" ? waterId : coffeeId,
+                quantity: change === "reduce" ? "1.5" : "2",
+              },
+            ];
+      await expect(updateProducts(cfg, id, { lines: changed })).rejects.toMatchObject({
+        code: "ticket.already_sent",
+        params: { workingOrderId: id, lineId: before[0]!.id },
+      });
+      expect(await readOrder(id)).toEqual(sent);
+    },
+  );
+
   it("keeps extras rows and customisation on a quantity-only edit", async () => {
     const { cfg, zoneId, coffeeId, catalogueId, premiumCoffeeOfferId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
@@ -2169,6 +2212,54 @@ describe("updateHeldOrder", () => {
     });
     return { ...venue, extra, extras, id, before: await readLines(id) };
   }
+
+  it("refuses a smaller measured extra portion in a whole-basket save", async () => {
+    const { cfg, premiumCoffeeOfferId, id, extra, before } = await parkWithExtra("1");
+    await withTransaction(db, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));
+    await db
+      .update(workingOrderLines)
+      .set({ sentAt: "2026-11-11T10:00:00.000Z", quantity: 300, priceQuantity: 150 })
+      .where(eq(workingOrderLines.id, before[1]!.id));
+    const stored = await readLines(id);
+    await expect(
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+        revision: await revisionOf(id),
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            menuItemId: premiumCoffeeOfferId,
+            quantity: "1",
+            extras: [
+              { listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "ticket.already_sent" });
+    expect(await readLines(id)).toEqual(stored);
+  });
+
+  it("keeps a sent extra when the whole basket would omit it", async () => {
+    const { cfg, premiumCoffeeOfferId, id, before } = await parkWithExtra("1");
+    await db
+      .update(workingOrderLines)
+      .set({ sentAt: "2026-11-11T10:00:00.000Z" })
+      .where(eq(workingOrderLines.id, before[1]!.id));
+    await expect(
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+        revision: await revisionOf(id),
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            menuItemId: premiumCoffeeOfferId,
+            quantity: "1",
+            extras: [],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "ticket.already_sent" });
+    expect(await readLines(id)).toEqual(before);
+  });
 
   it("keeps an unchanged or lowered quantity on a line whose extra has since become Unavailable, and refuses a new pick of it", async () => {
     const { cfg, zoneId, premiumCoffeeOfferId, extra, extras, id, before } =
@@ -2953,6 +3044,21 @@ describe("updateHeldOrder", () => {
 });
 
 describe("abandonHeldOrder", () => {
+  it("requires Cancel item before forgetting a sent zero-price dish", async () => {
+    const { cfg, coffeeId } = await setupVenue();
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [{ productId: coffeeId, quantity: "1" }] });
+    await db
+      .update(workingOrderLines)
+      .set({ sentAt: "2026-11-11T10:00:00.000Z", unitPriceGross: 0, lineTotal: 0 })
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const before = await readOrder(id);
+    await expect(abandonHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
+      code: "ticket.already_fired",
+    });
+    expect(await readOrder(id)).toEqual(before);
+  });
+
   it("flips an open order to abandoned and drops it from the held list, leaving settled_at null", async () => {
     const { cfg, coffeeId } = await setupVenue();
     const id = randomUUID();

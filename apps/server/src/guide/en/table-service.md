@@ -126,6 +126,16 @@ You can close the window and start a new refund later.
 
 The refund acknowledgment uses the original sale’s receipt language by default, even when your screen uses another language.
 
+## Cancel a dish on a saved Counter bill {#counter-cancel-item}
+
+Use × to remove a dish you have not sent. For a sent dish, × and **Cancel** open **Cancel item**.
+Choose how many to cancel. If preparation has started, choose whether to keep its charge or remove
+it, then choose a reason. Removing that charge may need a supervisor's PIN.
+
+**Back** leaves the dish as it is. After you confirm, the basket refreshes from the saved bill.
+If you choose **Discard** on a parked order with sent dishes, the till opens that order first.
+Cancel its sent dishes before discarding it. If you keep a cancelled dish's charge, pay the bill.
+
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 
 When a table has paid for a dish that is not coming, cancel it so the kitchen stops making it and

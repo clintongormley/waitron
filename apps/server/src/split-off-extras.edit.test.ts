@@ -1,3 +1,4 @@
+import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
@@ -111,6 +112,12 @@ async function edit(
     OPERATOR,
   );
 }
+async function cancelFirst(venue: Venue) {
+  return withTransaction(db, (tx) =>
+    cancelItemForTest(tx, venue.cfg, venue.party.tabId, 1, undefined, OPERATOR),
+  );
+}
+
 async function removeFirst(venue: Venue) {
   const id = venue.party.tabId;
   const { rows, currentRevision } = await withTransaction(db, async (tx) => ({
@@ -549,7 +556,7 @@ describe("editing split-off extras", () => {
     });
   });
 
-  it("voids a sent water's fired chips at Fryer when the whole-order save takes them off", async () => {
+  it("voids a sent water's fired chips at Fryer when the extra is cancelled", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     const before = await withTransaction(db, async (tx) => {
@@ -557,7 +564,6 @@ describe("editing split-off extras", () => {
       return {
         state: await state(tx, id),
         fryer: await slips(tx, venue.printers.fryer),
-        revision: await revision(tx, id),
       };
     });
     const water = before.state.lines.find((row) => row.parentLineId === null)!;
@@ -566,11 +572,9 @@ describe("editing split-off extras", () => {
       expect.objectContaining({ lineId: chips.id, stationId: venue.stations.fryer }),
     ]);
 
-    await updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, id, {
-      revision: before.revision,
-      operatorId: OPERATOR,
-      lines: [{ ...line(venue, "water"), workingOrderLineId: water.id }],
-    });
+    await withTransaction(db, (tx) =>
+      cancelLine(tx, venue.cfg, id, chips.lineNo, undefined, OPERATOR),
+    );
 
     await withTransaction(db, async (tx) => {
       expect(await state(tx, id)).toEqual({ lines: [water], items: [] });
@@ -591,7 +595,7 @@ describe("editing split-off extras", () => {
         groups: [{ lines: [line(venue, "burger", "1", 1), line(venue, "water")], release: "hold" }],
       });
     });
-    await removeFirst(venue);
+    await cancelFirst(venue);
     await withTransaction(db, async (tx) => {
       expect((await slips(tx, venue.printers.grill)).at(-1)).toContain("HOLD CANCELLED");
       expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("HOLD CANCELLED");
@@ -681,7 +685,7 @@ describe("editing split-off extras", () => {
       db,
       async (tx) => (await slips(tx, venue.printers.fryer)).length,
     );
-    await removeFirst(venue);
+    await cancelFirst(venue);
     await withTransaction(db, async (tx) => {
       const after = await slips(tx, venue.printers.fryer);
       expect(after).toHaveLength(before + 1);

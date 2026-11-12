@@ -37,14 +37,14 @@ export interface CancelItemAnswer {
 }
 
 export interface CancelItemRequest {
-  expectedEdit: BillEditExpected;
+  expectedEdit: BillEditExpected | null;
   /** Every portion line of a row the till shows as one, the path's line among them (plan D31). */
   lineIds?: string[];
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
   preparationStarted?: boolean;
   refundHandoff?: boolean;
-  expectedPartyRevision: number;
+  expectedPartyRevision?: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;
   submissionId: string;

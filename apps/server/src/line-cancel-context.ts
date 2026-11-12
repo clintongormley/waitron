@@ -9,6 +9,8 @@ import { readLineCancellations } from "./line-service-state.js";
 import { partyFamily } from "./parties.js";
 import "./errors.js";
 
+export type CancellationTarget = string | { billId: string };
+
 export interface CancellationContext {
   billStatus: typeof workingOrders.$inferSelect.status;
   stage: "not_started" | "started";
@@ -39,18 +41,18 @@ export function orderedCancellationContext(context: CancellationContext): Cancel
 
 export async function readCancellationContext(
   tx: Transaction,
-  partyId: string,
+  target: CancellationTarget,
   lineId: string,
   lineIds?: readonly string[],
 ): Promise<CancellationContext> {
-  return (await readRowContext(tx, partyId, lineId, lineIds)).context;
+  return (await readRowContext(tx, target, lineId, lineIds)).context;
 }
 
 /** The context, and the dish lines it was read over: `lineId`, or the till row `lineIds` names in
  * line order. */
 async function readRowContext(
   tx: Transaction,
-  partyId: string,
+  target: CancellationTarget,
   lineId: string,
   lineIds: readonly string[] | undefined,
 ): Promise<{ context: CancellationContext; dishIds: string[] }> {
@@ -60,10 +62,14 @@ async function readRowContext(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrderLines.id, lineId));
   if (subject === undefined || subject.parentId !== null) throw invalid("lineId");
-  if (
-    subject.bill.partyId !== partyId &&
+  if (typeof target !== "string") {
+    if (subject.bill.id !== target.billId || subject.bill.partyId !== null) throw invalid("lineId");
+    if (subject.bill.status !== "open")
+      throw new AppError("working_order.not_open", { workingOrderId: subject.bill.id });
+  } else if (
+    subject.bill.partyId !== target &&
     (subject.bill.partyId === null ||
-      !(await partyFamily(tx, partyId)).includes(subject.bill.partyId))
+      !(await partyFamily(tx, target)).includes(subject.bill.partyId))
   )
     throw new AppError("bill.other_party", { workingOrderId: subject.bill.id });
   if (subject.bill.status === "abandoned")
@@ -122,24 +128,24 @@ async function readRowContext(
 
 export async function requireCancellationContext(
   tx: Transaction,
-  partyId: string,
+  target: CancellationTarget,
   lineId: string,
   expected: CancellationContext,
 ): Promise<CancellationContext> {
-  return (await requireRowCancellationContext(tx, partyId, lineId, expected, undefined)).context;
+  return (await requireRowCancellationContext(tx, target, lineId, expected, undefined)).context;
 }
 
 /** {@link requireCancellationContext} over the till row `lineIds` names, answering its dish lines
  * too. */
 export async function requireRowCancellationContext(
   tx: Transaction,
-  partyId: string,
+  target: CancellationTarget,
   lineId: string,
   expected: CancellationContext,
   lineIds: readonly string[] | undefined,
 ): Promise<{ context: CancellationContext; dishIds: string[] }> {
   // Kitchen transitions need not advance a bill or party revision.
-  const read = await readRowContext(tx, partyId, lineId, lineIds);
+  const read = await readRowContext(tx, target, lineId, lineIds);
   if (!isDeepStrictEqual(orderedCancellationContext(expected), read.context))
     throw new AppError("tab.cancel_context_changed", { context: read.context });
   return read;

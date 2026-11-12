@@ -6446,6 +6446,11 @@ and `misdated-note-dialog.a11y.test.ts`.
 
 ### Counter basket and payment space
 
+A saved Counter row's × removes an unsent dish locally. On a sent dish it opens the existing
+Cancel item dialog, as does the row's Cancel action; confirmation refreshes the saved basket.
+Discard opens a held order when its sent dishes still need cancellation. A kept charge stays payable.
+
+
 Keep the order visually separate from the menu, using the surface and border tokens. The basket
 scrolls inside its card; total and payment controls take the space they need below it. Parked
 orders and Waiting each replace the menu-side content when selected, rather than following the

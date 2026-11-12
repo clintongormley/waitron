@@ -107,7 +107,7 @@ function recordedOn(billId: string) {
 }
 
 describe("corrections through order actions on a station's printers", () => {
-  it("sends HOLD CHANGED and HOLD CANCELLED through the order edit routes", async () => {
+  it("sends HOLD CHANGED through a line edit and HOLD CANCELLED through Cancel item", async () => {
     const printerId = await inTx(venue, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
       const printer = await createPrinter(tx, {
@@ -122,8 +122,9 @@ describe("corrections through order actions on a station's printers", () => {
       return printer.id;
     });
     try {
-      const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Burger" }], {
+      const { billId, partyId } = await billWith(venue, [{ name: "Steak" }, { name: "Burger" }], {
         release: "hold",
+        shape: "grouped",
       });
       const papers = () =>
         inTx(venue, async (tx) =>
@@ -151,21 +152,27 @@ describe("corrections through order actions on a station's printers", () => {
         expect.stringContaining(kitchenTicketWords("es").holdChanged),
       ]);
       expect((await papers())[1]).toContain("RIBEYE");
+      const lineId = await lineIdOf(venue, billId, 1);
+      const context = await send(
+        venue.app,
+        venue.cookie.staff,
+        "GET",
+        `/api/parties/${partyId}/lines/${lineId}/cancellation`,
+      );
+      expect(context.status).toBe(200);
       const removed = await send(
         venue.app,
         venue.cookie.staff,
-        "PUT",
-        `/api/working-orders/${billId}`,
+        "POST",
+        `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
         {
-          revision: await revisionOf(billId),
+          submissionId: randomUUID(),
+          expectedPartyRevision: context.json.revision,
+          expectedBillRevision: await revisionOf(billId),
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-          lines: [
-            {
-              workingOrderLineId: await lineIdOf(venue, billId, 2),
-              menuItemId: venue.item("Burger"),
-              quantity: "1",
-            },
-          ],
+          expectedContext: context.json.context,
+          quantity: "2",
+          outcome: "remove_charge",
         },
       );
       expect(removed.status, JSON.stringify(removed.json)).toBe(200);
