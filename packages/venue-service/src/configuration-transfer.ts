@@ -267,7 +267,7 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
     seasonIds,
     specialDates,
   );
-  const zones = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
+  const zones = new Set((tables.floor_zones ?? []).map((row) => row.id));
   const zoneDays = dayRows(
     tables.zone_days,
     "zone_days",
@@ -352,7 +352,7 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
   refuseSkippedPaint(zoneDays.specialDays, zonePaint, specialDates, bundle, "zone_day_ranges");
 
   const departmentOf = new Map(
-    (tables.zone_service_policies ?? []).map((row) => [row.zone_id, row.department_id]),
+    (tables.floor_zones ?? []).map((row) => [row.id, row.department_id]),
   );
   const seasonWeek = new Map<string, ServiceRange[]>();
   for (const [id, { ownerId, seasonId, weekday }] of departmentDays.seasonDays)
@@ -449,11 +449,8 @@ export function validateRoutingConfiguration(tables: Tables): void {
     (tables.products ?? []).filter((row) => (row.parent_id ?? null) === null).map((row) => row.id),
   );
   const stations = ids(tables.kitchen_stations);
-  const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
   const zones = new Set(
-    (tables.floor_zones ?? [])
-      .filter((row) => isActive(row, "floor_zones") && configured.has(row.id))
-      .map((row) => row.id),
+    (tables.floor_zones ?? []).filter((row) => isActive(row, "floor_zones")).map((row) => row.id),
   );
   const named = (rows: readonly Row[] | undefined) =>
     new Map((rows ?? []).map((row) => [row.id, row]));
@@ -462,7 +459,7 @@ export function validateRoutingConfiguration(tables: Tables): void {
   const categoryRows = named(tables.categories);
   const productRows = named(tables.products);
   const zoneDepartment = new Map(
-    (tables.zone_service_policies ?? []).map((row) => [row.zone_id, row.department_id]),
+    (tables.floor_zones ?? []).map((row) => [row.id, row.department_id]),
   );
   const taken = new Set<string>();
   for (const row of tables.routing_cells ?? []) {
@@ -551,24 +548,17 @@ function validateRoutingCellPeriods(
 function validateServiceHierarchy(tables: Tables): void {
   for (const table of ["floor_zones", "departments"])
     for (const row of tables[table] ?? []) if (!isActive(row, table)) refuse(`${table}.active`);
-  const zones = ids(tables.floor_zones);
   const departments = ids(tables.departments);
-  for (const row of tables.zone_service_policies ?? []) {
-    if (!zones.has(row.zone_id)) refuse("zone_service_policies.zone_id");
-    if (!departments.has(row.department_id)) refuse("zone_service_policies.department_id");
-  }
+  for (const row of tables.floor_zones ?? [])
+    if (!departments.has(row.department_id)) refuse("floor_zones.department_id");
   for (const table of ["department_receipts", "department_sale_policies"])
     for (const row of tables[table] ?? [])
       if (!departments.has(row.department_id)) refuse(`${table}.department_id`);
-  for (const row of tables.zone_sale_policies ?? [])
-    if (!zones.has(row.zone_id)) refuse("zone_sale_policies.zone_id");
 }
 
 function validateServicePolicyCompleteness(tables: Tables): void {
   for (const [parents, policies, key] of [
     ["departments", "department_sale_policies", "department_id"],
-    ["floor_zones", "zone_service_policies", "zone_id"],
-    ["floor_zones", "zone_sale_policies", "zone_id"],
   ] as const) {
     const configured = new Set((tables[policies] ?? []).map((row) => row[key]));
     if ((tables[parents] ?? []).some((row) => !configured.has(row.id))) refuse(policies);
@@ -603,10 +593,10 @@ function validateReceiptFields(tables: Tables): void {
 }
 
 function validateOrderStarts(tables: Tables): void {
-  for (const table of ["department_sale_policies", "zone_sale_policies"] as const) {
+  for (const table of ["department_sale_policies", "floor_zones"] as const) {
     for (const row of tables[table] ?? []) {
       const value = row.order_start;
-      if (value === undefined || (table === "zone_sale_policies" && value === null)) continue;
+      if (value === undefined || (table === "floor_zones" && value === null)) continue;
       if (typeof value !== "string" || (value !== "table" && value !== "counter"))
         refuse(`${table}.order_start`);
     }
@@ -680,8 +670,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "service_steps" },
     { name: "department_receipts" },
     { name: "department_sale_policies" },
-    { name: "zone_service_policies" },
-    { name: "zone_sale_policies" },
     { name: "device_profile_service_access" },
     { name: "device_profile_zones" },
     { name: "device_profile_kitchen_screens" },

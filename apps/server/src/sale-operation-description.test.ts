@@ -10,7 +10,6 @@ import {
   saleReceiptHeaders,
   departmentReceipts,
   departmentSalePolicies,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 
@@ -117,9 +116,9 @@ describe("department operation description", () => {
     await authored(f.primary, { operationDescription: "Deli meals" });
     await authored(f.fallback, { operationDescription: "Terrace drinks" });
     await suite.db
-      .update(zoneServicePolicies)
+      .update(floorZones)
       .set({ departmentId: f.fallback })
-      .where(eq(zoneServicePolicies.zoneId, f.zoneId));
+      .where(eq(floorZones.id, f.zoneId));
     expect(await read({}, { kind: "order", orderId: f.orderId })).toBe("Terrace drinks");
     expect(await read({}, { kind: "sale", saleId: f.saleId })).toBe("Deli meals");
   });

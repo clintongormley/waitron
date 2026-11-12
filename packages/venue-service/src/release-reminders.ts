@@ -1,6 +1,6 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { departments, zoneServicePolicies } from "@waitron/db";
+import { departments, floorZones } from "@waitron/db";
 
 export async function readReleaseReminderMinutesByZone(
   tx: Transaction,
@@ -9,12 +9,12 @@ export async function readReleaseReminderMinutesByZone(
   if (zoneIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      zoneId: zoneServicePolicies.zoneId,
+      zoneId: floorZones.id,
       minutes: departments.releaseReminderMinutes,
     })
-    .from(zoneServicePolicies)
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .where(inArray(zoneServicePolicies.zoneId, [...zoneIds]));
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(and(inArray(floorZones.id, [...zoneIds]), eq(floorZones.active, true)));
   return new Map(rows.map((row) => [row.zoneId, row.minutes]));
 }
 

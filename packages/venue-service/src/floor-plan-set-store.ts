@@ -4,7 +4,6 @@ import {
   departments,
   floorZones,
   menuPeriods,
-  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import type { FloorDeletion, FloorPlanSets, FloorPlanSetSummary } from "@waitron/module";
@@ -109,16 +108,10 @@ async function departmentZones(
     .select({
       id: floorZones.id,
       name: floorZones.name,
-      departmentId: zoneServicePolicies.departmentId,
+      departmentId: floorZones.departmentId,
     })
-    .from(zoneServicePolicies)
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .where(
-      and(
-        eq(floorZones.active, true),
-        inArray(zoneServicePolicies.departmentId, [...departmentIds]),
-      ),
-    )
+    .from(floorZones)
+    .where(and(eq(floorZones.active, true), inArray(floorZones.departmentId, [...departmentIds])))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
 }
 

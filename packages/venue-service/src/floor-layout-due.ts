@@ -4,7 +4,7 @@ import {
   departments,
   menuPeriods,
   readVenueClock,
-  zoneServicePolicies,
+  floorZones,
   type Transaction,
 } from "@waitron/db";
 import type { DueFloorLayout, PreparedServiceDay, ZoneFloorLayout } from "@waitron/module";
@@ -107,16 +107,17 @@ export async function dueFloorLayouts(
       ? []
       : await tx
           .select({
-            zoneId: zoneServicePolicies.zoneId,
-            departmentId: zoneServicePolicies.departmentId,
+            zoneId: floorZones.id,
+            departmentId: floorZones.departmentId,
           })
-          .from(zoneServicePolicies)
-          .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+          .from(floorZones)
+          .innerJoin(departments, eq(departments.id, floorZones.departmentId))
           .where(
             and(
               eq(departments.active, true),
+              eq(floorZones.active, true),
               inArray(
-                zoneServicePolicies.zoneId,
+                floorZones.id,
                 zones.map(({ zoneId }) => zoneId),
               ),
             ),

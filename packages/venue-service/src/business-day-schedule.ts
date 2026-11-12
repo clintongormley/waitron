@@ -1,5 +1,5 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
-import { asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import {
   departmentDayRanges,
   departmentDays,
@@ -14,7 +14,6 @@ import {
   zoneDayRanges,
   zoneDays,
   zoneExtensions,
-  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -75,7 +74,7 @@ export async function businessDayClockConflicts(
     .orderBy(asc(departmentDayRanges.id));
   const seasonClosures = await tx
     .select({
-      departmentId: zoneServicePolicies.departmentId,
+      departmentId: floorZones.departmentId,
       departmentName: departments.name,
       zoneName: floorZones.name,
       zoneId: zoneDays.zoneId,
@@ -86,10 +85,9 @@ export async function businessDayClockConflicts(
     })
     .from(zoneDayRanges)
     .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneDays.zoneId))
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
-    .where(isNotNull(zoneDays.seasonId))
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(and(isNotNull(zoneDays.seasonId), eq(floorZones.active, true)))
     .orderBy(asc(zoneDayRanges.id));
   const specialDayList = await tx
     .select({
@@ -123,7 +121,7 @@ export async function businessDayClockConflicts(
       tx
         .select({
           dateId: zoneDays.specialDayDateId,
-          departmentId: zoneServicePolicies.departmentId,
+          departmentId: floorZones.departmentId,
           departmentName: departments.name,
           zoneId: zoneDays.zoneId,
           zoneName: floorZones.name,
@@ -134,10 +132,9 @@ export async function businessDayClockConflicts(
         })
         .from(zoneDayRanges)
         .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
-        .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneDays.zoneId))
-        .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
         .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
-        .where(isNotNull(zoneDays.specialDayDateId)),
+        .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+        .where(and(isNotNull(zoneDays.specialDayDateId), eq(floorZones.active, true))),
     );
   const specialDayOf = new Map(specialDayList.map((day) => [day.dateId, day]));
   const specialPlacements: Placement[] = specialPaint.flatMap((row) => {
@@ -285,17 +282,16 @@ export async function keptOpenConflicts(
   const tonight = addDays(effectiveBusinessDay, -1);
   const zones = await tx
     .select({
-      departmentId: zoneServicePolicies.departmentId,
+      departmentId: floorZones.departmentId,
       departmentName: departments.name,
       zoneId: zoneExtensions.zoneId,
       zoneName: floorZones.name,
       endsAt: zoneExtensions.endsAt,
     })
     .from(zoneExtensions)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneExtensions.zoneId))
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .innerJoin(floorZones, eq(floorZones.id, zoneExtensions.zoneId))
-    .where(eq(zoneExtensions.businessDay, tonight))
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(and(eq(zoneExtensions.businessDay, tonight), eq(floorZones.active, true)))
     .orderBy(asc(zoneExtensions.id));
   const oldCutover = cutoverForBusinessDay(before, tonight);
   const newEnd = serviceDayWallContext(candidate, tonight).endMinute;

@@ -56,7 +56,7 @@ async function fixture(tx: Transaction) {
   for (const name of ["Terrace", "Patio"]) {
     const [zone] = await tx
       .insert(floorZones)
-      .values({ ...cfg, name })
+      .values({ ...cfg, name, departmentId: department.id })
       .returning();
     await configureZone(tx, { zoneId: zone!.id, departmentId: department.id });
     zones.push(zone!.id);

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "de1d9407-d831-406c-bec3-253b50e6bcd0",
+  "id": "cdcc229c-42b1-4965-8bda-335fa981b344",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -16697,12 +16697,12 @@
         "zone_extensions_zone_fk": {
           "name": "zone_extensions_zone_fk",
           "tableFrom": "zone_extensions",
-          "tableTo": "zone_service_policies",
+          "tableTo": "floor_zones",
           "columnsFrom": [
             "zone_id"
           ],
           "columnsTo": [
-            "zone_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -17873,12 +17873,12 @@
         "zone_days_zone_fk": {
           "name": "zone_days_zone_fk",
           "tableFrom": "zone_days",
-          "tableTo": "zone_service_policies",
+          "tableTo": "floor_zones",
           "columnsFrom": [
             "zone_id"
           ],
           "columnsTo": [
-            "zone_id"
+            "id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"

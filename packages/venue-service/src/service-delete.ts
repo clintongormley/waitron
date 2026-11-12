@@ -10,7 +10,6 @@ import {
   menuPeriods,
   orderServiceContexts,
   workingOrders,
-  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import type { FloorDeletion } from "@waitron/module";
@@ -82,9 +81,8 @@ async function selection(
     kind === "department"
       ? await tx
           .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
-          .from(zoneServicePolicies)
-          .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-          .where(eq(zoneServicePolicies.departmentId, id))
+          .from(floorZones)
+          .where(and(eq(floorZones.departmentId, id), eq(floorZones.active, true)))
       : await tx
           .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
           .from(floorZones)
@@ -209,10 +207,9 @@ async function selection(
     .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
   const memberships = await tx.select().from(deviceProfileZones);
   const candidates = await tx
-    .select({ id: floorZones.id, departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .where(and(eq(floorZones.active, true), eq(departments.active, true)));
   for (const profile of ordered(scopes)) {
     if (profile.retiredAt !== null || profile.formFactor === "kds") continue;

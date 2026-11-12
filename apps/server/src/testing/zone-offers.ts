@@ -10,7 +10,6 @@ import {
   setRoutingCell,
   setZoneSalePolicyOverride,
   listDepartments,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 
@@ -91,18 +90,18 @@ async function resolveZone(
     zoneId = zone.zoneId;
   } else if (zone === "counter") {
     const [counter] = await tx
-      .select({ zoneId: zoneServicePolicies.zoneId })
-      .from(zoneServicePolicies)
-      .where(and(eq(zoneServicePolicies.isCounterDefault, true)));
+      .select({ zoneId: floorZones.id })
+      .from(floorZones)
+      .where(and(eq(floorZones.isCounterDefault, true)));
     zoneId = counter?.zoneId ?? (await floorZone(tx, COUNTER_ZONE));
   } else {
     zoneId = await floorZone(tx, TABLES_ZONE);
   }
 
   const [policy] = await tx
-    .select({ departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.zoneId, zoneId));
+    .select({ departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
   const departmentId = policy?.departmentId ?? (await department(tx, orderStart));
   const location = await readVenue(tx);
   await tx
@@ -114,10 +113,7 @@ async function resolveZone(
     .onConflictDoNothing({ target: departmentReceipts.departmentId });
   await configureZone(tx, { zoneId, departmentId, orderStart });
   if (zone === "counter") {
-    await tx
-      .update(zoneServicePolicies)
-      .set({ isCounterDefault: true })
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    await tx.update(floorZones).set({ isCounterDefault: true }).where(eq(floorZones.id, zoneId));
   }
   return zoneId;
 }

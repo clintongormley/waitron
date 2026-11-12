@@ -514,7 +514,7 @@ it("reads the categories' routing again when a routing cell's period lines chang
 
 it("reads the categories' routing again when a zone's department changes", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
-  expect(query.dependencies).toContainEqual({ type: "zone_service_policies" });
+  expect(query.dependencies).toContainEqual({ type: "floor_zones" });
 });
 
 it("reads the categories' routing again when a season week changes", () => {
@@ -1148,9 +1148,7 @@ it.each(["Zone", "Department"] as const)(
       "device_profile_kitchen_screen_zones",
       "routing_cells",
       "routing_cell_periods",
-      "zone_service_policies",
-      "zone_sale_policies",
-      "zone_extensions",
+          "zone_extensions",
       "department_sale_policies",
       "service_steps",
       "menu_periods",

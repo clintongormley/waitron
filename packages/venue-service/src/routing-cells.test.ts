@@ -45,17 +45,17 @@ async function venue(tx: Transaction, suffix = "") {
   });
   const venueId = await venueLocationId(tx);
   const cfg = { locationId: venueId };
-  const zones = await tx
-    .insert(floorZones)
-    .values([
-      { ...cfg, name: "Terrace" },
-      { ...cfg, name: "Inside" },
-    ])
-    .returning();
   const department = await createDepartment(tx, {
     name: "Dining",
     orderStart: "table",
   });
+  const zones = await tx
+    .insert(floorZones)
+    .values([
+      { ...cfg, name: "Terrace", departmentId: department.id },
+      { ...cfg, name: "Inside", departmentId: department.id },
+    ])
+    .returning();
   for (const zone of zones)
     await configureZone(tx, { zoneId: zone.id, departmentId: department.id });
   const stations = await tx

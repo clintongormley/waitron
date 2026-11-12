@@ -3,7 +3,7 @@ import { parties, withTransaction, type Database } from "@waitron/db";
 import {
   saveServiceSteps,
   serviceSteps,
-  zoneServicePolicies,
+  floorZones,
   type ServiceStepInput,
 } from "@waitron/venue-service";
 
@@ -14,9 +14,9 @@ interface HasVenue {
 export async function departmentOf(v: HasVenue, zoneId: string): Promise<string> {
   const [row] = await withTransaction(v.db, (tx) =>
     tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, zoneId)),
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, zoneId)),
   );
   return row!.departmentId;
 }

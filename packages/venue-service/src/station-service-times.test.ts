@@ -51,7 +51,7 @@ async function fixture(db: Transaction) {
   const department = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
   const [terrace] = await db
     .insert(floorZones)
-    .values({ ...cfg, name: "Terrace" })
+    .values({ ...cfg, name: "Terrace", departmentId: department })
     .returning();
   await configureZone(db, { zoneId: terrace!.id, departmentId: department });
   const stations = await db
@@ -134,7 +134,7 @@ async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof f
   const takeaway = (await createDepartment(db, { name: "Takeaway", orderStart: "table" })).id;
   const [counter] = await db
     .insert(floorZones)
-    .values({ ...f.cfg, name: "Counter" })
+    .values({ ...f.cfg, name: "Counter", departmentId: takeaway })
     .returning();
   await configureZone(db, { zoneId: counter!.id, departmentId: takeaway });
   const period = (
@@ -245,7 +245,7 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
     const f = await fixture(db);
     const [inside] = await db
       .insert(floorZones)
-      .values({ ...f.cfg, name: "Inside" })
+      .values({ ...f.cfg, name: "Inside", departmentId: f.department })
       .returning();
     await configureZone(db, { zoneId: inside!.id, departmentId: f.department });
     await setRoutingCell(
@@ -446,7 +446,7 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
     const second = (await createDepartment(db, { name: "Takeaway", orderStart: "table" })).id;
     const [zone] = await db
       .insert(floorZones)
-      .values({ ...f.cfg, name: "Counter" })
+      .values({ ...f.cfg, name: "Counter", departmentId: second })
       .returning();
     await configureZone(db, { zoneId: zone!.id, departmentId: second });
     const period = (
@@ -772,7 +772,7 @@ it("A724: two reaching zones union their open shares without filling a shared cl
     const f = await fixture(db);
     const [second] = await db
       .insert(floorZones)
-      .values({ ...f.cfg, name: "Inside" })
+      .values({ ...f.cfg, name: "Inside", departmentId: f.department })
       .returning();
     await configureZone(db, { zoneId: second!.id, departmentId: f.department });
     await setRoutingCell(

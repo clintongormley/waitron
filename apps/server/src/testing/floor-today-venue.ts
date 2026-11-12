@@ -23,7 +23,6 @@ import {
   menuPeriods,
   replaceMenuWeek,
   saveMenuPeriod,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "../floor-plan.js";
 import { defaultLayout } from "./floor-sets.js";
@@ -55,9 +54,9 @@ export async function tableServiceZone(v: PartyVenue): Promise<string> {
   const id = randomUUID();
   await inTx(v, async (tx) => {
     const [tables] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, v.tables.zoneId));
     await seedZone(tx, { id, name: `Zone ${id.slice(0, 8)}` });
     await tx
       .update(floorZones)

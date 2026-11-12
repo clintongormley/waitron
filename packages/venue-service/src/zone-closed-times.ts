@@ -10,7 +10,6 @@ import {
   floorZones,
   readVenueClock,
   zoneExtensions,
-  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
@@ -131,11 +130,10 @@ export async function readServiceZones(tx: Transaction) {
     .select({
       id: floorZones.id,
       name: floorZones.name,
-      departmentId: zoneServicePolicies.departmentId,
+      departmentId: floorZones.departmentId,
     })
     .from(floorZones)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .where(and(eq(floorZones.active, true), eq(departments.active, true)))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.id));
 }

@@ -22,7 +22,6 @@ import { planVenue } from "@waitron/provisioning";
 import {
   createDepartment,
   createServiceZone,
-  zoneServicePolicies,
   deviceProfileKitchenScreenZones,
   deviceProfileKitchenScreens,
 } from "@waitron/venue-service";
@@ -109,8 +108,8 @@ async function setupTenant(): Promise<void> {
     simplifiedInvoiceLimit: null,
   };
   const [counter] = await suite.db
-    .select({ departmentId: zoneServicePolicies.departmentId, zoneId: zoneServicePolicies.zoneId })
-    .from(zoneServicePolicies);
+    .select({ departmentId: floorZones.departmentId, zoneId: floorZones.id })
+    .from(floorZones);
   ordering = { departmentId: counter!.departmentId, startingZoneId: counter!.zoneId };
 
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`

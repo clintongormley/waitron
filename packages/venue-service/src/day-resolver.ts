@@ -1,9 +1,5 @@
-import {
-  readVenueClock,
-  zoneServicePolicies,
-  type Transaction,
-  type VenuePlace,
-} from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { readVenueClock, floorZones, type Transaction, type VenuePlace } from "@waitron/db";
 import type { PreparedServiceDay } from "@waitron/module";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { layerPaint, layerZonePaint } from "./day-paint.js";
@@ -264,9 +260,9 @@ export async function resolveZoneClosedDays(
   if (zoneIds?.length === 0 || businessDays.length === 0) return resolved;
   const zones =
     zoneIds ??
-    (await tx.select({ zoneId: zoneServicePolicies.zoneId }).from(zoneServicePolicies)).map(
-      (row) => row.zoneId,
-    );
+    (
+      await tx.select({ zoneId: floorZones.id }).from(floorZones).where(eq(floorZones.active, true))
+    ).map((row) => row.zoneId);
   const plan = await planFor(tx, businessDays, given);
   const weeks = await readZoneSeasonWeeks(
     tx,

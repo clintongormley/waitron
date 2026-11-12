@@ -148,13 +148,13 @@ describe("the menu timetable rows of a bundle", () => {
   function menuTables(): Tables {
     return {
       department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
-      zone_sale_policies: [{ zone_id: BARRA }],
+
       departments: [
         { id: RESTAURANT, is_default: 1 },
         { id: DELI, is_default: 0 },
       ],
-      floor_zones: [{ id: BARRA, active: 1 }],
-      zone_service_policies: [{ zone_id: BARRA, department_id: RESTAURANT }],
+      floor_zones: [{ id: BARRA, active: 1, department_id: RESTAURANT }],
+
       catalogues: [{ id: "m-desayunos" }, { id: "m-copas" }, { id: "m-cafe" }, { id: "m-deli" }],
       menu_periods: [
         {
@@ -201,7 +201,7 @@ describe("the menu timetable rows of a bundle", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     const at = names.indexOf("menu_periods");
     expect(names.slice(at, at + 2)).toEqual(["menu_periods", "menu_period_staff_menus"]);
-    expect(at).toBeGreaterThan(names.indexOf("zone_sale_policies"));
+    expect(at).toBeGreaterThan(names.indexOf("department_sale_policies"));
   });
 
   it("transfer a department's floor plan sets before the periods that name them", () => {
@@ -404,16 +404,12 @@ describe("validateRoutingConfiguration", () => {
         { id: DELI, name: "Deli", active: 0 },
       ],
       floor_zones: [
-        { id: TERRACE, name: "Terrace", active: 1 },
-        { id: INSIDE, name: "Inside", active: 1 },
-        { id: CLOSED_ZONE, name: "Closed", active: 0 },
+        { id: TERRACE, name: "Terrace", active: 1, department_id: RESTAURANT },
+        { id: INSIDE, name: "Inside", active: 1, department_id: DELI },
+        { id: CLOSED_ZONE, name: "Closed", active: 0, department_id: RESTAURANT },
         { id: BARE_ZONE, name: "Bare", active: 1 },
       ],
-      zone_service_policies: [
-        { zone_id: TERRACE, department_id: RESTAURANT },
-        { zone_id: INSIDE, department_id: DELI },
-        { zone_id: CLOSED_ZONE, department_id: RESTAURANT },
-      ],
+
       kitchen_stations: [
         { id: KITCHEN, is_default: 1, active: 1 },
         { id: BAR, is_default: 0, active: 1 },
@@ -738,10 +734,10 @@ describe("validateRoutingConfiguration", () => {
     tables.departments!.find((row) => row.id === DELI)!.active = 1;
     tables.floor_zones!.find((row) => row.id === CLOSED_ZONE)!.active = 1;
     tables.department_sale_policies = [{ department_id: RESTAURANT }, { department_id: DELI }];
-    tables.zone_sale_policies = [TERRACE, INSIDE, CLOSED_ZONE, BARE_ZONE].map((zone_id) => ({
-      zone_id,
-    }));
-    tables.zone_service_policies!.push({ zone_id: BARE_ZONE, department_id: RESTAURANT });
+    Object.assign(
+      tables.floor_zones!.find((row) => row.id === BARE_ZONE)!,
+      { department_id: RESTAURANT },
+    );
     expect(() => validate(tables)).not.toThrow();
     tables.routing_cells!.push(cell({ product: LARGE, station: BAR }));
     expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));
@@ -754,13 +750,13 @@ describe("deleted hierarchy rows in a configuration bundle", () => {
   function zoneTables(): Tables {
     return {
       department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
-      zone_sale_policies: [{ zone_id: PATIO }],
+
       departments: [
         { id: RESTAURANT, name: "Restaurant", active: 1 },
         { id: DELI, name: "Deli", active: 0 },
       ],
-      floor_zones: [{ id: PATIO, name: "Patio", active: 1 }],
-      zone_service_policies: [{ zone_id: PATIO, department_id: DELI }],
+      floor_zones: [{ id: PATIO, name: "Patio", active: 1, department_id: DELI }],
+
       kitchen_stations: [{ id: KITCHEN, is_default: 1, active: 1 }],
     };
   }
@@ -974,7 +970,7 @@ describe("service-period configuration", () => {
 });
 
 describe("configuration order starts", () => {
-  it.each(["department_sale_policies", "zone_sale_policies"])(
+  it.each(["department_sale_policies", "floor_zones"])(
     "refuses malformed %s order starts",
     (table) => {
       for (const value of [
@@ -989,36 +985,36 @@ describe("configuration order starts", () => {
         expect(() =>
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
             departments: [{ id: RESTAURANT }],
-            floor_zones: [{ id: "zone" }],
-            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
+            floor_zones: [{ id: "zone", department_id: RESTAURANT }],
+
             department_sale_policies: [{ department_id: RESTAURANT }],
-            zone_sale_policies: [{ zone_id: "zone" }],
-            [table]: [{ department_id: RESTAURANT, zone_id: "zone", order_start: value }],
+
+            [table]: [{ id: "zone", department_id: RESTAURANT, order_start: value }],
           }),
         ).toThrowError(refusal(`${table}.order_start`));
       }
     },
   );
-  it.each(["department_sale_policies", "zone_sale_policies"])(
+  it.each(["department_sale_policies", "floor_zones"])(
     "accepts explicit and absent %s order starts",
     (table) => {
       for (const value of [
         "table",
         "counter",
         undefined,
-        ...(table === "zone_sale_policies" ? [null] : []),
+        ...(table === "floor_zones" ? [null] : []),
       ]) {
         expect(() =>
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
             departments: [{ id: RESTAURANT }],
-            floor_zones: [{ id: "zone" }],
-            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
+            floor_zones: [{ id: "zone", department_id: RESTAURANT }],
+
             department_sale_policies: [{ department_id: RESTAURANT }],
-            zone_sale_policies: [{ zone_id: "zone" }],
+
             [table]: [
               {
                 department_id: RESTAURANT,
-                zone_id: "zone",
+                id: "zone",
                 ...(value === undefined ? {} : { order_start: value }),
               },
             ],
@@ -1045,15 +1041,13 @@ it.each([0, false])(
 );
 
 it.each([
-  ["zone_service_policies", "zone_id", { zone_id: "missing", department_id: RESTAURANT }],
-  ["zone_service_policies", "department_id", { zone_id: "z-live", department_id: "missing" }],
+  ["floor_zones", "department_id", { id: "z-live", department_id: "missing" }],
   ["department_receipts", "department_id", { department_id: "missing", receipt: {} }],
   ["department_sale_policies", "department_id", { department_id: "missing" }],
-  ["zone_sale_policies", "zone_id", { zone_id: "missing" }],
 ])("refuses a deleted hierarchy child %s.%s with an absent parent", (table, field, row) => {
   const tables = {
     departments: [{ id: RESTAURANT, active: 1 }],
-    floor_zones: [{ id: "z-live", active: 1 }],
+    floor_zones: [{ id: "z-live", active: 1, department_id: RESTAURANT }],
     [table]: [row],
   };
   expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
@@ -1091,10 +1085,10 @@ describe("season weeks in a configuration bundle", () => {
   function seasonTables(): Tables {
     return {
       department_sale_policies: [{ department_id: RESTAURANT }],
-      zone_sale_policies: [{ zone_id: "terrace" }],
+
       departments: [{ id: RESTAURANT }],
-      floor_zones: [{ id: "terrace", active: 1 }],
-      zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
+      floor_zones: [{ id: "terrace", active: 1, department_id: RESTAURANT }],
+
       catalogues: [{ id: "m-lunch" }, { id: "m-late" }],
       menu_periods: [
         { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },
@@ -1163,7 +1157,7 @@ describe("season weeks in a configuration bundle", () => {
       "zone_day_ranges",
     ]);
     expect(at).toBeGreaterThan(names.indexOf("menu_periods"));
-    expect(at).toBeGreaterThan(names.indexOf("zone_service_policies"));
+    expect(at).toBeGreaterThan(names.indexOf("department_sale_policies"));
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables[at]).toEqual({
       name: "seasons",
     });
@@ -1367,10 +1361,10 @@ describe("special days in a configuration bundle", () => {
   function specialTables(): Tables {
     return {
       department_sale_policies: [{ department_id: RESTAURANT }],
-      zone_sale_policies: [{ zone_id: "terrace" }],
+
       departments: [{ id: RESTAURANT }],
-      floor_zones: [{ id: "terrace", active: 1 }],
-      zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
+      floor_zones: [{ id: "terrace", active: 1, department_id: RESTAURANT }],
+
       catalogues: [{ id: "m-bar" }, { id: "m-lunch" }],
       menu_periods: [
         { id: BAR_PERIOD, department_id: RESTAURANT, name: "Bar", colour: "red", menu_id: "m-bar" },
@@ -1847,4 +1841,13 @@ describe("A773 pass display policy", () => {
       expect(names).not.toContain(deviceTable);
     }
   });
+});
+
+it("refuses a zone whose folded department is absent from the bundle", () => {
+  expect(() =>
+    VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+      departments: [],
+      floor_zones: [{ id: "z", department_id: "missing" }],
+    }),
+  ).toThrowError(refusal("floor_zones.department_id"));
 });

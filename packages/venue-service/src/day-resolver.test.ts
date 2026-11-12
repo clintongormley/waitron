@@ -69,18 +69,19 @@ async function venue(options: { oneSeason?: boolean } = {}) {
   const cfg: { locationId: string } = {
     locationId: await venueLocationId(db),
   };
+  const departmentId = await scoped(
+    async (tx) => (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id,
+  );
   const zones = await db
     .insert(floorZones)
     .values([
-      { name: "Dining room", displayOrder: 0 },
-      { name: "Terrace", displayOrder: 1 },
+      { name: "Dining room", displayOrder: 0, departmentId },
+      { name: "Terrace", displayOrder: 1, departmentId },
     ])
     .returning({ id: floorZones.id });
   if (options.oneSeason === true)
     await db.insert(seasons).values({ name: "All year", startsOn: "01-01" });
   return scoped(async (tx) => {
-    const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
-      .id;
     for (const zone of zones) await configureZone(tx, { zoneId: zone.id, departmentId });
     const menus: Record<string, string> = {};
     const period = async (name: string) => {

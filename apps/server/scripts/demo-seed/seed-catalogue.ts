@@ -108,7 +108,7 @@ export async function seedCatalogues(
   const menuItemsByProduct = new Map<string, string>();
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
-    select d.menu_id as id from zone_service_policies p
+    select d.menu_id as id from floor_zones p
     join menu_periods d on d.department_id = p.department_id
     where p.is_counter_default
       and d.name in (${sql.join(

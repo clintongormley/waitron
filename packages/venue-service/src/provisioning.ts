@@ -9,8 +9,6 @@ import {
   kitchenCourses,
   readTenant,
   readVenue,
-  zoneSalePolicies,
-  zoneServicePolicies,
 } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { setProfileServiceScope } from "./profile-access.js";
@@ -86,13 +84,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .onConflictDoNothing({ target: departmentSalePolicies.departmentId });
 
       const existing = await tx
-        .select({ zoneId: zoneServicePolicies.zoneId })
-        .from(zoneServicePolicies)
-        .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-        .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+        .select({ zoneId: floorZones.id })
+        .from(floorZones)
+        .innerJoin(departments, eq(departments.id, floorZones.departmentId))
         .where(
           and(
-            eq(zoneServicePolicies.isCounterDefault, true),
+            eq(floorZones.isCounterDefault, true),
             eq(floorZones.active, true),
             eq(departments.active, true),
           ),
@@ -100,57 +97,40 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .limit(1);
       if (existing.length === 0) {
         await tx
-          .update(zoneServicePolicies)
+          .update(floorZones)
           .set({ isCounterDefault: false })
-          .where(eq(zoneServicePolicies.isCounterDefault, true));
-        // The conflict clause updates the name to the value it already holds: the point is not the
-        // update but the `returning`, which a plain `do nothing` would leave empty on a re-run.
-        const zone = await tx
+          .where(eq(floorZones.isCounterDefault, true));
+        await tx
           .insert(floorZones)
           .values({
             name: starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage),
             displayOrder: 0,
             active: true,
-          })
-          .onConflictDoUpdate({
-            target: [floorZones.name],
-            targetWhere: sql`${floorZones.active} = 1`,
-            set: { name: sql`excluded.name` },
-          })
-          .returning({ id: floorZones.id });
-        await tx
-          .insert(zoneServicePolicies)
-          .values({
-            zoneId: zone[0]!.id,
             departmentId,
             isCounterDefault: true,
           })
           .onConflictDoUpdate({
-            target: zoneServicePolicies.zoneId,
-            set: { isCounterDefault: true, departmentId },
+            target: [floorZones.name],
+            targetWhere: sql`${floorZones.active} = 1`,
+            set: { departmentId, isCounterDefault: true },
           });
       }
       const policy = await tx
         .select({
-          zoneId: zoneServicePolicies.zoneId,
-          departmentId: zoneServicePolicies.departmentId,
+          zoneId: floorZones.id,
+          departmentId: floorZones.departmentId,
         })
-        .from(zoneServicePolicies)
-        .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-        .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+        .from(floorZones)
+        .innerJoin(departments, eq(departments.id, floorZones.departmentId))
         .where(
           and(
-            eq(zoneServicePolicies.isCounterDefault, true),
+            eq(floorZones.isCounterDefault, true),
             eq(floorZones.active, true),
             eq(departments.active, true),
           ),
         )
         .limit(1);
       const zoneId = policy[0]!.zoneId;
-      await tx
-        .insert(zoneSalePolicies)
-        .values({ zoneId })
-        .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
       await ensureDefaultSeasons(tx, staffLanguage);
       const menuId = await readDefaultCatalogueId(tx);
       if (menuId !== null) {

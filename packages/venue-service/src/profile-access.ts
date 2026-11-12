@@ -5,7 +5,6 @@ import {
   deviceProfileServiceAccess,
   deviceProfileZones,
   floorZones,
-  zoneServicePolicies,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, type ErrorParams } from "@waitron/shared";
@@ -96,12 +95,11 @@ export async function readProfileZones(
   const allowedZoneIds = (
     await tx
       .select({ id: floorZones.id })
-      .from(zoneServicePolicies)
-      .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-      .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+      .from(floorZones)
+      .innerJoin(departments, eq(departments.id, floorZones.departmentId))
       .where(
         and(
-          eq(zoneServicePolicies.departmentId, profile.departmentId),
+          eq(floorZones.departmentId, profile.departmentId),
           eq(floorZones.active, true),
           eq(departments.active, true),
           profile.everyZone
@@ -162,12 +160,8 @@ export async function readProfilesZones(
   const zones = await tx
     .select({ profileId: deviceProfileServiceAccess.deviceProfileId, zoneId: floorZones.id })
     .from(deviceProfileServiceAccess)
-    .innerJoin(
-      zoneServicePolicies,
-      eq(zoneServicePolicies.departmentId, deviceProfileServiceAccess.departmentId),
-    )
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .innerJoin(floorZones, eq(floorZones.departmentId, deviceProfileServiceAccess.departmentId))
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .leftJoin(
       deviceProfileZones,
       and(
@@ -373,10 +367,9 @@ async function checkedScope(
         .select({
           id: floorZones.id,
           active: floorZones.active,
-          departmentId: zoneServicePolicies.departmentId,
+          departmentId: floorZones.departmentId,
         })
         .from(floorZones)
-        .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
         .where(inArray(floorZones.id, named))
     ).map((zone) => [zone.id, zone]),
   );

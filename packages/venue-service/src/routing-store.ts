@@ -10,7 +10,6 @@ import {
   routingCellPeriods,
   routingCells,
   stationDayStates,
-  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -109,18 +108,12 @@ async function validateRoutingCell(
   const zoneId = address.zoneId === null ? null : normaliseUuid(address.zoneId, "ZoneId");
   let departmentId: string | null = null;
   if (zoneId !== null) {
-    // resolveZoneContext's check, and the zone switched on, which it does not ask.
     const [zone] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-      .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .innerJoin(departments, eq(departments.id, floorZones.departmentId))
       .where(
-        and(
-          eq(zoneServicePolicies.zoneId, zoneId),
-          eq(departments.active, true),
-          eq(floorZones.active, true),
-        ),
+        and(eq(floorZones.id, zoneId), eq(departments.active, true), eq(floorZones.active, true)),
       );
     if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
     departmentId = zone.departmentId;
@@ -648,8 +641,9 @@ function during(rules: RoutingRules, periodId: string): RoutingRules {
 
 async function zoneDepartments(tx: Transaction): Promise<Map<string, string>> {
   const rows = await tx
-    .select({ zoneId: zoneServicePolicies.zoneId, departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies);
+    .select({ zoneId: floorZones.id, departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .where(eq(floorZones.active, true));
   return new Map(rows.map((row) => [row.zoneId, row.departmentId]));
 }
 

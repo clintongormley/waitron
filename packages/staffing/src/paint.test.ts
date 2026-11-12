@@ -756,7 +756,7 @@ async function guideVenue() {
     await addProductToMenu(tx, { menuId, productId });
     const [zone] = await tx
       .insert(floorZones)
-      .values({ ...cfg, name: "Dining" })
+      .values({ ...cfg, name: "Dining", departmentId: v.departmentId })
       .returning();
     await configureZone(tx, { zoneId: zone!.id, departmentId: v.departmentId });
     const [period] = await tx

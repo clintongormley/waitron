@@ -14,7 +14,6 @@ import {
   replaceMenuWeek,
   setRoutingCell,
   STARTER_OPEN_PERIOD_NAMES,
-  zoneSalePolicies,
 } from "@waitron/venue-service";
 import type { CountryDemoIdentity, DemoPlainText } from "@waitron/country";
 import { saveLayout } from "../../src/floor-plan.js";
@@ -36,7 +35,7 @@ export async function seedFloor(
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
 
   const { rows: defaults } = await tx.execute<{ department_id: string; zone_id: string }>(sql`
-    select department_id, zone_id from zone_service_policies
+    select department_id, id as zone_id from floor_zones
     where is_counter_default
     limit 1`);
   const defaultPolicy = defaults[0];
@@ -88,10 +87,7 @@ export async function seedFloor(
         where id = ${zoneId}`);
     }
     if (zone.key === "bar") {
-      await tx
-        .update(zoneSalePolicies)
-        .set({ orderStart: "counter" })
-        .where(eq(zoneSalePolicies.zoneId, zoneId));
+      await tx.update(floorZones).set({ orderStart: "counter" }).where(eq(floorZones.id, zoneId));
     }
     zoneIds.set(zone.key, zoneId);
   }
@@ -102,9 +98,9 @@ export async function seedFloor(
     displayOrder: 3,
   });
   await tx
-    .update(zoneSalePolicies)
+    .update(floorZones)
     .set({ orderStart: "counter" })
-    .where(eq(zoneSalePolicies.zoneId, upstairsBarZone.id));
+    .where(eq(floorZones.id, upstairsBarZone.id));
 
   if (menuIds !== undefined) {
     const downstairsBarZoneId = zoneIds.get("bar");

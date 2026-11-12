@@ -12,7 +12,6 @@ import {
   ZONE_PAINT_KINDS,
   zoneDayRanges,
   zoneDays,
-  zoneServicePolicies,
   type Transaction,
   type VenuePlace,
 } from "@waitron/db";
@@ -685,13 +684,12 @@ async function assertPaintOwners(
   const departmentOf = new Map(
     (
       await tx
-        .select({ id: zoneServicePolicies.zoneId, departmentId: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-        .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+        .select({ id: floorZones.id, departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .innerJoin(departments, eq(departments.id, floorZones.departmentId))
         .where(
           and(
-            inArray(zoneServicePolicies.zoneId, [...new Set(zoneIds)]),
+            inArray(floorZones.id, [...new Set(zoneIds)]),
             eq(departments.active, true),
             eq(floorZones.active, true),
           ),

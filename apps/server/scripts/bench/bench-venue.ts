@@ -537,8 +537,7 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
     .where(eq(catalogues.name, CATALOGUE_NAME))
     .orderBy(asc(products.name));
   const zoneRows = db.all<{ id: string; departmentId: string }>(
-    sql`select z.id as id, p.department_id as departmentId from floor_zones z
-        join zone_service_policies p on p.zone_id = z.id
+    sql`select z.id as id, z.department_id as departmentId from floor_zones z
         where z.name like 'Bench zone %' order by z.name`,
   );
   const tableRows = await db

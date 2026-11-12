@@ -2481,7 +2481,7 @@ CREATE TABLE `zone_extensions` (
 	`business_day` text NOT NULL,
 	`starts_at` text NOT NULL,
 	`ends_at` text NOT NULL,
-	FOREIGN KEY (`zone_id`) REFERENCES `zone_service_policies`(`zone_id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "zone_extensions_step_ck" CHECK(substr("zone_extensions"."starts_at", 4, 2) in ('00', '15', '30', '45')
       and substr("zone_extensions"."ends_at", 4, 2) in ('00', '15', '30', '45'))
 );
@@ -2652,7 +2652,7 @@ CREATE TABLE `zone_days` (
 	`season_id` text,
 	`weekday` integer,
 	`special_day_date_id` text,
-	FOREIGN KEY (`zone_id`) REFERENCES `zone_service_policies`(`zone_id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`season_id`) REFERENCES `seasons`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`special_day_date_id`) REFERENCES `special_day_dates`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "zone_days_one_day_ck" CHECK(("zone_days"."season_id" is null) <> ("zone_days"."special_day_date_id" is null) and ("zone_days"."season_id" is null) = ("zone_days"."weekday" is null)),

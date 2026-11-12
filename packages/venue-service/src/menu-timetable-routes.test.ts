@@ -66,14 +66,18 @@ async function routed() {
   const locationId = venueId;
   const cfg = { locationId };
   await db.insert(kitchenStations).values({ name: "Kitchen", isDefault: true });
-  const zone = async (name: string) =>
-    (await db.insert(floorZones).values({ name }).returning({ id: floorZones.id }))[0]!.id;
-  const barZone = await zone("Bar");
-  const counterZone = await zone("Deli counter");
+  const zone = async (name: string, departmentId: string) =>
+    (
+      await db.insert(floorZones).values({ name, departmentId }).returning({ id: floorZones.id })
+    )[0]!.id;
+  let barZone: string;
+  let counterZone: string;
   const made = await scoped(async (tx) => {
     await ensureDefaultSeasons(tx);
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     const deli = (await createDepartment(tx, { name: "Deli", orderStart: "counter" })).id;
+    barZone = await zone("Bar", restaurant);
+    counterZone = await zone("Deli counter", deli);
     await configureZone(tx, { zoneId: barZone, departmentId: restaurant });
     await configureZone(tx, { zoneId: counterZone, departmentId: deli });
     const menu = async (name: string) => {
@@ -164,7 +168,7 @@ async function routed() {
     });
   const model = () => scoped((tx) => readOpeningHoursModel(tx, new Date()));
   season = (await model()).currentSeasonId!;
-  return { ...made, cfg, barZone, counterZone, app, send, model, season };
+  return { ...made, cfg, barZone: barZone!, counterZone: counterZone!, app, send, model, season };
 }
 
 type Routed = Awaited<ReturnType<typeof routed>>;
