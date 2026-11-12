@@ -2308,6 +2308,24 @@ it("keeps a refusal naming no field in the bottom message alone, leaving Save wo
   expect(await bottomOf(el)).toBe("");
 });
 
+it("shows a fresh refusal after the same fields were edited and submitted again", async () => {
+  const refused = { kitchenName: "Too long.", _form: "Not found." };
+  const { el, host } = await mount({ value: addons, fieldErrors: refused });
+  const submitted = record(host);
+
+  await type(el, "kitchen-name", "CK");
+  expect(errorOf(el, "kitchen-name")).toBe("");
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(await bottomOf(el)).toBe("");
+
+  el.fieldErrors = { ...refused };
+  await el.updateComplete;
+  expect(errorOf(el, "kitchen-name")).toBe("Too long.");
+  expect(await bottomOf(el)).toBe("Not found. " + t("form.fix_fields"));
+  expect(saveOf(el).disabled).toBe(false);
+});
+
 it("starts again when reopened: no messages, Save quiet, and working after an edit", async () => {
   const { el } = await mount();
   await type(el, "kitchen-name", "XTR");

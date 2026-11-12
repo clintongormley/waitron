@@ -84,6 +84,9 @@ const clickForNewPage: BrowserCommand<
   }
 };
 
+const touchTooltipTest =
+  "on a touch screen a tapped icon button shows no tooltip over what lies beneath it";
+
 export default defineConfig({
   optimizeDeps: {
     include: [
@@ -103,7 +106,16 @@ export default defineConfig({
       enabled: true,
       provider: playwright({}),
       headless: true,
-      instances: [{ browser: "chromium" }],
+      instances: [
+        { browser: "chromium", testNamePattern: new RegExp(`^(?!${touchTooltipTest}$)`) },
+        {
+          browser: "chromium",
+          name: "chromium-touch",
+          include: ["src/icon-button.test.ts"],
+          testNamePattern: new RegExp(`^${touchTooltipTest}$`),
+          provider: playwright({ contextOptions: { hasTouch: true } }),
+        },
+      ],
       commands: {
         emulateColorScheme,
         emulateReducedMotion,

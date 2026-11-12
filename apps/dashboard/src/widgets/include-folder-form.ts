@@ -312,12 +312,7 @@ export class IncludeFolderForm extends LitElement {
   override render() {
     const errors = this.#errors();
     const fieldKeys = new Set(this.#fieldKeys(errors));
-    const formMessages = Object.entries(errors)
-      .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
-      .map(([, message]) => message);
-    const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
-      " ",
-    );
+    const bottom = this.#feedback.message(errors, fieldKeys, t("form.fix_fields"));
     const hint = t("menus.include_direct_hint");
     const action = saveActionState(this.#scope);
     return html`<wt-modal

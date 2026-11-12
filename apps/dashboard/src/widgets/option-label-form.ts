@@ -301,12 +301,7 @@ export class OptionLabelForm extends LitElement {
     const fieldKeys = new Set(this.#fieldKeys(errors));
     const invalid = this.#feedback.attempted && Object.keys(this.#validate()).length > 0;
     const saveAction = this.#saveAction();
-    const bottom = [
-      ...Object.entries(errors)
-        .filter(([key, message]) => message && !fieldKeys.has(key))
-        .map(([, message]) => message),
-      ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
-    ].join(" ");
+    const bottom = this.#feedback.message(errors, fieldKeys, t("form.fix_fields"));
     return html`<wt-modal
       size="standard"
       .open=${this.open}

@@ -252,12 +252,7 @@ export class PersonForm extends LitElement {
     const errors = this.#errors();
     const s = saveActionState(this.#scope);
     const fieldKeys = new Set(FIELDS.filter((key) => Boolean(errors[key])));
-    const formMessages = Object.entries(errors)
-      .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
-      .map(([, message]) => message);
-    const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
-      " ",
-    );
+    const bottom = this.#feedback.message(errors, fieldKeys, t("form.fix_fields"));
     return html`
       <wt-modal
         size="standard"

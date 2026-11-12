@@ -72,9 +72,11 @@ test("delegates focus and binds the hover, focus and Escape tooltip lifecycle", 
   expect(el.shadowRoot!.activeElement).toBe(button);
   expect(getComputedStyle(tooltip).display).toBe("block");
   expect(tooltip.getAttribute("aria-hidden")).toBe("true");
+  await userEvent.hover(button);
   await userEvent.keyboard("{Escape}");
   expect(getComputedStyle(tooltip).display).toBe("none");
   button.blur();
+  await commands.parkPointer();
   await userEvent.hover(button);
   expect(getComputedStyle(tooltip).display).toBe("block");
   const pressed = vi.fn();

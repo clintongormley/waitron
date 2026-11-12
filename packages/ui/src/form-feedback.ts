@@ -39,6 +39,19 @@ export class FormFeedback {
     return Object.fromEntries(Object.entries(errors).filter(([key]) => !this.#dismissed.has(key)));
   }
 
+  message(
+    errors: Record<string, string | undefined>,
+    fieldKeys: ReadonlySet<string>,
+    fixFields: string,
+  ): string {
+    return bottomMessage(
+      ...Object.entries(errors)
+        .filter(([key, message]) => message && !fieldKeys.has(key))
+        .map(([, message]) => message!),
+      fieldKeys.size > 0 ? fixFields : null,
+    );
+  }
+
   async focus(root: ParentNode): Promise<HTMLElement | null> {
     await this.#host.updateComplete;
     return focusFirstInvalid(root);

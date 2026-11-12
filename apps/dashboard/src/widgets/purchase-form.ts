@@ -4,6 +4,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -222,9 +223,7 @@ export class PurchaseForm extends LitElement {
   @state() private deductibleProportion = "100.00";
   @state() private note = "";
   @state() private lines: LineDraft[] = [blankLine()];
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
 
   #identity: string | null | undefined;
   #opening = {};
@@ -289,7 +288,7 @@ export class PurchaseForm extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     const identity = this.invoice?.id ?? null;
     const reopened = identity !== this.#identity || (changed.has("open") && this.open);
-    if (changed.has("fieldErrors") || reopened) this.dismissed = new Set();
+    if (changed.has("fieldErrors") || reopened) this.#feedback.newRefusal();
     if (reopened) {
       this.#disposeDraft();
       this.#identity = identity;
@@ -309,7 +308,7 @@ export class PurchaseForm extends LitElement {
       this.lines = inv
         ? inv.lines.map((l) => ({ rate: l.rate, base: l.base, tax: l.tax, kind: l.kind }))
         : [blankLine()];
-      this.attempted = false;
+      this.#feedback.reset();
     }
     if (!this.open) this.#disposeDraft();
     else if (this.isConnected && !this.#scope) {
@@ -344,7 +343,7 @@ export class PurchaseForm extends LitElement {
   }
 
   #dismiss(...keys: string[]): void {
-    this.dismissed = new Set([...this.dismissed, ...keys]);
+    this.#feedback.dismiss(...keys);
   }
 
   #onFieldChange(event: CustomEvent<{ value: string }>, field: HeaderField): void {
@@ -436,19 +435,16 @@ export class PurchaseForm extends LitElement {
   }
 
   #errors(invalid: PurchaseFormErrors): PurchaseFormErrors {
-    const refused = Object.fromEntries(
-      Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
-    );
+    const refused = this.#feedback.remaining(this.fieldErrors);
     return { ...refused, ...invalid };
   }
 
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy || saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
-    this.#dismiss(...Object.keys(this.fieldErrors));
+    this.#feedback.press(...Object.keys(this.fieldErrors));
     if (Object.keys(this.#validate()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
 
@@ -581,13 +577,14 @@ export class PurchaseForm extends LitElement {
   }
 
   override render() {
-    const validation = this.attempted ? this.#validate() : {};
+    const validation = this.#feedback.attempted ? this.#validate() : {};
     const s = saveActionState(this.#scope);
     const errors = this.#errors(validation);
-    const marked = this.#fieldKeys(errors).length > 0;
-    const bottom = [errors._form ?? "", marked ? t("form.fix_fields") : ""]
-      .filter((message) => message !== "")
-      .join(" ");
+    const bottom = this.#feedback.message(
+      errors,
+      new Set(this.#fieldKeys(errors)),
+      t("form.fix_fields"),
+    );
     return html`
       <wt-dialog
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}

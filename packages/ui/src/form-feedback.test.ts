@@ -93,3 +93,23 @@ it("joins nonempty message parts in the caller's order", () => {
     "Request refused. Correct the fields.",
   );
 });
+
+it("keeps unshown refusals in order and adds one correction for marked fields", async () => {
+  const { feedback } = await mountFeedback();
+  const errors = {
+    _form: "Request refused.",
+    name: "Name required.",
+    hiddenLanguage: "Translation missing.",
+    empty: "",
+    absent: undefined,
+  };
+  expect(feedback.message(errors, new Set(["name"]), "Correct the fields.")).toBe(
+    "Request refused. Translation missing. Correct the fields.",
+  );
+  expect(feedback.message(errors, new Set(), "Correct the fields.")).toBe(
+    "Request refused. Name required. Translation missing.",
+  );
+  expect(feedback.message({ empty: "", absent: undefined }, new Set(), "Correct the fields.")).toBe(
+    "",
+  );
+});

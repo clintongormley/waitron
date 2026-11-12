@@ -132,29 +132,16 @@ test("on a touch screen a tapped icon button shows no tooltip over what lies ben
   expect(document.elementFromPoint(tooltipSpot.x, tooltipSpot.y)).toBe(beneath);
 
   const session = cdp();
-  await session.send("Emulation.setEmulatedMedia", {
-    features: [
-      { name: "hover", value: "none" },
-      { name: "pointer", value: "coarse" },
-    ],
-  });
-  await session.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
-  try {
-    expect(matchMedia("(hover: hover)").matches).toBe(false);
-    await tap(session, centre(button.getBoundingClientRect()));
-    await expect.poll(() => button.getAttribute("aria-pressed")).toBe("true");
-    // The tap leaves the button hovered, which is what used to keep its tooltip up.
-    expect(button.matches(":hover")).toBe(true);
-    expect.soft(getComputedStyle(tooltip).display).toBe("none");
-    await tap(session, tooltipSpot);
-    await expect.poll(() => beneathClicks).toBe(1);
-    // Chromium clears a tap's :active on a timer; left to fire in the next test, it un-hovers
-    // whatever that test hovered.
-    await expect.poll(() => beneath.matches(":active")).toBe(false);
-  } finally {
-    await session.send("Emulation.setTouchEmulationEnabled", { enabled: false });
-    await session.send("Emulation.setEmulatedMedia", { features: [] });
-  }
+  expect(matchMedia("(hover: hover)").matches).toBe(false);
+  await tap(session, centre(button.getBoundingClientRect()));
+  await expect.poll(() => button.getAttribute("aria-pressed")).toBe("true");
+  expect(button.matches(":hover")).toBe(true);
+  expect.soft(getComputedStyle(tooltip).display).toBe("none");
+  await tap(session, tooltipSpot);
+  await expect.poll(() => beneathClicks).toBe(1);
+  // Chromium clears a tap's :active on a timer; left to fire in the next test, it un-hovers
+  // whatever that test hovered.
+  await expect.poll(() => beneath.matches(":active")).toBe(false);
 });
 
 test("a disabled icon button is drawn faded, with no pointer cursor", () => {
