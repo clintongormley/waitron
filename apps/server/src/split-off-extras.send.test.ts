@@ -1,7 +1,7 @@
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
