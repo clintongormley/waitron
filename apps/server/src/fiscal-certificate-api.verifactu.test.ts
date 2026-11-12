@@ -94,7 +94,7 @@ describe("the certificate routes with the real Veri*Factu seat", () => {
       const [admin] = await tx
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       const session = await startManagementSession(tx, { personId: admin!.id });
       await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
@@ -246,7 +246,7 @@ for (const [fiscal, box] of Object.entries(boxes)) {
           const [admin] = await tx
             .select({ id: persons.id })
             .from(persons)
-            .where(eq(persons.role, "admin"));
+            .where(eq(persons.email, "owner@example.test"));
           const session = await startManagementSession(tx, { personId: admin!.id });
           await setFreshManagementSignIn(tx, session.token);
           return `${MANAGEMENT_COOKIE}=${session.token}`;

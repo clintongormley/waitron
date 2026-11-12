@@ -25,13 +25,7 @@ import {
 import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/catalogue";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
-import {
-  createPinThrottle,
-  hashPin,
-  loginWithPin,
-  persons,
-  PIN_THROTTLE_IDLE_MS,
-} from "@waitron/identity";
+import { createPinThrottle, hashPin, loginWithPin, PIN_THROTTLE_IDLE_MS } from "@waitron/identity";
 import { captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {

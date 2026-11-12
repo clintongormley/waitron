@@ -657,6 +657,8 @@ editabas. Recarga para verlos; tus cambios se conservan hasta entonces."
 
 ## PR 5 — Test people and test devices behind helpers (A1002 cut 6)
 
+> 2026-11-12, watcher07:07: split into PR5a (Tasks5.1–5.2) and PR5b (Tasks5.3–5.5), both before PR1. PR5a retains its2,550-line forecast and3,825 outside-opinion stop. Review the tool rules and handwritten changes, and sample tool output; each PR records reproducible commands and separate tool/hand counts.
+
 **Outcome:** every test creates and changes people through `seedPersons` and
 `setBuiltInRoleForTest`, and creates device profiles through `seedDeviceProfiles`; today the
 helpers write exactly what the tests wrote. No product code changes. **Depends on:** nothing.
@@ -710,6 +712,8 @@ Other shapes (`.onConflictDoNothing()`, raw `sql\`update persons set role…\``,
   `git grep -nE 'insert\(persons\)|set\(\{ ?role|set role\b|persons\.role' -- '<the task's paths>/**/*.test.ts' '<the task's paths>/**/testing/**'`
   prints nothing, and `git diff --stat` shows no production file. Run the touched tests in groups
   of about 40, reading each `Tests` count. **Commit.**
+
+> 2026-11-12, watcher07:23: the “person who authorised the handover, according to the copy” corruption group in handover-compare.test.ts keeps its deliberate copied-file role mutations until PR11. Keep every refusal assertion; add no helper solely for injecting invalid copied data.
 
 ### Task 5.5: Device-profile codemod
 

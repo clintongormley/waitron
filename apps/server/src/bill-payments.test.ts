@@ -957,7 +957,7 @@ describe("the invoice at full payment", () => {
       const [admin] = await tx
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       return loginWithPin(tx, {
         deviceId: venue.cfg.origin.deviceId,
         personId: admin!.id,
@@ -1062,7 +1062,7 @@ describe("the invoice at full payment", () => {
       const [admin] = await tx
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       return loginWithPin(tx, {
         deviceId: venue.cfg.origin.deviceId,
         personId: admin!.id,
@@ -1177,7 +1177,7 @@ describe("the invoice at full payment", () => {
       const [admin] = await tx
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       return loginWithPin(tx, {
         deviceId: venue.cfg.origin.deviceId,
         personId: admin!.id,
@@ -1259,7 +1259,7 @@ describe("the invoice at full payment", () => {
       const [admin] = await tx
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       return loginWithPin(tx, {
         deviceId: venue.cfg.origin.deviceId,
         personId: admin!.id,
@@ -1305,7 +1305,7 @@ describe("the invoice at full payment", () => {
       const [admin] = await tx
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       return loginWithPin(tx, {
         deviceId: venue.cfg.origin.deviceId,
         personId: admin!.id,
@@ -1371,7 +1371,7 @@ describe("the invoice at full payment", () => {
         const [admin] = await tx
           .select({ id: persons.id })
           .from(persons)
-          .where(eq(persons.role, "admin"));
+          .where(eq(persons.email, "owner@example.test"));
         return loginWithPin(tx, {
           deviceId: venue.cfg.origin.deviceId,
           personId: admin!.id,

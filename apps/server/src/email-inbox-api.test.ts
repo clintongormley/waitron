@@ -73,7 +73,7 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     return {
       admin: await startManagementSession(tx, { personId: admin!.id }),
       manager: await start("manager"),

@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -4417,10 +4417,14 @@ async function retireProfile(profileId: string): Promise<void> {
     .set({ active: false })
     .where(eq(devices.deviceProfileId, profileId));
   await withTransaction(suite.db, async (tx) => {
-    const [admin] = await tx
-      .select({ id: persons.id })
-      .from(persons)
-      .where(eq(persons.role, "admin"));
+    const candidates = await tx.select({ id: persons.id }).from(persons);
+    let admin: { id: string } | undefined;
+    for (const person of candidates) {
+      if ((await builtInRoleForTest(tx, person.id)) === "admin") {
+        admin = person;
+        break;
+      }
+    }
     const session = await startManagementSession(tx, { personId: admin!.id });
     await deleteDeviceProfile(tx, { managementSessionId: session.token, id: profileId });
   });
@@ -4758,10 +4762,14 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
   });
 
   const original = await withTransaction(suite.db, async (tx) => {
-    const [admin] = await tx
-      .select({ id: persons.id })
-      .from(persons)
-      .where(eq(persons.role, "admin"));
+    const candidates = await tx.select({ id: persons.id }).from(persons);
+    let admin: { id: string } | undefined;
+    for (const person of candidates) {
+      if ((await builtInRoleForTest(tx, person.id)) === "admin") {
+        admin = person;
+        break;
+      }
+    }
     const [mia] = await seedPersons(tx, {
       displayName: "Mia",
       pinHash: hashPin("5555"),

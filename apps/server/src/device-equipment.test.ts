@@ -17,7 +17,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { endDeviceSessions, endSession, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { endDeviceSessions, endSession, hashPin, loginWithPin } from "@waitron/identity";
 import {
   CAPABILITY_FLAGS,
   emptyPrinterLists,

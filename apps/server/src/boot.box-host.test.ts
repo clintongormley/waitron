@@ -75,7 +75,7 @@ async function withServer(
   const [manager] = suite.db
     .select({ id: persons.id })
     .from(persons)
-    .where(eq(persons.role, "manager"))
+    .where(eq(persons.displayName, "The Manager"))
     .all();
   const [port] = await freePorts(1);
   let scratch: string | undefined;

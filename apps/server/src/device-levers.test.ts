@@ -18,7 +18,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { PERSON_HEADER } from "@waitron/shared";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { LEVER_STATUS, mountDeviceApi } from "./device-api.js";

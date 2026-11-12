@@ -63,7 +63,10 @@ async function fixture() {
     });
     return { department, zone };
   });
-  const [operator] = await source.db.select().from(persons).where(eq(persons.role, "admin"));
+  const [operator] = await source.db
+    .select()
+    .from(persons)
+    .where(eq(persons.email, "owner@example.test"));
   const versions = await schemaVersionsByModule(
     { venue: source.db, node: source.node },
     ALL_MODULES,

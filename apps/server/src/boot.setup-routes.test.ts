@@ -717,7 +717,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       const [admin] = await venue.store.venue
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "admin@waitron.dev"));
       const offer = await withTransaction(venue.store.venue, async (tx) => {
         const catalogue = await createCatalogue(tx, {
           name: `Boot setup routes menu ${venueId}`,
@@ -1808,7 +1808,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         const [admin] = await source.store.venue
           .select({ id: persons.id })
           .from(persons)
-          .where(eq(persons.role, "admin"));
+          .where(eq(persons.email, "admin@waitron.dev"));
         const session = await withTransaction(source.store.venue, async (tx) => {
           const session = await startManagementSession(tx, { personId: admin!.id });
           await setFreshManagementSignIn(tx, session.token);

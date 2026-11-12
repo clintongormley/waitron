@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -261,7 +262,11 @@ it("requires HTTPS on the box's own origin", async () => {
 });
 
 it("requires promotion permission in the copy", async () => {
-  await placed.venue.update(persons).set({ role: "staff" }).where(eq(persons.email, ADMIN_EMAIL));
+  const [person] = await placed.venue
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.email, ADMIN_EMAIL));
+  await setBuiltInRoleForTest(placed.venue, person!.id, "staff");
   expect((await service().post()).body.error?.code).toBe("authorization.not_permitted");
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
 });

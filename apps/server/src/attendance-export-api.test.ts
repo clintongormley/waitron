@@ -153,7 +153,7 @@ describe("authenticated working-time downloads", () => {
   it.each(["staff", "supervisor"] as const)(
     "refuses %s all-person export before capturing any document",
     async (role) => {
-      await suite.db.update(persons).set({ role }).where(eq(persons.id, fixture.personId));
+      await setBuiltInRoleForTest(suite.db, fixture.personId, role);
       await fail(await ask("manager"), 403, "authorization.not_permitted");
       expect(provider.prepare).not.toHaveBeenCalled();
       expect((await ask()).status).toBe(200);
@@ -162,7 +162,7 @@ describe("authenticated working-time downloads", () => {
   it.each(["manager", "admin"] as const)(
     "permits %s all and selected exports while suspended subjects remain in history",
     async (role) => {
-      await suite.db.update(persons).set({ role }).where(eq(persons.id, fixture.managerId));
+      await setBuiltInRoleForTest(suite.db, fixture.managerId, role);
       await suite.db
         .update(persons)
         .set({ status: "suspended" })

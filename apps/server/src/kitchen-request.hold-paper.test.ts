@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -761,10 +762,9 @@ describe("A773 hold paper: added work", () => {
   const addedBurger = changed("Grill", "+1 x BURG");
 
   const comp = async (tx: Transaction, venue: Venue, lineId: string) => {
-    await tx
-      .insert(persons)
-      .values({ id: OPERATOR, displayName: "Operator", role: "supervisor" })
-      .onConflictDoNothing({ target: persons.id });
+    if (!(await tx.select({ id: persons.id }).from(persons).where(eq(persons.id, OPERATOR)))[0]) {
+      await seedPersons(tx, { id: OPERATOR, displayName: "Operator", role: "supervisor" });
+    }
     const [reason] = await tx
       .select({ id: adjustmentReasons.id })
       .from(adjustmentReasons)
@@ -1184,10 +1184,9 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
     lineId: string,
     outcome: "remove_charge" | "keep_charge",
   ) {
-    await tx
-      .insert(persons)
-      .values({ id: OPERATOR, displayName: "Operator", role: "supervisor" })
-      .onConflictDoNothing({ target: persons.id });
+    if (!(await tx.select({ id: persons.id }).from(persons).where(eq(persons.id, OPERATOR)))[0]) {
+      await seedPersons(tx, { id: OPERATOR, displayName: "Operator", role: "supervisor" });
+    }
     const [bill] = await tx
       .select({ revision: workingOrders.revision })
       .from(workingOrders)

@@ -128,7 +128,7 @@ for (const [mode, status] of [
             const [admin] = await tx
               .select({ id: persons.id })
               .from(persons)
-              .where(eq(persons.role, "admin"));
+              .where(eq(persons.email, "owner@example.test"));
             managementToken = (await startManagementSession(tx, { personId: admin!.id })).token;
           }
           return { tableId, bookingId, zoneId: zone.id, managementToken };

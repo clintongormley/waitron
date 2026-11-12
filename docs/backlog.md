@@ -1440,8 +1440,10 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **A1002: access roles and job roles.** [Approved redesign, 2026-11-11](superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
   replaces the 7 November design: access roles are ticked permission lists, several per person,
-  combined; job roles drive the rota and device sign-in and grant nothing. Next: the build plan,
-  sized from current source. Cut 1's permission names (#2578) have landed.
+  combined; job roles drive the rota and device sign-in and grant nothing. The
+  [build plan](superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with test-fixture
+  preparation: the helpers and A–L server tests are ready; the remaining fixtures are PR5b.
+  Access/job-role behavior remains to be built. Cut 1's permission names (#2578) have landed.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users

@@ -36,7 +36,10 @@ it("an admitted future cutover change does not block activity on its already dis
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
     );
   })();
-  const [worker] = await suite.db.select().from(persons).where(eq(persons.role, "staff"));
+  const [worker] = await suite.db
+    .select()
+    .from(persons)
+    .where(eq(persons.displayName, "The Clerk"));
   const [version] = await suite.db
     .insert(rosterVersions)
     .values({
@@ -125,7 +128,10 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
     );
   })();
-  const [worker] = await suite.db.select().from(persons).where(eq(persons.role, "staff"));
+  const [worker] = await suite.db
+    .select()
+    .from(persons)
+    .where(eq(persons.displayName, "The Clerk"));
   const [version] = await suite.db
     .insert(rosterVersions)
     .values({
