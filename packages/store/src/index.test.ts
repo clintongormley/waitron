@@ -1,5 +1,5 @@
 import { AsyncResource } from "node:async_hooks";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
@@ -1085,4 +1085,47 @@ describe("onCommit", () => {
     store.venue.run(sql`insert into sales (total) values (1)`);
     expect(heard).toHaveLength(0);
   });
+});
+
+it("keeps another store's commits and held reader protected after one store closes", async () => {
+  const { store: first, directory } = await open();
+  const second = await openVenueStore({ directory, venueSchema, nodeSchema });
+  const path = join(directory, "venue.db");
+  const reader = new DatabaseSync(path, { readOnly: true });
+  try {
+    second.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    first.venue.onCommit(() => {});
+    const heard: true[] = [];
+    second.venue.onCommit(() => heard.push(true));
+    second.venue.run(sql`insert into sales (id, total) values (1, 10)`);
+    expect(heard).toHaveLength(1);
+    reader.exec("begin");
+    expect(reader.prepare("select id, total from sales").all()).toEqual([{ id: 1, total: 10 }]);
+    await first.close();
+    second.venue.run(sql`insert into sales (id, total) values (2, 20)`);
+    expect(heard).toHaveLength(2);
+    const child = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(process.argv[1]);
+      try { console.log(JSON.stringify(db.prepare("pragma wal_checkpoint(truncate)").get())); }
+      finally { db.close(); }
+    `,
+        path,
+      ],
+      { encoding: "utf8", timeout: 10000 },
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout).busy).toBe(1);
+    expect(reader.prepare("select id, total from sales").all()).toEqual([{ id: 1, total: 10 }]);
+  } finally {
+    reader.close();
+    await second.close();
+    await first.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
