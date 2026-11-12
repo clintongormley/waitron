@@ -141,7 +141,7 @@ async function payPartAndGiveBack(
   amount: string,
   back: string,
   method: "cash" | "card" = "cash",
-): Promise<void> {
+): Promise<Answer> {
   const paid = await payPart(party, amount, method);
   expect(paid.status).toBe(200);
   const paymentId = (paid.json.payment as { id: string }).id;
@@ -160,6 +160,7 @@ async function payPartAndGiveBack(
   );
   expect(givenBack.status, JSON.stringify(givenBack)).toBe(200);
   expect(givenBack.json).toMatchObject({ refund: { appliedAmount: back, state: "completed" } });
+  return givenBack;
 }
 
 describe("closeBillDeferredTx refuses, before writing anything", () => {
@@ -325,7 +326,9 @@ describe("closeBillDeferredTx refuses, before writing anything", () => {
       balance: { received: "0.00", reserved: "0.00" },
     });
     const cashBack = await seatedWith(t.venue, "House salad");
-    await payPartAndGiveBack(cashBack, "5.00", "5.00");
+    expect((await payPartAndGiveBack(cashBack, "5.00", "5.00")).json).toMatchObject({
+      balance: { received: "0.00" },
+    });
     const cardBack = await seatedWith(t.venue, "House salad");
     await payPartAndGiveBack(cardBack, "5.00", "5.00", "card");
 
