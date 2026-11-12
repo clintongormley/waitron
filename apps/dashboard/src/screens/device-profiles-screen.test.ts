@@ -2015,6 +2015,29 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     });
   });
 
+  it("waits for job choices before creating a profile", async () => {
+    let deliver!: (roles: { id: string; name: string; holderIds: string[] }[]) => void;
+    const api = stubApi({
+      listJobRoles: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            deliver = resolve;
+          }),
+      ),
+    });
+    const el = await openCreate(api);
+    change(el, "profile-department", "d1");
+    await flush(el);
+    await save(el);
+    expect(api.createDeviceProfile).not.toHaveBeenCalled();
+    expect(text(el, "admitted-people")).toBeNull();
+    deliver([{ id: "job-waiter", name: "Waiter", holderIds: [] }]);
+    await flush(el);
+    expect(q(el, "profile-role-job-waiter")!.checked).toBe(true);
+    await save(el);
+    expect(api.createDeviceProfile).toHaveBeenCalledOnce();
+  });
+
   it("ticks job roles in rota order and shows no people or access levels", async () => {
     const { api, el } = await openEdit(
       { ...profiles[0]!, admittedStaffRoleIds: ["job-waiter"] },

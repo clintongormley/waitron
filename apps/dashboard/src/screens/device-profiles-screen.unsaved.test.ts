@@ -537,6 +537,38 @@ it("W69 late create defaults keep earlier name input dirty and become the clean 
   expect(unload()).toBe(false);
 });
 
+it("W69 late scope defaults preserve an unticked job and its dirty state", async () => {
+  let finish!: () => void;
+  let reads = 0;
+  const choices = {
+    departments: [{ id: "d1", name: "Restaurant", active: true }],
+    zones: [{ id: "z1", name: "Room", departmentId: "d1", active: true }],
+  };
+  const { screen } = await mount({
+    getProfileScopeChoices: async () => {
+      if (++reads !== 1)
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      return choices;
+    },
+  });
+  q(screen, "profile-cancel")!.click();
+  await expect.poll(() => q(screen, "create")).not.toBeNull();
+  q(screen, "create")!.click();
+  await expect.poll(() => q(screen, "profile-role-job-chef")).not.toBeNull();
+  change(screen, "profile-role-job-chef", false);
+  expect(unload()).toBe(true);
+  finish();
+  await expect.poll(() => (q(screen, "profile-department") as HTMLInputElement).value).toBe("d1");
+  expect((q(screen, "profile-role-job-chef") as HTMLElementTagNameMap["wt-switch"]).checked).toBe(
+    false,
+  );
+  expect(unload()).toBe(true);
+  change(screen, "profile-role-job-chef", true);
+  expect(unload()).toBe(false);
+});
+
 it("W69 a create accepted with newer input uses Update on its next save", async () => {
   let finish!: () => void;
   const creates: unknown[] = [];

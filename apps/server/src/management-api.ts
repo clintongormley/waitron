@@ -1344,6 +1344,10 @@ export function mountManagementApi(
           await VENUE_SERVICE.copyProfileKitchenScreens(tx, sourceId, created.id);
         else if (kitchenScreens !== undefined)
           await VENUE_SERVICE.setProfileKitchenScreens(tx, created.id, kitchenScreens);
+        if (sourceId !== undefined && admission.admittedStaffRoleIds === undefined)
+          admission.admittedStaffRoleIds = (
+            await readProfileAdmissions(tx, [sourceId])
+          )[0]!.admittedStaffRoleIds;
         await setProfileAdmission(tx, created.id, admission);
         return (await withProfileAccess(tx, [created]))[0];
       });
@@ -1353,8 +1357,8 @@ export function mountManagementApi(
   app.post("/management-api/device-profiles/:id/copy", (c) => createProfile(c, c.req.param("id")));
 
   // An omitted `inactivityTimeoutSeconds` stores null. These stay as
-  // they were when omitted: the starting screen, a printer list, the kitchen screens, the role
-  // set and each of the department, the zones and the starting zone.
+  // they were when omitted: the starting screen, a printer list, the kitchen screens, the job-role
+  // ticks and each of the department, the zones and the starting zone.
   app.put("/management-api/device-profiles/:id", (c) =>
     runBodyPrinters(c, log, async () => {
       const sessionId = requireManagementSession(c);

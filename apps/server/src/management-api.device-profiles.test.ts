@@ -2183,6 +2183,26 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     return (await res.json()) as Detail;
   }
 
+  it("the copy route keeps source job ticks when the body omits them", async () => {
+    for (const selected of [[], [waiter]]) {
+      const source = await send(
+        "POST",
+        handheld(uniqueName("Copy source"), { ...ordering, admittedStaffRoleIds: selected }),
+      );
+      expect(source.status).toBe(201);
+      const res = await mountApp().request(
+        `/management-api/device-profiles/${(source.body as Detail).id}/copy`,
+        {
+          method: "POST",
+          headers: { ...JSON_HEADERS, cookie },
+          body: JSON.stringify(handheld(uniqueName("Copy"), ordering)),
+        },
+      );
+      expect(res.status).toBe(201);
+      expect(((await res.json()) as Detail).admittedStaffRoleIds).toEqual(selected);
+    }
+  });
+
   it("saves an empty job selection and refuses duplicate job ids", async () => {
     const created = await send(
       "POST",

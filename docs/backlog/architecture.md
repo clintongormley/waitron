@@ -1345,8 +1345,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   party).
 - **The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).**
   [Detail](ci.md#the-upgrade-walks-historical-runtime-variation-remains-unexplained-after-reducing-setup-work-a736-1788).
-- **Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run).
-  [Detail](ci.md#task-2s-review-found-no-test-that-fails-when-device_profile_admission_roles-or-device_profile_admission_persons-is-left-out-of-appsserversrctestingclear-provision-fixturets).
+- **Task 2's review found no test that fails when `device_profile_admission_roles` is left out of `apps/server/src/testing/clear-provision-fixture.ts`** (read, not run).
+  [Detail](ci.md#task-2s-review-found-no-test-that-fails-when-device_profile_admission_roles-is-left-out-of-appsserversrctestingclear-provision-fixturets).
 
 ## Bundle: Query plans and indexes, measured on a year of data
 

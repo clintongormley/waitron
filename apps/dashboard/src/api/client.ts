@@ -818,8 +818,6 @@ export interface RoleEquipment {
 
 export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
 
-/** One person's own rule on a profile: `admitted` false keeps them out whatever their role. */
-
 /** Where a profile serves; `allowedZoneIds` null is every zone of the department. */
 export interface ProfileServiceScope {
   departmentId: string | null;

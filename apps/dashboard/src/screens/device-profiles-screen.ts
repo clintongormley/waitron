@@ -595,6 +595,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private scopeChoices: ProfileScopeChoices = { departments: [], zones: [] };
 
   @state() private jobRoles: JobRole[] = [];
+  @state() private jobRolesRead = false;
 
   @state() private errorKey: string | null = null;
   #readErrorOwner: "main" | "scope" | "profiles" | null = null;
@@ -697,9 +698,15 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** One Save covers the profile and, once they have loaded, its card readers. */
   #saveState() {
-    return saveActionState({
+    const state = saveActionState({
       isDirty: () => Boolean(this.#draftScope?.isDirty() || this.#readerScope?.isDirty()),
     });
+    const awaitingJobs = this.editingId === null && !this.jobRolesRead;
+    return {
+      ...state,
+      variant: awaitingJobs ? ("secondary" as const) : state.variant,
+      awaitingJobs,
+    };
   }
 
   override disconnectedCallback(): void {
@@ -719,9 +726,11 @@ export class DeviceProfilesScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
+    this.jobRolesRead = false;
     try {
       this.#jobRolesReady = this.#queries.watch("listJobRoles", [], (value) => {
         this.jobRoles = value;
+        this.jobRolesRead = true;
       });
       await Promise.all([
         this.#jobRolesReady,
@@ -1102,8 +1111,9 @@ export class DeviceProfilesScreen extends LitElement {
         if (opened !== this.#opened) return;
         const choices = this.#latestScopeChoices ?? initialChoices;
         this.scopeChoices = choices;
-        this.draftRoles = this.jobRoles.map((role) => role.id);
-        baseline.roles = [...this.draftRoles].sort();
+        const defaults = this.jobRoles.map((role) => role.id);
+        if (sameIds(this.draftRoles, baseline.roles)) this.draftRoles = defaults;
+        baseline.roles = [...defaults].sort();
         scope?.commit(baseline);
         if (this.draftDepartmentId !== "") return;
         const departments = choices.departments.filter((department) => department.active);
@@ -1553,7 +1563,8 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** The server accepts `""` as a name, so an empty name is refused here. */
   async #save(): Promise<void> {
-    if (this.saving || this.#saveState().unchanged) return;
+    const state = this.#saveState();
+    if (this.saving || state.unchanged || state.awaitingJobs) return;
     this.narrowed = [];
     this.attempted = true;
     this.fieldRefusal = null;
@@ -2307,7 +2318,7 @@ export class DeviceProfilesScreen extends LitElement {
             ></wt-switch>`,
         ),
       )}
-      ${this.draftRoles.length === 0 ? html`<p class="hint" data-test="admitted-people" aria-live="polite">${t("device_profiles.admitted_nobody")}</p>` : nothing}
+      ${this.jobRolesRead && this.draftRoles.length === 0 ? html`<p class="hint" data-test="admitted-people" aria-live="polite">${t("device_profiles.admitted_nobody")}</p>` : nothing}
     `;
   }
 
@@ -2467,7 +2478,7 @@ export class DeviceProfilesScreen extends LitElement {
           <wt-button
             variant=${save.variant}
             data-test="profile-save"
-            ?disabled=${save.unchanged || this.saving || ownMarked}
+            ?disabled=${save.unchanged || save.awaitingJobs || this.saving || ownMarked}
             @click=${() => void this.#save()}
             >${t("device_profiles.save")}</wt-button
           >

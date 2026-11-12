@@ -119,7 +119,8 @@ Open **Device profiles** and edit the profile used by the device. Under **Who ca
 select its job roles and save. For example, select Waiter for a handheld used by your waiting staff.
 Everyone holding a selected job can sign in; their permissions still decide what they can do.
 Leave every job unticked to let nobody sign in. When you add a profile, it starts with every current
-job selected. Copying a profile keeps its selections.
+job selected. Copying a profile keeps its selections. When you add a job later, select it on the
+profiles where its holders need to sign in.
 
 ## Hours and breaks {#hours}
 

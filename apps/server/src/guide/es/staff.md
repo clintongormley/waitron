@@ -132,7 +132,8 @@ sesión**, selecciona sus puestos y guarda. Por ejemplo, selecciona Camarero par
 el personal de sala. Las personas que tienen un puesto seleccionado pueden iniciar sesión; sus
 permisos siguen decidiendo lo que pueden hacer. No marques ningún puesto para que nadie pueda
 iniciar sesión. Un perfil nuevo empieza con todos los puestos actuales seleccionados. Al copiar
-un perfil se conservan sus selecciones.
+un perfil se conservan sus selecciones. Si añades un puesto después, selecciónalo en los perfiles
+donde sus titulares necesiten iniciar sesión.
 
 ## Horas y descansos {#hours}
 
