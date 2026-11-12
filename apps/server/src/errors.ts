@@ -652,6 +652,13 @@ declare module "@waitron/shared" {
     /** The invoice's payments hold less money still refundable than the correction would give back. */
     "invoice_correction.money_short": { saleId: string; moneyLeft: string; gross: string };
     "invoice_correction.not_found": { correctionId: string };
+    /** The refund names a correction of another invoice, or one that has ended. */
+    "invoice_correction.not_open": {
+      correctionId: string;
+      state: "open" | "filed" | "discarded" | "closed";
+    };
+    /** The refund would give back more than the correction has left; what it has left. */
+    "invoice_correction.leg_too_large": { correctionId: string; left: string };
     /** The split the till showed is no longer what this correction would file; the fresh one. */
     "invoice_correction.split_changed": {
       saleId: string;

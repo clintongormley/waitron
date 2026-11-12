@@ -1,15 +1,21 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
-import { previewCorrectionAmounts, type CorrectionPreview } from "@waitron/core";
+import {
+  previewCorrectionAmounts,
+  recordCorrection,
+  type CorrectionPreview,
+  type RecordCorrectionInput,
+} from "@waitron/core";
 import {
   invoiceCorrectionRefunds,
   invoiceCorrections,
+  readLiveSeriesIdTx,
   saleSettlements,
   tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
-import { type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
+import { prepareIssueClock, type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
 import type { Authorization } from "@waitron/identity";
 import {
   AppError,
@@ -18,12 +24,16 @@ import {
   decimal,
   decimalToCents,
   isUuid,
+  negateDecimal,
+  seriesId as brandSeriesId,
   sumDecimals,
   type Decimal,
   type SaleId,
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
+import { readCorrectionMoney, refuseWhileCorrectionOpen } from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
+import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
@@ -96,17 +106,7 @@ export async function checkCorrectionOpenable(
     .where(eq(tenders.saleId, saleId));
   if (paid.some((row) => row.method !== "cash"))
     throw new AppError("invoice_correction.not_cash", { saleId });
-  const [unfinished] = await tx
-    .select({ id: invoiceCorrections.id })
-    .from(invoiceCorrections)
-    .where(
-      and(eq(invoiceCorrections.originalSaleId, saleId), eq(invoiceCorrections.state, "open")),
-    );
-  if (unfinished !== undefined)
-    throw new AppError("invoice_correction.already_open", {
-      saleId,
-      correctionId: unfinished.id,
-    });
+  await refuseWhileCorrectionOpen(tx, saleId);
   const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
   const moneyRefundable = sumDecimals([
     ZERO,
@@ -232,15 +232,7 @@ export async function readInvoiceCorrection(
     .from(invoiceCorrections)
     .where(eq(invoiceCorrections.id, correctionId));
   if (row === undefined) throw new AppError("invoice_correction.not_found", { correctionId });
-  const money = await tx
-    .select({ state: tenderRefunds.state, cents: sql<number>`sum(${tenderRefunds.appliedAmount})` })
-    .from(invoiceCorrectionRefunds)
-    .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
-    .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
-    .groupBy(tenderRefunds.state);
-  const centsIn = (state: string) => money.find((group) => group.state === state)?.cents ?? 0;
-  const back = centsIn("completed"),
-    pending = centsIn("pending");
+  const { completed: back, pending } = await readCorrectionMoney(tx, correctionId);
   const legs = await tx
     .select({ refund: tenderRefunds })
     .from(invoiceCorrectionRefunds)
@@ -267,6 +259,58 @@ export async function readInvoiceCorrection(
             ...(row.lineIds === null ? {} : { lineIds: row.lineIds }),
           }),
   };
+}
+
+/**
+ * Files `correction`'s R5 for `gross`, after the filing checks run again, and marks the correction
+ * filed. The one place a correction's R5 is filed.
+ */
+export async function fileCorrectionIn(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  correction: typeof invoiceCorrections.$inferSelect,
+  gross: Decimal,
+  authz: RecordCorrectionInput["authz"],
+  endedBy: string | null,
+): Promise<SaleId> {
+  const saleId = correction.originalSaleId as SaleId;
+  const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
+    gross,
+    ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+  });
+  if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
+    throw new AppError("invoice_correction.chain_unsound", { saleId });
+
+  const clock = await prepareIssueClock(tx, cfg, deps.clock);
+  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
+  const { saleId: correctiveSaleId } = await recordCorrection(tx, deps.backend, {
+    operationDescription: await readSaleOperationDescription(tx, cfg, { kind: "sale", saleId }),
+    origin: cfg.origin,
+    nodeId: cfg.nodeId,
+    seriesId,
+    correctsSaleId: saleId,
+    total: negateDecimal(preview.gross),
+    lines: preview.lines,
+    partialVatBreakdown: preview.vatBreakdown.map(({ rate, base, tax }) => ({
+      rate,
+      base: negateDecimal(base),
+      tax: negateDecimal(tax),
+    })),
+    authz,
+    clock,
+  });
+
+  await tx
+    .update(invoiceCorrections)
+    .set({
+      state: "filed",
+      correctiveSaleId,
+      endedAt: deps.clock.now().instant.toISOString(),
+      endedBy,
+    })
+    .where(eq(invoiceCorrections.id, correction.id));
+  return correctiveSaleId;
 }
 
 async function fileNowFor(

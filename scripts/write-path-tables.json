@@ -22,5 +22,5 @@
   ],
   "activity_log": ["packages/db/src/activity-log.ts"],
   "invoice_corrections": ["apps/server/src/invoice-corrections.ts"],
-  "invoice_correction_refunds": []
+  "invoice_correction_refunds": ["apps/server/src/invoice-correction-legs.ts"]
 }

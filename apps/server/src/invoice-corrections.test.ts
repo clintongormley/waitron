@@ -1,22 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import {
-  adjustmentReasons,
-  invoiceCorrectionRefunds,
-  invoiceCorrections,
-  saleLines,
-  sales,
-} from "@waitron/db";
+import { adjustmentReasons, invoiceCorrections, saleLines, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { createProduct } from "@waitron/catalogue";
 import { previewCorrectionAmounts } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { latestRecord } from "@waitron/fiscal-verifactu/src/clock-behind.js";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { decimal, saleId as brandSaleId } from "@waitron/shared";
+import { centsToDecimal, decimal, decimalToCents, saleId as brandSaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { parkOrder } from "./working-order.js";
@@ -25,6 +19,7 @@ import { readRefundableTenders } from "./tender-refund-balance.js";
 import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import {
+  fileCorrectionIn,
   openInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
@@ -37,6 +32,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 let venue: BillVenue;
 let offerOf: (name: string) => string;
 let managerId: string;
+let managerSessionId: string;
 let reasonId: string;
 
 useVenueDb({
@@ -86,6 +82,9 @@ useVenueDb({
         .values({ displayName: "Marta", pinHash: hashPin("8888"), role: "manager" })
         .returning({ id: persons.id });
       managerId = manager!.id;
+      managerSessionId = (
+        await loginWithPin(tx, { deviceId: venue.deviceId, personId: managerId, pin: "8888" })
+      ).id;
       reasonId = (await listAdjustmentReasons(tx))[0]!.id;
     });
   },
@@ -119,9 +118,10 @@ async function soldForCash(
   return brandSaleId(sale!.id);
 }
 
-async function payFor(id: string, parts: readonly (string | { card: string })[]) {
+async function payFor(id: string, parts: readonly (string | { card: string })[], tip = "0.00") {
   for (const part of parts) {
-    const amount = typeof part === "string" ? part : part.card;
+    const applied = typeof part === "string" ? part : part.card;
+    const amount = centsToDecimal(decimalToCents(decimal(applied)) + decimalToCents(decimal(tip)));
     const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
@@ -129,8 +129,9 @@ async function payFor(id: string, parts: readonly (string | { card: string })[])
       ...(typeof part === "string"
         ? { method: "cash", tendered: amount }
         : { method: "card", entry: "manual" }),
-      applied: amount,
-      tip: "0.00",
+      applied,
+      tip,
+      ...(tip === "0.00" ? {} : { addedTip: tip }),
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
     });
     expect(paid.status).toBe(200);
@@ -219,8 +220,9 @@ function counts() {
   return row!;
 }
 
-/** A completed goodwill return of `amount` from the sale's first cash payment. */
-async function giveBack(saleId: string, amount: string) {
+/** A completed goodwill return of `amount` from the sale's first cash payment; a leg of
+ * `correctionId` when named. */
+async function giveBack(saleId: string, amount: string, correctionId?: string) {
   return inTx(venue, async (tx) => {
     const [cash] = await readRefundableTenders(tx, saleId);
     const reading = venue.clock.now();
@@ -234,6 +236,9 @@ async function giveBack(saleId: string, amount: string) {
         appliedAmount: amount,
         tipAmount: "0.00",
         reason: "Goodwill",
+        ...(correctionId === undefined
+          ? {}
+          : { invoiceCorrection: { id: correctionId, requestId: randomUUID() } }),
       },
       { requestedBy: managerId, authorizedBy: managerId },
       reading.instant.toISOString(),
@@ -425,16 +430,10 @@ describe("openInvoiceCorrection", () => {
   it("reads the money back over the correction's refunds", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
-    const link = async (refundId: string) =>
-      venue.db.insert(invoiceCorrectionRefunds).values({
-        invoiceCorrectionId: correction.id,
-        tenderRefundId: refundId,
-        requestId: randomUUID(),
-      });
     const read = () =>
       inTx(venue, (tx) => readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id));
 
-    await link(await giveBack(saleId, "4.00"));
+    await giveBack(saleId, "4.00", correction.id);
     expect(await read()).toMatchObject({
       moneyBack: "4.00",
       pending: "0.00",
@@ -447,11 +446,7 @@ describe("openInvoiceCorrection", () => {
   it("reads a filing refusal as what filing now would answer", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
-    await venue.db.insert(invoiceCorrectionRefunds).values({
-      invoiceCorrectionId: correction.id,
-      tenderRefundId: await giveBack(saleId, "4.00"),
-      requestId: randomUUID(),
-    });
+    await giveBack(saleId, "4.00", correction.id);
     const voided = Object.create(venue.backend, {
       correctionAdmissionFor: {
         value: async () => ({ eligible: false, reason: "voided" }),
@@ -470,6 +465,164 @@ describe("openInvoiceCorrection", () => {
     await expect(
       inTx(venue, (tx) => readInvoiceCorrection(tx, venue.backend, venue.cfg, correctionId)),
     ).rejects.toMatchObject({ code: "invoice_correction.not_found", params: { correctionId } });
+  });
+});
+
+async function correctionRow(correctionId: string) {
+  const [row] = await venue.db
+    .select()
+    .from(invoiceCorrections)
+    .where(eq(invoiceCorrections.id, correctionId));
+  return row!;
+}
+
+async function fileAll(correctionId: string, gross: string) {
+  const row = await correctionRow(correctionId);
+  return inTx(venue, (tx) =>
+    fileCorrectionIn(
+      tx,
+      deps(),
+      venue.cfg,
+      row,
+      decimal(gross),
+      { sessionId: managerSessionId },
+      managerId,
+    ),
+  );
+}
+
+describe("fileCorrectionIn", () => {
+  it("files a correction's R5 for its amount and marks it filed", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const before = await original(saleId);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await giveBack(saleId, "6.05", correction.id);
+    const was = counts();
+
+    const correctiveSaleId = await fileAll(correction.id, "6.05");
+
+    expect(counts()).toEqual({ ...was, invoices: was.invoices + 1 });
+    const [corrective] = await venue.db.select().from(sales).where(eq(sales.id, correctiveSaleId));
+    expect(corrective).toMatchObject({
+      correctsSaleId: saleId,
+      total: -605,
+      vatBreakdown: [{ rate: "21.00", base: "-5.00", tax: "-1.05" }],
+    });
+    expect(await correctionRow(correction.id)).toMatchObject({
+      state: "filed",
+      correctiveSaleId,
+      endedAt: expect.any(String),
+      endedBy: managerId,
+    });
+    expect(await original(saleId)).toEqual(before);
+  });
+});
+
+describe("a correction's legs", () => {
+  it("refuses an ordinary refund on a ticket with an unfinished correction, and allows it once the correction ends", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const earlier = { submissionId: randomUUID(), amount: "1.00" };
+    const ordinary = (submissionId: string, amount: string) =>
+      inTx(venue, async (tx) => {
+        const [cash] = await readRefundableTenders(tx, saleId);
+        const reading = venue.clock.now();
+        const begun = await reserveTenderRefund(
+          tx,
+          venue.cfg,
+          saleId,
+          {
+            submissionId,
+            tenderId: cash!.tenderId,
+            appliedAmount: amount,
+            tipAmount: "0.00",
+            reason: "Goodwill",
+          },
+          { requestedBy: managerId, authorizedBy: managerId },
+          reading.instant.toISOString(),
+        );
+        if (!begun.replayed)
+          await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, begun.refund);
+        return { id: begun.refund.id, replayed: begun.replayed };
+      });
+    const first = await ordinary(earlier.submissionId, earlier.amount);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+
+    await refusedWithNothingWritten(() => ordinary(randomUUID(), "1.00"), {
+      code: "invoice_correction.already_open",
+      params: { saleId, correctionId: correction.id },
+    });
+    await expect(ordinary(earlier.submissionId, earlier.amount)).resolves.toEqual({
+      id: first.id,
+      replayed: true,
+    });
+
+    await giveBack(saleId, "6.05", correction.id);
+    await fileAll(correction.id, "6.05");
+
+    await expect(ordinary(randomUUID(), "1.00")).resolves.toMatchObject({ replayed: false });
+  });
+
+  it("refuses a leg on a correction of another ticket, or one already ended", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const other = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(other, { submissionId: randomUUID(), gross: "6.05" });
+
+    await refusedWithNothingWritten(() => giveBack(saleId, "1.00", correction.id), {
+      code: "invoice_correction.not_open",
+      params: { correctionId: correction.id, state: "open" },
+    });
+
+    await giveBack(other, "6.05", correction.id);
+    await fileAll(correction.id, "6.05");
+    await refusedWithNothingWritten(() => giveBack(other, "1.00", correction.id), {
+      code: "invoice_correction.not_open",
+      params: { correctionId: correction.id, state: "filed" },
+    });
+  });
+});
+
+describe("a correction's leg refuses", () => {
+  it("more than the correction has left, naming it, and takes what is left", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await giveBack(saleId, "4.00", correction.id);
+    await refusedWithNothingWritten(() => giveBack(saleId, "2.06", correction.id), {
+      code: "invoice_correction.leg_too_large",
+      params: { correctionId: correction.id, left: "2.05" },
+    });
+    await giveBack(saleId, "2.05", correction.id);
+    expect(
+      await inTx(venue, (tx) => readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id)),
+    ).toMatchObject({ moneyBack: "6.05", left: "0.00" });
+  });
+
+  it("a tip", async () => {
+    const saleId = await soldForCash("Rib steak", []);
+    const [sale] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
+    await payFor(sale!.workingOrderId!, ["12.10"], "1.00");
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await refusedWithNothingWritten(
+      () =>
+        inTx(venue, async (tx) => {
+          const [cash] = await readRefundableTenders(tx, saleId);
+          return reserveTenderRefund(
+            tx,
+            venue.cfg,
+            saleId,
+            {
+              submissionId: randomUUID(),
+              tenderId: cash!.tenderId,
+              reason: "Goodwill",
+              appliedAmount: "12.10",
+              tipAmount: "1.00",
+              invoiceCorrection: { id: correction.id, requestId: randomUUID() },
+            },
+            { requestedBy: managerId, authorizedBy: managerId },
+            venue.clock.now().instant.toISOString(),
+          );
+        }),
+      { code: "management.request_invalid", params: { field: "tipAmount" } },
+    );
   });
 });
 
