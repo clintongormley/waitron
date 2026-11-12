@@ -51,7 +51,7 @@ import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
 import { blocksPlaceSql, partPlaces } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
-import { leaveMerges } from "./floor-today-merges.js";
+import { leaveMerges, leaveMergesRestoring } from "./floor-today-merges.js";
 import { withMovedSlips } from "./moved-slips.js";
 import { holdersOf } from "./parties.js";
 import { refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
@@ -500,6 +500,7 @@ async function catchUpPass(
     ).keys(),
   );
   const resetIds = new Set(rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])));
+  // Full resets may dissolve free groups; catch-up waits for members outside the reset.
   const otherGroup = groups.flatMap((group) => {
     const ids = new Set(group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])));
     const joins = new Set(merges.filter((m) => ids.has(m.tableId)).map((m) => m.joinId));
@@ -789,7 +790,7 @@ async function catchUpPass(
       .limit(1);
     if (takenOff !== undefined) continue;
     if (joined.x !== null) {
-      await leaveMerges(tx, memberIds);
+      await leaveMergesRestoring(tx, memberIds);
       const [merge] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId, name: joined.label, seats: joined.seats! })

@@ -90,9 +90,8 @@ async function refuseInUse(
     .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.joinedTableId))
     .leftJoin(diningTables, eq(diningTables.planTableId, floorPlanTableParts.partTableId))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id));
-  if (
-    savedGroups.some((g) => sameName(g.label, name) && (selfJoin === null || g.joinId !== selfJoin))
-  )
+  const reserved = savedGroups.filter((g) => sameName(g.label, name));
+  if (reserved.length > 0 && !reserved.some((g) => selfJoin !== null && g.joinId === selfJoin))
     throw taken;
 
   const todays = await tx
