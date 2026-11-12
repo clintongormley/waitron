@@ -47,7 +47,7 @@ it("provisions Spain's demo business and files its practice sales under the demo
     seriesCode: "FS",
     rectificativeSeriesCode: "FR",
     admin: {
-      displayName: "Administradora",
+      displayName: "Administrator",
       pinHash: hashPin("1234"),
       passwordHash: hashPassword("dashPass123"),
       email: "owner@example.test",
@@ -115,7 +115,7 @@ it("names a Barcelona demo's dishes in Spanish for a Spanish-speaking admin, wit
     seriesCode: "FS",
     rectificativeSeriesCode: "FR",
     admin: {
-      displayName: "Administradora",
+      displayName: "Administrator",
       pinHash: hashPin("1234"),
       passwordHash: hashPassword("dashPass123"),
       email: "owner@example.test",

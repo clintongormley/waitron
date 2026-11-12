@@ -123,7 +123,7 @@ async function setupVenue(): Promise<{
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -175,7 +175,7 @@ async function setupVenue(): Promise<{
     // generators (`persons` in `packages/db/src/schema/identity/persons.ts`), which a raw statement
     // never reaches.
     const [person] = await seedPersons(tx, {
-      displayName: "Cajera",
+      displayName: "Cashier",
       pinHash: hashPin("5555"),
       role: "staff",
     });
