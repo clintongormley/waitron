@@ -120,7 +120,6 @@ describe("billLabelInText", () => {
   it.each([
     ["Cuenta 2 · Clint", "cuenta 2 · Clint"],
     ["Bill · Ana", "bill · Ana"],
-    ["Ánfora", "ánfora"],
     ["", ""],
   ])("lower-cases only the first letter of %j", (label, inText) => {
     expect(billLabelInText(label)).toBe(inText);

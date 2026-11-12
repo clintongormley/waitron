@@ -1,6 +1,7 @@
+import { countryNameFor } from "@waitron/country-packs";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PartyBill } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { mergeInvoiceChoice, mergeInvoiceNames, mergeInvoiceQuestion } from "./merge-invoice.js";
 
 afterEach(() => setLocale("en"));
@@ -117,8 +118,8 @@ describe("mergeInvoiceQuestion", () => {
 
     setLocale("es");
     expect(mergeInvoiceNames(question)).toEqual({
-      intoName: "Acme Travel SL · B11111111 · NIF español",
-      fromName: "Acme Travel SL · B11111111 · Otro documento · Francia",
+      intoName: `Acme Travel SL · B11111111 · ${t("invoice.identifier.tax-number", "es")}`,
+      fromName: `Acme Travel SL · B11111111 · ${t("invoice.identifier.other-document", "es")} · ${countryNameFor("FR", "es")}`,
     });
   });
 
