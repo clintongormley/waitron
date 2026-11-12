@@ -1079,7 +1079,8 @@ tests. Media still validates required image names and translates its refusal to
 **Go-live (owner, 2026-11-11).** The [design proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md)
 records the owner’s extras, later-choice and course-send decisions. The [build plan](../superpowers/plans/2026-11-12-a1515-set-lunch-build.md)
 was reviewed by Claude and cleared by the watcher at 22:04 on 12 November. The owner’s table-service 10% decision removes
-the adviser wait for that scope; takeaway/delivery remain with S10 and Lane L.
+the adviser wait for that scope; takeaway/delivery set menus are adviser question
+[T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
 The catalogue save/publish APIs retain the set-lunch marker. Its visible editor setting, later choices
 on the same lunch, independent course sending and lunch bill/receipt presentation remain unbuilt.
 Most Spanish restaurants sell a fixed-price

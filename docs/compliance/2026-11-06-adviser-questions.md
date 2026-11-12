@@ -23,6 +23,9 @@ This is research, not legal advice. The limits are at the end.
 | Privacy specialist | 9 | 1 point, plus confirmations | 2 to 3 |
 | Consumer law | 1 | None: removed | 0 |
 
+On 13 November T17 was added for the tax adviser, a second point of judgement. The figures above
+were counted and estimated before it.
+
 So about 4 to 7 hours rather than about 25. At the tax adviser's €300 an hour that is €1,200 to
 €2,100 rather than about €7,500. The hours are our estimate, and the other two advisers' rates are
 unknown.
@@ -88,13 +91,29 @@ without Cloud. See [how a venue gives the tax office access](#how-a-venue-gives-
 
 ## For the tax and accounting adviser
 
-### The question that needs judgement
+### The questions that need judgement
 
 - **T2. Proving the real date.** When the box and its evidence cannot show the real time of a sale, what
   is enough to fix its date? The box usually can show it: the boot-time clock gives the size of the
   error within one run, and a card payment carries the provider's time. The hard case is a clock wrong
   across a restart with no internet, on a sale paid in cash. May the restaurant keep the stamped date
   if nothing shows it is wrong?
+- **T17. One price for a takeaway or delivery set menu.** Added 13 November 2026; it extends S10 in
+  the [question register](asesor-questions.md). Our reading, for you to confirm first: eaten at the
+  venue and served by its staff, a set menu is one restaurant service at 10%, drinks included (LIVA
+  91.Uno.2.2.º). Taken away or delivered, it is a supply of goods, and each part takes its own rate:
+  food 10%, a sugared cola 21% (LIVA 91.Uno.1.1.º; DGT V2949-16). The same cola is 10% at the table
+  and 21% to take away. [Sources](research/2026-11-13-takeaway-food-and-drink-vat.md).
+
+  Example: a takeaway menu costs €12.00 with VAT, a burger and a sugared cola. Sold alone, the burger
+  is €9.50 and the cola €3.00. Shared by those prices, the burger takes €9.12 (€8.29 + €0.83 VAT at
+  10%) and the cola €2.88 (€2.38 + €0.50 VAT at 21%).
+  - May the venue choose the share each part takes, and on what basis? Is each part's own price when
+    sold alone acceptable?
+  - How exact must the share be? The owner reads the rules as not requiring an exact split. That is
+    the owner's reading, not something a source we found says.
+  - If the guest leaves the cola out and still pays €12.00, does the cola still take a share, or is the
+    whole €12.00 food at 10% (€10.91 + €1.09 VAT)?
 
 ### Confirmations: clocks
 
