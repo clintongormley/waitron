@@ -1,5 +1,7 @@
 # A1308 fk3 — the floor's design tables take in their parts, kept sizes and set names: implementation plan
 
+> 2026-11-12: implementation instructions are superseded by the [fk3 refresh](2026-11-12-a1308-fk3-floor-design-refresh.md), pending its Claude read and watcher clearance after fk5 PR B. This file remains the historical plan; the refresh uses PR B's ordinary groups and records the unlanded fixture-tool prerequisite.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Every step also
 > follows [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules").
