@@ -26,9 +26,8 @@ six recipient columns, the receipt language and the delivery choice. Email or A4
 be staged on an F1 bill (`apps/server/src/invoice-choice-delivery.ts:41-42`); receipt language can
 be set on any bill.
 
-**Cannot happen, so no code for it.** Both bills must be open to merge (`requireUntouchedPair` on
-main; on #2866 `refuseClosedBill` plus `requireBillOfParty`, `apps/server/src/parties.ts:274-276` on
-main, `:298-300` on #2866), and an issued invoice belongs to a placed or settled bill, so a bill
+**Cannot happen, so no code for it.** Both bills must be open to merge (`refuseClosedBill` plus
+`requireBillOfParty`, `apps/server/src/parties.ts:298-300`), and an issued invoice belongs to a placed or settled bill, so a bill
 with an issued invoice is never merged. Read, not run: `readChoiceChangeableOrder`
 (`apps/server/src/working-order.ts:4592`) looks for a sale only on a placed bill. A payment in
 progress on either bill is already refused in the same transaction by `bumpRevision`
