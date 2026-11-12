@@ -2428,8 +2428,9 @@ already paid for:
 
 - **Concurrency follows measured headroom, never a count** (CLAUDE.md §2). Before a heavy run check
   free memory and the heaviest processes, then scale to what is free.
-- **Whoever lands second rebases — only on a code-file overlap or a GitHub conflict.** A PR that is
-  merely `BEHIND` lands as is with `gh pr merge --squash --admin` (CLAUDE.md §6). Module-owned
+- **Whoever lands second rebases — only on a GitHub conflict or a failed landing check.** A PR that
+  is merely `BEHIND`, or whose code overlap passes the three landing checks, lands as is with
+  `gh pr merge --squash --admin` (CLAUDE.md §6). Module-owned
   migrations are regenerated on rebase per CLAUDE.md §3's recipe.
 - **Shared files:** `apps/server/src/boot.ts`, `CLAUDE.md`, `packages/db`'s core schema and
   migrations, the dashboard printers screen, and this file (each session edits its own entries).

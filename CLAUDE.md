@@ -998,13 +998,14 @@ before treating an implementation as a rule violation.
   (owner decision 2026-09-05): if what `main` gained is documentation, or code only in files this
   branch did not touch, land it with `gh pr merge --squash --admin` — which bypasses the up-to-date
   requirement and NOTHING else, never a failing check or an open review. Where `main` changed a code
-  file this branch also changed, it still lands that way when three checks pass, posted in a PR
-  comment before merging (owner, 2026-11-12, A1520): `git merge-tree --write-tree` merges it cleanly,
-  nothing `main` removed or renamed in the shared files appears in the branch's diff, and the merged
-  tree typechecks for every package both sides changed. Rebase only for `CONFLICTING` or a failed
-  check. Procedure: `/land-branch` step 2. Package-level failures caused only
-  by combining branches are checked at the next full run, not at merge; the owner accepted this
-  delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
+  file this branch also changed, it lands that way only when three checks pass, with their results
+  in a PR comment before merging (owner, 2026-11-12, A1520): a clean `git merge-tree --write-tree`,
+  no identifier or error code `main` removed or renamed in those files on any line the branch adds,
+  and a typecheck of the merged tree for every package both sides changed. Rebase only for
+  `CONFLICTING` or a failed check. Procedure:
+  [workflow-guide.md](docs/developers/workflow-guide.md#commits-pull-requests-and-merging).
+  Package-level failures caused only by combining branches are checked at the next full run, not at
+  merge; the owner accepted this delay on 2026-11-08 (A1452). **Never `gh pr update-branch`** — its
   merge commit carries no sign-off and fails DCO.
 - **Treat Dependabot PRs like any other, including strict sign-off** (owner, 2026-09-27).
   Check version-pinning guards and front-end qualification for npm-only bumps.
