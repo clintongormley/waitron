@@ -1,5 +1,6 @@
+import { seedPersons } from "../test/person-rows.js";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, persons } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -20,10 +21,7 @@ async function seedPerson(
   role: PersonRoleValue,
   status: "active" | "suspended" = "active",
 ): Promise<string> {
-  const [row] = await db
-    .insert(persons)
-    .values({ displayName: name, pinHash: PIN, role, status })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(db, { displayName: name, pinHash: PIN, role, status });
   return row!.id;
 }
 

@@ -1,9 +1,10 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { sales, saleSettlements, tenders, tenderRefunds, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, nodeId, saleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -71,10 +72,7 @@ beforeEach(async () => {
   runtimeNode = node.nodeId;
   aeat = createFakeAeat({ serverNow: T0, tiempoEsperaInicial: 5 });
   personId = await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin" })
-      .returning();
+    const [person] = await seedPersons(tx, { displayName: "Administrator", role: "admin" });
     token = (await startManagementSession(tx, { personId: person!.id })).token;
     await setFreshManagementSignIn(tx, token);
     return person!.id;
@@ -323,7 +321,7 @@ it.each([false, true])(
     writable = false;
     expect((await send()).status).toBe(409);
     writable = true;
-    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "staff");
     const denied = await send();
     expect(denied.status).toBe(403);
     expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
@@ -472,10 +470,7 @@ it("rolls delivery and acknowledgement changes back when the audit event cannot 
 it("refuses a second administrator's reuse of the first administrator's action key", async () => {
   expect((await send()).status).toBe(200);
   token = await withTransaction(suite.db, async (tx) => {
-    const [other] = await tx
-      .insert(persons)
-      .values({ displayName: "Second administrator", role: "admin" })
-      .returning();
+    const [other] = await seedPersons(tx, { displayName: "Second administrator", role: "admin" });
     const session = await startManagementSession(tx, { personId: other!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;

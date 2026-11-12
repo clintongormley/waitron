@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { Hono } from "hono";
@@ -17,7 +18,7 @@ import {
 } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
@@ -136,7 +137,7 @@ async function setupTenant(): Promise<void> {
     { db: suite.db, modules: ALL_MODULES },
   );
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(persons).values({
+    await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
       pinHash: hashPin("1234"),

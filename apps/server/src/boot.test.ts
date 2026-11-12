@@ -40,7 +40,6 @@ import { afterEach, afterAll, beforeAll, describe, expect, it, vi } from "vitest
 import { Agent } from "undici";
 import {
   captureError,
-  deviceProfiles,
   kitchenStations,
   printJobs,
   printers,
@@ -108,10 +107,11 @@ import { freePort } from "./testing/free-ports.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { peerCertificate } from "./testing/box-tls.js";
 import {
-  seedDevice,
-  seedWorkingOrder,
-  seedVenueSettings,
   seedBusinessDay,
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenueSettings,
+  seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
 import {
   TILL_LOCATION_ID,
@@ -3060,10 +3060,10 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       simplifiedInvoiceLimit: null,
     };
     const enrolDevice = async (name: string): Promise<string> => {
-      const [profile] = await sharedDb
-        .insert(deviceProfiles)
-        .values({ name: `Override profile ${name}`, formFactor: "phone-portrait" })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(sharedDb, {
+        name: `Override profile ${name}`,
+        formFactor: "phone-portrait",
+      });
       const dev = await enrolDeviceForTest(sharedDb, cfg, { name, profileId: profile!.id });
       return dev.deviceId;
     };

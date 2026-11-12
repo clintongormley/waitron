@@ -1,4 +1,5 @@
-import { persons, hashPassword, startManagementSession } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { hashPassword, startManagementSession } from "@waitron/identity";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -372,15 +373,12 @@ beforeAll(async () => {
     endorsements: [],
   });
   const token = await withTransaction(proofDb, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Proof Manager",
-        role: "manager",
-        passwordHash: hashPassword("correct password"),
-        pinHash: "unused",
-      })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Proof Manager",
+      role: "manager",
+      passwordHash: hashPassword("correct password"),
+      pinHash: "unused",
+    });
     return (await startManagementSession(tx, { personId: person!.id })).token;
   });
   fencedProof = { dir: proofDir, nodeId: proofId, token, db: proofDb };

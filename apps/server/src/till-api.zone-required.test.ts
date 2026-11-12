@@ -1,14 +1,20 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { floorZones, deviceProfiles, withTransaction, workingOrderLines } from "@waitron/db";
+import { floorZones, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedDeviceProfiles,
+  seedKitchenStation,
+  seedNode,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -60,10 +66,11 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     operationDescription: "Retail",
   });
   await seedKitchenStation(db, {});
-  const [person] = await db
-    .insert(persons)
-    .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(db, {
+    displayName: "Anna",
+    pinHash: hashPin("5555"),
+    role: "staff",
+  });
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
@@ -122,14 +129,11 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     const table = await createTable(tx, cfg, { label: "T1", zoneId: zone!.id });
     return { water: water.id, coffee: coffee.id, extrasListId: list.id, tableId: table.id };
   });
-  const [profile] = await db
-    .insert(deviceProfiles)
-    .values({
-      name: "Card till",
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "take-cash"],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(db, {
+    name: "Card till",
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "take-cash"],
+  });
   const device = await enrolDeviceForTest(db, cfg, { name: "Card till", profileId: profile!.id });
   const session = await withTransaction(db, (tx) =>
     loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),

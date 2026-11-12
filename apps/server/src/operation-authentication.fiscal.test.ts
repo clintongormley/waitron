@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -5,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withNodeTransaction, withTransaction } from "@waitron/db";
 import { nodeMode, readNodeMode, setNodeModeTx, setSingletonRoleTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 
@@ -187,7 +188,7 @@ async function snapshot() {
 beforeEach(async () => {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await suite.db.insert(persons).values([
+  await seedPersons(suite.db, [
     { id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH },
     { id: OTHER, displayName: "Another administrator", role: "admin", passwordHash: HASH },
   ]);

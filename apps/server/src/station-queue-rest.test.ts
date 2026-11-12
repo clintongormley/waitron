@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -12,7 +13,7 @@ import {
 } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -306,10 +307,11 @@ describe("station queue bump mode", () => {
       },
       () => {},
     );
-    const [cook] = await db
-      .insert(persons)
-      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
-      .returning();
+    const [cook] = await seedPersons(db, {
+      displayName: "Ana",
+      pinHash: fixturePinHash("5555"),
+      role: "staff",
+    });
     const deviceId = await seedSessionDevice(db);
     const { token } = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId, personId: cook!.id, pin: "5555" }),

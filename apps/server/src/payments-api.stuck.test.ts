@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -228,14 +229,16 @@ async function setup(
     const available = (await listAvailableProducts(tx)).products;
     const offers = await offerProducts(tx, cfg);
     const coffee = available.find((p) => p.name === "Café")!;
-    const [mgr] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [stf] = await tx
-      .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
+    const [stf] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     await putCredential(tx, RING, {
       purpose: "payments.stripe",
       value: {
@@ -1738,10 +1741,10 @@ describe("bill resolution attendance attribution", () => {
     "$route $outcome settles the original collector's evidence",
     async ({ route, provided, outcome, expected }) => {
       const v = await setup({ attendance: recordAttendanceFact });
-      const [worker] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Original collector", pinHash: "scrypt$00$00" })
-        .returning({ id: persons.id });
+      const [worker] = await seedPersons(suite.db, {
+        displayName: "Original collector",
+        pinHash: "scrypt$00$00",
+      });
       const orderId = await openOrder(v);
       const id = await strandBillPayment(v, orderId, provided, "1.50", v.cfg.origin.deviceId, {
         personId: worker!.id,
@@ -2714,10 +2717,10 @@ describe("whole-order attendance on manager recovery", () => {
   it("failed cleanup cannot refuse a new worker attempt started after provider resolution", async () => {
     const fake = new FakePaymentProvider(suite.db);
     const v = await setup({ extra: fake, attendance: recordAttendanceFact });
-    const [worker] = await suite.db
-      .insert(persons)
-      .values({ displayName: "First collector", pinHash: "scrypt$00$00" })
-      .returning({ id: persons.id });
+    const [worker] = await seedPersons(suite.db, {
+      displayName: "First collector",
+      pinHash: "scrypt$00$00",
+    });
     const orderId = await openOrder(v);
     const paymentDeps = {
       db: suite.db,
@@ -2774,10 +2777,10 @@ describe("whole-order attendance on manager recovery", () => {
     async (outcome) => {
       const fake = new FakePaymentProvider(suite.db);
       const v = await setup({ extra: fake, attendance: recordAttendanceFact });
-      const [worker] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Original whole-order collector", pinHash: "scrypt$00$00" })
-        .returning({ id: persons.id });
+      const [worker] = await seedPersons(suite.db, {
+        displayName: "Original whole-order collector",
+        pinHash: "scrypt$00$00",
+      });
       const orderId = await openOrder(v);
       const reading = clock.now();
       const originalClock = vi

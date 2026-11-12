@@ -1,4 +1,5 @@
-import { captureError, locations, withTransaction, persons } from "@waitron/db";
+import { seedPersons } from "./person-rows.js";
+import { captureError, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
@@ -37,10 +38,7 @@ export async function seedPerson(
   status: "pending" | "active" | "suspended" = "active",
 ): Promise<string> {
   const displayName = `P-${crypto.randomUUID()}`;
-  const [row] = await db
-    .insert(persons)
-    .values({ displayName, pinHash: hashPin("1234"), role, status })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(db, { displayName, pinHash: hashPin("1234"), role, status });
   return row!.id;
 }
 

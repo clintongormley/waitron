@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -26,12 +27,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { configureZone, createDepartment, listServiceZones } from "./operations.js";
@@ -90,30 +86,21 @@ async function fixture(
     await db.transaction(async (tx) => {
       const menu = await createCatalogue(tx, { name: `Drinks ${scopedLocationId}` });
       const category = await createCategory(tx, { name: `Cocktails ${scopedLocationId}` });
-      const [manager] = await tx
-        .insert(persons)
-        .values({
-          displayName: `Manager ${scopedLocationId}`,
-          pinHash: hashPin("1234"),
-          role: "manager",
-        })
-        .returning({ id: persons.id });
-      const [staff] = await tx
-        .insert(persons)
-        .values({
-          displayName: `Staff ${scopedLocationId}`,
-          pinHash: hashPin("1234"),
-          role: "staff",
-        })
-        .returning({ id: persons.id });
-      const [supervisor] = await tx
-        .insert(persons)
-        .values({
-          displayName: `Supervisor ${scopedLocationId}`,
-          pinHash: hashPin("1234"),
-          role: "supervisor",
-        })
-        .returning({ id: persons.id });
+      const [manager] = await seedPersons(tx, {
+        displayName: `Manager ${scopedLocationId}`,
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
+      const [staff] = await seedPersons(tx, {
+        displayName: `Staff ${scopedLocationId}`,
+        pinHash: hashPin("1234"),
+        role: "staff",
+      });
+      const [supervisor] = await seedPersons(tx, {
+        displayName: `Supervisor ${scopedLocationId}`,
+        pinHash: hashPin("1234"),
+        role: "supervisor",
+      });
       const managerSession = await startManagementSession(tx, {
         personId: manager!.id,
       });

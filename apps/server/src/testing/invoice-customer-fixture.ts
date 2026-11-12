@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { getCountryPack } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import { invoiceDeliveries, invoiceSeries, sales, tenants } from "@waitron/db";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -217,13 +218,10 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
   const j3 = await sale("23.95", { name: "Jordi Puig Electrician", ...jordi });
   const s1 = await sale("9.90", null);
   const people = await inTx(venue, async (tx) => {
-    const [otherAdmin, manager] = await tx
-      .insert(persons)
-      .values([
-        { displayName: "Otto Admin", role: "admin", locale: "es-ES" },
-        { displayName: "Mia Manager", role: "manager" },
-      ])
-      .returning({ id: persons.id });
+    const [otherAdmin, manager] = await seedPersons(tx, [
+      { displayName: "Otto Admin", role: "admin", locale: "es-ES" },
+      { displayName: "Mia Manager", role: "manager" },
+    ]);
     const session = async (personId: string) =>
       `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId })).token}`;
     return {

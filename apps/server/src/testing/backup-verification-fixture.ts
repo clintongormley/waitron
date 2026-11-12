@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
@@ -7,12 +8,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import forge from "node-forge";
 import type { BackupQuery } from "@waitron/store";
-import {
-  beginOwnTotpEnrollment,
-  hashPassword,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { beginOwnTotpEnrollment, hashPassword, startManagementSession } from "@waitron/identity";
 import { accountPurposeKey, resolveAccountKey } from "../account-key.js";
 import { afterEach, beforeEach, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -268,15 +264,12 @@ export function useBackupVerificationFixture() {
         certKind: "sello",
       },
     );
-    const [person] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: "Fixture manager",
-        email: "manager@example.test",
-        passwordHash: hashPassword("fixture-only-password"),
-        role: "manager",
-      })
-      .returning();
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Fixture manager",
+      email: "manager@example.test",
+      passwordHash: hashPassword("fixture-only-password"),
+      role: "manager",
+    });
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: person!.id }),
     );

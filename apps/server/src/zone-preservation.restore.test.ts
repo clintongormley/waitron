@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   agreeInternet,
   archiveCommand,
@@ -11,7 +12,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase, withTransaction } from "@waitron/db";
-import { persons } from "@waitron/identity";
+
 import { recordDailyClose } from "@waitron/reporting";
 import { recordSale } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
@@ -59,10 +60,10 @@ it.each(["archive", "bucket"] as const)(
         saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: source }),
       ),
     );
-    const [manager] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Recovery manager", role: "manager" })
-      .returning();
+    const [manager] = await seedPersons(suite.db, {
+      displayName: "Recovery manager",
+      role: "manager",
+    });
     await withTransaction(suite.db, (tx) =>
       recordDailyClose(tx, {
         nodeId: node.nodeId,

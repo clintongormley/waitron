@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -6,7 +7,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   billPaymentRefunds,
   billPayments,
-  deviceProfiles,
   printers,
   withTransaction,
   workingOrders,
@@ -93,10 +93,11 @@ async function rowsOf(deviceId: string): Promise<Record<string, Rows>> {
 /** "Bar till" on the "Tills" profile with a cash sale and an incident, then deleted. */
 async function seedDeleted() {
   const venue = await setupVenue(suite.db);
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: "Tills", formFactor: "till", capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: "Tills",
+    formFactor: "till",
+    capabilities: [],
+  });
   const barTill = (
     await enrolDeviceForTest(suite.db, venue.cfg, { name: "Bar till", profileId: profile!.id })
   ).deviceId;

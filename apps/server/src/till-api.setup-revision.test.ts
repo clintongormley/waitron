@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -120,15 +121,12 @@ type Till = Awaited<ReturnType<typeof setupTill>>;
 
 /** A second device in the same venue, on a profile of its own that times out after 300 s. */
 async function secondDeviceOnOwnProfile(till: Till) {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "take-cash"],
-      inactivityTimeoutSeconds: 300,
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Till ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS, "take-cash"],
+    inactivityTimeoutSeconds: 300,
+  });
   await withTransaction(suite.db, (tx) =>
     setProfileServiceAccess(tx, profile!.id, {
       departmentId: till.departmentId,

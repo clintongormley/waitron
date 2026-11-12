@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { applyAdjustment } from "./adjustments-apply.js";
@@ -61,14 +62,11 @@ async function chipsRecords(tx: Transaction, venue: Venue) {
 }
 async function compOne(venue: Venue) {
   await withTransaction(db, async (tx) => {
-    const [actor] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Split test operator",
-        pinHash: hashPin("4321"),
-        role: "staff",
-      })
-      .returning({ id: persons.id });
+    const [actor] = await seedPersons(tx, {
+      displayName: "Split test operator",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     const reason = await createAdjustmentReason(tx, {
       name: "House",
       names: { en: "House", es: "Casa" },

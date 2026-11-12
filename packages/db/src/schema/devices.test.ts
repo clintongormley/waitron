@@ -7,10 +7,10 @@ import { restrictRefused } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedVenue } from "../testing/seed.js";
+import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { devices } from "./devices.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
@@ -28,9 +28,11 @@ describe("device labels without a location", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("two active devices cannot share a label, and an inactive one can", async () => {
-    await suite.db
-      .insert(deviceProfiles)
-      .values({ id: KDS_PROFILE_A, name: "Till profile", formFactor: "till" });
+    await seedDeviceProfiles(suite.db, {
+      id: KDS_PROFILE_A,
+      name: "Till profile",
+      formFactor: "till",
+    });
     const insert = (id: string, active: number) =>
       suite.db.run(sql`insert into devices
         (id, device_profile_id, label, token_hash, active, enrolled_at, created_at)
@@ -68,7 +70,7 @@ describe("devices schema (columns, FKs, unique)", () => {
       operationDescription: "Hostelería",
     });
     await seedBusinessDay(db, {});
-    await db.insert(deviceProfiles).values([
+    await seedDeviceProfiles(db, [
       { id: KDS_PROFILE_A, name: "KDS A", formFactor: "kds" },
       { id: KDS_PROFILE_B, name: "KDS B", formFactor: "kds" },
     ]);

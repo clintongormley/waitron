@@ -1,7 +1,7 @@
+import { seedPersons } from "../test/person-rows.js";
 import { createHash } from "node:crypto";
 import {
   CORE_MIGRATIONS,
-  deviceProfiles,
   withTransaction,
   venueLocationId,
   persons,
@@ -16,7 +16,7 @@ import {
   deviceProfileAdmissionPersons,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -76,28 +76,25 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     nonces: [s("google-nonce-one"), s("google-nonce-two")],
     verifiers: [s("google-verifier-one"), s("google-verifier-two")],
   };
-  const [person] = await db
-    .insert(persons)
-    .values({
-      displayName: s("Display"),
-      displayNameFolded: s("display").toLowerCase(),
-      firstNames: s("First"),
-      lastNames: s("Last"),
-      telephone: `+44 7700 ${year}`,
-      pinHash: secrets.pinHash,
-      passwordHash: secrets.passwordHash,
-      totpSecret: secrets.totpSecret,
-      locale: who === "marta" ? "es" : "en",
-      passkeyOfferedAt: t(1),
-      email: `${who}@example.test`,
-      pendingEmail: `${who}.new@example.test`,
-      emailVerifiedAt: t(2),
-      googleSubject: secrets.googleSubject,
-      role: who === "marta" ? "supervisor" : "manager",
-      status: "active",
-      createdAt: t(0),
-    })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(db, {
+    displayName: s("Display"),
+    displayNameFolded: s("display").toLowerCase(),
+    firstNames: s("First"),
+    lastNames: s("Last"),
+    telephone: `+44 7700 ${year}`,
+    pinHash: secrets.pinHash,
+    passwordHash: secrets.passwordHash,
+    totpSecret: secrets.totpSecret,
+    locale: who === "marta" ? "es" : "en",
+    passkeyOfferedAt: t(1),
+    email: `${who}@example.test`,
+    pendingEmail: `${who}.new@example.test`,
+    emailVerifiedAt: t(2),
+    googleSubject: secrets.googleSubject,
+    role: who === "marta" ? "supervisor" : "manager",
+    status: "active",
+    createdAt: t(0),
+  });
   const personId = person!.id;
 
   // Inserted later-first, so the export's ordering is what puts them in order.
@@ -254,10 +251,7 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
   // Named so that the name order is the reverse of the insert order.
   const profileNames = [s("Zone kitchen screens"), s("Zone bar tills")];
   for (const [i, name] of profileNames.entries()) {
-    const [profile] = await db
-      .insert(deviceProfiles)
-      .values({ name, formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(db, { name, formFactor: "till", capabilities: [] });
     await db
       .insert(deviceProfileAdmissionPersons)
       .values({ deviceProfileId: profile!.id, personId, admitted: i === 0 });
@@ -454,10 +448,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
 
   it("gives a person with only a display name both files, empty", async () => {
     await seedBoth();
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Only A Name" })
-      .returning({ id: persons.id, createdAt: persons.createdAt });
+    const [row] = await seedPersons(suite.db, { displayName: "Only A Name" });
     const { profile, signIn } = await downloadParsed(row!.id);
     expect(profile).toEqual({
       id: row!.id,
@@ -506,24 +497,21 @@ describe("IDENTITY_PERSONAL_DATA", () => {
 
   it("does not count the configuration import's placeholder as a PIN", async () => {
     await seedBoth();
-    const [row] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: "Imported Person",
-        pinHash: `disabled-import:${crypto.randomUUID()}`,
-        status: "suspended",
-      })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: "Imported Person",
+      pinHash: `disabled-import:${crypto.randomUUID()}`,
+      status: "suspended",
+    });
     const { signIn } = await downloadParsed(row!.id);
     expect(signIn).toMatchObject({ pinSet: false });
   });
 
   it("does not count a stored value no PIN can match as a PIN", async () => {
     await seedBoth();
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Mirror Viewer", pinHash: "mirror-viewer-never-logs-in" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: "Mirror Viewer",
+      pinHash: "mirror-viewer-never-logs-in",
+    });
     const { signIn } = await downloadParsed(row!.id);
     expect(signIn).toMatchObject({ pinSet: false });
   });

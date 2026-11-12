@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   invoiceSeries,
@@ -13,7 +14,7 @@ import { recordCorrection, recordSale, settleSale, withIssuanceTransaction } fro
 import type { RecordSaleInput } from "@waitron/core";
 import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   computeDailyClose,
   computeVatReturn,
@@ -184,15 +185,12 @@ beforeEach(async () => {
     .deviceId;
   tillTwo = (await seedDevice(suite.db, { label: "Till two", capabilities: ["take-cash"] }))
     .deviceId;
-  const [person] = await suite.db
-    .insert(persons)
-    .values({
-      displayName: "Supervisor",
-      email: "supervisor@example.test",
-      pinHash: hashPin("1234"),
-      role: "supervisor",
-    })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Supervisor",
+    email: "supervisor@example.test",
+    pinHash: hashPin("1234"),
+    role: "supervisor",
+  });
   sessionId = (
     await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, {

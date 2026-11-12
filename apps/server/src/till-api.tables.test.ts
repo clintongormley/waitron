@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -6,7 +7,7 @@ import { observedGroupSubmitBody, placeGroupedRound } from "./testing/group-subm
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -14,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -73,15 +74,17 @@ const suite = useVenueDb({
     await seedKitchenStation(db, {});
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db);
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(db, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     ana = { id: person!.id };
-    const [supervisor] = await db
-      .insert(persons)
-      .values({ displayName: "Sara", pinHash: hashPin("6666"), role: "supervisor" })
-      .returning({ id: persons.id });
+    const [supervisor] = await seedPersons(db, {
+      displayName: "Sara",
+      pinHash: hashPin("6666"),
+      role: "supervisor",
+    });
     sara = { id: supervisor!.id };
     // Through the catalogue verbs, so the active/assignment filters are real.
     const product = await withTransaction(db, async (tx) => {
@@ -770,7 +773,7 @@ describe("table + tab routes", () => {
 it.each(["PUT", "DELETE"])(
   "answers %s /api/tables/:id/placement 404 for a manager and leaves tables unchanged",
   async (method) => {
-    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, ana.id));
+    await setBuiltInRoleForTest(suite.db, ana.id, "manager");
     try {
       const managerCookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
       const { id } = await withTransaction(suite.db, (tx) =>
@@ -794,7 +797,7 @@ it.each(["PUT", "DELETE"])(
       expect(response.status).toBe(404);
       expect(rows()).toEqual(before);
     } finally {
-      await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, ana.id));
+      await setBuiltInRoleForTest(suite.db, ana.id, "staff");
     }
   },
 );

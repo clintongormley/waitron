@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -5,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, nodes, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import {
   validateBackupModuleResult,
@@ -39,7 +40,7 @@ let requestId: string;
 beforeEach(async () => {
   for (const suite of [original, restored]) {
     await seedTenant(suite.db);
-    await suite.db.insert(persons).values({ id: person, displayName: "Worker" });
+    await seedPersons(suite.db, { id: person, displayName: "Worker" });
     await suite.db.insert(locations).values([{ id: place }]);
     await seedVenueSettings(suite.db, {
       name: "Main",

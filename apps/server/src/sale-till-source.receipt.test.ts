@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 // Sale writes and receipt reads through the real device-authenticated sale route, against a real
@@ -5,7 +7,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, sales, withTransaction, venueLocationId } from "@waitron/db";
+import { sales, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -19,7 +21,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -172,10 +174,11 @@ async function setupVenue(): Promise<{
     // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
     // generators (`persons` in `packages/db/src/schema/identity/persons.ts`), which a raw statement
     // never reaches.
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Cajera",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     const available = (await listAvailableProducts(tx)).products;
     return {
       product: {
@@ -196,14 +199,11 @@ async function seedHandheldProfile(): Promise<string> {
   // Through the table definition: `device_profiles.id` and `.created_at` are `$defaultFn`
   // generators (`deviceProfiles` in `packages/db/src/schema/device-profiles.ts`), unreachable from
   // raw SQL.
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Handheld ${profileCounter}`,
-      formFactor: "phone-portrait",
-      capabilities: [...BASIC_ACTIONS, "take-cash"],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Handheld ${profileCounter}`,
+    formFactor: "phone-portrait",
+    capabilities: [...BASIC_ACTIONS, "take-cash"],
+  });
   return profile!.id;
 }
 

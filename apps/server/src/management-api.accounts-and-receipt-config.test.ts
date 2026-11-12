@@ -1,3 +1,8 @@
+import {
+  builtInRoleForTest,
+  seedPersons,
+  setBuiltInRoleForTest,
+} from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createStaffApp } from "./cloud-remote.js";
 import {
@@ -134,26 +139,20 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
-    const [manager] = await tx
-      .insert(persons)
-      .values({
-        displayName: "The Manager",
-        email: MANAGER_EMAIL,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(PASSWORD),
-        role: "manager",
-      })
-      .returning({ id: persons.id });
-    const [staff] = await tx
-      .insert(persons)
-      .values({
-        displayName: "The Clerk",
-        email: STAFF_EMAIL,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(PASSWORD),
-        role: "staff",
-      })
-      .returning({ id: persons.id });
+    const [manager] = await seedPersons(tx, {
+      displayName: "The Manager",
+      email: MANAGER_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "manager",
+    });
+    const [staff] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      email: STAFF_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "staff",
+    });
     return { managerId: manager!.id, staffId: staff!.id };
   });
   return { managerId, staffId };
@@ -289,7 +288,7 @@ describe("Management API staff + session routes", () => {
 
   it("preserves one active admin when two admins concurrently demote themselves", async () => {
     const { managerId } = await setupTenant();
-    await suite.db.execute(sql`update persons set role='admin' where id=${managerId}`);
+    await setBuiltInRoleForTest(suite.db, managerId, "admin");
     const app = mountApp();
     const ownerCookie = await login(app, "owner@example.test", "dashPass123");
     const managerCookie = await login(app, MANAGER_EMAIL);
@@ -315,9 +314,13 @@ describe("Management API staff + session routes", () => {
       edit(managerId, managerCookie, "The Manager", MANAGER_EMAIL),
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
-    const remaining = await suite.db.execute<{ count: number }>(sql`
-      select count(*) as count from persons
-      where role='admin' and status='active'`);
+    const remaining = { rows: [{ count: 0 }] };
+    for (const person of await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.status, "active"))) {
+      if ((await builtInRoleForTest(suite.db, person.id)) === "admin") remaining.rows[0]!.count++;
+    }
     expect(remaining.rows[0]!.count).toBe(1);
   });
   it("links and then signs in with a configured Google account", async () => {
@@ -409,7 +412,7 @@ describe("Management API staff + session routes", () => {
   it("does not count the expected authenticator transition as a failed password", async () => {
     await setupTenant();
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(persons).values({
+      await seedPersons(tx, {
         displayName: "Factor Manager",
         email: "factor@example.com",
         pinHash: hashPin("1234"),
@@ -2751,7 +2754,9 @@ describe("A998 admin account authority", () => {
   it("blocks the manager email-change and password-reset takeover of an admin", async () => {
     await setupTenant();
     const [admin] = (
-      await suite.db.execute<{ id: string }>(sql`select id from persons where role = 'admin'`)
+      await suite.db.execute<{ id: string }>(
+        sql`select id from persons where email = 'owner@example.test'`,
+      )
     ).rows;
     const sent: Parameters<MailSink>[0][] = [];
     const app = mountApp(async (message) => {
@@ -2835,9 +2840,11 @@ describe("A998 staff route authority", () => {
     "refuses a manager's $action on a $role before any change or email",
     async ({ action, status, role }) => {
       const { staffId } = await setupTenant();
-      await suite.db.execute(
-        sql`update persons set role = ${role}, status = ${status} where id = ${staffId}`,
-      );
+      await setBuiltInRoleForTest(suite.db, staffId, role as "admin" | "staff");
+      await suite.db
+        .update(persons)
+        .set({ status: status as "active" | "pending" | "suspended" })
+        .where(eq(persons.id, staffId));
       const before = await suite.db.select().from(persons).where(eq(persons.id, staffId));
       const sent: Parameters<MailSink>[0][] = [];
       const app = mountApp(async (message) => {
@@ -2899,10 +2906,16 @@ it("rechecks admin authority lost after the invitation preflight", async () => {
     if (!changing && ++requests === 2) {
       changing = true;
       return withTransaction(suite.db, async (tx) => {
-        await tx
-          .update(persons)
-          .set({ role: "manager" })
-          .where(eq(persons.email, "owner@example.test"));
+        await setBuiltInRoleForTest(
+          tx,
+          (
+            await tx
+              .select({ id: persons.id })
+              .from(persons)
+              .where(eq(persons.email, "owner@example.test"))
+          )[0]!.id,
+          "manager",
+        );
       }).then(() => original(body));
     }
     return original(body);
@@ -2933,7 +2946,7 @@ it("rechecks admin authority lost after the invitation preflight", async () => {
 
 it("refuses a manager suspending an admin through details with the same email", async () => {
   const { staffId } = await setupTenant();
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, staffId));
+  await setBuiltInRoleForTest(suite.db, staffId, "admin");
   const before = await suite.db.select().from(persons).where(eq(persons.id, staffId));
   const app = mountApp();
   const cookie = await login(app, MANAGER_EMAIL);
@@ -3012,7 +3025,9 @@ describe("A1000 non-admin account authority", () => {
   it("blocks the manager email-change and password-reset takeover of a non-admin", async () => {
     await setupTenant();
     const [admin] = (
-      await suite.db.execute<{ id: string }>(sql`select id from persons where role = 'staff'`)
+      await suite.db.execute<{ id: string }>(
+        sql`select id from persons where display_name = 'The Clerk'`,
+      )
     ).rows;
     const sent: Parameters<MailSink>[0][] = [];
     const app = mountApp(async (message) => {
@@ -3104,9 +3119,13 @@ it("preserves a manager changing their own email through staff details", async (
   expect(saved.status).toBe(204);
   expect(
     await suite.db
-      .select({ email: persons.email, role: persons.role, status: persons.status })
+      .select({ email: persons.email, status: persons.status })
       .from(persons)
-      .where(eq(persons.id, managerId)),
+      .where(eq(persons.id, managerId))
+      .then(async (rows) => {
+        const role = await builtInRoleForTest(suite.db, managerId);
+        return rows.map((row) => ({ ...row, role }));
+      }),
   ).toEqual([{ email: "own-replacement@example.test", role: "manager", status: "active" }]);
   await app.flushMail();
   expect(sent).toEqual([]);

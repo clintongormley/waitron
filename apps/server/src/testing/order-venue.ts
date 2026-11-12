@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -7,7 +8,7 @@ import { devices, invoiceSeries, sales } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import { recordCorrection, recordSale, recordVoid } from "@waitron/core";
-import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { Logger } from "../logger.js";
@@ -63,10 +64,11 @@ export async function provisionOrderVenue(
     )
   ).zoneId;
   const made = await inTx(venue, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Sofía", pinHash: fixturePinHash("7777"), role: "supervisor" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Sofía",
+      pinHash: fixturePinHash("7777"),
+      role: "supervisor",
+    });
     const till = await loginWithPin(tx, {
       deviceId: venue.deviceId,
       personId: person!.id,

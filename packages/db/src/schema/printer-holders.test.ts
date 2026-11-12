@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { isUniqueViolation } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { printerHolders } from "./printer-holders.js";
 import { printers } from "./printers.js";
 import { venueLocationId } from "../venue.js";
@@ -25,10 +25,7 @@ describe("printer_holders", () => {
       operationDescription: "Hostelería",
     });
     const locationId = await venueLocationId(db);
-    const [profile] = await db
-      .insert(deviceProfiles)
-      .values({ name: "Profile", formFactor: "till" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
     ({ deviceId: deviceA } = await seedDevice(db, { profileId: profile!.id, label: "Till A" }));
     ({ deviceId: deviceB } = await seedDevice(db, { profileId: profile!.id, label: "Till B" }));
     const madePrinters = await db

@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -84,7 +85,15 @@ describe("venue details HTTP boundary", () => {
     });
   });
   it("serves a supervisor read but refuses even an unchanged patch", async () => {
-    await suite.db.execute(sql`update persons set role = 'supervisor' where role = 'manager'`);
+    await setBuiltInRoleForTest(
+      suite.db,
+      (
+        await suite.db.execute<{ id: string }>(
+          sql`select id from persons where display_name = 'The Manager'`,
+        )
+      ).rows[0]!.id,
+      "supervisor",
+    );
     const model = await initial();
     const read = await request("GET", venue.managerCookie);
     expect(read.status).toBe(200);
@@ -189,7 +198,15 @@ describe("fresh authorization and history at the HTTP write", () => {
     });
   });
   it("permits an administrator read and edit", async () => {
-    await suite.db.execute(sql`update persons set role = 'admin' where role = 'manager'`);
+    await setBuiltInRoleForTest(
+      suite.db,
+      (
+        await suite.db.execute<{ id: string }>(
+          sql`select id from persons where display_name = 'The Manager'`,
+        )
+      ).rows[0]!.id,
+      "admin",
+    );
     const model = await initial();
     const read = await request("GET", venue.managerCookie);
     expect(read.status).toBe(200);
@@ -327,7 +344,15 @@ describe("venue clock preview", () => {
     ["supervisor", 200],
   ])("enforces preview read authorization for %s", async (role, status) => {
     if (role === "supervisor")
-      await suite.db.execute(sql`update persons set role = 'supervisor' where role = 'manager'`);
+      await setBuiltInRoleForTest(
+        suite.db,
+        (
+          await suite.db.execute<{ id: string }>(
+            sql`select id from persons where display_name = 'The Manager'`,
+          )
+        ).rows[0]!.id,
+        "supervisor",
+      );
     const cookie =
       role === undefined ? undefined : role === "staff" ? venue.staffCookie : venue.managerCookie;
     const response = await app.request(path, { headers: cookie ? { cookie } : {} });

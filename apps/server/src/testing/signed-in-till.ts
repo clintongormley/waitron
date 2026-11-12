@@ -1,11 +1,13 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -106,24 +108,22 @@ export async function provisionSignedInTill<S extends TillSeed>(
           receipt: { operationDescription: "Venta en establecimiento" },
         })
         .onConflictDoNothing({ target: departmentReceipts.departmentId });
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Ana",
+      pinHash: fixturePinHash("5555"),
+      role: "staff",
+    });
     return { ...seed, personId: person!.id };
   });
-  const [profile] = await db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [
-        ...BASIC_ACTIONS,
-        "take-cash",
-        ...(options.simulatorCard === true ? (["integrated-card-payment"] as const) : []),
-      ],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(db, {
+    name: `Till ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [
+      ...BASIC_ACTIONS,
+      "take-cash",
+      ...(options.simulatorCard === true ? (["integrated-card-payment"] as const) : []),
+    ],
+  });
   await withTransaction(db, (tx) =>
     setProfileServiceAccess(tx, profile!.id, {
       departmentId: seeded.departmentId,

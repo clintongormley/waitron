@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -5,7 +6,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfilePrinters,
-  deviceProfiles,
   devices,
   floorZones,
   kitchenStations,
@@ -26,8 +26,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
@@ -81,14 +81,16 @@ async function seedTenantWithLocation(): Promise<Tenant> {
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    const [mgr] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [stf] = await tx
-      .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
+    const [stf] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     const managerSession = await startManagementSession(tx, {
       personId: mgr!.id,
     });
@@ -671,14 +673,11 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const agent = await joinAndAccept(app, "Offers agent");
     const counter = await createPrinter(app, agent.agentId, "Counter");
     const portable = await createPrinter(app, agent.agentId, "Portable");
-    const profileRows = await suite.db
-      .insert(deviceProfiles)
-      .values([
-        { name: `Waiters ${randomUUID()}`, formFactor: "phone-portrait" },
-        { name: `Bar ${randomUUID()}`, formFactor: "till" },
-        { name: `Kitchen ${randomUUID()}`, formFactor: "kds" },
-      ])
-      .returning({ id: deviceProfiles.id, name: deviceProfiles.name });
+    const profileRows = await seedDeviceProfiles(suite.db, [
+      { name: `Waiters ${randomUUID()}`, formFactor: "phone-portrait" },
+      { name: `Bar ${randomUUID()}`, formFactor: "till" },
+      { name: `Kitchen ${randomUUID()}`, formFactor: "kds" },
+    ]);
     const [waiters, bar] = profileRows;
     await suite.db.insert(deviceProfilePrinters).values([
       { deviceProfileId: bar!.id, printerId: counter, role: "receipt", position: 0 },
@@ -735,10 +734,10 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
         resolutionDpi: 300,
       })
       .returning({ id: pagePrinters.id });
-    const [invoices] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: `Invoices ${randomUUID()}`, formFactor: "till" })
-      .returning({ id: deviceProfiles.id, name: deviceProfiles.name });
+    const [invoices] = await seedDeviceProfiles(suite.db, {
+      name: `Invoices ${randomUUID()}`,
+      formFactor: "till",
+    });
     await suite.db.insert(deviceProfilePrinters).values([
       { deviceProfileId: invoices!.id, pagePrinterId: office!.id, role: "invoice", position: 0 },
       { deviceProfileId: invoices!.id, printerId: counter, role: "invoice", position: 1 },
@@ -784,13 +783,10 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       .insert(floorZones)
       .values({ name: `Terrace zone ${randomUUID()}` })
       .returning({ id: floorZones.id });
-    const [till, display] = await suite.db
-      .insert(deviceProfiles)
-      .values([
-        { name: `Terrace till ${randomUUID()}`, formFactor: "till" },
-        { name: `Pass display ${randomUUID()}`, formFactor: "kds" },
-      ])
-      .returning({ id: deviceProfiles.id, name: deviceProfiles.name });
+    const [till, display] = await seedDeviceProfiles(suite.db, [
+      { name: `Terrace till ${randomUUID()}`, formFactor: "till" },
+      { name: `Pass display ${randomUUID()}`, formFactor: "kds" },
+    ]);
     await suite.db.insert(deviceProfileServiceAccess).values({
       deviceProfileId: till!.id,
       departmentId: terrace!.id,
@@ -839,13 +835,10 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Retired agent");
     const printer = await createPrinter(app, agent.agentId, "Old counter");
-    const [live, retired] = await suite.db
-      .insert(deviceProfiles)
-      .values([
-        { name: `Live ${randomUUID()}`, formFactor: "till" },
-        { name: `Retired ${randomUUID()}`, formFactor: "till", retiredAt: nowIso() },
-      ])
-      .returning({ id: deviceProfiles.id });
+    const [live, retired] = await seedDeviceProfiles(suite.db, [
+      { name: `Live ${randomUUID()}`, formFactor: "till" },
+      { name: `Retired ${randomUUID()}`, formFactor: "till", retiredAt: nowIso() },
+    ]);
     await suite.db.insert(deviceProfilePrinters).values([
       { deviceProfileId: live!.id, printerId: printer, role: "receipt", position: 0 },
       { deviceProfileId: retired!.id, printerId: printer, role: "receipt", position: 0 },
@@ -1257,10 +1250,10 @@ describe("printer delete routes (hardware.manage)", () => {
     const stationId = await seedStation(stationName);
     await suite.db.insert(stationPrinters).values({ stationId, printerId });
     const profileName = `Waiters ${randomUUID()}`;
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: profileName, formFactor: "phone-portrait" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: profileName,
+      formFactor: "phone-portrait",
+    });
     await suite.db.insert(deviceProfilePrinters).values({
       deviceProfileId: profile!.id,
       printerId,
@@ -1419,10 +1412,11 @@ describe("printer delete routes (hardware.manage)", () => {
     const app = mountApp(() => NOW);
     const p = await linkedPrinter(app);
     const { personId, cookie } = await withTransaction(suite.db, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Demoted", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: "Demoted",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
       const session = await startManagementSession(tx, { personId: person!.id });
       return { personId: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
     });
@@ -1430,7 +1424,7 @@ describe("printer delete routes (hardware.manage)", () => {
       cookie,
     });
     expect(read.status).toBe(200);
-    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "staff");
     const before = await printingRows();
 
     const deleted = await send(app, "DELETE", `/management-api/printers/${p.printerId}`, {

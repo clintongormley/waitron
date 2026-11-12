@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "@waitron/catalogue";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine } from "./testing/order-writer-fixture.js";
@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
   deviceMadeHereStations,
-  deviceProfiles,
   kitchenStations,
   incidents,
   orderGroupHoldStations,
@@ -864,10 +863,11 @@ describe("release", () => {
 
   it("leaves a made-here drink untouched beside a held dish that reroutes", async () => {
     const { deviceId, cell, passPrinter } = await inTx(venue, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: `Bar till ${randomUUID()}`,
+        formFactor: "till",
+        capabilities: [],
+      });
       const { deviceId: tillId } = await seedDevice(tx, {
         profileId: profile!.id,
         label: `Bar till ${randomUUID()}`,
@@ -2603,10 +2603,11 @@ describe("moveDishesToStation", () => {
     "refuses a genuinely made-here drink sent with a %s group",
     async (release) => {
       const deviceId = await inTx(venue, async (tx) => {
-        const [profile] = await tx
-          .insert(deviceProfiles)
-          .values({ name: `Bar till ${randomUUID()}`, formFactor: "till", capabilities: [] })
-          .returning({ id: deviceProfiles.id });
+        const [profile] = await seedDeviceProfiles(tx, {
+          name: `Bar till ${randomUUID()}`,
+          formFactor: "till",
+          capabilities: [],
+        });
         const { deviceId: tillId } = await seedDevice(tx, {
           profileId: profile!.id,
           label: `Bar till ${randomUUID()}`,

@@ -1,12 +1,14 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, kitchenStations, ticketItems } from "@waitron/db";
+import { kitchenStations, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { decimal } from "@waitron/shared";
 import type { DeviceKitchenScreen, KitchenAllergyBlock } from "@waitron/module";
 import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
@@ -42,7 +44,7 @@ const changed: KitchenAllergyBlock = {
 
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
-  await v.db.insert(persons).values({ id: OPERATOR, displayName: "Test operator", role: "staff" });
+  await seedPersons(v.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await v.db
     .update(sessions)
@@ -74,10 +76,11 @@ async function fixture() {
     .select()
     .from(kitchenStations)
     .where(eq(kitchenStations.id, ticket!.stationId));
-  const [profile] = await v.db
-    .insert(deviceProfiles)
-    .values({ name: "Kitchen display", formFactor: "kds", capabilities: [] })
-    .returning();
+  const [profile] = await seedDeviceProfiles(v.db, {
+    name: "Kitchen display",
+    formFactor: "kds",
+    capabilities: [],
+  });
   const enrol = async (kind: DeviceKitchenScreen["kind"]) => {
     const device = await enrolDeviceForTest(v.db, v.cfg, {
       name: `${kind} screen`,

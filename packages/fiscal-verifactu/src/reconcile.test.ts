@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -133,12 +134,13 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
   const period = { year: "2026", month: "03" };
   const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
   // recordVoid requires `sale.void`: a manager session authorizes it.
-  const { rows: mgr } = await suite.db.execute<{ id: string }>(
-    // `id` and `created_at` have no SQL DEFAULT (drizzle's `$defaultFn` runs only for a builder
-    // insert), so raw SQL supplies them.
-    sql`insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
-  );
+  const mgr = await seedPersons(suite.db, {
+    id: newId(),
+    createdAt: nowIso(),
+    displayName: "P",
+    pinHash: hashPin("1234"),
+    role: "manager",
+  });
   const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const voidSession = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),

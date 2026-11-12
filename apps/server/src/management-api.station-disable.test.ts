@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -322,7 +323,16 @@ it.each(["staff", "supervisor"] as const)(
   "Delete impact and write refuse %s without configuration rights",
   async (role) => {
     const { persons } = await import("@waitron/identity");
-    await suite.db.update(persons).set({ role }).where(eq(persons.email, "owner@example.test"));
+    await setBuiltInRoleForTest(
+      suite.db,
+      (
+        await suite.db
+          .select({ id: persons.id })
+          .from(persons)
+          .where(eq(persons.email, "owner@example.test"))
+      )[0]!.id,
+      role,
+    );
     for (const [method, suffix] of [
       ["GET", "/delete-impact"],
       ["DELETE", ""],

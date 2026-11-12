@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -15,7 +16,7 @@ import {
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { mountTillApi } from "./till-api.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -76,10 +77,11 @@ beforeEach(async () => {
       { kind: "options", id: listId },
     ]);
     await publishWorkingMenu(tx, v.counter.menuId);
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "Waiter", role: "staff", pinHash: hashPin("5555") })
-      .returning();
+    const [staff] = await seedPersons(tx, {
+      displayName: "Waiter",
+      role: "staff",
+      pinHash: hashPin("5555"),
+    });
     const session = await loginWithPin(tx, {
       deviceId: v.cfg.origin.deviceId,
       personId: staff!.id,

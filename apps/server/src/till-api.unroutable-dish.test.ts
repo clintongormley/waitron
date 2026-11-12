@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -5,7 +7,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   floorZones,
   incidents,
   kitchenStations,
@@ -18,7 +19,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCategory, createProduct } from "@waitron/catalogue";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
@@ -67,14 +68,11 @@ let session: string;
 let catalogueId: string;
 
 async function enrolTill(): Promise<string> {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "take-cash"],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Till ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS, "take-cash"],
+  });
   const dev = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Counter till ${randomUUID()}`,
     profileId: profile!.id,
@@ -100,10 +98,11 @@ beforeEach(async () => {
     noopLog,
   );
   const operatorId = await inTx(v, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Cashier", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Cashier",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     return person!.id;
   });
   const deviceCookie = await enrolTill();

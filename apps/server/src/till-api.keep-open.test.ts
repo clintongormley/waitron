@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -94,11 +96,12 @@ beforeEach(async () => {
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
-    const [operator] = await tx
-      .insert(persons)
-      .values({ displayName: "Waiter", role: "staff", pinHash: hashPin("5555") })
-      .returning({ id: persons.id });
+      .where(eq(persons.email, "owner@example.test"));
+    const [operator] = await seedPersons(tx, {
+      displayName: "Waiter",
+      role: "staff",
+      pinHash: hashPin("5555"),
+    });
     return {
       department,
       zone,
@@ -114,10 +117,11 @@ beforeEach(async () => {
     allowedDepartment = department,
     startingZone = zone,
   ) => {
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: randomUUID(), formFactor: "till", capabilities: ["take-orders"] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: randomUUID(),
+      formFactor: "till",
+      capabilities: ["take-orders"],
+    });
     await run((tx) =>
       setProfileServiceAccess(tx, profile!.id, {
         departmentId: allowedDepartment,

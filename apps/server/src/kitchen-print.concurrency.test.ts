@@ -1,18 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { count as countRows, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  deviceProfiles,
-  printJobs,
-  printers,
-  ticketItems,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { printJobs, printers, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
@@ -221,14 +214,11 @@ describe("A773 pass release: a printer two pass screens share", () => {
     });
     const screen = async (name: string): Promise<PassActor> => {
       const [profile] = await withTransaction(suite.db, (tx) =>
-        tx
-          .insert(deviceProfiles)
-          .values({
-            name: `${name} profile`,
-            formFactor: "kds",
-            capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
-          })
-          .returning({ id: deviceProfiles.id }),
+        seedDeviceProfiles(tx, {
+          name: `${name} profile`,
+          formFactor: "kds",
+          capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
+        }),
       );
       const joined = await enrolDeviceForTest(suite.db, venue.cfg, {
         name,

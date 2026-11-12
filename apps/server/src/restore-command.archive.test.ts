@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -19,7 +20,7 @@ import {
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { cadenas, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError, jobOrigin, nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -146,10 +147,7 @@ beforeAll(async () => {
       idSistemaInformatico: "W1",
       numeroInstalacion: "1",
     });
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("1234") })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, { displayName: "Ana", pinHash: hashPin("1234") });
     personId = person!.id;
   });
   await stampDeployment(suite.db, "preproduction");

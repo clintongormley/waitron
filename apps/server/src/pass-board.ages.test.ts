@@ -1,13 +1,8 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  deviceProfiles,
-  kitchenStations,
-  parties,
-  ticketItems,
-  withTransaction,
-} from "@waitron/db";
+import { kitchenStations, parties, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -112,14 +107,11 @@ async function heldThenFired(venue: Venue) {
 
 async function passDevice(venue: Venue): Promise<PassActor> {
   const [profile] = await withTransaction(db, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Pass profile",
-        formFactor: "kds",
-        capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
-      })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, {
+      name: "Pass profile",
+      formFactor: "kds",
+      capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
+    }),
   );
   const joined = await enrolDeviceForTest(db, venue.cfg, {
     name: "Pass",

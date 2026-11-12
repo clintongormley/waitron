@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { describe, expect, it } from "vitest";
 import { locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -118,9 +119,11 @@ describe("fresh setup authority carried into a module seed", () => {
   });
 
   it("refuses to attribute setup to an administrator retained in a restored database", async () => {
-    await suite.db
-      .insert(persons)
-      .values({ displayName: "Archived owner", role: "admin", passwordHash: "hash" });
+    await seedPersons(suite.db, {
+      displayName: "Archived owner",
+      role: "admin",
+      passwordHash: "hash",
+    });
     let entered = false;
     const module = regime(async () => {
       entered = true;
@@ -192,7 +195,10 @@ describe("fresh setup authority carried into a module seed", () => {
     "rechecks the newly created account before a later module receives authority %#",
     async (change) => {
       const first = regime(async () => {
-        await suite.db.update(persons).set(change);
+        if (change.role !== undefined) {
+          const [person] = await suite.db.select({ id: persons.id }).from(persons);
+          await setBuiltInRoleForTest(suite.db, person!.id, change.role);
+        } else await suite.db.update(persons).set(change);
         return "first";
       });
       const second = fakeModule("second-regime", {

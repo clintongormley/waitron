@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -30,10 +31,11 @@ useVenueDb({
     venue = await provisionOrderVenue(db);
     await inTx(venue, async (tx) => {
       await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
-      const [manager] = await tx
-        .insert(persons)
-        .values({ displayName: "Marta", pinHash: hashPin("4444"), role: "manager" })
-        .returning({ id: persons.id });
+      const [manager] = await seedPersons(tx, {
+        displayName: "Marta",
+        pinHash: hashPin("4444"),
+        role: "manager",
+      });
       const session = await startManagementSession(tx, { personId: manager!.id });
       managerDashboard = `${MANAGEMENT_COOKIE}=${session.token}`;
       const [series] = await tx

@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -67,10 +67,11 @@ async function venue() {
       name: `Restaurant counter${suffix}`,
       departmentId: b.id,
     });
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: randomUUID(), formFactor: "till", capabilities: ["take-orders"] })
-      .returning();
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: randomUUID(),
+      formFactor: "till",
+      capabilities: ["take-orders"],
+    });
     await setProfileServiceScope(tx, profile!.id, {
       departmentId: b.id,
       allowedZoneIds: null,
@@ -144,13 +145,10 @@ describe("departmental tab transfers", () => {
         ["Retired desk", "till", v.b, true],
         ["Kitchen display", "kds", v.b, false],
       ] as const) {
-        const [profile] = await tx
-          .insert(deviceProfiles)
-          .values({
-            name: `${name}-${v.tab}`,
-            formFactor,
-          })
-          .returning();
+        const [profile] = await seedDeviceProfiles(tx, {
+          name: `${name}-${v.tab}`,
+          formFactor,
+        });
         if (formFactor !== "kds")
           await setProfileServiceScope(tx, profile!.id, {
             departmentId,
@@ -259,10 +257,7 @@ describe("departmental tab transfers", () => {
   it("refuses the opposite direction even when both departments have receiving desks", async () => {
     const v = await ready();
     await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: randomUUID(), formFactor: "till" })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
       await setProfileServiceScope(tx, profile!.id, {
         departmentId: v.a,
         allowedZoneIds: null,
@@ -461,10 +456,7 @@ describe("departmental tab transfers", () => {
       const profileId =
         kind === "wrong_department"
           ? await withTransaction(suite.db, async (tx) => {
-              const [p] = await tx
-                .insert(deviceProfiles)
-                .values({ name: randomUUID(), formFactor: "till" })
-                .returning();
+              const [p] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
               await setProfileServiceScope(tx, p!.id, {
                 departmentId: v.a,
                 allowedZoneIds: null,

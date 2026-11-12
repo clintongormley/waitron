@@ -532,7 +532,8 @@ describe("A803 move dishes: the moves that succeed", () => {
           expectedEdit: await readBillEditState(tx, p.bill1),
           expectedContext: await readCancellationContext(tx, p.partyId, burger!),
         },
-        v.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id,
+        v.db.all<{ id: string }>(sql`select id from persons where email = 'owner@example.test'`)[0]!
+          .id,
       ),
     );
     const kept = await inTx(v, (tx) => readLineCancellations(tx, [burger!]));
@@ -569,7 +570,7 @@ async function refused(run: () => Promise<unknown>, code: string, params?: unkno
 }
 
 const adminId = () =>
-  v.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id;
+  v.db.all<{ id: string }>(sql`select id from persons where email = 'owner@example.test'`)[0]!.id;
 
 async function saveCakeDraft(partyId: string, billId: string, operatorId: string) {
   const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, billId));

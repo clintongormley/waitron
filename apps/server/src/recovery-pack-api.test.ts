@@ -1,12 +1,13 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as identity from "@waitron/identity";
-import { eq } from "drizzle-orm";
+
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -29,10 +30,12 @@ beforeEach(async () => {
   secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   await withTransaction(suite.db, async (tx) => {
     for (const role of ["manager", "staff"] as const) {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: role, role, pinHash: "unused", passwordHash: "unused" })
-        .returning();
+      const [person] = await seedPersons(tx, {
+        displayName: role,
+        role,
+        pinHash: "unused",
+        passwordHash: "unused",
+      });
       const session = await startManagementSession(tx, { personId: person!.id });
       await setFreshManagementSignIn(tx, session.token);
       if (role === "manager") managerToken = session.token;
@@ -133,9 +136,7 @@ it("rechecks permission in the transaction after the key derivation", async () =
   const verify = identity.verifySecretAsync;
   vi.spyOn(identity, "verifySecretAsync").mockImplementation(async (...args) => {
     const matches = await verify(...args);
-    await withTransaction(suite.db, (tx) =>
-      tx.update(persons).set({ role: "staff" }).where(eq(persons.id, personId)),
-    );
+    await withTransaction(suite.db, (tx) => setBuiltInRoleForTest(tx, personId, "staff"));
     return matches;
   });
   const response = await download();

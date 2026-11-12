@@ -1,7 +1,8 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { hashPin, deactivatePerson, persons } from "@waitron/identity";
+import { hashPin, deactivatePerson } from "@waitron/identity";
 import { invoiceSeries, printJobs, sales, tenants, withTransaction } from "@waitron/db";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
@@ -232,10 +233,7 @@ describe("Orders routes", () => {
 
   it("keeps a deactivated colleague in the Staff filter", async () => {
     const [person] = await withTransaction(venue.db, (tx) =>
-      tx
-        .insert(persons)
-        .values({ displayName: "Pablo", pinHash: hashPin("8888"), role: "staff" })
-        .returning({ id: persons.id }),
+      seedPersons(tx, { displayName: "Pablo", pinHash: hashPin("8888"), role: "staff" }),
     );
     await parkedBy(venue, person!.id, "Caña");
     await withTransaction(venue.db, (tx) =>

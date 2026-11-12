@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
@@ -116,18 +117,15 @@ beforeEach(async () => {
   });
 
   await seedNode(suite.db);
-  const [marta, colleague] = await suite.db
-    .insert(persons)
-    .values([
-      {
-        displayName: "Marta López",
-        email: "marta@example.test",
-        pinHash: MARTA_PIN_HASH,
-        role: "staff",
-      },
-      { ...COLLEAGUE, role: "staff" },
-    ])
-    .returning();
+  const [marta, colleague] = await seedPersons(suite.db, [
+    {
+      displayName: "Marta López",
+      email: "marta@example.test",
+      pinHash: MARTA_PIN_HASH,
+      role: "staff",
+    },
+    { ...COLLEAGUE, role: "staff" },
+  ]);
   martaId = marta!.id;
   colleagueId = colleague!.id;
   martaToken = await withTransaction(
@@ -343,7 +341,7 @@ describe("sendPersonalData", () => {
 });
 
 it("requires proof to export another person's data, while own export stays available", async () => {
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, martaId));
+  await setBuiltInRoleForTest(suite.db, martaId, "admin");
   const response = await mounted().request(
     `/management-api/staff/${colleagueId}/personal-data/export`,
     { headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` } },

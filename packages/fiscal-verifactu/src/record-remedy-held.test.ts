@@ -1,14 +1,10 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { sales, saleSettlements, tenders, tenderRefunds, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -51,10 +47,11 @@ beforeEach(async () => {
   runtimeNode = node.nodeId;
   const saleId = await seedSale(suite.db, node, 1);
   await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
     await setFreshManagementSignIn(tx, token);
@@ -376,7 +373,7 @@ it.each(["reason", "acceptedRegistroId", "caseId"])(
 
 it.each(["staff", "supervisor", "manager"] as const)("refuses %s authority", async (role) => {
   await acceptCurrent();
-  await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, role);
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(403);
@@ -501,10 +498,11 @@ it("refuses a saved decision that belongs to another administrator", async () =>
   await acceptCurrent();
   expect((await send()).status).toBe(200);
   token = await withTransaction(suite.db, async (tx) => {
-    const [other] = await tx
-      .insert(persons)
-      .values({ displayName: "Other administrator", role: "admin", pinHash: hashPin("1357") })
-      .returning();
+    const [other] = await seedPersons(tx, {
+      displayName: "Other administrator",
+      role: "admin",
+      pinHash: hashPin("1357"),
+    });
     const session = await startManagementSession(tx, { personId: other!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;
@@ -519,7 +517,7 @@ it("refuses a saved decision that belongs to another administrator", async () =>
 it("still checks the administrator's current role on replay", async () => {
   await acceptCurrent();
   expect((await send()).status).toBe(200);
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(403);

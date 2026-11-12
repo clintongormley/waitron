@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -9,7 +10,6 @@ import {
   deviceApprovedProfiles,
   deviceMadeHereStations,
   deviceZoneSelections,
-  deviceProfiles,
   devices,
   drawerOpens,
   installChangeFeed,
@@ -160,10 +160,7 @@ async function signIn(deviceId: string): Promise<void> {
 }
 
 async function profile(name: string, formFactor: "till" | "kds" = "till"): Promise<string> {
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name, formFactor, capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, { name, formFactor, capabilities: [] });
   return row!.id;
 }
 

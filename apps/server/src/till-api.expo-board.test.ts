@@ -1,10 +1,11 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, ticketItems, workingOrderLines } from "@waitron/db";
+import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loginWithPin, persons } from "@waitron/identity";
@@ -55,10 +56,7 @@ async function fixture() {
     return { grill, bar, terraceWine: { zoneId: terrace.id, offers } };
   });
   const [profile] = await inTx(v, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({ name: "Plain till", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, { name: "Plain till", formFactor: "till", capabilities: [] }),
   );
   const joined = await enrolDeviceForTest(suite.db, v.cfg, {
     name: "Till",

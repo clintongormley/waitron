@@ -6,13 +6,12 @@ import {
   FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  deviceProfiles,
   isRefusal,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { cardReaders } from "./card-readers.js";
 import { deviceCardReaders } from "./device-card-readers.js";
@@ -32,10 +31,7 @@ async function seedDeviceAndReader(db: Database): Promise<Seeded> {
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
-  const [profile] = await db
-    .insert(deviceProfiles)
-    .values({ name: "Profile", formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
   const { deviceId } = await seedDevice(db, { profileId: profile!.id, label: "Counter till" });
   const [reader] = await db
     .insert(cardReaders)

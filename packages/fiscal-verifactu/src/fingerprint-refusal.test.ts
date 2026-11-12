@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { incidents, invoiceSeries, tenants, withTransaction, type Transaction } from "@waitron/db";
@@ -9,7 +10,7 @@ import {
   recordVoid,
   withIssuanceTransaction,
 } from "@waitron/core";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { deviceOrigin, seriesId as brandSeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -71,10 +72,11 @@ beforeEach(async () => {
     .returning();
   fullSeries = brandSeriesId(full!.id);
   correctionSeries = brandSeriesId(correction!.id);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Manager", role: "admin", pinHash: hashPin("1234") })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Manager",
+    role: "admin",
+    pinHash: hashPin("1234"),
+  });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { personId: person!.id, deviceId: node.deviceId, pin: "1234" }),
   );

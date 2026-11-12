@@ -4,7 +4,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   deviceMadeHereStations,
-  deviceProfiles,
   orderGroups,
   parties,
   printJobs,
@@ -14,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { createProduct, readContentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -277,10 +276,11 @@ describe("A773 waiter request: send", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Grill till", formFactor: "till", capabilities: [] })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Grill till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Grill till" });
       await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: venue.stations.grill });
       await submitGroups(tx, { ...venue.cfg, sendingDeviceId: deviceId }, venue.party.partyId, {

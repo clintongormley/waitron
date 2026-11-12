@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
@@ -15,7 +16,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
   loginWithPin,
-  persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
@@ -59,10 +59,13 @@ beforeEach(async () => {
     .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectSeriesId = brandSeriesId(series!.id);
-  const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${newId()}, ${nowIso()}, 'Supervisor', ${hashPin("1234")}, 'supervisor') returning id`,
-  );
+  const rows = await seedPersons(suite.db, {
+    id: newId(),
+    createdAt: nowIso(),
+    displayName: "Supervisor",
+    pinHash: hashPin("1234"),
+    role: "supervisor",
+  });
   sessionId = (
     await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
@@ -197,10 +200,11 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
     vi.unstubAllEnvs();
   });
   registerModulePermissions(FISCAL_PERMISSIONS);
-  const [admin] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-    .returning();
+  const [admin] = await seedPersons(suite.db, {
+    displayName: "Administrator",
+    role: "admin",
+    pinHash: hashPin("2468"),
+  });
   const { token, caseId } = await withTransaction(suite.db, async (tx) => ({
     token: (await startManagementSession(tx, { personId: admin!.id })).token,
     caseId: (

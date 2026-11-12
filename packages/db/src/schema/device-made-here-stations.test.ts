@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { kitchenStations } from "./kitchen-stations.js";
 
@@ -25,9 +25,7 @@ describe("device made-here stations schema", () => {
       operationDescription: "Hostelería",
     });
     await suite.db.insert(kitchenStations).values({ id: STATION, name: "Kitchen A" });
-    await suite.db
-      .insert(deviceProfiles)
-      .values({ id: PROFILE, name: "Till profile", formFactor: "till" });
+    await seedDeviceProfiles(suite.db, { id: PROFILE, name: "Till profile", formFactor: "till" });
     ({ deviceId: DEVICE } = await seedDevice(suite.db, {
       profileId: PROFILE,
       label: "Till device",

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -124,16 +125,13 @@ async function setupTenant(): Promise<{ managerId: string }> {
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
   const { managerId } = await withTransaction(suite.db, async (tx) => {
-    const [manager] = await tx
-      .insert(persons)
-      .values({
-        displayName: "The Manager",
-        email: MANAGER_EMAIL,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(PASSWORD),
-        role: "manager",
-      })
-      .returning({ id: persons.id });
+    const [manager] = await seedPersons(tx, {
+      displayName: "The Manager",
+      email: MANAGER_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "manager",
+    });
     return { managerId: manager!.id };
   });
   return { managerId };

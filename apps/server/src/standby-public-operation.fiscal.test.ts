@@ -1,7 +1,8 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { Hono } from "hono";
-import { persons, hashPassword } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -150,9 +151,12 @@ beforeEach(async () => {
     );
     await db.insert(invoiceSeries).values(bases.map((base) => ({ ...base, nodeId: PRIMARY })));
   }
-  await primary.db
-    .insert(persons)
-    .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
+  await seedPersons(primary.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: HASH,
+  });
   await establishNodeIdentity({ ownerDb: primary.db, node: primary.node, ring: RING }, PRIMARY);
 });
 function joinRequest(targetNodeId: string, action: string) {

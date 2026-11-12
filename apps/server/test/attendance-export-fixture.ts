@@ -2,7 +2,7 @@ import type { RecordExportDocument } from "@waitron/shared";
 import { jobOrigin } from "@waitron/shared";
 import { venueLocationId, withTransaction, type Database } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { WorkforceBackend, closePayPeriod } from "@waitron/workforce";
 import { prepareTimeRecordExport } from "@waitron/workforce-es";
 
@@ -17,24 +17,21 @@ export async function seedAttendanceExport(db: Database) {
   });
   const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
-  const [worker, manager] = await db
-    .insert(persons)
-    .values([
-      {
-        displayName: "María Muñoz",
-        email: "CONTACT-CANARY@example.test",
-        telephone: "+34999111222",
-        firstNames: "PROFILE-CANARY",
-        role: "staff",
-      },
-      {
-        displayName: "José",
-        email: "MANAGER-CONTACT@example.test",
-        passwordHash: "LOGIN-CANARY",
-        role: "manager",
-      },
-    ])
-    .returning();
+  const [worker, manager] = await seedPersons(db, [
+    {
+      displayName: "María Muñoz",
+      email: "CONTACT-CANARY@example.test",
+      telephone: "+34999111222",
+      firstNames: "PROFILE-CANARY",
+      role: "staff",
+    },
+    {
+      displayName: "José",
+      email: "MANAGER-CONTACT@example.test",
+      passwordHash: "LOGIN-CANARY",
+      role: "manager",
+    },
+  ]);
   const backend = new WorkforceBackend();
   const origin = jobOrigin("dashboard");
   const period = { start: "2026-01-01", end: "2026-02-01" };

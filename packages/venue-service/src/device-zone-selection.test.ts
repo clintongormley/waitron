@@ -12,7 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { readProfileServiceScopes, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE } from "./service.js";
@@ -40,10 +40,10 @@ async function fixture() {
       departmentId: restaurant.id,
     });
     const counter = await createServiceZone(tx, { name: "Counter", departmentId: deli.id });
-    const profiles = await tx
-      .insert(deviceProfiles)
-      .values([0, 1, 2].map((n) => ({ name: `${randomUUID()} ${n}`, formFactor: "till" as const })))
-      .returning();
+    const profiles = await seedDeviceProfiles(
+      tx,
+      [0, 1, 2].map((n) => ({ name: `${randomUUID()} ${n}`, formFactor: "till" as const })),
+    );
     const profileId = profiles[0]!.id;
     await setProfileServiceAccess(tx, profileId, {
       departmentId: restaurant.id,

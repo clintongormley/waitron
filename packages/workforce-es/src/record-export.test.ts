@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
@@ -38,19 +39,16 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
   });
   nodeId = await seedNode(suite.db);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      {
-        displayName: "María Worker",
-        role: "staff",
-        email: "worker-canary@example.test",
-        telephone: "+34900000001",
-      },
-      { displayName: "Other worker", role: "staff", email: "other-canary@example.test" },
-      { displayName: "José Manager", role: "manager", email: "manager-canary@example.test" },
-    ])
-    .returning({ id: persons.id });
+  const rows = await seedPersons(suite.db, [
+    {
+      displayName: "María Worker",
+      role: "staff",
+      email: "worker-canary@example.test",
+      telephone: "+34900000001",
+    },
+    { displayName: "Other worker", role: "staff", email: "other-canary@example.test" },
+    { displayName: "José Manager", role: "manager", email: "manager-canary@example.test" },
+  ]);
   [worker, other, manager] = rows.map((r) => r.id) as [string, string, string];
 });
 const event = (at: string, personId = worker) => ({
@@ -150,12 +148,12 @@ it("keeps automatic ends counted and worker acknowledgment separate", async () =
 });
 it("keeps originals, requests, approvals, reasons and stored self approval", async () => {
   const target = await day();
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, worker));
+  await setBuiltInRoleForTest(suite.db, worker, "admin");
   const change = await request(target, '= later, "reason"\nnew line');
   const answer = await run((tx) =>
     backend.approveCorrection(tx, { nodeId, correctionId: change, approverPersonId: worker }),
   );
-  await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, worker));
+  await setBuiltInRoleForTest(suite.db, worker, "staff");
   const exported = await doc();
   expect(cells(exported, "sessions")[0]!.workedMinutes).toBe(540);
   expect(cells(exported, "history").map((r) => r.entryId)).toEqual(

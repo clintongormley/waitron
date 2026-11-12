@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
@@ -341,15 +342,12 @@ describe.each(paths)("invoice email after %s", (path) => {
             : { mode: "unconfigured" },
         );
         const session = await withTransaction(opened.venue, async (tx) => {
-          const [person] = await tx
-            .insert(persons)
-            .values({
-              displayName: "Restore administrator",
-              pinHash: hashPin("1234"),
-              role: "admin",
-              email: "owner@example.test",
-            })
-            .returning({ id: persons.id });
+          const [person] = await seedPersons(tx, {
+            displayName: "Restore administrator",
+            pinHash: hashPin("1234"),
+            role: "admin",
+            email: "owner@example.test",
+          });
           const session = await startManagementSession(tx, { personId: person!.id });
           await setFreshManagementSignIn(tx, session.token);
           return session;

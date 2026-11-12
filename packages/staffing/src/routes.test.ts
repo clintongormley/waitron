@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -47,14 +48,11 @@ async function routed() {
   const venue = await seedVenueWithStaff(suite.db);
   const cookies = await withTransaction(suite.db, async (tx) => {
     const session = async (personRole: PersonRoleValue) => {
-      const [row] = await tx
-        .insert(persons)
-        .values({
-          displayName: `${personRole} ${randomUUID()}`,
-          pinHash: hashPin("1234"),
-          role: personRole,
-        })
-        .returning({ id: persons.id });
+      const [row] = await seedPersons(tx, {
+        displayName: `${personRole} ${randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role: personRole,
+      });
       return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: row!.id })).token}`;
     };
     return {

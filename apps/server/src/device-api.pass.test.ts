@@ -15,7 +15,12 @@ import {
   workingOrders,
   withTransaction,
 } from "@waitron/db";
-import { seedNode, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedBusinessDay,
+  seedDeviceProfiles,
+  seedNode,
+  seedVenueSettings,
+} from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { endSession, loginWithPin, persons } from "@waitron/identity";
@@ -76,10 +81,7 @@ async function fixture() {
   const v = await setupPartyVenue(suite.db);
   const profile = async (formFactor: "kds" | "till") => {
     const [row] = await inTx(v, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({ name: `${formFactor} profile`, formFactor, capabilities: [] })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, { name: `${formFactor} profile`, formFactor, capabilities: [] }),
     );
     return row!.id;
   };
@@ -298,10 +300,7 @@ describe("the pass screen's device routes", () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const narrowed = await inTx(f.v, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({ name: "Narrowed profile", formFactor: "kds", capabilities: [] })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, { name: "Narrowed profile", formFactor: "kds", capabilities: [] }),
     );
     const pass = await f.device("Pass", narrowed[0]!.id, { kitchenScreen: EVERY_PASS });
     const monitor = await f.device("Monitor", narrowed[0]!.id, {
@@ -1275,10 +1274,7 @@ describe("A773 pass release: route", () => {
   it("releases from a till pass only for the person signed in on it, recording their kitchen work, and refuses another person's or an out-of-zone retry", async () => {
     const f = await releaseFixture({ attendance: true });
     const [profile] = await inTx(f.v, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({ name: "Till pass profile", formFactor: "till", capabilities: FULL })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, { name: "Till pass profile", formFactor: "till", capabilities: FULL }),
     );
     const till = await f.device("Till pass", profile!.id, { kitchenScreen: EVERY_PASS });
     const other = await f.device("Other till", profile!.id, { kitchenScreen: EVERY_PASS });
@@ -1552,10 +1548,7 @@ describe("A773 pass release: route", () => {
   it("refuses a till pass signed out after its session was checked, writing nothing", async () => {
     const f = await releaseFixture();
     const [profile] = await inTx(f.v, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({ name: "Till pass profile", formFactor: "till", capabilities: FULL })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, { name: "Till pass profile", formFactor: "till", capabilities: FULL }),
     );
     const till = await f.device("Till pass", profile!.id, { kitchenScreen: EVERY_PASS });
     const [person] = await inTx(f.v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));

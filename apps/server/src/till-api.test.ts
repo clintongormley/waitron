@@ -1,5 +1,6 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { venueMenus } from "./testing/venue-menus.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -181,20 +182,25 @@ const suite = useVenueDb({
     // (its FK `(node_id) → nodes(id)` requires a real row).
     const nodeId = await seedNode(db);
     // Anna's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(db, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     ana = { id: person!.id };
     // Abel: ACTIVE, inserted after Anna but sorts before her. Zoe: SUSPENDED, must be excluded.
-    const [abelRow] = await db
-      .insert(persons)
-      .values({ displayName: "Abel", pinHash: hashPin("1111"), role: "staff" })
-      .returning({ id: persons.id });
+    const [abelRow] = await seedPersons(db, {
+      displayName: "Abel",
+      pinHash: hashPin("1111"),
+      role: "staff",
+    });
     abel = { id: abelRow!.id };
-    await db
-      .insert(persons)
-      .values({ displayName: "Zoe", pinHash: hashPin("2222"), role: "staff", status: "suspended" });
+    await seedPersons(db, {
+      displayName: "Zoe",
+      pinHash: hashPin("2222"),
+      role: "staff",
+      status: "suspended",
+    });
     const { water, beer, zoneId, offerId, hiddenOfferId, staffMenuId } = await withTransaction(
       db,
       async (tx) => {
@@ -402,10 +408,12 @@ async function seedDeviceProfile(
   const rows = await withTransaction(db, async (tx) => {
     // Through the table definition, not raw SQL: `device_profiles.id` is a `$defaultFn` generator,
     // which a raw insert never runs.
-    return tx
-      .insert(deviceProfiles)
-      .values({ name, formFactor: "till", capabilities, inactivityTimeoutSeconds })
-      .returning({ id: deviceProfiles.id });
+    return seedDeviceProfiles(tx, {
+      name,
+      formFactor: "till",
+      capabilities,
+      inactivityTimeoutSeconds,
+    });
   });
   return rows[0]!.id;
 }
@@ -461,10 +469,11 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const [mgr] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Martha", pinHash: hashPin("9999"), role: "manager" })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(suite.db, {
+      displayName: "Martha",
+      pinHash: hashPin("9999"),
+      role: "manager",
+    });
     const managerId = mgr!.id;
 
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
@@ -491,15 +500,12 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // Cleaned up so the roster tests' exact ordering assertions stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const [row] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: "Beatrice",
-        pinHash: hashPin("7777"),
-        role: "staff",
-        locale: "en-GB",
-      })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: "Beatrice",
+      pinHash: hashPin("7777"),
+      role: "staff",
+      locale: "en-GB",
+    });
     const personId = row!.id;
 
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
@@ -1327,16 +1333,18 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
 
   it("a deactivated person is still refused", async () => {
     const deviceId = await seedSessionDevice(suite.db);
-    const [admin] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Admin", pinHash: hashPin("8181"), role: "admin" })
-      .returning({ id: persons.id });
+    const [admin] = await seedPersons(suite.db, {
+      displayName: "Admin",
+      pinHash: hashPin("8181"),
+      role: "admin",
+    });
     let token: string;
     try {
-      const [leaver] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Leaver", pinHash: hashPin("8282"), role: "staff" })
-        .returning({ id: persons.id });
+      const [leaver] = await seedPersons(suite.db, {
+        displayName: "Leaver",
+        pinHash: hashPin("8282"),
+        role: "staff",
+      });
       ({ token } = await withTransaction(suite.db, (tx) =>
         loginWithPin(tx, { deviceId, personId: leaver!.id, pin: "8282" }),
       ));
@@ -1416,10 +1424,11 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Anna)
   // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
   async function loginFresh(pin: string): Promise<{ personId: string; token: string }> {
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Locale User", pinHash: hashPin(pin), role: "staff" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: "Locale User",
+      pinHash: hashPin(pin),
+      role: "staff",
+    });
     const personId = row!.id;
     const session = await withTransaction(suite.db, async (tx) => {
       return loginWithPin(tx, { deviceId: sessionDeviceId, personId, pin });
@@ -2036,15 +2045,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 it.each(["till", "phone-portrait", "tablet-landscape", "kds"] as const)(
   "GET /api/till returns the enrolled %s form factor without canvas data",
   async (formFactor) => {
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Fixed ${formFactor}`,
-        formFactor,
-        capabilities: [],
-        inactivityTimeoutSeconds: 42,
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: `Fixed ${formFactor}`,
+      formFactor,
+      capabilities: [],
+      inactivityTimeoutSeconds: 42,
+    });
     try {
       const enrolled = await enrolDeviceForTest(suite.db, cfg, {
         name: `Fixed ${formFactor}`,

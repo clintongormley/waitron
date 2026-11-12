@@ -1,17 +1,11 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  deviceProfiles,
-  devices,
-  printerHolders,
-  printJobs,
-  printers,
-  withTransaction,
-} from "@waitron/db";
+import { devices, printerHolders, printJobs, printers, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -97,14 +91,11 @@ const inTx = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.d
 let profileCounter = 0;
 async function seedProfile(): Promise<string> {
   profileCounter += 1;
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Equipment ${profileCounter}`,
-      formFactor: "till",
-      capabilities: [...CAPABILITY_FLAGS],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Equipment ${profileCounter}`,
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   return row!.id;
 }
 

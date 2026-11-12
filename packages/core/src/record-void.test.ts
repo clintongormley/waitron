@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
@@ -18,7 +19,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import type { AuthzInput } from "@waitron/identity";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
@@ -55,10 +56,11 @@ beforeEach(async () => {
 
 /** A person of `role` whose PIN is "1234". The role keeps the display names distinct. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: `P ${role}`, pinHash: hashPin("1234"), role })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, {
+    displayName: `P ${role}`,
+    pinHash: hashPin("1234"),
+    role,
+  });
   return row!.id;
 }
 

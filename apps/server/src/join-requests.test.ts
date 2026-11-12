@@ -1,6 +1,7 @@
 /**
  * The join-request verbs — mint, cap, sweep, challenge, accept, deny, self-enrol.
  */
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -27,7 +28,6 @@ import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import { parseDeviceCookie } from "./device-session.js";
 import {
   floorZones,
-  deviceProfiles,
   devices,
   joinRequests,
   kitchenStations,
@@ -74,10 +74,11 @@ async function seedProfile(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
 ): Promise<string> {
   profileCounter += 1;
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${profileCounter}`,
+    formFactor,
+    capabilities: [],
+  });
   return row!.id;
 }
 

@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { recordSale, type RecordCorrectionInput } from "@waitron/core";
@@ -11,12 +12,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import {
   AppError,
@@ -74,10 +70,11 @@ beforeEach(async () => {
     resolveClient: staticResolver(fakeClient),
   });
   await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     personId = person!.id;
     const token = (await startManagementSession(tx, { personId })).token;
     const original = await recordSale(
@@ -424,7 +421,7 @@ it.each([false, true])("checks environment on replay=%s", async (replay) => {
 });
 it.each([false, true])("checks management permission on replay=%s", async (replay) => {
   if (replay) await apply();
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
   await refuses("authorization.not_permitted");
 });
 it.each([false, true])("requires the live management session on replay=%s", async (replay) => {
@@ -573,10 +570,11 @@ it("refuses a duplicate-conflict code even when the case evidence matches it", a
 });
 it("refuses a saved decision replayed by a different administrator", async () => {
   await apply();
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Another administrator", role: "admin", pinHash: hashPin("2468") })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Another administrator",
+    role: "admin",
+    pinHash: hashPin("2468"),
+  });
   input.managementSessionId = (
     await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: person!.id }))
   ).token;

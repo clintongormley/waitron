@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -1347,14 +1348,11 @@ describe("the public cancellation read and command", () => {
     const elsewhere = await inTx(venue, (tx) => createZone(tx, { name: `Other-${randomUUID()}` }));
     const [department] = await listDepartments(venue.db);
     const profile = await inTx(venue, async (tx) => {
-      const [created] = await tx
-        .insert(deviceProfiles)
-        .values({
-          name: `Other-${randomUUID()}`,
-          formFactor: "till",
-          capabilities: ["take-orders"],
-        })
-        .returning();
+      const [created] = await seedDeviceProfiles(tx, {
+        name: `Other-${randomUUID()}`,
+        formFactor: "till",
+        capabilities: ["take-orders"],
+      });
       await setProfileServiceAccess(tx, created!.id, {
         departmentId: department!.id,
         allowedZoneIds: [elsewhere.id],

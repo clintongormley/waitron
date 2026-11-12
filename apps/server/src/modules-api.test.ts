@@ -1,8 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, saveSettings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { ALL_MODULES, CARD_PROVIDERS } from "@waitron/composition";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { PAYMENTS_SETTINGS } from "@waitron/payments";
@@ -15,7 +16,7 @@ beforeEach(async () => {
   [manager, staff] = await withTransaction(suite.db, async (tx) => {
     const cookies: string[] = [];
     for (const role of ["manager", "staff"] as const) {
-      const [person] = await tx.insert(persons).values({ displayName: role, role }).returning();
+      const [person] = await seedPersons(tx, { displayName: role, role });
       const session = await startManagementSession(tx, { personId: person!.id });
       cookies.push(`${MANAGEMENT_COOKIE}=${session.token}`);
     }

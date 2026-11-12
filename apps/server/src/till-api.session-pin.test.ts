@@ -1,15 +1,16 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { deviceProfiles } from "@waitron/db";
+
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   PIN_THROTTLE_FREE_ATTEMPTS,
   createPinThrottle,
   hashPin,
-  persons,
   type PinThrottle,
 } from "@waitron/identity";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -59,10 +60,11 @@ function mountApp(pinThrottle?: PinThrottle): Hono {
 }
 
 async function tillCookie(): Promise<string> {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: `Profile ${randomUUID()}`, formFactor: "till", capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [],
+  });
   const device = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Till ${randomUUID()}`,
     profileId: profile!.id,
@@ -71,10 +73,11 @@ async function tillCookie(): Promise<string> {
 }
 
 async function person(pin: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: `Staff ${randomUUID()}`, pinHash: hashPin(pin), role: "staff" })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, {
+    displayName: `Staff ${randomUUID()}`,
+    pinHash: hashPin(pin),
+    role: "staff",
+  });
   return row!.id;
 }
 

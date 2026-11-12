@@ -131,7 +131,7 @@ describe("the till's clock across a backward step of the box's clock", () => {
     const [admin] = await suite.db
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     const correctionId = await withTransaction(suite.db, (tx) =>
       backend.requestCorrection(tx, {
         nodeId: venue.cfg.nodeId,

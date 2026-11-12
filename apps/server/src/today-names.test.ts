@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -8,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { printJobs, ticketItems } from "@waitron/db";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
 import {
   kitchenNotices,
@@ -112,10 +113,11 @@ beforeAll(async () => {
   );
   const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
   cookie = await sessionCookieForTest(v.db, session.token);

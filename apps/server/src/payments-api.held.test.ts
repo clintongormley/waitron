@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -10,7 +11,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
   hashPin,
-  persons,
   PIN_THROTTLE_FREE_ATTEMPTS,
   startManagementSession,
 } from "@waitron/identity";
@@ -48,14 +48,16 @@ let nifCounter = 0;
 async function setup() {
   nifCounter += 1;
   const seeded = await seedWorkingOrder(suite.db, `${String(30_000_000 + nifCounter)}K`);
-  const [manager] = await suite.db
-    .insert(persons)
-    .values({ displayName: "The Manager", role: "manager", pinHash: hashPin("1234") })
-    .returning({ id: persons.id });
-  const [staff] = await suite.db
-    .insert(persons)
-    .values({ displayName: "The Clerk", role: "staff", pinHash: hashPin("5678") })
-    .returning({ id: persons.id });
+  const [manager] = await seedPersons(suite.db, {
+    displayName: "The Manager",
+    role: "manager",
+    pinHash: hashPin("1234"),
+  });
+  const [staff] = await seedPersons(suite.db, {
+    displayName: "The Clerk",
+    role: "staff",
+    pinHash: hashPin("5678"),
+  });
   const sessions = await withTransaction(suite.db, async (tx) => ({
     manager: (await startManagementSession(tx, { personId: manager!.id })).token,
     staff: (await startManagementSession(tx, { personId: staff!.id })).token,

@@ -168,7 +168,7 @@ describe("the provisioned admin authenticates by id with its password", () => {
     });
 
     const admin = await suite.db.execute<{ id: string }>(sql`
-      select id from persons where role = 'admin'`);
+      select id from persons where email = ${request("B33333333").admin.email}`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
@@ -202,7 +202,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     });
 
     const admin = await suite.db.execute<{ id: string }>(sql`
-      select id from persons where role = 'admin'`);
+      select id from persons where email = ${adminEmail}`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 

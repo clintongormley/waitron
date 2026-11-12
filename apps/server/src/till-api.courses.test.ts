@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,6 @@ import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  deviceProfiles,
   ticketItems,
   parties,
   workingOrderLines,
@@ -14,8 +14,13 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  seedDeviceProfiles,
+  seedKitchenStation,
+  seedNode,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignCatalogueToVenue,
@@ -77,10 +82,11 @@ const suite = useVenueDb({
 
     await seedKitchenStation(db, {});
     const nodeId = await seedNode(db);
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(db, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     ana = { id: person!.id };
     cfg = makeCfg(nodeId);
 
@@ -193,10 +199,7 @@ let tillDeviceCookie: string;
 
 /** Enrol a REAL `till` device and return its `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
-  const rows = await db
-    .insert(deviceProfiles)
-    .values({ name: "Counter till profile", formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
+  const rows = await seedDeviceProfiles(db, { name: "Counter till profile", formFactor: "till" });
   const dev = await enrolDeviceForTest(db, cfg, { name: "Counter till", profileId: rows[0]!.id });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
@@ -14,7 +15,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
@@ -303,10 +304,11 @@ describe("the till's pass route carries the short names", () => {
     );
     const deviceId = await seedSessionDevice(v.db);
     const session = await inTx(v, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Expo", pinHash: hashPin("4321"), role: "staff" })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: "Expo",
+        pinHash: hashPin("4321"),
+        role: "staff",
+      });
       return loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" });
     });
     cookie = `${SESSION_COOKIE}=${session.token}`;

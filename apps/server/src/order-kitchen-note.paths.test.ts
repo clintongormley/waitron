@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
@@ -8,7 +9,7 @@ import { parties, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeKitchenNote } from "@waitron/venue-service";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { SimulatorPaymentProvider } from "@waitron/payments/src/simulator.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -32,7 +33,7 @@ let v: PartyVenue;
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  await suite.db.insert(persons).values({ id: OPERATOR, displayName: "Kitchen note author" });
+  await seedPersons(suite.db, { id: OPERATOR, displayName: "Kitchen note author" });
 });
 
 describe("initial kitchen notes on ordering paths", () => {

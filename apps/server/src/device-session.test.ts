@@ -15,7 +15,7 @@ import { deviceProfiles, devices, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 
@@ -139,10 +139,7 @@ async function seedDeviceProfile(
   formFactor: FormFactor,
   capabilities: CapabilityFlag[],
 ): Promise<string> {
-  const [prof] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name, formFactor, capabilities })
-    .returning({ id: deviceProfiles.id });
+  const [prof] = await seedDeviceProfiles(suite.db, { name, formFactor, capabilities });
   return prof!.id;
 }
 
@@ -839,10 +836,7 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     });
-    const [prof] = await admin
-      .insert(deviceProfiles)
-      .values({ name: "Screen", formFactor: "kds" })
-      .returning({ id: deviceProfiles.id });
+    const [prof] = await seedDeviceProfiles(admin, { name: "Screen", formFactor: "kds" });
     const { deviceId } = await seedDevice(admin, { profileId: prof!.id, label: "Kitchen screen" });
     return { deviceId };
   }

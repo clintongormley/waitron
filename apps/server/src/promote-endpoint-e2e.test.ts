@@ -1,11 +1,16 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import {
+  seedBusinessDay,
+  seedDeviceProfiles,
+  seedVenueSettings,
+} from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from "vitest";
 import {
   deviceProfiles,
@@ -245,17 +250,16 @@ async function seedMirror(
     originNodeId: MIRROR_ORIGIN_NODE_ID,
   });
 
-  await admin
-    .insert(persons)
-    .values({
+  if (!(await admin.select({ id: persons.id }).from(persons).where(eq(persons.id, ADMIN_ID)))[0]) {
+    await seedPersons(admin, {
       id: ADMIN_ID,
       displayName: "Promote Admin",
       email: ADMIN_EMAIL,
       pinHash: hashPin("1234"),
       passwordHash: hashPassword(ADMIN_PW),
       role: "admin",
-    })
-    .onConflictDoNothing();
+    });
+  }
 
   await stampDeployment(admin, "production");
   await setNodeMode({ venue: admin, node }, standby.nodeId, "mirror");
@@ -265,24 +269,29 @@ async function seedMirror(
 /** What the promoted primary needs to ring a real cash sale; returns the offer to sell. */
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
   await seedLegacySellingUnits(admin);
-  await admin
-    .insert(persons)
-    .values({
+  if (!(await admin.select({ id: persons.id }).from(persons).where(eq(persons.id, STAFF_ID)))[0]) {
+    await seedPersons(admin, {
       id: STAFF_ID,
       displayName: "Cajera",
       pinHash: hashPin(STAFF_PIN),
       role: "staff",
-    })
-    .onConflictDoNothing();
-  await admin
-    .insert(deviceProfiles)
-    .values({
+    });
+  }
+  if (
+    !(
+      await admin
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, DEVICE_PROFILE_ID))
+    )[0]
+  ) {
+    await seedDeviceProfiles(admin, {
       id: DEVICE_PROFILE_ID,
       name: "Counter",
       formFactor: "till",
       capabilities: [...BASIC_ACTIONS, "take-cash"],
-    })
-    .onConflictDoNothing();
+    });
+  }
   await admin
     .insert(devices)
     .values({

@@ -1,8 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -23,13 +24,10 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
   nodeId = await seedNode(suite.db, locationId);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Bea", pinHash: "scrypt$00$00", role: "manager" },
-    ])
-    .returning({ id: persons.id });
+  const rows = await seedPersons(suite.db, [
+    { displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Bea", pinHash: "scrypt$00$00", role: "manager" },
+  ]);
   [personId, managerId] = rows.map((r) => r.id) as [string, string];
 });
 async function completedDay() {

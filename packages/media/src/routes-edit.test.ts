@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
@@ -37,10 +38,11 @@ async function fixture(
   role: "manager" | "staff" = "manager",
 ) {
   await seedTenant(suite.db);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: crypto.randomUUID(), pinHash: hashPin("1234"), role })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: crypto.randomUUID(),
+    pinHash: hashPin("1234"),
+    role,
+  });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
@@ -186,7 +188,7 @@ it("rejects stale and malformed fields before raster preparation", async () => {
 it("rechecks permission after preparation and rolls the entire save back", async () => {
   let personId = "";
   const render = vi.fn(async () => {
-    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "staff");
     return rasters;
   });
   const { image, person, edit } = await fixture(render);

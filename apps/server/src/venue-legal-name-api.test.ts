@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -164,7 +165,15 @@ describe("changing the taxpayer's legal name", () => {
     expect(await staff.json()).toEqual({
       error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     });
-    await suite.db.execute(sql`update persons set role = 'supervisor' where role = 'manager'`);
+    await setBuiltInRoleForTest(
+      suite.db,
+      (
+        await suite.db.execute<{ id: string }>(
+          sql`select id from persons where display_name = 'The Manager'`,
+        )
+      ).rows[0]!.id,
+      "supervisor",
+    );
     const supervisor = await rename(body);
     expect(supervisor.status).toBe(403);
     expect(await supervisor.json()).toEqual({

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, expect, it } from "vitest";
 import {
   decimal,
@@ -20,7 +21,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { eq, sql } from "drizzle-orm";
 import {
   correctionLinesFor,
@@ -125,10 +126,11 @@ beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   const till = (await seedDevice(suite.db, {})).deviceId;
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Supervisor", pinHash: hashPin("1234"), role: "supervisor" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Supervisor",
+    pinHash: hashPin("1234"),
+    role: "supervisor",
+  });
   sessionId = (
     await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId: till, personId: person!.id, pin: "1234" }),

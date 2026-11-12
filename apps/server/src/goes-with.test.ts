@@ -1,8 +1,8 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   kitchenStations,
   printJobs,
   ticketItems,
@@ -172,14 +172,11 @@ const fromHeading = (paper: string[]) =>
 
 async function passDevice(k: Kitchen): Promise<PassActor> {
   const [profile] = await withTransaction(db, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Pass profile",
-        formFactor: "kds",
-        capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
-      })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, {
+      name: "Pass profile",
+      formFactor: "kds",
+      capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
+    }),
   );
   const joined = await enrolDeviceForTest(db, k.v.cfg, {
     name: "Pass",

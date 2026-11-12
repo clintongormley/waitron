@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { printOverIpp } from "@waitron/print-agent-app/ipp-print.js";
 import { createServer, type Server } from "node:http";
@@ -7,7 +8,6 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  deviceProfiles,
   invoiceDeliveries,
   invoiceSeries,
   pagePrinters,
@@ -17,8 +17,8 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { seedDeviceProfiles, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -281,14 +281,16 @@ async function venue() {
     simplifiedInvoiceLimit: null,
   };
   const { managerCookie, staffId, zoneId } = await withTransaction(suite.db, async (tx) => {
-    const [manager] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: fixturePinHash("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "Staff one", pinHash: fixturePinHash("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [manager] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: fixturePinHash("1234"),
+      role: "manager",
+    });
+    const [staff] = await seedPersons(tx, {
+      displayName: "Staff one",
+      pinHash: fixturePinHash("5555"),
+      role: "staff",
+    });
     const session = await startManagementSession(tx, { personId: manager!.id });
     const zone = await createZone(tx, { name: "Bar" });
     return {
@@ -364,10 +366,11 @@ async function tillSession(
   app: Hono,
   personId: string,
 ): Promise<{ tillCookie: string; tillProfileId: string }> {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: "Till", formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: "Till",
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   const device = await enrolDeviceForTest(suite.db, cfg, { name: "Till", profileId: profile!.id });
   const login = await app.request("/api/session", {
     method: "POST",

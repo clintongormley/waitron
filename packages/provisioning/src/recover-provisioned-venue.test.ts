@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
@@ -31,7 +32,9 @@ const refusal = { code: "setup.already_provisioned", params: {} };
 async function fixture() {
   const target = await applyVenue(planVenue(venue, modules), { db: suite.db, modules });
   const admin = (
-    await suite.db.execute<{ id: string }>(sql`select id from persons where role = 'admin'`)
+    await suite.db.execute<{ id: string }>(
+      sql`select id from persons where email = 'target@example.test'`,
+    )
   ).rows[0]!;
   return {
     target,
@@ -145,13 +148,14 @@ it.each(["suspended", "staff"])(
   "refuses a retained administrator who is now %s",
   async (change) => {
     const f = await fixture();
-    await withTransaction(suite.db, (tx) =>
-      tx.execute(
-        change === "staff"
-          ? sql`update persons set role = 'staff' where id = ${f.initialOperations.administratorId}`
-          : sql`update persons set status = 'suspended' where id = ${f.initialOperations.administratorId}`,
-      ),
-    );
+    await withTransaction(suite.db, async (tx) => {
+      if (change === "staff")
+        await setBuiltInRoleForTest(tx, f.initialOperations.administratorId, "staff");
+      else
+        await tx.execute(
+          sql`update persons set status = 'suspended' where id = ${f.initialOperations.administratorId}`,
+        );
+    });
     await expect(
       recoverProvisionedVenue(
         suite.db,

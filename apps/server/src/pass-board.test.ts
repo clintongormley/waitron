@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, ticketItems, workingOrderLines } from "@waitron/db";
+import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -39,10 +39,10 @@ const suite = useVenueDb({
 
 async function passDevices(v: PartyVenue, count: number): Promise<string[]> {
   return inTx(v, async (tx) => {
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: `Pass ${randomUUID()}`, formFactor: "kds" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: `Pass ${randomUUID()}`,
+      formFactor: "kds",
+    });
     const deviceIds: string[] = [];
     for (let n = 0; n < count; n++) {
       const label = `Pass screen ${n + 1} ${randomUUID()}`;

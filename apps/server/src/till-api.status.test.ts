@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { createZone } from "./testing/service-zone.js";
 
@@ -8,7 +9,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createTable } from "./testing/live-table.js";
@@ -41,10 +42,11 @@ const suite = useVenueDb({
     });
 
     const nodeId = await seedNode(db);
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(db, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     ana = { id: person!.id };
     cfg = makeCfg(nodeId);
     TABLE_ID = await withTransaction(db, async (tx) => {

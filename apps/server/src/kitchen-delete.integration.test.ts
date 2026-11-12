@@ -4,15 +4,9 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import {
-  ticketItems,
-  workingOrderLines,
-  orderDraftEvents,
-  deviceProfiles,
-  products,
-} from "@waitron/db";
+import { ticketItems, workingOrderLines, orderDraftEvents, products } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   setRoutingCell,
@@ -211,10 +205,7 @@ it("keeps retained draft, group, course and ready station history through manage
   });
   const before = await history();
   const display = await inTx(v, async (tx) => {
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Dessert KDS", formFactor: "kds" })
-      .returning();
+    const [profile] = await seedDeviceProfiles(tx, { name: "Dessert KDS", formFactor: "kds" });
     await setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });

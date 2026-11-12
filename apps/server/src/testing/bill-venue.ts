@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";
 import { observedWholePaymentBody } from "./whole-payment-fixture.js";
@@ -12,7 +14,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import {
   billPayments,
-  deviceProfiles,
   sales,
   tenders,
   withTransaction,
@@ -29,7 +30,7 @@ import {
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
@@ -195,30 +196,28 @@ export async function provisionBillVenue(
     }
     await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
-      .returning({ id: persons.id });
-    const [profile, cashOnly] = await tx
-      .insert(deviceProfiles)
-      .values([
-        {
-          name: "Counter till",
-          formFactor: "till",
-          capabilities: [
-            ...BASIC_ACTIONS,
-            "integrated-card-payment",
-            "open-cash-drawer",
-            "take-cash",
-          ],
-        },
-        {
-          name: "Cash till",
-          formFactor: "till",
-          capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
-        },
-      ])
-      .returning({ id: deviceProfiles.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Ana",
+      pinHash: fixturePinHash("5555"),
+      role: "staff",
+    });
+    const [profile, cashOnly] = await seedDeviceProfiles(tx, [
+      {
+        name: "Counter till",
+        formFactor: "till",
+        capabilities: [
+          ...BASIC_ACTIONS,
+          "integrated-card-payment",
+          "open-cash-drawer",
+          "take-cash",
+        ],
+      },
+      {
+        name: "Cash till",
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+      },
+    ]);
     const printer = await createPrinter(tx, {
       name: "Receipt printer",
       transport: "cloud_poll",
@@ -321,7 +320,9 @@ export async function provisionBillVenue(
     cookieNoCard: await cookieFor(cashOnlyDevice),
     device2Id: devices[1]!.deviceId,
     operatorId: seeded.personId,
-    adminId: db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id,
+    adminId: db.all<{ id: string }>(
+      sql`select id from persons where email = 'owner@example.test'`,
+    )[0]!.id,
     offerFor: (name) => seeded.offers.offerFor(seeded.productIds.get(name)!),
     zoneId: seeded.offers.zoneId,
   };

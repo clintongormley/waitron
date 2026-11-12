@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -373,10 +374,7 @@ describe("staff roles", () => {
       id: string = randomUUID(),
     ) =>
       inTx(async (tx) => {
-        const [row] = await tx
-          .insert(persons)
-          .values({ id, displayName, role: "staff", status })
-          .returning({ id: persons.id });
+        const [row] = await seedPersons(tx, { id, displayName, role: "staff", status });
         return row!.id;
       });
     const marc = await person("Marc");

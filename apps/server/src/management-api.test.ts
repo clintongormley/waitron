@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createZone as createTableZone } from "./testing/service-zone.js";
 import type { ModuleRouteContext, TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -21,7 +22,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons, registerModulePermissions } from "@waitron/identity";
+import { hashPassword, hashPin, registerModulePermissions } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { stationStates } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -157,16 +158,13 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
       email: string,
       role: "manager" | "staff" | "supervisor",
     ) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({
-          displayName,
-          email,
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(PASSWORD),
-          role,
-        })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName,
+        email,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role,
+      });
       return person!.id;
     };
     await seed("The Supervisor", SUPERVISOR_EMAIL, "supervisor");
@@ -675,17 +673,14 @@ describe("POST /management-api/session (email login)", () => {
   it("answers every refused sign-in identically, whatever the cause, and sets no cookie", async () => {
     const seedManager = (email: string, status: "active" | "suspended") =>
       withTransaction(suite.db, async (tx) => {
-        const [person] = await tx
-          .insert(persons)
-          .values({
-            displayName: unique("Manager"),
-            email,
-            pinHash: hashPin("1234"),
-            passwordHash: hashPassword(PASSWORD),
-            role: "manager",
-            status,
-          })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(tx, {
+          displayName: unique("Manager"),
+          email,
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(PASSWORD),
+          role: "manager",
+          status,
+        });
         return person!.id;
       });
     const suspendedEmail = `${unique("suspended")}@x.com`;
@@ -743,16 +738,13 @@ describe("POST /management-api/session (email login)", () => {
   it("refuses a manager suspended while the key was being derived, as any refusal", async () => {
     const email = `${unique("suspended-mid-sign-in")}@x.com`;
     const personId = await withTransaction(suite.db, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({
-          displayName: unique("Manager"),
-          email,
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(PASSWORD),
-          role: "manager",
-        })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: unique("Manager"),
+        email,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "manager",
+      });
       return person!.id;
     });
 

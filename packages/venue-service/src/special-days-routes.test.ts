@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -20,12 +21,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { saveMenuPeriod } from "./menu-timetable.js";
@@ -73,10 +69,11 @@ async function routed() {
       await saveMenuPeriod(tx, restaurant, { name: "Dinner", menuId, staffMenuIds: [] })
     ).id;
     const person = async (role: "manager" | "supervisor") => {
-      const [row] = await tx
-        .insert(persons)
-        .values({ displayName: `${role} ${randomUUID()}`, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [row] = await seedPersons(tx, {
+        displayName: `${role} ${randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role,
+      });
       return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: row!.id })).token}`;
     };
     return {

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, expect, it } from "vitest";
@@ -10,7 +11,7 @@ import {
   tenants,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { withOperationAuthority } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { nodeId } from "@waitron/shared";
@@ -55,9 +56,12 @@ beforeEach(async () => {
     { nodeId: target.nodeId, code: "FF", purpose: "full" },
     { nodeId: target.nodeId, code: "R", purpose: "rectificative" },
   ]);
-  await suite.db
-    .insert(persons)
-    .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
+  await seedPersons(suite.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: HASH,
+  });
 });
 
 function regime(

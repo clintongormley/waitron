@@ -1,8 +1,9 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  deviceProfiles,
   devices,
   floorZones,
   kitchenStations,
@@ -16,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { DeviceKitchenScreen } from "@waitron/module";
-import { persons } from "@waitron/identity";
+
 import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
@@ -65,10 +66,7 @@ async function kitchenDisplay(
   formFactor: FormFactor = "kds",
 ): Promise<{ deviceId: string; profileId: string }> {
   const [profile] = await withTransaction(db, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({ name: `${name} profile`, formFactor, capabilities })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, { name: `${name} profile`, formFactor, capabilities }),
   );
   const joined = await enrolDeviceForTest(db, venue.cfg, {
     name,
@@ -630,10 +628,11 @@ async function tablesTillPass(venue: Venue, capabilities: CapabilityFlag[] = TIL
     }),
   );
   const [person] = await withTransaction(db, (tx) =>
-    tx
-      .insert(persons)
-      .values({ displayName: "Till pass cook", pinHash: fixturePinHash("2468"), role: "staff" })
-      .returning({ id: persons.id }),
+    seedPersons(tx, {
+      displayName: "Till pass cook",
+      pinHash: fixturePinHash("2468"),
+      role: "staff",
+    }),
   );
   const personId = person!.id;
   const sessionId = await openTillSession(db, { deviceId: made.deviceId, personId });

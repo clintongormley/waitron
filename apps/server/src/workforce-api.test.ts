@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { WorkforceBackend } from "@waitron/workforce";
 import { jobOrigin } from "@waitron/shared";
 import { seedNode } from "@waitron/db/testing/seed.js";
@@ -7,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import {
   WORKFORCE_MIGRATIONS,
   absences,
@@ -42,14 +43,16 @@ const suite = useVenueDb({
       });
       // Through the table definitions, not raw SQL: every `id` here is a NOT NULL `$defaultFn`
       // generator a raw insert never reaches.
-      const [mgr] = await tx
-        .insert(persons)
-        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
-      const [stf] = await tx
-        .insert(persons)
-        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-        .returning({ id: persons.id });
+      const [mgr] = await seedPersons(tx, {
+        displayName: "The Manager",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
+      const [stf] = await seedPersons(tx, {
+        displayName: "The Clerk",
+        pinHash: hashPin("1234"),
+        role: "staff",
+      });
       const mSes = await startManagementSession(tx, { personId: mgr!.id });
       const sSes = await startManagementSession(tx, { personId: stf!.id });
       return {
@@ -254,10 +257,11 @@ describe("mountWorkforceApi — shift routes", () => {
       body: shiftBody("2026-06-01"),
     });
     const { shiftId } = (await add.json()) as { shiftId: string };
-    const [other] = await suite.db
-      .insert(persons)
-      .values({ displayName: "The Cover", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [other] = await seedPersons(suite.db, {
+      displayName: "The Cover",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     const res = await send(app, "PATCH", `/management-api/roster/shifts/${shiftId}`, {
       body: {
         personId: other!.id,
@@ -882,10 +886,7 @@ describe("roster warnings while planning", () => {
 
   it("judges weekly rest with surrounding weeks, but not for a person whose only shifts are in the requested week", async () => {
     const loc = await warningLocation();
-    const [worker] = await suite.db
-      .insert(persons)
-      .values({ displayName: crypto.randomUUID() })
-      .returning();
+    const [worker] = await seedPersons(suite.db, { displayName: crypto.randomUUID() });
     await planned(loc, "2026-03-01T09:00:00Z", "2026-03-01T17:00:00Z");
     for (let day = 2; day <= 8; day++)
       for (const person of [personId, worker!.id]) {

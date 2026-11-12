@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR names, or on macOS a disk
 // image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case is reported
@@ -40,7 +41,6 @@ import {
   hashPin,
   hashDeviceToken,
   hashSessionToken,
-  persons,
   startManagementSession,
   withPassiveManagementRead,
   type PersonRoleValue,
@@ -264,10 +264,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
 
   async function seedPerson(role: PersonRoleValue, name: string) {
     return withTransaction(db, async (tx) => {
-      const [p] = await tx
-        .insert(persons)
-        .values({ displayName: name, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
       const session = await startManagementSession(tx, { personId: p!.id });
       await setFreshManagementSignIn(tx, session.token);
       return {
@@ -1040,10 +1037,11 @@ describe("a start on a real full disk", () => {
         invoiceLocales: ["en-GB"],
         operationDescription: "Sale",
       });
-      const [admin] = await db
-        .insert(persons)
-        .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
-        .returning();
+      const [admin] = await seedPersons(db, {
+        displayName: "Admin",
+        role: "admin",
+        email: "admin@example.test",
+      });
       await withTransaction(db, () => {});
       expect(db.all(sql`select count(*) as n from change_log`)).toEqual([{ n: 0 }]);
       db.all(sql`pragma wal_checkpoint(truncate)`);
@@ -1090,14 +1088,11 @@ describe("a start on a real full disk", () => {
       full = false;
       // The full-disk email reached the administrator, so only the new manager needs this one.
       const [added] = await withTransaction(db, (tx) =>
-        tx
-          .insert(persons)
-          .values({
-            displayName: "New manager",
-            role: "manager",
-            email: "new@example.test",
-          })
-          .returning(),
+        seedPersons(tx, {
+          displayName: "New manager",
+          role: "manager",
+          email: "new@example.test",
+        }),
       );
       armed.at(-1)!();
       await vi.waitFor(() => expect(armed).toHaveLength(3));
@@ -1464,10 +1459,11 @@ describe("a start on a real full disk", () => {
         invoiceLocales: ["en-GB"],
         operationDescription: "Sale",
       });
-      const [admin] = await db
-        .insert(persons)
-        .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
-        .returning({ id: persons.id });
+      const [admin] = await seedPersons(db, {
+        displayName: "Admin",
+        role: "admin",
+        email: "admin@example.test",
+      });
       db.run(
         sql`insert into change_log (id, payload) values ('zz1', '{"resource":"zz","id":"1"}')`,
       );

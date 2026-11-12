@@ -1,10 +1,11 @@
 /** The device delete routes, end to end over `app.request`. */
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, devices, joinRequests, withTransaction } from "@waitron/db";
+import { devices, joinRequests, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -80,14 +81,11 @@ function deviceCookieFrom(res: Response): string {
 let profileCounter = 0;
 async function seedProfile(): Promise<string> {
   profileCounter += 1;
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Test profile ${profileCounter}`,
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Test profile ${profileCounter}`,
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS],
+  });
   return row!.id;
 }
 

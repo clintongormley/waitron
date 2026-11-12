@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -26,7 +27,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordStepCompletions } from "@waitron/venue-service";
 import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
@@ -192,10 +193,7 @@ async function remindAtOf(v: PartyVenue, groupId: string): Promise<string> {
 
 async function person(v: PartyVenue, displayName: string): Promise<string> {
   const [row] = await inTx(v, (tx) =>
-    tx
-      .insert(persons)
-      .values({ displayName, pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id }),
+    seedPersons(tx, { displayName, pinHash: hashPin("4321"), role: "staff" }),
   );
   return row!.id;
 }

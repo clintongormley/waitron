@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -42,7 +43,10 @@ let app: Hono,
 beforeEach(async () => {
   venue = await createClockVenue(suite.db, () => now);
   registerModulePermissions(ALL_MODULES.flatMap((m) => m.permissions ?? []));
-  const [admin] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
+  const [admin] = await suite.db
+    .select()
+    .from(persons)
+    .where(eq(persons.email, "owner@example.test"));
   owner = admin!.id;
   await withTransaction(suite.db, async (tx) => {
     const staff = await startManagementSession(tx, { personId: venue.personId });
@@ -138,7 +142,7 @@ it("ordinary staff read only their own record without the manager permission", a
   const day = await ask(own + "day?date=2026-01-05");
   expect(day.status).toBe(200);
   expect(await day.json()).toMatchObject({ personId: venue.personId, revision: await revision() });
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, venue.personId));
+  await setBuiltInRoleForTest(suite.db, venue.personId, "manager");
   expect((await ask(own + path())).status).toBe(200);
 });
 it("manager hours refuses staff and permits a supervisor with minimal people data", async () => {
@@ -146,7 +150,7 @@ it("manager hours refuses staff and permits a supervisor with minimal people dat
   let response = await ask(route);
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-  await suite.db.update(persons).set({ role: "supervisor" }).where(eq(persons.id, venue.personId));
+  await setBuiltInRoleForTest(suite.db, venue.personId, "supervisor");
   response = await ask(route);
   expect(response.status).toBe(200);
   const value = (await response.json()) as ManagerHours;
@@ -425,10 +429,11 @@ it("rechecks a revoked own session after authentication and before the human wri
 });
 
 it("another worker's actual target, question and proposal confer no own authority", async () => {
-  const [other] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Other worker", pinHash: "scrypt$00$00", role: "staff" })
-    .returning();
+  const [other] = await seedPersons(suite.db, {
+    displayName: "Other worker",
+    pinHash: "scrypt$00$00",
+    role: "staff",
+  });
   let targetId = "",
     questionId = "",
     proposalId = "";

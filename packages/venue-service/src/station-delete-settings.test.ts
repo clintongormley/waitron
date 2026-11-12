@@ -11,7 +11,6 @@ import {
   deviceKitchenScreenStations,
   deviceKitchenScreenZones,
   deviceProfileKitchenScreens,
-  deviceProfiles,
   devices,
   floorZones,
   kitchenStations,
@@ -25,7 +24,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import * as module from "./index.js";
 import {
   readDeviceKitchenScreens,
@@ -84,7 +83,7 @@ async function fixture(tx: Transaction) {
   };
 }
 async function profile(tx: Transaction, name: string, formFactor: "kds" | "till" = "kds") {
-  const [row] = await tx.insert(deviceProfiles).values({ name, formFactor }).returning();
+  const [row] = await seedDeviceProfiles(tx, { name, formFactor });
   return row!.id;
 }
 async function device(tx: Transaction, profileId: string, label: string, active = true) {

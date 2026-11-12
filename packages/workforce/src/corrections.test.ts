@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { CORE_MIGRATIONS, captureError, newId, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -6,7 +7,7 @@ import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
-import { persons } from "@waitron/identity";
+
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
@@ -50,10 +51,11 @@ async function nineToFive(name: string): Promise<{ personId: string; outEntryId:
 
 /** Through the table definition for the same reason as `seedPerson`. */
 async function supervisor(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: name, pinHash: "scrypt$00$00", role: "supervisor" })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, {
+    displayName: name,
+    pinHash: "scrypt$00$00",
+    role: "supervisor",
+  });
   return row!.id;
 }
 

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -10,7 +11,7 @@ import { setRecoveryKeyTx } from "@waitron/node-db";
 import { makeBreakGlassSecret } from "./break-glass.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -27,7 +28,7 @@ const passwordHash = hashPassword(PASSWORD);
 let root: string | undefined;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "promote-throttle-"));
-  await suite.db.insert(persons).values([
+  await seedPersons(suite.db, [
     { id: ADMIN, displayName: "Administrator", role: "admin", passwordHash },
     { id: OTHER, displayName: "Other administrator", role: "admin", passwordHash },
   ]);

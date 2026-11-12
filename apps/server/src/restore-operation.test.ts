@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import {
   readOperationAuthority,
   withOperationAuthority,
@@ -56,9 +57,12 @@ beforeEach(async () => {
     { nodeId: target.nodeId, code: "FF", purpose: "full" },
     { nodeId: target.nodeId, code: "R", purpose: "rectificative" },
   ]);
-  await suite.db
-    .insert(persons)
-    .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
+  await seedPersons(suite.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: HASH,
+  });
 });
 
 function regime(hook: RestoreHook, name = binding.module): WaitronModule {

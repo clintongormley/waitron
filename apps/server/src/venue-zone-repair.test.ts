@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import {
   ZONE_REPAIR_ALERT_CLAIM,
   confirmVenueZone,
@@ -43,10 +44,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant service",
   });
   scope = { locationId: await venueLocationId(suite.db), nodeId: await seedNode(suite.db) };
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Manager", role: "manager" })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });
   actor = person!.id;
   token = (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: actor })))
     .token;
@@ -273,7 +271,7 @@ describe("atomic unusable-zone confirmation", () => {
   it.each(["staff", "supervisor"] as const)(
     "reauthorizes a direct %s caller for both reads and writes",
     async (role) => {
-      await suite.db.update(persons).set({ role }).where(eq(persons.id, actor));
+      await setBuiltInRoleForTest(suite.db, actor, role);
       const before = snapshot();
       await expect(read()).rejects.toMatchObject({ code: "authorization.not_permitted" });
       await expect(confirm()).rejects.toMatchObject({ code: "authorization.not_permitted" });

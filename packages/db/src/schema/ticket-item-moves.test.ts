@@ -4,11 +4,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, CHECK_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { catalogues, products } from "./catalogue.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines } from "./orders.js";
@@ -73,7 +73,7 @@ describe("ticket_item_moves schema", () => {
       })
       .returning({ id: workingOrderLines.id });
     lineId = line!.id;
-    await db.insert(deviceProfiles).values({ id: "till", name: "Till", formFactor: "till" });
+    await seedDeviceProfiles(db, { id: "till", name: "Till", formFactor: "till" });
     await db.insert(devices).values({
       id: "device-a",
       deviceProfileId: "till",

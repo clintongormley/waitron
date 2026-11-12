@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { spawn } from "node:child_process";
@@ -10,7 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { openVenueDatabase, orderGroups, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { PartyAllergyRead } from "@waitron/module";
 import { readPartyAllergy, setRoutingCell } from "@waitron/venue-service";
@@ -40,7 +41,7 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    await db.insert(persons).values({ id: OPERATOR, displayName: "Test operator", role: "staff" });
+    await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   },
 });
 

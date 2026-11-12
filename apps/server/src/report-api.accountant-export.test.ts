@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { strFromU8, unzipSync } from "fflate";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { activityLog, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import {
   seedPurchaseInvoice,
   seedSale,
@@ -44,10 +45,11 @@ describe("accountant export download", () => {
     });
     await withTransaction(db, async (tx) => {
       for (const role of ["manager", "supervisor"] as const) {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: `The ${role}`, pinHash: fixturePinHash("1234"), role })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(tx, {
+          displayName: `The ${role}`,
+          pinHash: fixturePinHash("1234"),
+          role,
+        });
         const session = await startManagementSession(tx, { personId: person!.id });
         const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
         if (role === "manager") manager = { id: person!.id, cookie };
@@ -125,14 +127,11 @@ describe("accountant export download", () => {
     try {
       await started;
       const written = withTransaction(suite.db, (tx) =>
-        tx
-          .insert(persons)
-          .values({
-            displayName: "Another request",
-            role: "staff",
-            pinHash: fixturePinHash("1234"),
-          })
-          .returning({ id: persons.id }),
+        seedPersons(tx, {
+          displayName: "Another request",
+          role: "staff",
+          pinHash: fixturePinHash("1234"),
+        }),
       );
       const finished = await Promise.race([
         written.then((rows) => rows.length === 1),

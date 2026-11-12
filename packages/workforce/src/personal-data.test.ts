@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { insertAttendanceMail, setAttendanceMail } from "../test/fixtures.js";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -8,7 +9,7 @@ import {
   seedBusinessDay,
 } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -56,10 +57,7 @@ async function download(personId: string): Promise<{ name: string; text: string 
 
 async function seedManager(db: Database): Promise<{ id: string; email: string }> {
   const email = "luis.manager@example.test";
-  const [row] = await db
-    .insert(persons)
-    .values({ displayName: "Luis Manager", email })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(db, { displayName: "Luis Manager", email });
   return { id: row!.id, email };
 }
 

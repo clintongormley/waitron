@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "@waitron/catalogue";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { deletePrinter } from "./printer-delete.js";
@@ -23,7 +23,6 @@ import * as receiptTicket from "./receipt-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   deviceProfilePrinters,
-  deviceProfiles,
   devices,
   diningTables,
   drawerOpens,
@@ -1617,14 +1616,11 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
 
   it("a kitchen display opens no drawer, even when its stored list names the drawer", async () => {
     const { cfg, printerId, product } = await sharedDrawer();
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Display ${randomUUID()}`,
-        formFactor: "kds",
-        capabilities: [...CAPABILITY_FLAGS],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: `Display ${randomUUID()}`,
+      formFactor: "kds",
+      capabilities: [...CAPABILITY_FLAGS],
+    });
     const device = {
       id: (
         await seedDevice(suite.db, {

@@ -1,10 +1,10 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  deviceProfiles,
   lineServiceCancellations,
   orderDraftLines,
   orderDrafts,
@@ -2162,14 +2162,11 @@ describe("A803 waiting copy: kitchen paper", () => {
     async function passDevice(): Promise<PassActor> {
       if (passActor !== undefined) return passActor;
       const [profile] = await inTx(v, (tx) =>
-        tx
-          .insert(deviceProfiles)
-          .values({
-            name: "A1327 pass profile",
-            formFactor: "kds",
-            capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
-          })
-          .returning({ id: deviceProfiles.id }),
+        seedDeviceProfiles(tx, {
+          name: "A1327 pass profile",
+          formFactor: "kds",
+          capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
+        }),
       );
       const joined = await enrolDeviceForTest(v.db, v.cfg, {
         name: "A1327 pass",

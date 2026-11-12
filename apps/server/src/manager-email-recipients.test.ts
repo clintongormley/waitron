@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -12,10 +13,7 @@ async function person(
   displayName: string,
   values: Partial<typeof persons.$inferInsert>,
 ): Promise<string> {
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName, ...values })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, { displayName, ...values });
   return row!.id;
 }
 

@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
@@ -5,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
 import { describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, devices, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -343,10 +344,11 @@ describe("StripeTerminalProvider.collect under the device profile the request wa
       .select({ profileId: devices.deviceProfileId })
       .from(devices)
       .where(eq(devices.id, p._seeded.deviceId));
-    const [other] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [other] = await seedDeviceProfiles(suite.db, {
+      name: "Moved to",
+      formFactor: "till",
+      capabilities: [],
+    });
     await suite.db
       .update(devices)
       .set({ deviceProfileId: other!.id })

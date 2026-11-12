@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { Hono } from "hono";
@@ -10,7 +11,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -79,7 +80,7 @@ async function provisionTenant(): Promise<Record<string, never>> {
   // Through the table definitions: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(persons).values([
+    await seedPersons(tx, [
       {
         displayName: "The Manager",
         email: MANAGER_EMAIL,

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
@@ -156,7 +157,7 @@ describe("scoped recovery-key authority", () => {
         key,
         async (tx, authority) => {
           held = authority;
-          await tx.insert(persons).values({ displayName: "Uncommitted", role: "staff" });
+          await seedPersons(tx, { displayName: "Uncommitted", role: "staff" });
           throw new Error("write refused");
         },
       ),

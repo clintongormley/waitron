@@ -1,9 +1,10 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -23,14 +24,11 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
   nodeId = await seedNode(suite.db, locationId);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
-      { displayName: "Other worker", pinHash: "scrypt$00$00", role: "staff" },
-    ])
-    .returning({ id: persons.id });
+  const rows = await seedPersons(suite.db, [
+    { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
+    { displayName: "Other worker", pinHash: "scrypt$00$00", role: "staff" },
+  ]);
   [personId, manager, other] = rows.map((r) => r.id) as [string, string, string];
   await seedEmployment(suite.db, { personId });
 });
@@ -160,7 +158,7 @@ async function unchangedRefusal(action: () => Promise<unknown>, code: string) {
 describe("two-party correction decisions", () => {
   it("lets a manager request their own hours as the worker while requiring a different manager's approval", async () => {
     const target = await day();
-    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "manager");
     const correctionId = await run((tx) => backend.requestCorrection(tx, targeted(target)));
     expect(
       (await suite.db.select().from(timeEntries).where(eq(timeEntries.id, correctionId)))[0],
@@ -186,11 +184,10 @@ describe("two-party correction decisions", () => {
     "stores and hashes an admin's self-approval (%s), retaining it after demotion",
     async (when) => {
       const target = await day();
-      if (when === "admin at request")
-        await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, personId));
+      if (when === "admin at request") await setBuiltInRoleForTest(suite.db, personId, "admin");
       const request = await run((tx) => backend.requestCorrection(tx, targeted(target)));
       if (when === "promoted before approval")
-        await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, personId));
+        await setBuiltInRoleForTest(suite.db, personId, "admin");
       const approved = await run((tx) =>
         backend.approveCorrection(tx, {
           nodeId,
@@ -198,7 +195,7 @@ describe("two-party correction decisions", () => {
           approverPersonId: personId,
         }),
       );
-      await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+      await setBuiltInRoleForTest(suite.db, personId, "staff");
       expect(await minutes()).toBe(540);
       const record = await run((tx) =>
         backend.timeRecord(tx, {
@@ -494,7 +491,7 @@ describe("two-party correction decisions", () => {
   it("does not let a requester approve themselves after promotion", async () => {
     const target = await day();
     const correctionId = await run((tx) => backend.requestCorrection(tx, targeted(target)));
-    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "manager");
     await unchangedRefusal(
       () =>
         run((tx) =>
@@ -505,7 +502,7 @@ describe("two-party correction decisions", () => {
   });
   it("does not let a manager propose and accept their own change", async () => {
     const target = await day();
-    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "manager");
     await unchangedRefusal(
       () => run((tx) => backend.proposeCorrection(tx, targeted(target))),
       "correction.not_permitted",

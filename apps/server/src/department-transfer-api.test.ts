@@ -22,7 +22,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, setProfileAdmission, sessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import {
@@ -123,10 +123,11 @@ async function ready() {
       [b.id, bz.id],
       [b.id, bz.id],
     ]) {
-      const [p] = await tx
-        .insert(deviceProfiles)
-        .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
-        .returning();
+      const [p] = await seedDeviceProfiles(tx, {
+        name: randomUUID(),
+        formFactor: "till",
+        capabilities: [...CAPABILITY_FLAGS],
+      });
       await setProfileServiceScope(tx, p!.id, {
         departmentId: departmentId!,
         allowedZoneIds: [zoneId!],
@@ -676,10 +677,11 @@ async function get(cookie: string, path: string) {
 }
 
 async function departmentlessTill() {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
-    .returning();
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: randomUUID(),
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   return { profileId: profile!.id, ...(await login(profile!.id)) };
 }
 

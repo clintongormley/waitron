@@ -1,7 +1,8 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
+import { nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -76,14 +77,11 @@ async function liveStepsAt(v: PartyVenue, partyId: string, tableId: string, nowM
 }
 
 async function profile(v: PartyVenue): Promise<string> {
-  const [row] = await v.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...CAPABILITY_FLAGS],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(v.db, {
+    name: `Till ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   return row!.id;
 }
 

@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
@@ -5,10 +7,10 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, kitchenStations, withTransaction } from "@waitron/db";
+import { kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -129,24 +131,22 @@ let ben: string;
 let tills: string[];
 
 async function person(name: string, role: "staff" | "admin"): Promise<string> {
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: `${name} ${randomUUID()}`, pinHash: hashPin("5555"), role })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, {
+    displayName: `${name} ${randomUUID()}`,
+    pinHash: hashPin("5555"),
+    role,
+  });
   return row!.id;
 }
 
 /** A till whose profile lists every capability flag and shows a station screen and `pass`, so each
  * kitchen route reaches its person check on one of them. */
 async function kitchenTill(stationId: string, pass: "pass" | "pass_monitor"): Promise<string> {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Profile ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...CAPABILITY_FLAGS],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   const kitchenScreens: DeviceKitchenScreen[] = [
     { kind: "station", stationIds: [stationId], zoneIds: null },
     { kind: pass, stationIds: null, zoneIds: null },

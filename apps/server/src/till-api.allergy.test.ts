@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -14,12 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import {
-  hashSessionToken,
-  persons,
-  sessions,
-  deviceProfileAdmissionPersons,
-} from "@waitron/identity";
+import { hashSessionToken, sessions, deviceProfileAdmissionPersons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { listDepartments, readPartyAllergy, setProfileServiceAccess } from "@waitron/venue-service";
@@ -58,10 +54,7 @@ beforeEach(async () => {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Anna", role: "staff" })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: "Anna", role: "staff" });
   personId = person!.id;
   ({ deviceId, profileId } = await seedDevice(suite.db, { capabilities: ["take-orders"] }));
   token = randomUUID();
@@ -337,10 +330,7 @@ describe("A669 allergy routes", () => {
       409,
       "submission.id_reused",
     );
-    const [other] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Other staff", role: "staff" })
-      .returning();
+    const [other] = await seedPersons(suite.db, { displayName: "Other staff", role: "staff" });
     await suite.db.update(sessions).set({ personId: other!.id }).where(eq(sessions.id, sessionId));
     noteSessionPerson(token, other!.id);
     await expectError(await request("PUT", path(), original), 409, "submission.id_reused");

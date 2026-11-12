@@ -1,9 +1,10 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -26,13 +27,10 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
   nodeId = await seedNode(suite.db, locationId);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
-    ])
-    .returning({ id: persons.id });
+  const rows = await seedPersons(suite.db, [
+    { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
+  ]);
   [personId, manager] = rows.map((r) => r.id) as [string, string];
   await seedEmployment(suite.db, { personId });
 });
@@ -177,7 +175,7 @@ it.each([
   if (shape === "reverse") inputs.reverse();
   if (shape === "different-node") inputs[1]!.nodeId = await seedNode(suite.db, locationId);
   if (shape === "different-actor") {
-    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "manager");
     inputs[1]!.actorPersonId = manager;
     inputs[1]!.personId = manager;
     inputs[0]!.personId = manager;
@@ -359,9 +357,9 @@ it.each(["approve", "decline"] as const)(
 it.each(["staff", "supervisor", "manager"] as const)(
   "refuses current %s self-approval of the entire bundle",
   async (role) => {
-    await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, "admin");
     const ids = await run((tx) => corrections.requestCorrectionGroup(tx, pair(), "request"));
-    await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, role);
     await refused(
       () =>
         run((tx) =>
@@ -377,7 +375,7 @@ it.each(["staff", "supervisor", "manager"] as const)(
 );
 
 it("stores current-admin self-approval on both hashed responses", async () => {
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "admin");
   const ids = await run((tx) => corrections.requestCorrectionGroup(tx, pair(), "request"));
   await run((tx) =>
     corrections.decideCorrectionGroup(
@@ -393,7 +391,7 @@ it("stores current-admin self-approval on both hashed responses", async () => {
       .map((r) => [r.respondsToEntryId, r.selfApproved, r.authorKind, r.recordedByPersonId]),
   ).toEqual(ids.map((id) => [id, true, "manager", personId]));
   expect((await record()).sessions.map((s) => s.workedMinutes)).toEqual([60]);
-  await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "staff");
   expect(
     (await record()).entries.filter((e) => e.selfApproved).map((e) => e.entry.entryId),
   ).toEqual(rows.slice(-2).map((r) => r.id));
@@ -474,10 +472,11 @@ it("answers an earlier node's pair on a new node without changing its chain", as
 });
 
 it("refuses two different managers' same-direction proposal rows as one bundle", async () => {
-  const [other] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Other manager", pinHash: "scrypt$00$00", role: "manager" })
-    .returning({ id: persons.id });
+  const [other] = await seedPersons(suite.db, {
+    displayName: "Other manager",
+    pinHash: "scrypt$00$00",
+    role: "manager",
+  });
   const inputs = pair(["in", "out"], manager);
   inputs[1]!.actorPersonId = other!.id;
   await refused(() => run((tx) => corrections.requestCorrectionGroup(tx, inputs, "propose")));

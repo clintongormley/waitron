@@ -63,7 +63,7 @@ describe("signed-in own till clock routes", () => {
       await tx
         .update(persons)
         .set({ displayName: "Owner updated" })
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       entered.resolve();
       await release.promise;
     });

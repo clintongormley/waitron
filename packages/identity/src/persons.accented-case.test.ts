@@ -1,3 +1,4 @@
+import { seedPersons } from "../test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { hashSessionToken } from "./session-token.js";
 /**
@@ -8,13 +9,7 @@ import { hashSessionToken } from "./session-token.js";
  * cases are encoding cases, with an ASCII case-only control beside each.
  */
 import { randomUUID } from "node:crypto";
-import {
-  CORE_MIGRATIONS,
-  captureError,
-  indexViolated,
-  withTransaction,
-  persons,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, indexViolated, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
@@ -197,7 +192,7 @@ describe("the index itself folds, not only the check in front of it", () => {
   it("refuses a second live row whose folded name matches, written through the table", async () => {
     const write = (displayName: string): Promise<unknown> =>
       run((tx) =>
-        tx.insert(persons).values({
+        seedPersons(tx, {
           displayName,
           displayNameFolded: foldForUniqueness(displayName),
         }),

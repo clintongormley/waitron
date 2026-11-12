@@ -352,7 +352,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       const [admin] = await seeding.venue
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       const [profile] = await seeding.venue
         .select({ id: deviceProfiles.id })
         .from(deviceProfiles)

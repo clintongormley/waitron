@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
@@ -20,7 +21,7 @@ import {
 } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { and, asc, eq, ne } from "drizzle-orm";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { partyRevision } from "./parties.js";
@@ -73,10 +74,11 @@ beforeAll(async () => {
   );
   const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
   cookie = await sessionCookieForTest(v.db, session.token);

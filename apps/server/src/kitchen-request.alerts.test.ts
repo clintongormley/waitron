@@ -1,9 +1,9 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   devices,
   parties,
   printJobs,
@@ -153,10 +153,11 @@ async function kdsDevice(
   venue: Venue,
   screen: Parameters<typeof enrolDeviceForTest>[2]["kitchenScreen"],
 ) {
-  const [profile] = await db
-    .insert(deviceProfiles)
-    .values({ name: randomUUID(), formFactor: "kds", capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(db, {
+    name: randomUUID(),
+    formFactor: "kds",
+    capabilities: [],
+  });
   const { deviceId } = await enrolDeviceForTest(db, venue.cfg, {
     name: "Screen",
     profileId: profile!.id,

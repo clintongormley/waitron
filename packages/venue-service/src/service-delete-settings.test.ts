@@ -18,7 +18,6 @@ import {
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
-  deviceProfiles,
   deviceProfileServiceAccess,
   deviceProfileZones,
   devices,
@@ -42,7 +41,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   readServiceDeleteSettings,
   clearServiceDeleteSettings,
@@ -105,15 +104,12 @@ async function fixture(tx: Transaction, suffix = "") {
     })),
   );
   await tx.insert(departmentSalePolicies).values(ds.map((row) => ({ departmentId: row.id })));
-  const ps = await tx
-    .insert(deviceProfiles)
-    .values([
-      { name: "Explicit" + suffix, formFactor: "till" },
-      { name: "Every" + suffix, formFactor: "till" },
-      { name: "Retired" + suffix, formFactor: "till", retiredAt: "2026-10-11T00:00:00Z" },
-      { name: "Kitchen" + suffix, formFactor: "kds" },
-    ])
-    .returning();
+  const ps = await seedDeviceProfiles(tx, [
+    { name: "Explicit" + suffix, formFactor: "till" },
+    { name: "Every" + suffix, formFactor: "till" },
+    { name: "Retired" + suffix, formFactor: "till", retiredAt: "2026-10-11T00:00:00Z" },
+    { name: "Kitchen" + suffix, formFactor: "kds" },
+  ]);
   const [explicit, every, retired, kitchen] = ps.map((row) => row.id) as [
     string,
     string,
@@ -700,10 +696,7 @@ it("delete without a surviving configured zone leaves default_missing and never 
 it("delete keeps missing-parent and KDS service access unrestricted while a retained empty parent stays restricted", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
-    const [unbound] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Unbound", formFactor: "till" })
-      .returning();
+    const [unbound] = await seedDeviceProfiles(tx, { name: "Unbound", formFactor: "till" });
     await tx.delete(deviceProfileZones).where(eq(deviceProfileZones.deviceProfileId, f.explicit));
     await clearServiceDeleteSettings(tx, [f.gone], null);
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.gone));

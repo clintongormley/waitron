@@ -2,14 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   captureError,
-  deviceProfiles,
   isUniqueViolation,
   tenants,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { freshNif } from "../../test/seed.js";
 import { cardReaderHolders } from "./card-reader-holders.js";
@@ -27,10 +26,7 @@ async function seed(db: Database) {
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
-  const [profile] = await db
-    .insert(deviceProfiles)
-    .values({ name: "Profile", formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(db, { name: "Profile", formFactor: "till" });
   const made = [
     await seedDevice(db, { profileId: profile!.id, label: "Till A" }),
     await seedDevice(db, { profileId: profile!.id, label: "Till B" }),

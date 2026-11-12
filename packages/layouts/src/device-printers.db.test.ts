@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -537,10 +537,11 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("deletes a profile's list rows with the profile, and refuses deleting a listed printer", async () => {
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Deletable", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "Deletable",
+      formFactor: "till",
+      capabilities: [],
+    });
     const lonely = await seedPrinter("Listed only");
     await inTx((tx) =>
       setProfilePrinterLists(

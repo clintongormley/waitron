@@ -1,10 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { bookings } from "@waitron/bookings";
 import {
-  deviceProfiles,
   diningTables,
   floorTodayTables,
   floorPlanPlacements,
@@ -17,9 +17,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
-  persons,
   startManagementSession,
   managementSessions,
   registerModulePermissions,
@@ -75,10 +74,7 @@ beforeEach(async () => {
   [manager, staff, expired] = await run(async (tx) => {
     const result: string[] = [];
     for (const role of ["manager", "staff", "manager"] as const) {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: randomUUID(), role })
-        .returning();
+      const [person] = await seedPersons(tx, { displayName: randomUUID(), role });
       const session = await startManagementSession(tx, { personId: person!.id });
       result.push(`${MANAGEMENT_COOKIE}=${session.token}`);
       if (result.length === 3)
@@ -357,10 +353,7 @@ it.each([
   const f = await target();
   await run(async (tx) => {
     if (code.endsWith("profile_in_use")) {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Only garden", formFactor: "till" })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, { name: "Only garden", formFactor: "till" });
       await setProfileServiceScope(tx, profile!.id, {
         departmentId: f.departmentId,
         allowedZoneIds: [f.zoneId],

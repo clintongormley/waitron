@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -40,10 +41,11 @@ function uploadBody(bytes: Uint8Array<ArrayBuffer>): FormData {
  * insert naming none of them is refused `NOT NULL constraint failed`. A fresh display name per
  * call, because live display names are unique across the database and this fixture runs twice. */
 async function session(role: "manager" | "staff"): Promise<Record<string, string>> {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: `${role} ${crypto.randomUUID()}`, pinHash: hashPin("1234"), role })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: `${role} ${crypto.randomUUID()}`,
+    pinHash: hashPin("1234"),
+    role,
+  });
   const started = await suite.db.transaction((tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
@@ -182,17 +184,14 @@ it("refuses an upload without catalogue.manage without taking the write lock", a
 it("refuses an upload whose permission is withdrawn while its photo is prepared", async () => {
   await seedTenant(suite.db);
   const headers = await session("manager");
-  const [manager] = await suite.db
-    .select({ id: persons.id })
-    .from(persons)
-    .where(eq(persons.role, "manager"));
+  const [manager] = await suite.db.select({ id: persons.id }).from(persons);
   // The first time the upload asks for the write lock, its photo is already prepared: demote the
   // manager then, so only the check taken under that lock can refuse.
   let demoted = false;
   const { db } = watchWriteLock(async () => {
     if (demoted) return;
     demoted = true;
-    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, manager!.id));
+    await setBuiltInRoleForTest(suite.db, manager!.id, "staff");
   });
   const response = await mount(db).request("/management-api/images", {
     method: "POST",

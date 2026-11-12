@@ -1,8 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { activityLog, withTransaction } from "@waitron/db";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -38,10 +39,11 @@ useVenueDb({
     t = await transferCloseVenue(db);
     const sessions = await withTransaction(db, async (tx) => {
       const sessionFor = async (role: "manager" | "supervisor") => {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: `The ${role}`, pinHash: hashPin("1234"), role })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(tx, {
+          displayName: `The ${role}`,
+          pinHash: hashPin("1234"),
+          role,
+        });
         const session = await startManagementSession(tx, { personId: person!.id });
         return { id: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
       };

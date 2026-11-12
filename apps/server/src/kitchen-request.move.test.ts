@@ -1,10 +1,10 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   kitchenStations,
   parties,
   printJobs,
@@ -178,10 +178,11 @@ async function transferredCounterOrder(
       [a.id, az.id],
       [b.id, bz.id],
     ] as const) {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: randomUUID(),
+        formFactor: "till",
+        capabilities: [...CAPABILITY_FLAGS],
+      });
       await setProfileServiceScope(tx, profile!.id, {
         departmentId,
         allowedZoneIds: [zoneId],

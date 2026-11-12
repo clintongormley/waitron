@@ -1,9 +1,10 @@
+import { seedDeviceProfiles } from "../testing/seed.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { tenants } from "./tenants.js";
 
 // Column shape and nullability only.
@@ -34,20 +35,18 @@ describe("device_profiles.inactivity_timeout_seconds", () => {
   });
 
   it("defaults to NULL when omitted on insert, and round-trips a value", async () => {
-    const [omitted] = await admin
-      .insert(deviceProfiles)
-      .values({ name: "No timeout", formFactor: "till" })
-      .returning({ seconds: deviceProfiles.inactivityTimeoutSeconds });
+    const [omitted] = (
+      await seedDeviceProfiles(admin, { name: "No timeout", formFactor: "till" })
+    ).map((row) => ({ seconds: row.inactivityTimeoutSeconds }));
     expect(omitted!.seconds).toBeNull();
 
-    const [withValue] = await admin
-      .insert(deviceProfiles)
-      .values({
+    const [withValue] = (
+      await seedDeviceProfiles(admin, {
         name: "Five minutes",
         formFactor: "phone-portrait",
         inactivityTimeoutSeconds: 300,
       })
-      .returning({ seconds: deviceProfiles.inactivityTimeoutSeconds });
+    ).map((row) => ({ seconds: row.inactivityTimeoutSeconds }));
     expect(withValue!.seconds).toBe(300);
   });
 });

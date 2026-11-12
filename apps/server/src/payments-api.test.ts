@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -7,7 +8,6 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import {
   billPayments,
   workingOrders,
-  deviceProfiles,
   devices,
   nowIso,
   tenants,
@@ -20,16 +20,12 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedDevice as seedDeviceRow,
+  seedDeviceProfiles,
   seedNode,
   seedVenue,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
@@ -117,14 +113,16 @@ async function seedVenueWithStaff(): Promise<Venue> {
   const locationId = await venueLocationId(suite.db);
   const writingNodeId = await seedNode(suite.db);
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    const [mgr] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [stf] = await tx
-      .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
+    const [stf] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     const managerSession = await startManagementSession(tx, {
       personId: mgr!.id,
     });
@@ -141,10 +139,10 @@ async function seedVenueWithStaff(): Promise<Venue> {
 }
 
 async function seedDevice(): Promise<string> {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: nextName("Perfil caja"), formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: nextName("Perfil caja"),
+    formFactor: "till",
+  });
   const { deviceId } = await seedDeviceRow(suite.db, {
     label: nextName("Registro"),
     profileId: profile!.id,
@@ -631,10 +629,10 @@ describe("device and profile readers", () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [counter, terrace] = await seedReaders("Barra", "Terraza");
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: nextName("Perfil lectores"), formFactor: "till" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: nextName("Perfil lectores"),
+      formFactor: "till",
+    });
     const path = `/management-api/payments/device-profiles/${profile!.id}/readers`;
     const opts = { cookie: venue.managerCookie };
 
@@ -668,10 +666,10 @@ describe("device and profile readers", () => {
   it("profile readers: refuses an unknown profile and an unknown reader", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: nextName("Perfil lectores"), formFactor: "till" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: nextName("Perfil lectores"),
+      formFactor: "till",
+    });
     const opts = { cookie: venue.managerCookie };
     const unknownReader = randomUUID();
 
@@ -789,10 +787,10 @@ describe("readers — lifecycle and screens", () => {
       { id: second, provider: "stripe", providerRef: nextRef(), name: "Chosen reader" },
       { id: unused, provider: "stripe", providerRef: nextRef(), name: "Unused reader" },
     ]);
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Shared tills", formFactor: "till" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "Shared tills",
+      formFactor: "till",
+    });
     await suite.db.insert(deviceProfileCardReaders).values([
       { deviceProfileId: profile!.id, readerId: first, position: 0, isDefault: true },
       { deviceProfileId: profile!.id, readerId: second, position: 1 },
@@ -1534,25 +1532,19 @@ describe("reader adoption and local management", () => {
   async function seededProfiles() {
     const ids: Record<string, string> = {};
     for (const profile of DEFAULT_DEVICE_PROFILES) {
-      const [row] = await suite.db
-        .insert(deviceProfiles)
-        .values({
-          name: nextName(profile.name),
-          formFactor: profile.formFactor,
-          capabilities: profile.capabilities,
-        })
-        .returning({ id: deviceProfiles.id });
+      const [row] = await seedDeviceProfiles(suite.db, {
+        name: nextName(profile.name),
+        formFactor: profile.formFactor,
+        capabilities: profile.capabilities,
+      });
       ids[profile.formFactor] = row!.id;
     }
-    const [retired] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: nextName("Retirado"),
-        formFactor: "till",
-        capabilities: ["integrated-card-payment"],
-        retiredAt: nowIso(),
-      })
-      .returning({ id: deviceProfiles.id });
+    const [retired] = await seedDeviceProfiles(suite.db, {
+      name: nextName("Retirado"),
+      formFactor: "till",
+      capabilities: ["integrated-card-payment"],
+      retiredAt: nowIso(),
+    });
     const [r0] = await suite.db
       .insert(cardReaders)
       .values({ provider: "stripe", providerRef: nextRef(), name: "Existing" })
@@ -3133,10 +3125,7 @@ describe("provider On/Off", () => {
       status: 403,
       body: { error: { code: "authorization.not_permitted" } },
     });
-    const [admin] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin" })
-      .returning();
+    const [admin] = await seedPersons(suite.db, { displayName: "Administrator", role: "admin" });
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: admin!.id }),
     );

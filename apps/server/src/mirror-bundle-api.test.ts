@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -25,7 +26,7 @@ import {
   writePairLinkTx,
   type KeyRing,
 } from "@waitron/credentials";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { generateSync } from "otplib";
 import {
   canonicalize,
@@ -191,7 +192,9 @@ async function setupVenue(): Promise<{
     privateKey: await readNodeIdentityKey(suite.node, RING, designated.nodeId),
   };
   const adminPersonId = await withTransaction(db, async (tx) => {
-    const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
+    const r = await tx.execute<{ id: string }>(
+      sql`select id from persons where email = 'owner@example.test'`,
+    );
     return r.rows[0]!.id;
   });
   return { designated, adminPersonId, primaryPublicKey };
@@ -199,15 +202,12 @@ async function setupVenue(): Promise<{
 
 async function seedStaff(): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const [row] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Cashier",
-        pinHash: hashPin("4321"),
-        passwordHash: hashPassword(STAFF_PASSWORD),
-        role: "staff",
-      })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(tx, {
+      displayName: "Cashier",
+      pinHash: hashPin("4321"),
+      passwordHash: hashPassword(STAFF_PASSWORD),
+      role: "staff",
+    });
     return row!.id;
   });
 }
@@ -792,16 +792,13 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const { designated, adminPersonId } = await setupVenue();
     const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
     const suspendedAdminId = await withTransaction(db, async (tx) => {
-      const [row] = await tx
-        .insert(persons)
-        .values({
-          displayName: "Suspended administrator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(ADMIN_PASSWORD),
-          role: "admin",
-          status: "suspended",
-        })
-        .returning({ id: persons.id });
+      const [row] = await seedPersons(tx, {
+        displayName: "Suspended administrator",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(ADMIN_PASSWORD),
+        role: "admin",
+        status: "suspended",
+      });
       return row!.id;
     });
     const app = mountApp(designated);

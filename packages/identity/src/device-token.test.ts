@@ -1,4 +1,5 @@
-import { CORE_MIGRATIONS, deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { CORE_MIGRATIONS, devices, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
@@ -276,10 +277,11 @@ describe("signInWithToken", () => {
 
   it("returns the NEW row when another column changes between the read and the write lock", async () => {
     const deviceId = await seed();
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: `Moved ${deviceId}`, formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: `Moved ${deviceId}`,
+      formFactor: "till",
+      capabilities: [],
+    });
 
     const row = await signInWithToken(suite.db, {
       token: TOKEN,

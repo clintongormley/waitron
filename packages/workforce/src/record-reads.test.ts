@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedEmployment } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -41,14 +42,11 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
   nodeId = await seedNode(suite.db, locationId);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
-      { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
-    ])
-    .returning({ id: persons.id });
+  const rows = await seedPersons(suite.db, [
+    { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
+    { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
+  ]);
   [personId, manager, other] = rows.map((r) => r.id) as [string, string, string];
   await seedEmployment(suite.db, { personId });
 });

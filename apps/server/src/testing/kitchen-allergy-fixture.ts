@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -15,7 +16,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import {
   allergyLineTicks,
@@ -52,7 +53,7 @@ export const kitchenCallers: KitchenCaller[] = ["edit", "groups", "draft", "rele
 
 export async function kitchenFixture(db: Database) {
   const v = await setupPartyVenue(db);
-  await db.insert(persons).values({ id: OPERATOR, displayName: "Test operator", role: "staff" });
+  await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await db
     .update(sessions)

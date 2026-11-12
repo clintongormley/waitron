@@ -1,14 +1,12 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { deviceProfiles, devices, withTransaction, type Database } from "@waitron/db";
+import { devices, withTransaction, type Database } from "@waitron/db";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { VENUE_SERVICE } from "../modules.js";
 
 /** A device profile with a unique name and no capabilities. */
 export async function profile(db: Database, formFactor: "kds" | "till"): Promise<string> {
-  const [row] = await db
-    .insert(deviceProfiles)
-    .values({ name: randomUUID(), formFactor, capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(db, { name: randomUUID(), formFactor, capabilities: [] });
   return row!.id;
 }
 

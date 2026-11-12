@@ -1,11 +1,13 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashSessionToken, loginWithPin, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
 import { PERSON_HEADER } from "@waitron/shared";
 import { mountDeviceApi } from "./device-api.js";
 import { mountTillApi } from "./till-api.js";
@@ -48,23 +50,21 @@ async function fixture() {
     log,
   );
   const person = async (name: string, pin: string) => {
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: name, pinHash: fixturePinHash(pin), role: "staff" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: name,
+      pinHash: fixturePinHash(pin),
+      role: "staff",
+    });
     return row!.id;
   };
   const ana = await person("Ana", "4411");
   const ben = await person("Ben", "4422");
   const profile = async (formFactor: "kds" | "till") => {
-    const [row] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `${formFactor} ${randomUUID()}`,
-        formFactor,
-        capabilities: [...BASIC_ACTIONS, "run-the-pass"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [row] = await seedDeviceProfiles(suite.db, {
+      name: `${formFactor} ${randomUUID()}`,
+      formFactor,
+      capabilities: [...BASIC_ACTIONS, "run-the-pass"],
+    });
     return row!.id;
   };
   const grill = (await inTx(v, (tx) => createStation(tx, { name: "Grill" }))).id;

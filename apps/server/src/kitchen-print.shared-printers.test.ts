@@ -3,7 +3,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceMadeHereStations,
-  deviceProfiles,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   printJobs,
@@ -14,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { createProduct, writeContentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
@@ -639,10 +638,11 @@ describe("a printer shared by several stations, and dishes made at the till", ()
     const venue = await setupSplitExtrasVenue();
     const { cfg, products, lists, printers: venuePrinters, stations } = venue;
     const result = await withTransaction(db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Fryer till", formFactor: "till", capabilities: [] })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Fryer till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Fryer till" });
       await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: stations.fryer });
       const orderId = await fireNewOrder(tx, { ...cfg, sendingDeviceId: deviceId }, [

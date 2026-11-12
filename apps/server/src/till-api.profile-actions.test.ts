@@ -1,14 +1,16 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, devices, kitchenStations, withTransaction } from "@waitron/db";
+import { devices, kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
-import { hashPin, persons, type PersonRoleValue } from "@waitron/identity";
+import { hashPin, type PersonRoleValue } from "@waitron/identity";
 import {
   CAPABILITY_FLAGS,
   type CapabilityFlag,
@@ -58,19 +60,21 @@ const people: Partial<Record<PersonRoleValue, string>> = {};
 async function person(role: PersonRoleValue): Promise<string> {
   const known = people[role];
   if (known !== undefined) return known;
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: `${role} ${randomUUID()}`, pinHash: hashPin("5555"), role })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, {
+    displayName: `${role} ${randomUUID()}`,
+    pinHash: hashPin("5555"),
+    role,
+  });
   people[role] = row!.id;
   return row!.id;
 }
 
 async function profile(capabilities: readonly string[], formFactor: FormFactor = "till") {
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: `Profile ${randomUUID()}`, formFactor, capabilities: [...capabilities] })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${randomUUID()}`,
+    formFactor,
+    capabilities: [...capabilities],
+  });
   return row!.id;
 }
 
@@ -1107,15 +1111,12 @@ describe("a shared kitchen display", () => {
 
 describe("the till's boot read", () => {
   it("names the active profile's starting screen, and none without a device", async () => {
-    const [row] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Pass ${randomUUID()}`,
-        formFactor: "till",
-        capabilities: ["show-expo", "take-orders"],
-        startingScreen: "show-expo",
-      })
-      .returning({ id: deviceProfiles.id });
+    const [row] = await seedDeviceProfiles(suite.db, {
+      name: `Pass ${randomUUID()}`,
+      formFactor: "till",
+      capabilities: ["show-expo", "take-orders"],
+      startingScreen: "show-expo",
+    });
     const device = await enrolDeviceForTest(suite.db, v.cfg, {
       name: `Till ${randomUUID()}`,
       profileId: row!.id,

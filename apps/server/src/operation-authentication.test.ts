@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
@@ -48,7 +49,7 @@ async function perform<T>(
 }
 
 beforeEach(async () => {
-  await suite.db.insert(persons).values([
+  await seedPersons(suite.db, [
     { id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH },
     { id: OTHER, displayName: "Manager", role: "manager", passwordHash: HASH },
   ]);
@@ -109,7 +110,7 @@ describe("host-issued authority after fresh operator authentication", () => {
   it.each(["manager", "supervisor", "staff"] as const)(
     "refuses a %s's correct password without granting authority",
     async (role) => {
-      await suite.db.update(persons).set({ role }).where(eq(persons.id, OTHER));
+      await setBuiltInRoleForTest(suite.db, OTHER, role);
       let entered = false;
       await expect(
         perform(
@@ -200,7 +201,7 @@ describe("host-issued authority after fresh operator authentication", () => {
       whileChangingOnLockRequest(
         suite.db,
         async (tx) => {
-          await tx.update(persons).set({ role: "manager" }).where(eq(persons.id, ADMIN));
+          await setBuiltInRoleForTest(tx, ADMIN, "manager");
         },
         () =>
           perform(async () => {

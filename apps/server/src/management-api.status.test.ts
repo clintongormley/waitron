@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -71,16 +72,13 @@ export async function setupTenant(): Promise<{ managerId: string; staffId: strin
   // generators, which a raw SQL insert never reaches.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
     const seed = async (displayName: string, email: string, role: "manager" | "staff") => {
-      const [person] = await tx
-        .insert(persons)
-        .values({
-          displayName,
-          email,
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(PASSWORD),
-          role,
-        })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName,
+        email,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role,
+      });
       return person!.id;
     };
     return {

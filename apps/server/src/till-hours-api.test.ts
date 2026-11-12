@@ -130,7 +130,10 @@ it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile"] as
   },
 );
 it("scopes frozen snapshots and current entries to the session person", async () => {
-  const [other] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
+  const [other] = await suite.db
+    .select()
+    .from(persons)
+    .where(eq(persons.email, "owner@example.test"));
   await withTransaction(suite.db, async (tx) => {
     const common = {
       ...venue.cfg,

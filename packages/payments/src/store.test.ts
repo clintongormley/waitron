@@ -6,7 +6,6 @@ import {
   UNIQUE_VIOLATION,
   billPayments,
   captureError,
-  deviceProfiles,
   devices,
   engineErrorMessage,
   refusalOn,
@@ -48,7 +47,7 @@ import {
 import { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -675,10 +674,11 @@ describe("insertAttempting under the device profile the request was checked agai
   it("refuses device.profile_changed and writes nothing once the device has moved to another profile", async () => {
     const seeded = await seedTenant();
     const checkedUnder = await profileOf(seeded.deviceId);
-    const [other] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [other] = await seedDeviceProfiles(suite.db, {
+      name: "Moved to",
+      formFactor: "till",
+      capabilities: [],
+    });
     await suite.db
       .update(devices)
       .set({ deviceProfileId: other!.id })
@@ -693,10 +693,11 @@ describe("insertAttempting under the device profile the request was checked agai
 
   it("checks nothing when no profile is given", async () => {
     const seeded = await seedTenant();
-    const [other] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [other] = await seedDeviceProfiles(suite.db, {
+      name: "Moved to",
+      formFactor: "till",
+      capabilities: [],
+    });
     await suite.db
       .update(devices)
       .set({ deviceProfileId: other!.id })

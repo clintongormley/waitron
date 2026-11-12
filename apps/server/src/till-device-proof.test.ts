@@ -1,11 +1,13 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, deviceProfilePrinters, withTransaction } from "@waitron/db";
+import { deviceProfilePrinters, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -55,10 +57,11 @@ beforeAll(async () => {
     },
     () => {},
   );
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: "Order profile", formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: "Order profile",
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   const device = await enrolDeviceForTest(suite.db, venue.cfg, {
     name: "Order till",
     profileId: profile!.id,
@@ -86,10 +89,11 @@ beforeAll(async () => {
       })),
     );
   });
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Order administrator", role: "admin", pinHash: hashPin("5555") })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Order administrator",
+    role: "admin",
+    pinHash: hashPin("5555"),
+  });
   const [port] = await freePorts(1);
   await new Promise<void>((resolve) => {
     server = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: port! }, () => resolve());

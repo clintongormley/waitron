@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -10,7 +11,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  deviceProfiles,
   printJobs,
   products,
   withTransaction,
@@ -668,14 +668,11 @@ describe("approval through the route (plan D6)", () => {
       const { billId } = await billWith(venue, [{ name: "Burger" }]);
       // The staff session on a second till device of the venue, whose profile may open a drawer.
       const [drawerProfile] = await inTx(venue, (tx) =>
-        tx
-          .insert(deviceProfiles)
-          .values({
-            name: "Drawer till",
-            formFactor: "till",
-            capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
-          })
-          .returning({ id: deviceProfiles.id }),
+        seedDeviceProfiles(tx, {
+          name: "Drawer till",
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
+        }),
       );
       const drawerDevice = await enrolDeviceForTest(venue.db, venue.cfg, {
         name: "Drawer till device",
@@ -720,17 +717,14 @@ describe("approval through the route (plan D6)", () => {
       const { app } = throttledApp();
       const { billId } = await billWith(venue, [{ name: "Burger" }]);
       const [tillProfile, handheldProfile] = await inTx(venue, (tx) =>
-        tx
-          .insert(deviceProfiles)
-          .values([
-            { name: "Bucket till", formFactor: "till", capabilities: [...BASIC_ACTIONS] },
-            {
-              name: "Bucket phone",
-              formFactor: "phone-portrait",
-              capabilities: [...BASIC_ACTIONS],
-            },
-          ])
-          .returning({ id: deviceProfiles.id }),
+        seedDeviceProfiles(tx, [
+          { name: "Bucket till", formFactor: "till", capabilities: [...BASIC_ACTIONS] },
+          {
+            name: "Bucket phone",
+            formFactor: "phone-portrait",
+            capabilities: [...BASIC_ACTIONS],
+          },
+        ]),
       );
       const till = await enrolDeviceForTest(venue.db, venue.cfg, {
         name: "Bucket till device",

@@ -1,11 +1,12 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { deviceProfiles, kitchenStations, products, printers, stationPrinters } from "@waitron/db";
+import { kitchenStations, products, printers, stationPrinters } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setDeviceKitchenScreens, setProfileKitchenScreens } from "@waitron/venue-service";
 import { createCourse, createStation } from "./kitchen.js";
@@ -168,10 +169,16 @@ it.each(["courses", "stations"] as const)(
       expect(answer.status).toBe(401);
       expect(await answer.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
-    await suite.db
-      .update(persons)
-      .set({ role: "supervisor" })
-      .where(eq(persons.email, "owner@example.test"));
+    await setBuiltInRoleForTest(
+      suite.db,
+      (
+        await suite.db
+          .select({ id: persons.id })
+          .from(persons)
+          .where(eq(persons.email, "owner@example.test"))
+      )[0]!.id,
+      "supervisor",
+    );
     expect((await app.request(`/management-api/${kind}`, { headers: { cookie } })).status).toBe(
       200,
     );
@@ -241,10 +248,7 @@ it("default station refuses deletion with its exact conflict params", async () =
   });
 });
 it("station bound to an active KDS refuses deletion with distinct device count", async () => {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: "KDS", formFactor: "kds" })
-    .returning();
+  const [profile] = await seedDeviceProfiles(suite.db, { name: "KDS", formFactor: "kds" });
   await inTx(v, (tx) =>
     setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },

@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as handover from "@waitron/handover";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { openBackupQuery } from "@waitron/store";
 import * as nodeDatabase from "@waitron/node-db";
 import { dirname, join } from "node:path";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
@@ -500,10 +501,7 @@ it("ends the duty after a signed clash without scheduling another receiver pass"
 async function acceptanceSession(role: "admin" | "staff" = "admin", fresh = true) {
   registerModulePermissions([{ permission: "sample.accept", grantedFrom: "admin" }]);
   return database.withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: `Operator ${role}`, role })
-      .returning();
+    const [person] = await seedPersons(tx, { displayName: `Operator ${role}`, role });
     const session = await startManagementSession(tx, { personId: person!.id });
     await setFreshManagementSignIn(tx, session.token, fresh);
     return { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, personId: person!.id };

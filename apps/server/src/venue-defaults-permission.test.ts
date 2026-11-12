@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -39,10 +40,11 @@ const suite = useVenueDb({
   setup: async (db) => {
     [managerCookie, supervisorCookie] = await withTransaction(db, async (tx) => {
       const cookieFor = async (role: "manager" | "supervisor") => {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: role, pinHash: hashPin("1234"), role })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(tx, {
+          displayName: role,
+          pinHash: hashPin("1234"),
+          role,
+        });
         const session = await startManagementSession(tx, { personId: person!.id });
         return `${MANAGEMENT_COOKIE}=${session.token}`;
       };

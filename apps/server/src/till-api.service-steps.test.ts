@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -6,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { nowIso, parties, partyTables, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
@@ -40,10 +41,7 @@ beforeEach(async () => {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Anna", role: "staff" })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: "Anna", role: "staff" });
   personId = person!.id;
   const { deviceId } = await seedDevice(suite.db, { capabilities: ["take-orders"] });
   token = randomUUID();

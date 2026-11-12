@@ -14,7 +14,7 @@ import {
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import {
   configureZone,
@@ -77,10 +77,7 @@ async function seedLocation(name: string): Promise<string> {
 }
 
 async function seedProfile(): Promise<string> {
-  const [row] = await db
-    .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID()}`, formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(db, { name: `Till ${randomUUID()}`, formFactor: "till" });
   return row!.id;
 }
 

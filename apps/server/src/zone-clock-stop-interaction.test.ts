@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -7,7 +8,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { incidents, settings as businessDaySettingsTable, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { authorizeManager, persons, startManagementSession } from "@waitron/identity";
+import { authorizeManager, startManagementSession } from "@waitron/identity";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
@@ -39,10 +40,7 @@ beforeEach(async () => {
   const paid = await takeBillPayment(v.deps, v.cfg, id, await v.request(id, "cash"), v.operator);
   expect(paid.invoice).toMatchObject({ issuedAt: RECORDED, issuedOffsetMinutes: 120 });
   v.set(BEHIND);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Zone manager", role: "manager" })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: "Zone manager", role: "manager" });
   manager = person!.id;
   token = (await inTx((tx) => startManagementSession(tx, { personId: manager }))).token;
   await suite.db.run(

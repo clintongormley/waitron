@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -5,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { mountThemesApi } from "./themes-api.js";
@@ -22,10 +23,7 @@ const suite = useVenueDb({
     await seedTenant(db);
     [managerCookie, supervisorCookie, staffCookie] = await withTransaction(db, async (tx) => {
       const cookieFor = async (role: "manager" | "supervisor" | "staff") => {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: role, role })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(tx, { displayName: role, role });
         const session = await startManagementSession(tx, { personId: person!.id });
         return `${MANAGEMENT_COOKIE}=${session.token}`;
       };

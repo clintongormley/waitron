@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedWorkingOrder, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { adjustments, recordAdjustment } from "@waitron/adjustments";
 import { decimal, jobOrigin } from "@waitron/shared";
@@ -51,10 +52,7 @@ async function download(
   beforeRequest?: (personId: string) => Promise<void>,
 ): Promise<Record<string, string>> {
   await seedVenue(suite.db);
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Marta Canary", role: "staff" })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, { displayName: "Marta Canary", role: "staff" });
   await beforeRequest?.(row!.id);
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: row!.id }),
@@ -89,10 +87,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
     });
     const venueId = await venueLocationId(suite.db);
     await suite.db.insert(nodes).values({ id: NODE_ID, locationId: venueId, name: "Box" });
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Marta Canary", role: "staff" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, { displayName: "Marta Canary", role: "staff" });
     await withTransaction(suite.db, (tx) =>
       new WorkforceBackend().clockIn(tx, {
         nodeId: NODE_ID,
@@ -151,10 +146,7 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Marta Canary", role: "staff" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, { displayName: "Marta Canary", role: "staff" });
     await suite.db.insert(saleVoids).values({
       saleId: sale!.id,
       reason: "Wrong table",

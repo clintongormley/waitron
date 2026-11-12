@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { locations, readVenue } from "@waitron/db";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -112,14 +113,16 @@ async function seedPrintRouteFixture(db: Database) {
     simplifiedInvoiceLimit: null,
   };
   const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-    const [mgr] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [stf] = await tx
-      .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
+    const [stf] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     const managerSession = await startManagementSession(tx, {
       personId: mgr!.id,
     });
@@ -1065,14 +1068,11 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     minutesIdle: number,
   ): Promise<{ cookie: string; token: string }> {
     const token = await withTransaction(suite.db, async (tx) => {
-      const [mgr] = await tx
-        .insert(persons)
-        .values({
-          displayName: `Renewing Manager ${randomUUID()}`,
-          pinHash: hashPin("1234"),
-          role: "manager",
-        })
-        .returning({ id: persons.id });
+      const [mgr] = await seedPersons(tx, {
+        displayName: `Renewing Manager ${randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
       return (await startManagementSession(tx, { personId: mgr!.id })).token;
     });
     const seenAt = new Date(Date.now() - minutesIdle * 60_000).toISOString();

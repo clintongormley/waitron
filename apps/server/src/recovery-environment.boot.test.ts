@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as filesystem from "node:fs/promises";
 import { mkdtemp, mkdir, rm, readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -15,7 +16,6 @@ import {
   CORE_MIGRATIONS,
   stampDeployment,
   lockVenueDatabase,
-  persons,
   tenants,
   locations,
   nodes,
@@ -72,9 +72,12 @@ async function recoveryFixture(
   stamped: DeploymentEnvironment = "preproduction",
 ) {
   if (stamp) await stampDeployment(database, stamped);
-  await database
-    .insert(persons)
-    .values({ displayName: "Robin", role, status, passwordHash: hashPassword(PASSWORD) });
+  await seedPersons(database, {
+    displayName: "Robin",
+    role,
+    status,
+    passwordHash: hashPassword(PASSWORD),
+  });
   const root = await mkdtemp(join(tmpdir(), "environment-choice-"));
   dirs.push(root);
   const stateDir = join(root, "state");

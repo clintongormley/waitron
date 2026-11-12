@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -6,7 +7,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import type { PersonalDataPart } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -80,10 +81,11 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   await seedNode(suite.db);
-  const [marta] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Marta López", email: "marta@example.test", role: "staff" })
-    .returning();
+  const [marta] = await seedPersons(suite.db, {
+    displayName: "Marta López",
+    email: "marta@example.test",
+    role: "staff",
+  });
   martaId = marta!.id;
   martaToken = await withTransaction(
     suite.db,

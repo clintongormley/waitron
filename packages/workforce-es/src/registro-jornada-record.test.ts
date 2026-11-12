@@ -1,9 +1,10 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, expect, it, vi, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
+
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
@@ -27,13 +28,10 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
   });
   nodeId = await seedNode(suite.db);
-  const people = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
-    ])
-    .returning({ id: persons.id });
+  const people = await seedPersons(suite.db, [
+    { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
+  ]);
   [worker, manager] = people.map((p) => p.id) as [string, string];
 });
 afterEach(() => vi.useRealTimers());
@@ -328,12 +326,12 @@ it("exports the worker's later confirmation separately without changing counted 
 });
 it("exports an admin's self-approval after their role changes", async () => {
   const target = await day();
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, worker));
+  await setBuiltInRoleForTest(suite.db, worker, "admin");
   const request = await proposal(target, false);
   const answer = await run((tx) =>
     backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: worker }),
   );
-  await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, worker));
+  await setBuiltInRoleForTest(suite.db, worker, "staff");
   const result = exportTimeRecord(await record(), period);
   expect(result.lineas[0]!.minutosTrabajados).toBe(540);
   expect(result.entradas!.find((e) => e.entryId === answer)).toMatchObject({

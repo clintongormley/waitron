@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorTodayTables } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -22,7 +23,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -165,14 +166,16 @@ const suite = useVenueDb({
     // A MANAGER (role `manager`, holds report.view) and a STAFF person (holds no report.view), each
     // with a live management session so the route tests drive the gate through a real cookie.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      const [mgr] = await tx
-        .insert(persons)
-        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
-      const [stf] = await tx
-        .insert(persons)
-        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-        .returning({ id: persons.id });
+      const [mgr] = await seedPersons(tx, {
+        displayName: "The Manager",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
+      const [stf] = await seedPersons(tx, {
+        displayName: "The Clerk",
+        pinHash: hashPin("1234"),
+        role: "staff",
+      });
       const managerSession = await startManagementSession(tx, {
         personId: mgr!.id,
       });

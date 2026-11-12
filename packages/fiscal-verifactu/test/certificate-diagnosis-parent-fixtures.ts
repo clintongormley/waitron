@@ -1,10 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomBytes } from "node:crypto";
 import { credentialRevision, loadKeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
 import type { FiscalCertificateDiagnosisDeps } from "@waitron/fiscal";
 import {
   authorizeManager,
-  persons,
   resolveManagementSession,
   startManagementSession,
 } from "@waitron/identity";
@@ -43,13 +43,10 @@ export async function parentFixture(db: Database, seal = true) {
     );
   }
   const session = await withTransaction(db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Private administrator",
-        role: "admin",
-      })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Private administrator",
+      role: "admin",
+    });
     return startManagementSession(tx, { personId: person!.id });
   });
   const child = makeCertificateDiagnosisChild();

@@ -1,10 +1,10 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   devices,
   kitchenStations,
-  deviceProfiles,
   printJobs,
   printers,
   stationPrinters,
@@ -191,10 +191,11 @@ describe("station output status", () => {
 
   it("reports a dark screen only with recently fired work still waiting, including at a closed station", async () => {
     const f = await setup();
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "KDS test",
+      formFactor: "kds",
+      capabilities: [],
+    });
     await stationScreenDevice({
       stationId: f.bar,
       deviceProfileId: profile!.id,
@@ -236,10 +237,11 @@ describe("station output status", () => {
     const f = await setup();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "KDS test",
+      formFactor: "kds",
+      capabilities: [],
+    });
     await stationScreenDevice({
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -262,10 +264,11 @@ describe("station output status", () => {
   it("does not count a pass screen on Grill as Grill's own screen", async () => {
     const f = await setup();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "KDS", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "KDS",
+      formFactor: "kds",
+      capabilities: [],
+    });
     const pass = await kitchenScreenDevice(
       suite.db,
       {
@@ -296,10 +299,11 @@ describe("station output status", () => {
   it("ignores old waiting dishes and revoked screens", async () => {
     const f = await setup();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:05:00.000Z");
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "KDS test",
+      formFactor: "kds",
+      capabilities: [],
+    });
     await stationScreenDevice({
       stationId: f.grill,
       deviceProfileId: profile!.id,
@@ -379,10 +383,11 @@ describe("station output status", () => {
     const p = await f.printer(f.bar, "Bar printer");
     await job(p);
     await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "KDS test",
+      formFactor: "kds",
+      capabilities: [],
+    });
     await stationScreenDevice({
       stationId: f.bar,
       deviceProfileId: profile!.id,
@@ -414,10 +419,11 @@ describe("station output status", () => {
   it("alerts an open default station whose never-seen screen is dark", async () => {
     const f = await setup();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "KDS test", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "KDS test",
+      formFactor: "kds",
+      capabilities: [],
+    });
     await stationScreenDevice({
       stationId: f.grill,
       deviceProfileId: profile!.id,

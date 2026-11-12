@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -15,13 +16,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
-import {
-  hashPin,
-  hashSessionToken,
-  personRole,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, hashSessionToken, personRole, startManagementSession } from "@waitron/identity";
 import {
   stringToBasisPoints,
   stringToCents,
@@ -252,10 +247,7 @@ const suite = useVenueDb({
         name: string,
         role: (typeof personRole.enumValues)[number],
       ): Promise<string> => {
-        const [p] = await tx
-          .insert(persons)
-          .values({ displayName: name, pinHash: hashPin("1234"), role })
-          .returning({ id: persons.id });
+        const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
         return (await startManagementSession(tx, { personId: p!.id })).token;
       };
       return {

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 // A spare whose venue.db is a real placed copy of the old box's database. Stand-ins: M1's stepdown
 // and the transfer of the copy (both real elsewhere); the copy, its signed indicator, its
@@ -26,7 +27,7 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { signEnvelope } from "@waitron/handover";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { endorseKey, signDocumentBody, type SignedMembershipDocument } from "@waitron/membership";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import {
@@ -172,7 +173,7 @@ export function placedSpareFixture(boxes: {
       taxModule: "vat",
     });
     await stampDeployment(mainBox.db, "preproduction");
-    await mainBox.db.insert(persons).values({
+    await seedPersons(mainBox.db, {
       id: ADMIN,
       displayName: "Administrator",
       role: "admin",

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
@@ -18,7 +19,7 @@ import {
   parties,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
@@ -71,11 +72,12 @@ beforeEach(async () => {
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
-    const [operator] = await tx
-      .insert(persons)
-      .values({ displayName: "Waiter", role: "staff", pinHash: hashPin("5555") })
-      .returning({ id: persons.id });
+      .where(eq(persons.email, "owner@example.test"));
+    const [operator] = await seedPersons(tx, {
+      displayName: "Waiter",
+      role: "staff",
+      pinHash: hashPin("5555"),
+    });
     const [fallback] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
@@ -698,14 +700,11 @@ describe("the kitchen display's station day", () => {
     },
   );
   beforeEach(async () => {
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: "Kitchen controls",
-        formFactor: "kds",
-        capabilities: ["prepare-orders"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "Kitchen controls",
+      formFactor: "kds",
+      capabilities: ["prepare-orders"],
+    });
     profileId = profile!.id;
     const enrolled = await enrolDeviceForTest(suite.db, v.cfg, {
       name: "Grill display",

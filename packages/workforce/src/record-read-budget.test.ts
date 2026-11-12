@@ -1,10 +1,11 @@
-import { sql, eq } from "drizzle-orm";
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
+import { sql } from "drizzle-orm";
 import { StatementSync } from "node:sqlite";
 import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -177,7 +178,7 @@ it("orders simultaneous live events by chain position and ignores the later ackn
 it("uses an approved missing start as live state while ignoring its pending request", async () => {
   const worker = await seedPerson(suite.db, "Missing start");
   const manager = await seedPerson(suite.db, "Approver");
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, manager));
+  await setBuiltInRoleForTest(suite.db, manager, "manager");
   const request = await withTransaction(suite.db, (tx) =>
     backend.requestCorrection(tx, {
       nodeId,

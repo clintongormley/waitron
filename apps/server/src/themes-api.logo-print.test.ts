@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import sharp from "sharp";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -5,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession, withPassiveManagementRead } from "@waitron/identity";
+import { startManagementSession, withPassiveManagementRead } from "@waitron/identity";
 import * as layouts from "@waitron/layouts";
 import * as media from "@waitron/media";
 import {
@@ -73,10 +74,7 @@ beforeEach(async () => {
     suite.db,
     async (tx) => {
       const cookieFor = async (role: "manager" | "supervisor" | "staff") => {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: role, role })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(tx, { displayName: role, role });
         const session = await startManagementSession(tx, { personId: person!.id });
         return `${MANAGEMENT_COOKIE}=${session.token}`;
       };

@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
@@ -15,7 +17,6 @@ import {
 } from "@waitron/catalogue";
 import { createAdjustmentReason, type AdjustmentReasonInput } from "@waitron/adjustments";
 import {
-  deviceProfiles,
   kitchenStations,
   orderPortionEvents,
   orderPortions,
@@ -29,7 +30,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
 import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -429,22 +430,16 @@ export async function provisionAdjustmentVenue(
       { row: { kind: "product", productId: productIds.get("Coffee")! }, zoneId: null },
       { kind: "no_preparation" },
     );
-    const people = await tx
-      .insert(persons)
-      .values([
-        { displayName: "Ana", pinHash: fixturePinHash(PINS.staff), role: "staff" },
-        { displayName: "Sara", pinHash: fixturePinHash(PINS.supervisor), role: "supervisor" },
-        { displayName: "Marta", pinHash: fixturePinHash(PINS.manager), role: "manager" },
-      ])
-      .returning({ id: persons.id });
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Counter till",
-        formFactor: "till",
-        capabilities: [...BASIC_ACTIONS, "take-cash"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const people = await seedPersons(tx, [
+      { displayName: "Ana", pinHash: fixturePinHash(PINS.staff), role: "staff" },
+      { displayName: "Sara", pinHash: fixturePinHash(PINS.supervisor), role: "supervisor" },
+      { displayName: "Marta", pinHash: fixturePinHash(PINS.manager), role: "manager" },
+    ]);
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: "Counter till",
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
+    });
     const reasonId = {} as Record<keyof typeof REASONS, string>;
     for (const [key, input] of Object.entries(REASONS)) {
       reasonId[key as keyof typeof REASONS] = (await createAdjustmentReason(tx, input)).id;

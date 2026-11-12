@@ -1,9 +1,10 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { credentialRevision, putCredential } from "@waitron/credentials";
 import { tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { managementSessions, persons } from "@waitron/identity";
+import { managementSessions } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   material,
@@ -129,10 +130,7 @@ describe("certificate diagnosis parent", () => {
       await withTransaction(suite.db, async (tx) => {
         await tx.run(sql`update tenant_credentials set ciphertext = x'00'`);
         if (failure === "permission")
-          await tx
-            .update(persons)
-            .set({ role: "supervisor" })
-            .where(eq(persons.id, f.session.personId));
+          await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
         if (failure === "session")
           await tx.update(managementSessions).set({ endedAt: new Date().toISOString() });
       });
@@ -196,7 +194,7 @@ describe("certificate diagnosis parent", () => {
       const runChild: typeof f.deps.runChild = async (input, signal) => {
         const value = await f.deps.runChild(input, signal);
         await withTransaction(suite.db, (tx) =>
-          tx.update(persons).set({ role: "supervisor" }).where(eq(persons.id, f.session.personId)),
+          setBuiltInRoleForTest(tx, f.session.personId, "supervisor"),
         );
         if (outcome === "throw") throw new Error("raw secret sentinel");
         if (outcome === "completed") return value;

@@ -1,8 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { AppError, jobOrigin } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -27,10 +28,11 @@ const suite = useVenueDb({
     await seedTenant(db);
     locationId = await seedLocation(db);
     nodeId = await seedNode(db, locationId);
-    const [row] = await db
-      .insert(persons)
-      .values({ displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(db, {
+      displayName: "Manager",
+      pinHash: "scrypt$00$00",
+      role: "manager",
+    });
     manager = row!.id;
   },
 });

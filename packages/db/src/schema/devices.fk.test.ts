@@ -5,9 +5,9 @@ import type { Database } from "../client.js";
 import { RESTRICT_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedVenue } from "../testing/seed.js";
+import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { devices } from "./devices.js";
 import { printers } from "./printers.js";
 
@@ -40,10 +40,7 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
         pollId: "poll-a",
       })
       .onConflictDoNothing({ target: printers.id });
-    await admin
-      .insert(deviceProfiles)
-      .values({ id: PROFILE_A, name: "Profile A", formFactor: "till" })
-      .onConflictDoNothing({ target: deviceProfiles.id });
+    await seedDeviceProfiles(admin, { id: PROFILE_A, name: "Profile A", formFactor: "till" });
   });
 
   afterEach(async () => {
@@ -117,9 +114,7 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
 
   it("refuses to delete a device_profile a device references (ON DELETE RESTRICT)", async () => {
     const profileC = "11111111-0000-4000-8000-0000000000c4";
-    await admin
-      .insert(deviceProfiles)
-      .values({ id: profileC, name: "Profile C", formFactor: "till" });
+    await seedDeviceProfiles(admin, { id: profileC, name: "Profile C", formFactor: "till" });
     await admin.insert(devices).values({
       deviceProfileId: profileC,
       label: "Restrict device",
@@ -138,9 +133,7 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
     // Control: the refusal names no key, so show an identical profile no device references deletes
     // cleanly.
     const profileD = "11111111-0000-4000-8000-0000000000d4";
-    await admin
-      .insert(deviceProfiles)
-      .values({ id: profileD, name: "Profile D", formFactor: "till" });
+    await seedDeviceProfiles(admin, { id: profileD, name: "Profile D", formFactor: "till" });
     await admin.execute(sql`delete from device_profiles where id = ${profileD}`);
     const { rows } = await admin.execute<{ n: number }>(
       sql`select count(*) as n from device_profiles where id = ${profileD}`,

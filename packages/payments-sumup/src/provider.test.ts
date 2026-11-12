@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { deferredClient } from "./card-provider.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
@@ -5,7 +6,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, deviceProfiles, devices } from "@waitron/db";
+import { CORE_MIGRATIONS, devices } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, diskFullIn } from "@waitron/shared";
@@ -472,10 +473,11 @@ describe("SumUpCloudProvider.collect under the device profile the request was ch
       .select({ profileId: devices.deviceProfileId })
       .from(devices)
       .where(eq(devices.id, t.deviceId));
-    const [other] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Moved to", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [other] = await seedDeviceProfiles(suite.db, {
+      name: "Moved to",
+      formFactor: "till",
+      capabilities: [],
+    });
     await suite.db
       .update(devices)
       .set({ deviceProfileId: other!.id })

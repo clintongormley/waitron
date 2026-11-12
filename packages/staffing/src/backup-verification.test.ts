@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -5,7 +6,7 @@ import { CORE_MIGRATIONS, locations, kitchenStations, type Database } from "@wai
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
-import { persons } from "@waitron/identity";
+
 import { departments, seasons, specialDays, specialDayDates } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
@@ -46,7 +47,7 @@ beforeEach(async () => {
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(db, {});
-    await db.insert(persons).values({
+    await seedPersons(db, {
       id: "person",
       displayName: "Suspended person",
       status: "suspended",
