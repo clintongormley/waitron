@@ -13,6 +13,7 @@ import type { KeyRing } from "@waitron/credentials";
 import {
   ACTIVATED_OR_LATER,
   isOperationId,
+  isSha256Hex,
   refuseRequest,
   type HandoverBinding,
   type SignedHandoverEnvelope,
@@ -111,6 +112,17 @@ function parse(raw: unknown) {
     refuseRequest("reason");
   if (locale !== "en" && locale !== "es") refuseRequest("locale");
   if (provider !== undefined && provider !== null) refuseRequest("provider");
+  const expectedCopy = raw.expectedCopy;
+  if (
+    !isRecord(expectedCopy) ||
+    !isSha256Hex(expectedCopy.identifier) ||
+    !(
+      expectedCopy.lastChangeAtMs === null ||
+      (typeof expectedCopy.lastChangeAtMs === "number" &&
+        Number.isFinite(expectedCopy.lastChangeAtMs))
+    )
+  )
+    refuseRequest("expectedCopy");
   return {
     operationId,
     statements: {
@@ -121,6 +133,11 @@ function parse(raw: unknown) {
     reason,
     locale: locale as "en" | "es",
     signIn: raw.signIn,
+    expectedCopy: {
+      source: "mirror-copy" as const,
+      identifier: expectedCopy.identifier,
+      lastChangeAtMs: expectedCopy.lastChangeAtMs,
+    },
   };
 }
 
@@ -212,10 +229,9 @@ export function mountHandoverEmergencyApi(
     ) as SignedHandoverEnvelope<Declaration>;
     return envelope.body;
   }
-  async function compareCopy(declaration: Declaration): Promise<EmergencyCopy> {
+  async function compareCopy(expected: EmergencyCopy): Promise<EmergencyCopy> {
     const copy = await checkEmergencyCopy(deps);
-    if (!isDeepStrictEqual(copy, declaration.lastCopy))
-      throw new AppError("handover.copy_mismatch", {});
+    if (!isDeepStrictEqual(copy, expected)) throw new AppError("handover.copy_mismatch", {});
     return copy;
   }
   async function mirrorSource() {
@@ -228,6 +244,16 @@ export function mountHandoverEmergencyApi(
       throw new AppError("handover.source_not_established", {});
     return { sourceNodeId, source: held!.body.nodes.find((node) => node.nodeId === sourceNodeId)! };
   }
+  function replaceable(old: HandoverOperation | null, sourceNodeId: string): void {
+    if (
+      old !== null &&
+      (old.role !== "destination" ||
+        old.scenario !== "controlled" ||
+        old.state !== "prepared" ||
+        old.sourceNodeId !== sourceNodeId)
+    )
+      throw new AppError("handover.controlled_unresolved", { operationId: old.operationId });
+  }
   async function preview(raw: unknown) {
     if (!isRecord(raw)) refuseRequest("body");
     await authenticate(raw.signIn);
@@ -235,14 +261,15 @@ export function mountHandoverEmergencyApi(
     const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
     if (
       operation !== null &&
-      (operation.role !== "destination" ||
-        (operation.scenario === "controlled" && operation.state !== "prepared"))
+      (operation.scenario !== "emergency" || operation.role !== "destination")
     )
-      throw new AppError("handover.controlled_unresolved", { operationId: operation.operationId });
+      replaceable(operation, sourceNodeId);
     const declaration =
       operation?.scenario === "emergency" ? await declarationFor(operation.operationId) : null;
     const copy =
-      declaration === null ? await checkEmergencyCopy(deps) : await compareCopy(declaration);
+      declaration === null
+        ? await checkEmergencyCopy(deps)
+        : await compareCopy(declaration.lastCopy);
     await sourceSilent(sourceNodeId, declaration !== null);
     return {
       sourceNodeId,
@@ -285,18 +312,20 @@ export function mountHandoverEmergencyApi(
             statements: old.statements,
             reason: old.reason,
             locale: old.locale,
+            expectedCopy: old.lastCopy,
           },
           {
             operationId: request.operationId,
             statements: request.statements,
             reason: request.reason,
             locale: request.locale,
+            expectedCopy: request.expectedCopy,
           },
         )
       )
         refuseRequest("operationId");
       if (!checked.has(request.operationId) && !ACTIVATED_OR_LATER.includes(stored.state)) {
-        await compareCopy(old);
+        await compareCopy(old.lastCopy);
         checked.add(request.operationId);
       }
       return { declaration };
@@ -310,18 +339,8 @@ export function mountHandoverEmergencyApi(
       request.operationId,
     );
     const previous = await readOpenHandoverOperation(deps.node, deps.nodeId);
-    const replaceable = (old: HandoverOperation | null) => {
-      if (
-        old !== null &&
-        (old.role !== "destination" ||
-          old.scenario !== "controlled" ||
-          old.state !== "prepared" ||
-          old.sourceNodeId !== sourceNodeId)
-      )
-        throw new AppError("handover.controlled_unresolved", {});
-    };
-    replaceable(previous);
-    const lastCopy = await checkEmergencyCopy(deps);
+    replaceable(previous, sourceNodeId);
+    const lastCopy = await compareCopy(request.expectedCopy);
     const body: Declaration = {
       binding,
       wordingVersion: "a1018-emergency-v1",
@@ -338,7 +357,7 @@ export function mountHandoverEmergencyApi(
     await sourceSilent(sourceNodeId, false);
     await withNodeTransaction(deps.node, async (tx) => {
       const open = await readOpenHandoverOperation(tx, deps.nodeId);
-      replaceable(open);
+      replaceable(open, sourceNodeId);
       if (open?.operationId !== previous?.operationId)
         throw new AppError("handover.controlled_unresolved", {});
       if (open !== null)
@@ -369,7 +388,7 @@ export function mountHandoverEmergencyApi(
   return {
     async assertMayActivate(operation) {
       if (!checked.has(operation.operationId)) {
-        await compareCopy(await declarationFor(operation.operationId));
+        await compareCopy((await declarationFor(operation.operationId)).lastCopy);
         checked.add(operation.operationId);
       }
       await sourceSilent(operation.sourceNodeId, true);

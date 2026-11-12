@@ -98,6 +98,10 @@ export class SetupHandoverScreen extends LitElement {
   @state() private busy = false;
   @state() private ready = false;
   @state() private entry?: ModulePromotionEntry;
+  #signInChecked = false;
+  #restorePage = (event: PageTransitionEvent): void => {
+    if (event.persisted) this.#restartPolling();
+  };
   #controller?: AbortController;
   #timer?: ReturnType<typeof setTimeout>;
   constructor() {
@@ -108,6 +112,7 @@ export class SetupHandoverScreen extends LitElement {
     super.connectedCallback();
     this.#restartPolling();
     window.addEventListener("pagehide", this.#leavePage);
+    window.addEventListener("pageshow", this.#restorePage);
   }
   #restartPolling(): void {
     this.#controller?.abort();
@@ -118,6 +123,7 @@ export class SetupHandoverScreen extends LitElement {
   }
   override disconnectedCallback(): void {
     window.removeEventListener("pagehide", this.#leavePage);
+    window.removeEventListener("pageshow", this.#restorePage);
     this.#leavePage();
     super.disconnectedCallback();
   }
@@ -126,6 +132,7 @@ export class SetupHandoverScreen extends LitElement {
     clearTimeout(this.#timer);
     this.#resetSelection();
     this.password = this.code = "";
+    this.#signInChecked = false;
     this.copyPreview = undefined;
     this.declarationSaved = false;
     this.reason = "";
@@ -273,7 +280,8 @@ export class SetupHandoverScreen extends LitElement {
       "handover.copy_check_failed",
       "handover.copy_mismatch",
     ].includes(code ?? "");
-    if (code === "password.invalid" && this.code) return t("handover.emergency.code_expired");
+    if (code === "password.invalid" && this.code && this.#signInChecked)
+      return t("handover.emergency.code_expired");
     if (code === "password.invalid" || code === "totp.required")
       return t("handover.emergency.sign_in_failed");
     if (code === "password.throttled") return t("handover.emergency.throttled");
@@ -315,6 +323,7 @@ export class SetupHandoverScreen extends LitElement {
     const preview = await this.api.previewEmergencyHandover(this.#signIn());
     if (controller?.signal.aborted) return false;
     this.copyPreview = preview;
+    this.#signInChecked = true;
     this.copyRefused = false;
     this.refusalLink = "";
     if (preview.operation !== null && preview.operation.reason !== null) {
@@ -356,6 +365,10 @@ export class SetupHandoverScreen extends LitElement {
       }
       this.#pendingDeclaration ??= {
         operationId: makeSetupId(),
+        expectedCopy: {
+          identifier: this.copyPreview!.copy.identifier,
+          lastChangeAtMs: this.copyPreview!.copy.lastChangeAtMs,
+        },
         reason: this.reason,
         locale: currentLocale().startsWith("es") ? "es" : "en",
         statements: {
@@ -371,6 +384,27 @@ export class SetupHandoverScreen extends LitElement {
       await this.#resume(this.#pendingDeclaration.operationId);
       if (this.isConnected) this.#prepareClock();
     } catch (cause) {
+      if (
+        typeof cause === "object" &&
+        cause !== null &&
+        "code" in cause &&
+        cause.code === "handover.copy_mismatch" &&
+        !this.#declared
+      ) {
+        this.#pendingDeclaration = undefined;
+        this.statements = {
+          sourceSwitchedOff: false,
+          noParallelRecovery: false,
+          missingTailAccepted: false,
+        };
+        try {
+          await this.#readPreview();
+          this.actionError = t("handover.emergency.copy_changed");
+        } catch (failure) {
+          this.actionError = this.#emergencyError(failure);
+        }
+        return;
+      }
       if (typeof cause !== "object" || cause === null || !("code" in cause)) {
         try {
           if (await this.#readPreview()) {
@@ -457,6 +491,7 @@ export class SetupHandoverScreen extends LitElement {
         ?disabled=${this.busy}
         .error=${this.attempted && name !== "code" && (name === "email" ? !this.email.includes("@") : !this.password) ? t("handover.required") : ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.#signInChecked = false;
           this.#resetSelection();
           if (name === "email" && event.detail.value !== this.email) {
             this.password = this.code = "";

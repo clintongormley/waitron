@@ -31,6 +31,8 @@ export const handoverEn = {
   "handover.emergency.saved":
     "This declaration is saved and cannot be undone. Stop leaves this page; it does not cancel the declaration.",
   "handover.emergency.copy": "Copy held on this spare",
+  "handover.emergency.copy_changed":
+    "The copy changed while you were reading. Review its latest activity and confirm all three statements again.",
   "handover.emergency.latest_activity": "Latest dated activity:",
   "handover.emergency.declared_at": "Declared:",
   "handover.emergency.no_date": "No dated activity was found in this copy.",
@@ -106,6 +108,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.saved":
     "Esta declaración está guardada y no se puede deshacer. Parar sale de esta página; no cancela la declaración.",
   "handover.emergency.copy": "Copia guardada en este equipo de reserva",
+  "handover.emergency.copy_changed":
+    "La copia cambió mientras la leías. Revisa su última actividad y vuelve a confirmar las tres declaraciones.",
   "handover.emergency.latest_activity": "Última actividad con fecha:",
   "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",

@@ -309,6 +309,7 @@ export interface EmergencyHandoverPreview {
 }
 export interface EmergencyHandoverDeclaration {
   operationId: string;
+  expectedCopy: Pick<EmergencyHandoverPreview["copy"], "identifier" | "lastChangeAtMs">;
   signIn: HandoverSignIn;
   statements: { sourceSwitchedOff: true; noParallelRecovery: true; missingTailAccepted: true };
   reason: string;

@@ -21,6 +21,9 @@ box switched off**, compare the clocks and choose **Start the venue on this box*
 open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. Your reason and statements stay in place.
 
+If the copy changes before you declare, review the new activity and tick the three statements
+again.
+
 If an answer is lost, keep the page open and check the copy again before retrying. Reloading or
 opening the address on another device finds your saved declaration; sign in and continue with the
 clock check. An unfinished controlled handover offers its own progress page. If the old main box
@@ -57,7 +60,7 @@ A waiting message describes the last attempt; keep both boxes connected while th
 ## After the handover {#after-hand-over}
 
 Use the new box’s address. If the old box’s page offers **Progress**, follow it to resume the
-handover on the spare. Keep the old box and its data until the return flow is available.
+handover on the spare. Keep the old box and its data.
 
 ## When a box no longer runs the venue {#handed-over}
 

@@ -55,6 +55,7 @@ async function mount(
     activationMismatch?: boolean;
     statusUnavailable?: boolean;
     lostBeforeWrite?: boolean;
+    changeBeforeDeclare?: boolean;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -62,6 +63,7 @@ async function mount(
   let activated = false;
   let rejected = false;
   let attemptedActivation = false;
+  let copyChanged = false;
   const api = new SetupApi("", async (input, init) => {
     const path = String(input);
     if (init?.method === "GET" && options.statusUnavailable)
@@ -98,9 +100,21 @@ async function mount(
           }),
           { status: 409 },
         );
-      return new Response(JSON.stringify({ ...preview, operation: recorded ? saved : null }));
+      return new Response(
+        JSON.stringify({
+          ...preview,
+          copy: { ...preview.copy, lastChangeAtMs: copyChanged ? 1792152000000 : null },
+          operation: recorded ? saved : null,
+        }),
+      );
     }
     if (path.endsWith("/emergency/declare")) {
+      if (options.changeBeforeDeclare && !copyChanged) {
+        copyChanged = true;
+        return new Response(JSON.stringify({ error: { code: "handover.copy_mismatch" } }), {
+          status: 409,
+        });
+      }
       if (options.expired && !rejected) {
         rejected = true;
         return new Response(JSON.stringify({ error: { code: "password.invalid" } }), {
@@ -232,6 +246,7 @@ it.each(["en-GB", "es-ES"])(
     const declaration = posts.find(({ path }) => path.endsWith("/declare"))!;
     expect(declaration.body).toEqual({
       operationId: expect.any(String),
+      expectedCopy: { identifier: preview.copy.identifier, lastChangeAtMs: null },
       signIn,
       statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
       reason: saved.reason,
@@ -386,4 +401,51 @@ it("leaves the declaration form after a successful write even when progress cann
   expect(q(el, "[data-test=emergency-declare]")).toBeNull();
   expect(posts.filter(({ path }) => path.endsWith("/declare"))).toHaveLength(1);
   expect(q(el, "wt-form-actions").shadowRoot!.querySelector("[data-error]")).toBeNull();
+});
+
+it("asks for password and code checks on the first refused sign-in, without assuming code expiry", async () => {
+  const { el } = await mount({ refusal: "password.invalid" });
+  await edit(el, "handover-email", signIn.email);
+  await edit(el, "handover-password", "mistyped");
+  await edit(el, "handover-code", signIn.totp);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.sign_in_failed"),
+    ),
+  );
+  expect(q(el, "wt-form-actions").shadowRoot!.textContent).not.toContain(
+    t("handover.emergency.code_expired"),
+  );
+});
+
+it("shows a fresh copy and asks for confirmation again when it changed before declaration", async () => {
+  const { el, posts } = await mount({ changeBeforeDeclare: true });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      "The copy changed while you were reading",
+    ),
+  );
+  expect(
+    [...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(
+      (input) => input.checked,
+    ),
+  ).toEqual([false, false, false]);
+  expect(q(el, '[name="emergency-reason"]').shadowRoot!.querySelector("textarea")!.disabled).toBe(
+    false,
+  );
+  expect(q(el, "[data-test=emergency-declare]").shadowRoot!.querySelector("button")!.disabled).toBe(
+    true,
+  );
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  const declarations = posts.filter(({ path }) => path.endsWith("/declare"));
+  expect(declarations.map(({ body }) => body.expectedCopy)).toEqual([
+    { identifier: preview.copy.identifier, lastChangeAtMs: null },
+    { identifier: preview.copy.identifier, lastChangeAtMs: 1792152000000 },
+  ]);
 });

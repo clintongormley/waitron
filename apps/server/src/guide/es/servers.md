@@ -24,6 +24,9 @@ Mantén la página abierta durante el reinicio. Introduces tu contraseña y cód
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. El
 motivo y las declaraciones se conservan.
 
+Si la copia cambia antes de declarar, revisa la nueva actividad y vuelve a marcar las tres
+declaraciones.
+
 Si se pierde una respuesta, mantén la página abierta y vuelve a comprobar la copia antes de
 reintentar. Al recargar o abrir la dirección en otro dispositivo se encuentra la declaración
 guardada; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
@@ -64,8 +67,7 @@ mantén los dos equipos conectados mientras vuelven a intentarlo.
 ## Después del traspaso {#after-hand-over}
 
 Usa la dirección del nuevo equipo. Si la página del equipo anterior ofrece **Progreso**, sigue el
-enlace para continuar el traspaso en el de reserva. Conserva el equipo anterior y sus datos hasta
-que esté disponible el proceso de devolución.
+enlace para continuar el traspaso en el de reserva. Conserva el equipo anterior y sus datos.
 
 ## Cuando el local ya no funciona con un equipo {#handed-over}
 

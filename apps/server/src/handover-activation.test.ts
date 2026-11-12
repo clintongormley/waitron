@@ -27,6 +27,7 @@ import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron
 import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mountHandoverActivationApi, type HandoverActivationDeps } from "./handover-activation.js";
+import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { mountHandoverEmergencyApi, type EmergencyHandover } from "./handover-emergency-api.js";
 import { handoverPromotionContext, mountHandoverPreparationApi } from "./handover-preparation.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
@@ -277,6 +278,7 @@ async function emergencySpare(gate = true) {
   const emergency = mountHandoverEmergencyApi(declarationApp, emergencyDeps);
   const declarationBody = {
     operationId: OPERATION,
+    expectedCopy: await checkEmergencyCopy({ venueDir: dirs().spareVenue, modules: fiscalModules }),
     signIn,
     statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
     reason: "Source stopped",
@@ -330,13 +332,25 @@ describe("emergency activation on a real copy", () => {
     expect(s.exchange).toHaveBeenCalledTimes(2);
   }, 60_000);
 
-  it("refuses emergency activation without this process's copy mark", async () => {
-    const s = await emergencySpare(false);
-    const { input } = await selectName(s.app);
-    expect((await activate(s.app, input)).body.error?.code).toBe("handover.copy_mismatch");
-    expect(await activations(s.store)).toHaveLength(0);
-    expect((await readNodeMode(s.store.node, standby.nodeId)).mode).toBe("mirror");
-  }, 60_000);
+  it.each([false, true])(
+    "rechecks emergency activation in a new process, copy changed %s",
+    async (changed) => {
+      const s = await emergencySpare(false);
+      const { input } = await selectName(s.app);
+      if (changed) await seedWorkingOrder(s.store.venue, { openedAt: "2026-10-16T12:05:00Z" });
+      const answer = await activate(s.app, input);
+      if (changed) {
+        expect(answer.body.error?.code).toBe("handover.copy_mismatch");
+        expect(await activations(s.store)).toHaveLength(0);
+        expect((await readNodeMode(s.store.node, standby.nodeId)).mode).toBe("mirror");
+      } else {
+        expect(answer.body).toEqual({ activated: true, restarting: true });
+        expect(await activations(s.store)).toHaveLength(1);
+        expect((await readNodeMode(s.store.node, standby.nodeId)).mode).toBe("primary");
+      }
+    },
+    60_000,
+  );
 });
 
 beforeEach(async () => {

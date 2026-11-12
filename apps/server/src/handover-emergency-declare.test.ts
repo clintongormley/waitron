@@ -22,6 +22,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverOperation, readOpenHandoverOperation } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { createPasswordThrottle } from "./password-throttle.js";
+import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -58,6 +59,7 @@ const external = {
 };
 const request = {
   operationId: OPERATION,
+  expectedCopy: { identifier: "", lastChangeAtMs: null as number | null },
   signIn: { email: ADMIN_EMAIL, password: PASSWORD },
   statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
   reason: "Synthetic lost source",
@@ -73,6 +75,10 @@ beforeEach(async () => {
   mainBox.db.run(sql`vacuum into ${join(dirs().spareVenue, "venue.db")}`);
   spareBefore.node.run(sql`vacuum into ${join(dirs().spareVenue, "node.db")}`);
   placed = await openVenueDatabase(dirs().spareVenue);
+  request.expectedCopy = await checkEmergencyCopy({
+    venueDir: dirs().spareVenue,
+    modules: fiscalModules,
+  });
   external.fault = "ECONNREFUSED";
   external.thrown = undefined;
   external.restriction = undefined;
@@ -430,3 +436,56 @@ it.each(["prepared", "copy_accepted"] as const)(
     }
   },
 );
+
+it("refuses a prepared controlled operation from another source before offering a declaration", async () => {
+  const operationId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  await beginHandover(
+    { node: placed.node, nodeId: standby.nodeId },
+    {
+      operationId,
+      scenario: "controlled",
+      venue: { country: "ES", taxId: "89890001K", environment: "preproduction" },
+      sourceNodeId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      destinationNodeId: standby.nodeId,
+      membership: { term: 1, digest: "a".repeat(64) },
+    },
+    "destination",
+  );
+  const s = service();
+  const expected = { code: "handover.controlled_unresolved", params: { operationId } };
+  expect((await s.post({ signIn: request.signIn }, true, "preview")).body.error).toMatchObject(
+    expected,
+  );
+  expect((await s.post()).body.error).toMatchObject(expected);
+});
+
+it("refuses a copy changed after the preview the person saw", async () => {
+  const s = service();
+  const shown = await s.post({ signIn: request.signIn }, true, "preview");
+  expect(shown.status).toBe(200);
+  await seedWorkingOrder(placed.venue, { openedAt: "2026-10-16T12:00:00Z" });
+  const answer = await s.post({ ...request, expectedCopy: shown.body.copy });
+  expect(answer.body.error?.code).toBe("handover.copy_mismatch");
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+it.each([
+  undefined,
+  { identifier: "not-a-hash", lastChangeAtMs: null },
+  { identifier: "a".repeat(64), lastChangeAtMs: "later" },
+])("refuses a malformed expected copy %#", async (expectedCopy) => {
+  expect((await service().post({ ...request, expectedCopy })).body.error?.code).toBe(
+    "handover.request_invalid",
+  );
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+it("refuses a different copy identifier even with the same activity date", async () => {
+  const identifier =
+    request.expectedCopy.identifier === "f".repeat(64) ? "e".repeat(64) : "f".repeat(64);
+  expect(
+    (await service().post({ ...request, expectedCopy: { ...request.expectedCopy, identifier } }))
+      .body.error?.code,
+  ).toBe("handover.copy_mismatch");
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});

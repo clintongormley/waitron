@@ -305,3 +305,30 @@ it("keeps the completed status when a lost activation answer settles after polli
   expect(q(el, "vf-recovery-hour")).toBeNull();
   expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue");
 });
+
+it.each([false, true])(
+  "resumes a restored controlled page and shows its activation outcome, refused %s",
+  async (refuse) => {
+    const { el } = await mount({ refuse });
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    await el.updateComplete;
+    await edit(el, "handover-password", "correct horse");
+    await edit(el, "handover-code", "123456");
+    q(el, "[data-test=authenticate]").click();
+    await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+    await select(el);
+    q(el, "[data-test=activate]").click();
+    if (refuse) {
+      await vi.waitFor(() =>
+        expect(q<HTMLElement & { error: string }>(el, "wt-form-actions").error).not.toBe(""),
+      );
+    } else {
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+      );
+      expect(Reflect.get(el, "password")).toBe("");
+      expect(Reflect.get(el, "code")).toBe("");
+    }
+  },
+);
