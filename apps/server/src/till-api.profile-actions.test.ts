@@ -528,6 +528,13 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
     ],
   },
   {
+    proof: "matching request (source)",
+    actions: ["take-cash"],
+    basis:
+      'Cash only: the sale\'s first cash payment goes through withTenderRefundAuthorization, as POST /api/transactions/:saleId/refunds; invoice-correction-api.test.ts: "refuses a till whose profile cannot take cash, writing nothing, and corrects once it can"',
+    routes: ["POST /api/transactions/:saleId/corrections"],
+  },
+  {
     proof: "device cookie (source)",
     actions: ["prepare-orders"],
     basis:
@@ -658,6 +665,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "POST /api/dead-ends/draft",
       "POST /api/dead-ends/order",
       "POST /api/dead-ends/sale",
+      "POST /api/transactions/:saleId/corrections/preview",
       "POST /api/working-orders/:id/adjustments/preview",
       "POST /api/working-orders/:id/payments/preview",
     ],

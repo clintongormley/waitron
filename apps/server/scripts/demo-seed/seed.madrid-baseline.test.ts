@@ -79,6 +79,7 @@ const ADDED_TABLES = [
   "fiscal_lookup_conflicts",
   "fiscal_series_conflicts",
   "handover_activations",
+  "invoice_corrections",
   "order_portion_events",
   "order_portions",
   "recovery_packs",

@@ -281,6 +281,7 @@ describe("the lists", () => {
       "apps/server/scripts/receipt-look.ts",
       "apps/server/src/first-setup-database-holdings.test.ts",
       "apps/server/src/first-setup-start-again-hour.test.ts",
+      "apps/server/src/invoice-corrections.test.ts",
       "apps/server/src/log-personal-data.ts",
       "apps/server/src/return-records.real.test.ts",
       "apps/server/src/start-again-full-disk.e2e.test.ts",

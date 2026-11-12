@@ -846,6 +846,21 @@ CREATE TABLE `invoice_pdf_downloads` (
 );
 --> statement-breakpoint
 CREATE INDEX `invoice_pdf_downloads_sale_idx` ON `invoice_pdf_downloads` (`sale_id`);--> statement-breakpoint
+CREATE TABLE `invoice_corrections` (
+	`id` text PRIMARY KEY NOT NULL,
+	`original_sale_id` text NOT NULL,
+	`corrective_sale_id` text NOT NULL,
+	`tender_refund_id` text NOT NULL,
+	`submission_id` text NOT NULL,
+	`fingerprint` text NOT NULL,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`original_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`corrective_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE INDEX `invoice_corrections_submission_idx` ON `invoice_corrections` (`original_sale_id`,`submission_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `invoice_corrections_tender_refund_key` ON `invoice_corrections` (`tender_refund_id`);--> statement-breakpoint
 CREATE TABLE `kitchen_print_job_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`print_job_id` text NOT NULL,

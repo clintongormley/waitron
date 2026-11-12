@@ -46,7 +46,7 @@ import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import "./errors.js";
 
 type Session = Awaited<ReturnType<typeof requireSession>>;
-function pathId(value: string, kind: "sale" | "refund"): string {
+export function pathId(value: string, kind: "sale" | "refund"): string {
   if (!isUuid(value))
     throw kind === "sale"
       ? new AppError("sale.not_found", { saleId: value })
@@ -54,7 +54,7 @@ function pathId(value: string, kind: "sale" | "refund"): string {
   return value.toLowerCase();
 }
 
-async function checkAccess(tx: Transaction, session: Session, saleId: string) {
+export async function checkAccess(tx: Transaction, session: Session, saleId: string) {
   await assertStillSignedIn(tx, session);
   const [row] = await tx
     .select(deviceBindingColumns)
@@ -79,7 +79,7 @@ async function readRefund(tx: Transaction, id: string) {
   if (row === undefined) throw new AppError("tender.refund_not_found", { refundId: id });
   return row;
 }
-function overrideOf(body: Record<string, unknown>): Override | undefined {
+export function overrideOf(body: Record<string, unknown>): Override | undefined {
   if (body.override === null) throw invalid("override");
   return parseOverrideField(body.override);
 }

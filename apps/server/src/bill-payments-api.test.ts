@@ -1167,6 +1167,31 @@ describe("a contribution (design §8 test 2)", () => {
       params: { field: "amount" },
     });
   });
+
+  it.each(["06.05", "00.50"])(
+    "refuses the amount %s, with a leading zero, by the field it names, writing nothing",
+    async (amount) => {
+      const billId = await bill120();
+
+      const refused = await contribute(billId, amount);
+
+      expect(refused.status).toBe(400);
+      expect(refused.json).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "amount" },
+      });
+      expect(await paymentRows(billId)).toEqual([]);
+    },
+  );
+
+  it("takes an amount under one euro written with its single leading zero", async () => {
+    const billId = await bill120();
+
+    const taken = await contribute(billId, "0.50");
+
+    expect(taken.status).toBe(200);
+    expect(await paymentRows(billId)).toHaveLength(1);
+  });
 });
 
 describe("equal shares (design §8 test 4)", () => {

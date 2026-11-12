@@ -83,6 +83,10 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     reason: VERIFACTU_NAMES,
     findings: 9,
   },
+  "apps/server/src/invoice-corrections.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 6,
+  },
   "apps/server/src/return-records.real.test.ts": {
     reason: VERIFACTU_NAMES,
     findings: 71,
