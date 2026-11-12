@@ -1,6 +1,6 @@
 # D: Reorder and contrast plan
 
-**Proposed; watcher clearance pending.** Separate Sol-high author, Codex driver checked; Claude approach read completed (259 seconds), simpler route accepted. No owner design approval claimed. Authority: watcher, 2026-11-12 07:00, `~/waitron-campaign-d/queue.md`:
+**Reduced scope cleared by the watcher, 2026-11-12 07:38 (Lane D questions.md).** Separate Sol-high author, Codex driver checked; Claude approach read completed (259 seconds), simpler route accepted. No owner design approval claimed. Authority: watcher, 2026-11-12 07:00, `~/waitron-campaign-d/queue.md`:
 
 > backlog bundles "Reorder controller" (2 entries, size S, `docs/backlog/dashboard.md#bundle-reorder-controller`) and "Contrast pass" (1 entry, size S, `#bundle-contrast-pass`). One branch, one PR, since they are small and in one area. Plan first (short), Claude read, then PLAN FOR APPROVAL. Fix in the shared primitive where the entry is about one, and check by screenshot.
 
@@ -15,3 +15,7 @@ Run existing `packages/venue-service/src/dashboard/routing-grid.a11y.test.ts` ho
 Run changed test files with `pnpm --filter @waitron/<package> exec vitest run <file>`; venue-service browser cases use `--project browser`. Inspect shared-style consumers found by `rg 'ReorderController.styles|ReorderController.tableStyles' apps packages`, including separate variant markup. RUNNER requires local EN/ES × light/dark × desktop/390px visuals; keep images uncommitted. Update `docs/backlog.md` and `docs/backlog/dashboard.md` together only after watcher disposition; change `design-system.md` only if its contract changes. One PR if code is needed; docs-only route otherwise.
 
 **Forecast:** production 0–35 lines; tests 0–50; support 0; docs 6–18 plus this plan. Stop for watcher direction on material growth.
+
+**2026-11-12 measured checkpoint:** Existing routing-grid/station-table accessibility files passed 64 cases. Browser-computed focus/surface-raised ratios were 4.634 in light and 4.738 in dark, both above 3:1. The bounded current service-steps probe (Spanish/dark/390px, 20 steps) reached scroll 1691/1691 in 10.356 seconds with its drag still active. That does not explain the retired Prep stations failure; the watcher has been asked whether to retire that obsolete entry without claiming its cause fixed. Small local receipts are under Lane D `receipts/d-reorder-contrast/`.
+
+The held-row capture shows cell boundaries; no paint cause or fix is claimed. Shared-style consumers were enumerated, including variant-table’s separate wrapper. The three named paint/probe source files had no changes between this plan tree and fetched main at inspection. Remaining: variant and shared held/bottom paint investigation and the required visual matrix, a meaningful failing regression before any fix, and watcher disposition before backlog edits. Temporary probes and installed dependencies were removed; no product changes were made.
