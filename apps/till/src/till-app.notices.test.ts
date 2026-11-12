@@ -491,7 +491,7 @@ describe("the open notice list beside an open order", () => {
 });
 
 const UNCONFIRMED: StaffNotice = {
-  owner: "fiscal-verifactu",
+  owner: "box-clock",
   key: "clock.unconfirmed",
   code: "clock.unconfirmed",
   severity: "error",
@@ -569,6 +569,57 @@ describe("a till or handheld at the PIN screen", () => {
     getDeviceEquipment.mockResolvedValue(withNotices([]));
     await poll(el);
     expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(clockLine(el)).toBeNull();
+  });
+
+  it("drops the waiting line once the device is refused, and reads no more", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([UNCONFIRMED]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(clockLine(el)).toContain("(1 of 2 so far)");
+    getDeviceEquipment.mockRejectedValue({ code: "device.unauthorized" });
+    await poll(el);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(clockLine(el)).toBeNull();
+  });
+
+  it("shows no line for a waiting notice that is not well formed, and the screen still draws", async () => {
+    const noParams: Partial<StaffNotice> = { ...UNCONFIRMED };
+    delete noParams.params;
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValue(withNotices([noParams as unknown as StaffNotice]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(clockLine(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-lock-screen")!.shadowRoot!.textContent).toContain(
+      "Terrace handheld",
+    );
+  });
+
+  it("keeps the waiting line while a read names the box's clock unavailable", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([UNCONFIRMED]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(clockLine(el)).toContain("(1 of 2 so far)");
+    getDeviceEquipment.mockResolvedValue({
+      ...withNotices([]),
+      noticesUnavailable: ["box-clock"],
+    });
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(clockLine(el)).toContain("(1 of 2 so far)");
+  });
+
+  it("shows no line for a waiting notice from anyone but the box's clock", async () => {
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValue(withNotices([{ ...UNCONFIRMED, owner: "fiscal-verifactu" }]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
     expect(clockLine(el)).toBeNull();
   });
 

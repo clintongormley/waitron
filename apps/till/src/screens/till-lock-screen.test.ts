@@ -16,7 +16,7 @@ import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
-import type { StaffMember, TillApi } from "../api/client.js";
+import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
 
 const ana: StaffMember = { personId: "p1", displayName: "Ana" };
@@ -642,6 +642,31 @@ describe("till-lock-screen", () => {
     expect(query(el, "[data-setup-handheld]")).toBeNull();
     expect(query(el, "[data-setup-till]")).toBeNull();
     expect(query(el, ".device-setup")).toBeNull();
+  });
+
+  it("draws the clock-waiting line with the notice's main words and its count, and none when unset", async () => {
+    const waiting: StaffNotice = {
+      owner: "box-clock",
+      key: "clock.unconfirmed",
+      code: "clock.unconfirmed",
+      severity: "error",
+      params: { agreed: 1 },
+    };
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("[data-clock-notice]")).toHaveLength(0);
+    el.clockNotice = waiting;
+    await el.updateComplete;
+    const lines = el.shadowRoot!.querySelectorAll("[data-clock-notice]");
+    expect(lines).toHaveLength(1);
+    const line = lines[0]!.textContent!.trim();
+    expect(line).toBe(t("staff_notice.clock.unconfirmed").replace("{agreed}", "1"));
+    expect(line).toContain("1");
+    expect(line).not.toContain(t("staff_notice.tell_manager"));
+    expect(line).not.toContain(t("staff_notice.check_time"));
+    el.clockNotice = undefined;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-clock-notice]")).toHaveLength(0);
   });
 
   it("renders one row per server with its state, and a check-again button", async () => {

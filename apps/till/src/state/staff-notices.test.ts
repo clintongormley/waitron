@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceEquipmentRead, StaffNotice } from "../api/client.js";
-import { checkTimeOffered, nextNotices } from "./staff-notices.js";
+import { checkTimeOffered, nextNotices, waitingStartNotice } from "./staff-notices.js";
 
 const notice = (
   owner: string,
@@ -156,5 +156,45 @@ describe("the box's check-the-time marker", () => {
   it("is not offered by a marker that is not well formed", () => {
     const broken = { ...marker, params: null } as unknown as StaffNotice;
     expect(checkTimeOffered(read({ notices: [broken] }), false)).toBe(false);
+  });
+});
+
+describe("the box's waiting-start notice the PIN screen shows", () => {
+  const waiting: StaffNotice = {
+    owner: "box-clock",
+    key: "clock.unconfirmed",
+    code: "clock.unconfirmed",
+    severity: "error",
+    params: { agreed: 1 },
+  };
+
+  it("is the read's waiting-start notice from the box's clock, and nothing else it carries", () => {
+    const disk = notice("box", "disk", "error");
+    expect(waitingStartNotice(undefined, read({ notices: [disk, waiting] }))).toEqual(waiting);
+    expect(waitingStartNotice(waiting, read({ notices: [disk] }))).toBeUndefined();
+    expect(waitingStartNotice(waiting, read())).toBeUndefined();
+  });
+
+  it("is not taken from another owner", () => {
+    expect(
+      waitingStartNotice(undefined, read({ notices: [{ ...waiting, owner: "fiscal" }] })),
+    ).toBeUndefined();
+  });
+
+  it("is not taken when it is not well formed", () => {
+    const noParams: Partial<StaffNotice> = { ...waiting };
+    delete noParams.params;
+    expect(
+      waitingStartNotice(undefined, read({ notices: [noParams as unknown as StaffNotice] })),
+    ).toBeUndefined();
+  });
+
+  it("stays as before while a read names the box's clock unavailable, and only that owner", () => {
+    const blind = read({ notices: [], noticesUnavailable: ["box-clock"] });
+    expect(waitingStartNotice(waiting, blind)).toEqual(waiting);
+    expect(waitingStartNotice(undefined, blind)).toBeUndefined();
+    expect(
+      waitingStartNotice(waiting, read({ notices: [], noticesUnavailable: ["fiscal"] })),
+    ).toBeUndefined();
   });
 });

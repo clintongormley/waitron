@@ -422,7 +422,7 @@ import type { FormFactor, CapabilityFlag, DeviceKind, NavigationScreen } from ".
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
-import { checkTimeOffered, nextNotices } from "./state/staff-notices.js";
+import { checkTimeOffered, nextNotices, waitingStartNotice } from "./state/staff-notices.js";
 import "./widgets/box-time-dialog.js";
 import { EquipmentNfc, type EquipmentCode } from "./state/equipment-nfc.js";
 import {
@@ -3190,9 +3190,18 @@ export class TillApp extends LitElement {
   });
   /** The PIN screen's reads, so the server hears this device's clock with nobody signed in. */
   readonly #pinScreenPoll = new EquipmentPoll({
-    read: (signal) => this.api.getDeviceEquipment({ signal }),
-    onEquipment: ({ notices }) => {
-      this.pinClockNotice = notices?.find((notice) => notice.code === "clock.unconfirmed");
+    read: async (signal) => {
+      try {
+        return await this.api.getDeviceEquipment({ signal });
+      } catch (error) {
+        // The poll stops on this refusal, so no later read would clear the line.
+        if ((error as { code?: string } | undefined)?.code === "device.unauthorized")
+          this.pinClockNotice = undefined;
+        throw error;
+      }
+    },
+    onEquipment: (read) => {
+      this.pinClockNotice = waitingStartNotice(this.pinClockNotice, read);
     },
   });
   @state() private pinClockNotice?: StaffNotice;

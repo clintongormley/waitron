@@ -58,3 +58,15 @@ export function checkTimeOffered(read: DeviceEquipmentRead, previous: boolean): 
       (notice.code === WAITING_START && notice.owner === BOX_CLOCK_OWNER),
   );
 }
+
+/** The box's waiting-start notice to show after `read`, through {@link nextNotices}: so a notice
+ * that is not well formed is dropped, and `previous` stays while `read` names the box's clock
+ * owner unavailable. */
+export function waitingStartNotice(
+  previous: StaffNotice | undefined,
+  read: DeviceEquipmentRead,
+): StaffNotice | undefined {
+  return nextNotices(previous === undefined ? [] : [previous], read).find(
+    (notice) => notice.code === WAITING_START && notice.owner === BOX_CLOCK_OWNER,
+  );
+}
