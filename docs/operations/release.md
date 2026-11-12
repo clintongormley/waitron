@@ -159,7 +159,7 @@ two jobs make the release:
    build renders the version's declaration into `/app/declaration/`, and fails if the committed
    `declarations/v1.0.0.md` is missing, carries a blocker line or disagrees with the code. It runs
    `check-release 1.0.0` inside the built image, refuses a version the registry already holds, and
-   only then pushes `ghcr.io/clintongormley/waitron:1.0.0` and the print agent's `:1.0.0`.
+   only then pushes the print agent's `:1.0.0` and, last, `ghcr.io/clintongormley/waitron:1.0.0`.
 2. **`release`** pulls that published image, copies its declaration's PDF and plain text out of
    it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
    `waitron-1.0.0-declaration.txt`, making the Release if there is none. Because the files come
@@ -183,6 +183,10 @@ gh run rerun <run id> --failed
 That repeats the upload and replaces the two files from the image the tag names. Do not re-run the
 whole workflow: its `publish` job stops, because the version is already published, and `release`
 never runs.
+
+If `publish` fails while pushing, re-run it with `gh run rerun <run id> --failed`. The app image is
+pushed last, so a run that stopped before that push has not published the version, and the re-run
+pushes both images.
 
 ## 8. Install the release on a box
 
