@@ -100,7 +100,9 @@ describe("AdjustmentsApi", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
     const liveData = new LiveData();
     const queries = new QueryController(
-      { addController: vi.fn() } as unknown as ConstructorParameters<typeof QueryController>[0],
+      { addController: vi.fn(), requestUpdate: vi.fn() } as unknown as ConstructorParameters<
+        typeof QueryController
+      >[0],
       () => liveData,
       vi.fn(),
     );

@@ -23,6 +23,7 @@ function setup() {
   const hosts: ReactiveController[] = [];
   const host = {
     addController: (value: ReactiveController) => hosts.push(value),
+    requestUpdate: () => {},
   } as unknown as ReactiveControllerHost;
   const controller = new MenuReadController(
     host,
@@ -164,7 +165,10 @@ it("does not count a read already in flight as the save's refresh", async () => 
   const answers: Array<(response: Response) => void> = [];
   const api = new DashboardApi("", () => new Promise<Response>((resolve) => answers.push(resolve)));
   const values: MenuReadResult[] = [];
-  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const host = {
+    addController: () => {},
+    requestUpdate: () => {},
+  } as unknown as ReactiveControllerHost;
   const controller = new MenuReadController(
     host,
     () => api,
@@ -203,7 +207,10 @@ it("retains an invalidation arriving during the refresh's read", async () => {
     });
   });
   const values: MenuReadResult[] = [];
-  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const host = {
+    addController: () => {},
+    requestUpdate: () => {},
+  } as unknown as ReactiveControllerHost;
   const controller = new MenuReadController(
     host,
     () => api,
@@ -231,7 +238,10 @@ it("keeps waiting for a refresh requested after an earlier read started and then
   vi.useFakeTimers();
   const answers: Array<(response: Response) => void> = [];
   const api = new DashboardApi("", () => new Promise<Response>((resolve) => answers.push(resolve)));
-  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const host = {
+    addController: () => {},
+    requestUpdate: () => {},
+  } as unknown as ReactiveControllerHost;
   const values: MenuReadResult[] = [];
   const errors: unknown[] = [];
   const controller = new MenuReadController(
@@ -264,7 +274,10 @@ it("settles a failed refresh for a second observer sharing the first observer's 
   const initial = s.controller.watch("lunch", ["home"], (value) => s.values.push(value));
   await vi.advanceTimersByTimeAsync(0);
   await initial;
-  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const host = {
+    addController: () => {},
+    requestUpdate: () => {},
+  } as unknown as ReactiveControllerHost;
   const errors: unknown[] = [];
   const other = new MenuReadController(
     host,
@@ -330,7 +343,10 @@ it("drops an old menu's late response after a new menu is opened", async () => {
   const answers: Array<(response: Response) => void> = [];
   const api = new DashboardApi("", () => new Promise<Response>((resolve) => answers.push(resolve)));
   const values: MenuReadResult[] = [];
-  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const host = {
+    addController: () => {},
+    requestUpdate: () => {},
+  } as unknown as ReactiveControllerHost;
   const controller = new MenuReadController(
     host,
     () => api,
@@ -392,7 +408,10 @@ it.each([
       });
     });
     const values: MenuReadResult[] = [];
-    const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+    const host = {
+      addController: () => {},
+      requestUpdate: () => {},
+    } as unknown as ReactiveControllerHost;
     const controller = new MenuReadController(
       host,
       () => api,
@@ -452,7 +471,10 @@ it("forces a manual refresh even when its snapshot includes the latest successfu
       home: { status: 200, body: { handheld: { columns } } },
     });
   });
-  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const host = {
+    addController: () => {},
+    requestUpdate: () => {},
+  } as unknown as ReactiveControllerHost;
   const controller = new MenuReadController(
     host,
     () => api,
@@ -487,7 +509,10 @@ it("reads the newer save back when an older save response arrives last", async (
       home: { status: 200, body: { handheld: { columns: sequence === 5 ? 3 : 5 } } },
     });
   });
-  const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+  const host = {
+    addController: () => {},
+    requestUpdate: () => {},
+  } as unknown as ReactiveControllerHost;
   const controller = new MenuReadController(
     host,
     () => api,
