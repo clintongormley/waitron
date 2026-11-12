@@ -10,7 +10,6 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { printJobs, ticketItems } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
-import { partyTablesName } from "@waitron/shared";
 import {
   kitchenNotices,
   setZoneSalePolicyOverride,
@@ -185,12 +184,13 @@ async function pushOnto(partyId: string, moving: string, target: string, seats: 
 /** 12 guests at Long table, Bar pushed on: one group of Bar, Counter 3, 4 and 5. */
 async function seatedGroup() {
   const zone = await LONG_TABLE();
-  const guests = await seat(v, zone.table.long!, 12);
-  await pushOnto(guests.partyId, zone.table.bar!, zone.table.long!, 14);
+  const guests = await seat(v, zone.table.c3!, 12);
+  await pushOnto(guests.partyId, zone.table.bar!, zone.table.c3!, 14);
+  await rename(zone.table.c3!, null);
   return { ...zone, guests };
 }
 
-async function rename(tableId: string, name: string): Promise<void> {
+async function rename(tableId: string, name: string | null): Promise<void> {
   await post(`/api/tables/${tableId}/today/name`, await withRevision(v, tableId, { name }));
 }
 
@@ -267,25 +267,19 @@ describe("a group renamed for today, as the kitchen sees it", () => {
     expect(printed.filter(isMovedSlip)).toEqual([]);
   });
 
-  it("Bar pushed onto the seated, joined Long table prints one MOVED slip from Long table to Bar and its parts, as Long table and its name are gone", async () => {
+  it("Bar pushed onto the seated saved group keeps its name and prints no MOVED slip", async () => {
     const zone = await LONG_TABLE();
-    const guests = await seat(v, zone.table.long!, 12);
+    const guests = await seat(v, zone.table.c3!, 12);
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
+    const name = (await floorRow(v, zone.table.c3!)).today!.joinName;
+    expect(name).toMatch(/^Long table /);
 
     const printed = await jobsFrom(() =>
-      pushOnto(guests.partyId, zone.table.bar!, zone.table.long!, 14),
+      pushOnto(guests.partyId, zone.table.bar!, zone.table.c3!, 14),
     );
 
-    const slips = printed.filter(isMovedSlip);
-    expect(slips).toHaveLength(1);
-    const labels = await Promise.all(
-      [zone.table.bar!, zone.table.c3!, zone.table.c4!, zone.table.c5!].map(labelOf),
-    );
-    // The To text is long enough to wrap, so the lines are compared with their spacing collapsed.
-    const collapsed = (text: string) => text.replace(/\s+/g, " ");
-    expect(collapsed(slips[0]!.join(" "))).toContain(
-      collapsed(fromTo(await labelOf(zone.table.long!), partyTablesName(labels))),
-    );
+    expect(printed.filter(isMovedSlip)).toEqual([]);
+    expect((await floorRow(v, zone.table.bar!)).today?.joinName).toBe(name);
   });
 
   it("the party moved from the renamed group to Table 9 prints one MOVED slip from the name to Table 9", async () => {
@@ -383,13 +377,12 @@ describe("a group renamed for today, where saved names stay", () => {
     await finish(guests.partyId);
 
     const saved = [
-      await labelOf(table.long!),
       await labelOf(table.bar!),
       await labelOf(table.c3!),
       await labelOf(table.c4!),
       await labelOf(table.c5!),
     ];
-    expect((await partyRow(v, guests.partyId)).tableNames).toEqual(saved);
+    expect((await partyRow(v, guests.partyId)).tableNames.toSorted()).toEqual(saved.toSorted());
     const page = await inTx(v, (tx) =>
       listOrders(tx, {
         status: "all",
@@ -397,7 +390,7 @@ describe("a group renamed for today, where saved names stay", () => {
         credited: false,
         limit: 200,
         scope: "all",
-        table: saved[3]!,
+        table: saved[2]!,
       }),
     );
     expect(page.rows.map((row) => row.id)).toContain(guests.tabId);
@@ -594,7 +587,7 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
     expect(slips[0]!.join(" ")).toContain(fromTo(name, `${own}, ${nine}`));
   });
 
-  it("Bar back to its saved place leaves the named group of three and prints no MOVED slip: the party keeps every table and the name", async () => {
+  it("Bar back to its saved place leaves a named group behind and prints no MOVED slip: the party keeps every table and the name", async () => {
     const { table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     await rename(table.c3!, name);
@@ -864,85 +857,5 @@ describe("a counter order delivered to a table an action brings into or takes ou
       const to = fromTo(cumple, await labelOf(tableId));
       expect(slips.filter((slip) => slip.includes(to))).toHaveLength(1);
     }
-  });
-
-  it("Long table, renamed for today, pushed by the floor's merge route onto Counter 6 of an unnamed group with Table 9 prints one MOVED slip for the counter order delivered to Table 9, from Table 9 to the name", async () => {
-    const { table, zoneId } = await LONG_TABLE();
-    await post(
-      `/api/tables/${table.t9!}/today/merge`,
-      await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
-    );
-    await deliveredCounterOrder(zoneId, table.t9!);
-    const name = suffixed("Fiesta");
-    await rename(table.long!, name);
-
-    const printed = await jobsFrom(async () =>
-      post(
-        `/api/tables/${table.long!}/today/merge`,
-        await withRevision(v, table.long!, { targetId: table.c6!, side: "right", seats: 16 }),
-      ),
-    );
-
-    expect((await floorRow(v, table.t9!)).today?.joinName).toBe(name);
-    const slips = printed.filter(isMovedSlip);
-    expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.t9!), name));
-  });
-});
-
-describe("the till's Join pushing a table onto a group, as the kitchen sees it", () => {
-  /**
-   * Table 9 pushed onto free Counter 6 by the floor's merge route (no name); Long table renamed;
-   * guests at Long table with a Burger sent; then `before`, then the till joins them to Counter 6,
-   * dragging Long table onto it.
-   */
-  async function joinLongTableOntoCounter6(before: (zoneId: string, t9: string) => Promise<void>) {
-    const { table, zoneId } = await LONG_TABLE();
-    await post(
-      `/api/tables/${table.t9!}/today/merge`,
-      await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
-    );
-    await before(zoneId, table.t9!);
-    const name = suffixed("Fiesta");
-    await rename(table.long!, name);
-    const guests = await seat(v, table.long!, 12);
-    await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
-
-    const printed = await jobsFrom(async () =>
-      post(`/api/parties/${guests.partyId}/join`, {
-        zoneRevision: await readRevision(table.c6!),
-        tableId: table.c6!,
-        expectedPartyRevision: await revisionOf(v, guests.partyId),
-        expectedEdits: await inTx(v, (tx) => partyBillEditsForTest(tx, [guests.partyId])),
-        otherPartyId: null,
-        merge: { moving: table.long!, target: table.c6!, side: "right", seats: 16 },
-      }),
-    );
-    return { table, name, slips: printed.filter(isMovedSlip).map((slip) => slip.join(" ")) };
-  }
-
-  /** The guests' own MOVED slip: from the name alone to the name over Counter 6 and the rest. */
-  async function guestsSlip(name: string, counter6: string) {
-    return fromTo(`${name} (${name})`, `${name} (${await labelOf(counter6)},`);
-  }
-
-  it("with no counter order at the group's tables prints one MOVED slip, for the guests' own Burger, from the name to the name over Counter 6 and the rest", async () => {
-    const { table, name, slips } = await joinLongTableOntoCounter6(async () => {});
-
-    expect(slips).toHaveLength(1);
-    expect(slips[0]).toContain(await guestsSlip(name, table.c6!));
-  });
-
-  it("with a counter order delivered to Table 9 also prints one MOVED slip for it, from Table 9 to the name, as the floor's merge does", async () => {
-    const { table, name, slips } = await joinLongTableOntoCounter6(async (zoneId, t9) => {
-      await deliveredCounterOrder(zoneId, t9);
-    });
-
-    expect((await floorRow(v, table.t9!)).today?.joinName).toBe(name);
-    const walkUp = fromTo(await labelOf(table.t9!), name);
-    expect(slips.filter((slip) => slip.includes(walkUp))).toHaveLength(1);
-    const guests = await guestsSlip(name, table.c6!);
-    expect(slips.filter((slip) => slip.includes(guests))).toHaveLength(1);
-    expect(slips).toHaveLength(2);
   });
 });

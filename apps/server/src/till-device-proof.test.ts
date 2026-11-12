@@ -481,7 +481,6 @@ const actionRoutes = [
   ["POST", "/api/tables/:id/today/name", 401],
   ["POST", "/api/tables/:id/today/merge", 401],
   ["POST", "/api/tables/:id/today/split-off", 401],
-  ["POST", "/api/tables/:id/today/reset", 401],
   ["POST", "/api/zones/:id/today/reset", 401],
   ["POST", "/api/zones/:id/today/update-layout", 401],
   ["POST", "/api/working-orders", 401],
