@@ -75,6 +75,17 @@ describe("releasedDeclarationProblems", () => {
     expect(releasedDeclarationProblems(repo)).toEqual([]);
   });
 
+  it("orders versions past JavaScript's exact whole numbers", () => {
+    const repo = repository({
+      "v9007199254740992.0.0.md": "lower\n",
+      "v9007199254740993.0.0.md": "higher\n",
+    });
+    tag(repo, "v9007199254740993.0.0");
+    const problems = releasedDeclarationProblems(repo);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("no tag v9007199254740992.0.0");
+  });
+
   it("passes a tagged version whose file is unchanged", () => {
     const repo = repository({ "v1.0.0.md": "one\n", "template.md": "t\n" });
     tag(repo, "v1.0.0");
@@ -112,6 +123,15 @@ describe("releasedDeclarationProblems", () => {
   it("ignores tags and files that are not plain versions", () => {
     const repo = repository({ "v01.0.0.md": "x\n", "template.md": "t\n", "notes.md": "n\n" });
     for (const name of ["pre-sqlite-migration", "v1.2", "v1.2.3-rc1"]) tag(repo, name);
+    expect(releasedDeclarationProblems(repo)).toEqual([]);
+  });
+
+  // 50 characters is the most a record's version holds (`isReleaseVersion` in @waitron/shared).
+  it("ignores a tag and a file whose version is longer than 50 characters", () => {
+    const long = `v1.0.${"9".repeat(47)}`;
+    const repo = repository({ [`${long}.md`]: "long\n", "v1.0.0.md": "one\n" });
+    tag(repo, long);
+    commit(repo, { [`${long}.md`]: "edited\n" }, "edit");
     expect(releasedDeclarationProblems(repo)).toEqual([]);
   });
 

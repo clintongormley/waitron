@@ -6652,6 +6652,7 @@ describe("the publish job carries the producer's settings into the image", () =>
       PRODUCER_LOAD_STEP,
       PRODUCER_CHECK_STEP,
       PRODUCER_VALID_STEP,
+      "Publish the print-agent image to GHCR",
       "Publish to GHCR",
     ].map(at);
     expect(order.every((index) => index > -1)).toBe(true);
@@ -7081,6 +7082,7 @@ describe("the publish job carries the producer's settings into the image", () =>
 const RELEASE_ON_MAIN_STEP = "Refuse a release tag that is not on main";
 const RELEASE_CHECK_STEP = "Check the release inside the built image";
 const RELEASE_UNPUBLISHED_STEP = "Refuse a release version the registry already holds";
+const AGENT_PUSH_STEP = "Publish the print-agent image to GHCR";
 const ON_A_RELEASE_TAG = "        if: startsWith(github.ref, 'refs/tags/v')";
 
 describe("the publish job on a release tag", () => {
@@ -7168,8 +7170,8 @@ describe("the publish job on a release tag", () => {
   it("passes the tag's version to both app builds and the print-agent build", () => {
     expect(builds.map((step) => step.name)).toEqual([
       PRODUCER_LOAD_STEP,
+      AGENT_PUSH_STEP,
       "Publish to GHCR",
-      "Publish the print-agent image to GHCR",
     ]);
     for (const build of builds)
       expect(withBlock(build), build.name).toContain(
@@ -7360,11 +7362,20 @@ describe("the publish job on a release tag", () => {
       }
     };
 
-    it("runs on a release tag only, after the release check and just before the push", () => {
+    it("runs on a release tag only, after the release check and just before the first push", () => {
       expect(step().step).toContain(ON_A_RELEASE_TAG);
       expect(step().envOf("RELEASE_IMAGE")).toBe("${{ steps.tags.outputs.release_image }}");
       expect(at(RELEASE_UNPUBLISHED_STEP)).toBeGreaterThan(at(RELEASE_CHECK_STEP));
-      expect(at(RELEASE_UNPUBLISHED_STEP)).toBe(at("Publish to GHCR") - 1);
+      expect(at(RELEASE_UNPUBLISHED_STEP)).toBe(at(AGENT_PUSH_STEP) - 1);
+    });
+
+    // The check reads the app image alone, so that push has to be the last: a failed print-agent
+    // push after it would leave a version the check refuses and the registry lacks half of.
+    it("is followed by the print-agent push and then the app push, the app image last", () => {
+      const pushes = steps.filter((step) => /^ {10}push: true$/m.test(step.text));
+      expect(pushes.map((step) => step.name)).toEqual([AGENT_PUSH_STEP, "Publish to GHCR"]);
+      expect(at(RELEASE_UNPUBLISHED_STEP)).toBeLessThan(steps.indexOf(pushes[0]));
+      expect(steps.at(-1).name).toBe("Publish to GHCR");
     });
 
     it("asks the registry under a time limit, and refuses a version already published", () => {
@@ -7387,6 +7398,63 @@ describe("the publish job on a release tag", () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("denied");
     });
+  });
+});
+
+// The workflow's own group is unique per run, so two runs on one tag would both find the version
+// unpublished and both push. GitHub keeps one pending run per group and cancels an older pending
+// one, so only a tag's runs may share a group: main's must never wait behind, or displace, another.
+describe("the publish job's concurrency group", () => {
+  const block = () => {
+    const body = job("publish").body;
+    const at = body.findIndex((line) => /^ {4}concurrency:\s*$/.test(line));
+    if (at === -1) throw new Error("the `publish` job has no `concurrency:` block");
+    const entries = [];
+    for (const line of body.slice(at + 1)) {
+      if (!/^ {6}\S/.test(line)) break;
+      entries.push(line.trim());
+    }
+    const valueOf = (key) => {
+      const line = entries.find((entry) => entry.startsWith(`${key}:`));
+      if (line === undefined) throw new Error(`publish's concurrency block has no \`${key}:\``);
+      return line.slice(key.length + 1).trim();
+    };
+    return { group: valueOf("group"), cancelInProgress: valueOf("cancel-in-progress") };
+  };
+  const groupFor = (event, ref, runId) =>
+    block().group.replace(/\$\{\{ (.*?) \}\}/g, (_, expression) =>
+      String(
+        runInNewContext(expression, {
+          github: { event_name: event, ref, run_id: runId, workflow: "CI" },
+          startsWith: (text, prefix) => text.startsWith(prefix),
+        }),
+      ),
+    );
+
+  it("is keyed to the tag on a release tag, and to the run everywhere else", () => {
+    expect(block().group).toMatch(
+      /startsWith\(github\.ref, 'refs\/tags\/v'\)\s*&&\s*github\.ref\s*\|\|\s*github\.run_id/,
+    );
+  });
+
+  it("puts a tag push and a manual run on the same tag in one group", () => {
+    const pushed = groupFor("push", "refs/tags/v1.2.3", 1);
+    expect(pushed).toContain("refs/tags/v1.2.3");
+    expect(groupFor("workflow_dispatch", "refs/tags/v1.2.3", 2)).toBe(pushed);
+    expect(groupFor("push", "refs/tags/v1.2.4", 3)).not.toBe(pushed);
+  });
+
+  it.each(["push", "schedule", "workflow_dispatch"])(
+    "gives each %s run on main a group of its own",
+    (event) => {
+      const first = groupFor(event, "refs/heads/main", 1);
+      expect(groupFor(event, "refs/heads/main", 2)).not.toBe(first);
+      expect(first).not.toContain("refs/");
+    },
+  );
+
+  it("never cancels a publish that has started", () => {
+    expect(block().cancelInProgress).toBe("false");
   });
 });
 

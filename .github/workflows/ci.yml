@@ -14,16 +14,16 @@ name: CI
 # that would never report. Both of those are now free moves, which is what makes the scoping (#27)
 # possible at all.
 #
-# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`, with a
-# single deliberate exception. A job that does not is reporting to nothing — it could fail while the
-# pull request stays green. The exception is `publish`, which runs AFTER `ci` (it `needs: ci`) and so
-# cannot be in `ci`'s needs without a cycle; it is a post-gate leaf reporting no required status, and
-# scripts/ci-workflow.test.mjs pins it downstream of `ci` rather than absent from it.
+# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`, with two
+# deliberate exceptions. A job that does not is reporting to nothing — it could fail while the
+# pull request stays green. The exceptions are `publish`, which runs AFTER `ci` (it `needs: ci`), and
+# `release`, which needs `publish`; neither can be in `ci`'s needs without a cycle. They report no
+# required status, and scripts/ci-workflow.test.mjs pins them downstream of `ci` rather than absent from it.
 
 on:
   push:
     branches: [main]
-    # Release tags, for the `publish` job alone: a `v*` push is what publishes `ghcr.io/<owner>/waitron:<version>`.
+    # Release tags, for the `publish` and `release` jobs: a `v*` push is what publishes `ghcr.io/<owner>/waitron:<version>`.
     # The rest of the workflow running on that ref is the point rather than a cost — nothing should
     # be published from a commit whose suite has not run. Release tags take the full, unscoped path.
     tags: ["v*"]
@@ -4310,8 +4310,8 @@ jobs:
   # red never ships `:main` / `:sha-…` / `:<version>` to a box that follows it via
   # `docker compose pull` (spec §10). `changes` is needed for its `full` output.
   #
-  # It cannot appear in `ci`'s `needs` — that would be a cycle — so it is the ONE job the
-  # "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
+  # It cannot appear in `ci`'s `needs` — that would be a cycle — so it and `release` are the jobs
+  # the "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
   # of `ci` (needs `ci`, `if:` reads `needs.ci.result`) rather than merely absent.
   publish:
     needs: [changes, ci]
@@ -4319,6 +4319,11 @@ jobs:
     if: needs.changes.outputs.full == 'true' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.ci.result == 'success' && always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Runs for one release tag publish one at a time, so a later one finds the version published. Every
+    # other run keeps a group of its own: a group holds one waiting run and cancels an older waiting one.
+    concurrency:
+      group: ${{ github.workflow }}-publish-${{ startsWith(github.ref, 'refs/tags/v') && github.ref || github.run_id }}
+      cancel-in-progress: false
     # Naming any permission drops every default. `packages: write` is for the GHCR push.
     permissions:
       contents: read
@@ -4453,8 +4458,6 @@ jobs:
                 *) echo "main-tag-guard.sh answered '$decision', which is neither move nor hold" >&2; exit 1 ;;
               esac
               ;;
-            # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
-            # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
             refs/tags/v*)
               release_version=${REF#refs/tags/v}
               # The same form the bundle build accepts (`isReleaseVersion`), refused here before any read.
@@ -4609,8 +4612,10 @@ jobs:
           timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/server.js check-release "$RELEASE_VERSION"
 
       # A published release is never replaced. Only these words mean "not published" (measured with
-      # docker 29.9.3 against ghcr.io, 2026-11-12: a missing tag answers `manifest unknown`); any
-      # other failure, such as `denied`, stops the publish.
+      # docker 29.9.3 against ghcr.io, 2026-11-12: a missing tag answers `manifest unknown`;
+      # `no such manifest: ` is accepted as the same answer, unmeasured); any
+      # other failure, such as `denied`, stops the publish. The app image is pushed last, so a version
+      # whose app image exists is a whole publication and a retry after any failed push redoes both.
       - name: Refuse a release version the registry already holds
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -4631,6 +4636,23 @@ jobs:
             exit 1
           fi
 
+      - name: Publish the print-agent image to GHCR
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: print-agent
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.agent_tags }}
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
       - name: Publish to GHCR
         uses: docker/build-push-action@v7
         with:
@@ -4645,23 +4667,6 @@ jobs:
             WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
             WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
             WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
-          labels: |
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
-            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
-
-      - name: Publish the print-agent image to GHCR
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deploy/Dockerfile
-          target: print-agent
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.tags.outputs.agent_tags }}
-          build-args: |
-            WAITRON_BUILD_ID=${{ github.sha }}
-            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
@@ -4705,6 +4710,10 @@ jobs:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
           GIT_TRACE2_EVENT: 1
+      - name: Measure checkout objects
+        run: |
+          git rev-parse --is-shallow-repository
+          find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - uses: docker/login-action@v4
         with:

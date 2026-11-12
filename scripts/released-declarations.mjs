@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
+import { compareVersions, isVersion } from "./release/waitron-release.mjs";
 
 const FOLDER = "packages/fiscal-verifactu/declarations";
-const VERSION_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const isVersionTag = (name) => name.startsWith("v") && isVersion(name.slice(1));
 
 /**
  * What breaks "a released declaration never changes" in `repo` at `HEAD`, one line per problem:
@@ -15,7 +16,7 @@ const VERSION_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export function releasedDeclarationProblems(repo) {
   const tags = git(repo, "tag", "--list");
   const atHead = blobs(repo, "HEAD");
-  const declared = [...atHead.keys()].filter((name) => VERSION_TAG.test(name));
+  const declared = [...atHead.keys()].filter(isVersionTag);
   if (tags.length === 0)
     return declared.map(
       (name) =>
@@ -23,7 +24,7 @@ export function releasedDeclarationProblems(repo) {
     );
 
   const problems = [];
-  const released = tags.filter((name) => VERSION_TAG.test(name));
+  const released = tags.filter(isVersionTag);
   for (const name of released) {
     const path = `${FOLDER}/${name}.md`;
     const atTag = blobs(repo, name).get(name);
@@ -51,10 +52,7 @@ function blobs(repo, ref) {
   return entries;
 }
 
-function compare(a, b) {
-  const [x, y] = [a, b].map((name) => VERSION_TAG.exec(name).slice(1).map(Number));
-  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
-}
+const compare = (a, b) => compareVersions(a.slice(1), b.slice(1));
 
 // The caller's GIT_DIR and its family would point git at another repository than `repo`.
 function git(repo, ...args) {
