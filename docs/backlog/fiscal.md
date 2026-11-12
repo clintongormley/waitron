@@ -1079,8 +1079,8 @@ from **Print on {printer}** in the window that follows it. Direct `POST /api/sal
 
 ### A802: a correction runs like a bill in reverse (owner, 2026-11-12)
 
-A correction of a paid invoice is opened first (the filing checks up front, nothing filed, no money
-moved), money goes back through refunds linked to it, and the corrective invoice is
+A correction of a paid invoice is opened first (every filing check up front, nothing filed, no money
+moved), money goes back through Refund a payment as legs linked to it, and the corrective invoice is
 filed **"When all money is back"**: once every refund in it has gone through. This replaces the
 2026-10-21 "file when opened". **"Opening approval counts"**: when a card refund is confirmed later
 with nobody signed in, the approval given at opening counts and Waitron files the corrective
@@ -1088,6 +1088,10 @@ automatically, falling back to an alert and a manager's Record correction whenev
 refused; this authorises a small change to the protected fiscal core (`recordCorrection`'s session
 check). Recorded in the campaign's `questions.md`, 2026-11-12 12:37; the shape and its card cases
 are in [the note](../superpowers/plans/2026-11-12-a802-correction-primitives.md).
+
+**2026-11-12, as built in PR 1a:** cash goes back through the correction's own cash route, not
+Refund a payment ([reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md), decision 13), and
+Open does not check the corrective series, which the last cash step does.
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
