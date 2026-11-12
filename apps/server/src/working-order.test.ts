@@ -1630,6 +1630,81 @@ describe("getHeldOrder", () => {
     ]);
   });
 
+  it("reads a portion-sized extra back as its per-dish picks, and saves it unchanged", async () => {
+    const { cfg, catalogueId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } =
+      await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Ham",
+        unitId: kgUnitId,
+        unitPrice: "0.27",
+        vatClass: "general",
+      });
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Portions",
+          minPicks: 0,
+          maxPicks: 3,
+          items: [{ productId: product.id, portion: "0.055", maxQuantity: 3, price: null }],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, coffeeId, { kind: "extras", id: list.id });
+      await republishMenus(tx);
+      return { listId: list.id, productId: product.id };
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCoffeeOfferId,
+          quantity: "2",
+          extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 3 }] }],
+        },
+      ],
+    });
+    const children = sql`select cast(quantity as int) as quantity,
+        cast(line_total as int) as line_total
+      from working_order_lines where working_order_id = ${id} and parent_line_id is not null
+      order by line_no`;
+    const stored = await db.execute<{ quantity: number; line_total: number }>(children);
+    expect(stored.rows).toEqual([
+      { quantity: 165, line_total: 3 },
+      { quantity: 165, line_total: 3 },
+    ]);
+
+    const held = await getHeldOrder({ db }, id);
+    expect(held.lines.map((line) => line.extras?.map((pick) => pick.quantity))).toEqual([[3], [3]]);
+
+    // What the till sends back when another part of the order is edited: each held pick as read.
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+      revision: await revisionOf(id),
+      lines: held.lines.map((line, index) => ({
+        workingOrderLineId: line.workingOrderLineId!,
+        menuItemId: premiumCoffeeOfferId,
+        quantity: line.quantity,
+        extras: [
+          {
+            listId: extra.listId,
+            picks: (line.extras ?? []).map((pick) => ({
+              productId: pick.productId!,
+              quantity: pick.quantity,
+            })),
+          },
+        ],
+        ...(index === 0 ? { note: "No salt" } : {}),
+      })),
+    });
+    expect((await db.execute<{ quantity: number; line_total: number }>(children)).rows).toEqual(
+      stored.rows,
+    );
+  });
+
   it("parks weighted extras with physical quantity and the frozen per-pick basis", async () => {
     const { cfg, catalogueId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } =
       await setupVenue();

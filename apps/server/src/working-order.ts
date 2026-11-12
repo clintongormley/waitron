@@ -5026,6 +5026,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         quantity: workingOrderLines.quantity,
+        priceQuantity: workingOrderLines.priceQuantity,
         descriptions: workingOrderLines.descriptions,
         variantDescriptions: workingOrderLines.variantDescriptions,
         optionSnapshots: workingOrderLines.optionSnapshots,
@@ -5052,6 +5053,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         productId,
         variantId,
         quantity: thousandthsToDecimal(line.quantity),
+        priceQuantity: thousandthsToDecimal(line.priceQuantity),
         unitPriceGross: centsToDecimal(line.unitPriceGross),
       };
     });
@@ -5082,14 +5084,13 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             ...(line.optionSnapshots.length ? { workingOrderLineId: line.id } : {}),
           };
         }
-        // A child's stored quantity is dish quantity × pick count.
         const extras = (childrenByParent.get(line.id) ?? []).map((child) => ({
           productId: child.productId,
           name: child.name,
           descriptions: child.descriptions,
           kitchenName: child.kitchenName,
           price: child.unitPriceGross,
-          quantity: Number(child.quantity) / Number(line.quantity),
+          quantity: perDishExtraPicks(child.quantity, line.quantity, child.priceQuantity),
           listId: child.extraListId,
         }));
         return {
