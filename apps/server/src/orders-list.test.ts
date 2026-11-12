@@ -231,6 +231,8 @@ describe("each status, from the product's own write paths", () => {
       total: "12.10",
       staff: [{ id: venue.operatorId, name: "Ana" }],
     });
+    const detail = await inTx(venue, (tx) => readOrderDetail(tx, saleId, "all", false));
+    expect(detail.lines.map((line) => [line.sent, line.sentNutrition])).toEqual([[false, null]]);
   });
 });
 

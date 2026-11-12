@@ -13,6 +13,7 @@ import {
   sales,
   ticketItems,
   workingLinePortions,
+  workingLineContexts,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -29,6 +30,7 @@ import { createCourse } from "./kitchen.js";
 import { resolveKitchenAllergyBlocks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./move-bill.js";
+import type { LineNutrition } from "./line-nutrition.js";
 import { readOrderDetail } from "./orders-list.js";
 import type { PortionRef } from "./order-portions.js";
 import { partyRevision } from "./parties.js";
@@ -881,6 +883,120 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
         total: String(line.total),
       })),
     );
+
+  it("keeps recorded dish and extra declarations apart, comparing their values when folding", async () => {
+    const { billId } = await seed(burgersWithCheese("4"));
+    await inTx(venue, (tx) => fireAll(tx, venue.cfg, billId));
+    const milk = {
+      allergens: { milk: {}, eggs: {} },
+      dietaryDeclarations: ["vegetarian", "halal"],
+    };
+    const cheese = { allergens: { milk: {} }, dietaryDeclarations: [] };
+    await inTx(venue, async (tx) => {
+      const lines = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId))
+        .orderBy(workingOrderLines.lineNo);
+      const declarations: LineNutrition[] = [
+        milk,
+        cheese,
+        { allergens: { eggs: {}, milk: {} }, dietaryDeclarations: ["halal", "vegetarian"] },
+        cheese,
+        { allergens: { fish: {} }, dietaryDeclarations: [] },
+        cheese,
+        milk,
+        { allergens: {}, dietaryDeclarations: [] },
+      ];
+      await VENUE_SERVICE.recordSentLineNutrition(
+        tx,
+        lines.map((line, at) => ({
+          lineId: line.id,
+          nutrition: declarations[at]!,
+        })),
+      );
+      await tx
+        .update(products)
+        .set({ allergens: { mustard: {} } })
+        .where(eq(products.id, ids.burger));
+    });
+    const lines = await inTx(
+      venue,
+      async (tx) => (await readOrderDetail(tx, billId, "all", false)).lines,
+    );
+    expect(lines.map((line) => line.sent)).toEqual([true, true, true, true, true, true]);
+    expect(lines.map((line) => [line.name, String(line.quantity), line.sentNutrition])).toEqual([
+      ["Burger", "2.000", milk],
+      ["Cheese", "2.000", cheese],
+      ["Burger", "1.000", { allergens: { fish: {} }, dietaryDeclarations: [] }],
+      ["Cheese", "1.000", cheese],
+      ["Burger", "1.000", milk],
+      ["Cheese", "1.000", { allergens: {}, dietaryDeclarations: [] }],
+    ]);
+  });
+
+  it("distinguishes a missing capture from unreviewed and reviewed-empty recorded declarations", async () => {
+    const { billId, portions } = await seed(croquettes("3"));
+    await inTx(venue, async (tx) => {
+      await fireAll(tx, venue.cfg, billId);
+      await tx
+        .update(workingLineContexts)
+        .set({ sentNutrition: null })
+        .where(eq(workingLineContexts.workingOrderLineId, portions[0]!.lineId));
+      await VENUE_SERVICE.recordSentLineNutrition(tx, [
+        { lineId: portions[1]!.lineId, nutrition: { allergens: null, dietaryDeclarations: [] } },
+        { lineId: portions[2]!.lineId, nutrition: { allergens: {}, dietaryDeclarations: [] } },
+      ]);
+    });
+    const lines = await inTx(
+      venue,
+      async (tx) => (await readOrderDetail(tx, billId, "all", false)).lines,
+    );
+    expect(lines.map((line) => line.sentNutrition)).toEqual([
+      null,
+      { allergens: null, dietaryDeclarations: [] },
+      { allergens: {}, dietaryDeclarations: [] },
+    ]);
+  });
+
+  it("keeps portions apart when only their recorded grain type or diet differs", async () => {
+    const { billId, portions } = await seed(croquettes("3"));
+    await inTx(venue, async (tx) => {
+      await fireAll(tx, venue.cfg, billId);
+      await VENUE_SERVICE.recordSentLineNutrition(tx, [
+        {
+          lineId: portions[0]!.lineId,
+          nutrition: {
+            allergens: { gluten: { kinds: ["wheat"] } },
+            dietaryDeclarations: ["vegan"],
+          },
+        },
+        {
+          lineId: portions[1]!.lineId,
+          nutrition: { allergens: { gluten: { kinds: ["rye"] } }, dietaryDeclarations: ["vegan"] },
+        },
+        {
+          lineId: portions[2]!.lineId,
+          nutrition: { allergens: { gluten: { kinds: ["wheat"] } }, dietaryDeclarations: [] },
+        },
+      ]);
+    });
+    const lines = await inTx(
+      venue,
+      async (tx) => (await readOrderDetail(tx, billId, "all", false)).lines,
+    );
+    expect(
+      lines.map((line) => [
+        String(line.quantity),
+        line.sentNutrition?.allergens?.gluten?.kinds,
+        line.sentNutrition?.dietaryDeclarations,
+      ]),
+    ).toEqual([
+      ["1.000", ["wheat"], ["vegan"]],
+      ["1.000", ["rye"], ["vegan"]],
+      ["1.000", ["wheat"], []],
+    ]);
+  });
 
   it("A803 portion grouping: two identical portions show one row of 2 with the summed amount", async () => {
     const { billId } = await seed(burgersWithCheese("2"));

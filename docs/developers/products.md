@@ -939,8 +939,10 @@ A null allergen declaration draws no icons. Sent counter and table rows use `sen
 `working_line_contexts`, captured at the first `sent_at` through the effective current product
 read, including variant inheritance. `readDisplayLineNutrition` keeps unstamped rows live and
 never substitutes current declarations for a missing sent snapshot. Each extra stays separate.
-Kitchen reads retain their current-product declarations. Orders history detail is the remaining
-A1517-6 slice. This Sent exception follows the owner's 11-November decision 6 in
+Kitchen reads retain their current-product declarations. Orders history detail reads the same saved
+contexts, keeps each extra separate and folds portions only with matching declaration values.
+A missing capture stays distinct from an unreviewed or reviewed-empty allergen declaration.
+This sent-order/history exception follows the owner's 11-November decision 6 in
 [the A1517 proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11). The retired Allergens screen has no destination or print path.
 
 

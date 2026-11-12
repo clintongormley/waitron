@@ -4,7 +4,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { allergenLabel } from "../i18n/domain.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, OrderDetailDto } from "../api/client.js";
 import "./order-detail-dialog.js";
 import type { OrderDetailDialog } from "./order-detail-dialog.js";
@@ -40,6 +41,8 @@ const detail: OrderDetailDto = {
       total: "10.00",
       listUnitPrice: "12.00",
       creditedTo: "Ana",
+      sentNutrition: null,
+      sent: true,
     },
   ],
   invoices: [
@@ -139,6 +142,73 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
   ])
     expect(words).toContain(value);
   expect(api.getOrder).toHaveBeenCalledWith("bill-1");
+});
+
+it.each(["en-GB", "es-ES"])(
+  "shows saved declarations and their review state in %s",
+  async (locale) => {
+    setLocale(locale);
+    const snapshots = [
+      {
+        allergens: { gluten: { kinds: ["wheat"] }, milk: {} },
+        dietaryDeclarations: ["vegetarian"],
+      },
+      { allergens: {}, dietaryDeclarations: [] },
+      { allergens: null, dietaryDeclarations: ["vegan"] },
+      null,
+    ];
+    const api = {
+      getOrder: vi.fn().mockResolvedValue({
+        ...detail,
+        lines: snapshots.map((sentNutrition, at) => ({
+          ...detail.lines[0]!,
+          lineNo: at + 1,
+          sentNutrition,
+        })),
+      }),
+      liveData: new LiveData(),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+      api,
+      orderId: "bill-1",
+    });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+    const nutrition = [...el.shadowRoot!.querySelectorAll("[data-sent-nutrition]")].map(
+      (node) => node.textContent!,
+    );
+    expect(nutrition).toHaveLength(4);
+    expect(nutrition[0]).toContain(t("orders.detail.recorded_when_sent"));
+    expect(nutrition[0]).toContain(allergenLabel("gluten", { kinds: ["wheat"] }));
+    expect(nutrition[0]).toContain(allergenLabel("milk", {}));
+    expect(nutrition[0]).toContain(t("editor.diet.vegetarian"));
+    expect(nutrition[1]).toContain(t("editor.nutrition.contains_none"));
+    expect(nutrition[2]).toContain(t("editor.allergens_unreviewed"));
+    expect(nutrition[2]).toContain(t("editor.diet.vegan"));
+    expect(nutrition[3]).toContain(t("orders.detail.sent_not_recorded"));
+    expect(nutrition[3]).not.toContain(t("orders.detail.recorded_when_sent"));
+    const body = el
+      .shadowRoot!.querySelector("wt-dialog")!
+      .shadowRoot!.querySelector<HTMLElement>(".body")!;
+    await vi.waitFor(() =>
+      expect(body.tabIndex).toBe(body.scrollHeight > body.clientHeight ? 0 : -1),
+    );
+    await expectNoA11yViolations(host);
+  },
+);
+
+it("keeps the historical declaration block off an unsent line", async () => {
+  const api = {
+    getOrder: vi
+      .fn()
+      .mockResolvedValue({ ...detail, lines: [{ ...detail.lines[0]!, sent: false }] }),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  expect(el.shadowRoot!.querySelector("[data-sent-nutrition]")).toBeNull();
 });
 
 it("names a transfer closure as still to be paid, with no card and no tip", async () => {

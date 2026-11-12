@@ -407,6 +407,8 @@ the till.
 Open a sent dish's details to check **Recorded when sent**. These declarations describe the dish
 when you sent it, even if you edit the product later. Dishes on hold keep their current
 declarations until you release them. Use the kitchen's current information when preparing food.
+To review an earlier bill, open its details in **Orders**. The saved declarations appear beneath
+each dish and extra.
 
 When you add a dish with an allergen exclusion active, you can choose only compatible sizes and
 extras whose declarations have been reviewed. Optional toppings do not hide the dish. If a
