@@ -28,6 +28,7 @@ import { createTurns } from "./backup-turns.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { StreamHost, STREAM_PURPOSE } from "./stream-host.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
 import {
@@ -79,6 +80,11 @@ vi.mock("@waitron/module", async (importOriginal) => {
       drain: () => Promise.resolve(emptyDrainResult()),
     }),
   };
+});
+
+vi.mock("./mirror-bundle-fetch.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./mirror-bundle-fetch.js")>();
+  return { ...actual, rememberCheckedAddressesIn: vi.fn(actual.rememberCheckedAddressesIn) };
 });
 
 vi.mock("./modules.js", async (importOriginal) => {
@@ -756,6 +762,35 @@ describe("the start check on a real start", () => {
       expect(await acceptingSales()).toBe(false);
       const page = await fetch(`http://127.0.0.1:${httpPort()}/`);
       expect(await page.text()).toContain("This box is waiting for Spare");
+    }, 60_000);
+
+    it("closed while it waits, lets go of the state folder it kept checked addresses in before the waiting server closes", async () => {
+      // The waiting server closes its listeners before the venue store, so a listener still
+      // answering at the let-go means the store is still open too.
+      const answered: unknown[] = [];
+      const real = vi.mocked(rememberCheckedAddressesIn).getMockImplementation()!;
+      vi.mocked(rememberCheckedAddressesIn).mockImplementationOnce(async (...args) => {
+        const letGo = await real(...args);
+        return async () => {
+          answered.push(
+            await fetch(`http://127.0.0.1:${httpPort()}/api/node`).then(
+              (response) => response.status,
+              () => "refused",
+            ),
+          );
+          return letGo();
+        };
+      });
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        seams: { ...seams(waitThen()), waitingStart: { intervalMs: 60_000 } },
+      });
+      expect(booted.acceptingSales).toBe(false);
+
+      await server!.close();
+      server = undefined;
+      expect(answered[0]).toBe(200);
     }, 60_000);
 
     it("the waiting start refuses a carry-on from another port of the box's address, and takes its own pages'", async () => {

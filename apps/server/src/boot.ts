@@ -1024,15 +1024,15 @@ export async function startServer(
   seams: StartServerSeams = {},
 ): Promise<StartedServer> {
   const undoOnFailure: Array<() => Promise<void>> = [];
-  const afterClose: Array<() => Promise<void>> = [];
+  const beforeClose: Array<() => Promise<void>> = [];
   let waiting: StartedServer | undefined;
   let announced: () => void = () => {};
   const waitBegan = new Promise<void>((resolve) => (announced = resolve));
-  const booted = bootServer(env, base, seams, undoOnFailure, afterClose, (whileWaiting) => {
+  const booted = bootServer(env, base, seams, undoOnFailure, beforeClose, (whileWaiting) => {
     waiting = whileWaiting;
     announced();
   })
-    .then((server) => closingAlso(server, afterClose))
+    .then((server) => closingAlso(server, beforeClose))
     .catch(async (error: unknown) => {
       // Newest first, so anything that runs on the venue store stops before the store closes. An undo
       // that fails is dropped: the boot's own error is the one the supervisor has to see.
@@ -1059,7 +1059,7 @@ export async function startServer(
     health: whileWaiting.health,
     fullyStarted,
     close: async () => {
-      await whileWaiting.close();
+      await closeAll([...beforeClose, () => whileWaiting.close()]);
       // A shutdown after the wait ended waits for the rest of the start, up to the shutdown deadline.
       await continued;
       await current.close();
@@ -1067,22 +1067,26 @@ export async function startServer(
   };
 }
 
-/** `server`, whose `close()` then runs each of `afterClose` in turn, even when closing failed. */
-function closingAlso(server: StartedServer, afterClose: Array<() => Promise<void>>): StartedServer {
-  return { ...server, close: () => closeAll([() => server.close(), ...afterClose]) };
+/** `server`, whose `close()` first runs each of `beforeClose` in turn, closing it even when one fails. */
+function closingAlso(
+  server: StartedServer,
+  beforeClose: Array<() => Promise<void>>,
+): StartedServer {
+  return { ...server, close: () => closeAll([...beforeClose, () => server.close()]) };
 }
 
 /**
  * `startServer`'s body. Whatever it starts that must be stopped if a later step throws is pushed onto
  * `undoOnFailure`; nothing there runs once it has returned a server, whose own `close()` takes over.
- * What `afterClose` holds runs after the returned server's `close()`, whichever mode returned it.
+ * What `beforeClose` holds runs before the returned server's own `close()`, whichever mode returned
+ * it, so it must leave the server able to finish closing.
  */
 async function bootServer(
   env: Record<string, string | undefined>,
   base: NodeJS.ProcessEnv,
   seams: StartServerSeams,
   undoOnFailure: Array<() => Promise<void>>,
-  afterClose: Array<() => Promise<void>>,
+  beforeClose: Array<() => Promise<void>>,
   announceWaiting: (whileWaiting: StartedServer) => void,
 ): Promise<StartedServer> {
   const now = () => new Date();
@@ -1223,7 +1227,9 @@ async function bootServer(
       log("warn", "mirror.checked_address_unsaved", { errorCode: codeOf(error) }),
     );
     undoOnFailure.push(letGoOfCheckedAddresses);
-    afterClose.push(letGoOfCheckedAddresses);
+    // Before the server's own close, which gives up the venue folder: an address kept by a call
+    // still running while it closes then stays in memory, never written into a folder not held.
+    beforeClose.push(letGoOfCheckedAddresses);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,

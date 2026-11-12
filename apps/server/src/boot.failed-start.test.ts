@@ -241,19 +241,27 @@ async function spyOnBoxEmailDutyStop() {
   return stop;
 }
 
-/** Spies on the function that lets go of the state folder the next start keeps checked addresses in. */
-async function spyOnCheckedAddressesLetGo() {
+/**
+ * Spies on the function that lets go of the state folder the next start keeps checked addresses in;
+ * `holders` gets the process holding `venueDir` at each call, `null` for none.
+ */
+async function spyOnCheckedAddressesLetGo(venueDir?: string) {
   const { rememberCheckedAddressesIn: realRemember } = await vi.importActual<
     typeof import("./mirror-bundle-fetch.js")
   >("./mirror-bundle-fetch.js");
   const letGo = vi.fn<() => Promise<void>>();
   const folders: string[] = [];
+  const holders: Array<number | null> = [];
   vi.mocked(rememberCheckedAddressesIn).mockImplementationOnce(async (stateDir, onWriteFailed) => {
     folders.push(stateDir);
-    letGo.mockImplementation(await realRemember(stateDir, onWriteFailed));
+    const letGoOfFolder = await realRemember(stateDir, onWriteFailed);
+    letGo.mockImplementation(() => {
+      if (venueDir !== undefined) holders.push(readVenueHolder(venueDir)?.pid ?? null);
+      return letGoOfFolder();
+    });
     return letGo;
   });
-  return { letGo, folders };
+  return { letGo, folders, holders };
 }
 
 async function tempDir(prefix: string): Promise<string> {
@@ -1220,11 +1228,11 @@ describe("closing a started server", () => {
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
-  it("lets go of the state folder it kept checked addresses in", async () => {
+  it("lets go of the state folder it kept checked addresses in while it still holds the venue folder", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
     const env = await tradingEnv(venueDir, state);
-    const { letGo, folders } = await spyOnCheckedAddressesLetGo();
+    const { letGo, folders, holders } = await spyOnCheckedAddressesLetGo(venueDir);
     const server = await startServer(env);
     await listening(Number(env.WAITRON_HTTP_PORT));
     expect(folders).toEqual([state]);
@@ -1232,6 +1240,8 @@ describe("closing a started server", () => {
 
     await server.close();
     expect(letGo).toHaveBeenCalledOnce();
+    expect(holders).toEqual([process.pid]);
+    expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
   it("stops the free-space watch", async () => {
