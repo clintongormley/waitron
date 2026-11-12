@@ -1,5 +1,11 @@
 import { eq, ne } from "drizzle-orm";
-import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
+import {
+  now,
+  tableExists,
+  withNodeTransaction,
+  type NodeDatabase,
+  type NodeTransaction,
+} from "@waitron/db";
 import { nodePairLink, type PairLink, type PairLinkState } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
@@ -50,16 +56,7 @@ export async function writePairLinkTx(
     });
 }
 
-/**
- * The store's secret key from this node's pair link. Throws `credentials.missing` when the node has
- * no link, `credentials.key_version_unknown` when the ring lacks the sealing key, and
- * `credentials.decrypt_failed` when it does not open; never echoes the secret.
- */
-export async function readPairSecret(
-  node: NodeDatabase | NodeTransaction,
-  ring: KeyRing,
-  nodeId: string,
-): Promise<string> {
+async function readSealedRow(node: NodeDatabase | NodeTransaction, nodeId: string) {
   const [row] = await node
     .select({
       peerNodeId: nodePairLink.peerNodeId,
@@ -70,7 +67,14 @@ export async function readPairSecret(
     })
     .from(nodePairLink)
     .where(eq(nodePairLink.nodeId, nodeId));
-  if (row === undefined) throw new AppError("credentials.missing", { purpose: PURPOSE });
+  return row ?? null;
+}
+
+function openSecret(
+  row: NonNullable<Awaited<ReturnType<typeof readSealedRow>>>,
+  ring: KeyRing,
+  nodeId: string,
+): string {
   const key = keyForVersion(ring, row.keyVersion);
   if (key === null) {
     throw new AppError("credentials.key_version_unknown", {
@@ -81,6 +85,63 @@ export async function readPairSecret(
   const secret = open(key, aadForPair(nodeId, row.peerNodeId), row);
   if (secret === null) throw new AppError("credentials.decrypt_failed", { purpose: PURPOSE });
   return secret;
+}
+
+/**
+ * The store's secret key from this node's pair link. Throws `credentials.missing` when the node has
+ * no link, `credentials.key_version_unknown` when the ring lacks the sealing key, and
+ * `credentials.decrypt_failed` when it does not open; never echoes the secret.
+ */
+export async function readPairSecret(
+  node: NodeDatabase | NodeTransaction,
+  ring: KeyRing,
+  nodeId: string,
+): Promise<string> {
+  const row = await readSealedRow(node, nodeId);
+  if (row === null) throw new AppError("credentials.missing", { purpose: PURPOSE });
+  return openSecret(row, ring, nodeId);
+}
+
+/**
+ * Re-seals every pair link's secret not on the ring's current key, each under its own two node
+ * ids, one node transaction per row. Only the secret and its key version change: the ring version
+ * records what the spare was handed, and the start time is the pairing's. Returns how many it
+ * re-sealed and how many were already current.
+ */
+export async function rotateNodePairLinks(
+  node: NodeDatabase,
+  ring: KeyRing,
+): Promise<{ rotated: number; alreadyCurrent: number }> {
+  const result = { rotated: 0, alreadyCurrent: 0 };
+  // As `rotateNodeSigningKeys`: a node.db no start has migrated yet has nothing to re-seal.
+  if (!(await tableExists(node, "node_pair_link"))) return result;
+  const rows = await node
+    .select({ nodeId: nodePairLink.nodeId, keyVersion: nodePairLink.keyVersion })
+    .from(nodePairLink);
+  for (const { nodeId, keyVersion } of rows) {
+    if (keyVersion === ring.current.version) {
+      result.alreadyCurrent += 1;
+      continue;
+    }
+    await withNodeTransaction(node, async (tx) => {
+      const row = await readSealedRow(tx, nodeId);
+      if (row === null) return;
+      const secret = openSecret(row, ring, nodeId);
+      const sealed = seal(ring.current.key, aadForPair(nodeId, row.peerNodeId), secret);
+      await tx
+        .update(nodePairLink)
+        .set({
+          secretCiphertext: sealed.ciphertext,
+          secretIv: sealed.iv,
+          secretAuthTag: sealed.authTag,
+          keyVersion: ring.current.version,
+          updatedAt: now(),
+        })
+        .where(eq(nodePairLink.nodeId, nodeId));
+      result.rotated += 1;
+    });
+  }
+  return result;
 }
 
 /** Moves this node's pair link to `state`; the table's check refuses a state outside its role. */

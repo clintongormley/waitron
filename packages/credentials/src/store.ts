@@ -12,6 +12,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
 import { keyForVersion, type KeyRing } from "./keyring.js";
+import { rotateNodePairLinks } from "./node-pair-link.js";
 import { rotateNodeSigningKeys } from "./node-signing-key.js";
 import { isPurpose, validatePayload, type Purpose } from "./purposes.js";
 import "./errors.js";
@@ -254,8 +255,8 @@ export interface RotationResult {
  * row and stop, until the purpose is re-provisioned. Kept deliberately: re-sealing a payload the
  * package would now refuse is its own trap.
  *
- * Given `node`, every row in its `node_signing_key` table is re-sealed too, after the vault, and
- * counted in the same result.
+ * Given `node`, every row in its `node_signing_key` and `node_pair_link` tables is re-sealed too,
+ * after the vault, and counted in the same result.
  */
 export async function rotateCredentials(
   db: Database,
@@ -279,9 +280,11 @@ export async function rotateCredentials(
     });
   }
   if (node !== undefined) {
-    const signing = await rotateNodeSigningKeys(node, ring);
-    result.rotated += signing.rotated;
-    result.alreadyCurrent += signing.alreadyCurrent;
+    for (const rotate of [rotateNodeSigningKeys, rotateNodePairLinks]) {
+      const rows = await rotate(node, ring);
+      result.rotated += rows.rotated;
+      result.alreadyCurrent += rows.alreadyCurrent;
+    }
   }
   return result;
 }

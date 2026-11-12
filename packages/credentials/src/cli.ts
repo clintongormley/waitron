@@ -21,7 +21,7 @@ export interface CliIo {
 
 export interface CliDeps {
   db: Database;
-  /** The box's own file; `rotate` re-seals its signing key there. */
+  /** The box's own file; `rotate` re-seals its signing key and pair link's secret there. */
   node?: NodeDatabase;
   ring: KeyRing;
   io: CliIo;

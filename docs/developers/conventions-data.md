@@ -982,7 +982,7 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
 `node_mode`, `node_mirror_link`, `node_primary_key`, `node_recovery_key` and `node_signing_key`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+`waitron-credentials rotate` reach `node_signing_key`, and the rotation also reaches `node_pair_link`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
@@ -1589,7 +1589,7 @@ nothing reads it: accept stamps the venue on the new `devices` or `print_agents`
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
-rotation reads `node_signing_key` whole), a seal only a box holding the key ring opens
+rotation reads `node_signing_key` and `node_pair_link` whole), a seal only a box holding the key ring opens
 (`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
 transaction that wrote them deletes (`change_log`). `fiscal_certificate_installs` and
 `fiscal_certificate_reminders` use the first tie widened to a list: a `node_id` column every read
