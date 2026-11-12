@@ -81,6 +81,8 @@ export const RECEIPT_LABEL_KEYS = [
   "phone",
   "simplifiedInvoice",
   "invoiceHeading",
+  "correctiveInvoice",
+  "correctedInvoice",
   "customer",
   "unitsColumn",
   "itemColumn",

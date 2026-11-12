@@ -81,6 +81,16 @@ export async function readTransactionReceipt(
     .where(eq(sales.id, saleId));
   if (issued === undefined) throw new AppError("sale.not_found", { saleId });
   const { sale } = issued;
+  const corrected =
+    sale.correctsSaleId === null
+      ? undefined
+      : (
+          await tx
+            .select({ sale: sales, code: invoiceSeries.code })
+            .from(sales)
+            .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+            .where(eq(sales.id, sale.correctsSaleId))
+        )[0]!;
   const rows = await tx
     .select()
     .from(saleLines)
@@ -141,7 +151,16 @@ export async function readTransactionReceipt(
           },
         }
       : {}),
-    invoiceType: sale.counterpartyTaxId === null ? "F2" : "F1",
+    ...(corrected === undefined
+      ? { invoiceType: sale.counterpartyTaxId === null ? "F2" : "F1" }
+      : {
+          invoiceType: "R5",
+          corrects: {
+            invoiceNumber: formatInvoiceNumber(corrected.code, corrected.sale.invoiceNumber),
+            issuedAt: new Date(corrected.sale.issuedAt).toISOString(),
+            issuedOffsetMinutes: corrected.sale.issuedOffsetMinutes,
+          },
+        }),
     ...(sale.counterpartyTaxId === null
       ? {}
       : {

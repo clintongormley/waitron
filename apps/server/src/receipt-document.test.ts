@@ -11,8 +11,9 @@ import {
   FULL_INVOICE_FIXTURE,
   FULL_INVOICE_DOCUMENT_FIXTURE,
 } from "./testing/full-invoice-fixture.js";
-import { printedLines } from "./testing/decode-ticket.js";
+import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { receiptDateTime, receiptDateTimeNumeric } from "./receipt-dates.js";
+import { formatAmount, formatMoney } from "./receipt-money.js";
 
 describe("format-neutral invoice content", () => {
   it.each([false, true])(
@@ -1513,4 +1514,92 @@ describe("set lunch presentation", () => {
       }
     },
   );
+});
+
+describe("the corrective invoice (R5)", () => {
+  const CORRECTIVE: ReceiptDocumentInput["result"] = {
+    locale: "es-ES",
+    orderLabel: null,
+    orderNumber: 0,
+    invoiceType: "R5",
+    invoiceNumber: "R/7",
+    issuedAt: "2026-11-12T19:05:00.000Z",
+    issuedOffsetMinutes: 60,
+    corrects: {
+      invoiceNumber: "A/41",
+      issuedAt: "2026-11-10T13:20:00.000Z",
+      issuedOffsetMinutes: 60,
+    },
+    total: "-5.00",
+    // Its own stored split, which no sum of the lines below gives.
+    vatBreakdown: [{ rate: "21.00", base: "-4.13", tax: "-0.87" }],
+    lines: [
+      {
+        descriptions: { "es-ES": "Croquetas de jamón", "en-GB": "Ham croquettes" },
+        quantity: "-1",
+        gross: "-6.00",
+      },
+    ],
+    tender: { method: "unpaid" },
+    qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=R%2F7&fecha=12-11-2026&importe=-5.00",
+    qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
+  };
+  const corrective = (paperWidth: "58mm" | "80mm", invoiceLocale: string) => {
+    const bytes = formatReceipt({
+      result: CORRECTIVE,
+      issuer: { venueName: "Charcutería La Buena", nif: "B12345678" },
+      receipt: {},
+      invoiceLocale,
+      namesLocale: invoiceLocale,
+      printer: { paperWidth, resolution: "180dpi" },
+    });
+    return {
+      lines: printedLines(bytes).map((line) => line.trim().replace(/\s+/g, " ")),
+      qrs: printedCommands(bytes).filter((c) => c.name === "GS v 0" && c.text === undefined),
+    };
+  };
+
+  it.each([
+    ["58mm", "es-ES"],
+    ["80mm", "es-ES"],
+    ["58mm", "en-GB"],
+    ["80mm", "en-GB"],
+  ] as const)(
+    "prints the title, both numbers and dates, its lines, its own split and the QR on %s in %s",
+    (paperWidth, locale) => {
+      const label = receiptLabelsFor(locale);
+      const [title, correctsLabel] = [label.correctiveInvoice, label.correctedInvoice];
+      const dish = CORRECTIVE.lines[0]!.descriptions[locale]!;
+      const date = paperWidth === "58mm" ? receiptDateTimeNumeric : receiptDateTime;
+      const { lines, qrs } = corrective(paperWidth, locale);
+      const at = lines.indexOf(title);
+      expect(at, lines.join("\n")).toBeGreaterThan(-1);
+      expect(lines.slice(at, at + 4)).toEqual([
+        title,
+        `R/7 ${date(CORRECTIVE.issuedAt, locale, 60)}`,
+        correctsLabel,
+        `A/41 ${date(CORRECTIVE.corrects!.issuedAt, locale, 60)}`,
+      ]);
+      expect(lines).toContain(`-1 ${dish} ${formatAmount("-6.00", locale)}`);
+      expect(lines).toContain(`${label.taxableBase} 21% ${formatMoney("-4.13", locale)}`);
+      expect(lines).toContain(`${label.vat} 21% ${formatMoney("-0.87", locale)}`);
+      expect(qrs).toHaveLength(1);
+    },
+  );
+
+  it("marks a reprint as a copy", () => {
+    const input = {
+      result: CORRECTIVE,
+      issuer: { venueName: "Charcutería La Buena", nif: "B12345678" },
+      receipt: {},
+      invoiceLocale: "es-ES",
+    };
+    const texts = (duplicate: boolean) =>
+      buildReceiptDocument({ ...input, duplicate }).elements.flatMap((e) =>
+        e.kind === "text" ? [e.text] : [],
+      );
+    const { duplicate } = receiptLabelsFor("es-ES");
+    expect(texts(false)).not.toContain(duplicate);
+    expect(texts(true)).toContain(duplicate);
+  });
 });

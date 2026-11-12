@@ -334,7 +334,9 @@ export interface BillTenderRefund {
 export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: import("@waitron/fiscal").FiledInvoiceEvidence;
   issuedOffsetMinutes?: number;
-  invoiceType?: "F1" | "F2";
+  invoiceType?: "F1" | "F2" | "R5";
+  /** On a corrective invoice (R5), the invoice it corrects. */
+  corrects?: { invoiceNumber: string; issuedAt: string; issuedOffsetMinutes?: number };
   issuer?: { venueName: string; nif: string; domicile?: string };
   recipient?: {
     taxId: string;
