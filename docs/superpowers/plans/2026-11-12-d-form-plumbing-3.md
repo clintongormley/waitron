@@ -29,3 +29,5 @@ Caller suites own invalid-field/footer/focus, refusal edit/retry, reopen, drafts
 **Docs/size:** narrow `docs/backlog/dashboard.md`; retain remaining work. No Forms-contract/guide changes; watcher cleared unchanged guide text at 20:30 because no staff step changes. Slice two was cleared at 18:01 on 12 November (its plan records it); no earlier clearance covers this batch. Forecast production +55/−75, tests +25/−0, docs about 75 changed including this plan, support 0; about 230 overall, no generated files. Material growth returns to the watcher under RUNNER.
 
 Watcher clearance, `~/waitron-campaign-d/questions.md`, 2026-11-12 20:30: “Cleared on Claude's approach read and fixes read, as narrowed: build the corrected plan (about 230 lines, no visible change).” Claude reports: `~/waitron-campaign-d/receipts/form-plumbing-3/{plan-review,plan-fixes-review}.md`.
+
+Implementation note, 12 November: attendance's existing `#release()` also runs conditionally from `willUpdate`; its reset remains at that release boundary. The “outside `willUpdate`” instruction above was too broad.
