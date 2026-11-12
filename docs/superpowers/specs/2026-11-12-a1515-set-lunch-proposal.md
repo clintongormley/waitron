@@ -143,3 +143,22 @@ underneath them and adds later-course service.
 `apps/till/src/screens/till-ticket-view.ts::{groupByParent,mergeIdenticalGroups}`.
 [5] `apps/server/src/working-order.ts::{addTabRound,priceTabRound,priceOrderLines,fireLines}`;
 `packages/country-es/src/demo/menu.ts:610–634`.
+
+## 12 November 2026, 20:38 and 20:54: extras and course service
+
+The owner answered the reuse comparison through the watcher in Lane D questions.md:
+“that works. however, it doesn't allow splitting the order into two - everything gets ordered
+at the same time. also it doesn't allow sending the dishes to the kitchen by course.”
+At 20:54: “btw, with set menus, having a selling times section doesn't make sense - that can
+already be handled with periods and menus”. These directions supersede the comparison's
+owner-review wait and any separate availability controls in the earlier local studies.
+
+Use existing extras. Keep outstanding choices on the same lunch, and send each chosen course
+independently to its station without recalling earlier courses. The revised English and Spanish
+studies show starters and drinks first, a main chosen and sent later, then coffee. Choosing the
+premium main adds its separate supplement once; the included coffee adds no charge. Put House
+lunch on the menu offered by an existing service period, with no new selling schedule.
+
+These directions authorise preparing the build plan, followed by Claude review and watcher
+clearance. They choose no VAT treatment; adviser S10 and the full invoice remain open. The
+studies are local layout examples, not implemented order, printer or fiscal behaviour.
