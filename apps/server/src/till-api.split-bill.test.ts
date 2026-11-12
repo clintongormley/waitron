@@ -6,7 +6,7 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
@@ -58,15 +58,12 @@ import {
   sessionCookieForTest,
 } from "./testing/session-device.js";
 
-// The HTTP surface of the split, un-join and merge routes: the session guard, the malformed-`:id`/`tableId`
-// screens, the result shapes and the STATUS mapping for `table.not_joined`. The successful merge case also
-// checks the kitchen tickets, kitchen notices and print jobs it leaves; the refused one checks the
-// tickets stay on the check. One case finds a split-off check in Held orders and pays it through the
-// sale route. The split and un-join verbs themselves are tested in
-// `split-bill.test.ts` and `split-bill.fiscal.test.ts`.
+// Merging a check that Move dishes made back into its tab, through the merge route: the kitchen
+// tickets, kitchen notices and print jobs it leaves, and the refusals that leave the check as it was.
+// One case finds such a check in Held orders and pays it through the sale route.
 let cfg: WithVenueRowId<OriginConfig>;
 let staffMember: { id: string };
-// One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
+// One product so a tab can open with a real line to move — `openTab` prices it
 // and the `check_locales` trigger demands its `es-ES` description key match the venue's `es-ES` locale.
 let coffeeId: string;
 let coffeeMenuItemId: string;
@@ -183,6 +180,15 @@ async function partyRevisionOf(db: Database, billId: string): Promise<number> {
   return row!.revision;
 }
 
+/** The id of the bill's line numbered `lineNo`. */
+async function lineIdOf(db: Database, billId: string, lineNo: number): Promise<string> {
+  const [row] = await db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, lineNo)));
+  return row!.id;
+}
+
 /** Seeds one open tab on table A carrying `aQty` espresso lines (line_no 1), plus a mounted app and a
  * logged-in cookie. */
 async function setupTabApp(
@@ -242,16 +248,18 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     );
     const [ticket] = await ticketsOn(tabA);
     expect(ticket).toMatchObject({ lineNo: 2, quantity: 2000 });
-    const split = await app.request(`/api/bills/${tabA}/split`, {
+    const split = await app.request(`/api/bills/${tabA}/move-dishes`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(
-        await observedBillActionBody(suite.db, `/api/bills/${tabA}/split`, {
-          transfers: [{ lineNo: 2 }],
+        await observedBillActionBody(suite.db, `/api/bills/${tabA}/move-dishes`, {
+          lineIds: [await lineIdOf(suite.db, tabA, 2)],
+          toBillId: null,
           expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
         }),
       ),
     });
+    expect(split.status).toBe(200);
     const { billId: checkId } = (await split.json()) as { billId: string };
     return { app, tabA, checkId, cookie, printerId, ticket: ticket! };
   }
@@ -396,9 +404,10 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
     });
     expect(round.status).toBe(200);
     const split = await post(
-      `/api/bills/${tabId}/split`,
-      await observedBillActionBody(suite.db, `/api/bills/${tabId}/split`, {
-        transfers: [{ lineNo: 1, quantity: "1" }],
+      `/api/bills/${tabId}/move-dishes`,
+      await observedBillActionBody(suite.db, `/api/bills/${tabId}/move-dishes`, {
+        lineIds: [await lineIdOf(suite.db, tabId, 1)],
+        toBillId: null,
         expectedPartyRevision: ((await round.json()) as { revision: number }).revision,
       }),
     );
@@ -538,12 +547,13 @@ describe("a split-off check after the till that made it has forgotten it", () =>
 
   it("is in Held orders under its table's name, and pays there through the sale route", async () => {
     const { app, tabId, cookie } = await provisionedTab();
-    const split = await app.request(`/api/bills/${tabId}/split`, {
+    const split = await app.request(`/api/bills/${tabId}/move-dishes`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(
-        await observedBillActionBody(venueSuite.db, `/api/bills/${tabId}/split`, {
-          transfers: [{ lineNo: 1, quantity: "1" }],
+        await observedBillActionBody(venueSuite.db, `/api/bills/${tabId}/move-dishes`, {
+          lineIds: [await lineIdOf(venueSuite.db, tabId, 1)],
+          toBillId: null,
           expectedPartyRevision: await partyRevisionOf(venueSuite.db, tabId),
         }),
       ),
