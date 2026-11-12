@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { DashboardApi } from "../api/client.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { HandoverReportWarning } from "./handover-report-warning.js";
 
@@ -11,17 +11,16 @@ afterEach(() => {
   setLocale(locale);
 });
 describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme) => {
-  it("keeps initial checking, unconfirmed and failed states accessible", async () => {
+  it("keeps unconfirmed, refreshing and failed messages accessible", async () => {
     let answer!: (value: unknown) => void;
-    const list = vi
-      .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            answer = resolve;
-          }),
-      )
-      .mockRejectedValueOnce({ code: "report.failed" });
+    let refuse!: (reason: unknown) => void;
+    const list = vi.fn(
+      () =>
+        new Promise((resolve, reject) => {
+          answer = resolve;
+          refuse = reject;
+        }),
+    );
     const { el, host } = await mountWidget<HandoverReportWarning>(
       "dashboard-handover-report-warning",
       {
@@ -29,7 +28,6 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
       },
       theme,
     );
-    await expectNoA11yViolations(host);
     answer({
       intervals: [
         {
@@ -47,7 +45,13 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("a")).not.toBeNull());
     await expectNoA11yViolations(host);
     await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(false));
+    expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
+    await expectNoA11yViolations(host);
+    refuse({ code: "report.failed" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain(t("handover_warning.unavailable")),
+    );
+    expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(false);
     await expectNoA11yViolations(host);
   });
 });

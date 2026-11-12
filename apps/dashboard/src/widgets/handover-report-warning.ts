@@ -51,13 +51,18 @@ export class HandoverReportWarning extends LitElement {
     }
   }
   override render() {
-    if (this.status === "empty") return nothing;
-    return html`<div class="notice" role="status">
-      <span>${t(`handover_warning.${this.status}`)}</span>
-      ${this.status === "unconfirmed" ? html`<a href="/manage/handover-intervals">${t("handover_warning.check")}</a>` : nothing}
-      <wt-button .disabled=${this.loading} @click=${() => void this.#load()}
-        >${t("handover_warning.refresh")}</wt-button
-      >
+    return html`<div role="status">
+      ${
+        this.status === "empty"
+          ? nothing
+          : html`<div class="notice">
+              <span>${t(`handover_warning.${this.status}`)}</span>
+              ${this.status === "unconfirmed" ? html`<a href="/manage/handover-intervals">${t("handover_warning.check")}</a>` : nothing}
+              <wt-button .disabled=${this.loading} @click=${() => void this.#load()}
+                >${t("handover_warning.refresh")}</wt-button
+              >
+            </div>`
+      }
     </div>`;
   }
 }

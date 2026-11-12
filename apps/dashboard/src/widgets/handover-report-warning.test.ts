@@ -62,9 +62,13 @@ it("hides the first check and retains warning or failure while Refresh runs", as
     api: { listHandoverIntervals: list } as unknown as DashboardApi,
   });
   expect(el.shadowRoot).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+  const region = el.shadowRoot!.querySelector("[role=status]");
+  expect(region).not.toBeNull();
+  expect(region!.textContent!.trim()).toBe("");
+  expect(el.shadowRoot!.querySelector(".notice")).toBeNull();
   answer({ intervals: [interval], timeZone: "Europe/Madrid" });
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector("a")).toBeTruthy());
+  expect(el.shadowRoot!.querySelector("[role=status]")).toBe(region);
   await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
   expect(el.shadowRoot!.textContent).toContain(en["handover_warning.unconfirmed"]);
   expect(el.shadowRoot!.querySelector("a")).not.toBeNull();
@@ -78,6 +82,7 @@ it("hides the first check and retains warning or failure while Refresh runs", as
   expect(el.shadowRoot!.textContent).toContain(en["handover_warning.unavailable"]);
   expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
   answer({ intervals: [], timeZone: "Europe/Madrid" });
-  await vi.waitFor(() => expect(el.shadowRoot?.querySelector("[role=status]")).toBeNull());
+  await vi.waitFor(() => expect(el.shadowRoot?.querySelector(".notice")).toBeNull());
+  expect(el.shadowRoot!.querySelector("[role=status]")).toBe(region);
   expect(el.shadowRoot!.textContent!.trim()).toBe("");
 });
