@@ -59,3 +59,15 @@ The watcher cleared removing only the two save-only `page.screenshot` calls in t
 ## Watcher-cleared Menus structure capture cut, 2026-11-12 03:30
 
 The watcher cleared removing only the Menus structure matrix’s screenshot saves: “drop only the save, reuse settleStructure and the two-frame waits, remove the unused argument, and keep every row, action, cleanup and assertion” (Lane I `questions.md`, 03:30). An unchanged coverage-on 390px English/light case passed in 2,695 ms; its six screenshot calls took 1,865.7 ms. The matrix has eight rows. The helper now only settles the view and preserves both frames. The historical viewport-hook receipt remains. Compare paired coverage-on whole-file runs and identical expanded case/assertion inventory; the four-minute goal remains open. No other matrix, production code, polling or motion changes.
+
+
+## Watcher-cleared printer capture cut, 2026-11-12 05:30
+
+The watcher cleared removing only the two save-only screenshot calls in the printer
+pick-up-role matrix: “Drop only the two save calls (16 PNG writes); keep every row,
+interaction, flush, geometry and accessibility assertion” (Lane I `questions.md`,
+05:30). The unchanged focused diagnostic passed both English phone cases and timed
+four PNG saves at 1,604.9 ms in total. Compare paired coverage-on whole-file runs,
+then finish-branch. Production code, shared helpers and all other capture sites stay
+outside this cut. The larger axe cost remains a diagnostic target; the four-minute
+goal stays open.
