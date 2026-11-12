@@ -416,6 +416,19 @@ async function clickAndAwaitClose(
 
 type Dropdown = HTMLElement & { value: string };
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
+/** How many times `sentence` is drawn anywhere in the screen, nested shadow trees included. */
+function timesShown(el: PrintersScreen, sentence: string): number {
+  const texts: string[] = [];
+  const walk = (root: Node): void => {
+    for (const node of root.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) texts.push(node.textContent ?? "");
+      if (node instanceof Element && node.shadowRoot) walk(node.shadowRoot);
+      walk(node);
+    }
+  };
+  walk(el.shadowRoot!);
+  return texts.join("\n").split(sentence).length - 1;
+}
 /** A sentence holding a relative time, with the time standing as `{time}`, and the moment it shows. */
 function timeSentence(sentence: Element | null): { text: string; at: string | null } {
   const copy = sentence!.cloneNode(true) as Element;
@@ -6231,7 +6244,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     { read: "listAgents", tab: "agents", table: "agents-table", empty: "printers.no_agents" },
     { read: "listRecentJobs", tab: "queue", table: "jobs-table", empty: "printers.no_jobs" },
   ] as const)(
-    "shows a failed $read read in the $table, not '$empty'",
+    "says a failed $read read once, in the page's alert, and draws no $table saying $empty",
     async ({ read, tab, table: testId, empty }) => {
       const api = stubApi({
         listPrinters: vi.fn().mockResolvedValue([]),
@@ -6243,11 +6256,13 @@ describe("printers-screen tabs, tables and refresh edges", () => {
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await flush(el);
       await selectTab(el, tab);
-      const table = q(el, `[data-test=${testId}]`)!.shadowRoot!.textContent!;
-      expect(table).toContain(
+      expect(text(el, "[data-test=printer-refresh-error] p.error")).toBe(
         `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`,
       );
-      expect(table).not.toContain(t(empty));
+      expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+      expect(q(el, "[data-test=refresh-printer-lists]")).not.toBeNull();
+      expect(q(el, `[data-test=${testId}]`)).toBeNull();
+      expect(timesShown(el, t(empty))).toBe(0);
     },
   );
 
@@ -6264,27 +6279,69 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     expect(q(el, "[data-test=agents-table]")!.shadowRoot!.textContent).toContain(
       t("printers.no_agents"),
     );
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
   });
 
-  it("shows a later failed read in an empty printers table, and its rows again once a read answers", async () => {
+  it("says a later failed read of an empty printers table once, in the page's alert, and shows its rows again once a read answers", async () => {
     history.replaceState(null, "", "/manage/printers/view/printers");
     const api = Object.assign(stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }), {
       liveData: new LiveData(),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    const table = () => q(el, "[data-test=printers-table]")!.shadowRoot!.textContent!;
+    const table = () => q(el, "[data-test=printers-table]")?.shadowRoot!.textContent ?? null;
     expect(table()).toContain(t("printers.no_printers"));
 
     vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
     api.liveData.refresh();
-    await vi.waitFor(() => expect(table()).toContain(codeMessage("connection.failed")));
-    expect(table()).not.toContain(t("printers.no_printers"));
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+        codeMessage("connection.failed"),
+      ),
+    );
+    await flush(el);
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+    expect(q(el, "[data-test=refresh-printer-lists]")).not.toBeNull();
+    expect(table()).toBeNull();
+    expect(timesShown(el, t("printers.no_printers"))).toBe(0);
 
     vi.mocked(api.listPrinters).mockResolvedValue(printers);
     api.liveData.refresh();
     await vi.waitFor(() => expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull());
     expect(table()).not.toContain(codeMessage("connection.failed"));
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(0);
+  });
+
+  it("says an empty table's read is still failing in the table while Refresh lists reads it again", async () => {
+    let answer!: (rows: Printer[]) => void;
+    const api = stubApi({
+      listPrinters: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockReturnValueOnce(
+          new Promise<Printer[]>((resolve) => {
+            answer = resolve;
+          }),
+        ),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "printers");
+    expect(q(el, "[data-test=printers-table]")).toBeNull();
+
+    q(el, "[data-test=refresh-printer-lists]")!.click();
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+    const table = () => q(el, "[data-test=printers-table]")!.shadowRoot!.textContent!;
+    expect(table()).toContain(t("printers.refresh_failed"));
+    expect(table()).not.toContain(t("printers.no_printers"));
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+
+    answer([]);
+    await flush(el);
+    expect(table()).toContain(t("printers.no_printers"));
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(0);
   });
 
   it("does not switch tabs for a change event raised by a control inside a tab", async () => {
@@ -6547,7 +6604,7 @@ describe("printers-screen discovery and add edges", () => {
     expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
   });
 
-  it("shows a failed read of the discovered printers in their list, not 'No printers found'", async () => {
+  it("says a failed read of the discovered printers once, in Add printer's alert, and draws no list saying 'No printers found'", async () => {
     const api = Object.assign(
       stubApi({ listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
@@ -6556,17 +6613,23 @@ describe("printers-screen discovery and add edges", () => {
     await flush(el);
     await openDiscovery(el);
     await flush(el);
-    const table = () => q(el, "[data-test=discovered-table]")!.shadowRoot!.textContent!;
-    expect(q(el, "[data-test=new-printer-modal] [data-test=printer-refresh-error]")).not.toBeNull();
-    expect(table()).toContain(
-      `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`,
-    );
-    expect(table()).not.toContain(t("printers.no_discovered"));
-    expect(table()).not.toContain(t("printers.scan_empty"));
+    expect(
+      text(el, "[data-test=new-printer-modal] [data-test=printer-refresh-error] p.error"),
+    ).toBe(`${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`);
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
+    expect(q(el, "[data-test=new-printer-modal] [data-test=refresh-printer-lists]")).not.toBeNull();
+    expect(q(el, "[data-test=discovered-table]")).toBeNull();
+    expect(timesShown(el, t("printers.no_discovered"))).toBe(0);
+    expect(timesShown(el, t("printers.scan_empty"))).toBe(0);
 
     vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([]);
     api.liveData.refresh();
-    await vi.waitFor(() => expect(table()).not.toContain(codeMessage("connection.failed")));
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=discovered-table]")!.shadowRoot!.textContent).not.toContain(
+        codeMessage("connection.failed"),
+      ),
+    );
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(0);
   });
 
   it("ignores a listen re-read that fails after Add printer was closed", async () => {

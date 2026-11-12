@@ -2519,38 +2519,40 @@ export class PrintersScreen extends LitElement {
       },
     ];
     return html`<section>
-      <wt-data-table
-        noMatchesMessage=${tableNoMatches()}
-        filterSearchPlaceholder=${t("categories.combobox_search")}
-        filterNoResultsLabel=${t("categories.combobox_no_results")}
-        data-test="agents-table"
-        viewKey="waitron.printers.agents.table"
-        customiseColumnsLabel=${t("table.customise_columns")}
-        customiseLabel=${t("table.customise")}
-        restoreColumnsLabel=${t("table.restore_columns")}
-        doneLabel=${t("table.done")}
-        moveColumnLabel=${t("table.move_column")}
-        showColumnLabel=${t("table.show_column")}
-        hideColumnLabel=${t("table.hide_column")}
-        alwaysShownColumnLabel=${t("table.column_always_shown")}
-        lastShownColumnLabel=${t("table.column_last_shown")}
-        columnPositionLabel=${t("table.column_position")}
-        filtersLabel=${t("table.filters")}
-        filteredColumnLabel=${t("table.filtered_column")}
-        filtersClearAllLabel=${t("table.filters_clear_all")}
-        filtersCloseLabel=${t("table.filters_close")}
-        aria-label=${t("printers.agents_title")}
-        .rows=${this.agents.filter((agent) => agent.active)}
-        .columns=${columns}
-        .rowKey=${(a: PrintAgentRow) => a.id}
-        .loading=${this.loading}
-        .loadingMessage=${t("printers.table_loading")}
-        .emptyMessage=${t("printers.no_agents")}
-        .errorMessage=${this.#unreadMessage(
-          this.agents.every((agent) => !agent.active) && this.#queries.failing("listAgents"),
-        )}
-        >${this.agents.every((agent) => !agent.active) ? this.#renderAddAgent("empty-action") : nothing}</wt-data-table
-      >
+      ${this.#unreadTable(
+        this.agents.every((agent) => !agent.active) && this.#queries.failing("listAgents"),
+        (errorMessage) =>
+          html`<wt-data-table
+            noMatchesMessage=${tableNoMatches()}
+            filterSearchPlaceholder=${t("categories.combobox_search")}
+            filterNoResultsLabel=${t("categories.combobox_no_results")}
+            data-test="agents-table"
+            viewKey="waitron.printers.agents.table"
+            customiseColumnsLabel=${t("table.customise_columns")}
+            customiseLabel=${t("table.customise")}
+            restoreColumnsLabel=${t("table.restore_columns")}
+            doneLabel=${t("table.done")}
+            moveColumnLabel=${t("table.move_column")}
+            showColumnLabel=${t("table.show_column")}
+            hideColumnLabel=${t("table.hide_column")}
+            alwaysShownColumnLabel=${t("table.column_always_shown")}
+            lastShownColumnLabel=${t("table.column_last_shown")}
+            columnPositionLabel=${t("table.column_position")}
+            filtersLabel=${t("table.filters")}
+            filteredColumnLabel=${t("table.filtered_column")}
+            filtersClearAllLabel=${t("table.filters_clear_all")}
+            filtersCloseLabel=${t("table.filters_close")}
+            aria-label=${t("printers.agents_title")}
+            .rows=${this.agents.filter((agent) => agent.active)}
+            .columns=${columns}
+            .rowKey=${(a: PrintAgentRow) => a.id}
+            .loading=${this.loading}
+            .loadingMessage=${t("printers.table_loading")}
+            .emptyMessage=${t("printers.no_agents")}
+            .errorMessage=${errorMessage}
+            >${this.agents.every((agent) => !agent.active) ? this.#renderAddAgent("empty-action") : nothing}</wt-data-table
+          >`,
+      )}
     </section>`;
   }
 
@@ -3649,39 +3651,41 @@ export class PrintersScreen extends LitElement {
       },
     ];
     return html`<section>
-      <wt-data-table
-        noMatchesMessage=${tableNoMatches()}
-        filterSearchPlaceholder=${t("categories.combobox_search")}
-        filterNoResultsLabel=${t("categories.combobox_no_results")}
-        data-test="printers-table"
-        viewKey="waitron.printers.table"
-        customiseColumnsLabel=${t("table.customise_columns")}
-        customiseLabel=${t("table.customise")}
-        restoreColumnsLabel=${t("table.restore_columns")}
-        doneLabel=${t("table.done")}
-        moveColumnLabel=${t("table.move_column")}
-        showColumnLabel=${t("table.show_column")}
-        hideColumnLabel=${t("table.hide_column")}
-        alwaysShownColumnLabel=${t("table.column_always_shown")}
-        lastShownColumnLabel=${t("table.column_last_shown")}
-        columnPositionLabel=${t("table.column_position")}
-        filtersLabel=${t("table.filters")}
-        filteredColumnLabel=${t("table.filtered_column")}
-        filtersClearAllLabel=${t("table.filters_clear_all")}
-        filtersCloseLabel=${t("table.filters_close")}
-        aria-label=${t("printers.list_title")}
-        .rows=${rows}
-        .columns=${columns}
-        .rowKey=${(r: PrinterTableRow) => `${r.kind}:${idOf(r)}`}
-        .loading=${this.loading}
-        .loadingMessage=${t("printers.table_loading")}
-        .emptyMessage=${t("printers.no_printers")}
-        .errorMessage=${this.#unreadMessage(
-          rows.length === 0 &&
-            (this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters")),
-        )}
-        >${rows.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
-      >
+      ${this.#unreadTable(
+        rows.length === 0 &&
+          (this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters")),
+        (errorMessage) =>
+          html`<wt-data-table
+            noMatchesMessage=${tableNoMatches()}
+            filterSearchPlaceholder=${t("categories.combobox_search")}
+            filterNoResultsLabel=${t("categories.combobox_no_results")}
+            data-test="printers-table"
+            viewKey="waitron.printers.table"
+            customiseColumnsLabel=${t("table.customise_columns")}
+            customiseLabel=${t("table.customise")}
+            restoreColumnsLabel=${t("table.restore_columns")}
+            doneLabel=${t("table.done")}
+            moveColumnLabel=${t("table.move_column")}
+            showColumnLabel=${t("table.show_column")}
+            hideColumnLabel=${t("table.hide_column")}
+            alwaysShownColumnLabel=${t("table.column_always_shown")}
+            lastShownColumnLabel=${t("table.column_last_shown")}
+            columnPositionLabel=${t("table.column_position")}
+            filtersLabel=${t("table.filters")}
+            filteredColumnLabel=${t("table.filtered_column")}
+            filtersClearAllLabel=${t("table.filters_clear_all")}
+            filtersCloseLabel=${t("table.filters_close")}
+            aria-label=${t("printers.list_title")}
+            .rows=${rows}
+            .columns=${columns}
+            .rowKey=${(r: PrinterTableRow) => `${r.kind}:${idOf(r)}`}
+            .loading=${this.loading}
+            .loadingMessage=${t("printers.table_loading")}
+            .emptyMessage=${t("printers.no_printers")}
+            .errorMessage=${errorMessage}
+            >${rows.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
+          >`,
+      )}
       ${
         pages.actionError === null
           ? nothing
@@ -3871,33 +3875,37 @@ export class PrintersScreen extends LitElement {
     ];
     return html`<section>
       <p class="hint">${t("printers.jobs_limit")}</p>
-      <wt-data-table
-        noMatchesMessage=${tableNoMatches()}
-        data-test="jobs-table"
-        viewKey="waitron.printers.jobs.table"
-        customiseColumnsLabel=${t("table.customise_columns")}
-        customiseLabel=${t("table.customise")}
-        restoreColumnsLabel=${t("table.restore_columns")}
-        doneLabel=${t("table.done")}
-        moveColumnLabel=${t("table.move_column")}
-        showColumnLabel=${t("table.show_column")}
-        hideColumnLabel=${t("table.hide_column")}
-        alwaysShownColumnLabel=${t("table.column_always_shown")}
-        lastShownColumnLabel=${t("table.column_last_shown")}
-        columnPositionLabel=${t("table.column_position")}
-        filtersLabel=${t("table.filters")}
-        filteredColumnLabel=${t("table.filtered_column")}
-        filtersClearAllLabel=${t("table.filters_clear_all")}
-        filtersCloseLabel=${t("table.filters_close")}
-        aria-label=${t("printers.jobs_title")}
-        .rows=${this.jobs}
-        .columns=${columns}
-        .rowKey=${(j: PrintJobRow) => j.id}
-        .loading=${this.loading}
-        .loadingMessage=${t("printers.table_loading")}
-        .emptyMessage=${t("printers.no_jobs")}
-        .errorMessage=${this.#unreadMessage(this.jobs.length === 0 && this.#queries.failing("listRecentJobs"))}
-      ></wt-data-table>
+      ${this.#unreadTable(
+        this.jobs.length === 0 && this.#queries.failing("listRecentJobs"),
+        (errorMessage) =>
+          html`<wt-data-table
+            noMatchesMessage=${tableNoMatches()}
+            data-test="jobs-table"
+            viewKey="waitron.printers.jobs.table"
+            customiseColumnsLabel=${t("table.customise_columns")}
+            customiseLabel=${t("table.customise")}
+            restoreColumnsLabel=${t("table.restore_columns")}
+            doneLabel=${t("table.done")}
+            moveColumnLabel=${t("table.move_column")}
+            showColumnLabel=${t("table.show_column")}
+            hideColumnLabel=${t("table.hide_column")}
+            alwaysShownColumnLabel=${t("table.column_always_shown")}
+            lastShownColumnLabel=${t("table.column_last_shown")}
+            columnPositionLabel=${t("table.column_position")}
+            filtersLabel=${t("table.filters")}
+            filteredColumnLabel=${t("table.filtered_column")}
+            filtersClearAllLabel=${t("table.filters_clear_all")}
+            filtersCloseLabel=${t("table.filters_close")}
+            aria-label=${t("printers.jobs_title")}
+            .rows=${this.jobs}
+            .columns=${columns}
+            .rowKey=${(j: PrintJobRow) => j.id}
+            .loading=${this.loading}
+            .loadingMessage=${t("printers.table_loading")}
+            .emptyMessage=${t("printers.no_jobs")}
+            .errorMessage=${errorMessage}
+          ></wt-data-table>`,
+      )}
     </section>`;
   }
 
@@ -4006,13 +4014,14 @@ export class PrintersScreen extends LitElement {
     await closed;
   }
 
-  /** An empty list whose read failed says so instead of saying there is nothing. */
-  #unreadMessage(unread: boolean): string {
-    if (!unread) return "";
-    const failed = t("printers.refresh_failed");
-    return this.refreshErrorKey === null
-      ? failed
-      : `${failed} ${codeMessage(this.refreshErrorKey)}`;
+  /** An empty list whose read failed never says there is nothing: the refresh alert says the read
+   * failed, and the list is left out; with no alert showing, the list says it. */
+  #unreadTable(
+    unread: boolean,
+    table: (errorMessage: string) => TemplateResult,
+  ): TemplateResult | typeof nothing {
+    if (!unread) return table("");
+    return this.refreshErrorKey === null ? table(t("printers.refresh_failed")) : nothing;
   }
 
   /** A failed read, with its own retry, stays at the top of the page or the dialog. */
@@ -4819,19 +4828,21 @@ export class PrintersScreen extends LitElement {
             : nothing
         }
       </div>
-      <wt-data-table
-        noMatchesMessage=${tableNoMatches()}
-        data-test="discovered-table"
-        aria-label=${t("printers.discovered_title")}
-        .columns=${columns}
-        .rows=${[...rows, ...lost]}
-        .rowKey=${(d: DiscoveredPrinter) => this.#rowKey(d)}
-        .emptyMessage=${t(this.scanning ? "printers.scan_empty" : "printers.no_discovered")}
-        .errorMessage=${this.#unreadMessage(
-          rows.length + lost.size === 0 &&
-            (this.discoveredUnread || this.#queries.failing("listDiscoveredPrinters")),
-        )}
-      ></wt-data-table>
+      ${this.#unreadTable(
+        rows.length + lost.size === 0 &&
+          (this.discoveredUnread || this.#queries.failing("listDiscoveredPrinters")),
+        (errorMessage) =>
+          html`<wt-data-table
+            noMatchesMessage=${tableNoMatches()}
+            data-test="discovered-table"
+            aria-label=${t("printers.discovered_title")}
+            .columns=${columns}
+            .rows=${[...rows, ...lost]}
+            .rowKey=${(d: DiscoveredPrinter) => this.#rowKey(d)}
+            .emptyMessage=${t(this.scanning ? "printers.scan_empty" : "printers.no_discovered")}
+            .errorMessage=${errorMessage}
+          ></wt-data-table>`,
+      )}
       <wt-form-actions
         slot="footer"
         .error=${this.namingPrinter ? "" : bottomMessage(refusal(this.errorKey))}
