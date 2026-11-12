@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./presented-pay-dialog.js";
@@ -1042,7 +1043,7 @@ describe("till-presented-pay-dialog: Close as deferred payment", () => {
     const el = await mount({ deferredOffered: { state: "offered" } });
     const pressed = capture<unknown>(el, "presented-pay-deferred");
 
-    expect(text(deferred(el))).toBe("Cerrar como pago aplazado");
+    expect(text(deferred(el))).toBe(es["deferred_close.title"]);
     expect(deferred(el)!.disabled).toBe(false);
     expect(root(el).querySelector("[data-pay-deferred-reason]")).toBeNull();
     deferred(el)!.click();
