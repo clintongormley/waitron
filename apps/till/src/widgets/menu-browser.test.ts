@@ -3376,7 +3376,7 @@ it("keeps the published menu and chosen order unchanged while mounted thumbnails
 
 it("uses the filtered offer for information Add and forwards exclusions to new and weighed choices", async () => {
   const filters = { diets: [], exclude: { milk: "all" as const } };
-  const original = {
+  const original: TillProduct = {
     ...wine,
     allergens: {},
     variants: [
@@ -3384,7 +3384,7 @@ it("uses the filtered offer for information Add and forwards exclusions to new a
       { ...wine.variants![0]!, id: "clear", allergens: {} },
     ],
   };
-  const filtered = { ...original, variants: [original.variants[1]!] };
+  const filtered = { ...original, variants: [original.variants![1]!] };
   const { el } = await mount({
     menu: lunch({ structure: { members: [member("wine")] }, ...withShortcuts([]) }),
     products: [filtered],
