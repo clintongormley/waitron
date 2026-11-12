@@ -315,6 +315,7 @@ import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead
 import {
   assertBillInvariant,
   issueIfFullyPaid,
+  linkBillCardPaymentsToSale,
   outstandingOf,
   readPaidQuantities,
   readPaymentsByBill,
@@ -7070,6 +7071,7 @@ export async function issueUnpaidInvoice(
     settlement: { kind: "deferred" },
   });
   await linkSalePortions(tx, saleId, invoice.identities);
+  await linkBillCardPaymentsToSale(tx, id, saleId);
   await recordSaleReceiptFacts(
     tx,
     { saleId, workingOrderId: id, counterparty: selected.sale.counterparty },
@@ -7182,7 +7184,7 @@ async function cancelPlaced(
     if (invoice !== undefined) {
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
     }
-    await refuseBillWithPayments(tx, id);
+    await refuseBillHoldingMoney(tx, [id]);
     // A placed order's card collection writes no mark, and its provider may write no payment row
     // until the card resolves, so only this process's own record of the attempt shows it.
     if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {

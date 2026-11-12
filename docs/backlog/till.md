@@ -543,11 +543,12 @@ Asesor Q28 was decided by the owner
 without the asesor (2026-10-01): the full simplified invoice is issued when a bill is left unpaid.
 Open:
 
-- **Known limit, kept by the owner's decision of 2026-10-01 — a bill holding a payment cannot
-  be left unpaid** (`unpaid_departure.bill_holds_payment`, even one given back in full): its
-  invoice would have to be settled in part, and `settleSale`
+- **Known limit, kept by the owner's decision of 2026-10-01 — a bill still holding money from a
+  payment cannot be left unpaid** (`unpaid_departure.bill_holds_payment`). A bill whose payments
+  were all declined or given back in full can be (owner, 2026-11-12, R6-2). A bill still
+  holding money would have its invoice settled in part, and `settleSale`
   (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not add up to
-  the amount due. Such a table can only be finished by taking the rest as payment.
+  the amount due.
 - **Collecting PART of the debt later is not built**, for the same reason. Collecting it in
   full uses `POST /api/working-orders/:id/collect`.
 - **A dish never sent, on hold, or waiting for the pass and not fully served blocks the

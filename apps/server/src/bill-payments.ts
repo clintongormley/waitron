@@ -468,37 +468,44 @@ export async function assertBillInvariant(
   }
 }
 
-/** A pending payment, or a received one with applied money or a tip it has not given back. */
-function holdsMoney(payments: readonly PaymentMoney[]): boolean {
-  return payments.some(
-    ({ row, netApplied, netTip }) =>
-      row.state === "pending" ||
-      (row.state === "received" && compareDecimal(addDecimal(netApplied, netTip), ZERO) > 0),
-  );
+function receivedHoldsMoney({ row, netApplied, netTip }: PaymentMoney): boolean {
+  return row.state === "received" && compareDecimal(addDecimal(netApplied, netTip), ZERO) > 0;
 }
 
-/**
- * Refuse `bill.payments_received` for the first of these bills that holds money taken before its
- * invoice (design §4.5): discarding it (`abandonHeldOrder`), or discarding it as an emptied bill
- * when its party closes (`closeParty`), would lose that money from the records.
- */
+/** A pending payment, or a received one with applied money or a tip it has not given back. */
+function holdsMoney(payments: readonly PaymentMoney[]): boolean {
+  return payments.some((payment) => payment.row.state === "pending" || receivedHoldsMoney(payment));
+}
+
+/** Refuse `bill.payments_received` for the first of these bills that holds money (design §4.5). */
 export async function refuseBillHoldingMoney(
   tx: Transaction,
   workingOrderIds: readonly string[],
 ): Promise<void> {
-  const payments = await readPaymentMoney(tx, workingOrderIds);
-  for (const workingOrderId of workingOrderIds) {
-    if (holdsMoney(payments.filter(({ row }) => row.workingOrderId === workingOrderId))) {
-      throw new AppError("bill.payments_received", { workingOrderId });
-    }
+  const holding = await billsHoldingMoney(tx, workingOrderIds);
+  const workingOrderId = workingOrderIds.find((id) => holding.has(id));
+  if (workingOrderId !== undefined) {
+    throw new AppError("bill.payments_received", { workingOrderId });
   }
+}
+
+/** Those of these bills that hold money: a pending payment, or received money not given back. */
+export async function billsHoldingMoney(
+  tx: Transaction,
+  workingOrderIds: readonly string[],
+): Promise<Set<string>> {
+  const payments = await readPaymentMoney(tx, workingOrderIds);
+  return new Set(
+    workingOrderIds.filter((workingOrderId) =>
+      holdsMoney(payments.filter(({ row }) => row.workingOrderId === workingOrderId)),
+    ),
+  );
 }
 
 /**
  * Refuse `bill.payments_received` when the bill holds any pending or received payment, even one
  * given back in full (design §7): the single-payment routes and placing invoice the whole total as
- * one tender and link no bill payment's card to the sale, which only the bill's own invoice does
- * (§2.5).
+ * one tender and link no bill payment's card to the sale (§2.5).
  */
 export async function refuseBillWithPayments(
   tx: Transaction,
@@ -602,6 +609,46 @@ function toView(
       })),
     refunds: refunds.filter((refund) => refund.billPaymentId === payment.id).map(toRefundView),
   };
+}
+
+/**
+ * Point the provider row of each of these received card bill payments at the sale, a payment
+ * given back in full included (design §2.5).
+ */
+async function linkCardBillPayments(
+  tx: Transaction,
+  received: readonly PaymentRow[],
+  saleId: string,
+): Promise<void> {
+  const provided = await findPaymentsByBillPayments(
+    tx,
+    received.filter((row) => row.method === "card").map((row) => row.id),
+  );
+  for (const row of received) {
+    const card = provided.get(row.id);
+    // An invoice issued before the bill was paid in full linked its cards then.
+    if (card !== undefined && card.saleId !== saleId) {
+      await associatePaymentWithSale(tx, {
+        provider: card.provider,
+        paymentRef: card.paymentRef,
+        saleId,
+      });
+    }
+  }
+}
+
+/** Link the bill's received card payments to the invoice issued without them (design §2.5). */
+export async function linkBillCardPaymentsToSale(
+  tx: Transaction,
+  workingOrderId: string,
+  saleId: string,
+): Promise<void> {
+  const rows = await readPaymentRows(tx, [workingOrderId]);
+  await linkCardBillPayments(
+    tx,
+    rows.filter((row) => row.state === "received"),
+    saleId,
+  );
 }
 
 /** The card payments keyed on a separate terminal: their provider row is the manual one, written in
@@ -731,8 +778,7 @@ async function issueWhenFullyPaid(
     deps.backend,
   );
   const tendersOfBill: SettleSaleTender[] = held
-    .filter(({ row }) => row.state === "received")
-    .filter(({ netApplied, netTip }) => compareDecimal(addDecimal(netApplied, netTip), ZERO) > 0)
+    .filter(receivedHoldsMoney)
     .sort((a, b) => a.row.receivedAt!.localeCompare(b.row.receivedAt!))
     .map(({ row, netApplied, netTip }) => ({
       method: row.method,
@@ -782,21 +828,7 @@ async function issueWhenFullyPaid(
     );
   }
   await settleSale(tx, { saleId, tenders: tendersOfBill });
-
-  const provided = await findPaymentsByBillPayments(
-    tx,
-    received.filter((row) => row.method === "card").map((row) => row.id),
-  );
-  for (const row of received) {
-    const card = provided.get(row.id);
-    if (card !== undefined) {
-      await associatePaymentWithSale(tx, {
-        provider: card.provider,
-        paymentRef: card.paymentRef,
-        saleId,
-      });
-    }
-  }
+  await linkCardBillPayments(tx, received, saleId);
 
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, order.partyId);
   await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
@@ -1017,27 +1049,36 @@ export async function requireRefundableBill(
   return "open";
 }
 
+/** `held` is the bill's payments when this read them, for the caller to reuse. */
 async function requirePayableBill(
   tx: Transaction,
   workingOrderId: string,
-): Promise<"open" | "placed"> {
+): Promise<{ payable: "open" | "placed"; held?: PaymentMoney[] }> {
   const [order] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.status === "placed") {
-    if (order.partyId === null && !(await hasInvoice(tx, workingOrderId))) return "placed";
-    const [part] = await tx
-      .select({ id: billPayments.id })
-      .from(billPayments)
-      .where(
-        and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
-      )
-      .limit(1);
-    if (part !== undefined) return "placed";
+    const invoiced = await hasInvoice(tx, workingOrderId);
+    if (order.partyId === null && !invoiced) return { payable: "placed" };
+    // With its invoice issued, only a received payment still holding money leaves a rest to take
+    // here; a bill left unpaid after its payments were given back is collected whole.
+    if (invoiced) {
+      const held = await readPaymentMoney(tx, [workingOrderId]);
+      if (held.some(receivedHoldsMoney)) return { payable: "placed", held };
+    } else {
+      const [part] = await tx
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(
+          and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
+        )
+        .limit(1);
+      if (part !== undefined) return { payable: "placed" };
+    }
   }
   await requireOpenBill(tx, workingOrderId);
-  return "open";
+  return { payable: "open" };
 }
 
 /** Design §3.6: what a payment of the bill would be, writing nothing. */
@@ -1049,7 +1090,8 @@ export async function previewBillPayment(
   operatorId: string | undefined,
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
-    if ((await requirePayableBill(tx, workingOrderId)) === "placed") {
+    const payable = await requirePayableBill(tx, workingOrderId);
+    if (payable.payable === "placed") {
       await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
     }
     await requireOrderBillEditor(tx, workingOrderId, {
@@ -1057,7 +1099,7 @@ export async function previewBillPayment(
       expectedEdit: ask.expectedEdit,
     });
     await assertBillHasNoUnsent(tx, workingOrderId);
-    const held = await readPaymentMoney(tx, [workingOrderId]);
+    const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
     const { request } = await allocationRequestFor(tx, workingOrderId, ask, held);
     const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId), held);
     return previewAllocation(funds, request, { tipsEnabled: cfg.tipsEnabled });
@@ -1195,10 +1237,10 @@ async function beginBillPayment(
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   // A part payment's card reserves its share, as on an open bill (design §5.2).
-  if (payable === "placed") {
+  if (payable.payable === "placed") {
     await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
   }
-  const held = await readPaymentMoney(tx, [workingOrderId]);
+  const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await billPaymentTotal(tx, workingOrderId);
   deps.backend.assertRecordableAt(reading);
