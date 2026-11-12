@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   activityLog,
@@ -61,7 +61,12 @@ async function fixture() {
     return { zoneId: zone.id, actor };
   });
 }
-const history = () => suite.db.select().from(activityLog).where(eq(activityLog.personId, "staff"));
+const history = () =>
+  suite.db
+    .select()
+    .from(activityLog)
+    .where(eq(activityLog.personId, "staff"))
+    .orderBy(activityLog.at, sql`${activityLog}.rowid`);
 
 describe("today's choices history", () => {
   it("records keep-open, its ended times and the authorising manager", async () => {
