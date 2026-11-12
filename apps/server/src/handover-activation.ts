@@ -225,17 +225,34 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
     deps.log("warn", "handover-activation.chart_no_address", { operationId, sourceNodeId });
     return;
   }
-  const answer = await boxExchange(
-    new URL(`${base}/api/node/membership`),
-    {
-      method: "POST",
-      trust: { ca: link.boxCaPem, rejectUnauthorized: true },
-      signal: AbortSignal.any([stopping, AbortSignal.timeout(deps.limitMs ?? CHART_POST_LIMIT_MS)]),
-      body: JSON.stringify({ document: chart }),
-    },
-    MAX_CHART_ANSWER_BYTES,
-  );
-  if (answer.status === 200 && (JSON.parse(answer.text) as { accepted?: unknown }).accepted) {
+  let answer: { status: number; text: string };
+  let accepted: unknown;
+  try {
+    answer = await boxExchange(
+      new URL(`${base}/api/node/membership`),
+      {
+        method: "POST",
+        trust: { ca: link.boxCaPem, rejectUnauthorized: true },
+        signal: AbortSignal.any([
+          stopping,
+          AbortSignal.timeout(deps.limitMs ?? CHART_POST_LIMIT_MS),
+        ]),
+        body: JSON.stringify({ document: chart }),
+      },
+      MAX_CHART_ANSWER_BYTES,
+    );
+    accepted =
+      answer.status === 200 && (JSON.parse(answer.text) as { accepted?: unknown }).accepted;
+  } catch (error) {
+    if (stopping.aborted) return;
+    deps.log("warn", "handover-activation.chart_post_failed", {
+      operationId,
+      sourceNodeId,
+      error: String(error),
+    });
+    return;
+  }
+  if (accepted) {
     deps.log("info", "handover-activation.chart_posted", { operationId, sourceNodeId });
     return;
   }

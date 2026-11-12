@@ -397,6 +397,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       if (signal.aborted) return;
       deps.log("warn", "handover-destination.fetch_failed", {
         operationId,
+        sourceNodeId: operation.sourceNodeId,
         error: String(error),
       });
       return waitOn(operation, "handover.source_unreachable");
@@ -487,7 +488,11 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       );
     } catch (error) {
       if (signal.aborted) return;
-      deps.log("warn", "handover-destination.post_failed", { operationId, error: String(error) });
+      deps.log("warn", "handover-destination.post_failed", {
+        operationId,
+        sourceNodeId: operation.sourceNodeId,
+        error: String(error),
+      });
       return waitOn(operation, "handover.source_unreachable");
     }
     if (answer.status !== 200) {

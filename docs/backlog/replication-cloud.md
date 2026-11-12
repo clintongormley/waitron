@@ -1124,7 +1124,9 @@ whether a box files; 3b-F, letting a Veri*Factu venue add a spare, which waits o
 question Q1). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
 box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742); 3b-3 (a joining spare
 takes the venue's certificate authority as its own) as
-[#2761](https://github.com/clintongormley/waitron/pull/2761). Slices 3c onwards are still open;
+[#2761](https://github.com/clintongormley/waitron/pull/2761); 3b-4 (box-to-box calls find a `.local` box by
+asking the network, a spare listens on the venue's network, and what it serves there is walked by a
+test) as [#2779](https://github.com/clintongormley/waitron/pull/2779). 3b-5a to 3b-F and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).

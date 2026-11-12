@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { writeMirrorLink } from "@waitron/node-db";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
@@ -18,6 +19,7 @@ import {
   standby,
 } from "./testing/handover-placed-copy.js";
 import { THIRD_BOX, holdChart } from "./testing/place-copy-box.js";
+import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@hono/node-server", async () => {
@@ -315,10 +317,21 @@ describe("the emergency routes through a real spare start", () => {
   };
   async function startEmergency() {
     const copy = await fixture.placeEmergencyCopy();
+    // A failure to connect counts as the main box being gone only at an address this spare
+    // reached it at under the pinned authority, so the spare first meets it running.
+    const authority = await mintBoxAuthority();
+    const source = await startBoxServer(authority, () => ({ status: 503, body: "{}" }));
+    await writeMirrorLink(copy.node, standby.nodeId, {
+      relayUrl: "http://127.0.0.1:1/",
+      boxHostname: "box.local",
+      boxCaPem: authority.caPem,
+      originNodeId: primary.nodeId,
+    });
+    const contactUrl = `https://127.0.0.1:${new URL(source.url).port}`;
     const body = {
       ...copy.chart.body,
       nodes: copy.chart.body.nodes.map((node) =>
-        node.nodeId === primary.nodeId ? { ...node, contactUrl: "http://127.0.0.1:1" } : node,
+        node.nodeId === primary.nodeId ? { ...node, contactUrl } : node,
       ),
     };
     await copy.close();
@@ -334,6 +347,10 @@ describe("the emergency routes through a real spare start", () => {
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
       stepdown: { mount: () => {}, restart: () => {} },
     });
+    const running = await post("declare", declaration, "emergency");
+    expect(codeOf(running)).toBe("handover.source_not_established");
+    expect(source.requests).toHaveLength(1);
+    await source.close();
     const answer = await post("declare", declaration, "emergency");
     expect(answer.status, JSON.stringify(answer.body)).toBe(200);
     return env;
@@ -372,6 +389,8 @@ describe("the emergency routes through a real spare start", () => {
       node.close();
     }
     beforeServerStarts();
+    // This restart stays in the test's process, which keeps the address the spare reached; a real
+    // restart forgets it, and the activation then waits for the main box to be reached again.
     started = await startServer(env, undefined, {
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     });

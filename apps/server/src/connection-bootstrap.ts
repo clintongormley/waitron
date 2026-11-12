@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { X509Certificate } from "node:crypto";
 import {
@@ -17,7 +17,9 @@ export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
   reachUrls: string[];
   onRepaired: () => Promise<void>;
   log: Logger;
-  repairAllowed?: boolean;
+  /** A function decides, per request, whether the page offers the repair and a write is answered;
+   * the certificate downloads follow only whether a repair is offered at all. */
+  repairAllowed?: boolean | ((c: Context) => boolean);
   continuationRequired?: boolean;
 }
 
@@ -53,6 +55,9 @@ export function mountConnectionBootstrap(
   deps: ConnectionBootstrapDeps,
   bootstrapOnly = true,
 ): void {
+  const offered = deps.repairAllowed !== false;
+  const offeredTo = (c: Context) =>
+    typeof deps.repairAllowed === "function" ? deps.repairAllowed(c) : offered;
   let transitioning = false;
   let transitionFailed = false;
   const publicPaths = bootstrapOnly
@@ -70,7 +75,7 @@ export function mountConnectionBootstrap(
     async (c) => {
       const status = await inspectBoxTls(deps);
       const caCertificate =
-        deps.repairAllowed !== false && status.caAvailable
+        offered && status.caAvailable
           ? await readBoxPublicCa(deps.stateDir, deps.now()).catch(() => null)
           : null;
       const html = renderTrustPage({
@@ -82,7 +87,8 @@ export function mountConnectionBootstrap(
         device: trustDeviceForRequest(c.req),
         connection: {
           ...status,
-          repairAllowed: deps.repairAllowed,
+          repairAllowed: offered,
+          serverOnly: offered && !offeredTo(c),
           continuationRequired: bootstrapOnly || transitionFailed || deps.continuationRequired,
         },
         locale: connectionLocale(c.req.query("lang") ?? c.req.header("accept-language")),
@@ -93,7 +99,7 @@ export function mountConnectionBootstrap(
   if (bootstrapOnly)
     app.on("GET", ["/ca.crt", "/setup-api/ca.crt"], async (c) => {
       const status = await inspectBoxTls(deps);
-      if (deps.repairAllowed !== false && status.caAvailable) {
+      if (offered && status.caAvailable) {
         try {
           const pem = await readBoxPublicCa(deps.stateDir, deps.now());
           if (pem !== null && new X509Certificate(pem).fingerprint256 === status.fingerprint)
@@ -113,7 +119,7 @@ export function mountConnectionBootstrap(
     const origin = request.headers.get("origin");
     const host = request.headers.get("host");
     if (
-      deps.repairAllowed === false ||
+      !offeredTo(c) ||
       origin !== url.origin ||
       !deps.origins.includes(url.origin) ||
       (host !== null && host !== url.host) ||

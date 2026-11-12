@@ -59,7 +59,18 @@ export function managementSite(
   return isRemoteStaffRequest(c) ? { rpId: url.hostname, origin: url.origin } : local;
 }
 
-/** A missing socket is local unless the staff listener marked the request remote. */
+/** Where taking a request for the box's own only withholds something: a missing socket is local
+ * unless the staff listener marked the request remote. */
 export function requestFromBox(c: Context, deps: RequestSourceDeps = {}): boolean {
   return !isRemoteStaffRequest(c) && addressIsBox(requestAddress(c), deps);
+}
+
+/**
+ * For permitting what only the box itself may do: only a readable loopback address counts, since
+ * another device on the venue's network can hold one of the box's own link-local addresses.
+ * Node stops reporting the address once a client resets, though the request it sent is still read.
+ */
+export function requestProvenFromBox(c: Context): boolean {
+  const address = requestAddress(c);
+  return !isRemoteStaffRequest(c) && address !== undefined && isLoopbackHost(address);
 }

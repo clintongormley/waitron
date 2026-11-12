@@ -1,6 +1,5 @@
 import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import { resolveLoginLocale } from "./login-locale.js";
-import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
@@ -61,9 +60,7 @@ li { margin-block: var(--wt-space-2); }
 `;
 
 export function renderConnectionPage(
-  input: TrustPageInput & {
-    connection: BoxTlsInspection & { repairAllowed?: boolean; continuationRequired?: boolean };
-  },
+  input: TrustPageInput & { connection: NonNullable<TrustPageInput["connection"]> },
 ): string {
   const locale = input.locale ?? "en";
   const words = CONNECTION_TEXT[locale];
@@ -71,6 +68,7 @@ export function renderConnectionPage(
   const operator = status.repairAllowed === false;
   const retry = status.continuationRequired === true;
   const ready = status.state === "healthy" && !operator;
+  const elsewhere = !operator && status.serverOnly === true && (!ready || retry);
   const hidden = (visible: boolean) => (visible ? "" : " hidden");
   const help = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
   const devices =
@@ -169,16 +167,16 @@ button?.addEventListener("click", async () => {
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <nav aria-label="${words.language}"><a href="?lang=en" lang="en"${locale === "en" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.en.languageName}</a><a href="?lang=es" lang="es"${locale === "es" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.es.languageName}</a></nav>
 <h1>${words.title}</h1><p>${words.intro}</p><p class="note">${words.publicOnly}</p>
-<p id="connection-status" role="status" tabindex="-1">${operator ? words.operator : ready ? (retry ? words.certificateReady : words.ready) : status.state === "refused" ? words.failed : words.needed}</p>
+<p id="connection-status" role="status" tabindex="-1">${operator ? words.operator : elsewhere ? words.serverOnly : ready ? (retry ? words.certificateReady : words.ready) : status.state === "refused" ? words.failed : words.needed}</p>
 <p id="connection-error" role="alert"></p>
 <noscript><p>${words.javascript}</p></noscript>
 <div id="connection-work">
-${!ready && !operator ? `<button id="connection-repair" type="button" hidden>${words.repair}</button>` : ""}
+${!ready && !operator && !elsewhere ? `<button id="connection-repair" type="button" hidden>${words.repair}</button>` : ""}
 <section${hidden(!operator)}><div id="trust-retained"${hidden(status.trust === "retained")}><h2>${words.retained}</h2><p>${words.retainedHelp}</p></div>
 <div id="trust-new"${hidden(status.trust === "new-required")}><h2>${words.newTrust}</h2><p>${words.newTrustHelp}</p></div>
 <div id="connection-download"${hidden(status.caAvailable)}><p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>
 <div id="connection-help"${hidden(status.caAvailable)}><h2>${words.install}</h2><p class="note">${words.managed}</p>${details}</div></section>
-<section id="connection-actions">${ready && retry && !operator ? `<button id="connection-reconnect" type="button" hidden>${words.reconnect}</button>` : ""}<p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}" target="_blank" rel="noopener noreferrer"${hidden((ready && !retry) || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
+<section id="connection-actions">${ready && retry && !operator && !elsewhere ? `<button id="connection-reconnect" type="button" hidden>${words.reconnect}</button>` : ""}<p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}" target="_blank" rel="noopener noreferrer"${hidden((ready && !retry) || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
 </div>
 <p id="connection-choice-help" class="note">${words.choiceHelp}</p>
 <div id="connection-choices"><button id="connection-check" class="secondary" type="button" hidden>${words.check}</button>

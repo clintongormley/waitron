@@ -1,8 +1,9 @@
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import type { AddressInfo } from "node:net";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { createServer as createTcpServer, type AddressInfo, type Socket } from "node:net";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { signEnvelope, type HandoverState } from "@waitron/handover";
+import { AppError } from "@waitron/shared";
 import {
   acceptMembershipDocument,
   generateNodeKeyPair,
@@ -1343,7 +1344,7 @@ describe("askPeerStatus", () => {
   });
 
   it.each([
-    [false, "unreachable"],
+    [false, "not_established"],
     [true, "not_established"],
   ] as const)(
     "a native timeout (connected: %s) keeps its diagnostic and is %s",
@@ -1406,10 +1407,27 @@ describe("askPeerStatus", () => {
   });
 
   it("a refused real TCP connection still counts as silence", async () => {
-    const [port] = await freePorts(1);
-    const onSilent = vi.fn();
-    expect(await realAsk({ onSilent })({ ...PEER, url: `http://127.0.0.1:${port}` })).toBeNull();
-    expect(onSilent).toHaveBeenCalledWith(SPARE, "unreachable");
+    // Silence counts only at an address this box reached under the pinned authority before.
+    const checked = new boxTransport.CheckedAddresses();
+    const real = boxTransport.boxExchange;
+    const exchange = vi
+      .spyOn(boxTransport, "boxExchange")
+      .mockImplementation((url, options, maxBytes) => real(url, { ...options, checked }, maxBytes));
+    try {
+      const server = await statusServer(authorityX, (q) => sign(body(q.nonce)));
+      servers.splice(servers.indexOf(server), 1);
+      const url = `https://127.0.0.1:${new URL(server.url).port}`;
+      const reach = realAsk({ authorityOf: () => authorityX.caPem });
+      expect(await reach({ ...PEER, url })).not.toBeNull();
+      await server.close();
+      const onSilent = vi.fn();
+      expect(
+        await realAsk({ authorityOf: () => authorityX.caPem, onSilent })({ ...PEER, url }),
+      ).toBeNull();
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "unreachable");
+    } finally {
+      exchange.mockRestore();
+    }
   });
 
   it.each([false, true])(
@@ -1441,6 +1459,43 @@ describe("askPeerStatus", () => {
       }
     },
   );
+
+  it("a peer whose first address refuses and whose second accepts TCP but never answers is not established", async () => {
+    const held = new Set<Socket>();
+    // Accepts the TCP connection on 127.0.0.1 alone and never starts TLS; nothing listens on the
+    // IPv6 loopback at this port, so that address refuses the connection.
+    const server = createTcpServer((socket) => {
+      held.add(socket);
+      socket.on("error", () => {});
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const real = boxTransport.boxExchange;
+    const addresses = vi.fn(() =>
+      Promise.resolve({ addresses: ["::1", "127.0.0.1"], remembered: false }),
+    );
+    const exchange = vi
+      .spyOn(boxTransport, "boxExchange")
+      .mockImplementation((url, options, maxBytes) =>
+        real(url, { ...options, lookup: addresses }, maxBytes),
+      );
+    try {
+      const { port } = server.address() as AddressInfo;
+      const onSilent = vi.fn();
+      expect(
+        await realAsk({ timeoutMs: 1000, authorityOf: () => authorityX.caPem, onSilent })({
+          ...PEER,
+          url: `https://box-7f3a.waitron.local:${port}`,
+        }),
+      ).toBeNull();
+      expect(addresses).toHaveBeenCalled();
+      expect(held.size).toBe(1);
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+    } finally {
+      exchange.mockRestore();
+      for (const socket of held) socket.destroy();
+      await new Promise<void>((done) => server.close(() => done()));
+    }
+  });
 
   describe("over HTTPS to a box serving a leaf from its own authority", () => {
     it("with the peer's authority pinned, the signed answer verifies", async () => {
@@ -1485,6 +1540,153 @@ describe("askPeerStatus", () => {
     });
   });
 
+  describe("a .local box's address heard from the venue's network (the second read's five cases)", () => {
+    const NAME = "box-7f3a.waitron.local";
+    let named: BoxAuthority;
+    let checked: boxTransport.CheckedAddresses;
+    let heard: boxTransport.BoxLookup;
+    let exchange: { mockRestore: () => void };
+    const nobody = () => Promise.reject(new AppError("mirror.peer_unresolved", {}));
+    const fresh =
+      (...addresses: string[]) =>
+      () =>
+        Promise.resolve({ addresses, remembered: false });
+    beforeAll(async () => {
+      named = await mintBoxAuthority([NAME]);
+    });
+    beforeEach(() => {
+      checked = new boxTransport.CheckedAddresses();
+      heard = nobody;
+      const real = boxTransport.boxExchange;
+      exchange = vi
+        .spyOn(boxTransport, "boxExchange")
+        .mockImplementation((url, options, maxBytes) =>
+          real(url, { ...options, lookup: (h, a) => heard(h, a), checked }, maxBytes),
+        );
+    });
+    afterEach(() => {
+      exchange.mockRestore();
+    });
+
+    async function mainBox() {
+      const server = await statusServer(named, (q) => sign(body(q.nonce)));
+      const port = new URL(server.url).port;
+      const switchOff = async () => {
+        servers.splice(servers.indexOf(server), 1);
+        await server.close();
+      };
+      return { server, port, switchOff };
+    }
+    async function askAt(port: string, timeoutMs = 5000) {
+      const onSilent = vi.fn();
+      const answer = await realAsk({ timeoutMs, authorityOf: () => named.caPem, onSilent })({
+        ...PEER,
+        url: `https://${NAME}:${port}`,
+      });
+      return { answer, reasons: onSilent.mock.calls.map(([, why]) => why as string) };
+    }
+    /** Asks once while only the live box answers, so this box has reached it under its authority. */
+    async function reachedOnce(box: { port: string }) {
+      heard = fresh("127.0.0.1");
+      expect((await askAt(box.port)).answer).not.toBeNull();
+    }
+
+    it("row 1: the main box switched off and nobody answering for its name is unreachable", async () => {
+      const box = await mainBox();
+      await reachedOnce(box);
+      await box.switchOff();
+      heard = nobody;
+
+      expect(await askAt(box.port)).toEqual({ answer: null, reasons: ["unreachable"] });
+    });
+
+    it("row 2: only the live box answering is an answer", async () => {
+      const box = await mainBox();
+      heard = fresh("127.0.0.1");
+
+      expect((await askAt(box.port)).answer).toEqual(body(box.server.lastNonce()));
+    });
+
+    it("row 3: a dead claimed address ahead of the live box still reaches the live box", async () => {
+      const box = await mainBox();
+      heard = fresh("::1", "127.0.0.1");
+
+      expect((await askAt(box.port)).answer).toEqual(body(box.server.lastNonce()));
+      expect(box.server.requests).toHaveLength(1);
+    });
+
+    it("row 4: the ask's limit ending before any connection, while claimed addresses stand in the way, is not established", async () => {
+      const box = await mainBox();
+      heard = () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ addresses: ["::1", "127.0.0.1"], remembered: false }), 300),
+        );
+
+      expect(await askAt(box.port, 50)).toEqual({ answer: null, reasons: ["not_established"] });
+      expect(box.server.requests).toHaveLength(0);
+    });
+
+    it("row 5: an only answer with nothing listening is not established when nothing was reached before", async () => {
+      const box = await mainBox();
+      heard = fresh("::1");
+
+      expect(await askAt(box.port)).toEqual({ answer: null, reasons: ["not_established"] });
+      expect(box.server.requests).toHaveLength(0);
+    });
+
+    it("row 5: an only answer with nothing listening does not hide the live box at the address reached before", async () => {
+      const box = await mainBox();
+      await reachedOnce(box);
+      heard = fresh("::1");
+
+      expect((await askAt(box.port)).answer).toEqual(body(box.server.lastNonce()));
+    });
+
+    it("an address reached before that refuses, while a claimed address accepts the connection, is not established", async () => {
+      const box = await mainBox();
+      await reachedOnce(box);
+      await box.switchOff();
+      const held = new Set<Socket>();
+      const claimant = createTcpServer((socket) => {
+        held.add(socket);
+        socket.on("error", () => {});
+      });
+      await new Promise<void>((done) => claimant.listen(Number(box.port), "::1", done));
+      heard = fresh("::1");
+      try {
+        expect(await askAt(box.port, 1000)).toEqual({
+          answer: null,
+          reasons: ["not_established"],
+        });
+        expect(held.size).toBe(1);
+      } finally {
+        for (const socket of held) socket.destroy();
+        await new Promise<void>((done) => claimant.close(() => done()));
+      }
+    });
+
+    it("an address reached before that refuses, with the network still asked when the limit ends, is unreachable", async () => {
+      const box = await mainBox();
+      await reachedOnce(box);
+      await box.switchOff();
+      heard = () => new Promise(() => {});
+
+      expect(await askAt(box.port, 300)).toEqual({ answer: null, reasons: ["unreachable"] });
+    });
+  });
+
+  it("a refused connection at an address the chart writes out is not established when this box never reached it", async () => {
+    const [port] = await freePorts(1);
+    const onSilent = vi.fn();
+    expect(
+      await realAsk({ authorityOf: () => authorityX.caPem, onSilent })({
+        ...PEER,
+        url: `https://127.0.0.1:${port}`,
+      }),
+    ).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+  });
+
   it("a plain-http peer is asked over plain http", async () => {
     let nonce = "";
     const server = createHttpServer((req, res) => {
@@ -1519,5 +1721,18 @@ describe("askPeerStatus", () => {
     });
     expect(await real(PEER)).toBeNull();
     expect(onSilent).toHaveBeenCalledWith(SPARE, "not_verified");
+  });
+
+  it("reports a box no other box answers for apart from one it could not reach", async () => {
+    const onSilent = vi.fn();
+    const real = askPeerStatus({
+      sign: async (b) =>
+        signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      publicKeyOf: (id) => keys[id],
+      fetch: () => Promise.reject(new AppError("mirror.peer_unresolved", {})),
+      onSilent,
+    });
+    expect(await real(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "unresolved");
   });
 });

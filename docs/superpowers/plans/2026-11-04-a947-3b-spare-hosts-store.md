@@ -711,6 +711,9 @@ the A1018 plan, not run.
      dashboard sign-in on a mirror: `mirror-session.ts` is now only `endMirrorViewer`, which ends a
      left-over viewer session at boot (`boot.ts:2052`). `spare-read-gate.test.ts` passes, 8 cases
      (`Tests 8 passed (8)`, run for this revision);
+     **2026-11-11 (A940 slice 3, #2861):** the declaration pages `GET /legal/*`
+     (`mountDeclarationPages`, mounted straight after `mountGuidePages`) are routes of that kind
+     too, so every start answers them; `boot.mirror-surface.test.ts` lists them;
   2. `POST /api/node/peer-status` and `POST /api/node/membership`, which answer only signed
      requests and signed charts (`read-only-exemptions.ts:39-52`);
   3. **not** `POST /management-api/promote` or `/promote/preparation`: on a mirror they answer only

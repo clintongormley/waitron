@@ -361,8 +361,8 @@ import {
   type MdnsResponder,
   type MdnsSocket,
 } from "./mdns.js";
-import type { MdnsQuerySocket } from "./box-lookup.js";
-import { ownInterfaceAddresses } from "./request-from-box.js";
+import { countAsOwnAddresses, type MdnsQuerySocket } from "./box-lookup.js";
+import { ownInterfaceAddresses, requestProvenFromBox } from "./request-from-box.js";
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
@@ -429,7 +429,6 @@ import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
 import { endMirrorViewer } from "./mirror-session.js";
-import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { spareReadGate } from "./spare-read-gate.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
@@ -859,6 +858,11 @@ export type LandingListenerConfig = Pick<
   "landingPort" | "httpHost" | "stateDir" | "httpPort" | "boxAddresses" | "tls"
 > & { connection?: import("./connection-bootstrap.js").ConnectionBootstrapDeps };
 
+/** A spare's landing pages are for its own screen only. */
+function landingHostFor(config: LandingListenerConfig, spare: boolean): LandingListenerConfig {
+  return spare ? { ...config, httpHost: "127.0.0.1" } : config;
+}
+
 export function startLandingListener(
   config: LandingListenerConfig,
   log: Logger,
@@ -964,7 +968,10 @@ export interface StartServerSeams {
   /** For the free-space watch and the spare's room check only. */
   freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
+  /** Replaces `requestFromBox`, the check for what a request from the box only withholds. */
   requestFromBox?: (c: Context) => boolean;
+  /** Replaces `requestProvenFromBox`, the fail-closed check for what only the box may do. */
+  requestProvenFromBox?: (c: Context) => boolean;
   /** The box's clock service; unset, the server talks to the host's socket. */
   boxHost?: BoxHostClient;
   /** The box's host requests; unset, the server talks to the host's socket. */
@@ -1136,6 +1143,7 @@ async function bootServer(
   // QR and mDNS answers to an address the certificate does not cover. Set it on the FIRST boot of a
   // state dir, or discard the `tls/` files to re-mint.
   const boxAddresses = (): string[] => config.boxAddresses ?? listBoxIpv4();
+  countAsOwnAddresses(config.boxAddresses ?? []);
   // Before any surface that gates on a management session is mounted, in either mode.
   registerModulePermissions(ALL_MODULE_PERMISSIONS);
   const verbosity = createVerbosityController({ defaultLevel: "info", now });
@@ -1328,6 +1336,8 @@ async function bootServer(
 
   // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
+  let spare = false;
+  const fromBox = seams.requestProvenFromBox ?? requestProvenFromBox;
   mountDiscovery(
     app,
     {
@@ -1341,6 +1351,7 @@ async function bootServer(
       listIpv4: boxAddresses,
       discoveryEnabled: config.node === undefined,
       serveBoxCa: config.tls === undefined,
+      repairAllowed: (c) => !spare || fromBox(c),
       connectionHostnames: BOX_LEAF_HOSTNAMES,
     },
     log,
@@ -1746,6 +1757,7 @@ async function bootServer(
   };
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
+    spare = true;
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
     mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
     mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
@@ -1784,7 +1796,7 @@ async function bootServer(
         closePools: () => store.close(),
       },
       mdns,
-      startLandingListener(config, log),
+      startLandingListener(landingHostFor(config, true), log),
     );
   }
 
@@ -2069,6 +2081,7 @@ async function bootServer(
   const clockWitnesses = createClockWitnessStore();
   const boxBoot = bootReader();
   const isMirror = holders.mode.current === "mirror";
+  spare = isMirror;
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
   const fencedOrMirror = isMirror || fenced;
@@ -2111,7 +2124,6 @@ async function bootServer(
   // Asked on each call, unlike `isSingletonPrimary`: the role can change while the box runs.
   const filesRecords = () =>
     fiscalDrainEnabled(config) && holders.singletonRole.current === "primary";
-  assertMirrorBindSafe(config, isMirror, env);
   const secureCookies = resolveTradingTls(config) !== undefined;
   const isReadOnly = () => holders.mode.current === "mirror" || fenced;
   if (fencedOrMirror) {
@@ -2312,7 +2324,7 @@ async function bootServer(
         closePools: () => store.close(),
       },
       { stop: () => Promise.resolve() },
-      startLandingListener(config, log),
+      startLandingListener(landingHostFor(config, isMirror), log),
     );
   }
   tradingAdmission.admit();
@@ -3673,6 +3685,8 @@ async function bootServer(
       modules: setsToMigrate,
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
+      requestProvenFromBox: seams.requestProvenFromBox,
+      isMirror,
       nodePreparation,
     },
     log,
@@ -4120,7 +4134,7 @@ async function bootServer(
       closePools: () => store.close(),
     },
     mdns,
-    startLandingListener(config, log),
+    startLandingListener(landingHostFor(config, isMirror), log),
     // Decided once at boot: a box exposes one in-process promote, never both.
     isMirror
       ? { kind: "mirror" as const, run: promoteMirrorRun }

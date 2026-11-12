@@ -911,3 +911,12 @@ it.each([
   expect(codeMessage(code, "en")).toBe(english);
   expect(codeMessage(code, "es")).toBe(spanish);
 });
+
+it("says a standby server cannot be switched on from another device, in English and Spanish", () => {
+  expect(codeMessage("promotion.from_box_only", "en")).toBe(
+    "In this version a standby server cannot be switched on from another device. Nothing was changed.",
+  );
+  expect(codeMessage("promotion.from_box_only", "es")).toBe(
+    "En esta versión, un servidor en espera no se puede activar desde otro dispositivo. No se ha cambiado nada.",
+  );
+});

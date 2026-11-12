@@ -370,6 +370,28 @@ describe("the spare fetches the old box's final copy", () => {
     expect((await stat(r.received())).size).toBe(indicator.body.snapshot.bytes);
   });
 
+  it("a failed fetch is logged with the old box it was from", async () => {
+    const r = await rig();
+    const compare = vi.fn(async () => ({ ok: true as const }));
+    await r.stepDownM1();
+    let cut = 0;
+    await r.listen(r.m1App({ restricted: true }), (url, real) =>
+      url.endsWith("/final-copy") && cut++ === 0
+        ? (_req, res) => {
+            res.writeHead(200, { "content-length": "1000" });
+            res.write("only the start", () => res.destroy());
+          }
+        : real,
+    );
+    await r.start({ compare });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(logLines).toContainEqual([
+      "warn",
+      "handover-destination.fetch_failed",
+      expect.objectContaining({ sourceNodeId: r.m1 }),
+    ]);
+  });
+
   it("a server that goes silent mid-file is given up on and fetched again", async () => {
     const r = await rig();
     const compare = vi.fn(async () => ({ ok: true as const }));

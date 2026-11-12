@@ -36,7 +36,7 @@ import {
   writeContentLanguages,
 } from "@waitron/catalogue";
 import type { StartedServer, StartServerSeams } from "./boot.js";
-import type { MdnsQuerySocket } from "./box-lookup.js";
+import { lookupBoxName, type MdnsQuerySocket } from "./box-lookup.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { ALL_MODULES } from "./modules.js";
@@ -606,6 +606,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(mdns.answers().map(({ name, data }) => ({ name, data }))).toEqual([
             { name: "waitron.local", data: configured },
           ]);
+          // So does every later call this box makes to another box by name.
+          await expect(
+            lookupBoxName("waitron.local", { timeoutMs: 20, makeSocket: querySocket }),
+          ).rejects.toMatchObject({ code: "mirror.peer_unresolved" });
         },
         {
           seams: {

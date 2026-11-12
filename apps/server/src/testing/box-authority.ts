@@ -13,12 +13,12 @@ export interface BoxAuthority {
   keyPem: string;
 }
 
-export async function mintBoxAuthority(): Promise<BoxAuthority> {
+export async function mintBoxAuthority(hostnames = ["localhost"]): Promise<BoxAuthority> {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-box-authority-"));
   try {
     const files = await ensureBoxSecrets({
       stateDir,
-      hostnames: ["localhost"],
+      hostnames,
       now: () => new Date(),
     });
     return {

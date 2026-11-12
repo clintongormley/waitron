@@ -1,5 +1,8 @@
 import { Hono } from "hono";
-import { Socket } from "node:net";
+import { once } from "node:events";
+import { createServer as createHttpsServer } from "node:https";
+import { Socket, type AddressInfo } from "node:net";
+import { serve, type ServerType } from "@hono/node-server";
 import { TLSSocket } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
@@ -70,6 +73,8 @@ vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 import { mountPromoteApi } from "./promote-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { resetObserver } from "./testing/connection-reset.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 const fakeDb = {} as Database;
 // Answers the route's read of open handover operations with none.
@@ -500,5 +505,253 @@ describe("an ordinary promotion while a handover is open on this box", () => {
     await operation("destination", "controlled", ["abandoned"]);
     await operation("destination", "controlled", [], { operationId: LATER_OP });
     await expectRefusedNamingOperation(LATER_OP);
+  });
+});
+
+describe("on a mirror, promotion answers only the box itself", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const binding = {
+    module: "test-regime",
+    action: "promote",
+    eventId: "event-1",
+    sourceId: "promotion-1",
+    targetNodeId: NODE,
+  };
+
+  function mirrorApp(fromBox: boolean | undefined, isMirror = true) {
+    const run = vi.fn(async (): Promise<PromoteRunResult> => ({
+      alreadyPrimary: false,
+      restarting: true,
+    }));
+    const prepare = vi.fn(async () => ({ prepared: true }));
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: fakeDb,
+      nodeDb: fakeNode,
+      nodeId: NODE,
+      run,
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: {
+        prepare,
+        withPromotion: vi.fn(),
+      } as unknown as PromoteApiDeps["nodePreparation"],
+      ...(fromBox === undefined
+        ? {}
+        : { requestFromBox: () => fromBox, requestProvenFromBox: () => fromBox }),
+      isMirror,
+    });
+    return { app, run, prepare };
+  }
+
+  async function overHttps(app: Hono, path: string, body: unknown): Promise<Response> {
+    const socket = new TLSSocket(new Socket());
+    try {
+      return await app.request(
+        `https://box.test/management-api/promote${path}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        { incoming: { socket } },
+      );
+    } finally {
+      socket.destroy();
+    }
+  }
+
+  const REFUSAL = { error: { code: "promotion.from_box_only", params: {} } };
+
+  it("a mirror refuses promotion from another address, promotes nothing and reads no password", async () => {
+    const { app, run } = mirrorApp(false);
+    const res = await post(app, { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+    expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
+    expect(checkManagerPassword).not.toHaveBeenCalled();
+    expect(loginManagerById).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("a mirror refuses promotion from another address before reading the body", async () => {
+    const { app, run } = mirrorApp(false);
+    let read = false;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          read = true;
+          controller.error(new Error("the body was read"));
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const res = await app.request(
+      new Request("http://box.test/management-api/promote", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        duplex: "half",
+      } as RequestInit),
+    );
+    expect([res.status, await res.json(), read]).toEqual([403, REFUSAL, false]);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("a mirror refuses a recovery key from another address without checking it", async () => {
+    const { app, run } = mirrorApp(false);
+    const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
+    expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
+    expect(verifyBreakGlass).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("a mirror still accepts promotion from the box itself", async () => {
+    const { app, run } = mirrorApp(true);
+    const res = await post(app, { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+    expect([res.status, await res.json()]).toEqual([
+      200,
+      { alreadyPrimary: false, restarting: true },
+    ]);
+    expect(checkManagerPassword).toHaveBeenCalled();
+    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
+  });
+
+  it("a mirror refuses preparation from another address and reads no password", async () => {
+    const { app, prepare } = mirrorApp(false);
+    const res = await overHttps(app, "/preparation", {
+      moduleOperation: { binding, input: null },
+      personId: PERSON,
+      password: "pw",
+    });
+    expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("a mirror refuses preparation from another address before its HTTPS check", async () => {
+    const { app, prepare } = mirrorApp(false);
+    const res = await app.request("/management-api/promote/preparation", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not json",
+    });
+    expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("a mirror still accepts preparation from the box itself", async () => {
+    const { app, prepare } = mirrorApp(true);
+    const res = await overHttps(app, "/preparation", {
+      moduleOperation: { binding, input: null },
+      personId: PERSON,
+      password: "pw",
+    });
+    expect([res.status, await res.json()]).toEqual([200, { prepared: true }]);
+    expect((prepare.mock.calls[0] as unknown[])[4]).toEqual({ onBox: true });
+  });
+
+  it("a mirror's from-box refusal and the preparation's on-box answer are two checks", async () => {
+    const prepare = vi.fn(async () => ({ prepared: true }));
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: fakeDb,
+      nodeDb: fakeNode,
+      nodeId: NODE,
+      run: vi.fn(),
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: {
+        prepare,
+        withPromotion: vi.fn(),
+      } as unknown as PromoteApiDeps["nodePreparation"],
+      requestProvenFromBox: () => true,
+      requestFromBox: () => false,
+      isMirror: true,
+    });
+    const res = await overHttps(app, "/preparation", {
+      moduleOperation: { binding, input: null },
+      personId: PERSON,
+      password: "pw",
+    });
+    expect([res.status, await res.json()]).toEqual([200, { prepared: true }]);
+    expect((prepare.mock.calls[0] as unknown[])[4]).toEqual({ onBox: false });
+  });
+
+  describe("over a real connection the client resets before the route runs", () => {
+    const material = mintSelfSignedServerCert({
+      hostnames: ["waitron.local"],
+      ipAddresses: [],
+      now: new Date(),
+    });
+    const listening: ServerType[] = [];
+    afterEach(() => {
+      for (const server of listening.splice(0)) if (server !== undefined) server.close();
+    });
+
+    async function listen(app: Hono, tls: boolean) {
+      const reset = resetObserver();
+      const server = serve({
+        fetch: reset.wrap(app.fetch),
+        port: 0,
+        hostname: "127.0.0.1",
+        ...(tls
+          ? {
+              createServer: createHttpsServer,
+              serverOptions: { key: material.serverKeyPem, cert: material.serverCertPem },
+            }
+          : {}),
+      });
+      listening.push(server);
+      await once(server, "listening");
+      const port = (server.address() as AddressInfo).port;
+      return (path: string, body: unknown) => {
+        const text = JSON.stringify(body);
+        const host = `127.0.0.1:${port}`;
+        return reset.sendThenReset(
+          port,
+          `POST /management-api/promote${path} HTTP/1.1\r\nHost: ${host}\r\n` +
+            `Origin: ${tls ? "https" : "http"}://${host}\r\nContent-Type: application/json\r\n` +
+            `Content-Length: ${Buffer.byteLength(text)}\r\n\r\n${text}`,
+          { tls },
+        );
+      };
+    }
+
+    it("a mirror's promotion is refused, its password unread", async () => {
+      const { app, run } = mirrorApp(undefined);
+      const send = await listen(app, false);
+      const answer = await send("", { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+      expect([answer.status, JSON.parse(answer.body)]).toEqual([403, REFUSAL]);
+      expect(checkManagerPassword).not.toHaveBeenCalled();
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it("a mirror's preparation is refused over HTTPS, its password unread", async () => {
+      const { app, prepare } = mirrorApp(undefined);
+      const send = await listen(app, true);
+      const answer = await send("/preparation", {
+        moduleOperation: { binding, input: null },
+        personId: PERSON,
+        password: "pw",
+      });
+      expect([answer.status, JSON.parse(answer.body)]).toEqual([403, REFUSAL]);
+      expect(prepare).not.toHaveBeenCalled();
+    });
+
+    it("a box that is not a mirror still promotes", async () => {
+      const { app, run } = mirrorApp(undefined, false);
+      const send = await listen(app, false);
+      const answer = await send("", { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+      expect(answer.status).toBe(200);
+      expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
+    });
+  });
+
+  it("a fenced box's promotion refusal is unchanged", async () => {
+    const { app, run } = mirrorApp(false, false);
+    run.mockRejectedValueOnce(new AppError("promotion.node_fenced", { standing: "sell-only" }));
+    const res = await post(app, { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("promotion.node_fenced");
+    expect(checkManagerPassword).toHaveBeenCalled();
   });
 });

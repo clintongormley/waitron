@@ -401,6 +401,42 @@ it.each(["en", "es"] as const)(
   },
 );
 
+it.each([
+  ["en", "repair-required", false],
+  ["es", "repair-required", false],
+  ["en", "healthy", true],
+] as const)(
+  "a standby server's repair is explained as a restart, not offered (%s, %s)",
+  async (locale, state, continuationRequired) => {
+    const page = await browser!.newPage();
+    try {
+      let writes = 0;
+      const status = { ...retained, state, continuationRequired, serverOnly: true };
+      await open(
+        page,
+        status,
+        async () => {
+          writes++;
+          return { status: 403, body: { error: "connection.refused" } };
+        },
+        { locale, connection: status },
+      );
+      expect(await page.locator("#connection-status").textContent()).toBe(
+        locale === "en"
+          ? "This page cannot repair a standby server’s secure connection. Switch the standby server off and on: as it starts, it renews a certificate that no longer matches its name or address."
+          : "Esta página no puede reparar la conexión segura de un servidor en espera. Apaga y enciende el servidor en espera: al arrancar, renueva el certificado si ya no coincide con su nombre o su dirección.",
+      );
+      expect(await page.locator("#connection-repair, #connection-reconnect").count()).toBe(0);
+      expect(await page.locator("#connection-certificate").isVisible()).toBe(true);
+      expect(await page.locator("#connection-check").isVisible()).toBe(true);
+      expect(await page.locator("#connection-stop").isVisible()).toBe(true);
+      expect(writes).toBe(0);
+    } finally {
+      await page.close();
+    }
+  },
+);
+
 it.each(["repair", "reconnect"] as const)(
   "waits for a pending %s before allowing check or stop",
   async (action) => {

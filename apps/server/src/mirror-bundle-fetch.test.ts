@@ -4,23 +4,34 @@ import { Readable } from "node:stream";
 import { existsSync, statSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { createServer as createTcpServer, type AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import {
+  createConnection,
+  createServer as createTcpServer,
+  type AddressInfo,
+  type Server as NetServer,
+  type Socket,
+} from "node:net";
+import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer as createTlsServer } from "node:tls";
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { X509Certificate } from "node:crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { hasCode, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
+import { lookupBoxName, type BoxAddresses, type MdnsQuerySocket } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import {
   boxDownload,
   boxExchange,
   fetchMirrorBundle,
   fetchPrimaryCertificate,
+  CheckedAddresses,
+  CheckedAddressUnreached,
+  type BoxLookup,
 } from "./mirror-bundle-fetch.js";
 import {
   mintBoxAuthority,
@@ -761,6 +772,639 @@ describe("boxExchange", () => {
       await new Promise((resolve) => server.close(resolve));
     }
   });
+});
+
+describe("a box named on the venue's network is found by asking it", () => {
+  const NAME = "box-7f3a.waitron.local";
+  const closers: (() => Promise<void>)[] = [];
+  let named: BoxAuthority;
+  let unnamed: BoxAuthority;
+
+  beforeAll(async () => {
+    [named, unnamed] = await Promise.all([mintBoxAuthority([NAME]), mintBoxAuthority()]);
+  });
+
+  afterEach(async () => {
+    while (closers.length > 0) await closers.pop()!();
+  });
+
+  async function serve(authority: BoxAuthority): Promise<BoxServer> {
+    const server = await startBoxServer(authority, () => ({ status: 200, body: "answered" }));
+    closers.push(server.close);
+    return server;
+  }
+
+  const portOf = (server: BoxServer) => new URL(server.url).port;
+  const pinned = (authority: BoxAuthority) => ({ ca: authority.caPem, rejectUnauthorized: true });
+
+  it("connects to the address the lookup gave and checks the certificate against the name", async () => {
+    const box = await serve(named);
+    const lookup = vi.fn(() => Promise.resolve({ addresses: ["127.0.0.1"], remembered: false }));
+
+    const answer = await boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+      method: "GET",
+      trust: pinned(named),
+      signal: AbortSignal.timeout(5_000),
+      lookup,
+    });
+
+    expect(answer).toEqual({ status: 200, text: "answered" });
+    expect(lookup).toHaveBeenCalledWith(NAME, { fresh: false });
+    expect(box.requests.map((r) => r.headers.host)).toEqual([`${NAME}:${portOf(box)}`]);
+  });
+
+  it("refuses a box under the same authority whose certificate does not carry the name", async () => {
+    const box = await serve(unnamed);
+
+    await expect(
+      boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(unnamed),
+        signal: AbortSignal.timeout(5_000),
+        lookup: () => Promise.resolve({ addresses: ["127.0.0.1"], remembered: false }),
+      }),
+    ).rejects.toMatchObject({ code: "ERR_TLS_CERT_ALTNAME_INVALID" });
+    expect(box.requests).toHaveLength(0);
+  });
+
+  it("a false first answer costs one connection, not the call", async () => {
+    const box = await serve(named);
+    // Nothing listens on the IPv6 loopback at this port: the box listens on 127.0.0.1 alone.
+    const lookup = () => Promise.resolve({ addresses: ["::1", "127.0.0.1"], remembered: false });
+
+    const answer = await boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+      method: "POST",
+      trust: pinned(named),
+      signal: AbortSignal.timeout(5_000),
+      body: '{"once":true}',
+      lookup,
+    });
+
+    expect(answer).toEqual({ status: 200, text: "answered" });
+    expect(box.requests.map((r) => r.body)).toEqual(['{"once":true}']);
+  });
+
+  it("an answer whose certificate fails is passed over for the next one", async () => {
+    const wrong = await serve(unnamed);
+    const right = await serve(named);
+    const otherPort = Number(portOf(right));
+    // The two boxes listen on different ports; the call names one, so the first answer is made to
+    // reach the wrong box by giving it the right box's port through a forwarding listener.
+    const forward = createTcpServer((socket) => {
+      const onward = createConnection(Number(portOf(wrong)), "127.0.0.1");
+      socket.pipe(onward).pipe(socket);
+      socket.on("error", () => onward.destroy());
+      onward.on("error", () => socket.destroy());
+    });
+    await new Promise<void>((resolve) => forward.listen(otherPort, "::1", resolve));
+    closers.push(() => new Promise<void>((resolve) => forward.close(() => resolve())));
+
+    const answer = await boxExchange(new URL(`https://${NAME}:${otherPort}/x`), {
+      method: "GET",
+      trust: { ca: [named.caPem, unnamed.caPem], rejectUnauthorized: true },
+      signal: AbortSignal.timeout(5_000),
+      lookup: () => Promise.resolve({ addresses: ["::1", "127.0.0.1"], remembered: false }),
+    });
+
+    expect(answer).toEqual({ status: 200, text: "answered" });
+    expect(wrong.requests).toHaveLength(0);
+    expect(right.requests).toHaveLength(1);
+  });
+
+  it("refuses with the last address's failure when no answer completes the handshake", async () => {
+    const box = await serve(unnamed);
+    // Nothing listens on the IPv6 loopback at this port, so that address is refused outright, while
+    // 127.0.0.1 fails its certificate: the two failures differ.
+    const call = (addresses: string[]) =>
+      boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(unnamed),
+        signal: AbortSignal.timeout(5_000),
+        lookup: () => Promise.resolve({ addresses, remembered: false }),
+      });
+
+    await expect(call(["::1", "127.0.0.1"])).rejects.toMatchObject({
+      code: "ERR_TLS_CERT_ALTNAME_INVALID",
+    });
+    await expect(call(["127.0.0.1", "::1"])).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    expect(box.requests).toHaveLength(0);
+  });
+
+  /** Listens on the IPv6 loopback at `port`, beside a box on 127.0.0.1 at the same port. */
+  async function onIpv6Loopback(server: NetServer, port: number): Promise<void> {
+    const sockets = new Set<Socket>();
+    server.on("connection", (socket: Socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => server.listen(port, "::1", resolve));
+    closers.push(
+      () =>
+        new Promise<void>((resolve) => {
+          for (const socket of sockets) socket.destroy();
+          server.close(() => resolve());
+        }),
+    );
+  }
+
+  it("a request whose connection finished goes to no other address, even when its answer is cut short", async () => {
+    const box = await serve(named);
+    let reached = 0;
+    const cutShort = createTlsServer({ key: named.keyPem, cert: named.certPem }, (socket) => {
+      socket.once("data", () => {
+        reached++;
+        socket.end("HTTP/1.1 200 OK\r\ncontent-type: appl");
+      });
+    });
+    await onIpv6Loopback(cutShort, Number(portOf(box)));
+    const lookup = vi.fn<BoxLookup>(() =>
+      Promise.resolve({ addresses: ["::1", "127.0.0.1"], remembered: true }),
+    );
+
+    await expect(
+      boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "POST",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        body: '{"once":true}',
+        lookup,
+      }),
+    ).rejects.toMatchObject({ code: "ECONNRESET" });
+    expect(reached).toBe(1);
+    expect(box.requests).toHaveLength(0);
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  /** A lookup that hands out `kept` as remembered, and `heard` (or its refusal) when asked afresh. */
+  function rememberedThen(kept: string[], heard: string[] | Error | "never") {
+    const asks: boolean[] = [];
+    let markFreshAsk = () => {};
+    const freshAsked = new Promise<void>((resolve) => (markFreshAsk = resolve));
+    const lookup: BoxLookup = (_, { fresh }) => {
+      asks.push(fresh);
+      if (!fresh) return Promise.resolve({ addresses: kept, remembered: true });
+      markFreshAsk();
+      if (heard === "never") return new Promise<BoxAddresses>(() => {});
+      if (heard instanceof Error) return Promise.reject(heard);
+      return Promise.resolve({ addresses: heard, remembered: false });
+    };
+    return { lookup, asks, freshAsked };
+  }
+
+  it("when no remembered address takes the call, the network is asked once more and its answer used", async () => {
+    const box = await serve(named);
+    const net = rememberedThen(["::1"], ["127.0.0.1"]);
+
+    const answer = await boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+      method: "POST",
+      trust: pinned(named),
+      signal: AbortSignal.timeout(5_000),
+      body: '{"once":true}',
+      lookup: net.lookup,
+    });
+
+    expect(answer).toEqual({ status: 200, text: "answered" });
+    expect(box.requests.map((r) => r.body)).toEqual(['{"once":true}']);
+    expect(net.asks).toEqual([false, true]);
+  });
+
+  it("the answer asked for afresh is the last: when no address takes the call either, it fails", async () => {
+    const box = await serve(named);
+    const net = rememberedThen(["::1"], ["::1"]);
+
+    await expect(
+      boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: net.lookup,
+      }),
+    ).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    expect(net.asks).toEqual([false, true]);
+    expect(box.requests).toHaveLength(0);
+  });
+
+  it("a name nobody answers for when asked afresh is the lookup's refusal", async () => {
+    const box = await serve(named);
+    const refused = new AppError("mirror.peer_unresolved", {});
+    const net = rememberedThen(["::1"], refused);
+
+    await expect(
+      boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: net.lookup,
+      }),
+    ).rejects.toBe(refused);
+    expect(net.asks).toEqual([false, true]);
+  });
+
+  it("a stop while the name is asked afresh ends the call without waiting for the answer", async () => {
+    const box = await serve(named);
+    const net = rememberedThen(["::1"], "never");
+    const stopping = new AbortController();
+
+    const call = boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+      method: "GET",
+      trust: pinned(named),
+      signal: stopping.signal,
+      lookup: net.lookup,
+    });
+    await net.freshAsked;
+    stopping.abort();
+
+    await expect(call).rejects.toThrow("no answer in time");
+  });
+
+  it("an answer just heard that no address takes is the call's failure, without asking again", async () => {
+    const box = await serve(named);
+    const lookup = vi.fn<BoxLookup>(() =>
+      Promise.resolve({ addresses: ["::1"], remembered: false }),
+    );
+
+    await expect(
+      boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup,
+      }),
+    ).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  describe("an address that does not finish its handshake", () => {
+    /** Accepts connections on the IPv6 loopback at `port` and never sends a byte. */
+    async function silentAt(port: number): Promise<{ connected: Promise<void> }> {
+      let markConnected = () => {};
+      const connected = new Promise<void>((resolve) => (markConnected = resolve));
+      await onIpv6Loopback(
+        createTcpServer(() => markConnected()),
+        port,
+      );
+      return { connected };
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("is passed over after two seconds when another address follows", async () => {
+      const box = await serve(named);
+      const silent = await silentAt(Number(portOf(box)));
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+      const call = boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: () => Promise.resolve({ addresses: ["::1", "127.0.0.1"], remembered: false }),
+      });
+      await silent.connected;
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(box.requests).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(call).resolves.toEqual({ status: 200, text: "answered" });
+    });
+
+    it("is passed over after two seconds when it was remembered, for the network's fresh answer", async () => {
+      const box = await serve(named);
+      const silent = await silentAt(Number(portOf(box)));
+      const net = rememberedThen(["::1"], ["127.0.0.1"]);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+      const call = boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: net.lookup,
+      });
+      await silent.connected;
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      await expect(call).resolves.toEqual({ status: 200, text: "answered" });
+      expect(net.asks).toEqual([false, true]);
+    });
+
+    it("is waited for until the call's own limit when it is the last address to try", async () => {
+      const box = await serve(named);
+      let release = () => {};
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let markHeld = () => {};
+      const held = new Promise<void>((resolve) => (markHeld = resolve));
+      // Holds each connection, passing nothing on, until released; then joins it to the box.
+      const slow = createTcpServer((socket) => {
+        socket.pause();
+        markHeld();
+        void released.then(() => {
+          const onward = createConnection(Number(portOf(box)), "127.0.0.1");
+          socket.on("error", () => onward.destroy());
+          onward.on("error", () => socket.destroy());
+          socket.pipe(onward).pipe(socket);
+          socket.resume();
+        });
+      });
+      await onIpv6Loopback(slow, Number(portOf(box)));
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+      const call = boxExchange(new URL(`https://${NAME}:${portOf(box)}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: () => Promise.resolve({ addresses: ["::1"], remembered: false }),
+      });
+      await held;
+      await vi.advanceTimersByTimeAsync(10_000);
+      release();
+
+      await expect(call).resolves.toEqual({ status: 200, text: "answered" });
+    });
+  });
+
+  it("a final copy is asked for at the address the lookup gave", async () => {
+    const refusal = '{"error":{"code":"handover.not_ready"}}';
+    const box = await startBoxServer(named, () => ({ status: 409, body: refusal }));
+    closers.push(box.close);
+    const folder = await mkdtemp(join(tmpdir(), "waitron-box-lookup-"));
+    closers.push(() => rm(folder, { recursive: true, force: true }));
+
+    const answer = await boxDownload(
+      new URL(`https://${NAME}:${portOf(box)}/copy`),
+      {
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        body: "{}",
+        lookup: () => Promise.resolve({ addresses: ["::1", "127.0.0.1"], remembered: false }),
+      },
+      join(folder, "received.db"),
+    );
+
+    expect(answer).toEqual({ status: 409, text: refusal });
+    expect(box.requests).toHaveLength(1);
+  });
+
+  it("a stop while the name is being asked ends the call without waiting for the answer", async () => {
+    const stopping = new AbortController();
+    let markAsked = () => {};
+    const asked = new Promise<void>((resolve) => (markAsked = resolve));
+    const call = boxExchange(new URL(`https://${NAME}/x`), {
+      method: "GET",
+      trust: pinned(named),
+      signal: stopping.signal,
+      lookup: () => {
+        markAsked();
+        return new Promise<BoxAddresses>(() => {});
+      },
+    });
+    await asked;
+    stopping.abort();
+    await expect(call).rejects.toThrow("no answer in time");
+  });
+
+  it("an unanswered name is the lookup's refusal, sent to no address", async () => {
+    const refused = new AppError("mirror.peer_unresolved", {});
+    await expect(
+      boxExchange(new URL(`https://${NAME}/x`), {
+        method: "GET",
+        trust: pinned(named),
+        signal: AbortSignal.timeout(5_000),
+        lookup: () => Promise.reject(refused),
+      }),
+    ).rejects.toBe(refused);
+  });
+
+  describe("the address this box last reached the other box at under its pinned authority", () => {
+    const refused = () => Promise.reject(new AppError("mirror.peer_unresolved", {}));
+    const fresh = (...addresses: string[]) => ({ addresses, remembered: false });
+    const switchOff = async (box: BoxServer) => {
+      closers.splice(closers.indexOf(box.close), 1);
+      await box.close();
+    };
+
+    /** One GET to `box`'s port under `trust`, remembering checked addresses in `checked`. */
+    const call = (
+      box: BoxServer | string,
+      checked: CheckedAddresses,
+      lookup: BoxLookup,
+      trust: { ca?: string; rejectUnauthorized: boolean } = pinned(named),
+      timeoutMs = 5_000,
+    ) =>
+      boxExchange(new URL(`https://${NAME}:${typeof box === "string" ? box : portOf(box)}/x`), {
+        method: "GET",
+        trust,
+        signal: AbortSignal.timeout(timeoutMs),
+        lookup,
+        checked,
+      });
+    const failureOf = (promise: Promise<unknown>) =>
+      promise.then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    it("is tried first next time, before the network is asked", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const lookup = vi.fn<BoxLookup>(() => Promise.resolve(fresh("::1")));
+
+      await expect(call(box, checked, lookup)).resolves.toEqual({
+        status: 200,
+        text: "answered",
+      });
+      expect(lookup).not.toHaveBeenCalled();
+      expect(box.requests).toHaveLength(2);
+    });
+
+    it("is tried when nobody answers for the name, and its failure says so", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+
+      const failure = await failureOf(call(port, checked, refused));
+      expect(failure).toBeInstanceOf(CheckedAddressUnreached);
+    });
+
+    it("its failure, then a claimed address that refuses too, still says the checked address was not reached", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+      const lookup = vi.fn<BoxLookup>(() => Promise.resolve(fresh("::1")));
+
+      expect(await failureOf(call(port, checked, lookup))).toBeInstanceOf(CheckedAddressUnreached);
+      expect(lookup).toHaveBeenCalled();
+    });
+
+    it("its failure does not count when a claimed address accepted the connection", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+      let accepted = 0;
+      await onIpv6Loopback(
+        createTcpServer(() => accepted++),
+        Number(port),
+      );
+
+      const failure = await failureOf(
+        call(port, checked, () => Promise.resolve(fresh("::1")), pinned(named), 500),
+      );
+      expect(accepted).toBe(1);
+      expect(failure).toBeDefined();
+      expect(failure).not.toBeInstanceOf(CheckedAddressUnreached);
+    });
+
+    it("a failure with no checked address remembered never says one was not reached", async () => {
+      const box = await serve(named);
+      const port = portOf(box);
+      await switchOff(box);
+
+      for (const lookup of [refused, () => Promise.resolve(fresh("127.0.0.1"))]) {
+        const failure = await failureOf(call(port, new CheckedAddresses(), lookup));
+        expect(failure).toBeDefined();
+        expect(failure).not.toBeInstanceOf(CheckedAddressUnreached);
+      }
+    });
+
+    it("is not taken from a connection whose certificate the pinned authority refused", async () => {
+      const nameless = await serve(unnamed);
+      const port = portOf(nameless);
+      const checked = new CheckedAddresses();
+      await expect(
+        call(nameless, checked, () => Promise.resolve(fresh("127.0.0.1")), pinned(unnamed)),
+      ).rejects.toMatchObject({ code: "ERR_TLS_CERT_ALTNAME_INVALID" });
+      await switchOff(nameless);
+
+      const failure = await failureOf(call(port, checked, refused, pinned(unnamed)));
+      expect(failure).not.toBeInstanceOf(CheckedAddressUnreached);
+      expect(failure).toMatchObject({ code: "mirror.peer_unresolved" });
+    });
+
+    it("counts only under the authority that checked it", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+
+      expect(await failureOf(call(port, checked, refused, pinned(unnamed)))).toMatchObject({
+        code: "mirror.peer_unresolved",
+      });
+      expect(await failureOf(call(port, checked, refused))).toBeInstanceOf(CheckedAddressUnreached);
+    });
+
+    it.each([
+      ["no authority", () => ({ rejectUnauthorized: false })],
+      ["an authority it does not insist on", (ca: string) => ({ ca, rejectUnauthorized: false })],
+    ])("is never kept by a call under %s", async (_label, trustIn) => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      const unchecked = trustIn(named.caPem);
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")), unchecked);
+      const port = portOf(box);
+      await switchOff(box);
+
+      const failure = await failureOf(call(port, checked, refused, unchecked));
+      expect(failure).toMatchObject({ code: "mirror.peer_unresolved" });
+    });
+
+    it("is not used by a call that checks no certificate", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+
+      const failure = await failureOf(call(port, checked, refused, { rejectUnauthorized: false }));
+      expect(failure).toMatchObject({ code: "mirror.peer_unresolved" });
+    });
+
+    it("is passed over for a duplicate the network answers with", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+      let tried = 0;
+      const counting = createTcpServer((socket) => {
+        tried++;
+        socket.destroy();
+      });
+      await new Promise<void>((resolve) => counting.listen(Number(port), "127.0.0.1", resolve));
+      closers.push(() => new Promise<void>((resolve) => counting.close(() => resolve())));
+      // The remembered address drops each connection; the network then claims it again, then ::1.
+      await failureOf(call(port, checked, () => Promise.resolve(fresh("127.0.0.1", "::1"))));
+      expect(tried).toBe(1);
+    });
+  });
+
+  const lanAddress = Object.values(networkInterfaces())
+    .flat()
+    .find((entry) => entry?.family === "IPv4" && !entry.internal)?.address;
+
+  // Needs an address other than loopback, which the lookup never takes as another box's.
+  it.skipIf(lanAddress === undefined && process.env.CI === undefined)(
+    "the setup app's certificate read by https://waitron.local reaches the other box, not this one",
+    async () => {
+      if (lanAddress === undefined) throw new Error("no non-loopback IPv4 address on this machine");
+      const other = unnamed;
+      const self = named;
+      const listenAt = async (authority: BoxAuthority, host: string, port: number) => {
+        const server = createHttpsServer(
+          { key: authority.keyPem, cert: authority.certPem },
+          (_, res) => res.end(authority.caPem),
+        );
+        await new Promise<void>((resolve) => server.listen(port, host, resolve));
+        closers.push(
+          () =>
+            new Promise<void>((resolve) => {
+              server.closeAllConnections();
+              server.close(() => resolve());
+            }),
+        );
+        return (server.address() as AddressInfo).port;
+      };
+      const port = await listenAt(other, lanAddress, 0);
+      await listenAt(self, "127.0.0.1", port);
+      const handlers: { response?: (r: { answers: unknown[] }) => void } = {};
+      const socket = {
+        on(event: string, handler: never) {
+          if (event === "response") handlers.response = handler;
+        },
+        query() {
+          queueMicrotask(() =>
+            handlers.response?.({
+              answers: [
+                { name: "waitron.local", type: "A", data: "127.0.0.1" },
+                { name: "waitron.local", type: "A", data: lanAddress },
+              ],
+            }),
+          );
+        },
+        destroy(cb?: () => void) {
+          cb?.();
+        },
+      } as MdnsQuerySocket;
+
+      const read = await fetchPrimaryCertificate(`https://waitron.local:${port}`, {
+        lookup: (hostname) =>
+          lookupBoxName(hostname, {
+            timeoutMs: 20,
+            makeSocket: () => socket,
+            ownAddresses: () => ["127.0.0.1"],
+          }),
+      });
+
+      expect(read?.fingerprint256).toBe(new X509Certificate(other.caPem).fingerprint256);
+    },
+  );
 });
 
 describe("boxDownload streams one answer to a file", () => {

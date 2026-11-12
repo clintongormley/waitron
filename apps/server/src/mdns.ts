@@ -1,5 +1,5 @@
 import multicastDns from "multicast-dns";
-import { askedAndHeardOthers, type MdnsQuerySocket } from "./box-lookup.js";
+import { askedAndHeardOthers, MDNS_TTL_SECONDS, type MdnsQuerySocket } from "./box-lookup.js";
 import type { Logger } from "./logger.js";
 import { isLoopbackHost } from "./primary-url.js";
 
@@ -41,9 +41,6 @@ export interface MdnsDeps {
   /** Socket factory, injected for tests. Default: the real multicast-dns instance. */
   makeSocket?: () => MdnsSocket;
 }
-
-/** TTL (seconds) on the A records — short so a moved box is re-resolved quickly. */
-export const MDNS_TTL_SECONDS = 120;
 
 export function buildMdnsAnswers(hostname: string, addresses: string[]): MdnsAnswer[] {
   return addresses.map((data) => ({ name: hostname, type: "A", ttl: MDNS_TTL_SECONDS, data }));

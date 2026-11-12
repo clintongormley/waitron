@@ -359,7 +359,6 @@ declare module "@waitron/shared" {
      * logs the `codeOf` classification under `till.failed`.
      */
     "server.internal": Record<string, never>;
-    "server.mirror_bind_exposed": { host: string };
     /**
      * The container's start-up program was given arguments, which it never takes: `docker compose
      * run app <command>` appends `<command>` to it. No params: the arguments are operator input.
@@ -1258,6 +1257,9 @@ declare module "@waitron/shared" {
      * params: a wrong credential has nothing to echo safely.
      */
     "promotion.break_glass_invalid": Record<string, never>;
+    /** A mirror's promotion was asked for by a request not shown to come from the box itself;
+     * refused before the body is read. */
+    "promotion.from_box_only": Record<string, never>;
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
      * no membership document). Only a fenced node retires itself.
