@@ -15,6 +15,7 @@ import {
   listOptionLists,
   optionListDependants,
   readOptionListsByIds,
+  setOptionLabelAvailability,
   updateOptionList,
 } from "./options.js";
 
@@ -47,6 +48,52 @@ const cookedList = () => ({
       available: false,
     },
   ],
+});
+
+describe("option label availability", () => {
+  it("stops and restores only the named label while keeping the preferred default", async () => {
+    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const labelId = created.defaultLabelId!;
+    await run((tx) => setOptionLabelAvailability(tx, created.id, labelId, false));
+    expect(await run((tx) => getOptionList(tx, created.id))).toEqual({
+      ...created,
+      labels: created.labels.map((label) =>
+        label.id === labelId ? { ...label, available: false } : label,
+      ),
+    });
+    await run((tx) => setOptionLabelAvailability(tx, created.id, labelId, true));
+    expect(await run((tx) => getOptionList(tx, created.id))).toEqual(created);
+  });
+
+  it("refuses to stop the last available choice of an active list without changing it", async () => {
+    const created = await run((tx) =>
+      createOptionList(tx, { name: "Cooking", labels: [{ name: "Medium" }] }, "en"),
+    );
+    const error = await refusal((tx) =>
+      setOptionLabelAvailability(tx, created.id, created.labels[0]!.id, false),
+    );
+    expect(error).toMatchObject({ code: "options.invalid", params: { field: "labels" } });
+    expect(await run((tx) => getOptionList(tx, created.id))).toEqual(created);
+  });
+
+  it("allows an inactive list to have no available choice", async () => {
+    const created = await run((tx) =>
+      createOptionList(tx, { name: "Cooking", active: false, labels: [{ name: "Medium" }] }, "en"),
+    );
+    await run((tx) => setOptionLabelAvailability(tx, created.id, created.labels[0]!.id, false));
+    expect((await run((tx) => getOptionList(tx, created.id))).labels[0]!.available).toBe(false);
+  });
+
+  it("refuses a label belonging to another list without changing either list", async () => {
+    const first = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const second = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const error = await refusal((tx) =>
+      setOptionLabelAvailability(tx, first.id, second.labels[0]!.id, false),
+    );
+    expect(error).toMatchObject({ code: "options.not_found", params: { optionListId: first.id } });
+    expect(await run((tx) => getOptionList(tx, first.id))).toEqual(first);
+    expect(await run((tx) => getOptionList(tx, second.id))).toEqual(second);
+  });
 });
 
 describe("option list CRUD", () => {
@@ -117,6 +164,108 @@ describe("option list CRUD", () => {
 
     expect(read.defaultLabelId).toBe(read.labels[0]!.id);
     expect(read.labels.map((label) => label.name)).toEqual(["Medium rare", "Well done"]);
+  });
+
+  it.each(["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", null])(
+    "keeps stored default %j when the dashboard saves the displayed fallback",
+    async (storedDefault) => {
+      const preferred = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+      const created = await run((tx) =>
+        createOptionList(
+          tx,
+          {
+            name: "Cooking",
+            defaultLabelId: preferred,
+            labels: [{ name: "Medium rare" }, { id: preferred, name: "Well done" }],
+          },
+          "en",
+        ),
+      );
+      await run(async (tx) => {
+        await tx.execute(sql`update option_labels set available = 0 where id = ${preferred}`);
+        await tx.execute(
+          sql`update option_lists set default_label_id = ${storedDefault} where id = ${created.id}`,
+        );
+      });
+      const { id, ...body } = await run((tx) => getOptionList(tx, created.id));
+      const saved = await run((tx) =>
+        updateOptionList(
+          tx,
+          id,
+          {
+            ...body,
+            name: "Steak cooking",
+            defaultLabelId: body.labels[0]!.id,
+          },
+          "en",
+        ),
+      );
+      expect(saved.defaultLabelId).toBe(storedDefault);
+      expect(saved.name).toBe("Steak cooking");
+      expect(saved.labels.find((label) => label.id === preferred)!.available).toBe(false);
+    },
+  );
+
+  it("keeps the preferred default when the dashboard restores its availability", async () => {
+    const { id, ...body } = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const preferred = body.labels[1]!.id;
+    await run(async (tx) => {
+      await tx.execute(sql`update option_labels set available = 0 where id = ${preferred}`);
+      await tx.execute(
+        sql`update option_lists set default_label_id = ${preferred} where id = ${id}`,
+      );
+    });
+    const { id: openedId, ...opened } = await run((tx) => getOptionList(tx, id));
+    const saved = await run((tx) =>
+      updateOptionList(
+        tx,
+        openedId,
+        {
+          ...opened,
+          defaultLabelId: opened.labels[0]!.id,
+          labels: opened.labels.map((label) => ({ ...label, available: true })),
+        },
+        "en",
+      ),
+    );
+    expect(saved.defaultLabelId).toBe(preferred);
+    expect(saved.labels.find((label) => label.id === preferred)!.available).toBe(true);
+  });
+
+  it("keeps an explicit choice of another available default", async () => {
+    const { id, ...body } = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const chosen = body.labels[1]!.id;
+    const saved = await run((tx) =>
+      updateOptionList(
+        tx,
+        id,
+        {
+          ...body,
+          defaultLabelId: chosen,
+        },
+        "en",
+      ),
+    );
+    expect(saved.defaultLabelId).toBe(chosen);
+  });
+
+  it("uses the remaining choice when the stored default is removed", async () => {
+    const { id, ...body } = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const remaining = body.labels[1]!;
+    const saved = await run((tx) =>
+      updateOptionList(
+        tx,
+        id,
+        {
+          ...body,
+          labels: [remaining],
+          defaultLabelId: remaining.id,
+        },
+        "en",
+      ),
+    );
+    expect(saved.defaultLabelId).toBe(remaining.id);
+    expect(saved.labels.map((label) => label.id)).toEqual([remaining.id]);
   });
 
   it("returns the lists in sort order then id order, each with its labels in sort order", async () => {

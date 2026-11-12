@@ -16,6 +16,7 @@ import {
 } from "./option-contract.js";
 import type { OptionListDependants, OptionListRow } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
+import { effectiveDefaultLabelId } from "./option-default.js";
 import {
   mergeOptionalTranslations,
   validateOptionalTranslations,
@@ -110,6 +111,29 @@ export async function getOptionList(tx: Transaction, optionListId: string): Prom
   const [list] = await readOptionListsByIds(tx, [optionListId]);
   if (!list) throw new AppError("options.not_found", { optionListId });
   return list;
+}
+
+export async function setOptionLabelAvailability(
+  tx: Transaction,
+  optionListId: string,
+  labelId: string,
+  available: boolean,
+): Promise<void> {
+  const list = await getOptionList(tx, optionListId);
+  if (!list.labels.some((label) => label.id === labelId)) {
+    throw new AppError("options.not_found", { optionListId });
+  }
+  if (
+    list.active &&
+    !available &&
+    !list.labels.some((label) => label.id !== labelId && label.available)
+  ) {
+    throw new AppError("options.invalid", { field: "labels" });
+  }
+  await tx
+    .update(optionLabels)
+    .set({ available })
+    .where(and(eq(optionLabels.listId, optionListId), eq(optionLabels.id, labelId)));
 }
 
 async function assertOptionList(tx: Transaction, optionListId: string): Promise<void> {
@@ -243,6 +267,14 @@ export async function updateOptionList(
   // Stored ids are lower-case and an id column compares byte for byte (packages/shared/src/ids.ts).
   const optionListId = callerListId.toLowerCase();
   const stored = await getOptionList(tx, optionListId);
+  if (
+    (stored.defaultLabelId === null ||
+      input.labels.some((label) => label.id === stored.defaultLabelId)) &&
+    (input.defaultLabelId === effectiveDefaultLabelId(input.labels, stored.defaultLabelId) ||
+      input.defaultLabelId === effectiveDefaultLabelId(stored.labels, stored.defaultLabelId))
+  ) {
+    input.defaultLabelId = stored.defaultLabelId;
+  }
   normalizeNames(input, value, await readContentLanguages(tx, fallbackLanguage), stored);
   await tx.update(optionLists).set(listValues(input)).where(eq(optionLists.id, optionListId));
   await writeLabels(tx, optionListId, input);
