@@ -71,6 +71,7 @@ option preselected. An extras entry is either preselected or not; there is no st
 
 To make the replacement choice your preferred option while the old preference is sold out, first
 put the old preference back on sale and save. Then choose the new default and save again.
+Finally, mark the old preference sold out again and save.
 
 ## Attach a list to a product {#attach}
 

@@ -79,7 +79,7 @@ inicial que fijar.
 
 Si quieres que la opción de sustitución sea la preferida mientras la anterior está agotada,
 primero vuelve a poner la preferida anterior a la venta y guarda. Después elige la nueva opción
-predeterminada y vuelve a guardar.
+predeterminada y vuelve a guardar. Por último, marca la preferida anterior como agotada y guarda.
 
 ## Asigna una lista a un producto {#attach}
 
