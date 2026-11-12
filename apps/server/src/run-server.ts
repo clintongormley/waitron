@@ -82,8 +82,15 @@ export function installShutdownHandlers(
       });
       void server.close().then(
         () => {
-          deadline.cancel();
-          exitOnce(0);
+          if (exited) return;
+          createLogger(
+            (line) =>
+              deps.write(line, () => {
+                deadline.cancel();
+                exitOnce(0);
+              }),
+            deps.now,
+          )("info", "server.shutdown_complete");
         },
         (error: unknown) => {
           if (exited) return;

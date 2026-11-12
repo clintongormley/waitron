@@ -531,3 +531,18 @@ it("leaves a truncated attempt and candidate bytes held for inspection", async (
   expect(f.events.filter((event) => event.resume)).toEqual([]);
   expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("candidate venue");
 });
+
+it("retains copies and image pins when boot recovery defers reopening until Docker starts", async () => {
+  const f = await fixture();
+  f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
+  await applyUpgrade({ ...f.input, mode: "manual" });
+  f.host.resume = async () => false;
+  await recoverUpgrade({ ...f.input, choice: "restore" });
+  expect(await fs.readFile(join(f.directory, "copies", "0", "venue.db"), "utf8")).toBe("old venue");
+  expect(f.events.some((event) => Array.isArray(event) && event[0] === "cleanup")).toBe(false);
+  expect(await upgradeStatus(f.directory)).toMatchObject({ phase: "committed", target: "old" });
+  f.host.resume = async () => true;
+  await recoverUpgrade(f.input);
+  expect(await fs.readdir(f.directory)).toEqual(["attempt.json"]);
+  expect(f.events.at(-1)[0]).toBe("cleanup");
+});

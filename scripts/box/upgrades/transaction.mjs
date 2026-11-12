@@ -15,7 +15,7 @@ async function syncDirectory(path) {
 }
 
 // The host runtime is installed without workspace packages; this writer stays Node-only.
-async function writeFileDurable(path, value) {
+export async function writeFileDurable(path, value) {
   const temporary = `${path}.tmp`;
   const handle = await fs.open(temporary, "w", 0o600);
   try {
@@ -78,7 +78,8 @@ async function record(directory, marker) {
 }
 
 async function reopen(directory, host, marker) {
-  await host.resume(marker.images[marker.target]);
+  // Pre-Docker recovery returns false until the selected image can reopen the venue.
+  if ((await host.resume(marker.images[marker.target])) === false) return marker;
   await fs.rm(join(directory, "copies"), { recursive: true, force: true });
   await syncDirectory(directory);
   await host.cleanup(marker.images);
