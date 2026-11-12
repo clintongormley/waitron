@@ -2704,8 +2704,12 @@ test.each([390, 1280])("filtering preserves header geometry at %i px", async (wi
     await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
     await el.updateComplete;
     expect(geometry()).toEqual(initial);
+    await frames();
+    expect(geometry()).toEqual(initial);
     await clickFilterRow(root.querySelector<WtCombobox>('[data-filter="status"]')!, "Any status");
     await el.updateComplete;
+    expect(geometry()).toEqual(initial);
+    await frames();
     expect(geometry()).toEqual(initial);
   } finally {
     await page.viewport(previousWidth, previousHeight);
@@ -2732,6 +2736,8 @@ test.each([390, 1280])("filtering out a wide row keeps column widths at %i px", 
     const initial = widths();
     await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
     await el.updateComplete;
+    expect(widths()).toEqual(initial);
+    await frames();
     expect(widths()).toEqual(initial);
   } finally {
     await page.viewport(previousWidth, previousHeight);

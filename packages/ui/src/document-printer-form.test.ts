@@ -600,6 +600,67 @@ describe("late protocol boundaries", () => {
 });
 
 describe("offer refresh and unavailable protocol states", () => {
+  it("a freshly constructed form reports nothing loaded and nothing chosen", async () => {
+    const { model } = await form();
+    expect(model.state).toBe("loading");
+    expect(model.printerId).toBeNull();
+    expect(model.unavailablePreference).toBe(false);
+    expect(model.selectionWithdrawn).toBe(false);
+    expect(model.refusal).toBeNull();
+    expect(model.savedRefreshUnavailable).toBe(false);
+    expect(model.saleId).toBeNull();
+    expect(model.intent).toBeNull();
+    expect(model.canPrint).toBe(false);
+  });
+  it.each([
+    ["applianceId", (o: DocumentOffers): DocumentOffers => ({ ...o, applianceId: b })],
+    [
+      "origin.nodeId",
+      (o: DocumentOffers): DocumentOffers => ({ ...o, origin: { ...o.origin, nodeId: b } }),
+    ],
+    [
+      "origin.recoveryEpoch",
+      (o: DocumentOffers): DocumentOffers => ({ ...o, origin: { ...o.origin, recoveryEpoch: b } }),
+    ],
+    [
+      "context.surface",
+      (o: DocumentOffers): DocumentOffers => ({
+        ...o,
+        context: { surface: "till", deviceId, profileId },
+      }),
+    ],
+    [
+      "context.deviceId",
+      (o: DocumentOffers): DocumentOffers => ({
+        ...o,
+        context: { surface: "dashboard", deviceId: b, profileId },
+      }),
+    ],
+    [
+      "context.profileId",
+      (o: DocumentOffers): DocumentOffers => ({
+        ...o,
+        context: { surface: "dashboard", deviceId, profileId: b },
+      }),
+    ],
+  ])("a refresh that changes only %s is a new context", async (_field, change) => {
+    const { model } = await form();
+    const before = offers({
+      context: { surface: "dashboard", deviceId, profileId },
+      chosenPrinterId: a,
+    });
+    model.open(before, null);
+    await model.recover(seat());
+    expect(model.printerId).toBe(a);
+    expect(model.canPrint).toBe(true);
+    const generation = model.generation;
+    model.applyOffers(change(before));
+    expect(model.generation).toBe(generation + 1);
+    expect(model.printerId).toBeNull();
+    expect(model.selectionWithdrawn).toBe(true);
+    expect(model.state).toBe("ready");
+    expect(model.canPrint).toBe(false);
+  });
   it("a new authorized context invalidates the old selection and late acceptance callback", async () => {
     const { model } = await form();
     model.open(offers(), a);
