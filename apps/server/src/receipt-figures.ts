@@ -11,8 +11,8 @@ import {
   sumDecimals,
   type Decimal,
 } from "@waitron/shared";
+import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
-import { withDecimalMark } from "./receipt-money.js";
 
 export type FiledLine = TillSaleLine & { net: NonNullable<TillSaleLine["net"]> };
 
@@ -205,7 +205,7 @@ export function quantityText(
     }
   }
   const unitName = line.unitName;
-  const quantity = withDecimalMark(line.quantity, locale);
+  const quantity = formatDecimalInput(line.quantity, locale);
   if (unitName == null || line.soldInEach === true) return quantity;
   // `soldInEach` marks a line whose recorded context says Each; any other line is judged by its names.
   const each = Object.entries(unitName).every(

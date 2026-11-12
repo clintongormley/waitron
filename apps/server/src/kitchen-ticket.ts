@@ -15,10 +15,10 @@ import {
 } from "@waitron/shared";
 import type { TicketGrouping } from "@waitron/shared";
 import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
+import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 import { kitchenLanguageFor as ticketLanguage, kitchenTicketWords } from "./i18n/kitchen-ticket.js";
-import { withDecimalMark } from "./receipt-money.js";
 
 interface KitchenNoteHeading {
   text: string;
@@ -173,7 +173,7 @@ export function arrangeTicketItems(
 }
 
 export function kitchenQuantityText(qty: number | string, locale: string): string {
-  return withDecimalMark(String(qty).replace(/\.0+$/, ""), locale);
+  return formatDecimalInput(String(qty).replace(/\.0+$/, ""), locale);
 }
 
 function itemLine(item: KitchenTicketItem, locale: string): string {

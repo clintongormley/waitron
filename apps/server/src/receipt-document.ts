@@ -18,6 +18,7 @@ import {
   type ReceiptPaperWidth,
   type ReceiptPresentation,
 } from "@waitron/shared";
+import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import {
   beforeVatFigures,
   invoiceDiscounts,
@@ -30,7 +31,7 @@ import {
 } from "./receipt-figures.js";
 import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
-import { formatAmount, formatMoney, formatVatRate, withDecimalMark } from "./receipt-money.js";
+import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
@@ -377,7 +378,7 @@ export function buildReceiptDocument({
         const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
         caption = perDish > 1 ? `  ${name} x${perDish}` : `  ${name}`;
       } else {
-        caption = `  ${name} ${withDecimalMark(option.quantity, locale)} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
+        caption = `  ${name} ${formatDecimalInput(option.quantity, locale)} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
       row(caption, itemAmount(option.listGross ?? option.gross), 2);
     }
