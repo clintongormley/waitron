@@ -912,7 +912,7 @@ export interface AdjustmentCommand extends AdjustmentAsk {
 
 /** What an adjustment would do, read before it is confirmed. `reduction` is what the bill actually
  * loses, which can differ from the discount asked for when a line cannot take its share in whole
- * cents per unit (a weighed dish, a dish with extras, or an extra on its own). */
+ * cents per unit. */
 export interface AdjustmentPreview {
   reduction: string;
   nominalValue: string;

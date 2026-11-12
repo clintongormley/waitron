@@ -97,7 +97,8 @@ vi.mock("node:crypto", async (importOriginal) =>
 // A803 slice 1, Tasks 25a-1 to 25f: a discount or a comp on a row of identical portions acts as
 // today's one line of the same count does. Every comparison builds the same bill twice — today's
 // grouped shape, one line of n, and portions, n bound lines of one — applies the same request, and
-// compares the money, the record, the filed rows and the receipt.
+// compares the money, the record, the filed rows and the receipt, except the exact-discount describe
+// below, whose cases check what each discount takes rather than that the two shapes agree.
 let venue: AdjustmentVenue;
 
 useVenueDb({
@@ -446,25 +447,6 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     expectSameMoney(grouped, portions);
   });
 
-  it("A803 portions: €0.05 off a row of three pizzas with an olive each takes €0.03, as one line of three does, not €0.05", async () => {
-    const { grouped, portions } = await bothShapes(
-      [{ name: "Pizza", quantity: "3", olives: 1 }, bread],
-      "Pizza",
-      { action: "discount_amount", amount: "0.05" },
-    );
-
-    expect(grouped.record.reduction).toBe(3);
-    expectSameMoney(grouped, portions);
-
-    // The control: the same three portions named one at a time take a different amount.
-    const alone = await portionsBill([{ name: "Pizza", quantity: "3", olives: 1 }, bread]);
-    for (const lineId of await dishesNamed(alone.billId, "Pizza")) {
-      await adjust(alone.billId, { lineId, action: "discount_amount", amount: "0.05" });
-    }
-    const taken = (await recordedOn(alone.billId)).reduce((sum, row) => sum + row.reduction, 0);
-    expect(taken).not.toBe(3);
-  });
-
   it("A803 portions: 10% off a row of three pizzas with two olives each takes €3.60 off €36.00, as one line of three does", async () => {
     const { grouped, portions } = await bothShapes(
       [{ name: "Pizza", quantity: "3", olives: 2 }, bread],
@@ -602,6 +584,212 @@ const pricesOf = async (billId: string) =>
     row.unitPriceGross,
     row.listUnitPriceGross,
   ]);
+
+/** A bill of three portions of a new dish at `price` offering the Pizza's extras, an olive on each,
+ * and the dish's name. */
+async function threeWithAnOliveAt(price: string): Promise<Bill & { dish: string }> {
+  return inTx(venue, async (tx) => {
+    const [pizza] = await tx
+      .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+      .from(products)
+      .where(eq(products.name, "Pizza"));
+    const dish = `Pizza ${randomUUID()}`;
+    const product = await createProduct(tx, {
+      catalogueId: pizza!.catalogueId,
+      categoryId: pizza!.categoryId,
+      name: dish,
+      pricingUnit: "each",
+      unitPrice: price,
+      vatClass: "general",
+    });
+    await writeProductModifiers(tx, product.id, [{ kind: "extras", id: venue.pizzaExtras }]);
+    const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+    const bill = await seated(tx);
+    await addPortionRound(
+      tx,
+      venue.cfg,
+      bill.billId,
+      [
+        {
+          menuItemId: offers.offerFor(product.id),
+          quantity: "3",
+          extras: [
+            { listId: venue.pizzaExtras, picks: [{ productId: venue.olivesId, quantity: 1 }] },
+          ],
+        },
+      ],
+      { fire: true },
+    );
+    return { ...bill, dish };
+  });
+}
+
+describe("A803 portions: a discount on portions takes exactly what was typed (owner, 2026-11-12, R6-4)", () => {
+  it("A803 portions: €0.05 off a row of three pizzas with an olive each takes exactly €0.05, where one line of three takes €0.03 (a stated difference)", async () => {
+    const {
+      grouped,
+      portions,
+      portionsBill: bill,
+    } = await bothShapes([{ name: "Pizza", quantity: "3", olives: 1 }, bread], "Pizza", {
+      action: "discount_amount",
+      amount: "0.05",
+    });
+
+    expect(portions.record.reduction).toBe(5);
+    expect(portions.due).toBe("33.95");
+    expect(grouped.record.reduction).toBe(3);
+    expect(grouped.due).toBe("33.97");
+    expect(await pricesOf(bill.billId)).toEqual([
+      ["Pizza", "8.99", "9.00"],
+      ["Olives", "1.50", null],
+      ["Pizza", "8.98", "9.00"],
+      ["Olives", "1.50", null],
+      ["Pizza", "8.98", "9.00"],
+      ["Olives", "1.50", null],
+      ["Bread", "2.50", null],
+    ]);
+  });
+
+  it("A803 portions: €1.00 off a row of three pizzas with an olive each takes exactly €1.00, the olives at one price and one pizza a cent cheaper", async () => {
+    const bill = await portionsBill([{ name: "Pizza", quantity: "3", olives: 1 }, bread]);
+    const members = await dishesNamed(bill.billId, "Pizza");
+    await adjust(bill.billId, {
+      action: "discount_amount",
+      amount: "1.00",
+      lineId: members[0]!,
+      lineIds: members,
+    });
+
+    expect((await recordedOn(bill.billId))[0]!.reduction).toBe(100);
+    expect(await pricesOf(bill.billId)).toEqual([
+      ["Pizza", "8.72", "9.00"],
+      ["Olives", "1.45", "1.50"],
+      ["Pizza", "8.72", "9.00"],
+      ["Olives", "1.45", "1.50"],
+      ["Pizza", "8.71", "9.00"],
+      ["Olives", "1.45", "1.50"],
+      ["Bread", "2.50", null],
+    ]);
+  });
+
+  it("A803 portions: €1.00 off the whole bill of three pizzas with an olive each takes exactly €1.00, the olives at one price and one pizza a cent cheaper", async () => {
+    const bill = await portionsBill([{ name: "Pizza", quantity: "3", olives: 1 }]);
+    await adjust(bill.billId, { action: "discount_amount", amount: "1.00" });
+
+    expect((await recordedOn(bill.billId))[0]!.reduction).toBe(100);
+    expect(await pricesOf(bill.billId)).toEqual([
+      ["Pizza", "8.72", "9.00"],
+      ["Olives", "1.45", "1.50"],
+      ["Pizza", "8.72", "9.00"],
+      ["Olives", "1.45", "1.50"],
+      ["Pizza", "8.71", "9.00"],
+      ["Olives", "1.45", "1.50"],
+    ]);
+  });
+
+  // A free dish has nothing to give, so its one-olive portions take the exact share, a cent apart.
+  it.each([
+    ["0.01", "row", ["1.50", "1.50", "1.49"]],
+    ["0.02", "row", ["1.50", "1.49", "1.49"]],
+    ["0.01", "bill", ["1.50", "1.50", "1.49"]],
+    ["0.02", "bill", ["1.50", "1.49", "1.49"]],
+  ] as const)(
+    "A803 portions: €%s off the %s of three free pizzas with a €1.50 olive each takes exactly that off the olives",
+    async (amount, on, olives) => {
+      const bill = await threeWithAnOliveAt("0.00");
+      const members = await dishesNamed(bill.billId, bill.dish);
+      await adjust(bill.billId, {
+        action: "discount_amount",
+        amount,
+        ...(on === "row" ? { lineId: members[0]!, lineIds: members } : {}),
+      });
+
+      expect((await recordedOn(bill.billId))[0]!.reduction).toBe(decimalToCents(decimal(amount)));
+      expect(await pricesOf(bill.billId)).toEqual(
+        olives.flatMap((price) => [
+          [bill.dish, "0.00", null],
+          // A row's discount stamps every portion it priced; a bill's, only those it moved.
+          ["Olives", price, on === "row" || price !== "1.50" ? "1.50" : null],
+        ]),
+      );
+    },
+  );
+
+  it("A803 portions: €0.02 off a row of three €0.01 pizzas with an olive each takes exactly €0.02 off the olives, which the pizzas' one cent each could not make up", async () => {
+    const bill = await threeWithAnOliveAt("0.01");
+    const members = await dishesNamed(bill.billId, bill.dish);
+    await adjust(bill.billId, {
+      action: "discount_amount",
+      amount: "0.02",
+      lineId: members[0]!,
+      lineIds: members,
+    });
+
+    expect((await recordedOn(bill.billId))[0]!.reduction).toBe(2);
+    expect(await pricesOf(bill.billId)).toEqual([
+      [bill.dish, "0.01", null],
+      ["Olives", "1.50", "1.50"],
+      [bill.dish, "0.01", null],
+      ["Olives", "1.49", "1.50"],
+      [bill.dish, "0.01", null],
+      ["Olives", "1.49", "1.50"],
+    ]);
+  });
+
+  it("A803 portions: €0.03 off one pizza with two olives, named without a row, takes exactly €0.03 off the pizza", async () => {
+    const bill = await portionsBill([{ name: "Pizza", olives: 2 }]);
+    const [pizza] = await dishesNamed(bill.billId, "Pizza");
+    await adjust(bill.billId, { action: "discount_amount", amount: "0.03", lineId: pizza! });
+
+    expect((await recordedOn(bill.billId))[0]!.reduction).toBe(3);
+    expect(await pricesOf(bill.billId)).toEqual([
+      ["Pizza", "8.97", "9.00"],
+      ["Olives", "1.50", null],
+    ]);
+  });
+
+  it.each(["line", "bill"])(
+    "A803 portions: €0.03 off the %s of one pizza whose olives are one line of two takes exactly €0.03 off the pizza",
+    async (on) => {
+      const bill = await groupedBill([{ name: "Pizza", olives: 2 }]);
+      const [pizza] = await dishesNamed(bill.billId, "Pizza");
+      await adjust(bill.billId, {
+        action: "discount_amount",
+        amount: "0.03",
+        ...(on === "line" ? { lineId: pizza! } : {}),
+      });
+
+      expect((await recordedOn(bill.billId))[0]!.reduction).toBe(3);
+      expect(await pricesOf(bill.billId)).toEqual([
+        ["Pizza", "8.97", "9.00"],
+        ["Olives", "1.50", null],
+      ]);
+    },
+  );
+
+  const plain: RoundLine[] = [{ name: "Pizza", quantity: "3" }];
+  const olive: RoundLine[] = [{ name: "Pizza", quantity: "3", olives: 1 }];
+  // 1.5% of €27.00 is €0.405, rounded to €0.41; 1% of €31.50 is €0.315, rounded to €0.32.
+  it.each([
+    ["1.5% off the row of three plain pizzas takes €0.41", "row", plain, 150, 41],
+    ["1.5% off the bill of three plain pizzas takes €0.41", "bill", plain, 150, 41],
+    ["1% off the row of three pizzas with an olive each takes €0.32", "row", olive, 100, 32],
+    ["1% off the bill of three pizzas with an olive each takes €0.32", "bill", olive, 100, 32],
+  ] satisfies [string, string, RoundLine[], number, number][])(
+    "A803 portions: %s, the percentage rounded to the cent, exactly with extras as without",
+    async (_what, on, lines, percentBp, taken) => {
+      const bill = await portionsBill(lines);
+      const members = await dishesNamed(bill.billId, "Pizza");
+      await adjust(bill.billId, {
+        action: "discount_percent",
+        percentBp,
+        ...(on === "row" ? { lineId: members[0]!, lineIds: members } : {}),
+      });
+
+      expect((await recordedOn(bill.billId))[0]!.reduction).toBe(taken);
+    },
+  );
+});
 
 describe("A803 portions: part of a row, and a row's extras", () => {
   it("A803 portions: 10% off 1 of a row of three takes the last portion, keeps the other two at €3.33 with their list price stamped, and records 1 of 3 on the row's first portion with a split to the portion taken", async () => {

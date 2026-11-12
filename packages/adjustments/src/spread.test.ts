@@ -421,7 +421,7 @@ describe("spreadBillDiscount", () => {
     });
   });
 
-  describe("on a dish with extras (rows that are not split)", () => {
+  describe("on rows the caller cannot split", () => {
     const burger = () => line("burger", 1, "12.00", "2", false);
     const cheese = () => line("cheese", 2, "1.00", "2", false);
 
