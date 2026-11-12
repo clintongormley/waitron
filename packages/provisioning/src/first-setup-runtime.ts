@@ -41,11 +41,13 @@ export function createModuleOperationHost(
     readSetupFacts?: ModuleOperationHost["readSetupFacts"];
     readRecoveryFacts?: ModuleOperationHost["readRecoveryFacts"];
     testClock?: ModuleOperationHost["testClock"];
+    setBoxClock?: ModuleOperationHost["setBoxClock"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
     ...(evidence?.testClock === undefined ? {} : { testClock: evidence.testClock }),
+    ...(evidence?.setBoxClock === undefined ? {} : { setBoxClock: evidence.setBoxClock }),
     ...(evidence?.readSetupFacts === undefined ? {} : { readSetupFacts: evidence.readSetupFacts }),
     ...(evidence?.readRecoveryFacts === undefined
       ? {}

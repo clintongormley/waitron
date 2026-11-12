@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
   openVenueDatabase,
+  outgoingMail,
   readNodeMembership,
+  withTransaction,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
@@ -26,12 +28,19 @@ import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
+import { recordCorrected } from "@waitron/fiscal-verifactu/src/clock-stop-incidents.js";
+import {
+  BOX_EMAIL_CHECK_MS,
+  readOpenEmailedIncidents,
+  startBoxEmailDuty,
+} from "./box-alert-email.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mountHandoverActivationApi, type HandoverActivationDeps } from "./handover-activation.js";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { mountHandoverEmergencyApi, type EmergencyHandover } from "./handover-emergency-api.js";
 import { handoverPromotionContext, mountHandoverPreparationApi } from "./handover-preparation.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import { placeAcceptedCopyAtStart } from "./handover-place-copy.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -1334,5 +1343,116 @@ describe("one password hash for every failed sign-in", () => {
     const hashes = external.hashes;
     expect((await activate(app, input)).body).toEqual({ activated: true, restarting: true });
     expect(external.hashes - hashes).toBe(1);
+  }, 60_000);
+});
+
+describe("a clock step made while the handover page is open", () => {
+  const STEP = {
+    confirmationId: null,
+    source: "admin",
+    person: "Admin",
+    deviceId: null,
+    device: null,
+    before: "2026-10-16T12:39:00.000Z",
+    beforeOffsetMinutes: 0,
+    after: "2026-10-16T12:40:00.000Z",
+    afterOffsetMinutes: 0,
+    stepMs: 60_000,
+    direction: "forward",
+    verified: false,
+    unverified: true,
+    byAdmin: true,
+    byStaff: false,
+  } as const;
+
+  /** As the next start finds the folder: placement runs first, then the venue file is opened. */
+  async function restart(): Promise<PlacedSpare> {
+    const before = placed!;
+    await before.close();
+    placed = undefined;
+    const { spareState, spareVenue } = dirs();
+    await placeAcceptedCopyAtStart({
+      venueDir: spareVenue,
+      stateDir: spareState,
+      nodeId: standby.nodeId,
+      log: () => {},
+    });
+    const opened = await openVenueDatabase(spareVenue);
+    placed = { ...before, venue: opened.venue, node: opened.node, close: () => opened.close() };
+    return placed;
+  }
+
+  async function queuedEmails(store: PlacedSpare, incidentId: string) {
+    const primaryNow = (await readNodeMode(store.node, standby.nodeId)).mode === "primary";
+    const armed: (() => void)[] = [];
+    const duty = startBoxEmailDuty({
+      db: store.venue,
+      now: () => new Date(),
+      disk: { since: () => null },
+      space: { current: () => ({ freeBytes: null, readAt: null, lowSince: null }) },
+      moduleNotices: async () => ({ notices: [], unavailable: [] }),
+      emailedIncidents: () => readOpenEmailedIncidents(store.venue),
+      backupStopped: () => undefined,
+      context: async () => ({
+        venue: "Venue",
+        recipients: [{ personId: ADMIN, email: ADMIN_EMAIL, language: "en" }],
+        delivery: { mode: "smtp", smtp: { url: "smtp://127.0.0.1:1", from: "box@venue.test" } },
+      }),
+      send: async () => "sent",
+      isPrimary: () => primaryNow,
+      intervalMs: BOX_EMAIL_CHECK_MS,
+      log: () => {},
+      timer: (_ms, fn) => {
+        armed.push(fn);
+        return { cancel: () => {} };
+      },
+    });
+    try {
+      armed[0]!();
+      await vi.waitFor(() => expect(armed.length).toBe(2));
+    } finally {
+      await duty.stop();
+    }
+    return store.venue.select().from(outgoingMail).where(eq(outgoingMail.subjectId, incidentId));
+  }
+
+  async function stepThenActivate(store: PlacedSpare, app: Hono) {
+    const { input } = await selectName(app);
+    const step = await withTransaction(store.venue, (tx) =>
+      recordCorrected(tx, { detectedAt: new Date(), params: STEP }),
+    );
+    expect((await activate(app, input)).body).toEqual({ activated: true, restarting: true });
+    return step.id;
+  }
+
+  async function stillOpenAfterRestart(id: string) {
+    const after = await restart();
+    expect((await readNodeMode(after.node, standby.nodeId)).mode).toBe("primary");
+    const open = await readOpenEmailedIncidents(after.venue);
+    expect(open.map((row) => [row.id, row.code])).toEqual([[id, "clock.corrected"]]);
+    const mail = await queuedEmails(after, id);
+    expect(mail.map((row) => [row.kind, row.personId, row.status])).toEqual([
+      ["box_alert", ADMIN, "pending"],
+    ]);
+  }
+
+  it("at filing_assumed, stays open through activation and its restart, and the main box queues its email", async () => {
+    const store = await placedSpare();
+    const { app } = spareOn(store);
+    await stillOpenAfterRestart(await stepThenActivate(store, app));
+  }, 60_000);
+
+  it("at emergency_declared, stays open through activation and its restart, and the main box queues its email", async () => {
+    const s = await emergencySpare();
+    await stillOpenAfterRestart(await stepThenActivate(s.store, s.app));
+  }, 60_000);
+
+  it("control: on the spare before activation, the duty queues nothing for it", async () => {
+    const store = await placedSpare();
+    spareOn(store);
+    const step = await withTransaction(store.venue, (tx) =>
+      recordCorrected(tx, { detectedAt: new Date(), params: STEP }),
+    );
+    expect(await queuedEmails(store, step.id)).toEqual([]);
   }, 60_000);
 });

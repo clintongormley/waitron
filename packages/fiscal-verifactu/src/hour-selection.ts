@@ -255,7 +255,6 @@ function resumedIntent(entries: readonly Entry[]) {
   return intent;
 }
 
-/** When the hour already chosen for `binding`'s event was issued, if one was. */
 /** Every recorded entry once, refusing `history_invalid` where two copies of one disagree or an
  * event's resumptions do not follow from its intent. */
 function retainedEntries(state: { readonly value: unknown; readonly history: unknown }): Entry[] {

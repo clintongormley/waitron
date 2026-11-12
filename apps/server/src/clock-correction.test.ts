@@ -908,6 +908,28 @@ describe("a person's set", () => {
     expect(await h.correction.set(byAdmin(h, { offsetMs: 59_980 }))).toMatchObject({ set: true });
   });
 
+  it("with a closer agreement given, refuses within it, uncertainty included, and sets past it", async () => {
+    const h = harness();
+    expect(
+      await h.correction.set(byAdmin(h, { offsetMs: 29_970, agreesWithinMs: 30_000 })),
+    ).toEqual({ set: false, reason: "agrees" });
+    expect(h.hostSets).toEqual([]);
+    expect(
+      await h.correction.set(byAdmin(h, { offsetMs: 29_980, agreesWithinMs: 30_000 })),
+    ).toMatchObject({ set: true });
+  });
+
+  it("without one, a 45-second offset still agrees: the minute holds", async () => {
+    const h = harness();
+    expect(await h.correction.set(byAdmin(h, { offsetMs: 45 * S }))).toEqual({
+      set: false,
+      reason: "agrees",
+    });
+    expect(
+      await h.correction.set(byAdmin(h, { offsetMs: 45 * S, agreesWithinMs: 30_000 })),
+    ).toMatchObject({ set: true });
+  });
+
   it("sets an administrator's offset of 61 seconds", async () => {
     const h = harness();
     expect(await h.correction.set(byAdmin(h, { offsetMs: 61 * S }))).toMatchObject({ set: true });

@@ -68,6 +68,8 @@ export interface ClockSetInput {
   witnesses: readonly ClockWitness[];
   /** For `admin` and `staff`; for `staff`, with `role: "staff"`. */
   admin?: ClockAdminConfirm;
+  /** How close, uncertainty included, a person's offset counts as agreeing; a minute when absent. */
+  agreesWithinMs?: number;
   /** Asked in the write-lock turn that judges the stop, after it. */
   admit?: (
     tx: Transaction,
@@ -174,7 +176,9 @@ export function clockCorrection(deps: {
 
   function agrees(input: ClockSetInput): boolean {
     const uncertaintyMs = input.admin?.reading.uncertaintyMs ?? 0;
-    return Math.abs(input.offsetMs) + uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
+    return (
+      Math.abs(input.offsetMs) + uncertaintyMs <= (input.agreesWithinMs ?? CLOCK_WITNESS_MARGIN_MS)
+    );
   }
 
   async function reanchorAll(): Promise<boolean> {

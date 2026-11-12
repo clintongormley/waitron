@@ -40,13 +40,25 @@ afterEach(async () => {
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 
-function service(hooks: { readState?(): Promise<void>; facts?(): void } = {}) {
+function service(
+  hooks: {
+    readState?(): Promise<void>;
+    facts?(): void;
+    clockCorrection?: Parameters<typeof createNodeOperationPreparation>[0]["clockCorrection"];
+  } = {},
+) {
   let host: ModuleOperationHost;
   const configured: ModuleOperationPreparation = {
     liveRecoveryActions: ["conflict-switch"],
     prepare: async (operation, run) => run(operation),
-    recovery: async (operation) =>
+    recovery: async (operation, proposal) =>
       host.withPreparationState!(operation.binding, async () => {
+        if (proposal === "set-clock")
+          return host.setBoxClock!(operation.binding, {
+            offsetMs: 45_000,
+            measuredAt: { wallMs: Date.now(), monoMs: performance.now() },
+            reading: { boxAt: "2026-10-16T12:40:00.000Z", witnessAt: "", uncertaintyMs: 0 },
+          });
         const facts = await host.readRecoveryFacts!(operation.binding);
         hooks.facts?.();
         return facts;
@@ -82,6 +94,7 @@ function service(hooks: { readState?(): Promise<void>; facts?(): void } = {}) {
     coordinator: createFirstSetupCoordinator(),
     environment: {},
     isLiveWritable: () => true,
+    ...(hooks.clockCorrection === undefined ? {} : { clockCorrection: hooks.clockCorrection }),
   });
 }
 
@@ -108,6 +121,19 @@ it("hands a promotion that does not mention relinquishment to the module as offl
     oldMachineOffline: true,
     oldMachineRelinquished: false,
   });
+});
+
+it("refuses to set the clock under the recovery key, which names no person, and never asks the setter", async () => {
+  const set = vi.fn();
+  const answer = await service({ clockCorrection: { set, steps: () => 0 } }).prepare(
+    promote,
+    { breakGlass: secret },
+    { oldNodeNeutralised: true, noParallelRecovery: true },
+    "set-clock",
+    { onBox: false },
+  );
+  expect(answer).toEqual({ status: "refused", reason: "not_admitted" });
+  expect(set).not.toHaveBeenCalled();
 });
 
 it("refuses a promotion whose relinquishment answer is not a boolean", async () => {

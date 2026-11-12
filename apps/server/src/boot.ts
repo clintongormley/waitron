@@ -2996,6 +2996,7 @@ async function bootServer(
   // over the full `tradingContext` here, so `nodeId` never enters a module's cfg.
   const nodePreparation = createNodeOperationPreparation({
     testClock: seams.testClock,
+    clockCorrection: correction,
     db,
     nodeDb: store.node,
     node: { nodeId: tradingContext.nodeId },
