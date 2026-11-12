@@ -278,7 +278,7 @@ describe("a correction's connected card legs", () => {
     await expect(open(t.saleId, "5.00")).resolves.toMatchObject({ correction: { state: "open" } });
   });
 
-  it("refuses to file or close with cash back while a card leg is pending, and files once it completes", async () => {
+  it("refuses to file or close with cash back while a card leg is pending, and the pass files once it completes", async () => {
     const t = await cashAndReader();
     const { correction } = await open(t.saleId, "24.20");
     await cash(correction.id, "14.20");
@@ -300,14 +300,25 @@ describe("a correction's connected card legs", () => {
     });
     expect(salesCount()).toBe(before);
 
+    const cashLegs = (await read(correction.id)).legs.filter((row) => row.id !== leg.id);
+
     await confirmedByThePass(leg.id);
 
-    await expect(close(correction.id)).rejects.toMatchObject({
-      code: "invoice_correction.still_correctable",
+    expect(salesCount()).toBe(before + 1);
+    const filed = await read(correction.id);
+    expect(filed).toMatchObject({ state: "filed", moneyBack: "24.20", pending: "0.00" });
+    const [corrective] = await v.db
+      .select()
+      .from(sales)
+      .where(eq(sales.id, filed.correctiveSaleId!));
+    expect(corrective).toMatchObject({
+      correctsSaleId: t.saleId,
+      total: -2420,
+      authorizedBy: v.adminId,
     });
-    await expect(fileNow(correction.id, await splitOf(t.saleId, "24.20"))).resolves.toMatchObject({
-      state: "filed",
-      moneyBack: "24.20",
-    });
+    expect(filed.legs).toEqual([
+      ...cashLegs,
+      { ...leg, state: "completed", completedAt: expect.any(String) },
+    ]);
   });
 });
