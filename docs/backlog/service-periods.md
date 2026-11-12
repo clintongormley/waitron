@@ -546,6 +546,8 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
   under the table (A721 plan, Decision 14; plan default, sent to the owner as an FYI, 2026-10-17).**
   Mockup 02's "+ Season" in the footer predates the 2026-10-16 footer rule. Cancel, Escape and Back
   ask before discarding changes.
+  _2026-11-12: the action in Decisions 12 and 14 now reads "Add season" / "Añadir temporada", per
+  [Wording](../developers/design-system.md#wording)._
 
 - **The bin removes a row from the draft and a note under the table says what Save will delete
   (A721 plan, Decision 15; plan default, sent to the owner as an FYI, 2026-10-17)**: where its days
@@ -863,6 +865,8 @@ makes"):
 - Decision 3: both special-day painters, Opening hours' too, are titled "<name>: special day,
   <dates>"; "<name>: special day" with no dates; "New special day" before a new day has a name.
   It supersedes A723's Decision 9.
+  _2026-11-12: the unnamed new day's heading now reads "Add special day" / "Añadir día especial",
+  per [Wording](../developers/design-system.md#wording)._
 - Decision 8: the Staffing month draws a special day's dates as one purple run over the season's
   line, joined across the gaps within a week and broken at a week's end; two special days on
   neighbouring dates are two runs.

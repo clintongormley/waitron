@@ -891,6 +891,11 @@ it("the profile parent link keeps the item heading and protects unsaved edits", 
   );
   parent.dispatchEvent(modified);
   expect(q(screen, "editor-form")).not.toBeNull();
+  for (const name of ["New counter", "", "   "]) {
+    change(screen, "profile-name", name);
+    await screen.updateComplete;
+    expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Counter");
+  }
   change(screen, "profile-name", "New counter");
   parent.click();
   await choose(app, "keep");

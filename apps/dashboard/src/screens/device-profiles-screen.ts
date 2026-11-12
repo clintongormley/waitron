@@ -2524,7 +2524,7 @@ export class DeviceProfilesScreen extends LitElement {
             >${t("device_profiles.title")}</a
           ><span aria-hidden="true">›</span>
         </nav>
-        <h1 class="title">${this.draftName || t("device_profiles.create")}</h1>
+        <h1 class="title">${this.#loaded?.name ?? t("device_profiles.create")}</h1>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
           class="field"

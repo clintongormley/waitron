@@ -193,7 +193,6 @@ it("slotted content follows the last chip", async () => {
   document.body.append(el);
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("+ Season");
   const last = chips()[1]!.getBoundingClientRect();
   const box = extra.getBoundingClientRect();
   expect(box.width).toBeGreaterThan(0);

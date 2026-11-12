@@ -310,7 +310,6 @@ export class SeasonsWindow extends LitElement {
     if (id !== undefined) void this.readImpact(id);
     void this.focusAfterBin(index);
   }
-  /** The bin took its own button away; focus goes to the bin now in its place, else the one above, else + Season. */
   private async focusAfterBin(index: number) {
     await this.updateComplete;
     const bins = [
