@@ -193,6 +193,11 @@ export async function serverRoute(options) {
       ),
     "Unknown server capacity",
   );
+  if (capacity.slots > 0 && capacity.serverRunning === 0 && capacity.serverWaiting === 0)
+    return {
+      route: "server",
+      reason: `Server: 0 running, 0 queued / ${capacity.slots} slots; snapshot age ${Math.max(0, (options.now ?? Date.now()) - capacity.observedAt)} ms. Idle server capacity wins every hosted comparison.`,
+    };
   const runs = new Map();
   for (const status of ["queued", "in_progress"]) {
     for (const run of await inventory(
