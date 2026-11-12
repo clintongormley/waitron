@@ -8,7 +8,7 @@ import {
   documentSection,
   expectNoA11yViolations,
   menuDocument,
-  mountWidget,
+  mountMenuPreview as mountWidget,
 } from "./test-helpers.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
 

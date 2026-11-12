@@ -14,6 +14,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { formatMoney, languageDisplayName } from "@waitron/shared";
 import type {
+  DashboardApi,
   MenuChange,
   MenuPreview,
   MenuStatus,
@@ -34,6 +35,7 @@ import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
 import { leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
+import "./menu-publications.js";
 import type { StringKey } from "../i18n/strings.js";
 
 /** How the host's last publish ended, for the panel to say. */
@@ -148,7 +150,8 @@ export function publishFailure(menu: string, status: MenuStatus | null, reason: 
  * came from, the warnings that do not stop it, the button that publishes the menu, and the whole menu
  * read-only as the publish would make it live, or as it is live when there is nothing to publish. The
  * host reads the preview and performs the publish: the button asks for it as `wt-menu-publish` with
- * the hash the preview showed, and a failed read offers `wt-preview-retry`.
+ * the hash the preview showed, and a failed read offers `wt-preview-retry`. Scheduling reads and
+ * dialogs belong to the publications widget composed alongside that publish control.
  */
 @customElement("dashboard-menu-preview")
 export class MenuPreviewPanel extends LitElement {
@@ -182,6 +185,11 @@ export class MenuPreviewPanel extends LitElement {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-5);
+        min-width: 0;
+      }
+      .changes-column {
+        display: grid;
+        gap: var(--wt-space-3);
         min-width: 0;
       }
       .pane {
@@ -277,15 +285,13 @@ export class MenuPreviewPanel extends LitElement {
       button.undo[aria-disabled="true"] {
         cursor: default;
       }
-      .actions {
-        display: grid;
-        justify-items: start;
-        gap: var(--wt-space-2);
-      }
     `,
   ];
 
   @property() menuName = "";
+  @property({ attribute: false }) api!: DashboardApi;
+  @property() menuId = "";
+  @property({ attribute: false }) lateRefusalFor?: (name: string) => () => void;
   @property({ attribute: false }) includedBy: { id: string; name: string }[] = [];
   /** Null while the live version is being read. */
   @property({ attribute: false }) status: MenuStatus | null = null;
@@ -934,8 +940,7 @@ export class MenuPreviewPanel extends LitElement {
     if (this.failed || this.preview === null || this.#upToDate(this.preview) !== null)
       return nothing;
     const menu = { menu: this.menuName };
-    return html`<div class="actions">
-      <wt-button
+    return html`<wt-button
         variant=${this.undoing === null && (this.publishing || this.preview.clashes.length === 0) ? "primary" : "secondary"}
         data-test="publish"
         .loading=${this.publishing}
@@ -946,8 +951,7 @@ export class MenuPreviewPanel extends LitElement {
           menu,
         )}</wt-button
       >
-      ${this.includedBy.length === 0 ? nothing : html`<p class="help" data-test="only-this-menu">${this.#includerLinks()} ${t(this.includedBy.length === 1 ? "menu_preview.includer_note" : "menu_preview.includers_note")}</p>`}
-    </div>`;
+      ${this.includedBy.length === 0 ? nothing : html`<p slot="publish-note" class="help" data-test="only-this-menu">${this.#includerLinks()} ${t(this.includedBy.length === 1 ? "menu_preview.includer_note" : "menu_preview.includers_note")}</p>`} `;
   }
 
   #includerLinks() {
@@ -1021,17 +1025,26 @@ export class MenuPreviewPanel extends LitElement {
 
   override render() {
     return html`${this.#renderResult()} ${this.#renderWarnings()} ${this.#renderClashes()}
-      ${this.#renderPublish()}
       <div class="panes">
-        <div
-          class="pane"
-          data-test="changes-pane"
-          tabindex="0"
-          role="region"
-          aria-labelledby="changes-heading"
-        >
-          <slot name="schedule"></slot>
-          ${this.#renderChanges()}
+        <div class="changes-column" data-test="changes-column">
+          <dashboard-menu-publications
+            .api=${this.api}
+            .menuId=${this.menuId}
+            .menuName=${this.menuName}
+            .lateRefusalFor=${this.lateRefusalFor}
+            .preview=${this.failed ? null : this.preview}
+            .blocked=${this.undoing !== null}
+            >${this.#renderPublish()}</dashboard-menu-publications
+          >
+          <div
+            class="pane"
+            data-test="changes-pane"
+            tabindex="0"
+            role="region"
+            aria-labelledby="changes-heading"
+          >
+            ${this.#renderChanges()}
+          </div>
         </div>
         <div
           class="pane"

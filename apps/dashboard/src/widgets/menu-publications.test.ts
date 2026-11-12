@@ -132,12 +132,12 @@ function table(el: MenuPublicationsPanel) {
 }
 
 function cell(el: MenuPublicationsPanel, testId: string): string | null {
-  const found = table(el).shadowRoot!.querySelector(`[data-test="${testId}"]`);
+  const found = table(el)?.shadowRoot!.querySelector(`[data-test="${testId}"]`) ?? null;
   return found === null ? null : found.textContent!.replace(/\s+/g, " ").trim();
 }
 
 function rowMenu(el: MenuPublicationsPanel, versionId: string) {
-  return table(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+  return table(el)?.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
     `tr[data-row-key="${versionId}"] wt-row-actions`,
   );
 }
@@ -174,6 +174,67 @@ afterEach(async () => {
 });
 
 describe("a menu's scheduled versions", () => {
+  it.each([false, true])(
+    "A547 retains focus after the last queued row disappears, with a publish control: %s",
+    async (withPublish) => {
+      let refresh!: (answer: MenuPublicationsAnswer) => void;
+      const read = vi
+        .fn()
+        .mockResolvedValueOnce({ ...queue(), editions: [queue().editions[0]] })
+        .mockImplementationOnce(
+          () =>
+            new Promise<MenuPublicationsAnswer>((resolve) => {
+              refresh = resolve;
+            }),
+        );
+      const el = await mount(stubApi({ getMenuPublications: read }));
+      const publish = document.createElement("wt-button");
+      publish.textContent = "Publish now";
+      if (withPublish) el.append(publish);
+      await openCancel(el);
+      const closed = new Promise((resolve) =>
+        dialog(el).addEventListener("wt-close", resolve, { once: true }),
+      );
+      inShadow(el, "cancel-confirm")!.click();
+      await closed;
+      await new Promise(requestAnimationFrame);
+      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h2"));
+      refresh({ ...queue(), editions: [] });
+      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("h2")).toBeNull());
+      await vi.waitFor(() => expect(document.activeElement).toBe(withPublish ? publish : el));
+    },
+  );
+
+  it("A547 moves focus from the first schedule's disappearing opener to its new heading", async () => {
+    let refresh!: (answer: MenuPublicationsAnswer) => void;
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce({ ...queue(), editions: [] })
+      .mockImplementationOnce(
+        () =>
+          new Promise<MenuPublicationsAnswer>((resolve) => {
+            refresh = resolve;
+          }),
+      );
+    const api = stubApi({ getMenuPublications: read });
+    const el = await mount(api, { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2030-01-01");
+    await enter(el, "time", "12:00");
+    const closed = new Promise((resolve) =>
+      scheduleDialog(el).addEventListener("wt-close", resolve, { once: true }),
+    );
+    await submit(el);
+    await closed;
+    await new Promise(requestAnimationFrame);
+    expect(el.shadowRoot!.activeElement).toBe(inShadow(el, "schedule-open"));
+    refresh({ ...queue(), editions: [{ ...queue().editions[0]!, contentHash: DRAFT_HASH }] });
+    await vi.waitFor(() => expect(inShadow(el, "schedule-open")).toBeNull());
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h2")),
+    );
+  });
+
   it("reads the open menu's editions and lists each with its venue-local time and state", async () => {
     const api = stubApi();
     const el = await mount(api);
@@ -291,7 +352,7 @@ describe("a menu's scheduled versions", () => {
     await flush(el);
     expect(api.cancelMenuPublication).toHaveBeenCalledTimes(1);
     expect(dialog(el).open).toBe(false);
-    expect(table(el).errorMessage).toBe(codeMessage("connection.failed"));
+    expect(inShadow(el, "editions-error")?.textContent).toBe(codeMessage("connection.failed"));
     expect(inShadow(el, "editions-retry")).not.toBeNull();
   });
 
@@ -356,12 +417,12 @@ describe("a menu's scheduled versions", () => {
     lunch(queue());
     await flush(el);
     expect(cell(el, "version-v-lunch-2")).toBeNull();
-    expect(table(el).loading).toBe(true);
+    expect(table(el)).toBeNull();
     dinner({ timeZone: "Europe/Madrid", live: null, editions: [] });
     await flush(el);
     await flush(el);
-    expect(table(el).loading).toBe(false);
-    expect(table(el).shadowRoot!.textContent).toContain("No versions are scheduled.");
+    expect(table(el)).toBeNull();
+    expect(table(el)).toBeNull();
   });
 
   it("does not show the list read after a cancel once it follows another menu", async () => {
@@ -398,12 +459,12 @@ describe("a menu's scheduled versions", () => {
     inShadow(el, "cancel-confirm")!.click();
     await flush(el);
     await flush(el);
-    expect(table(el).errorMessage).toBe(codeMessage("connection.failed"));
+    expect(inShadow(el, "editions-error")?.textContent).toBe(codeMessage("connection.failed"));
     live.invalidate([{ type: "menu_scheduled_publications" }]);
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
     await flush(el);
     await flush(el);
-    expect(table(el).errorMessage).toBe("");
+    expect(inShadow(el, "editions-error")).toBeNull();
     expect(inShadow(el, "editions-retry")).toBeNull();
     expect(cell(el, "version-v-lunch-2")).toBe("Version 2");
   });
@@ -459,7 +520,7 @@ describe("a menu's scheduled versions", () => {
     await flush(el);
     expect(read).toHaveBeenLastCalledWith("menu-dinner");
     expect(cell(el, "version-v-lunch-2")).toBeNull();
-    expect(table(el).shadowRoot!.textContent).toContain("No versions are scheduled.");
+    expect(table(el)).toBeNull();
   });
 
   it("shows a refusal above the dialog's buttons and keeps it open", async () => {
@@ -479,35 +540,41 @@ describe("a menu's scheduled versions", () => {
     expect(await messageIn(dialog(el))).toBe(codeMessage("menu_publication.not_queued"));
   });
 
-  it("says so when nothing is scheduled", async () => {
+  it.each([
+    { editions: [] },
+    { editions: queue().editions.filter((edition) => edition.state !== "queued") },
+  ])("A547 hides the heading and table without queued editions (%j)", async ({ editions }) => {
     const el = await mount(
       stubApi({
         getMenuPublications: vi.fn(async () => ({
           timeZone: "Europe/Madrid",
           live: null,
-          editions: [],
+          editions,
         })),
       }),
     );
-    expect(table(el).emptyMessage).toBe("No versions are scheduled.");
-    expect(table(el).shadowRoot!.textContent).toContain("No versions are scheduled.");
+    expect(el.shadowRoot!.querySelector("h2")).toBeNull();
+    expect(table(el)).toBeNull();
   });
 
-  it("shows a failed read with Try again, which reads the list again", async () => {
-    const read = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "time_zone.unreadable", params: {} })
-      .mockResolvedValue(queue());
-    const el = await mount(stubApi({ getMenuPublications: read }));
-    expect(table(el).errorMessage).toBe(codeMessage("time_zone.unreadable"));
-    inShadow(el, "editions-retry")!.click();
-    await flush(el);
-    await flush(el);
-    expect(read).toHaveBeenCalledTimes(2);
-    expect(table(el).errorMessage).toBe("");
-    expect(inShadow(el, "editions-retry")).toBeNull();
-    expect(cell(el, "version-v-lunch-2")).toBe("Version 2");
-  });
+  it.each([false, true])(
+    "shows a failed read with Try again, recovering to an empty queue: %s",
+    async (empty) => {
+      const read = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "time_zone.unreadable", params: {} })
+        .mockResolvedValue(empty ? { ...queue(), editions: [] } : queue());
+      const el = await mount(stubApi({ getMenuPublications: read }));
+      expect(inShadow(el, "editions-error")?.textContent).toBe(codeMessage("time_zone.unreadable"));
+      inShadow(el, "editions-retry")!.click();
+      await flush(el);
+      await flush(el);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(inShadow(el, "editions-error")).toBeNull();
+      expect(inShadow(el, "editions-retry")).toBeNull();
+      expect(cell(el, "version-v-lunch-2")).toBe(empty ? null : "Version 2");
+    },
+  );
 
   it("reads the list again when the schedule changes", async () => {
     const live = new LiveData();

@@ -12,7 +12,7 @@ import {
   documentProduct,
   documentSection,
   menuDocument,
-  mountWidget,
+  mountMenuPreview as mountWidget,
   expectNoA11yViolations,
 } from "./test-helpers.js";
 
