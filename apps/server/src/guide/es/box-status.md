@@ -249,8 +249,8 @@ iniciada.
 Si el servidor se niega a poner su reloj en hora, el diálogo dice por qué encima de sus botones. Por
 ejemplo, cuando la parte del servidor que pone su reloj en hora no responde, dice **Este servidor no
 puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor
-tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cuando el
-reloj del servidor esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.** Cuando
+tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cierra
+esto y vuelve a comprobarlo dentro de unos minutos.** Cuando
 el reloj del servidor ha cambiado mientras lo comprobabas, o el servidor no había terminado de
 registrar lo que encontró sobre su reloj, cierra el diálogo y vuelve a comprobarlo.
 

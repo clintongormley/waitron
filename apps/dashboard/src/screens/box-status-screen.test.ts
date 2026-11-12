@@ -1016,7 +1016,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       [
         "host_unavailable",
         "box_status.clock.admin.set.refused.host_unavailable",
-        "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Once the box's clock is within a minute of your device's, you can confirm it here.",
+        "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Close this and check again in a few minutes.",
         false,
       ],
       [

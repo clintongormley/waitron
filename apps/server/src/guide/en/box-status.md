@@ -232,8 +232,8 @@ handhelds stay signed in.
 If the box refuses to set its clock, the dialog says why above its buttons. For example, when the
 part of the box that sets its clock is not answering, it says **This box cannot set its own clock:
 the part of the box that does that is not answering. If the box can reach the internet, its time
-service may still put the clock right by itself. Once the box's clock is within a minute of your
-device's, you can confirm it here.** When the box's clock changed while you were checking, or the
+service may still put the clock right by itself. Close this and check again in a few minutes.**
+When the box's clock changed while you were checking, or the
 box had not finished recording what it found about its clock, close the dialog and check again.
 
 The box takes your device's word for the time, so check that your phone or computer shows the

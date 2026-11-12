@@ -4081,7 +4081,7 @@ export const en = {
   "box_status.clock.admin.set.refused.stale":
     "The box's clock changed while this was being checked. Close this and check again.",
   "box_status.clock.admin.set.refused.host_unavailable":
-    "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Once the box's clock is within a minute of your device's, you can confirm it here.",
+    "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Close this and check again in a few minutes.",
   "box_status.clock.admin.set.refused.target_invalid":
     "Your device's date is not one the box can take. Check your device's date and time.",
   "box_status.clock.admin.set.refused.pending_disproofs":
@@ -8295,7 +8295,7 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.admin.set.refused.stale":
     "El reloj del servidor ha cambiado mientras se comprobaba. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock.admin.set.refused.host_unavailable":
-    "Este servidor no puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cuando el reloj del servidor esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.",
+    "Este servidor no puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cierra esto y vuelve a comprobarlo dentro de unos minutos.",
   "box_status.clock.admin.set.refused.target_invalid":
     "La fecha de tu dispositivo no es una que el servidor pueda tomar. Comprueba la fecha y la hora de tu dispositivo.",
   "box_status.clock.admin.set.refused.pending_disproofs":
