@@ -62,7 +62,7 @@ export function mountTransactionReceiptApi(
 
   async function invoiceState(
     tx: Transaction,
-    session: Parameters<typeof checkZones>[1],
+    session: Parameters<typeof checkZones>[1] & { deviceId: string },
     id: string,
   ) {
     await orderlessSale(tx, session, id);
