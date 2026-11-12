@@ -47,6 +47,35 @@ export class SetupAboutSheet extends LitElement {
 
   @query("wt-modal") private modal!: WtModal;
 
+  #pageListeners?: AbortController;
+
+  override disconnectedCallback(): void {
+    this.#unlistenPage();
+    super.disconnectedCallback();
+  }
+
+  #unlistenPage(): void {
+    this.#pageListeners?.abort();
+    this.#pageListeners = undefined;
+  }
+
+  /** A key pressed inside the framed page never reaches the modal, so Escape is caught in each
+   * page the frame loads. */
+  #onFrameLoad(frame: HTMLIFrameElement): void {
+    this.#unlistenPage();
+    // Null for a page from another origin, which the sheet cannot reach into.
+    const page = frame.contentDocument;
+    if (page === null) return;
+    this.#pageListeners = new AbortController();
+    page.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape") void this.modal.requestClose("escape");
+      },
+      { signal: this.#pageListeners.signal },
+    );
+  }
+
   override render() {
     const title = t("shell.about.title");
     return html`<wt-modal
@@ -56,12 +85,21 @@ export class SetupAboutSheet extends LitElement {
       .opener=${this.opener}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
+        this.#unlistenPage();
         this.dispatchEvent(new CustomEvent("about-close", { bubbles: true, composed: true }));
       }}
     >
       <div class="frame">
         <h2>${title}</h2>
-        ${this.open ? html`<iframe src="/legal/declaration" title=${title}></iframe>` : nothing}
+        ${
+          this.open
+            ? html`<iframe
+                src="/legal/declaration"
+                title=${title}
+                @load=${(event: Event) => this.#onFrameLoad(event.target as HTMLIFrameElement)}
+              ></iframe>`
+            : nothing
+        }
       </div>
       <wt-button slot="footer" @click=${() => void this.modal.requestClose("cancel")}
         >${t("shell.about.close")}</wt-button
