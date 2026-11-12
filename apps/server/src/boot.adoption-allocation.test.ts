@@ -237,6 +237,7 @@ it("the pending-adoption start answers the main box's signed query", async () =>
         restriction: null,
         openOperation: null,
         requestedOperation: null,
+        joining: true,
         nonce,
       },
     });
