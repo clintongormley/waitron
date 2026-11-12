@@ -401,8 +401,6 @@ describe("the emergency routes through a real spare start", () => {
       node.close();
     }
     beforeServerStarts();
-    // This restart stays in the test's process, which keeps the address the spare reached; a real
-    // restart forgets it, and the activation then waits for the main box to be reached again.
     started = await startServer(env, undefined, {
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     });
