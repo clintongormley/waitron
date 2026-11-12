@@ -507,7 +507,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A885. Say that lines already on an open order keep their VAT class after a republish.**
   [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
-- **A670 — printed menus (owner, 2026-10-14; open, not designed).** A printed menu carries each
+- **A670 — printed menus (owner, 2026-10-14; design proposal awaiting choices).** A printed menu carries each
   dish's allergen icons after its name and a key on the page naming every icon.
   The owner brought its basic guest-menu design forward on 11 November through A1517.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
