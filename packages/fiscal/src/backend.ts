@@ -294,8 +294,8 @@ export interface ClockAdminConfirm {
 /** A step of the box's clock from `before` to `after`, read on the boot-time clock either side.
  * `stepMs` is the measured step; `verified` false when the box could not confirm the step took.
  * `admin` names the person for the `admin` and `staff` sources, with `role: "staff"` for `staff`.
- * A `setup` step, made from the setup or restore page before the venue exists, is never recorded
- * by the regime. */
+ * A `setup` step, made from the setup or restore page before the venue exists, goes to the setup
+ * note; the Veri*Factu regime's `confirmClockStep` refuses one. */
 export interface ClockStepRequest {
   before: Pick<TrustedReading, "instant" | "offsetMinutes">;
   after: Pick<TrustedReading, "instant" | "offsetMinutes">;

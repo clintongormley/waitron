@@ -114,6 +114,12 @@ export function createSetupClockSet(deps: {
   });
   return async (request, person) => {
     const stepsSeen = correction.steps();
+    try {
+      await correction.writePending();
+    } catch (error) {
+      // The step stays pending, and this press is refused for it.
+      deps.log("warn", "setup_clock_step.note_failed", { errorCode: codeOf(error) });
+    }
     const who = await person();
     return moduleClockSetAnswer(
       await correction.set({
@@ -166,6 +172,8 @@ async function raise(deps: Parameters<typeof raiseSetupClockSteps>[0]): Promise<
         .from(incidents)
         .where(eq(incidents.id, step.id));
       if (present !== undefined) continue;
+      // A copy of the regime's `recordCorrected` (fiscal-verifactu clock-stop-incidents.ts), which
+      // server code may not import (scripts/module-seams.test.ts) and which takes no id.
       const open = await tx
         .select({ id: incidents.id, detectedAt: incidents.detectedAt })
         .from(incidents)

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -177,6 +177,20 @@ describe("setting the box's clock from the setup and restore pages", () => {
     const entries = (await note(h.dir)) as { id: string; params: Record<string, unknown> }[];
     expect(entries.map((entry) => entry.params["direction"])).toEqual(["forward", "back"]);
     expect(new Set(entries.map((entry) => entry.id)).size).toBe(2);
+  });
+
+  it("notes a step whose note could not be written at a later press, then sets", async () => {
+    const h = await harness();
+    await rm(h.dir, { recursive: true });
+    expect(await h.setter(h.request(), async () => null)).toEqual({ status: "set" });
+    expect(await h.setter(h.request(-2 * H), async () => null)).toEqual({
+      status: "refused",
+      reason: "pending_disproofs",
+    });
+    await mkdir(h.dir);
+    expect(await h.setter(h.request(-2 * H), async () => null)).toEqual({ status: "set" });
+    const entries = (await note(h.dir)) as { params: Record<string, unknown> }[];
+    expect(entries.map((entry) => entry.params["direction"])).toEqual(["forward", "back"]);
   });
 
   it("refuses an offset measured before a step made meanwhile", async () => {

@@ -30,7 +30,9 @@ function assertPersonMatchesSource(
       ? admin === undefined
       : source === "admin"
         ? admin !== undefined && admin.role === undefined
-        : admin?.role === "staff" && admin.device !== undefined;
+        : source === "staff"
+          ? admin?.role === "staff" && admin.device !== undefined
+          : false;
   if (!matches)
     throw new Error(`confirmClockStep: a ${source} step was given a person that does not match it`);
 }

@@ -351,7 +351,8 @@ it("sets the box's clock from this device only under the setup owner's pass, nam
   expect(withoutPass.status).toBe(comparedWithoutPass.status);
   expect(await withoutPass.json()).toEqual(await comparedWithoutPass.json());
   const wrongPass = await setClock({ ...f.headers(), "X-Waitron-Setup-Owner": "not-the-pass" });
-  expect(wrongPass.status).toBeGreaterThanOrEqual(400);
+  expect(wrongPass.status).toBe(403);
+  expect((await wrongPass.json()).error.code).toBe("setup.owner_required");
   expect(setBoxClock).not.toHaveBeenCalled();
 
   const answered = await setClock(f.headers());
