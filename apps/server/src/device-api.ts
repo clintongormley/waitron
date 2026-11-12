@@ -688,7 +688,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       assertProfileAction(device, "prepare-orders");
-      const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does; the `text` id column has no
       // refusal of its own.

@@ -7,7 +7,6 @@ import { withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { ProfileAction } from "@waitron/layouts";
 import { assertProfileAction, requireDevice, type DeviceBinding } from "./device-session.js";
-import { requestCfg } from "./request-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { asObject } from "./bill-payments-api.js";
 import { groupCommand, requirePartyParam } from "./till-api.js";
@@ -57,7 +56,6 @@ export function mountDeviceLevers(
   app.post("/api/device/orders/:id/courses/:courseId/ready", (c) =>
     run(c, log, async () => {
       const device = await requireKitchenDisplay(deps, c, "prepare-orders");
-      const cfg = requestCfg(deps.cfg, device);
       const orderId = c.req.param("id").toLowerCase();
       if (!isUuid(orderId))
         throw new AppError("working_order.not_found", { workingOrderId: orderId });

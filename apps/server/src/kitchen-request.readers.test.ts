@@ -96,7 +96,7 @@ async function fireNow(tx: Transaction, venue: Venue, lineInputs: ReturnType<typ
   });
 }
 
-async function toReady(tx: Transaction, venue: Venue, itemId: string) {
+async function toReady(tx: Transaction, _venue: Venue, itemId: string) {
   await advanceTicketItem(tx, itemId, "preparing");
   await advanceTicketItem(tx, itemId, "ready");
 }
