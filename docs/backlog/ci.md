@@ -221,6 +221,15 @@ the service-status browser suite failed with Playwright's "Frame was detached" d
 whole-workspace run, and then passed on its own with no code change. The original log and screenshot were kept; the cause is unexplained, so retain them
 again on the next sighting rather than re-running to green.
 
+A fourth, first seen on PR #2979 (2026-11-12, run 43259195658, attempt 1, `test-till` shard 3):
+`apps/till/src/till-app.test.ts` "a completed refund keeps the Transactions query, filters, sorting
+and page while leaving the basket intact" gave up waiting with the last list request still sending
+`q: ''` after "0091 " was typed in the Transactions search. The branch changed only a comment in the
+till; the case passed locally and on the shard's re-run. Of the 40 most recent failed CI runs, two
+had failing `test-till` jobs whose failed cases were read (runs 43240726730 and 43137922853); none
+was this case. Earlier sightings were not searched further. The log is kept at
+`~/waitron-campaign-c/ci-logs/pr2979-run43259195658-attempt1-test-till-3.log`.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
