@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { kitchenStations, venueLocationId, withTransaction, type Database } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { departments, seasons } from "@waitron/venue-service";
 
 /** The venue with two staff, a department, a prep station and a season. */

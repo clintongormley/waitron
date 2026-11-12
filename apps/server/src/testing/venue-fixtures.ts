@@ -8,7 +8,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { jobOrigin, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";

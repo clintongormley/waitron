@@ -5,7 +5,6 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
-  deviceProfiles,
   diningTables,
   kitchenStations,
   printJobs,

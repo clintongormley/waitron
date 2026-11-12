@@ -1435,7 +1435,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   replaces the 7 November design: access roles are ticked permission lists, several per person,
   combined; job roles drive the rota and device sign-in and grant nothing. The
   [build plan](superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with test-fixture
-  preparation: the helpers and A–L server tests are ready; the remaining fixtures are PR5b.
+  preparation is ready: ordinary people and device-profile fixtures use the shared helpers.
+  SQL constraint, trigger and pinned-hash probes retain their direct writes until PR11.
   Access/job-role behavior remains to be built. Cut 1's permission names (#2578) have landed.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 

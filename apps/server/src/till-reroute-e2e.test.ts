@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +21,12 @@ import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db
 import { hashPin, hashDeviceToken, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
-import { seedWorkingOrder, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedBusinessDay,
+  seedDeviceProfiles,
+  seedVenueSettings,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -185,14 +192,29 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
     .insert(invoiceSeries)
     .values({ id: SERIES_B, nodeId: NODE_B, code: "B" })
     .onConflictDoNothing({ target: invoiceSeries.id });
-  await db
-    .insert(persons)
-    .values({ id: PERSON, displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
-    .onConflictDoNothing({ target: persons.id });
-  await db
-    .insert(deviceProfiles)
-    .values({ id: DEVICE_PROFILE, name: "Counter", formFactor: "till", capabilities: [] })
-    .onConflictDoNothing({ target: deviceProfiles.id });
+  if (!(await db.select({ id: persons.id }).from(persons).where(eq(persons.id, PERSON)))[0]) {
+    await seedPersons(db, {
+      id: PERSON,
+      displayName: "Cajera",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
+  }
+  if (
+    !(
+      await db
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, DEVICE_PROFILE))
+    )[0]
+  ) {
+    await seedDeviceProfiles(db, {
+      id: DEVICE_PROFILE,
+      name: "Counter",
+      formFactor: "till",
+      capabilities: [],
+    });
+  }
   await db
     .insert(devices)
     .values({

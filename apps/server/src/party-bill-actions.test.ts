@@ -86,7 +86,9 @@ useVenueDb({
         { kind: "no_preparation" },
       ),
     );
-    const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
+    const [admin] = db.all<{ id: string }>(
+      sql`select id from persons where email = 'owner@example.test'`,
+    );
     adminId = admin!.id;
   },
 });

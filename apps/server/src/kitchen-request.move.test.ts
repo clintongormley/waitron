@@ -5,7 +5,6 @@ import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   kitchenStations,
   parties,
   printJobs,

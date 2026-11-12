@@ -5,7 +5,6 @@ import { withTransaction, type Database } from "@waitron/db";
 import type { FiscalCertificateDiagnosisDeps } from "@waitron/fiscal";
 import {
   authorizeManager,
-  persons,
   resolveManagementSession,
   startManagementSession,
 } from "@waitron/identity";

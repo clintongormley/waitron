@@ -5,7 +5,7 @@ import type { TradingContext } from "./trading-context.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedNode, seedVenue } from "@waitron/db/testing/seed.js";

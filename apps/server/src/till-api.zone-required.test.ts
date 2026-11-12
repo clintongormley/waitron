@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { floorZones, deviceProfiles, withTransaction, workingOrderLines } from "@waitron/db";
+import { floorZones, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -14,7 +14,7 @@ import {
   seedVenue,
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   assignCatalogueToVenue,
   createCatalogue,

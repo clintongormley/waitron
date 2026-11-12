@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  deviceProfiles,
-  devices,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { devices, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {

@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { generateSync } from "otplib";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
@@ -83,7 +83,9 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
     nodeId: venue.nodeId,
   };
   const adminPersonId = await withTransaction(db, (tx) => {
-    const rows = tx.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
+    const rows = tx.all<{ id: string }>(
+      sql`select id from persons where email = 'owner@example.test'`,
+    );
     return Promise.resolve(rows[0]!.id);
   });
   return { designated, adminPersonId };

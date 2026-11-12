@@ -4,7 +4,7 @@ import { beforeEach } from "vitest";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import * as api from "../src/index.js";
 import { seedEmployment, seedLocation } from "./fixtures.js";

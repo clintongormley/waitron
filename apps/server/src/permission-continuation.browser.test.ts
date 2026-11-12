@@ -130,7 +130,7 @@ async function fixture() {
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     await tx.insert(webauthnCredentials).values({
       personId: admin!.id,
       credentialId: "AQ",

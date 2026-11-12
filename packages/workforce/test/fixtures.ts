@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { appendToChain } from "../src/chain.js";
 import type { WorkforceEntryKind } from "../src/projection.js";
 import type { WorkTimeRuleset } from "../src/ruleset.js";

@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   deviceProfilePrinters,
-  deviceProfiles,
   devices,
   invoiceDeliveries,
   invoiceSeries,

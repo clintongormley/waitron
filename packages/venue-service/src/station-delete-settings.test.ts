@@ -11,7 +11,6 @@ import {
   deviceKitchenScreenStations,
   deviceKitchenScreenZones,
   deviceProfileKitchenScreens,
-  deviceProfiles,
   devices,
   floorZones,
   kitchenStations,

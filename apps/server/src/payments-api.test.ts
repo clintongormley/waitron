@@ -8,7 +8,6 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import {
   billPayments,
   workingOrders,
-  deviceProfiles,
   devices,
   nowIso,
   tenants,
@@ -26,12 +25,7 @@ import {
   seedVenue,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";

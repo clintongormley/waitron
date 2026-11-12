@@ -1,5 +1,5 @@
 import { seedPersons } from "./person-rows.js";
-import { captureError, locations, withTransaction, persons } from "@waitron/db";
+import { captureError, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";

@@ -18,7 +18,7 @@ import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
 import { withPromotionModuleOperation } from "./promotion-operation.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";

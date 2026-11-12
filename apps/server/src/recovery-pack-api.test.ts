@@ -3,11 +3,11 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as identity from "@waitron/identity";
-import { eq } from "drizzle-orm";
+
 import { CORE_MIGRATIONS, stampDeployment, withTransaction } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";

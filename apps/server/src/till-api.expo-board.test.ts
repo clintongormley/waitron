@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, ticketItems, workingOrderLines } from "@waitron/db";
+import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loginWithPin, persons } from "@waitron/identity";

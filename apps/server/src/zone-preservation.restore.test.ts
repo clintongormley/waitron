@@ -12,7 +12,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase, withTransaction } from "@waitron/db";
-import { persons } from "@waitron/identity";
+
 import { recordDailyClose } from "@waitron/reporting";
 import { recordSale } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";

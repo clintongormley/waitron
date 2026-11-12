@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { departments, seasons, specialDayDates, specialDays } from "@waitron/venue-service";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 import {

@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedWorkingOrder, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { adjustments, recordAdjustment } from "@waitron/adjustments";
 import { decimal, jobOrigin } from "@waitron/shared";

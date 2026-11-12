@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, nodes, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import {
   validateBackupModuleResult,

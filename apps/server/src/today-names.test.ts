@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { printJobs, ticketItems } from "@waitron/db";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
 import {
   kitchenNotices,

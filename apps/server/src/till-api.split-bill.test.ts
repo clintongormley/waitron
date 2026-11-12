@@ -10,7 +10,6 @@ import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  deviceProfiles,
   kitchenStations,
   printJobs,
   ticketItems,
@@ -28,7 +27,7 @@ import {
   seedNode,
   seedVenue,
 } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignCatalogueToVenue,

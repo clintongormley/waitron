@@ -6,7 +6,7 @@ import { captureError } from "../testing/errors.js";
 import { seedDevice, seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { deviceMadeHereStations } from "./device-made-here-stations.js";
 import { kitchenStations } from "./kitchen-stations.js";
 

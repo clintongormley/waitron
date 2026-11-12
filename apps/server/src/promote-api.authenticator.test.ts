@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, managementSessions, persons } from "@waitron/identity";
+import { hashPassword, hashPin, managementSessions } from "@waitron/identity";
 import { generateSync } from "otplib";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";

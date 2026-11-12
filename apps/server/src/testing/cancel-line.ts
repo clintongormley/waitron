@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { readBillEditState } from "../bill-editing.js";
 import { randomUUID } from "node:crypto";
@@ -79,10 +80,9 @@ export function cancelReasonId(tx: Transaction): Promise<string> {
 /** A person with `id`, added as a supervisor when no person has that id: an adjustment is
  * requested by someone, and a supervisor holds the refund permission a sent dish's cancel needs. */
 export async function ensureOperator(tx: Transaction, id: string): Promise<string> {
-  await tx
-    .insert(persons)
-    .values({ id, displayName: `Operator ${id}`, role: "supervisor" })
-    .onConflictDoNothing({ target: persons.id });
+  if (!(await tx.select({ id: persons.id }).from(persons).where(eq(persons.id, id)))[0]) {
+    await seedPersons(tx, { id, displayName: `Operator ${id}`, role: "supervisor" });
+  }
   return id;
 }
 

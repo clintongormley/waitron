@@ -11,7 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { openVenueDatabase, orderGroups, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { PartyAllergyRead } from "@waitron/module";
 import { readPartyAllergy, setRoutingCell } from "@waitron/venue-service";

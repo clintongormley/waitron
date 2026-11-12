@@ -13,7 +13,6 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
-  deviceProfiles,
   devices,
   invoiceSeries,
   printJobs,
@@ -36,13 +35,7 @@ import {
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import {
-  hashPassword,
-  hashPin,
-  loginWithPin,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin, startManagementSession } from "@waitron/identity";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";

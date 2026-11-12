@@ -7,7 +7,7 @@ import { observedGroupSubmitBody, placeGroupedRound } from "./testing/group-subm
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -15,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   assignCatalogueToVenue,
   createCatalogue,

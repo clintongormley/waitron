@@ -9,7 +9,7 @@ import {
   seedBusinessDay,
 } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+
 import { jobOrigin } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";

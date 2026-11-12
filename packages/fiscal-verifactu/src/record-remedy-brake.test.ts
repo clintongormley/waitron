@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { sales, saleSettlements, tenders, tenderRefunds, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, nodeId, saleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";

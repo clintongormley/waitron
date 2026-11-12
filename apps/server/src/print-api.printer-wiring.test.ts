@@ -6,7 +6,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfilePrinters,
-  deviceProfiles,
   devices,
   floorZones,
   kitchenStations,
@@ -28,7 +27,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
 import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";

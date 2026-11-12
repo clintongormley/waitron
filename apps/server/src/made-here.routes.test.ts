@@ -26,7 +26,7 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

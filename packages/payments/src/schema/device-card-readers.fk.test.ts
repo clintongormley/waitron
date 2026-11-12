@@ -6,7 +6,6 @@ import {
   FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  deviceProfiles,
   isRefusal,
   withTransaction,
 } from "@waitron/db";

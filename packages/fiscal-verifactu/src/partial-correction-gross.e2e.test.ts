@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { recordCorrection, recordSale, type RecordSaleLine } from "@waitron/core";
@@ -43,10 +44,13 @@ beforeEach(async () => {
     .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectSeriesId = brandSeriesId(series!.id);
-  const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${newId()}, ${nowIso()}, 'Supervisor', ${hashPin("1234")}, 'supervisor') returning id`,
-  );
+  const rows = await seedPersons(suite.db, {
+    id: newId(),
+    createdAt: nowIso(),
+    displayName: "Supervisor",
+    pinHash: hashPin("1234"),
+    role: "supervisor",
+  });
   sessionId = (
     await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),

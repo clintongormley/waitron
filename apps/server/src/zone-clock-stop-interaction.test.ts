@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { incidents, settings as businessDaySettingsTable, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { authorizeManager, persons, startManagementSession } from "@waitron/identity";
+import { authorizeManager, startManagementSession } from "@waitron/identity";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated } from "@waitron/payments";
 import { decimal } from "@waitron/shared";

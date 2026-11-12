@@ -8,7 +8,7 @@ import { devices, invoiceSeries, sales } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import { recordCorrection, recordSale, recordVoid } from "@waitron/core";
-import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { Logger } from "../logger.js";

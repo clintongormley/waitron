@@ -8,7 +8,6 @@ import {
   deviceProfileServiceAccess,
   deviceProfileZones,
   diningTables,
-  deviceProfiles,
   devices,
   floorZones,
   orderServiceContexts,

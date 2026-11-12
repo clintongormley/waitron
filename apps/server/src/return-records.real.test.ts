@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { FISCAL_PERMISSIONS } from "@waitron/fiscal-verifactu/src/permissions.js";
 import { listFilingCases } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { mountRecordRemedies } from "@waitron/fiscal-verifactu/src/record-remedy-routes.js";

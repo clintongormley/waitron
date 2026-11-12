@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { personRole, roleHasPermission } from "@waitron/identity";
-import { deviceProfiles, floorZones, withTransaction } from "@waitron/db";
+import { floorZones, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mountJoinApi } from "./join-api.js";

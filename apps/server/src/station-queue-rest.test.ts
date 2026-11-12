@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId as brandNodeId } from "@waitron/shared";

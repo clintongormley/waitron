@@ -712,7 +712,7 @@ add the import when anything changed; apply edits from the end of the file backw
 Other shapes (`.onConflictDoNothing()`, raw `sql\`update persons set role…\``, selects of
 `persons.role`) are rewritten by hand with the helpers.
 
-- [ ] **Each task:** run the script; typecheck the package; fix what it flags; then
+- [x] **Each task:** run the script; typecheck the package; fix what it flags; then
   `git grep -nE 'insert\(persons\)|set\(\{ ?role|update persons set role|persons\.role' -- '<the task's paths>/**/*.test.ts' '<the task's paths>/**/testing/**'`
   leaves only the explicitly recorded copied-file corruption exception. Inspect each remaining
   `update(persons)` call by hand, including variable and conditional patches. `git diff --stat`
@@ -720,6 +720,8 @@ Other shapes (`.onConflictDoNothing()`, raw `sql\`update persons set role…\``,
   of about 40, reading each `Tests` count. **Commit.**
 
 > 2026-11-12, watcher 07:23: the “person who authorised the handover, according to the copy” corruption group in handover-compare.test.ts keeps its deliberate copied-file role mutations until PR 11. Keep every refusal assertion; add no helper solely for injecting invalid copied data.
+
+> 2026-11-12, watcher 10:15 and 10:19: retain the raw defaults/invalid-row cases in `packages/workforce/src/migrations.test.ts`, the pinned-hash supervisor fixture in `packages/fiscal-verifactu/src/correction-amount.huella.test.ts`, and `withRacerPlanted`’s temporary SQL trigger in `packages/identity/src/staff-lifecycle.test.ts` until PR11. The watcher also cleared retaining raw SQL where the test needs SQL itself; name those cases in PR5b.
 
 ### Task 5.5: Device-profile codemod
 

@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
   devices,
-  deviceProfiles,
   ticketItemMoves,
   ticketItems,
   workingOrderLines,

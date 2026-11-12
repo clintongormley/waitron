@@ -11,7 +11,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
   hashPin,
-  persons,
   PIN_THROTTLE_FREE_ATTEMPTS,
   startManagementSession,
 } from "@waitron/identity";

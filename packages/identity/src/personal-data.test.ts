@@ -2,7 +2,6 @@ import { seedPersons } from "../test/person-rows.js";
 import { createHash } from "node:crypto";
 import {
   CORE_MIGRATIONS,
-  deviceProfiles,
   withTransaction,
   venueLocationId,
   persons,

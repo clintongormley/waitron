@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
   deviceMadeHereStations,
-  deviceProfiles,
   kitchenStations,
   incidents,
   orderGroupHoldStations,

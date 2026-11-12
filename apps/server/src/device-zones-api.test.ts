@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   deviceZoneSelections,
-  deviceProfiles,
   devices,
   floorZones,
   workingOrders,

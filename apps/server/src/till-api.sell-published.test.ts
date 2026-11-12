@@ -10,7 +10,6 @@ import { Hono } from "hono";
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   floorZones,
   products,
   saleLines,
@@ -57,7 +56,7 @@ import {
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";

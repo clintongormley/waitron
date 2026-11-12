@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   floorZones,
   incidents,
   kitchenStations,
@@ -26,7 +25,7 @@ import {
   createServiceZone,
   setProfileServiceAccess,
 } from "@waitron/venue-service";
-import { persons } from "@waitron/identity";
+
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";

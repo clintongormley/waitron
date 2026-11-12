@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "../test/person-rows.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import {
   CORE_MIGRATIONS,
@@ -113,10 +114,10 @@ describe("canUseDeviceProfile", () => {
     const personId = await seedPerson(suite.db, "staff");
     expect(await admits(profileId, personId)).toBe(false);
 
-    await suite.db.execute(sql`update persons set role = 'manager' where id = ${personId}`);
+    await setBuiltInRoleForTest(suite.db, personId, "manager");
     expect(await admits(profileId, personId)).toBe(true);
 
-    await suite.db.execute(sql`update persons set role = 'supervisor' where id = ${personId}`);
+    await setBuiltInRoleForTest(suite.db, personId, "supervisor");
     expect(await admits(profileId, personId)).toBe(false);
   });
 

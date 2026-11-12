@@ -10,7 +10,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { deviceProfiles, devices, withTransaction, type Transaction } from "@waitron/db";
+import { devices, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { BootReading, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
@@ -19,7 +19,6 @@ import {
   endSession,
   hashPin,
   loginWithPin,
-  persons,
   type PersonRoleValue,
   type PinThrottle,
 } from "@waitron/identity";

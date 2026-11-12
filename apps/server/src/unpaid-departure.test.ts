@@ -15,7 +15,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  deviceProfiles,
   diningTables,
   floorZones,
   invoiceSeries,
@@ -34,7 +33,7 @@ import {
 } from "@waitron/db";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { offerProducts } from "./testing/zone-offers.js";

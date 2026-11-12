@@ -9,13 +9,7 @@ import { hashSessionToken } from "./session-token.js";
  * cases are encoding cases, with an ASCII case-only control beside each.
  */
 import { randomUUID } from "node:crypto";
-import {
-  CORE_MIGRATIONS,
-  captureError,
-  indexViolated,
-  withTransaction,
-  persons,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, indexViolated, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";

@@ -10,7 +10,6 @@ import {
   hashPin,
   hashSessionToken,
   managementSessions,
-  persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";

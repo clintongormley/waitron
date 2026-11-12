@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { activityLog, withTransaction } from "@waitron/db";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

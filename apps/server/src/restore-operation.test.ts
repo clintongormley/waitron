@@ -4,7 +4,7 @@ import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js"
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import {
   readOperationAuthority,
   withOperationAuthority,

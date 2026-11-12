@@ -1,5 +1,5 @@
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
-import { CORE_MIGRATIONS, deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, devices, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";

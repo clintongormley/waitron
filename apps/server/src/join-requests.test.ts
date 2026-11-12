@@ -28,7 +28,6 @@ import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import { parseDeviceCookie } from "./device-session.js";
 import {
   floorZones,
-  deviceProfiles,
   devices,
   joinRequests,
   kitchenStations,

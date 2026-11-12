@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";

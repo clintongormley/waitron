@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   orderGroupHoldStations,
   orderGroups,
   parties,

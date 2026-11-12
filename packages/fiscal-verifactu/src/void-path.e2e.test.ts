@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -43,12 +44,13 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 beforeEach(async () => {
   ({ nodeId, seriesId } = await seedTenantWithSif(suite.db));
   // Seed a manager (holds `sale.void`) and open its session.
-  const { rows } = await suite.db.execute<{ id: string }>(
-    // `id` and `created_at` are supplied here: both come from a `$defaultFn` generator, which
-    // drizzle runs for a builder insert and never for raw SQL.
-    sql`insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
-  );
+  const rows = await seedPersons(suite.db, {
+    id: newId(),
+    createdAt: nowIso(),
+    displayName: "P",
+    pinHash: hashPin("1234"),
+    role: "manager",
+  });
   const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),

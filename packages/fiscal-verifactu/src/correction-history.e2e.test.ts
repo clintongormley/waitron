@@ -16,7 +16,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
   loginWithPin,
-  persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
@@ -60,10 +59,13 @@ beforeEach(async () => {
     .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectSeriesId = brandSeriesId(series!.id);
-  const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${newId()}, ${nowIso()}, 'Supervisor', ${hashPin("1234")}, 'supervisor') returning id`,
-  );
+  const rows = await seedPersons(suite.db, {
+    id: newId(),
+    createdAt: nowIso(),
+    displayName: "Supervisor",
+    pinHash: hashPin("1234"),
+    role: "supervisor",
+  });
   sessionId = (
     await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),

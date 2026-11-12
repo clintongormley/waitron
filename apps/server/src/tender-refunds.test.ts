@@ -29,7 +29,6 @@ import {
   createPinThrottle,
   hashPin,
   hashSessionToken,
-  persons,
   sessions,
   type PinAttempts,
 } from "@waitron/identity";

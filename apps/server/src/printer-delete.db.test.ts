@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   deviceProfilePrinters,
-  deviceProfiles,
   devices,
   drawerOpens,
   installChangeFeed,

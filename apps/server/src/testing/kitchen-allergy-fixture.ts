@@ -16,7 +16,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import {
   allergyLineTicks,

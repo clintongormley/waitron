@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { persons, hashPassword, startManagementSession } from "@waitron/identity";
+import { hashPassword, startManagementSession } from "@waitron/identity";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

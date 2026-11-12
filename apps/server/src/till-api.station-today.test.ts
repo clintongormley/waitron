@@ -72,7 +72,7 @@ beforeEach(async () => {
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     const [operator] = await seedPersons(tx, {
       displayName: "Waiter",
       role: "staff",

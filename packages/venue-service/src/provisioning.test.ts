@@ -9,7 +9,6 @@ import {
   floorZones,
   withTransaction,
   catalogues,
-  deviceProfiles,
   kitchenStations,
   venueLocationId,
 } from "@waitron/db";

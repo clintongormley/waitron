@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { hashPin, deactivatePerson, persons } from "@waitron/identity";
+import { hashPin, deactivatePerson } from "@waitron/identity";
 import { invoiceSeries, printJobs, sales, tenants, withTransaction } from "@waitron/db";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";

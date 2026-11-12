@@ -12,7 +12,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bookings, BOOKINGS_ROUTES, BOOKINGS_PERMISSIONS } from "@waitron/bookings";
 import {
   catalogues,
-  deviceProfiles,
   diningTables,
   floorPlanSets,
   floorPlanTables,

@@ -16,7 +16,7 @@ import {
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { mountTillApi } from "./till-api.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";

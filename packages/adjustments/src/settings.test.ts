@@ -1,13 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  persons,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { PersonRoleValue } from "@waitron/identity";
 import { decimal } from "@waitron/shared";

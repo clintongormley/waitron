@@ -10,7 +10,7 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { venueLocationId } from "../venue.js";
 import { deviceProfilePrinters } from "./device-profile-printers.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 

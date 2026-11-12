@@ -3,12 +3,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { incidents, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";

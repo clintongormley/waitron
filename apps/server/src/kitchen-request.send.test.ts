@@ -4,7 +4,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   deviceMadeHereStations,
-  deviceProfiles,
   orderGroups,
   parties,
   printJobs,

@@ -5,7 +5,7 @@ import { captureError } from "../testing/errors.js";
 import { seedDevice, seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { printerHolders } from "./printer-holders.js";
 import { printers } from "./printers.js";
 import { venueLocationId } from "../venue.js";

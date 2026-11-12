@@ -27,7 +27,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordStepCompletions } from "@waitron/venue-service";
 import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";

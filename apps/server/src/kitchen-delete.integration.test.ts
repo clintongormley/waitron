@@ -4,13 +4,7 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import {
-  ticketItems,
-  workingOrderLines,
-  orderDraftEvents,
-  deviceProfiles,
-  products,
-} from "@waitron/db";
+import { ticketItems, workingOrderLines, orderDraftEvents, products } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

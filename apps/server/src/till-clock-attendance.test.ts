@@ -5,7 +5,7 @@ import { billPayments, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, sessions } from "@waitron/identity";
+import { sessions } from "@waitron/identity";
 import {
   attendanceDayWork,
   attendanceQuestions,

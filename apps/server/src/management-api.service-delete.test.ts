@@ -5,7 +5,6 @@ import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { bookings } from "@waitron/bookings";
 import {
-  deviceProfiles,
   diningTables,
   floorTodayTables,
   floorPlanPlacements,
@@ -20,7 +19,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
-  persons,
   startManagementSession,
   managementSessions,
   registerModulePermissions,

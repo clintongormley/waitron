@@ -26,7 +26,7 @@ import {
   readVenueHolder,
   withTransaction,
 } from "@waitron/db";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { runRestore } from "./restore-command.js";
 import { runEntry } from "./node-entry.js";
 import { loadBoxEnv } from "./box-env.js";

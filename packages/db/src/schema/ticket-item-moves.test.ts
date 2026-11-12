@@ -8,7 +8,7 @@ import { seedDeviceProfiles, seedNode, seedVenue, seedWorkingOrder } from "../te
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { catalogues, products } from "./catalogue.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines } from "./orders.js";

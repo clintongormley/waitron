@@ -14,7 +14,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import {
   billPayments,
-  deviceProfiles,
   sales,
   tenders,
   withTransaction,
@@ -31,7 +30,7 @@ import {
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
@@ -321,7 +320,9 @@ export async function provisionBillVenue(
     cookieNoCard: await cookieFor(cashOnlyDevice),
     device2Id: devices[1]!.deviceId,
     operatorId: seeded.personId,
-    adminId: db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id,
+    adminId: db.all<{ id: string }>(
+      sql`select id from persons where email = 'owner@example.test'`,
+    )[0]!.id,
     offerFor: (name) => seeded.offers.offerFor(seeded.productIds.get(name)!),
     zoneId: seeded.offers.zoneId,
   };

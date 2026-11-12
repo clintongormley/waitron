@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { sha256Hex, signEnvelope, type HandoverBinding } from "@waitron/handover";
-import { hashPassword, hashPin, hashSecret, managementSessions, persons } from "@waitron/identity";
+import { hashPassword, hashPin, hashSecret, managementSessions } from "@waitron/identity";
 import {
   canonicalize,
   endorseKey,

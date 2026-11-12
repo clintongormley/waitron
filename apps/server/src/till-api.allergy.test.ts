@@ -15,12 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import {
-  hashSessionToken,
-  persons,
-  sessions,
-  deviceProfileAdmissionPersons,
-} from "@waitron/identity";
+import { hashSessionToken, sessions, deviceProfileAdmissionPersons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { listDepartments, readPartyAllergy, setProfileServiceAccess } from "@waitron/venue-service";

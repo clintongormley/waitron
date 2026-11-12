@@ -1,3 +1,4 @@
+import { seedPersons } from "../test/person-rows.js";
 import {
   seedBusinessDay,
   seedDeviceProfiles,
@@ -8,13 +9,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { isoCBOR } from "@simplewebauthn/server/helpers";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_CLASSIFICATION,
-  CORE_MIGRATIONS,
-  deviceProfiles,
-  devices,
-  locations,
-} from "@waitron/db";
+import { CORE_CLASSIFICATION, CORE_MIGRATIONS, devices, locations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery } from "@waitron/store";
 import {
@@ -96,7 +91,7 @@ beforeEach(async () => {
       enrolledAt: now,
       createdAt: now,
     });
-    await suite.db.insert(schema.persons).values([
+    await seedPersons(suite.db, [
       {
         id: person,
         displayName: "First",
@@ -565,9 +560,7 @@ it("accepts an absent predecessor only with an empty migrated owner", async () =
   for (const table of [...IDENTITY_CLASSIFICATION].reverse().map((c) => c.table))
     damage(`delete from ${table}`);
   expect(await run(entries(), true)).toEqual(passed);
-  restored.db.run(
-    sql`insert into persons (id,display_name,created_at) values (${person},'Unexpected',${now})`,
-  );
+  await seedPersons(restored.db, { id: person, displayName: "Unexpected", createdAt: now });
   expect((await run(entries(), true)).checks).toContainEqual({ code: "data", status: "invalid" });
 });
 

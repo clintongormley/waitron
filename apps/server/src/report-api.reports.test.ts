@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, personRole, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, personRole, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";

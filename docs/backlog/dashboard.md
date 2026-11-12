@@ -57,8 +57,9 @@ replaces the [7 November design](../superpowers/specs/2026-10-22-a1002-custom-ro
 they differ (its §9 lists what was dropped and kept) and supersedes the unmerged cut 2 scope
 forecast. `fiscal.remedy` is Admin by default and assignable (owner 2026-11-09). Cut 1 (#2578) has
 landed. The [build plan](../superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with
-test-fixture preparation: helpers and A–L server tests are ready; PR5b covers the remaining
-server, package and device-profile fixtures before access/job-role behavior changes.
+test-fixture preparation is ready: ordinary server, package and device-profile fixtures use
+the shared helpers. SQL constraint, trigger and pinned-hash probes retain their direct writes
+until PR11; access/job-role behavior remains to be built.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 

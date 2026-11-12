@@ -1,14 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { count as countRows, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  deviceProfiles,
-  printJobs,
-  printers,
-  ticketItems,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { printJobs, printers, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

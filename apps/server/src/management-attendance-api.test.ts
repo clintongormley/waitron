@@ -44,7 +44,10 @@ beforeEach(async () => {
   registerModulePermissions(ALL_MODULES.flatMap((m) => m.permissions ?? []));
   const backend = new WorkforceBackend();
   await withTransaction(suite.db, async (tx) => {
-    const [manager] = await tx.select().from(persons).where(eq(persons.role, "admin"));
+    const [manager] = await tx
+      .select()
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
     managerId = manager!.id;
     const session = await startManagementSession(tx, { personId: managerId });
     managementId = (

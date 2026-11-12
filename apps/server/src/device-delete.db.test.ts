@@ -10,7 +10,6 @@ import {
   deviceApprovedProfiles,
   deviceMadeHereStations,
   deviceZoneSelections,
-  deviceProfiles,
   devices,
   drawerOpens,
   installChangeFeed,

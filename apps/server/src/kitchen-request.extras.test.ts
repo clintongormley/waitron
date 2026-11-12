@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
-  deviceProfiles,
   orderGroups,
   printJobs,
   ticketItems,

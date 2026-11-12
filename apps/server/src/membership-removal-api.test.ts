@@ -66,7 +66,9 @@ async function primary(
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   const publicKey = (await readMembershipTrustSet(db))[nodeId]!;
   const { adminPersonId, token } = await withTransaction(db, async (tx) => {
-    const rows = tx.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
+    const rows = tx.all<{ id: string }>(
+      sql`select id from persons where email = 'owner@example.test'`,
+    );
     const personId = rows[0]!.id;
     const session = await startManagementSession(tx, { personId });
     await setFreshManagementSignIn(tx, session.token);

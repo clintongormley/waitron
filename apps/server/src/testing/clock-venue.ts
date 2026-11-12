@@ -72,7 +72,7 @@ export async function createClockVenue(
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     const management = await startManagementSession(tx, { personId: admin!.id });
     const profile = await createDeviceProfile(tx, {
       managementSessionId: management.token,

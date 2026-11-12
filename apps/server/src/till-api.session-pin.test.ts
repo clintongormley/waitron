@@ -4,14 +4,13 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { deviceProfiles } from "@waitron/db";
+
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   PIN_THROTTLE_FREE_ATTEMPTS,
   createPinThrottle,
   hashPin,
-  persons,
   type PinThrottle,
 } from "@waitron/identity";
 import { DEVICE_COOKIE } from "./device-session.js";

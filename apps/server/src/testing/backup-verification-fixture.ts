@@ -8,12 +8,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import forge from "node-forge";
 import type { BackupQuery } from "@waitron/store";
-import {
-  beginOwnTotpEnrollment,
-  hashPassword,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { beginOwnTotpEnrollment, hashPassword, startManagementSession } from "@waitron/identity";
 import { accountPurposeKey, resolveAccountKey } from "../account-key.js";
 import { afterEach, beforeEach, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";

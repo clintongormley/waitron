@@ -1,3 +1,4 @@
+import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
@@ -518,17 +519,21 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
 
-    const people = await suite.db.execute<{
+    const seededPeople = await suite.db.execute<{
+      id: string;
       display_name: string;
-      role: string;
+      role: string | null;
       first_names: string | null;
       last_names: string | null;
       locale: string | null;
       pin_hash: string;
       password_hash: string;
     }>(sql`
-      select display_name, role, first_names, last_names, locale, pin_hash, password_hash
+      select id, display_name, first_names, last_names, locale, pin_hash, password_hash
       from persons `);
+    const people = { rows: [] as Omit<(typeof seededPeople.rows)[number], "id">[] };
+    for (const { id, ...person } of seededPeople.rows)
+      people.rows.push({ ...person, role: await builtInRoleForTest(suite.db, id) });
     expect(people.rows).toHaveLength(1);
     expect(people.rows[0]).toEqual({
       display_name: "Alicia",
@@ -697,7 +702,7 @@ describe("applyVenue", () => {
     });
 
     const seeded = await suite.db.execute<{ email: string | null }>(sql`
-      select email from persons where role = 'admin'`);
+      select email from persons`);
     expect(seeded.rows[0]?.email).toBe("owner@x.com");
   });
 
@@ -843,9 +848,11 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
 
-    const admins = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from persons
-      where role = 'admin'`);
+    const admins = { rows: [{ n: 0 }] };
+    for (const person of (await suite.db.execute<{ id: string }>(sql`select id from persons`))
+      .rows) {
+      if ((await builtInRoleForTest(suite.db, person.id)) === "admin") admins.rows[0]!.n++;
+    }
     expect(admins.rows[0]?.n).toBe(1);
   });
 

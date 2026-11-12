@@ -40,7 +40,6 @@ import { afterEach, afterAll, beforeAll, describe, expect, it, vi } from "vitest
 import { Agent } from "undici";
 import {
   captureError,
-  deviceProfiles,
   kitchenStations,
   printJobs,
   printers,

@@ -7,7 +7,7 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { devices } from "./devices.js";
 import { printers } from "./printers.js";
 
@@ -40,10 +40,7 @@ describe("devices FKs (receipt_printer / payment_slip_printer / device_profile)"
         pollId: "poll-a",
       })
       .onConflictDoNothing({ target: printers.id });
-    await admin
-      .insert(deviceProfiles)
-      .values({ id: PROFILE_A, name: "Profile A", formFactor: "till" })
-      .onConflictDoNothing({ target: deviceProfiles.id });
+    await seedDeviceProfiles(admin, { id: PROFILE_A, name: "Profile A", formFactor: "till" });
   });
 
   afterEach(async () => {

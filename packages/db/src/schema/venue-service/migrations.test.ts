@@ -7,7 +7,6 @@ import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   departments,
-  deviceProfiles,
   engineErrorMessage,
   floorZones,
   FOREIGN_KEY_VIOLATION,

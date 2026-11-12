@@ -6,11 +6,11 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, devices, kitchenStations, withTransaction } from "@waitron/db";
+import { devices, kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
-import { hashPin, persons, type PersonRoleValue } from "@waitron/identity";
+import { hashPin, type PersonRoleValue } from "@waitron/identity";
 import {
   CAPABILITY_FLAGS,
   type CapabilityFlag,

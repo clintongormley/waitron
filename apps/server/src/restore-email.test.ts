@@ -4,7 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";

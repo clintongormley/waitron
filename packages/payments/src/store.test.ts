@@ -6,7 +6,6 @@ import {
   UNIQUE_VIOLATION,
   billPayments,
   captureError,
-  deviceProfiles,
   devices,
   engineErrorMessage,
   refusalOn,

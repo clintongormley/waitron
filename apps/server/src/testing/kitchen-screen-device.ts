@@ -1,6 +1,6 @@
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { deviceProfiles, devices, withTransaction, type Database } from "@waitron/db";
+import { devices, withTransaction, type Database } from "@waitron/db";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { VENUE_SERVICE } from "../modules.js";
 

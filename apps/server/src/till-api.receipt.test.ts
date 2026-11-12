@@ -8,7 +8,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   devices,
   drawerOpens,
   printers,

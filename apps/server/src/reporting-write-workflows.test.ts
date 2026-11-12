@@ -14,7 +14,7 @@ import { recordCorrection, recordSale, settleSale, withIssuanceTransaction } fro
 import type { RecordSaleInput } from "@waitron/core";
 import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   computeDailyClose,
   computeVatReturn,

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { newId, nowIso, withTransaction } from "@waitron/db";
@@ -20,8 +21,13 @@ const flag = "<sf:Incidencia>S</sf:Incidencia>";
 it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact across outage retries", async () => {
   const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
   const personId = newId();
-  await suite.db.execute(sql`insert into persons (id, created_at, display_name, pin_hash, role)
-    values (${personId}, ${nowIso()}, 'Manager', ${hashPin("1234")}, 'manager')`);
+  await seedPersons(suite.db, {
+    id: personId,
+    createdAt: nowIso(),
+    displayName: "Manager",
+    pinHash: hashPin("1234"),
+    role: "manager",
+  });
   const { deviceId } = await seedDevice(suite.db, {});
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId, pin: "1234" }),

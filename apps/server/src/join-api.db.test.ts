@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, devices, joinRequests, printAgents, withTransaction } from "@waitron/db";
+import { devices, joinRequests, printAgents, withTransaction } from "@waitron/db";
 import {
   hashSessionToken,
   persons,

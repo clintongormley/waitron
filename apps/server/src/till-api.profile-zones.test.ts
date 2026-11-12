@@ -30,7 +30,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addProductToMenu, createCatalogue, createProduct } from "@waitron/catalogue";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import {

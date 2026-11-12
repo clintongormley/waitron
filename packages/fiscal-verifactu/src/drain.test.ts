@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -113,13 +114,13 @@ async function sellAndVoid(options: {
     suite.db,
     options.nif === undefined ? {} : { nif: options.nif },
   );
-  // `recordVoid` requires `sale.void`, so a manager's session authorizes it. `id` and
-  // `created_at` are supplied because their defaults are drizzle `$defaultFn`s, which raw SQL
-  // never runs.
-  const { rows: mgr } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
-  );
+  const mgr = await seedPersons(suite.db, {
+    id: newId(),
+    createdAt: nowIso(),
+    displayName: "P",
+    pinHash: hashPin("1234"),
+    role: "manager",
+  });
   const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const voidSession = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
@@ -1197,10 +1198,13 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
 
   beforeEach(async () => {
     venue = await seedTenantWithSif(suite.db);
-    const { rows: mgr } = await suite.db.execute<{ id: string }>(
-      sql`insert into persons (id, created_at, display_name, pin_hash, role)
-          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
-    );
+    const mgr = await seedPersons(suite.db, {
+      id: newId(),
+      createdAt: nowIso(),
+      displayName: "P",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
     const deviceId = (await seedDevice(suite.db, {})).deviceId;
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),

@@ -3,7 +3,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceMadeHereStations,
-  deviceProfiles,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   printJobs,

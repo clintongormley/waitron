@@ -330,7 +330,7 @@ describe("the waiting start", () => {
       const [admin] = await suite.db
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       adminId = admin!.id;
       h = harness(() => new Promise(() => {}), {
         node: suite.node,

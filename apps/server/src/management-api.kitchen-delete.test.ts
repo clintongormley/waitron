@@ -1,8 +1,9 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { deviceProfiles, kitchenStations, products, printers, stationPrinters } from "@waitron/db";
+import { kitchenStations, products, printers, stationPrinters } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
@@ -168,10 +169,16 @@ it.each(["courses", "stations"] as const)(
       expect(answer.status).toBe(401);
       expect(await answer.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
-    await suite.db
-      .update(persons)
-      .set({ role: "supervisor" })
-      .where(eq(persons.email, "owner@example.test"));
+    await setBuiltInRoleForTest(
+      suite.db,
+      (
+        await suite.db
+          .select({ id: persons.id })
+          .from(persons)
+          .where(eq(persons.email, "owner@example.test"))
+      )[0]!.id,
+      "supervisor",
+    );
     expect((await app.request(`/management-api/${kind}`, { headers: { cookie } })).status).toBe(
       200,
     );

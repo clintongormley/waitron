@@ -20,7 +20,7 @@ import {
   seedVenue,
   seedVenueSettings,
 } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";

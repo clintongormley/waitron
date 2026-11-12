@@ -16,7 +16,7 @@ import { createAdjustmentReason } from "@waitron/adjustments";
 import { withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { addDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";

@@ -4,7 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { getCountryPack } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import { invoiceDeliveries, invoiceSeries, sales, tenants } from "@waitron/db";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";

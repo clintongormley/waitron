@@ -11,7 +11,6 @@ import {
   isUniqueViolation,
   refusalError,
   withTransaction,
-  persons,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

@@ -10,7 +10,7 @@ import {
   recordVoid,
   withIssuanceTransaction,
 } from "@waitron/core";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { deviceOrigin, seriesId as brandSeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";

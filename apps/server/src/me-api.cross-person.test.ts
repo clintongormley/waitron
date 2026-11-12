@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { builtInRoleForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -9,7 +9,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPassword,
   hashPin,
-  persons,
   startManagementSession,
   webauthnCredentials,
 } from "@waitron/identity";
@@ -76,9 +75,12 @@ describe("your profile", () => {
     });
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ emailVerificationSent: false });
-    const people = await suite.db.execute<{ id: string; display_name: string; role: string }>(
-      sql`select id,display_name,role from persons where id in (${personId},${colleagueId})`,
-    );
+    const people = await suite.db.execute<{
+      id: string;
+      display_name: string;
+      role: string | null;
+    }>(sql`select id,display_name from persons where id in (${personId},${colleagueId})`);
+    for (const person of people.rows) person.role = await builtInRoleForTest(suite.db, person.id);
     expect(people.rows).toEqual(
       expect.arrayContaining([
         { id: personId, display_name: "Updated name", role: "staff" },

@@ -11,7 +11,7 @@ import { setRecoveryKeyTx } from "@waitron/node-db";
 import { makeBreakGlassSecret } from "./break-glass.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";

@@ -559,8 +559,9 @@ function rectificativeSeries(cfg: DeviceRequestConfig): string {
 /** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
  *  `recordCorrection`. */
 async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<void> {
-  const adminId = suite.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!
-    .id;
+  const adminId = suite.db.all<{ id: string }>(
+    sql`select id from persons where email = 'owner@example.test'`,
+  )[0]!.id;
   const deviceId = await seedSessionDevice(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const session = await loginWithPin(tx, {
@@ -3229,7 +3230,7 @@ describe("an order being paid by card cannot be changed from another device (pla
     async (refund) => {
       const t = await twoTabs();
       const personId = suite.db.all<{ id: string }>(
-        sql`select id from persons where role = 'admin'`,
+        sql`select id from persons where email = 'owner@example.test'`,
       )[0]!.id;
       const sessionId = await openTillSession(suite.db, {
         personId,

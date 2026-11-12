@@ -6,7 +6,6 @@ import { fetch as httpFetch } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import {
-  deviceProfiles,
   devices,
   invoiceSeries,
   openVenueDatabase,

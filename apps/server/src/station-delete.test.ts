@@ -6,7 +6,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   devices,
-  deviceProfiles,
   deviceMadeHereStations,
   kitchenStations,
   stationPrinters,

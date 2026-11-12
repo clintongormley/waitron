@@ -23,7 +23,6 @@ import * as receiptTicket from "./receipt-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   deviceProfilePrinters,
-  deviceProfiles,
   devices,
   diningTables,
   drawerOpens,

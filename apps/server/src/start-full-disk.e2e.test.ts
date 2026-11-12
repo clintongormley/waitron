@@ -41,7 +41,6 @@ import {
   hashPin,
   hashDeviceToken,
   hashSessionToken,
-  persons,
   startManagementSession,
   withPassiveManagementRead,
   type PersonRoleValue,

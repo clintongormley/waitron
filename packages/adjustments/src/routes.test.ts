@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { builtInRoleForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -710,7 +710,10 @@ describe("adjustment report routes", () => {
       dayCutover: "05:00:00",
     });
     const fx = await fixture();
-    const people = await db.select({ id: persons.id, role: persons.role }).from(persons);
+    const people: { id: string; role: PersonRoleValue | null }[] = [];
+    for (const person of await db.select({ id: persons.id }).from(persons)) {
+      people.push({ ...person, role: await builtInRoleForTest(db, person.id) });
+    }
     const idOf = (role: PersonRoleValue) => people.find((p) => p.role === role)!.id;
     const bill = await seedOrder(db, {
       source: "dashboard",

@@ -16,7 +16,6 @@ import {
   CORE_MIGRATIONS,
   stampDeployment,
   lockVenueDatabase,
-  persons,
   tenants,
   locations,
   nodes,

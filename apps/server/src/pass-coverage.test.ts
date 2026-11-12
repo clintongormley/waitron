@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  deviceProfiles,
   devices,
   floorZones,
   kitchenStations,
@@ -18,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { DeviceKitchenScreen } from "@waitron/module";
-import { persons } from "@waitron/identity";
+
 import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";

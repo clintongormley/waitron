@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
 import { describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, devices, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {

@@ -13,7 +13,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
   deviceProfilePrinters,
-  deviceProfiles,
   devices,
   joinRequests,
   printers,

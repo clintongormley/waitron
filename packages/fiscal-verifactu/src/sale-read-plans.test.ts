@@ -3,12 +3,7 @@ import type { Query } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { newId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { saleId as brandSaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";

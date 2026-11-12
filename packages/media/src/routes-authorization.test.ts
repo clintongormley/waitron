@@ -184,10 +184,7 @@ it("refuses an upload without catalogue.manage without taking the write lock", a
 it("refuses an upload whose permission is withdrawn while its photo is prepared", async () => {
   await seedTenant(suite.db);
   const headers = await session("manager");
-  const [manager] = await suite.db
-    .select({ id: persons.id })
-    .from(persons)
-    .where(eq(persons.role, "manager"));
+  const [manager] = await suite.db.select({ id: persons.id }).from(persons);
   // The first time the upload asks for the write lock, its photo is already prepared: demote the
   // manager then, so only the check taken under that lock can refuse.
   let demoted = false;

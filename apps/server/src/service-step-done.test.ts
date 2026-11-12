@@ -2,7 +2,7 @@ import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
+import { nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

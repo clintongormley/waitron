@@ -7,7 +7,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   floorZones,
   incidents,
   kitchenStations,
@@ -20,7 +19,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCategory, createProduct } from "@waitron/catalogue";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";

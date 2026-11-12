@@ -17,7 +17,6 @@ import {
 } from "@waitron/catalogue";
 import { createAdjustmentReason, type AdjustmentReasonInput } from "@waitron/adjustments";
 import {
-  deviceProfiles,
   kitchenStations,
   orderPortionEvents,
   orderPortions,
@@ -31,7 +30,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
 import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";

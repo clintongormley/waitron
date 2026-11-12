@@ -43,7 +43,10 @@ let app: Hono,
 beforeEach(async () => {
   venue = await createClockVenue(suite.db, () => now);
   registerModulePermissions(ALL_MODULES.flatMap((m) => m.permissions ?? []));
-  const [admin] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
+  const [admin] = await suite.db
+    .select()
+    .from(persons)
+    .where(eq(persons.email, "owner@example.test"));
   owner = admin!.id;
   await withTransaction(suite.db, async (tx) => {
     const staff = await startManagementSession(tx, { personId: venue.personId });

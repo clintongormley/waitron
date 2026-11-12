@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -19,7 +19,7 @@ import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, persons } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import {
@@ -444,7 +444,7 @@ it("refuses a promotion runner redirected to another node before collecting evid
 });
 it("refuses a manager's correct password before collecting reservation evidence", async () => {
   const app = await bundleApp();
-  await suite.db.update(persons).set({ role: "manager" });
+  await setBuiltInRoleForTest(suite.db, ADMIN, "manager");
   const response = await post(app, "/management-api/mirror-bundle", bundleBody());
   expect(response.status).toBe(403);
   expect((await response.json()).error).toEqual({

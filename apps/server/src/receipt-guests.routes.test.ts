@@ -13,7 +13,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
-  deviceProfiles,
   devices,
   printJobs,
   saleReceiptGuests,
@@ -26,7 +25,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, payments, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";

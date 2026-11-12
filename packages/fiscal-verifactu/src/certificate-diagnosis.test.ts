@@ -2,9 +2,9 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { credentialRevision, putCredential } from "@waitron/credentials";
 import { tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { managementSessions, persons } from "@waitron/identity";
+import { managementSessions } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   material,

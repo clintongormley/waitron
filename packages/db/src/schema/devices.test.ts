@@ -10,7 +10,7 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { deviceProfiles } from "./device-profiles.js";
+
 import { devices } from "./devices.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";

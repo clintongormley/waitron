@@ -6,7 +6,7 @@ import { CORE_MIGRATIONS, locations, kitchenStations, type Database } from "@wai
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
-import { persons } from "@waitron/identity";
+
 import { departments, seasons, specialDays, specialDayDates } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,

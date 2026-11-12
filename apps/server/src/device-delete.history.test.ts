@@ -7,7 +7,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   billPaymentRefunds,
   billPayments,
-  deviceProfiles,
   printers,
   withTransaction,
   workingOrders,

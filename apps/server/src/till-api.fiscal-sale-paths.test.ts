@@ -12,7 +12,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  deviceProfiles,
   devices,
   drawerOpens,
   orderAmendments,
@@ -41,13 +40,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import {
-  hashPassword,
-  hashPin,
-  loginWithPin,
-  permissionsForRole,
-  persons,
-} from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin, permissionsForRole } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";

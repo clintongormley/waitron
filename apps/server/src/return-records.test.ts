@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { openBackupQuery } from "@waitron/store";
 import * as nodeDatabase from "@waitron/node-db";
 import { dirname, join } from "node:path";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";

@@ -16,13 +16,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
-import {
-  hashPin,
-  hashSessionToken,
-  personRole,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, hashSessionToken, personRole, startManagementSession } from "@waitron/identity";
 import {
   stringToBasisPoints,
   stringToCents,

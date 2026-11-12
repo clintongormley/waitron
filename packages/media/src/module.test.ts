@@ -5,12 +5,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_CLASSIFICATION, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { uploadImage } from "./images.js";
 import { MEDIA_CONFIGURATION_TRANSFER, MEDIA_MODULE, MEDIA_TABLES } from "./module.js";

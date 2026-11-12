@@ -14,12 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import {
-  deviceProfileAdmissionPersons,
-  hashSessionToken,
-  persons,
-  sessions,
-} from "@waitron/identity";
+import { deviceProfileAdmissionPersons, hashSessionToken, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergyMoveRead } from "@waitron/module";
 import {

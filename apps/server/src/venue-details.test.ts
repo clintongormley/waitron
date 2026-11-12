@@ -245,7 +245,7 @@ describe("venue detail edits", () => {
       () => {},
     );
     const [person] = suite.db.all<{ id: string }>(
-      sql`select id from persons where role = 'manager' limit 1`,
+      sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: person!.id }),
@@ -488,7 +488,7 @@ describe("venue history locks", () => {
   );
   it("locks both clock fields after an empty daily close", async () => {
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from persons where role = 'manager' limit 1`,
+      sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     await withTransaction(suite.db, (tx) =>
       recordDailyClose(tx, {
@@ -1270,7 +1270,7 @@ describe("venue detail consumer reads", () => {
     expect(before.previous.counts.sales).toBe(0);
     expect(before.day.counts.sales).toBe(1);
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from persons where role = 'manager' limit 1`,
+      sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     await withTransaction(suite.db, (tx) =>
       recordDailyClose(tx, {
@@ -1477,7 +1477,7 @@ describe("workforce facts after venue corrections", () => {
   it("keeps midnight offset dates, the published roster and chain bytes through an eligible clock edit", async () => {
     const backend = new WorkforceBackend();
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from persons where role = 'manager' limit 1`,
+      sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     const personId = rows[0]!.id;
     await suite.db.insert(employments).values({
@@ -1614,7 +1614,7 @@ describe("open kitchen work during venue corrections", () => {
       ),
     );
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from persons where role = 'manager' limit 1`,
+      sql`select id from persons where display_name = 'The Manager' limit 1`,
     );
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -1789,7 +1789,7 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
     () => {},
   );
   const { rows } = await suite.db.execute<{ id: string }>(
-    sql`select id from persons where role = 'manager' limit 1`,
+    sql`select id from persons where display_name = 'The Manager' limit 1`,
   );
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: rows[0]!.id }),

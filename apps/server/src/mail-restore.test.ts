@@ -8,7 +8,7 @@ import { invoiceSeries, openVenueDatabase, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { completeAccountAction, persons, queueAccountMail } from "@waitron/identity";
+import { completeAccountAction, queueAccountMail } from "@waitron/identity";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { formatEnvFile } from "./env-file.js";

@@ -1,3 +1,4 @@
+import { builtInRoleForTest } from "../test/person-rows.js";
 import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -552,9 +553,12 @@ describe("updatePersonDetails refusals and side effects", () => {
         details(token, admin, { displayName: "Only admin", role: "admin", status: "active" }),
       ),
     );
-    const rows = await suite.db.execute<{ display_name: string; role: string; status: string }>(
-      sql`select display_name, role, status from persons where id = ${admin}`,
-    );
+    const rows = await suite.db.execute<{
+      display_name: string;
+      role: string | null;
+      status: string;
+    }>(sql`select display_name, status from persons where id = ${admin}`);
+    for (const person of rows.rows) person.role = await builtInRoleForTest(suite.db, admin);
     expect(rows.rows).toEqual([{ display_name: "Only admin", role: "admin", status: "active" }]);
   });
 });

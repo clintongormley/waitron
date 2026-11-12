@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -66,7 +66,7 @@ const suite = useVenueDb({
     const [admin] = await db
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     const session = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId, personId: admin!.id, pin: "1234" }),
     );

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { nowIso, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { absences, rosterVersions, shiftSwaps, shifts } from "@waitron/workforce";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";

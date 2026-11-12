@@ -18,7 +18,6 @@ import {
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
-  deviceProfiles,
   deviceProfileServiceAccess,
   deviceProfileZones,
   devices,

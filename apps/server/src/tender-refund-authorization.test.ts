@@ -352,11 +352,12 @@ describe("settled-tender refund authorization before reservation", () => {
     async (kind) => {
       const t = await target();
       await role("staff");
-      if (kind !== "wrong")
+      if (kind === "suspended")
         await store.db
           .update(persons)
-          .set(kind === "suspended" ? { status: "suspended" } : { role: "staff" })
+          .set({ status: "suspended" })
           .where(eq(persons.id, managerId));
+      else if (kind === "no-permission") await setBuiltInRoleForTest(store.db, managerId, "staff");
       await refused(
         t,
         kind === "no-permission" ? "authorization.not_permitted" : "pin.invalid",
@@ -422,11 +423,12 @@ describe("settled-tender refund authorization before reservation", () => {
     "a standalone-terminal confirmer with %s credentials cannot approve",
     async (kind) => {
       const t = await target("card", "manual");
-      if (kind !== "wrong")
+      if (kind === "suspended")
         await store.db
           .update(persons)
-          .set(kind === "suspended" ? { status: "suspended" } : { role: "staff" })
+          .set({ status: "suspended" })
           .where(eq(persons.id, managerId));
+      else if (kind === "no-permission") await setBuiltInRoleForTest(store.db, managerId, "staff");
       await refused(
         t,
         kind === "no-permission" ? "authorization.not_permitted" : "pin.invalid",

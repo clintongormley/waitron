@@ -5,9 +5,9 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin } from "@waitron/identity";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId } from "@waitron/shared";
