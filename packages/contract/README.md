@@ -1,11 +1,13 @@
 # Shared Cloud signing formats
 
 Use `@waitron/contract` inside Waitron when you need the bytes that a box and Cloud
-sign and verify. The package exports the existing `waitron-cloud-pair-v1`,
+sign and verify. The package exports the existing `waitron-cloud-pair-v2`,
 `waitron-cloud-machine-v1` and `waitron-cloud-access-v1` formats for Node.js.
 It has no runtime dependencies on other Waitron packages.
 
-Use `pairingPayload` and `verifyPairingProof` for pairing requests. For an installed
+Use `pairingPayload` and `verifyPairingProof` for pairing requests. Pass an empty
+`venueId` to request a new Cloud venue, or its existing Cloud UUID to pair again.
+The verifier accepts v2 only. For an installed
 box, use `encodeMachine` and `verifyMachine`. `readMachineClaims` parses an envelope
 without verifying its signature; authenticate its claims with the stored installation key through `verifyMachine`
 before using them. Use `createLeaseIssuer` to sign access leases and give

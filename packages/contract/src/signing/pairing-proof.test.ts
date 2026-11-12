@@ -6,7 +6,7 @@ const claims: PairingClaims = {
   origin: "https://cloud.example.test",
   action: "start",
   requestId: "12345678-1234-4234-8234-123456789abc",
-  localVenueId: "22345678-1234-4234-8234-123456789abc",
+  venueId: "22345678-1234-4234-8234-123456789abc",
   publicKey: keys.publicKey.export({ type: "spki", format: "der" }).toString("base64url"),
   environment: "test",
   code: "12345678",
@@ -23,15 +23,15 @@ const proof = (c = claims) => {
 };
 const check = (p = proof(), origin = claims.origin, action = "start", at = now) =>
   verifyPairingProof(p.payload, p.signature, origin, action, at);
-it("encodes the literal v1 fields and binds every signed field", () => {
+it("encodes the literal v2 fields and binds every signed field", () => {
   expect(pairingPayload(claims).toString()).toBe(
     JSON.stringify([
-      "waitron-cloud-pair-v1",
+      "waitron-cloud-pair-v2",
       claims.origin,
       "start",
       claims.requestId,
       claims.publicKey,
-      claims.localVenueId,
+      claims.venueId,
       "test",
       "12345678",
       "",
@@ -43,7 +43,7 @@ it("encodes the literal v1 fields and binds every signed field", () => {
   for (const changed of [
     { requestId: randomUUID() },
     { code: "87654321" },
-    { localVenueId: randomUUID() },
+    { venueId: randomUUID() },
     { environment: "production" as const },
   ])
     expect(() =>
@@ -73,6 +73,7 @@ it.each([
   { issuedAt: now + 60001 },
   { issuedAt: 1.5 },
   { requestId: "bad" },
+  { venueId: "bad" },
   { code: "123" },
   { organisationId: randomUUID() },
   { publicKey: "a".repeat(129) },
@@ -163,4 +164,18 @@ it("refuses an unpadded base64 alias of an otherwise valid signature", () => {
     true,
   );
   expect(() => check({ ...value, signature: alias })).toThrow(PairingError);
+});
+
+it("accepts a new venue without an id and refuses a signed v1 request", () => {
+  const fresh = { ...claims, venueId: "" };
+  expect(check(proof(fresh))).toEqual(fresh);
+  const old = JSON.parse(pairingPayload(claims).toString());
+  old[0] = "waitron-cloud-pair-v1";
+  const bytes = Buffer.from(JSON.stringify(old));
+  expect(() =>
+    check({
+      payload: bytes.toString("base64url"),
+      signature: sign(null, bytes, keys.privateKey).toString("base64url"),
+    }),
+  ).toThrow(PairingError);
 });

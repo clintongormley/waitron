@@ -70,6 +70,8 @@ import {
   applicationVersion,
   nodes,
   venueLocationId,
+  readCloudVenueId,
+  saveCloudVenueId,
   type Database,
   type NodeDatabase,
   type SingletonRole,
@@ -3851,7 +3853,8 @@ async function bootServer(
         stateDir: config.stateDir,
         tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
-        localVenueId: venueId,
+        readVenueId: () => readCloudVenueId(db),
+        recordVenueId: (id) => withTransaction(db, (tx) => saveCloudVenueId(tx, id)),
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;

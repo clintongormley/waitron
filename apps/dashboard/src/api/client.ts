@@ -1721,7 +1721,7 @@ export interface CloudConnectionStatus {
   openCloudUrl?: string;
   requestId?: string;
   expiresAt?: string;
-  localVenueId?: string;
+  venueId?: string;
   environment?: "test" | "production";
   organisationId?: string;
   legalBusinessId?: string;

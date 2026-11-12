@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as fs from "node:fs/promises";
@@ -23,7 +23,7 @@ it("saves the connection under cloud with private permissions and both flushes",
     );
     const folder = join(f.stateDir, "cloud");
     const path = join(folder, "connection.json");
-    expect(JSON.parse(await readFile(path, "utf8")).localVenueId).toBe(f.options.localVenueId);
+    expect(JSON.parse(await readFile(path, "utf8")).venueId).toBe(f.venueId);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
     expect((await stat(folder)).mode & 0o777).toBe(0o700);
     expect(writtenDurably(events, path, folder)).toBe(true);
@@ -102,7 +102,7 @@ it("persists before sending, resumes a failed start after restart and never expo
     const status = await resumed.start();
     expect(f.requests[0]!.slice(3, 10)).toEqual(f.requests[1]!.slice(3, 10));
     expect(status.state).toBe("awaiting_cloud");
-    expect(status.localVenueId).toBe(f.options.localVenueId);
+    expect(status.venueId).toBe(f.venueId);
     expect(status.environment).toBe("test");
     expect(JSON.stringify(status)).not.toContain(JSON.parse(before).privateKey);
     expect(status.openCloudUrl).toContain("/connect#request=");
@@ -172,7 +172,7 @@ it("rejects changed binding, malformed state, and mismatched replies without ove
     await client.start();
     const before = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
     await expect(
-      createCloudConnection({ ...f.options, localVenueId: randomUUID() }).status(),
+      createCloudConnection({ ...f.options, readVenueId: async () => randomUUID() }).status(),
     ).rejects.toMatchObject({ code: "cloud.state_invalid" });
     f.bad();
     await expect(client.check()).rejects.toMatchObject({ code: "cloud.unavailable" });
@@ -254,20 +254,23 @@ it("starts again only after Cloud refuses the old request, retaining the install
   }
 });
 
-it("emits the fixed version-one wire vector shared with Cloud", async () => {
+it("emits the fixed version-two wire vector shared with Cloud", async () => {
   const f = await fixture();
   const v = JSON.parse(
     await readFile(new URL("../test/cloud-pairing-vector.json", import.meta.url), "utf8"),
   );
-  const options = { ...f.options, origin: v.claims.origin, localVenueId: v.claims.localVenueId };
+  expect(createHash("sha256").update(Buffer.from(v.payload, "base64url")).digest("hex")).toBe(
+    v.sha256,
+  );
+  const options = { ...f.options, origin: v.claims.origin, readVenueId: async () => null };
   await mkdir(join(f.stateDir, "cloud"), { recursive: true });
   await writeFile(
     join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
-      version: 1,
+      version: 2,
       origin: v.claims.origin,
       requestId: v.claims.requestId,
-      localVenueId: v.claims.localVenueId,
+      venueId: v.claims.venueId,
       environment: "test",
       code: v.claims.code,
       privateKey: v.privateKey,
@@ -284,7 +287,7 @@ it("emits the fixed version-one wire vector shared with Cloud", async () => {
     });
     return Response.json({
       requestId: v.claims.requestId,
-      localVenueId: v.claims.localVenueId,
+      venueId: v.claims.venueId,
       environment: "test",
       expiresAt: new Date(v.claims.issuedAt + 600000).toISOString(),
       state: "awaiting_cloud",
@@ -296,6 +299,110 @@ it("emits the fixed version-one wire vector shared with Cloud", async () => {
   } finally {
     send.mockRestore();
     clock.mockRestore();
+    await f.close();
+  }
+});
+
+it("records Cloud's id before the pairing file and keeps the empty request binding on retries", async () => {
+  const f = await fixture();
+  let stored: string | null = null;
+  const path = join(f.stateDir, "cloud/connection.json");
+  let fileAtRecord: unknown;
+  const options = {
+    ...f.options,
+    readVenueId: async () => stored,
+    recordVenueId: async (id: string) => {
+      fileAtRecord = JSON.parse(await readFile(path, "utf8"));
+      stored = id;
+    },
+  };
+  try {
+    const client = createCloudConnection(options);
+    await client.start();
+    expect(f.requests[0]![0]).toBe("waitron-cloud-pair-v2");
+    expect(f.requests[0]![5]).toBe("");
+    f.approve();
+    const approved = await client.check();
+    const choice = {
+      requestId: approved.requestId!,
+      organisationId: f.organisationId,
+      legalBusinessId: f.legalBusinessId,
+    };
+    await client.complete(choice, async () => {});
+    expect(stored).toBe(f.venueId);
+    expect(fileAtRecord).toMatchObject({ venueId: "", view: { state: "awaiting_local" } });
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+      version: 2,
+      venueId: f.venueId,
+    });
+    await createCloudConnection(options).check();
+    expect(f.requests.every((v) => v[5] === "")).toBe(true);
+    // A new request presents the id already saved in the venue database.
+    await fs.unlink(path);
+    await createCloudConnection(options).start();
+    expect(f.requests.at(-1)![5]).toBe(f.venueId);
+  } finally {
+    await f.close();
+  }
+});
+
+it("recovers the pairing file after the venue id was committed but its file save failed", async () => {
+  const f = await fixture();
+  let stored: string | null = null;
+  const path = join(f.stateDir, "cloud/connection.json");
+  const options = {
+    ...f.options,
+    readVenueId: async () => stored,
+    recordVenueId: async (id: string): Promise<void> => {
+      stored = id;
+      throw new Error("power cut after database commit");
+    },
+  };
+  try {
+    const client = createCloudConnection(options);
+    await client.start();
+    f.approve();
+    const approved = await client.check();
+    await expect(
+      client.complete(
+        {
+          requestId: approved.requestId!,
+          organisationId: f.organisationId,
+          legalBusinessId: f.legalBusinessId,
+        },
+        async () => {},
+      ),
+    ).rejects.toThrow("power cut after database commit");
+    expect(stored).toBe(f.venueId);
+    expect(JSON.parse(await readFile(path, "utf8")).venueId).toBe("");
+    options.recordVenueId = async (id) => {
+      stored = id;
+    };
+    const restarted = createCloudConnection(options);
+    expect((await restarted.check()).state).toBe("complete");
+    expect(JSON.parse(await readFile(path, "utf8")).venueId).toBe(f.venueId);
+    expect(f.requests.at(-1)![5]).toBe("");
+  } finally {
+    await f.close();
+  }
+});
+
+it("treats a version-one connection file as not connected for status, refresh, revoke and start", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/connection.json");
+  try {
+    const client = createCloudConnection(f.options);
+    await client.start();
+    const saved = JSON.parse(await readFile(path, "utf8"));
+    await writeFile(path, JSON.stringify({ ...saved, version: 1 }));
+    expect((await client.status()).state).toBe("not_connected");
+    expect((await client.refresh()).state).toBe("not_connected");
+    await expect(client.revoke(async () => {})).rejects.toMatchObject({
+      code: "cloud.binding_conflict",
+    });
+    expect((await client.start()).requestId).not.toBe(saved.requestId);
+    expect(JSON.parse(await readFile(path, "utf8")).version).toBe(2);
+  } finally {
     await f.close();
   }
 });

@@ -499,7 +499,7 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     const connected = await send(manager.cookie);
     expect(connected.status).toBe(200);
     const body = await connected.json();
-    expect(body.localVenueId).toBe(f.options.localVenueId);
+    expect(body.venueId).toBe(f.venueId);
     expect(body.privateKey).toBeUndefined();
     await suite.db
       .update(managementSessions)
@@ -705,7 +705,7 @@ it("rejects malformed or extra browser inputs and reports an unconfigured server
     "[1]",
     "broken",
     "x".repeat(4097),
-    '{"localVenueId":"caller"}',
+    '{"venueId":"caller"}',
     '{"restart":null}',
     '{"restart":"true"}',
   ]) {

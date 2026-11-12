@@ -18,7 +18,7 @@ const pair = {
   action: "start" as const,
   requestId: id(1),
   publicKey,
-  localVenueId: id(2),
+  venueId: "",
   environment: "test" as const,
   code: "12345678",
   organisationId: "",
@@ -29,12 +29,12 @@ const bytes = pairingPayload(pair);
 assert.equal(
   bytes.toString(),
   JSON.stringify([
-    "waitron-cloud-pair-v1",
+    "waitron-cloud-pair-v2",
     origin,
     "start",
     id(1),
     publicKey,
-    id(2),
+    "",
     "test",
     "12345678",
     "",
