@@ -454,6 +454,27 @@ describe("openInvoiceCorrection", () => {
     expect((await read()).legs).toHaveLength(2);
   });
 
+  it("reads a filing refusal as what filing now would answer", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await venue.db.insert(invoiceCorrectionRefunds).values({
+      invoiceCorrectionId: correction.id,
+      tenderRefundId: await giveBack(saleId, "4.00"),
+      requestId: randomUUID(),
+    });
+    const voided = Object.create(venue.backend, {
+      correctionAdmissionFor: {
+        value: async () => ({ eligible: false, reason: "voided" }),
+      },
+    }) as typeof venue.backend;
+    expect(
+      await inTx(venue, (tx) => readInvoiceCorrection(tx, voided, venue.cfg, correction.id)),
+    ).toMatchObject({
+      moneyBack: "4.00",
+      fileNow: { refusal: "sale.correction_not_admitted" },
+    });
+  });
+
   it("refuses to read a correction that does not exist", async () => {
     const correctionId = randomUUID();
     await expect(
