@@ -108,7 +108,10 @@ async function mount(api: DashboardApi) {
   await vi.waitFor(() =>
     expect(rows().querySelector('tr[data-row-key="m-burger"]')).not.toBeNull(),
   );
-  screen.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
+  screen
+    .shadowRoot!.querySelector('wt-icon-button[data-test="select"]')!
+    .shadowRoot!.querySelector("button")!
+    .click();
   await vi.waitFor(() =>
     expect(rows().querySelector('[data-test="select-m-burger"]')).not.toBeNull(),
   );

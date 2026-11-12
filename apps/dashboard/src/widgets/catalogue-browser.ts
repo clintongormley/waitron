@@ -1,10 +1,11 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, iconButtonStyles, trackIconTooltip, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-icon-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import type {
   ExtraList,
@@ -92,7 +93,6 @@ export class CatalogueBrowser extends LitElement {
         min-width: 0;
       }
     `,
-    iconButtonStyles,
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) products: Product[] = [];
@@ -949,26 +949,17 @@ export class CatalogueBrowser extends LitElement {
           this.nameError = "";
         }}
       >
-        <!-- A native button: wt-button does not pass aria-pressed to its inner button. -->
-        <button
-          type="button"
+        <wt-icon-button
           slot="toolbar-start"
-          class="icon-button"
           data-test="select"
-          aria-label=${t("folders.select")}
-          aria-pressed=${String(this.selecting)}
+          label=${t("folders.select")}
+          icon="select-rows"
+          .pressed=${this.selecting}
           @click=${() => {
             this.selected = [];
             this.selecting = !this.selecting;
           }}
-          @pointerenter=${trackIconTooltip}
-          @pointerleave=${trackIconTooltip}
-          @focus=${trackIconTooltip}
-          @blur=${trackIconTooltip}
-        >
-          <wt-icon name="select-rows"></wt-icon
-          ><span class="icon-tooltip" aria-hidden="true">${t("folders.select")}</span>
-        </button>
+        ></wt-icon-button>
         <wt-input
           slot="toolbar-search"
           name="catalogue-search"

@@ -424,6 +424,7 @@ it("Done hides the grips and checkboxes, a drag moves nothing again, and focus r
   expect((await checkboxes(el)).length).toBe(0);
   const select = el.shadowRoot!.querySelector('[data-test="select"]')!;
   expect(el.shadowRoot!.activeElement).toBe(select);
+  expect(select.shadowRoot!.activeElement).toBe(selectButton(el));
   await dragAndClick(el, "bread", "folder:f");
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
@@ -1693,10 +1694,14 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
+const selectHost = (el: CatalogueBrowser) =>
+  el.shadowRoot!.querySelector('wt-icon-button[data-test="select"]')!;
+const selectButton = (el: CatalogueBrowser) => selectHost(el).shadowRoot!.querySelector("button")!;
+
 export async function press(el: CatalogueBrowser, action: string) {
   const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}"]`);
   expect(button, action).not.toBeNull();
-  button!.click();
+  (action === "select" ? selectButton(el) : button)!.click();
   await el.updateComplete;
 }
 export async function selectKeys(el: CatalogueBrowser, keys: string[]) {
@@ -3900,10 +3905,11 @@ it("A462 Customise follows Filters, Select and search on one toolbar line, in th
 
 it("Select is an icon button named Select, with a tooltip, pressed while selecting", async () => {
   const el = await mountBrowser();
-  const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+  expect(el.shadowRoot!.querySelector('wt-icon-button[data-test="select"]')).not.toBeNull();
+  const select = selectButton(el);
   expect(select.localName).toBe("button");
   expect(select.getAttribute("type")).toBe("button");
-  expect(select.getAttribute("slot")).toBe("toolbar-start");
+  expect(selectHost(el).getAttribute("slot")).toBe("toolbar-start");
   expect(select.getAttribute("aria-label")).toBe("Select");
   const icon = select.querySelector<HTMLElement>('wt-icon[name="select-rows"]')!;
   await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
@@ -3926,7 +3932,7 @@ it("Select is an icon button named Select, with a tooltip, pressed while selecti
 it("names Select in Spanish", async () => {
   setLocale("es");
   const el = await mountBrowser();
-  const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+  const select = selectButton(el);
   expect(select.getAttribute("aria-label")).toBe(es["folders.select"]);
   expect(select.querySelector(".icon-tooltip")!.textContent!.trim()).toBe(es["folders.select"]);
 });
@@ -3938,9 +3944,7 @@ it("pressing Select again leaves Select mode and clears the selection, as Done d
   await press(el, "select");
   expect((await tableOf(el)).selectable).toBe(false);
   expect(count(el)).toBeUndefined();
-  expect(el.shadowRoot!.querySelector('[data-test="select"]')!.getAttribute("aria-pressed")).toBe(
-    "false",
-  );
+  expect(selectButton(el).getAttribute("aria-pressed")).toBe("false");
   await press(el, "select");
   expect(count(el)).toBe("0 selected");
   expect(
@@ -4194,13 +4198,13 @@ it("draws the Select tooltip over the sticky headings", async () => {
     host.style.height = "600px";
     const table = await tableOf(el);
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+    const select = selectButton(el);
     await userEvent.hover(select);
     const tooltip = select.querySelector<HTMLElement>(".icon-tooltip")!;
     const tip = tooltip.getBoundingClientRect();
     const heading = table.shadowRoot!.querySelector("thead th")!.getBoundingClientRect();
     expect(tip.bottom).toBeGreaterThan(heading.top);
-    const hit = el.shadowRoot!.elementFromPoint(tip.left + 4, tip.bottom - 2);
+    const hit = selectHost(el).shadowRoot!.elementFromPoint(tip.left + 4, tip.bottom - 2);
     expect(hit !== null && tooltip.contains(hit)).toBe(true);
   } finally {
     await page.viewport(width, height);
@@ -4220,7 +4224,7 @@ it("a click on the Select tooltip, where it lies over the sticky headings, leave
     host.style.height = "600px";
     const table = await tableOf(el);
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+    const select = selectButton(el);
     const tooltip = select.querySelector<HTMLElement>(".icon-tooltip")!;
     await userEvent.hover(select);
     expect(table.shadowRoot!.querySelector("thead th")!.getBoundingClientRect().top).toBeLessThan(
@@ -4428,7 +4432,7 @@ it.each(
   await search.updateComplete;
   const controls = [
     table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!,
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!,
+    selectButton(el),
     search.shadowRoot!.querySelector<HTMLInputElement>("input")!,
     table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
   ];
@@ -4936,7 +4940,7 @@ it.each(
     const primary = document.createElement("span");
     primary.style.color = "var(--wt-color-primary-text)";
     host.append(primary);
-    const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+    const select = selectButton(el);
     const table = await tableOf(el);
     const filters = table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
     for (const [name, button, attribute] of [

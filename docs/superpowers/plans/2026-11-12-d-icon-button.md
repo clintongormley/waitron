@@ -1,6 +1,6 @@
 # Icon button implementation plan
 
-Drafted by a separate Sol-high invocation; shortened and checked by the Codex driver against `29f0e2cc51`. Claude approach read completed (344 seconds); corrections below applied, pending watcher clearance before build. No owner design approval claimed.
+Drafted by a separate Sol-high invocation; shortened and checked by the Codex driver against `29f0e2cc51`. Claude approach read completed (344 seconds); corrections below applied. Watcher cleared the trimmed plan and no-guide-text exception on 2026-11-12 at 15:21 in Lane D questions.md. No owner design approval claimed.
 
 **Ask, verbatim** (`~/waitron-campaign-d/queue.md`, Icon button bundle):
 > give the data table's columns button the same tooltip Filters has (`wt-data-table.ts:2965` has none); then a shared icon-button primitive, since `wt-button` cannot pass `aria-pressed`, replacing the hand-built Products Select and the Structure tab's Reorder and Select.

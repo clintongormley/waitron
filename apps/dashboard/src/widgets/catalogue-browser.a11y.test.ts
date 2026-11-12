@@ -78,7 +78,9 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
     await userEvent.tab();
     await userEvent.tab();
     expect(el.shadowRoot!.activeElement).toBe(select);
-    expect(getComputedStyle(select.querySelector(".icon-tooltip")!).display).toBe("block");
+    expect(getComputedStyle(select.shadowRoot!.querySelector(".icon-tooltip")!).display).toBe(
+      "block",
+    );
     await expectNoA11yViolations(host);
   });
 
@@ -179,7 +181,9 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
         await table.updateComplete;
       }
       if (["selection", "move", "delete"].includes(state)) {
-        el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
+        el.shadowRoot!.querySelector('wt-icon-button[data-test="select"]')!
+          .shadowRoot!.querySelector("button")!
+          .click();
         await el.updateComplete;
         await list.updateComplete;
         const table = list.shadowRoot!.querySelector("wt-data-table")!;

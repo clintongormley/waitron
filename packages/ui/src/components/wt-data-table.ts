@@ -628,7 +628,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         display: contents;
       }
 
-      .columns-trigger,
       .expand-all {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
@@ -639,6 +638,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-text);
         font: inherit;
         cursor: pointer;
+      }
+
+      .columns-trigger > .icon-tooltip {
+        inset-inline: auto 0;
       }
 
       .columns-list {
@@ -754,7 +757,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      .columns-trigger:focus-visible,
       .expand-all:focus-visible,
       .eye-toggle input:focus-visible + wt-icon {
         outline: var(--wt-focus-ring);
@@ -2964,13 +2966,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     );
     return html`<button
         type="button"
-        class="columns-trigger"
+        class="columns-trigger icon-button"
         aria-expanded=${this.chooserOpen}
         aria-label=${this.customiseColumnsLabel}
+        @pointerenter=${trackIconTooltip}
+        @pointerleave=${trackIconTooltip}
+        @focus=${trackIconTooltip}
+        @blur=${trackIconTooltip}
         @click=${this.#toggleChooser}
         @keydown=${this.#chooserKeydown}
       >
         <wt-icon name="table-customise"></wt-icon>
+        <span class="icon-tooltip" aria-hidden="true">${this.customiseColumnsLabel}</span>
       </button>
       <wt-dialog
         class="columns-panel"

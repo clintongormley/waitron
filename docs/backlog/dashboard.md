@@ -799,17 +799,6 @@ The editor repeats the list title and has no parent link above the heading
   then apply the parent link and one item-name `h1` while retaining the unsaved-changes check.
 
 
-## Loose ends left by W83's review (#1193), not started.
-
-- The table's Customise columns button is icon-only beside Filters and Select but has neither
-    their look nor a tooltip.
-  - The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not
-    a `wt-icon-button` component — the Products table's Select is a native `<button>` because
-    `wt-button` does not pass `aria-pressed` through, and the Structure tab's Reorder and Select
-    toggles are hand-built icon buttons for the same reason.
-  [Detail](catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
-
-
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).
 
 Left as they were, from #827's review: unlike the two staff

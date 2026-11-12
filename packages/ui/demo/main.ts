@@ -9,6 +9,7 @@ import {
   type WtDataTable,
 } from "../src/index.js";
 import "../src/components/wt-button.js";
+import "../src/components/wt-icon-button.js";
 import "../src/components/wt-card.js";
 import "../src/components/wt-disclosure.js";
 import "../src/components/wt-dialog.js";
@@ -76,6 +77,11 @@ const panel = (theme: "light" | "dark") => `
       <wt-button shape="round" variant="primary" aria-label="Add"
         ><wt-icon name="plus"></wt-icon
       ></wt-button>
+    </div>
+    <div class="row">
+      <wt-icon-button label="Add" icon="plus"></wt-icon-button>
+      <wt-icon-button class="demo-icon-toggle" label="Select basket" icon="cart"></wt-icon-button>
+      <wt-icon-button label="Remove" icon="minus" disabled></wt-icon-button>
     </div>
     <div class="row">
       <wt-button size="sm">sm</wt-button>
@@ -635,4 +641,13 @@ for (const panel of app.querySelectorAll(".panel")) {
       modal.open = false;
     });
   }
+}
+
+for (const button of document.querySelectorAll<HTMLElementTagNameMap["wt-icon-button"]>(
+  ".demo-icon-toggle",
+)) {
+  button.pressed = false;
+  button.addEventListener("click", () => {
+    button.pressed = !button.pressed;
+  });
 }

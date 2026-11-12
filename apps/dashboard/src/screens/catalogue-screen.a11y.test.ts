@@ -447,7 +447,10 @@ describe.each(["light", "dark"] as const)("named extras archive warnings (%s)", 
                 }),
               );
             } else {
-              browser.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
+              browser
+                .shadowRoot!.querySelector('wt-icon-button[data-test="select"]')!
+                .shadowRoot!.querySelector("button")!
+                .click();
               await browser.updateComplete;
               const list = browser.shadowRoot!.querySelector("dashboard-product-list")!;
               await list.updateComplete;
