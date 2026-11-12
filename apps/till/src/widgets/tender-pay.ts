@@ -1,3 +1,4 @@
+import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import { cardSlipChoice } from "./pay-equipment.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -275,6 +276,7 @@ export class TillTenderPay extends LitElement {
 
   /** The order this widget settles. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
+  @property({ attribute: false }) filters: MenuFilters = EMPTY_MENU_FILTERS;
   /**
    * A sale or order is being sent (card-grid also ORs its held basket into it). Disabling the
    * controls is only the VISIBLE half of the guard against a second send; the real safety is the
@@ -844,6 +846,7 @@ export class TillTenderPay extends LitElement {
       this.modifierDraft
         ? html`<till-modifier-picker
             .product=${this.modifierDraft.product}
+            .filters=${this.filters}
             .quantity=${this.modifierDraft.quantity}
             @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
               event.stopPropagation();

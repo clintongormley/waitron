@@ -1,5 +1,6 @@
 import type { AllergenCode, Kind, ProductAllergens } from "@waitron/shared";
 import type { TillProduct } from "./api/client.js";
+import { offeredListsOf, productAsVariant } from "./state/order-line.js";
 
 /**
  * Only the grid is filtered: a screen keeps the full product set for name and allergen lookups,
@@ -83,6 +84,19 @@ export function allowsAllergenChoice(
   );
 }
 
+function hasCompatibleExtras(product: TillProduct, filters: MenuFilters): boolean {
+  return offeredListsOf(product).every(
+    (entry) =>
+      entry.kind !== "extras" ||
+      entry.items.reduce(
+        (capacity, item) =>
+          capacity +
+          (allowsAllergenChoice(item.addAllergens, filters) ? (item.maxQuantity ?? Infinity) : 0),
+        0,
+      ) >= entry.minPicks,
+  );
+}
+
 export function visibleProducts(
   products: TillProduct[],
   selectedMenuId: string,
@@ -94,12 +108,16 @@ export function visibleProducts(
   if (!exclusions.some(([, selected]) => isActiveExclusion(selected))) return byDiet;
   return byDiet.flatMap((product) => {
     if ((product.variants?.length ?? 0) > 0) {
-      const variants = product.variants!.filter((variant) =>
-        allowsAllergenChoice(variant.allergens, filters),
+      const variants = product.variants!.filter(
+        (variant) =>
+          allowsAllergenChoice(variant.allergens, filters) &&
+          hasCompatibleExtras(productAsVariant(product, variant), filters),
       );
       return variants.length > 0 ? [{ ...product, variants }] : [];
     }
-    return allowsAllergenChoice(product.allergens, filters) ? [product] : [];
+    return allowsAllergenChoice(product.allergens, filters) && hasCompatibleExtras(product, filters)
+      ? [product]
+      : [];
   });
 }
 

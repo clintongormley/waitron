@@ -265,9 +265,8 @@ declaraciones, no rechaza la publicación. Si cancelas la confirmación de progr
 fecha y la hora que introdujiste.
 
 Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos
-cuyos alérgenos nadie ha introducido, ni en el plato ni en ninguna de sus variantes. Para que un
-plato así aparezca, elige sus alérgenos, o **No contiene ninguno de los 14**, y vuelve a publicar
-cada carta en la que esté.
+y tamaños sin revisar. Declara los alérgenos de cada tamaño que vendes, o elige **No contiene
+ninguno de los 14**, y vuelve a publicar cada carta en la que esté.
 
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
@@ -427,6 +426,14 @@ declaración. Los extras mantienen su propia información nutricional separada d
 elegir los extras de un plato, cada extra muestra los alérgenos que declara su producto antes de
 añadirlo. Un extra sin revisar no muestra ninguno, lo que no establece que sea apto. La caja no
 tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
+
+Al añadir un plato con un filtro de alérgenos activo, solo puedes elegir tamaños y extras
+compatibles cuya declaración esté revisada. Los extras opcionales no ocultan el plato. Si un
+extra preseleccionado es incompatible o está sin revisar, comprueba los extras indicados y elige
+**Quitar extras y continuar**, o **Cancelar**. Elige sustitutos cuando el grupo de extras los
+requiera. El filtro también se aplica al añadir un plato al peso o desde su ventana de información;
+no cambia los platos que ya tienes en el pedido. Las respuestas de opciones, como el punto de
+cocción, no tienen declaraciones de alérgenos y no se filtran: compruébalas tú.
 
 Mayús+F10 o la tecla de menú contextual abre la misma ventana de información para un producto
 enfocado. Intro selecciona un plato disponible; toca o pulsa Intro sobre uno agotado para abrir su información.

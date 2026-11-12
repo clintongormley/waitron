@@ -162,3 +162,27 @@ it("decimal input weight is shown in Spanish and stored at the same quantity", a
   expect(store.lines[0]!.quantity).toBe("0.250");
   setLocale("en");
 });
+
+it("forwards the active exclusions into a new weighed dish's choices", async () => {
+  const store = new WorkingOrderStore();
+  const filters = { diets: [], exclude: { nuts: "all" as const } };
+  const product = {
+    ...hamWithVariants,
+    variants: hamWithVariants.variants!.map((variant, index) => ({
+      ...variant,
+      allergens: index === 0 ? { nuts: {} } : {},
+    })),
+  };
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, filters });
+  store.emit("product-selected", product);
+  await el.updateComplete;
+  await type(el, "0.250");
+  click(el, ".add");
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+  await picker.updateComplete;
+  expect(picker.filters).toBe(filters);
+  picker.confirm();
+  expect(store.lines[0]!.product.variantId).toBe("v-serrano");
+  expect(store.lines[0]!.quantity).toBe("0.250");
+});

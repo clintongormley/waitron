@@ -501,6 +501,9 @@ export const en = {
   "modifier.edit": "Modifiers",
   "modifier.save": "Save",
   "modifier.variant": "Variant",
+  "modifier.remove_extras_question":
+    "These preselected extras do not match the allergen filter. Remove them?",
+  "modifier.remove_extras_continue": "Remove extras and continue",
   "modifier.selection_changed":
     "A selected extra is no longer available. Cancel and reopen the product to choose again.",
   "modifier.selected_total": "Selected",
@@ -2494,6 +2497,9 @@ export const es: Record<StringKey, string> = {
   "modifier.edit": "Modificadores",
   "modifier.save": "Guardar",
   "modifier.variant": "Variante",
+  "modifier.remove_extras_question":
+    "Estos extras preseleccionados no cumplen el filtro de alérgenos. ¿Quieres quitarlos?",
+  "modifier.remove_extras_continue": "Quitar extras y continuar",
   "modifier.selection_changed":
     "Un extra seleccionado ya no está disponible. Cancela y vuelve a abrir el producto para elegir de nuevo.",
   "modifier.selected_total": "Seleccionados",

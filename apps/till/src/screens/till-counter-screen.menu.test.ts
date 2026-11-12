@@ -276,3 +276,16 @@ describe("the Pay entry while the basket's pay controls are held", () => {
     expect(await mountHeld(true)).toBe("primary");
   });
 });
+
+it("forwards active exclusions to the menu browser and counter weighing panel", async () => {
+  const filters = { diets: [], exclude: { nuts: "all" as const } };
+  const { el, browser } = await mountBrowser({ selectedFilters: filters });
+  expect(browser().filters).toBe(filters);
+  expect(
+    (
+      el.shadowRoot!.querySelector(
+        "till-tender-pay",
+      )! as import("../widgets/tender-pay.js").TillTenderPay
+    ).filters,
+  ).toBe(filters);
+});

@@ -28,6 +28,7 @@ import { productName, productUnit } from "./product-name.js";
 import { lineNutrition } from "./line-nutrition.js";
 import { extraNutrition } from "./diet-badges.js";
 import { optionAnswers } from "./option-snapshot.js";
+import { allowsAllergenChoice, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import type { LineNutrition } from "../api/client.js";
 import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
@@ -257,6 +258,9 @@ export class TillModifierPicker extends LitElement {
    * a fresh open seeds the offer's defaults, a reopen never does. */
   @property({ attribute: false }) initialSelections?: LineSelection;
 
+  @property({ attribute: false }) filters: MenuFilters = EMPTY_MENU_FILTERS;
+  @state() private removedDefaults: string[] = [];
+
   @property({ type: Boolean }) withNote = false;
 
   @property({ attribute: false }) initialCourse?: string;
@@ -430,6 +434,15 @@ export class TillModifierPicker extends LitElement {
         this.answers[answer.listId] = answer.labelId;
       return;
     }
+    this.removedDefaults = offeredListsOf(this.product).flatMap((entry) =>
+      entry.kind === "extras" && !this.inline
+        ? entry.items
+            .filter(
+              (item) => item.preselected && !allowsAllergenChoice(item.addAllergens, this.filters),
+            )
+            .map((item) => item.name)
+        : [],
+    );
     this.variantId = this.#variants.find((variant) => variant.available)?.id ?? "";
     for (const entry of this.#offered) {
       if (entry.kind === "options") {
@@ -445,13 +458,27 @@ export class TillModifierPicker extends LitElement {
   /** The lists the till offers on this dish (`offeredListsOf`), in offer order. A product the till synthesised (a retrieved line
    * with no live offer) carries none, and then the dialog has only its variants to ask about. */
   get #offered() {
-    return offeredListsOf(this.product);
+    const entries = offeredListsOf(this.product);
+    return this.initialSelections !== undefined || this.inline
+      ? entries
+      : entries.map((entry) =>
+          entry.kind === "extras"
+            ? {
+                ...entry,
+                items: entry.items.filter((item) =>
+                  allowsAllergenChoice(item.addAllergens, this.filters),
+                ),
+              }
+            : entry,
+        );
   }
 
-  /** Every variant the offer lists, in variant order; an unavailable one is drawn disabled. The
-   * parent itself is never offered: a product with variants is sold as one of them. */
   get #variants() {
-    return this.inline ? [] : (this.product.variants ?? []);
+    if (this.inline) return [];
+    const variants = this.product.variants ?? [];
+    return this.initialSelections !== undefined
+      ? variants
+      : variants.filter((variant) => allowsAllergenChoice(variant.allergens, this.filters));
   }
 
   get #chosenVariant() {
@@ -503,7 +530,7 @@ export class TillModifierPicker extends LitElement {
    */
   #satisfied(stale: readonly SelectedExtra[], totals: ReadonlyMap<string, number>): boolean {
     if (this.#variants.length > 0 && this.#chosenVariant === undefined) return false;
-    if (stale.length > 0) return false;
+    if (stale.length > 0 || this.removedDefaults.length > 0) return false;
     return this.#offered.every((entry) => {
       if (entry.kind === "options")
         return entry.labels.some((label) => label.id === this.answers[entry.id]);
@@ -849,6 +876,35 @@ export class TillModifierPicker extends LitElement {
                           </label>`,
                       )}
                     </fieldset>`
+              }
+              ${
+                this.removedDefaults.length === 0
+                  ? nothing
+                  : html`<div
+                      class="allergen-removal"
+                      role="group"
+                      aria-label=${t("modifier.remove_extras_question")}
+                    >
+                      <p>${t("modifier.remove_extras_question")}</p>
+                      <ul>
+                        ${this.removedDefaults.map((name) => html`<li>${name}</li>`)}
+                      </ul>
+                      <wt-button
+                        class="remove-extras"
+                        variant="primary"
+                        @click=${(event: Event) => {
+                          event.stopPropagation();
+                          this.removedDefaults = [];
+                        }}
+                        >${t("modifier.remove_extras_continue")}</wt-button
+                      >
+                      <wt-button
+                        class="cancel-removal"
+                        variant="secondary"
+                        @click=${(event: Event) => this.#cancel(event)}
+                        >${t("action.cancel")}</wt-button
+                      >
+                    </div>`
               }
               ${this.#offered.map((entry) =>
                 entry.kind === "extras"

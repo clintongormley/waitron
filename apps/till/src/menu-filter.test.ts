@@ -322,6 +322,76 @@ describe("A738 filter combinations", () => {
     expect(dish.variants![1]!.available).toBe(true);
   });
 
+  it("requires enough compatible extra capacity while keeping optional toppings optional", () => {
+    const item = (
+      id: string,
+      maxQuantity: number | null,
+      addAllergens: TillProduct["allergens"],
+    ) => ({
+      productId: id,
+      name: id,
+      customerName: { en: `${id} customer` },
+      kitchenName: `${id} kitchen`,
+      presentation: {
+        name: id,
+        customerName: { en: `${id} customer` },
+        kitchenName: `${id} kitchen`,
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
+      portion: "1",
+      unit: {
+        id: "each",
+        staffName: "Each",
+        staffAbbreviation: "ea",
+        name: { en: "Each" },
+        abbreviation: { en: "ea" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      price: "1.00",
+      vatClass: "general" as const,
+      maxQuantity,
+      preselected: false,
+      addAllergens,
+      suitableFor: [],
+    });
+    const dish: TillProduct = {
+      ...product("salad"),
+      allergens: {},
+      offeredModifiers: [
+        {
+          kind: "extras",
+          id: "toppings",
+          name: "Toppings",
+          customerName: { en: "Customer toppings" },
+          kitchenName: "Kitchen toppings",
+          minPicks: 2,
+          maxPicks: 3,
+          items: [
+            item("seeds", 1, {}),
+            item("nuts", null, { nuts: {} }),
+            item("unknown", null, null),
+          ],
+        },
+      ],
+    };
+    const filters = { diets: [], exclude: { nuts: "all" as const } };
+    expect(visibleProducts([dish], "", filters)).toEqual([]);
+    const group = dish.offeredModifiers![0]!;
+    if (group.kind !== "extras") throw new Error("expected extras");
+    group.items[0]!.maxQuantity = 2;
+    expect(visibleProducts([dish], "", filters)).toEqual([dish]);
+    group.items[0]!.maxQuantity = null;
+    expect(visibleProducts([dish], "", filters)).toEqual([dish]);
+    group.items = [];
+    group.minPicks = 0;
+    expect(visibleProducts([dish], "", filters)).toEqual([dish]);
+    group.minPicks = 1;
+    expect(visibleProducts([dish], "", EMPTY_MENU_FILTERS)).toEqual([dish]);
+  });
+
   it("A738 leaves empty filters and unchanged immutable memo inputs stable", () => {
     const products = [product("one", "food"), product("two", "drink")];
     expect(visibleProducts(products, "", EMPTY_MENU_FILTERS)).toBe(products);
