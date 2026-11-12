@@ -111,7 +111,7 @@ useVenueDb({
     const session = await inTx(venue, async (tx) => {
       const [person] = await tx
         .insert(persons)
-        .values({ displayName: "Sofía", pinHash: hashPin(SUPERVISOR_PIN), role: "supervisor" })
+        .values({ displayName: "Sophia", pinHash: hashPin(SUPERVISOR_PIN), role: "supervisor" })
         .returning({ id: persons.id });
       supervisorId = person!.id;
       return loginWithPin(tx, {
