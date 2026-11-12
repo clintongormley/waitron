@@ -1260,7 +1260,6 @@ CREATE TABLE `sales` (
 	`invoice_number` integer NOT NULL,
 	`issued_at` text NOT NULL,
 	`issued_offset_minutes` integer NOT NULL,
-	`operation_date` text,
 	`total` integer NOT NULL,
 	`vat_breakdown` text NOT NULL,
 	`locale` text NOT NULL,
