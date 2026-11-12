@@ -548,7 +548,7 @@ Open:
   were all declined or given back in full can be (owner, 2026-11-12, R6-2). A bill still
   holding money would have its invoice settled in part, and `settleSale`
   (`packages/core/src/settle-sale.ts`) refuses a settlement whose payments do not add up to
-  the amount due. Such a table can only be finished by taking the rest as payment.
+  the amount due.
 - **Collecting PART of the debt later is not built**, for the same reason. Collecting it in
   full uses `POST /api/working-orders/:id/collect`.
 - **A dish never sent, on hold, or waiting for the pass and not fully served blocks the
