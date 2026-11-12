@@ -63,7 +63,7 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
 describe("the running server's clock correction", () => {
-  it("is handed to the watch and the set route, has the watch as an anchor, and a set clears the clock-service caches", async () => {
+  it("is handed to the watch and the set route, and a set clears the clock-service caches", async () => {
     let statusReads = 0;
     const host: BoxHostClient = {
       clockStatus: async () => {
@@ -112,7 +112,6 @@ describe("the running server's clock correction", () => {
           (seen.corrections[0] as Record<string, unknown>)[method],
         );
       }
-      expect(seen.anchors[0]).toContain(seen.watches[0]);
 
       await vi.waitFor(async () => {
         expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);

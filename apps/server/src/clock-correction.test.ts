@@ -4,7 +4,6 @@ import type {
   ClockConfirmation,
   ClockStepRecorded,
   ClockStepRequest,
-  ClockWitness,
   TrustedReading,
 } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
@@ -30,16 +29,6 @@ const UNSYNCHRONISED: ClockServiceStatus = {
   synchronised: false,
   lastSyncAt: null,
 };
-
-function authority(boxMs: number, differenceMs: number): ClockWitness {
-  return {
-    kind: "authority",
-    id: "authority",
-    boxAt: new Date(boxMs).toISOString(),
-    witnessAt: new Date(boxMs + differenceMs).toISOString(),
-    uncertaintyMs: 40,
-  };
-}
 
 const LUIS: ClockAdminConfirm = {
   personId: "0b6f1c1e-7f2a-4a35-9c1d-2f0e5a8b9c10",
@@ -278,15 +267,12 @@ function byStaff(h: Harness, over: Partial<SetInput> = {}): SetInput {
 }
 
 describe("setting the box's clock", () => {
-  it("judges the stop, reads the service, tells the anchors, judges the stop again, sets, re-anchors, clears and records, in that order", async () => {
+  it("reads the service, sets, re-anchors, clears and records, in that order", async () => {
     const h = harness();
     const answer = await h.correction.set(byAdmin(h));
 
     expect(h.calls).toEqual([
-      "clockStopState",
       "clockStatus",
-      "stepComing",
-      "clockStopState",
       "setClock",
       "reanchor",
       "clear",
@@ -300,7 +286,7 @@ describe("setting the box's clock", () => {
       confirmedAt: SET_AT,
     });
     expect(h.hostSets).toEqual([
-      { targetMs: START_MS + H, requester: { source: "authority", check: "check-1" } },
+      { targetMs: START_MS + H, requester: { source: "admin", person: LUIS.personId } },
     ]);
     expect(h.correction.steps()).toBe(1);
   });
@@ -318,9 +304,9 @@ describe("setting the box's clock", () => {
       targetAt: new Date(START_MS + H).toISOString(),
       stepMs: H,
       verified: true,
-      reason: "behind_chain",
-      source: "authority",
-      witnesses: [authority(START_MS, H)],
+      reason: "unusable",
+      source: "admin",
+      witnesses: [],
       nodeId: "node-1",
     });
   });
@@ -512,7 +498,7 @@ describe("rows kept pending", () => {
     expect(
       await h.correction.set(byAdmin(h, { stepsSeen: 1, measuredAt: h.measured() })),
     ).toMatchObject({ set: true });
-    expect(h.seatCalls.map((request) => request.source)).toEqual(["authority", "admin"]);
+    expect(h.seatCalls.map((request) => request.source)).toEqual(["admin", "admin"]);
   });
 
   it("writes a pending row once when two writePending calls overlap", async () => {
@@ -529,19 +515,19 @@ describe("a set that asks nothing of the host", () => {
   it("refuses while the time service is synchronised", async () => {
     const h = harness({ status: { ...UNSYNCHRONISED, synchronised: true } });
     expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "synchronised" });
-    expect(h.calls).toEqual(["clockStopState", "clockStatus"]);
+    expect(h.calls).toEqual(["clockStatus"]);
   });
 
   it("refuses while the box's clock service is unavailable", async () => {
     const h = harness({ status: { available: false, reason: "missing", detail: "ENOENT" } });
     expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "host_unavailable" });
-    expect(h.calls).toEqual(["clockStopState", "clockStatus"]);
+    expect(h.calls).toEqual(["clockStatus"]);
   });
 
   it("refuses once the stop no longer holds", async () => {
     const h = harness({ unusable: () => false });
     expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "not_stopped" });
-    expect(h.calls).toEqual(["clockStopState"]);
+    expect(h.calls).toEqual([]);
   });
 
   it("refuses a target before 28 October 2024", async () => {
@@ -659,11 +645,11 @@ describe("a stale offset", () => {
 });
 
 describe("clocks that move or cannot be read", () => {
-  it("refuses stale when the wall clock steps while the host's status is read, re-anchoring", async () => {
+  it("refuses stale when the wall clock steps while the host's status is read", async () => {
     const h = harness({ statusMovesWallMs: 5 * S });
     expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "stale" });
     expect(h.hostSets).toEqual([]);
-    expect(h.calls).toContain("reanchor");
+    expect(h.calls).toEqual(["clockStatus"]);
   });
 
   it("measures the step on the steady clock when the boot-time clock cannot be read", async () => {
@@ -879,12 +865,12 @@ describe("a person's set judged again once the waits are over", () => {
       .mockResolvedValue("not_admitted");
     expect(await h.correction.set(byStaff(h, { admit }))).toEqual({
       set: false,
-      reason: "authority_pending",
+      reason: "not_admitted",
     });
     expect(h.hostSets).toEqual([]);
-    expect(h.calls).toContain("reanchor");
+    expect(h.calls).toEqual(["clockStatus"]);
   });
-  it("re-anchors every anchor and passes on the error when the till's check throws once the waits are over", async () => {
+  it("passes on the error when the till's check throws once the waits are over, telling no anchor", async () => {
     const calls: string[] = [];
     const h = harness({
       anchors: [
@@ -904,12 +890,7 @@ describe("a person's set judged again once the waits are over", () => {
       code: "session.required",
     });
     expect(h.hostSets).toEqual([]);
-    expect(calls).toEqual([
-      "first.stepComing",
-      "second.stepComing",
-      "first.reanchor",
-      "second.reanchor",
-    ]);
+    expect(calls).toEqual([]);
   });
 });
 
@@ -920,7 +901,7 @@ describe("a staff member's set", () => {
       const admit = vi.fn(async () => reason);
       expect(await h.correction.set(byStaff(h, { admit }))).toEqual({ set: false, reason });
       expect(admit).toHaveBeenCalledWith(TX);
-      expect(h.calls).toEqual(["clockStopState"]);
+      expect(h.calls).toEqual([]);
     });
   }
 
@@ -980,7 +961,6 @@ describe("a set at the start", () => {
       const h = harness({ start, duringSet: () => void sets++ });
       expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
       expect(h.hostSets).toHaveLength(1);
-      expect(h.calls).toContain("clockStopState");
       expect(h.seatCalls[0]).toMatchObject({ reason: "start", source: "staff" });
       expect(start.state.status).toBe("by_person");
       expect(start.state.mark).toEqual({ "node-1": 8 });

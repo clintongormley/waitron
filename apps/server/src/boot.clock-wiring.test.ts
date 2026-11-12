@@ -18,6 +18,7 @@ import type {
 } from "@waitron/catalogue/src/content-translation-types.js";
 import { AppError, jobOrigin } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
+import type { BoxHostClient } from "./box-host-client.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
@@ -158,8 +159,21 @@ vi.mock("@waitron/module", async (importOriginal) => {
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
+function hostReporting(synchronised: boolean): BoxHostClient {
+  return {
+    clockStatus: async () => ({
+      available: true,
+      service: "on",
+      unit: "chrony.service",
+      synchronised,
+      lastSyncAt: null,
+    }),
+    setClock: async () => ({ available: false, reason: "missing" }),
+  };
+}
+
 describe("boot's authority clock wiring", () => {
-  it("raises the drift alert from a sample the fiscal drain observes, and runs the Translate all loop until close", async () => {
+  it("raises the drift alert, once the start's time is confirmed by the internet, from a sample the fiscal drain observes, and runs the Translate all loop until close", async () => {
     beforeServerStarts();
     const venue = await setupVenue(suite.db);
     // A step the box made to its clock, already handled, so it raises no alert or email here.
@@ -225,7 +239,7 @@ describe("boot's authority clock wiring", () => {
         WAITRON_CLOUD_ORIGIN: "https://cloud.example",
         WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
       };
-      server = await startServer(env, env);
+      server = await startServer(env, env, { boxHost: hostReporting(true) });
       await vi.waitFor(async () => {
         expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
       });
@@ -476,6 +490,64 @@ describe("boot's authority clock wiring", () => {
       vi.mocked(createContentSuggestionRunner).mockClear();
       vi.mocked(mountContentSuggestionsApi).mockClear();
       loop.ended = false;
+      if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it("hides the drift alert while the start waits for its time", async () => {
+    beforeServerStarts();
+    const venue = await setupVenue(suite.db);
+    const [port] = await freePorts(1);
+    let scratch: string | undefined;
+    let server: StartedServer | undefined;
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-14T00:00:00Z"));
+      suite.db.run(sql`update management_sessions set last_seen_at = ${new Date().toISOString()}`);
+      const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+      scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-wiring-"));
+      const migrationsRoot = join(scratch, "migrations");
+      for (const [index, set] of manifestSets().entries()) {
+        await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+          recursive: true,
+        });
+      }
+      await writeFile(
+        join(scratch, "modules.json"),
+        JSON.stringify({ modules: { "fiscal-none": false } }),
+      );
+      const env = {
+        WAITRON_STATE_DIR: scratch,
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        WAITRON_VENUE_DIR: dirname(database),
+        WAITRON_NODE_ID: venue.cfg.nodeId,
+        WAITRON_ENV: "preproduction",
+        WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
+      };
+      server = await startServer(env, env, { boxHost: hostReporting(false) });
+      await vi.waitFor(async () => {
+        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+      });
+      // The fake drain observes its sample before it returns.
+      await vi.waitFor(() => expect(drain.calls.length).toBeGreaterThan(0), { timeout: 10_000 });
+      const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
+        headers: { cookie: venue.managerCookie },
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { alerts: Alert[] };
+      expect(body.alerts.filter((alert) => alert.code === "fiscal.clock_drift")).toEqual([]);
+    } finally {
+      try {
+        if (server !== undefined) await server.close();
+      } finally {
+        vi.useRealTimers();
+      }
+      drain.calls = [];
+      drain.slots = [];
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }
   });
