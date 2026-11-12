@@ -18,6 +18,7 @@ import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
+import { holdsPayment } from "./bill-payments.js";
 import { saveDraft } from "./order-drafts.js";
 import { readTransferClosure } from "./transfer-close.js";
 import { readOrderRevision } from "./working-order.js";
@@ -282,6 +283,40 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
     );
 
     expect(error).toMatchObject(ineligible(party.tabId, "prior_payment"));
+  });
+
+  it("a bill whose only payment was a declined card still closes as a deferred payment", async () => {
+    const party = await seatedWith(t.venue, "House salad");
+    const expectedEdit = await inTx(t.venue, (tx) => readBillEditState(tx, party.tabId));
+    t.venue.card.failNextCollect();
+    const declined = await send(
+      t.venue.app,
+      t.venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        expectedEdit,
+        kind: "contribution",
+        amount: "5.00",
+        method: "card",
+        entry: "reader",
+        applied: "5.00",
+        tip: "0.00",
+      },
+    );
+    expect(declined.status).toBe(200);
+    expect(declined.json).toMatchObject({
+      outcome: "declined",
+      payment: { state: "failed" },
+      balance: { received: "0.00", reserved: "0.00" },
+    });
+    // The rule every other "this bill has a payment" refusal uses says the bill holds none.
+    expect(await inTx(t.venue, (tx) => holdsPayment(tx, party.tabId))).toBe(false);
+
+    const closed = await t.close(await t.requestFor(party.tabId, "12.00", party.partyId));
+
+    expect(closed.workingOrderId).toBe(party.tabId);
   });
 
   it("a bill whose card payment is still being taken", async () => {
