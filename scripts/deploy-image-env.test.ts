@@ -50,6 +50,31 @@ function only(source: string, pattern: RegExp, what: string): string {
   return match[1];
 }
 
+/**
+ * Each `docker/build-push-action` step's `build-args` entries, one list per step (empty when the
+ * step has none). Reads text: a step is the lines from its `- ` item to the next one.
+ */
+function buildPushBuildArgs(workflow: string): string[][] {
+  return workflow
+    .split(/\n(?=\s*- )/)
+    .filter((step) => /^\s+uses: docker\/build-push-action@/m.test(step))
+    .map((step) => {
+      const lines = step.split("\n");
+      const at = lines.findIndex((line) => /^\s+build-args:/.test(line));
+      if (at === -1) return [];
+      const key = lines[at]!;
+      const inline = key.replace(/^\s+build-args:\s*/, "");
+      if (inline !== "|") return [inline];
+      const indent = key.search(/\S/);
+      const entries: string[] = [];
+      for (const line of lines.slice(at + 1)) {
+        if (line.trim() !== "" && line.search(/\S/) <= indent) break;
+        if (line.trim() !== "") entries.push(line.trim());
+      }
+      return entries;
+    });
+}
+
 /** The image's `ENV` block as a record — one `ENV` instruction, backslash-continued. */
 function imageEnv(dockerfile: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -169,7 +194,9 @@ describe("the container image's environment", () => {
 
   it("stamps the exact source revision into every CI-built image", () => {
     expect(IMAGE_ENV.WAITRON_BUILD_ID).toBe("${WAITRON_BUILD_ID}");
-    expect(CI).toContain("build-args: WAITRON_BUILD_ID=${{ github.sha }}");
+    const steps = buildPushBuildArgs(CI);
+    expect(steps.length).toBeGreaterThan(0);
+    for (const args of steps) expect(args).toContain("WAITRON_BUILD_ID=${{ github.sha }}");
     expect(IMAGE_SMOKE).toContain("build-args: WAITRON_BUILD_ID=${{ github.sha }}");
   });
 
