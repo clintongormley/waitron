@@ -42,6 +42,16 @@ describe("reserved-identity accessors", () => {
     locationId = await venueLocationId(suite.db);
   });
 
+  it("stores a node without linking it to a location", async () => {
+    await suite.db.run(sql`insert into nodes (id, name, created_at)
+      values ('55555555-5555-4555-8555-555555555555', 'Independent node', '2026-11-12T08:00:00Z')`);
+    expect(
+      await suite.db.all(
+        sql`select name from nodes where id = '55555555-5555-4555-8555-555555555555'`,
+      ),
+    ).toEqual([{ name: "Independent node" }]);
+  });
+
   it("insertReservedNodeTx persists a dormant node with its public key + endorsement", async () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedNodeTx(tx, {
