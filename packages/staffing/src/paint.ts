@@ -1,5 +1,5 @@
 import { staffRoles } from "@waitron/db";
-import { and, asc, desc, eq, inArray, or, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, compareStationNames } from "@waitron/shared";
 import {
@@ -222,7 +222,7 @@ async function assertEditTargets(
   const found = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(inArray(staffRoles.id, wanted));
+    .where(and(inArray(staffRoles.id, wanted), isNull(staffRoles.hiddenAt)));
   const known = new Set(found.map((row) => row.id));
   const missingRole = wanted.find((id) => !known.has(id));
   if (missingRole !== undefined)

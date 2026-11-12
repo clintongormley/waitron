@@ -125,7 +125,6 @@ export const shiftAssignments = table(
       foreignColumns: [kitchenStations.id],
       name: "shift_assignments_station_fk",
     }).onDelete("cascade"),
-    // restrict: a staff role a shift uses cannot be deleted (staff_role.in_use is checked first).
     foreignKey({
       columns: [t.staffRoleId],
       foreignColumns: [staffRoles.id],

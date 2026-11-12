@@ -1,5 +1,7 @@
 # A585 Staffing needs and the rota — Implementation Plan
 
+> **2026-11-12, A1002 PR4:** the [11 November roles redesign](2026-11-11-a1002-roles-redesign.md#pr-4--a-used-job-role-is-hidden-job-roles-per-person) replaces the job-role deletion preview and `staff_role.in_use` refusal below. Used job roles are hidden, with their existing shifts retained; unused roles are deleted.
+
 > 2026-10-17: A763 replaces the By area | By person switch, the area picker and the people panel
 > with one Show menu (Everyone or an area); see [its plan](2026-10-17-a763-rota-redesign.md).
 

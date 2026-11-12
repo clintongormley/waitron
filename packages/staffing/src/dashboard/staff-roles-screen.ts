@@ -27,9 +27,8 @@ const swatchColours = unsafeCSS(
 
 type Deletion = {
   staffRoleId: string;
-  impact: DeleteImpact | null;
-  loading: boolean;
-  readError: string;
+  impact: DeleteImpact;
+  holderCount: number;
   actionError: string;
   busy: boolean;
 };
@@ -101,24 +100,6 @@ export class StaffRolesScreen extends LitElement {
       this.loadError = undefined;
     },
   );
-  /** Released whenever the delete question closes, so it reports only while one is open. */
-  readonly #impactQueries = new QueryController(
-    this,
-    () => this.api.liveData,
-    (error) => {
-      const deletion = this.deleting!;
-      if (codeOf(error) === "staff_role.not_found") {
-        if (!deletion.busy) this.#staffRoleGone();
-        return;
-      }
-      this.deleting = {
-        ...deletion,
-        loading: false,
-        readError: tf("staffing.role.delete_load_error", { reason: codeMessage(codeOf(error)) }),
-      };
-    },
-  );
-
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -170,17 +151,19 @@ export class StaffRolesScreen extends LitElement {
     this.#deletion = {};
     this.deleting = {
       staffRoleId: staffRole.id,
-      impact: null,
-      loading: true,
-      readError: "",
+      impact: {
+        target: { id: staffRole.id, name: staffRole.name },
+        refusals: [],
+        ends: [],
+        removes: [],
+      },
+      holderCount: staffRole.holderIds.length,
       actionError: "",
       busy: false,
     };
-    this.#readImpact();
   }
 
   #closeDelete(): void {
-    this.#impactQueries.release("delete-impact");
     this.#deletion = undefined;
     this.deleting = undefined;
   }
@@ -190,16 +173,6 @@ export class StaffRolesScreen extends LitElement {
     this.#closeDelete();
     this.actionError = codeMessage("staff_role.not_found");
     void this.#load();
-  }
-
-  #readImpact(): void {
-    const deletion = this.deleting!;
-    this.deleting = { ...deletion, loading: true, readError: "" };
-    this.api
-      .watchStaffRoleDeleteImpact(this.#impactQueries, deletion.staffRoleId, (impact) => {
-        this.deleting = { ...this.deleting!, impact, loading: false, readError: "" };
-      })
-      .catch(() => undefined);
   }
 
   async #delete(staffRoleId: string): Promise<void> {
@@ -295,18 +268,12 @@ export class StaffRolesScreen extends LitElement {
         data-test="delete-staff-role"
         .open=${true}
         .impact=${deletion.impact}
-        .loading=${deletion.loading}
         .submitting=${deletion.busy}
-        .readError=${deletion.readError}
         .actionError=${deletion.actionError}
-        .copy=${staffRoleDeleteCopy()}
+        .copy=${staffRoleDeleteCopy(deletion.holderCount)}
         @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
           event.stopPropagation();
           void this.#delete(event.detail.id);
-        }}
-        @wt-delete-retry=${(event: Event) => {
-          event.stopPropagation();
-          this.#readImpact();
         }}
         @wt-close=${(event: Event) => {
           event.stopPropagation();

@@ -16,6 +16,7 @@ export interface StaffRole {
   colour: CalendarColour;
   position: number;
   holderIds: string[];
+  hidden?: true;
 }
 
 export interface ListedStaffRole extends StaffRole {

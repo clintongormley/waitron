@@ -1093,7 +1093,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/staffing/src/dashboard/open-slots-menu.test.ts",
   "packages/staffing/src/dashboard/role-initials.test.ts",
   "packages/staffing/src/dashboard/rota-view.test.ts",
-  "packages/staffing/src/dashboard/staff-role-delete-copy.test.ts",
   "packages/staffing/src/dashboard/staff-role-dialog.test.ts",
   "packages/staffing/src/dashboard/staff-roles-screen.test.ts",
   "packages/staffing/src/dashboard/staffing-grid.test.ts",

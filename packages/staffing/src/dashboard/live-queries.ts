@@ -4,13 +4,6 @@ export const QUERY_DEPENDENCIES = {
   "staff-roles": ["staff_roles", "person_staff_roles", "persons"],
   /** The painters show no holder names, so a person's change does not concern them. */
   "painter-staff-roles": ["staff_roles", "person_staff_roles"],
-  "staff-role-delete-impact": [
-    "staff_roles",
-    "person_staff_roles",
-    "staffing_blocks",
-    "shift_assignments",
-    "persons",
-  ],
   "staffing-month": [
     "shifts",
     "roster_versions",

@@ -10,6 +10,13 @@
  * from this log. State each kind's additional privacy rules beside its data declaration.
  */
 export interface ActivityKindData {
+  readonly "job_role.created": { readonly name: string };
+  readonly "job_role.renamed": { readonly from: string; readonly to: string };
+  readonly "job_role.deleted": { readonly name: string };
+  readonly "job_role.hidden": { readonly name: string };
+  readonly "job_role.member_added": { readonly staffRoleId: string; readonly name: string };
+  readonly "job_role.member_removed": { readonly staffRoleId: string; readonly name: string };
+
   /** Clash identifiers only; the signed decision, not this history, holds the reason. */
   readonly "handover.return_clash_accepted": {
     readonly clashId: string;
@@ -43,6 +50,12 @@ export interface ActivityKindRule {
   readonly subject: string;
 }
 export const ACTIVITY_KINDS = {
+  "job_role.created": { subject: "job_role" },
+  "job_role.renamed": { subject: "job_role" },
+  "job_role.deleted": { subject: "job_role" },
+  "job_role.hidden": { subject: "job_role" },
+  "job_role.member_added": { subject: "person" },
+  "job_role.member_removed": { subject: "person" },
   "handover.return_clash_accepted": { subject: "node" },
   "settings.saved": { subject: "settings" },
   "membership.node_removed": { subject: "node" },

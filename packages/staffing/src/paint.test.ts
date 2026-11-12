@@ -204,6 +204,23 @@ describe("season staffing", () => {
     ).toEqual([]);
   });
 
+  it("refuses a hidden role when painting", async () => {
+    const v = await venue();
+    await inTx((tx) =>
+      tx
+        .update(staffRoles)
+        .set({ hiddenAt: "2026-11-12T12:00:00Z" })
+        .where(eq(staffRoles.id, v.waiter)),
+    );
+    await expect(
+      inTx((tx) =>
+        saveSeasonStaffing(tx, v.seasonId, [
+          { area: dept(v), weekday: 1, blocks: [block(v.waiter)] },
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "staff_role.not_found", params: { staffRoleId: v.waiter } });
+  });
+
   it("refuses an unknown season, an unknown staff role and an unknown area", async () => {
     const v = await venue();
     const ghostSeason = randomUUID();

@@ -111,12 +111,7 @@ describe("staffing strings", () => {
   });
 
   it("registers a message for each code the page can meet", () => {
-    for (const code of [
-      "staff_role.name_taken",
-      "staff_role.in_use",
-      "staff_role.not_found",
-      "staffing.invalid",
-    ]) {
+    for (const code of ["staff_role.name_taken", "staff_role.not_found", "staffing.invalid"]) {
       expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
       expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
     }

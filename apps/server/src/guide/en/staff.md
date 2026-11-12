@@ -102,9 +102,16 @@ venue's other duties, see [Data protection](data-protection.md#who-does-what).
 
 ## Delete a staff role {#delete-staff-role}
 
-In the staff roles list, choose **Delete** from the role's row menu. The window shows
-**Checking what changes…** while it reads the impact. Review **Work that ends** and
-**Settings that are removed** when those sections appear before confirming the deletion.
+In the staff roles list, choose **Delete** from the role's row menu. Check how many people
+hold it, then confirm. This removes their memberships and the role's staffing blocks.
+Existing shifts keep the role's name. To assign new shifts, choose another role.
+
+## Job roles per person {#job-roles}
+
+To put someone on the rota, open their editor in **Users**, choose their **Job roles** and press
+**Save job roles**. You need permission to manage the schedule. These tags save separately from
+the person's details. If someone changes them while you edit, press **Reload** to see their latest
+roles before choosing again.
 
 ## Hours and breaks {#hours}
 

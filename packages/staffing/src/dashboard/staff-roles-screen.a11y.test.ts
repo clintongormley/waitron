@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import type { DeleteImpact } from "@waitron/shared";
 import { StaffingApi, type ListedStaffRole, type StaffRole } from "./client.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
 import "./staff-roles-screen.js";
@@ -12,7 +11,7 @@ afterEach(() => {
   setLocale("en");
 });
 
-/** A staff role with what uses it, which only its delete-impact read reports. */
+/** Counts describe the existing shifts and paint in each deletion fixture. */
 type Role = StaffRole & { blockCount: number; shiftCount: number };
 
 const staffRoles: Role[] = (["red", "amber", "grey", "blue", "green", "purple"] as const).map(
@@ -40,38 +39,14 @@ const staffRoleList = staffRoles.map(listed);
 
 type ListAnswer = () => Promise<unknown>;
 type Write = (path: string, method: string) => Promise<unknown>;
-type ImpactAnswer = (staffRole: Role) => Promise<DeleteImpact>;
-
-/** What the server's delete-impact read answers for `staffRole`, with Ana holding it. */
-const impactOf: ImpactAnswer = async (staffRole) => ({
-  target: { id: staffRole.id, name: staffRole.name },
-  refusals:
-    staffRole.shiftCount > 0
-      ? [
-          {
-            code: "staff_role.in_use",
-            params: { staffRoleId: staffRole.id, shiftCount: staffRole.shiftCount },
-            targets: [],
-          },
-        ]
-      : [],
-  ends: [],
-  removes: [
-    { key: "staff_role_blocks", count: staffRole.blockCount, targets: [] },
-    { key: "staff_role_holders", count: 1, targets: [{ id: "p-ana", name: "Ana" }] },
-  ],
-});
-
 async function screen(
   list: ListAnswer,
-  options: { write?: Write; impact?: ImpactAnswer; liveData?: LiveData; readOnly?: boolean } = {},
+  options: { write?: Write; liveData?: LiveData; readOnly?: boolean } = {},
 ) {
   const el = document.createElement("dashboard-staff-roles-screen") as StaffRolesScreen;
   const request = vi.fn((path: string, method: string = "GET") => {
     if (method !== "GET") return options.write?.(path, method) ?? Promise.resolve(undefined);
-    const impact = /\/([^/]+)\/delete-impact$/.exec(path);
-    if (!impact) return list();
-    return (options.impact ?? impactOf)(staffRoles.find((role) => role.id === impact[1])!);
+    return list();
   });
   el.api = new StaffingApi(request as unknown as DashboardRequest, options.liveData);
   el.readOnly = options.readOnly ?? false;
@@ -142,30 +117,11 @@ const states: Record<string, () => Promise<void>> = {
   "the delete question": async () => {
     const el = await screen(async () => ({ staffRoles: staffRoleList }));
     await press(el, "delete-role-grey");
-    expect(dialogText(el)).toContain("Removes 2 painted staffing blocks.");
-  },
-  "the delete question while its impact loads": async () => {
-    const el = await screen(async () => ({ staffRoles: staffRoleList }), {
-      impact: () => new Promise(() => undefined),
-    });
-    await press(el, "delete-role-grey");
-    expect(dialogText(el)).toContain("Checking what changes…");
-  },
-  "the delete question when its impact cannot be read": async () => {
-    const el = await screen(async () => ({ staffRoles: staffRoleList }), {
-      impact: () => Promise.reject({ code: "connection.failed" }),
-    });
-    await press(el, "delete-role-grey");
-    expect(deleteDialog(el).readError).toContain("Could not load what deleting it would change");
-  },
-  "a staff role that shifts use": async () => {
-    const el = await screen(async () => ({ staffRoles: staffRoleList }));
-    await press(el, "delete-role-amber");
-    expect(dialogText(el)).toContain("2 shifts use this staff role.");
+    expect(dialogText(el)).toContain("1 person holds this role.");
   },
   "a refused delete inside the question": async () => {
     const el = await screen(async () => ({ staffRoles: staffRoleList }), {
-      write: refuse("staff_role.in_use"),
+      write: refuse("connection.failed"),
     });
     await press(el, "delete-role-grey");
     deleteDialog(el).shadowRoot!.querySelector<HTMLElement>("[data-test=delete-confirm]")!.click();

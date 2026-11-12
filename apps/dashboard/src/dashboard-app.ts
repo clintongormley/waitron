@@ -3035,6 +3035,7 @@ export class DashboardApp extends LitElement {
         ></dashboard-orders-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
+          .canManageSchedule=${this.#sessionPermissions.includes("schedule.manage")}
           .api=${this.api}
           .canAdminister=${this.#sessionPermissions.includes("person.admin")}
           .canExportPersonalData=${this.#sessionPermissions.includes("personal_data.export")}

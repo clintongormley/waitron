@@ -1,5 +1,5 @@
 import { staffRoles } from "@waitron/db";
-import { and, asc, eq, gte, lte, inArray, or } from "drizzle-orm";
+import { and, asc, eq, gte, lte, inArray, or, isNull, isNotNull } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, cutoverForBusinessDay } from "@waitron/shared";
@@ -61,6 +61,20 @@ export async function readRotaWeek(tx: Transaction, week: string): Promise<RotaW
   const data = await readRotaRows(tx, week, week);
   const version = data.selected.get(week);
   const placed = (data.byWeek.get(week) ?? []).map((s) => placeShift(s, cutover));
+  const usedRoleIds = [...new Set(placed.flatMap((s) => (s.staffRoleId ? [s.staffRoleId] : [])))];
+  if (usedRoleIds.length) {
+    const hidden = await tx
+      .select({
+        id: staffRoles.id,
+        name: staffRoles.name,
+        colour: staffRoles.colour,
+        position: staffRoles.position,
+      })
+      .from(staffRoles)
+      .where(and(isNotNull(staffRoles.hiddenAt), inArray(staffRoles.id, usedRoleIds)));
+    roles.push(...hidden.map((r) => ({ ...r, holderIds: [], hidden: true as const })));
+  }
+
   const people = await tx
     .select({ personId: persons.id, name: persons.displayName })
     .from(persons)
@@ -185,14 +199,24 @@ export async function readRotaWeek(tx: Transaction, week: string): Promise<RotaW
     staffRoles: roles,
   };
 }
-async function assignmentTargets(tx: Transaction, area: AreaRef, staffRoleId: string) {
+async function assignmentTargets(
+  tx: Transaction,
+  area: AreaRef,
+  staffRoleId: string,
+  currentStaffRoleId?: string,
+) {
   parseArea(area, "area");
   if (!(await listStaffingAreas(tx)).some((a) => areaKey(a.area) === areaKey(area)))
     throw new AppError("staffing_area.not_found", { area: areaKey(area) });
   const [role] = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(eq(staffRoles.id, staffRoleId));
+    .where(
+      and(
+        eq(staffRoles.id, staffRoleId),
+        staffRoleId === currentStaffRoleId ? undefined : isNull(staffRoles.hiddenAt),
+      ),
+    );
   if (!role) throw new AppError("staff_role.not_found", { staffRoleId });
 }
 async function times(tx: Transaction, businessDay: string, startsAt: string, endsAt: string) {
@@ -303,7 +327,7 @@ export async function updateRotaShift(
     const staffRoleId = patch.staffRoleId ?? prior?.staffRoleId;
     if (!area) throw invalid("area");
     if (!staffRoleId) throw invalid("staffRoleId");
-    await assignmentTargets(tx, area, staffRoleId);
+    await assignmentTargets(tx, area, staffRoleId, prior?.staffRoleId);
     await tx
       .insert(shiftAssignments)
       .values({ shiftId, ...assignment(area, staffRoleId) })

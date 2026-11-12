@@ -1,5 +1,7 @@
 > Appendix to [README.md](README.md), the rationalisation design of 2 November 2026: one researcher's proposal for this area, written to the shared rules. Where README.md §5 decides differently, README.md wins.
 
+> **2026-11-12, A1002 PR4:** the [11 November roles redesign](../2026-11-11-a1002-roles-redesign-design.md) replaces the job-role deletion preview and `staff_role.in_use` refusal below. Used job roles are hidden, with their existing shifts retained; unused roles are deleted.
+
 # People, sign-in, working time and rota — proposed tables
 
 > **2026-11-10, A947 3b-4:** the bind guard (`mirror-bind-guard.ts`), `server.mirror_bind_exposed` and

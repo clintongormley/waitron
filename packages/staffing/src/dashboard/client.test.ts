@@ -92,37 +92,6 @@ describe("StaffingApi", () => {
     expect(sent(fetchImpl).live).toBe("1");
   });
 
-  it("watches what deleting a staff role would do with a passive read, depending on the staff roles' tables", async () => {
-    const impact = {
-      target: { id: waiter.id, name: "Waiter" },
-      refusals: [],
-      ends: [],
-      removes: [{ key: "staff_role_blocks", count: 1, targets: [] }],
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
-    const liveData = new LiveData();
-    const queries = new QueryController(host(), () => liveData, vi.fn());
-    const apply = vi.fn();
-    await api(fetchImpl, liveData).watchStaffRoleDeleteImpact(queries, "a/b", apply);
-    expect(apply).toHaveBeenCalledWith(impact);
-    expect(sent(fetchImpl)).toMatchObject({
-      path: `${BASE}/a%2Fb/delete-impact`,
-      method: "GET",
-      live: "1",
-    });
-    expect(liveData.interests).toEqual([
-      { type: "staff_roles" },
-      { type: "person_staff_roles" },
-      { type: "staffing_blocks" },
-      { type: "shift_assignments" },
-      { type: "persons" },
-    ]);
-    fetchImpl.mockResolvedValue(jsonResponse({ ...impact, removes: [] }));
-    liveData.invalidate([{ type: "shift_assignments" }]);
-    await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith({ ...impact, removes: [] }));
-    queries.hostDisconnected();
-  });
-
   it("creates and updates a staff role with its name and colour", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(waiter, 201));
     const client = api(fetchImpl);
@@ -141,12 +110,7 @@ describe("StaffingApi", () => {
   });
 
   it("sets who holds a staff role, reorders and deletes, answering what the delete did", async () => {
-    const impact = {
-      target: { id: waiter.id, name: "Waiter" },
-      refusals: [],
-      ends: [],
-      removes: [{ key: "staff_role_blocks", count: 2, targets: [] }],
-    };
+    const impact = { outcome: "deleted", removedFrom: 1 };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ ...waiter, holderIds: ["p1"] }))

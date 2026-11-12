@@ -17,16 +17,6 @@ describe("QUERY_DEPENDENCIES", () => {
     ]);
   });
 
-  it("reads a delete's impact again when a role, a holder, a painted block, a shift or a person changes", () => {
-    expect(QUERY_DEPENDENCIES["staff-role-delete-impact"]).toEqual([
-      "staff_roles",
-      "person_staff_roles",
-      "staffing_blocks",
-      "shift_assignments",
-      "persons",
-    ]);
-  });
-
   it("reads the month again when its paint, a staff role, an area, a season, a special day, a holiday area, the location or the day's changeover changes", () => {
     expect(QUERY_DEPENDENCIES["staffing-month"]).toEqual([
       "shifts",
@@ -52,7 +42,6 @@ describe("QUERY_DEPENDENCIES", () => {
     expect(Object.keys(QUERY_DEPENDENCIES)).toEqual([
       "staff-roles",
       "painter-staff-roles",
-      "staff-role-delete-impact",
       "staffing-month",
       "rota-warnings",
       "rota",

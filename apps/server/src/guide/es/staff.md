@@ -114,9 +114,16 @@ registros del local. El plazo de un mes para responder y las demás obligaciones
 
 ## Eliminar un rol de personal {#delete-staff-role}
 
-En la lista de roles de personal, elige **Eliminar** en el menú del rol. La ventana muestra
-**Comprobando qué cambia…** mientras consulta las consecuencias. Revisa **Trabajo que finaliza**
-y **Configuración que se elimina** cuando aparezcan esas secciones antes de confirmar la eliminación.
+En la lista de roles de personal, elige **Eliminar** en el menú del rol. Comprueba cuántas
+personas lo tienen y confirma. Esto quita sus puestos y los bloques del plan de personal.
+Los turnos existentes conservan el nombre del puesto. Para asignar nuevos turnos, elige otro.
+
+## Puestos por persona {#job-roles}
+
+Para incluir a alguien en el cuadrante, abre su editor en **Usuarios**, elige sus **Puestos** y pulsa
+**Guardar puestos**. Necesitas permiso para gestionar el horario. Estas etiquetas se guardan por
+separado de los datos de la persona. Si alguien las cambia mientras editas, pulsa **Recargar** para
+ver sus puestos actuales antes de elegir de nuevo.
 
 ## Horas y descansos {#hours}
 

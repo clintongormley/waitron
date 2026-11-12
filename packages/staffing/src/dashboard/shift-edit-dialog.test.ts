@@ -266,3 +266,41 @@ it.each([
     (el.shadowRoot!.querySelector("wt-form-actions")! as HTMLElement & { error: string }).error,
   ).toBe("Correct the highlighted fields to continue.");
 });
+
+it("does not offer a hidden job role for a new assignment", async () => {
+  await mount(false);
+  el.staffRoleId = "head";
+  el.week = {
+    ...el.week,
+    staffRoles: el.week.staffRoles.map((r) =>
+      r.id === "head" ? { ...r, hidden: true as const } : r,
+    ),
+  };
+  await el.updateComplete;
+  const role = field("staffRoleId") as HTMLElementTagNameMap["wt-combobox"];
+  expect(role.options.map((o) => o.value)).not.toContain("head");
+});
+
+it("keeps the current hidden role's name and allows time edits without assigning it again", async () => {
+  const api = await mount();
+  el.week = {
+    ...el.week,
+    staffRoles: el.week.staffRoles.map((r) =>
+      ["head", "sous"].includes(r.id) ? { ...r, hidden: true as const } : r,
+    ),
+  };
+  await el.updateComplete;
+  const role = field("staffRoleId") as HTMLElementTagNameMap["wt-combobox"];
+  expect(role.options.find((o) => o.value === "head")).toMatchObject({
+    label: "Head chef",
+    disabled: true,
+  });
+  expect(role.options.map((option) => option.value)).not.toContain("sous");
+  await change("endsAt", "18:00");
+  button("save").click();
+  await vi.waitFor(() => expect(api.updateRotaShift).toHaveBeenCalled());
+  expect(api.updateRotaShift).toHaveBeenCalledWith(
+    "filled",
+    expect.objectContaining({ endsAt: "18:00" }),
+  );
+});

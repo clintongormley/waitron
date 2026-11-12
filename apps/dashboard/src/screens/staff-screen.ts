@@ -89,6 +89,7 @@ export class StaffScreen extends LitElement {
   );
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
+  @property({ type: Boolean }) canManageSchedule = false;
   @property({ type: Boolean }) canExportPersonalData = false;
   @state() private people: PersonSummary[] = [];
   @state() private formOpen = false;
@@ -612,6 +613,8 @@ export class StaffScreen extends LitElement {
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
       <dashboard-person-edit
+        .api=${this.api}
+        .canManageSchedule=${this.canManageSchedule}
         .busy=${this.#editing}
         .person=${this.editingPerson}
         .currentPersonId=${this.currentPersonId}

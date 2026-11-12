@@ -16,6 +16,8 @@ import {
   PRIVACY_CONTACT_FIELDS,
 } from "@waitron/shared";
 import {
+  recordActivity,
+  staffRoles,
   readVenue,
   readVenueSettings,
   saveVenueFields,
@@ -896,6 +898,23 @@ export async function importConfigurationTables(
         )})
       `);
     }
+  }
+  const importedRoles = new Map(
+    (await tx.select({ id: staffRoles.id, name: staffRoles.name }).from(staffRoles)).map((r) => [
+      r.id,
+      r.name,
+    ]),
+  );
+  for (const source of bundle.tables.person_staff_roles ?? []) {
+    if (typeof source.person_id !== "string" || sourceOperatorIds.has(source.person_id)) continue;
+    const personId = idMap.get(source.person_id)!;
+    const staffRoleId = idMap.get(String(source.staff_role_id))!;
+    await recordActivity(tx, {
+      kind: "job_role.member_added",
+      subjectId: personId,
+      personId: null,
+      data: { staffRoleId, name: importedRoles.get(staffRoleId)! },
+    });
   }
   const { privacyNoticeUrl, privacyEmail } = bundle.privacyContact;
   await savePrivacyContact(tx, {

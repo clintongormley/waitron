@@ -1,6 +1,5 @@
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import type { DashboardRequest, LiveData, QueryController } from "@waitron/dashboard-kit";
-import type { DeleteImpact } from "@waitron/shared";
 import type { AreaRef } from "../slots.js";
 import type {
   RotaWeek,
@@ -73,26 +72,6 @@ export class StaffingApi {
               passive: true,
             })
           ).staffRoles,
-      },
-      apply,
-    );
-  }
-
-  /** Keeps `apply` fed with what deleting the staff role would do; resolves after the first read. */
-  watchStaffRoleDeleteImpact(
-    queries: QueryController,
-    staffRoleId: string,
-    apply: (impact: DeleteImpact) => void,
-  ): Promise<void> {
-    return queries.watch(
-      "delete-impact",
-      {
-        key: `staffing:staff-role-delete-impact:${staffRoleId}`,
-        dependencies: QUERY_DEPENDENCIES["staff-role-delete-impact"].map((type) => ({ type })),
-        read: () =>
-          this.request<DeleteImpact>(`${path(staffRoleId)}/delete-impact`, "GET", undefined, {
-            passive: true,
-          }),
       },
       apply,
     );
@@ -231,7 +210,9 @@ export class StaffingApi {
     return this.request(`${BASE}/order`, "PUT", { staffRoleIds });
   }
 
-  deleteStaffRole(staffRoleId: string): Promise<DeleteImpact> {
+  deleteStaffRole(
+    staffRoleId: string,
+  ): Promise<{ outcome: "deleted" | "hidden"; removedFrom: number }> {
     return this.request(path(staffRoleId), "DELETE");
   }
 
