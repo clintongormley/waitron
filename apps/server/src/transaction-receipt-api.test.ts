@@ -533,7 +533,7 @@ it("the new delivery paths refuse order-linked sales and simplified invoices wit
   expect(await snapshot()).toEqual(before);
   expect(await jobs()).toEqual(printed);
 });
-it("orderless writes require their device proof and print actions require print-receipt", async () => {
+it("orderless writes require device proof while reads and handover need no print capability", async () => {
   const id = (
     await projectionInvoice({ counterpartyTaxId: "B00000000", counterpartyLegalName: "Recipient" })
   ).id;
@@ -557,7 +557,6 @@ it("orderless writes require their device proof and print actions require print-
   await inTx(venue, (tx) =>
     tx.update(deviceProfiles).set({ capabilities: [] }).where(eq(deviceProfiles.id, profileId)),
   );
-
   expect(
     (await send(venue.app, venue.cookie, "GET", `/api/transactions/${id}/deliveries`)).status,
   ).toBe(200);
@@ -576,8 +575,8 @@ it("orderless writes require their device proof and print actions require print-
   expect(await jobs()).toEqual(before);
 });
 it("orderless delivery checks every source zone before any status or action", async () => {
-  const tableSale = await saleOf(await placedIssuedBill(venue, "Croquettes"));
-  const counterSale = await saleOf(await placedIssuedBill(venue, "Caña"));
+  const firstSale = await saleOf(await placedIssuedBill(venue, "Croquettes"));
+  const secondSale = await saleOf(await placedIssuedBill(venue, "Caña"));
   const own = await projectionInvoice({
     counterpartyTaxId: "B00000000",
     counterpartyLegalName: "Recipient",
@@ -585,15 +584,14 @@ it("orderless delivery checks every source zone before any status or action", as
     counterpartyAddress: "Address",
   });
   const sourceProfile = await profile();
-  const firstZone =
-    tableSale.workingOrderId! < counterSale.workingOrderId! ? venue.zoneId : venue.counterZone;
+  const firstOrderId = [firstSale.workingOrderId!, secondSale.workingOrderId!].sort()[0]!;
   await inTx(venue, async (tx) => {
     await tx
       .update(orderServiceContexts)
       .set({ zoneId: venue.zoneId })
-      .where(eq(orderServiceContexts.workingOrderId, tableSale.workingOrderId!));
+      .where(eq(orderServiceContexts.workingOrderId, firstOrderId));
     await tx.insert(saleSubstitutions).values(
-      [tableSale, counterSale].map((sale) => ({
+      [firstSale, secondSale].map((sale) => ({
         substitutionSaleId: own.id,
         substitutedSaleId: sale.id,
       })),
@@ -601,8 +599,8 @@ it("orderless delivery checks every source zone before any status or action", as
     const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
     await setProfileServiceAccess(tx, sourceProfile, {
       departmentId: zone!.departmentId,
-      allowedZoneIds: [firstZone],
-      startingZoneId: firstZone,
+      allowedZoneIds: [venue.zoneId],
+      startingZoneId: venue.zoneId,
     });
   });
   const before = await jobs();

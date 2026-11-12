@@ -957,15 +957,18 @@ export class TillTicketView extends LitElement {
       : nothing;
   }
 
+  #retainedReceiptPrinterName(): string | undefined {
+    return this.originalReceiptPrint?.status === "not_queued"
+      ? undefined
+      : this.originalReceiptPrint?.printerName;
+  }
+
   protected renderDelivery() {
     const status = this.deliveries;
     const words = status?.current ? deliveryWords(status.current) : undefined;
     const busy = this.deliveryBusy || this.originalReceiptBusy;
     const instead = this.canPrintReceipt ? status?.actions.receiptInstead : null;
-    const retainedPrinter =
-      this.originalReceiptPrint?.status === "not_queued"
-        ? undefined
-        : this.originalReceiptPrint?.printerName;
+    const retainedPrinter = this.#retainedReceiptPrinterName();
     const insteadPrinter =
       retainedPrinter ?? this.receiptEquipment?.resolved?.name ?? t("equipment.none");
     const email = this.canPrintReceipt ? status?.actions.email : null;
@@ -1046,10 +1049,7 @@ export class TillTicketView extends LitElement {
 
   protected renderReceiptRetry(failedButSuperseded: boolean) {
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
-    const printerName =
-      this.originalReceiptPrint?.status === "not_queued"
-        ? undefined
-        : this.originalReceiptPrint?.printerName;
+    const printerName = this.#retainedReceiptPrinterName();
     return this.canPrintReceipt &&
       this.originalReceiptPrint?.status === "failed" &&
       this.originalReceiptPrint.canRetry &&

@@ -36,6 +36,24 @@ const delivered: InvoiceDeliveryStatus = {
   history: [],
   actions: { print: null, retryOriginal: null, receiptInstead: null, email: null },
 };
+
+const a4Waiting: InvoiceDeliveryStatus = {
+  ...delivered,
+  originalCompleted: false,
+  current: {
+    id: "a4-job",
+    medium: "a4",
+    designation: "original",
+    status: "queued",
+    failureCode: null,
+    requestedAt: "2026-11-12T12:00:00Z",
+    at: null,
+    personId: "staff",
+    printerHold: null,
+    lateSuccess: false,
+  },
+  actions: { ...delivered.actions, receiptInstead: { deliveryId: "a4-job" } },
+};
 const ticket = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTicketView>(
     "till-ticket-view, till-settlement-document-dialog",
@@ -407,23 +425,6 @@ it.each(["receipt", "a4"] as const)(
 it.each(["en-GB", "es-ES"])(
   "orderless recovery names its retained retry and fallback printer in %s",
   async (locale) => {
-    const a4Waiting: InvoiceDeliveryStatus = {
-      ...delivered,
-      originalCompleted: false,
-      current: {
-        id: "a4-job",
-        medium: "a4",
-        designation: "original",
-        status: "queued",
-        failureCode: null,
-        requestedAt: "2026-11-12T12:00:00Z",
-        at: null,
-        personId: "staff",
-        printerHold: null,
-        lateSuccess: false,
-      },
-      actions: { ...delivered.actions, receiptInstead: { deliveryId: "a4-job" } },
-    };
     const getTransactionDeliveries = vi.fn().mockResolvedValue({
       ...delivered,
       originalCompleted: false,
@@ -509,4 +510,11 @@ it("an orderless F2 retains the immediate Receipt copy and never reads Invoice d
   expect(api.reprintTransaction).toHaveBeenCalledWith("sale-history", undefined);
   expect(api.getTransactionDeliveries).not.toHaveBeenCalled();
   expect(api.getTransactionReceiptPrint).not.toHaveBeenCalled();
+});
+
+it("names the saved Receipt destination when no receipt original exists", async () => {
+  const { el } = await orderless({
+    getTransactionDeliveries: vi.fn().mockResolvedValue(a4Waiting),
+  });
+  expect(part(el, "receipt-instead").textContent).toContain("Bar");
 });
