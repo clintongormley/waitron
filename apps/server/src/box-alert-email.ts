@@ -156,6 +156,9 @@ function wordsFor(
       text = words.staff;
     } else if (source === "admin") {
       text = words.admin;
+    } else if (source === "setup") {
+      values["person"] = typeof name === "string" ? fillTemplate(words.setupPerson, { name }) : "";
+      text = words.setup;
     }
     return { subject, text, values };
   }

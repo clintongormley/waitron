@@ -19,8 +19,11 @@ import { clockConfirmations } from "./schema/clock-confirmations.js";
 /** An unverified step this small is the clock's own drift, not a step worth an alert. */
 const UNVERIFIED_STEP_FLOOR_MS = 1_000;
 
-/** A request whose person does not match its source is a caller's bug, refused before any write. */
-function assertPersonMatchesSource(input: ClockStepRequest): void {
+/** A request whose person does not match its source is a caller's bug, refused before any write;
+ * a `setup` step matches no person here, since the regime never records one. */
+function assertPersonMatchesSource(
+  input: ClockStepRequest,
+): asserts input is ClockStepRequest & { source: "authority" | "admin" | "staff" } {
   const { source, admin } = input;
   const matches =
     source === "authority"

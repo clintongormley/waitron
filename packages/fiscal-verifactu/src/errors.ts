@@ -423,11 +423,13 @@ declare module "@waitron/shared" {
      * display name, and `deviceId` and `device` the till's id and label when the reading came from
      * one, else null. `before` and `after` are ISO 8601 instants, each with its own offset;
      * `stepMs` the measured step, `direction` its sign. `byAdmin` and `byStaff` say which person
-     * confirmed.
+     * confirmed. A `setup` step was made from the setup or restore page before the venue existed
+     * and raised at its first full start: `bySetupPerson` when `person` names the administrator,
+     * `bySetup` when it names nobody.
      */
     "clock.corrected": {
       confirmationId: string | null;
-      source: "authority" | "admin" | "staff";
+      source: "authority" | "admin" | "staff" | "setup";
       person: string | null;
       deviceId: string | null;
       device: string | null;
@@ -441,6 +443,8 @@ declare module "@waitron/shared" {
       unverified: boolean;
       byAdmin: boolean;
       byStaff: boolean;
+      bySetup?: true;
+      bySetupPerson?: true;
     };
 
     /**

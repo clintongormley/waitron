@@ -1,6 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
@@ -167,9 +168,12 @@ async function bootServer(
   booted: Booted,
   venue: Awaited<ReturnType<typeof setupVenue>>,
   email?: { intent: "demo" | "prepare" | "live"; development: boolean },
+  setupNote?: unknown[],
 ): Promise<void> {
   const [port] = await freePorts(1);
   booted.scratch = await mkdtemp(join(tmpdir(), "waitron-boot-box-emails-"));
+  if (setupNote !== undefined)
+    await writeFile(join(booted.scratch, SETUP_CLOCK_STEP_FILE), JSON.stringify(setupNote));
   const migrationsRoot = join(booted.scratch, "migrations");
   for (const [index, set] of manifestSets().entries()) {
     await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
@@ -607,6 +611,75 @@ describe("the running server's managers' email check", () => {
         (await deps.db.select().from(outgoingMail).where(eq(outgoingMail.id, queued.id)))[0]!
           .status,
       ).toBe("sent");
+    } finally {
+      await shutDown(booted);
+    }
+  });
+
+  it("boot raises and emails each clock step the setup page noted, then deletes the note", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    const step = (id: string, person: string | null, stepMs: number) => ({
+      id,
+      detectedAt: new Date(Date.parse("2026-10-18T21:40:00.000Z") + stepMs).toISOString(),
+      params: {
+        confirmationId: null,
+        source: "setup",
+        person,
+        deviceId: null,
+        device: null,
+        before: "2026-10-18T21:40:00.000Z",
+        beforeOffsetMinutes: 120,
+        after: new Date(Date.parse("2026-10-18T21:40:00.000Z") + stepMs).toISOString(),
+        afterOffsetMinutes: 120,
+        stepMs,
+        direction: stepMs < 0 ? "back" : "forward",
+        verified: true,
+        unverified: false,
+        byAdmin: false,
+        byStaff: false,
+        ...(person === null ? { bySetup: true } : { bySetupPerson: true }),
+      },
+    });
+    const steps = [
+      step("5b0c7f4e-1d2a-4c3b-9e8f-7a6b5c4d3e2f", "Ben", 3_600_000),
+      step("6c1d8a5f-2e3b-4d4c-8f9a-8b7c6d5e4f3a", null, -60_000),
+    ];
+    try {
+      await withTransaction(suite.db, (tx) =>
+        putCredential(
+          tx,
+          loadKeyRing({
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          }),
+          {
+            purpose: "email.smtp",
+            value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
+          },
+        ),
+      );
+      await bootServer(booted, venue, undefined, steps);
+      const rows = await suite.db
+        .select({ id: incidents.id, handled: incidents.acknowledgedAt })
+        .from(incidents)
+        .where(eq(incidents.code, "clock.corrected"));
+      expect(rows.map((row) => row.id).sort()).toEqual(steps.map((s) => s.id).sort());
+      expect(rows.filter((row) => row.handled === null).map((row) => row.id)).toEqual([
+        steps[1]!.id,
+      ]);
+      await expect(readFile(join(booted.scratch!, SETUP_CLOCK_STEP_FILE))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      const name = await venueName();
+      await tick();
+      await vi.waitFor(
+        () =>
+          expect(holder.sent.map((message) => message.text).sort()).toEqual(
+            steps.map((s) => boxEmailMessage("clock.corrected", "es", name, s.params).text).sort(),
+          ),
+        { timeout: 5_000 },
+      );
     } finally {
       await shutDown(booted);
     }

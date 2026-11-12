@@ -81,6 +81,7 @@ import {
   fetchHealthOk,
 } from "./testing/boot-harness.js";
 import { createHourTestClock } from "./testing/hour-test-clock.js";
+import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import * as bootHarness from "./testing/boot-harness.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
@@ -104,6 +105,25 @@ vi.mock("./setup-api.js", async (original) => {
         return c.body(null, 204);
       });
       return actual.mountSetup(...args);
+    },
+  };
+});
+
+/** The options boot hands the setup start's restore preparation. */
+const recovery = vi.hoisted(() => ({
+  options: undefined as
+    | Parameters<typeof import("./recovery-preparation.js").createSetupRecoveryPreparation>[0]
+    | undefined,
+}));
+vi.mock("./recovery-preparation.js", async (original) => {
+  const actual = await original<typeof import("./recovery-preparation.js")>();
+  return {
+    ...actual,
+    createSetupRecoveryPreparation: (
+      options: Parameters<typeof actual.createSetupRecoveryPreparation>[0],
+    ) => {
+      recovery.options = options;
+      return actual.createSetupRecoveryPreparation(options);
     },
   };
 });
@@ -518,6 +538,71 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         await venue.store.close();
         await rm(venue.directory, { recursive: true, force: true });
       }
+    }
+  });
+
+  it("the setup and restore pages set the box's clock through the setup start's own setter", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const boxHost = { ...synchronisedBoxHost(), setClock: vi.fn() };
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, stateDir }) => {
+          const json = { "content-type": "application/json" };
+          const claimed = await post("/setup-api/first-setup/claim", {
+            headers: json,
+            body: JSON.stringify({ venue: provisionVenueBody("60000010W") }),
+          });
+          expect(claimed.status).toBe(200);
+          const claim = await claimed.json();
+          const headers = {
+            ...json,
+            "X-Waitron-Setup-Owner": claim.capability,
+            "X-Waitron-Setup-Attempt": claim.state.attemptId,
+            "X-Waitron-Setup-Revision": String(claim.state.revision),
+            "X-Waitron-Setup-Generation": String(claim.state.ownerGeneration),
+          };
+          const prepare = async (proposal: unknown) =>
+            (
+              await (
+                await post("/setup-api/first-setup/preparation", {
+                  headers,
+                  body: JSON.stringify({ module: "fiscal-verifactu", proposal }),
+                })
+              ).json()
+            ).preparation;
+          const challenge = await prepare({ action: "clock-challenge" });
+          // Only the setter answers `synchronised`: the module alone answers host_unavailable.
+          expect(
+            await prepare({
+              action: "set-clock",
+              browser: { challengeId: challenge.id, instantMs: Date.now() + 3_600_000 },
+            }),
+          ).toEqual({ status: "refused", reason: "synchronised" });
+          // Only the setter answers `stale`, here for a reading taken at the epoch.
+          expect(
+            await recovery.options!.setBoxClock!(
+              {
+                offsetMs: 3_600_000,
+                agreesWithinMs: 30_000,
+                measuredAt: { wallMs: 0, monoMs: 0 },
+                reading: { boxAt: "", witnessAt: "", uncertaintyMs: 0 },
+              },
+              async () => null,
+            ),
+          ).toEqual({ status: "refused", reason: "stale" });
+          expect(boxHost.setClock).not.toHaveBeenCalled();
+          await expect(readFile(join(stateDir, "setup-clock-step.json"))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        },
+        { seams: { boxHost, requestFromBox: () => false } },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
     }
   });
 

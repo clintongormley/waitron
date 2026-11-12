@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   ClockAdminConfirm,
+  ClockConfirmation,
   ClockStepRecorded,
   ClockStepRequest,
   ClockStopState,
@@ -210,7 +211,7 @@ function harness(
             ? {
                 id: `confirmation-${seatCalls.length}`,
                 seq: seatCalls.length,
-                source: input.source,
+                source: input.source as ClockConfirmation["source"],
                 personId: input.admin?.personId ?? null,
                 confirmedAt: input.after.instant.toISOString(),
                 checkId: "check-1",

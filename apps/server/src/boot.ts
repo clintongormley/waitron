@@ -347,6 +347,7 @@ import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
+import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
 import { readSetupOpeningHours } from "./setup-opening-hours.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
@@ -1134,8 +1135,13 @@ async function bootServer(
   await assertNoStartAgainDeletion(config.venueDir);
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
+  // Built in setup mode, once the log exists, before any setup route is mounted.
+  let setupClockSet: ReturnType<typeof createSetupClockSet> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({
     testClock: seams.testClock,
+    ...(config.node === undefined
+      ? { setBoxClock: (request, person) => setupClockSet!(request, person) }
+      : {}),
     database: () => db,
     environment: env,
     stateDir: config.stateDir,
@@ -1443,8 +1449,19 @@ async function bootServer(
       coordinator: firstSetupCoordinator,
       assertOtherAllowed: () => assertOtherFirstSetupAllowed(config.venueDir, firstSetupStore),
     };
+    const testClock = seams.testClock;
+    setupClockSet = createSetupClockSet({
+      stateDir: config.stateDir,
+      host: seams.boxHost ?? boxHostClient(),
+      log,
+      // The steady clock the module measured the device on.
+      ...(testClock === undefined
+        ? {}
+        : { wall: () => testClock.wall(), monotonic: () => testClock.monotonic() }),
+    });
     const recoveryPreparation = createSetupRecoveryPreparation({
       testClock: seams.testClock,
+      setBoxClock: setupClockSet,
       stateDir: config.stateDir,
       venueDir: config.venueDir,
       stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
@@ -3326,6 +3343,14 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());
+  // A mirror or fenced box writes no alert here; the note waits for a start that trades.
+  if (!fencedOrMirror)
+    await raiseSetupClockSteps({
+      db,
+      stateDir: config.stateDir,
+      remember: boxEmails.remember,
+      log,
+    });
   const clockService = sharedClockServiceReading(boxHost, now);
   const readClockService = clockService.read;
   // Before the listener opens, so its first answer already knows whether the start is confirmed.

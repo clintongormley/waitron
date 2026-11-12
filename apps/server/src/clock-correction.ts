@@ -8,6 +8,7 @@ import type {
   TrustedClock,
 } from "@waitron/fiscal";
 import { CLOCK_WITNESS_MARGIN_MS } from "@waitron/fiscal";
+import type { ModuleClockSetAnswer } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import type { LatestClockStep } from "./backup-sweep.js";
 import type { BootReader } from "./boot-reader.js";
@@ -59,7 +60,7 @@ export type ClockSetRefusal =
 
 export interface ClockSetInput {
   reason: "behind_chain" | "unusable" | "start";
-  source: "authority" | "admin" | "staff";
+  source: "authority" | "admin" | "staff" | "setup";
   offsetMs: number;
   /** The box's wall and steady clocks when the witness's reading arrived. */
   measuredAt: { wallMs: number; monoMs: number };
@@ -81,6 +82,11 @@ export interface ClockSetInput {
 export type ClockSetAnswer =
   | { set: true; confirmationId: string | null; stepMs: number; confirmedAt: string }
   | { set: false; reason: ClockSetRefusal };
+
+/** A set's answer as a module's `setBoxClock` gives it, the setter's refusal passed through. */
+export function moduleClockSetAnswer(answer: ClockSetAnswer): ModuleClockSetAnswer {
+  return answer.set ? { status: "set" } : { status: "refused", reason: answer.reason };
+}
 
 /** Sets the box's clock during a stop, one set at a time: judges the stop again, asks the host,
  * verifies the step on the boot-time clock and records it. */

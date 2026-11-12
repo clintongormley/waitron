@@ -30,6 +30,7 @@ export function createFirstSetupModuleHost(options: {
   assertClaimAllowed?: (hold: import("@waitron/provisioning").FirstSetupHold) => Promise<void>;
   testClock?: ModuleOperationHost["testClock"];
   grantClock?: () => number;
+  setBoxClock?: Parameters<typeof createFirstSetupRuntime>[0]["setBoxClock"];
 }) {
   const evidence: {
     current?: { read: ModuleOperationHost["readPublicEvidence"] };

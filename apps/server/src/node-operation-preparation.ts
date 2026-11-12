@@ -35,7 +35,7 @@ import {
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { requiredNameOf } from "./box-health-api.js";
-import type { clockCorrection } from "./clock-correction.js";
+import { moduleClockSetAnswer, type clockCorrection } from "./clock-correction.js";
 import {
   withAuthenticatedOperation,
   withRecoveryKeyAuthority,
@@ -176,7 +176,7 @@ export function createNodeOperationPreparation(options: {
             },
             requester: { source: "admin", person: operatorId },
           });
-          return answer.set ? { status: "set" } : { status: "refused", reason: answer.reason };
+          return moduleClockSetAnswer(answer);
         };
   const modules = configureModuleOperations(
     options.modules,

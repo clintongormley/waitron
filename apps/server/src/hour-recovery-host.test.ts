@@ -173,6 +173,37 @@ it("replays the exact restore after reading the now-committed database history",
   expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(2);
 });
 
+it("sets the box's clock from this device only under the backup's key, naming nobody", async () => {
+  const f = await host();
+  const people: unknown[] = [];
+  const setBoxClock = vi.fn(async (_request: unknown, person: () => Promise<unknown>) => {
+    people.push(await person());
+    return { status: "set" as const };
+  });
+  const service = createSelectedRecoveryPreparation({ ...f.options, setBoxClock });
+  const setClock = (on: typeof service, challengeId: string) =>
+    on.prepare(
+      { action: "set-clock", browser: { challengeId, instantMs: clock.wall() + 3_600_000 } },
+      { onBox: false },
+    );
+  await expect(
+    setClock(
+      createSelectedRecoveryPreparation({ ...f.options, secret: "wrong-key", setBoxClock }),
+      "any",
+    ),
+  ).rejects.toMatchObject({
+    code: "promotion.break_glass_invalid",
+  });
+  expect(setBoxClock).not.toHaveBeenCalled();
+  const challenge = (await service.prepare({ action: "clock-challenge" }, { onBox: false })) as {
+    id: string;
+  };
+  expect(await setClock(service, challenge.id)).toEqual({ status: "set" });
+  expect(setBoxClock).toHaveBeenCalledTimes(1);
+  expect(setBoxClock.mock.calls[0]![0]).toMatchObject({ agreesWithinMs: 30_000 });
+  expect(people).toEqual([null]);
+});
+
 it("requires the backup's actual key before selecting or writing preparation history", async () => {
   const f = await host();
   await expect(f.prepare({ action: "clock-challenge" }, "wrong-key")).rejects.toMatchObject({
