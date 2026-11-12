@@ -1,6 +1,6 @@
 # A1482: "This device" on the Check this venue clock step — plan (one page)
 
-Status: draft 2 (after one fresh read), for the watcher. Fiscal clock rule; the owner lands #2693.
+Status: draft 3, CLEARED by the watcher 2026-11-12 18:33 with four changes (folded in below, marked "Watcher 18:33"); own PR after #2693 (owner 18:40). Fiscal clock rule; the owner lands it.
 **Not approved by the owner**: the deferred alert, the setup note and the 30-second "agrees" below
 are the lane's and the watcher's design only. Every receipt was **read at 5e00b17ae6, not run**.
 
@@ -71,7 +71,7 @@ computes (`setup-first-fiscal-api.ts:474`, `setup-recovery-preparation-api.ts:24
 | Reason | EN | ES |
 | --- | --- | --- |
 | `synchronised`, `not_stopped` | The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server. | El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y vuelve a conectarte al servidor. |
-| `witnessed` | The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again. | El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo. |
+| `witnessed` (Watcher 18:33 change 3: this line names the tax agency's time, and A1420 PR 6 #3003 deletes the server's AEAT time readings; whichever of the two lands second drops this row and its reason, or keeps it if the reason still exists) | The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again. | El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo. |
 | `same_machine` | This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer. | Esta pantalla está en el propio servidor, así que no puede poner su hora. Abre esta página en un móvil o un ordenador. |
 | every other (`host_unavailable`, `refused`, `unverified`, `stale`, `pending_disproofs`, `target_invalid`) | The server could not set its clock from this device. Check this device's date and time, then press This device again. | El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo. |
 
@@ -135,7 +135,7 @@ browser reading `unavailable: challenge` (`:115,127`). The history checks still 
   the primary (`box-alert-email.ts:195-206,379`, `boot.ts:3325`), so the email follows if the row
   survives; whether `venue.db` is replaced between preparation and activation is **unknown**
   (`handover-preparation.ts:56-74` says the copy is placed before preparation at `filing_assumed`;
-  nothing read covers `emergency_declared`). If the row does not survive, stop and ask the watcher.
+  nothing read covers `emergency_declared`). **Fallback (Watcher 18:33 change 1):** if the row does not survive `emergency_declared`, the handover also writes T3's setup note, and the first full start turns it into the alert. At `filing_assumed` the preparation route already refuses until the copy is placed (`handover-preparation.ts:56-74,146`), so the row is written into the placed copy.
   Then `agreesWithinMs` (`clock-correction.test.ts`) and the seat (`handover-preparation.test.ts`).
 - **T3, setup adapter and note**: `setup-clock-set.test.ts` (host stub: `synchronised`, `missing`,
   unverified-but-moved gives an entry, verified; two presses give two entries); first start gives
@@ -154,8 +154,14 @@ browser reading `unavailable: challenge` (`:115,127`). The history checks still 
 ## 6. Open questions (recommendation each)
 
 - **Q1. Device earlier than a minute already used for this venue's series** (restore's history).
-  Rule 3 trusts the time; series names must never repeat. **Recommended:** keep `minute_not_later`,
-  with the after-set line in §2.
+  Rule 3 trusts the time; series names must never repeat. **Decided (Watcher 18:33 change 2):** check
+  the device's time against the history BEFORE setting the clock: `set-clock` refuses with reason
+  `later` (the §2 "later" line, reworded to "this device's time is earlier than a time already used
+  for this venue's invoice series…") when the device's instant is earlier than an intent already
+  recorded for the page's binding (the check at `hour-selection.ts:410-412`), read through the same
+  selection state the series step reads, and never asks the host. If that state cannot be read from
+  the `set-clock` action on a page, the PR says why for that page, and the after-set `later` line
+  stays as the backstop.
 - **Q2. Restore set earlier than the backup's latest sale**: the first start meets today's
   clock-behind stop (`backup-recovery.md:172-175`) until A1506's C5 lands. **Recommended:** leave it
   to A1506.
@@ -170,3 +176,11 @@ browser reading `unavailable: challenge` (`:115,127`). The history checks still 
 - **Q6. First setup: the owner's pass alone, or the password again (`reconfirm`,
   `setup-first-fiscal-api.ts:457-470`)?** **Recommended:** the pass alone, as for the comparison;
   making the series already asks for the password again.
+
+## 7. For the owner to decide (Watcher 18:33 change 4: goes in the PR body)
+
+- The CLAUDE.md §5 additions in §4, word for word.
+- Q4: a clock step on a setup or restore that never fully starts is never alerted or emailed (the
+  host journal and Waitron's log keep it).
+- The deferred alert, the setup note and the 30-second "agrees" are the lane's and the watcher's
+  design, not the owner's.
