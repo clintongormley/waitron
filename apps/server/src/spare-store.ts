@@ -1,7 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PAIR_STORE_DIR } from "@waitron/store";
+import { codeOf } from "@waitron/server-kit";
+import { errnoOf } from "./errno.js";
 import {
+  abortableSleep,
   HEALTHY_RUN_MS,
   RESTART_BACKOFF_MS,
   spawnLitestream,
@@ -23,6 +26,8 @@ export interface SpareStoreDeps {
   loopbackPort: number;
   /** `spawnLitestream` when absent, which hands the child only `PATH`, `HOME` and the keys. */
   spawn?: SpawnFn;
+  /** `abortableSleep` when absent. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   log: Logger;
 }
 
@@ -31,17 +36,12 @@ export interface SpareStore {
   stop(): Promise<void>;
 }
 
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) return resolve();
-    const timer = setTimeout(done, ms);
-    function done() {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    }
-    signal.addEventListener("abort", done, { once: true });
-  });
+/** How many characters from the end of versitygw's output an exit logs. */
+const OUTPUT_TAIL = 1_024;
+
+/** The end of `output`, with the pair's two keys taken out wherever they appear. */
+function outputTail(output: string, keys: readonly string[]): string {
+  return keys.reduce((text, key) => text.replaceAll(key, "[redacted]"), output).slice(-OUTPUT_TAIL);
 }
 
 /**
@@ -72,6 +72,7 @@ export async function startSpareStore(deps: SpareStoreDeps): Promise<SpareStore>
     ROOT_SECRET_ACCESS_KEY: deps.secretAccessKey,
   };
   const spawn = deps.spawn ?? spawnLitestream;
+  const sleep = deps.sleep ?? abortableSleep;
   const wake = new AbortController();
   let current: ChildHandle | undefined;
   const loop = (async () => {
@@ -84,10 +85,19 @@ export async function startSpareStore(deps: SpareStoreDeps): Promise<SpareStore>
       if (Date.now() - startedAt >= HEALTHY_RUN_MS) attempt = 0;
       const delay = RESTART_BACKOFF_MS[Math.min(attempt, RESTART_BACKOFF_MS.length - 1)]!;
       attempt += 1;
-      deps.log("warn", "spare.store_exited", { exitCode: code, restartInMs: delay });
+      deps.log("warn", "spare.store_exited", {
+        exitCode: code,
+        output: outputTail(current.output(), [deps.secretAccessKey, deps.accessKeyId]),
+        restartInMs: delay,
+      });
       await sleep(delay, wake.signal);
     }
-  })();
+  })().catch((error: unknown) => {
+    deps.log("error", "spare.store_failed", {
+      errno: errnoOf(error) ?? null,
+      errorCode: codeOf(error),
+    });
+  });
   return {
     loopbackUrl: `http://${address}`,
     async stop() {

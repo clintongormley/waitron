@@ -45,6 +45,7 @@ export {
 export { readBucketConfig } from "./bucket-config.js";
 export type { ChildHandle, SpawnFn } from "./litestream-process.js";
 export { spawnLitestream } from "./litestream-process.js";
+export { abortableSleep } from "./store-call.js";
 export {
   DEFAULT_WAL_LIMIT_BYTES,
   HEALTHY_RUN_MS,

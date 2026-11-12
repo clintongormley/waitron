@@ -32,6 +32,7 @@ interface Spawned {
   env: Readonly<Record<string, string>>;
   exit(code: number | null): void;
   killed: boolean;
+  output: string;
 }
 
 function fakeSpawn(onSpawn?: () => void) {
@@ -40,12 +41,19 @@ function fakeSpawn(onSpawn?: () => void) {
     onSpawn?.();
     let settle!: (code: number | null) => void;
     const exited = new Promise<number | null>((resolve) => (settle = resolve));
-    const record: Spawned = { bin, args, env, exit: (code) => settle(code), killed: false };
+    const record: Spawned = {
+      bin,
+      args,
+      env,
+      exit: (code) => settle(code),
+      killed: false,
+      output: "",
+    };
     spawned.push(record);
     const handle: ChildHandle = {
       pid: 4242,
       exited,
-      output: () => "",
+      output: () => record.output,
       kill: () => {
         record.killed = true;
         settle(null);
@@ -54,6 +62,14 @@ function fakeSpawn(onSpawn?: () => void) {
     return handle;
   };
   return { spawn, spawned };
+}
+
+/** A wait the fake timers move, as `abortableSleep`'s is not. */
+function timerSleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
+  });
 }
 
 const scratch: string[] = [];
@@ -145,6 +161,7 @@ describe("startSpareStore", () => {
       secretAccessKey: SECRET,
       loopbackPort: 7444,
       spawn,
+      sleep: timerSleep,
       log: (_level, event, fields) => logs.push({ event, fields }),
     });
     started = store;
@@ -157,7 +174,7 @@ describe("startSpareStore", () => {
     expect(spawned[1]!.env).toEqual(spawned[0]!.env);
     expect(logs).toContainEqual({
       event: "spare.store_exited",
-      fields: { exitCode: 2, restartInMs: 1_000 },
+      fields: { exitCode: 2, output: "", restartInMs: 1_000 },
     });
     spawned[1]!.exit(2);
     await vi.advanceTimersByTimeAsync(2_000);
@@ -166,6 +183,82 @@ describe("startSpareStore", () => {
     expect(spawned[2]!.killed).toBe(true);
     await vi.advanceTimersByTimeAsync(120_000);
     expect(spawned).toHaveLength(3);
+  });
+
+  it("logs the end of what versitygw printed when it exits, with the pair's keys taken out", async () => {
+    const dir = await stateDir();
+    const { spawn, spawned } = fakeSpawn();
+    const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+    started = await startSpareStore({
+      bin: "versitygw",
+      stateDir: dir,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+      loopbackPort: 7444,
+      spawn,
+      log: (level, event, fields) => logs.push({ level, event, fields }),
+    });
+    const failure = "failed to bind s3 listener 127.0.0.1:7444: bind: address already in use\n";
+    spawned[0]!.output = `${"banner ".repeat(1_000)}key ${ACCESS_KEY_ID} secret ${SECRET}\n${failure}`;
+
+    spawned[0]!.exit(1);
+
+    await vi.waitFor(() => expect(logs.map((line) => line.event)).toContain("spare.store_exited"));
+    const output = String(logs.find((line) => line.event === "spare.store_exited")!.fields!.output);
+    expect(output.endsWith(`key [redacted] secret [redacted]\n${failure}`)).toBe(true);
+    expect(output.length).toBeLessThanOrEqual(1_024);
+    expect(output).not.toContain(ACCESS_KEY_ID);
+    expect(output).not.toContain(SECRET);
+  });
+
+  it("logs why a versitygw that cannot be started did not run", async () => {
+    const dir = await stateDir();
+    const logs: { event: string; fields?: Record<string, unknown> }[] = [];
+    started = await startSpareStore({
+      bin: join(dir, "no-such-versitygw"),
+      stateDir: dir,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+      loopbackPort: 7444,
+      log: (_level, event, fields) => logs.push({ event, fields }),
+    });
+
+    await vi.waitFor(() => expect(logs.map((line) => line.event)).toContain("spare.store_exited"));
+    expect(logs[0]!.fields).toMatchObject({
+      exitCode: null,
+      output: expect.stringContaining("ENOENT"),
+    });
+  });
+
+  it("logs a failure of its own loop, and still stops", async () => {
+    vi.useFakeTimers();
+    const dir = await stateDir();
+    const { spawn, spawned } = fakeSpawn(() => {
+      if (spawned.length === 1) throw Object.assign(new Error("spawn EAGAIN"), { code: "EAGAIN" });
+    });
+    const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+    const store = await startSpareStore({
+      bin: "versitygw",
+      stateDir: dir,
+      accessKeyId: ACCESS_KEY_ID,
+      secretAccessKey: SECRET,
+      loopbackPort: 7444,
+      spawn,
+      sleep: timerSleep,
+      log: (level, event, fields) => logs.push({ level, event, fields }),
+    });
+    started = store;
+
+    spawned[0]!.exit(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(logs).toContainEqual({
+      level: "error",
+      event: "spare.store_failed",
+      fields: { errno: "EAGAIN", errorCode: "unknown" },
+    });
+    await store.stop();
+    started = undefined;
   });
 
   it("the real versitygw answers with the pair's key and refuses another key with 403", async (ctx) => {
