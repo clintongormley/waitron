@@ -75,6 +75,7 @@ describe("the till's Spanish Clear snooze label, and no aplazar for snooze in th
     "floor.deferred",
     "table.bill_deferred",
     "waiting.deferred_not_handed_over",
+    "deferred_close.title",
   ]);
 
   it("has no Spanish catalogue string that says aplazar, other than a deferred payment", () => {
@@ -83,7 +84,7 @@ describe("the till's Spanish Clear snooze label, and no aplazar for snooze in th
     );
     expect(snoozeTermEntries).toEqual([]);
     for (const key of DEFERRED_PAYMENT_KEYS) {
-      expect(catalogues["es-ES"]?.[key]).toMatch(/^Pago aplazado/);
+      expect(catalogues["es-ES"]?.[key]).toMatch(/pago aplazado/i);
     }
   });
 });

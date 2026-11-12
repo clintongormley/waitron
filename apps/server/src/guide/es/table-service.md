@@ -662,3 +662,9 @@ usa **Cobrar al siguiente** para continuar.
 
 Una cuenta ya presentada para su cobro solo permite cobrar el importe completo. Cerrar la mesa es
 una acción aparte, después del cobro.
+
+## Cerrar una cuenta como pago aplazado {#deferred-payment}
+
+Cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron, abre **Cobrar** y elige
+**Cerrar como pago aplazado**. Esto cierra la cuenta ahora y Waitron no registrará el pago cuando
+llegue.

@@ -8,6 +8,8 @@ export const helpEn = {
   "help.guide_link": "Read more in the guide",
   "help.guide_title": "Guide",
   "help.guide_close": "Close",
+  "help.deferred_close":
+    "Closes the whole bill now without taking a payment. Waitron will not record the payment when the customer pays later.",
   "help.payment":
     "Choose an amount, an equal share, items, or the whole amount left. Split equally asks how many people are still to pay. After a part payment, go on to the next guest.",
   "help.counter.park":
@@ -71,6 +73,8 @@ export const helpEs: Record<HelpKey, string> = {
   "help.guide_link": "Más información en la guía",
   "help.guide_title": "Guía",
   "help.guide_close": "Cerrar",
+  "help.deferred_close":
+    "Cierra toda la cuenta ahora sin cobrarla. Waitron no registrará el pago cuando el cliente pague más tarde.",
   "help.payment":
     "Elige una cantidad, una parte igual, artículos o todo lo que queda. Dividir a partes iguales pregunta cuántas personas quedan por pagar. Tras un pago parcial, sigue con el siguiente comensal.",
   "help.counter.park":

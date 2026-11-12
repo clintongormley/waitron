@@ -1622,6 +1622,15 @@ export const en = {
   "sale.over_simplified_limit":
     "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
+  // The confirmation before closing a whole bill as a deferred payment.
+  "deferred_close.title": "Close as deferred payment",
+  "deferred_close.bill": "Bill",
+  "deferred_close.invoice": "Invoice",
+  "deferred_close.simplified": "Simplified invoice",
+  "deferred_close.final":
+    "The customer will pay later. This closes the bill now, and Waitron will not record the payment when it arrives.",
+  "deferred_close.issue_and_close": "Issue invoice and close",
+  "deferred_close.close": "Close bill",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.unsent": "Send or remove the unsent dishes before paying.",
   "bill_pay.title": "Pay",
@@ -3568,6 +3577,14 @@ export const es: Record<StringKey, string> = {
   "sale.over_simplified_limit":
     "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
+  "deferred_close.title": "Cerrar como pago aplazado",
+  "deferred_close.bill": "Cuenta",
+  "deferred_close.invoice": "Factura",
+  "deferred_close.simplified": "Factura simplificada",
+  "deferred_close.final":
+    "El cliente pagará más tarde. Esto cierra la cuenta ahora y Waitron no registrará el pago cuando llegue.",
+  "deferred_close.issue_and_close": "Emitir factura y cerrar",
+  "deferred_close.close": "Cerrar cuenta",
   "bill_pay.unsent": "Envía o quita los platos sin enviar antes de cobrar.",
   "bill_pay.title": "Cobrar",
   "bill_pay.title_table": "Cobrar · {table}",

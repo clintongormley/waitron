@@ -624,3 +624,9 @@ remains and take the next guest's payment. On a phone, use **Take the next** to 
 
 A bill already presented for collection offers the whole amount only. Finishing the table is a
 separate action after payment.
+
+## Close a bill as a deferred payment {#deferred-payment}
+
+When the customer will pay the whole bill later, outside Waitron, open **Pay** and choose **Close as
+deferred payment**. This closes the bill now, and Waitron will not record the payment when it
+arrives.
