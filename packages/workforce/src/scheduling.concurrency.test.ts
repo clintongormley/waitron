@@ -37,9 +37,8 @@ describe("publishRoster under concurrent publishers", () => {
   it("lets exactly one concurrent publish of a draft win; the rest see roster.already_published", async () => {
     const versionId = await insertRosterVersion(suite.db, { locationId });
     // A distinct publisher per call, so the surviving `published_by` identifies the winner.
-    const persons = await Promise.all(
-      Array.from({ length: PUBLISHERS }, (_, i) => seedPerson(suite.db, `publisher-${i}`)),
-    );
+    const persons: string[] = [];
+    for (let i = 0; i < PUBLISHERS; i++) persons.push(await seedPerson(suite.db, `publisher-${i}`));
     const results = await Promise.allSettled(
       persons.map((publishedByPersonId) =>
         withTransaction(suite.db, (tx) =>
