@@ -298,6 +298,30 @@ describe("A738 filter combinations", () => {
     ).toEqual(["one-clear"]);
   });
 
+  it("offers compatible sizes even when their parent declares the excluded allergen, without changing the menu", () => {
+    const dish = { ...withVariants("salad", { nuts: {} }, {}, null), allergens: { nuts: {} } };
+    const visible = visibleProducts([dish], "", { diets: [], exclude: { nuts: "all" } });
+    expect(visible.map((item) => item.id)).toEqual(["salad"]);
+    expect(visible[0]!.variants!.map((variant) => variant.id)).toEqual(["salad-1"]);
+    expect(dish.variants!.map((variant) => variant.id)).toEqual(["salad-0", "salad-1", "salad-2"]);
+  });
+
+  it("hides a clear parent when every actual size declares the excluded allergen", () => {
+    const dish = { ...withVariants("cake", { milk: {} }, { milk: {} }), allergens: {} };
+    expect(visibleProducts([dish], "", { diets: [], exclude: { milk: "all" } })).toEqual([]);
+  });
+
+  it("keeps a sold-out compatible size visible while removing the incompatible available size", () => {
+    const dish = { ...withVariants("soup", {}, { milk: {} }), allergens: {} };
+    dish.variants![0]!.available = false;
+    const visible = visibleProducts([dish], "", { diets: [], exclude: { milk: "all" } });
+    expect(visible).toHaveLength(1);
+    expect(visible[0]!.variants!.map((variant) => [variant.id, variant.available])).toEqual([
+      ["soup-0", false],
+    ]);
+    expect(dish.variants![1]!.available).toBe(true);
+  });
+
   it("A738 leaves empty filters and unchanged immutable memo inputs stable", () => {
     const products = [product("one", "food"), product("two", "drink")];
     expect(visibleProducts(products, "", EMPTY_MENU_FILTERS)).toBe(products);
