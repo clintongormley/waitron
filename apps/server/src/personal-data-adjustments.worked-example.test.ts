@@ -42,7 +42,7 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 
 // The S2d plan's worked example (docs/superpowers/plans/2026-10-25-a980-s2d-line-voids.md, Tasks 6a
-// and 6b): Martha, a cashier, voids three lines on table 4's bill with Void…, and a fourth line she
+// and 6b): a cashier voids three lines on table 4's bill with Void…, and a fourth line she
 // removes before preparation started leaves no adjustment.
 
 const DISHES = [
