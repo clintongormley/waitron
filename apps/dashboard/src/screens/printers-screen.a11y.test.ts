@@ -764,9 +764,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       expect(rect.left).toBeGreaterThanOrEqual(modal.left);
       expect(rect.right).toBeLessThanOrEqual(modal.right);
       await expectNoA11yViolations(host);
-      await page.screenshot({
-        path: `__screenshots__/pickup-roles-${theme}-${locale}-${width}.png`,
-      });
       await userEvent.click(field.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!);
       await flush(el);
       expect(field.shadowRoot!.querySelector<HTMLInputElement>("input.search")!.placeholder).toBe(
@@ -780,9 +777,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await flush(el);
       expect(field.values).toEqual(["payment_slip"]);
       await expectNoA11yViolations(host);
-      await page.screenshot({
-        path: `__screenshots__/pickup-roles-menu-${theme}-${locale}-${width}.png`,
-      });
       const slip = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
         (row) => row.textContent!.trim() === t("devices.slip_printer_now"),
       )!;
