@@ -1315,8 +1315,8 @@ once released. Belongs with A1016.
   [Detail](box.md#a798-b-build-degraded-but-trading-what-the-box-does-and-tells-staff-when-a-part-fails-but-it-can-still-sell)
 - **The box's certificate issued under a wrong clock.**
   [Detail](box.md#the-boxs-certificate-issued-under-a-wrong-clock)
-- **What slice 9b leaves to slice 9c and to a restart.**
-  [Detail](box.md#what-slice-9b-leaves-to-slice-9c-and-to-a-restart)
+- **What slice 9b leaves to a restart.**
+  [Detail](box.md#what-slice-9b-leaves-to-a-restart)
 
 ## Bundle: Qualify clock confirmation through remote access
 
@@ -1454,14 +1454,10 @@ except the last, added 2026-11-14.
 
 ## Bundle: Box status rows
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **The Clock row says 'connect the box to the internet' where that may not help.**
-  [Detail](box.md#the-clock-row-says-connect-the-box-to-the-internet-where-that-may-not-help)
-- **The clock stop's look differs from pictures 8 and 9.** The counter refusal shows in the till's
-  top banner, not under the strip; the Clock row's fix advice follows " · " on the comparison line
-  rather than on a line of its own; the Box status page shows the alert sentence "Sort it out on the
-  Box status page" while on that page. Left open by A798-B slice 8 (#2012).
+- **The email about a clock set before 28 October 2024 points to the internet where that may not help.**
+  [Detail](box.md#the-email-about-a-clock-set-before-28-october-2024-points-to-the-internet-where-that-may-not-help)
 - **The Tax agency row does not say since when sends have failed.** Picture 4 draws «los envíos
   fallan desde 17:31»; the row shows the last acceptance. The technical incident's open time could
   carry it. Left open by A798-B slice 7b (#2030).
@@ -2068,13 +2064,11 @@ prune deletes nothing, every day, and logs nothing (a read that fails logs `stre
 so old generations can pile up in the bucket with no alert. Also not tested: a later generation whose marker cannot be read after an
 earlier one's could (read, not run). Left open by A798-B slice 9b, Task 15.
 
-## What slice 9b leaves to slice 9c and to a restart.
+## What slice 9b leaves to a restart.
 
-- A clock wrong forward at start, or wrong backward by less than the gap to the last sale, asks
-  nobody until slice 9c's start check (slice 9b plan, decision 14).
-- A node promoted while running gets no start-up window, so no till's time can set its clock, until
-  it restarts; and a start-up window stays open while every read of the stop keeps failing
-  (decision 14; stated, not fixed).
+- A node promoted while running gets no start-up window until it restarts (`clockStartUp`'s
+  `primaryAtStart`, `apps/server/src/boot.ts`), so staff can set its clock from a till only until
+  the internet confirms its start (decision 14; stated, not fixed).
 
 Left open by A798-B slice 9b.
 
@@ -2119,15 +2113,13 @@ its day and is dropped unsent. The alert stays in the bell. A plain relay or the
 local capture does receive it. For the owner to know. Read, not run: no TLS relay with a
 future-dated certificate was used in 3b-ii.
 
-## The Clock row says 'connect the box to the internet' where that may not help.
+## The email about a clock set before 28 October 2024 points to the internet where that may not help.
 
-On a box that
-  does not keep its clock in step with internet time (since A798-B slice 10, `waitron.sh install`
-  switches synchronisation on where the system provides it, and says so where it cannot);
-  and on one that does, the same advice shows where the clock is right and the latest record's time
-  was wrong — neither half clears the stop. The `clock.unusable` email
-  (`apps/server/src/i18n/box-emails.ts`) also tells the managers to connect the box to the internet
-  first. Left open by A798-B slice 8 (#2012).
+The `clock.unusable` email (`apps/server/src/i18n/box-emails.ts`) tells the managers that with the
+internet the box puts its clock right by itself. That may not help on a box that does not keep its
+clock in step with internet time (since A798-B slice 10, `waitron.sh install` switches
+synchronisation on where the system provides it, and says so where it cannot). Left open by A798-B
+slice 8 (#2012).
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 

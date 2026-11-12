@@ -3826,6 +3826,9 @@ the stop. Sales that a clock running ahead stamped later than the real time are 
 (Q60). _2026-11-01: slice 9b (#2331) sets the clock and adds a staff member's confirmation from a
 till; see [Q61](#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)._
 
+**2026-11-12 (A1420 PR 6):** the stop, the confirmation that lifted it and the list of wrongly dated
+sales are removed; the clock now stops payments only when it reads before 28 October 2024 or, on a box that files records, while a start waits for its time to be confirmed.
+
 This records a question; no enquiry has been sent.
 
 ### Q52. Sales recorded under a restart whose clock later proved wrong (added 2026-10-21)
@@ -3872,6 +3875,9 @@ change nothing else; the restart and its proof stay in the append-only table Q51
 `clock.behind_chain_disproved`, for the sales written under it, and the proof is kept in
 `clock_confirmations`. The sales a clock running ahead dated before the stop are
 [Q60](#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
+
+**2026-11-12 (A1420 PR 6):** the stop, the confirmation that lifted it and the
+`clock.behind_chain_disproved` alert are removed; the clock now stops payments only when it reads before 28 October 2024 or, on a box that files records, while a start waits for its time to be confirmed.
 
 This records a question; no enquiry has been sent.
 
@@ -3935,6 +3941,9 @@ change nothing else. Built by A798-B slice 9 (#2025), revised 2026-10-24; parked
 who handled it and an optional note, and each list downloads as a CSV for the adviser (series and
 number, invoice date, time recorded, real time unknown, amount, and whether the invoice date may
 differ from the day the sale was made).
+
+**2026-11-12 (A1420 PR 6):** the stop, the confirmation that lifted it, the list of wrongly dated
+sales, its notes and its download are removed; the clock now stops payments only when it reads before 28 October 2024 or, on a box that files records, while a start waits for its time to be confirmed.
 
 This records a question; no enquiry has been sent.
 
