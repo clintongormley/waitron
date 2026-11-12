@@ -470,7 +470,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   names to what it creates and names no menu after a period, and the service-step suite
   (`apps/server/src/service-step-signals.test.ts`) English table names; the service-period suite
   keeps the Spanish names its shared signed-in till (`apps/server/src/testing/signed-in-till.ts`)
-  creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
+  creates, and the Spanish
   ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
   shared party venue creates.
   The tables suite (`apps/server/src/tables.test.ts`) gives English location, zone, menu,
@@ -859,6 +859,7 @@ the helper's constant status is not evidence of the write.
   The adjustment-download worked example uses Martha Lewis, Lewis Green, Paul Gray and Anna Smith;
   local reprint and restore-archive staff samples use Anna.
   The shared clock venue uses Anna for its staff sample and matching attendance, approver and profile-export checks.
+  The shared signed-in-till venue uses Anna and Administrator for its staff display samples.
   Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
@@ -966,7 +967,7 @@ the helper's constant status is not evidence of the write.
   names to what it creates and names no menu after a period, and the service-step suite
   (`apps/server/src/service-step-signals.test.ts`) English table names; the service-period suite
   keeps the Spanish names its shared signed-in till (`apps/server/src/testing/signed-in-till.ts`)
-  creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
+  creates, and the Spanish
   ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
   shared party venue creates.
   The tables suite (`apps/server/src/tables.test.ts`) gives English location, zone, menu,
