@@ -40,6 +40,8 @@ it("keeps served dish and extra option answers, notes and extra nutrition in the
       ungrouped: [
         {
           ...recorded,
+          sentAt: "2026-09-28T20:00:00Z",
+          nutrition: { allergens: { eggs: {} }, dietaryDeclarations: ["vegetarian"] },
           note: "Dish note",
           servedAt: "2026-09-28T20:05:00Z",
           servedQuantity: "2.000",
@@ -48,6 +50,7 @@ it("keeps served dish and extra option answers, notes and extra nutrition in the
     }),
   });
   const dialog = await openSentDish(el, "dish", "served");
+  expect(dialog.textContent).toContain("Recorded when sent");
   const picked = [...dialog.querySelectorAll(".modifier-answer")].map((el) =>
     el.textContent!.trim(),
   );

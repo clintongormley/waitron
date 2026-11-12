@@ -6804,6 +6804,30 @@ describe("A1208 a retrieved counter order's portions", () => {
     ]);
   });
 
+  it("shows a retrieved sent dish's recorded declaration through the counter", async () => {
+    const { c } = await retrieved({
+      getTabLines: vi.fn().mockResolvedValue({
+        revision: 4,
+        lines: ids.map((id, i) => ({
+          ...listedLine(id, i + 1),
+          sentAt: "2026-11-12T08:00:00Z",
+          nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["halal"] },
+        })),
+      }),
+    });
+    const basket =
+      c.shadowRoot!.querySelector<import("./widgets/basket.js").TillBasket>("till-basket")!;
+    basket.openLineDetails(c.store.lines[0]!);
+    await basket.updateComplete;
+    const picker =
+      basket.shadowRoot!.querySelector<import("./widgets/modifier-picker.js").TillModifierPicker>(
+        "till-modifier-picker",
+      )!;
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain(t("allergens.recorded_when_sent"));
+    expect(picker.shadowRoot!.textContent).toContain(t("allergens.contains"));
+  });
+
   it("parks an unchanged row without saving it", async () => {
     const { el, c, updateWorkingOrder } = await retrieved();
     emit(c, "park-order", { label: undefined });

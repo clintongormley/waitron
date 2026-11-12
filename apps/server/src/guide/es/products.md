@@ -427,6 +427,12 @@ elegir los extras de un plato, cada extra muestra los alérgenos que declara su 
 añadirlo. Un extra sin revisar no muestra ninguno, lo que no establece que sea apto. La caja no
 tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
 
+Abre los detalles de un plato enviado para consultar **Registrado al enviar**. Esas declaraciones
+describen el plato cuando lo enviaste, aunque después edites el producto. Si un plato antiguo no
+tiene una declaración registrada, la ventana lo indica; comprueba sus ingredientes. Los platos en
+espera mantienen sus declaraciones actuales hasta que los liberas. Usa la información actual de
+la cocina para preparar la comida.
+
 Al añadir un plato con un filtro de alérgenos activo, solo puedes elegir tamaños y extras
 compatibles cuya declaración esté revisada. Los extras opcionales no ocultan el plato. Si un
 extra preseleccionado es incompatible o está sin revisar, comprueba los extras indicados y elige

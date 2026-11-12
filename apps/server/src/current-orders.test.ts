@@ -1176,16 +1176,19 @@ describe("readCurrentOrders (spec §4)", () => {
     },
   );
 
-  it("carries effective live dish nutrition on a sent current-order row", async () => {
+  it("keeps the first-send declaration on a current-order row after a product edit", async () => {
     const v = await setupVenue();
     const s = await seated(v);
+    await suite.db.execute(
+      sql`update products set allergens = ${JSON.stringify({ milk: {} })}, dietary_declarations = ${JSON.stringify(["vegetarian"])} where name = 'steak'`,
+    );
     await group(v, s.partyId, "fire", [line(v, "steak")]);
     await suite.db.execute(
       sql`update products set allergens = ${JSON.stringify({ gluten: { kinds: ["barley"] } })}, dietary_declarations = ${JSON.stringify(["halal"])} where name = 'steak'`,
     );
     const read = await currentOrders(s.partyId);
     expect(read.groups[0]!.rows[0]).toMatchObject({
-      nutrition: { allergens: { gluten: { kinds: ["barley"] } }, dietaryDeclarations: ["halal"] },
+      nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["vegetarian"] },
     });
   });
 
@@ -1367,6 +1370,8 @@ describe("readCurrentOrders (spec §4)", () => {
             row({
               netAmount: "8.00",
               lineId: croqLine!.id,
+              sentAt: expect.any(String),
+              nutrition: { allergens: null, dietaryDeclarations: [] },
               billStatus: "settled",
               workingOrderId: s.tabId,
               lineNo: croqLine!.lineNo,
@@ -1385,6 +1390,8 @@ describe("readCurrentOrders (spec §4)", () => {
             row({
               netAmount: "8.00",
               lineId: untouched!.id,
+              sentAt: expect.any(String),
+              nutrition: { allergens: null, dietaryDeclarations: [] },
               billStatus: "settled",
               workingOrderId: s.tabId,
               lineNo: untouched!.lineNo,
@@ -1401,6 +1408,8 @@ describe("readCurrentOrders (spec §4)", () => {
             row({
               netAmount: "2.00",
               lineId: named("water", s.tabId).id,
+              sentAt: expect.any(String),
+              nutrition: { allergens: null, dietaryDeclarations: [] },
               billStatus: "settled",
               workingOrderId: s.tabId,
               name: "water",
@@ -1408,6 +1417,8 @@ describe("readCurrentOrders (spec §4)", () => {
             row({
               netAmount: "8.00",
               lineId: split.id,
+              sentAt: expect.any(String),
+              nutrition: { allergens: null, dietaryDeclarations: [] },
               workingOrderId: checkId,
               name: "croquetas",
               kitchen: {
@@ -1466,6 +1477,8 @@ describe("readCurrentOrders (spec §4)", () => {
         row({
           netAmount: "5.00",
           lineId: flan.id,
+          sentAt: expect.any(String),
+          nutrition: { allergens: null, dietaryDeclarations: [] },
           workingOrderId: laterTab,
           name: "flan",
           kitchen: {

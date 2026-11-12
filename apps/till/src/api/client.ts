@@ -589,6 +589,8 @@ export interface CurrentOrderRow {
    *  `firedAt` for a dish with no kitchen work. */
   requestedAt: string | null;
   firedAt: string | null;
+  /** First-send time, independent of whether Serve is currently available. */
+  sentAt?: string;
   nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;

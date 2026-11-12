@@ -935,10 +935,13 @@ option choices. Extras appear when the dish or an available variant takes whole-
 Changes refresh the menu immediately; restoration stays manual.
 
 `nutritionIcons` draws allergen and positive diet icons beside counter and table-order line names.
-A null allergen declaration draws no icons. Counter lines keep their existing `asServedAllergens`
-and `asServedDiet` calculation and retrieved snapshots. Persisted table rows receive `nutrition`
-from `readLineNutrition`, a live effective-product read like the kitchen queue’s own nutrition read.
-Each extra stays separate. The retired Allergens screen has no destination or print path.
+A null allergen declaration draws no icons. Sent counter and table rows use `sentNutrition` from
+`working_line_contexts`, captured at the first `sent_at` through the effective current product
+read, including variant inheritance. `readDisplayLineNutrition` keeps unstamped rows live and
+never substitutes current declarations for a missing sent snapshot. Each extra stays separate.
+Kitchen reads retain their current-product declarations. Orders history detail is the remaining
+A1517-6 slice. This Sent exception follows the owner's 11-November decision 6 in
+[the A1517 proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11). The retired Allergens screen has no destination or print path.
 
 
 ### Regional practice names

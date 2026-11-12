@@ -1939,6 +1939,8 @@ export interface CurrentOrderRow {
    *  `firedAt` for a dish with no kitchen work. */
   requestedAt: string | null;
   firedAt: string | null;
+  /** First-send time, independent of whether Serve is currently available. */
+  sentAt?: string;
   nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;
@@ -2190,6 +2192,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
           ? readyTimes.sort().at(-1)!
           : null,
       lineId: line.id,
+      ...(line.sentAt === null ? {} : { sentAt: line.sentAt }),
       ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
       workingOrderId: line.workingOrderId,
       lineNo: line.lineNo,

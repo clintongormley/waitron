@@ -790,6 +790,7 @@ export class TillBasket extends LitElement {
       return line === undefined ? [] : [[line, index] as const];
     });
     const listing = storedListing(this.store, this.storedLines);
+    const recordedLine = this.modifierLine ? this.#sentLine(this.modifierLine) : undefined;
     const adjustable = this.readOnly
       ? null
       : adjustableListing(this.store, listing, this.orderInFlight);
@@ -1012,15 +1013,18 @@ export class TillBasket extends LitElement {
               .lineDetails=${this.lineDetails}
               .withNote=${this.lineDetails}
               .readOnly=${this.lineDetails && this.#lineReadOnly(this.modifierLine)}
+              .recordedWhenSent=${recordedLine !== undefined}
               .nutrition=${
                 this.lineDetails
-                  ? {
-                      allergens: this.modifierLine.product.allergens,
-                      dietaryDeclarations: nutritionDietLabels(
-                        asServedDiet(this.modifierLine),
-                        this.modifierLine.product.dietaryDeclarations,
-                      ),
-                    }
+                  ? recordedLine === undefined
+                    ? {
+                        allergens: this.modifierLine.product.allergens,
+                        dietaryDeclarations: nutritionDietLabels(
+                          asServedDiet(this.modifierLine),
+                          this.modifierLine.product.dietaryDeclarations,
+                        ),
+                      }
+                    : (recordedLine.nutrition ?? null)
                   : null
               }
               .initialCourse=${this.#modifierCourse}
@@ -1335,7 +1339,18 @@ export class TillBasket extends LitElement {
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 
+  #sentLine(line: OrderLine): TabLine | undefined {
+    const row = this.#listed(line, storedListing(this.store, this.storedLines));
+    return row?.sentAt == null ? undefined : row;
+  }
+
   #nutrition(line: OrderLine) {
+    const recorded = this.#sentLine(line);
+    if (recorded !== undefined)
+      return nutritionIcons(
+        recorded.nutrition?.allergens,
+        nutritionDietLabels(undefined, recorded.nutrition?.dietaryDeclarations),
+      );
     const served = asServedAllergens(line);
     return nutritionIcons(
       served.pending ? null : served.allergens,
