@@ -23,11 +23,17 @@ import {
   seedVenue,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  hashPin,
+  persons,
+  registerModulePermissions,
+  startManagementSession,
+} from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import {
+  PAYMENTS_PERMISSIONS,
   SimulatorPaymentProvider,
   cardReaderHolders,
   cardReaders,
@@ -59,6 +65,7 @@ import "./errors.js";
  * The card-provider and card-reader management routes: the `hardware.manage` gate, credential
  * sealing, and reader add/adopt/unpair against fake provider seats.
  */
+registerModulePermissions(PAYMENTS_PERMISSIONS);
 const noopLog: Logger = () => {};
 
 const RING: KeyRing = loadKeyRing({
@@ -3106,4 +3113,78 @@ describe("manager-ended practice uncertainty", () => {
       }
     },
   );
+});
+
+describe("provider On/Off", () => {
+  it("requires an administrator and retains credentials while reader additions are refused", async () => {
+    const venue = await seedVenueWithStaff();
+    const app = mountApp(venue);
+    expect((await connectStripe(app, venue)).status).toBe(200);
+    const change = (cookie: string, enabled: boolean, revision: number) =>
+      send(app, "PUT", "/management-api/payments/providers/stripe/state", {
+        cookie,
+        body: { enabled, revision },
+      });
+    const refused = await change(venue.managerCookie, false, 0);
+    expect(refused.status).toBe(403);
+    expect({ status: refused.status, body: await refused.json() }).toMatchObject({
+      status: 403,
+      body: { error: { code: "authorization.not_permitted" } },
+    });
+    const [admin] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Administrator", role: "admin" })
+      .returning();
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: admin!.id }),
+    );
+    const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
+    const reader = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "stripe", providerRef: nextRef(), name: "Front reader" })
+      .returning();
+    const inUse = await change(cookie, false, 0);
+    expect({ status: inUse.status, body: await inUse.json() }).toMatchObject({
+      status: 409,
+      body: {
+        error: { code: "payment.provider_in_use", params: { readerNames: ["Front reader"] } },
+      },
+    });
+    await suite.db.delete(cardReaders).where(eq(cardReaders.id, reader[0]!.id));
+    const off = await change(cookie, false, 0);
+    expect({ status: off.status, body: await off.json() }).toEqual({
+      status: 200,
+      body: { enabled: false, revision: 1 },
+    });
+    expect(
+      await tryGetCredential(suite.db, RING, { purpose: stripeSeat.credentialPurpose }),
+    ).not.toBeNull();
+    const add = vi.spyOn(stripeSeat.readers, "add");
+    const list = vi.spyOn(stripeSeat.readers, "list");
+    for (const [path, body] of [
+      [
+        "/management-api/payments/readers",
+        { providerId: "stripe", name: "New reader", reference: "tmr_new" },
+      ],
+      [
+        "/management-api/payments/readers/adopt",
+        { providerId: "stripe", name: "New reader", providerRef: "tmr_new" },
+      ],
+    ] as const) {
+      const response = await send(app, "POST", path, { cookie: venue.managerCookie, body });
+      expect({ status: response.status, body: await response.json() }).toMatchObject({
+        status: 409,
+        body: { error: { code: "payment.provider_disabled" } },
+      });
+    }
+    expect(add).not.toHaveBeenCalled();
+    expect(list).not.toHaveBeenCalled();
+    add.mockRestore();
+    list.mockRestore();
+    const on = await change(cookie, true, 1);
+    expect({ status: on.status, body: await on.json() }).toEqual({
+      status: 200,
+      body: { enabled: true, revision: 2 },
+    });
+  });
 });

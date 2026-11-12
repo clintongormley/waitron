@@ -92,6 +92,41 @@ async function connect(el: SumUpConnectForm): Promise<void> {
 }
 
 describe("sumup-connect-form", () => {
+  it.each(["api-key"])("submits the current credentials with Enter from %s", async (field) => {
+    const request = vi.fn(async () => ({ merchantName: "Deli" }));
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+    await setInput(el, "api-key", "key");
+    const input = q(el, `[data-test=${field}]`)!.shadowRoot!.querySelector("input")!;
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith(CONNECT_PATH, "POST", { apiKey: "key" }),
+    );
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=connected]")).toBe(
+        t("payments.sumup.connected_as").replace("{name}", "Deli"),
+      ),
+    );
+  });
+  it("cancels the configuration without submitting credentials", async () => {
+    const request = vi.fn();
+    const onCancel = vi.fn();
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", {
+      request,
+      actions: { saveLabel: "Save", cancelLabel: "Cancel", onCancel },
+    });
+    await setInput(el, "api-key", "key");
+    q(el, "wt-button[slot=cancel]")!.click();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("posts the API key and shows the merchant name for confirmation, then calls onConnected", async () => {
     const request = vi.fn(async () => ({
       merchantName: "Deli Gormley",
@@ -139,6 +174,11 @@ describe("sumup-connect-form", () => {
     expect(select).not.toBeNull();
     expect(await bottomOf(el)).toBe("");
     expect(fieldError(el, "merchant")).toBe("");
+
+    select!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    expect(request).toHaveBeenCalledTimes(1);
 
     // Choose the second merchant and connect again.
     await chooseOption(select!, "M2");

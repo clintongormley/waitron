@@ -417,7 +417,8 @@ declare module "@waitron/shared" {
      * A card provider cannot be disconnected while a card reader that uses it is still active.
      * `activeReaders` is a COUNT; never a reader id or a secret.
      */
-    "payment.provider_in_use": { activeReaders: number };
+    "payment.provider_in_use": { activeReaders: number; readerNames?: string[] };
+    "payment.provider_disabled": { providerId: string };
     "payment.not_stuck": { paymentId: string };
     "stuck_payment.not_found": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };

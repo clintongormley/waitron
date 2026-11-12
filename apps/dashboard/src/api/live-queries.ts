@@ -166,7 +166,7 @@ export const QUERY_DEPENDENCIES = {
   // The route reads `tenant_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
   // Module selection is fixed for this server start.
-  listModules: [],
+  listModules: ["settings.payments"],
   listStuckPayments: ["payments", "working_orders", "devices"],
   listStuckTenderRefunds: ["tender_refunds", "sales", "invoice_series"],
   listStuckBillPayments: ["bill_payments", "payments", "working_orders", "devices"],

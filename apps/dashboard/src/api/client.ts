@@ -2157,6 +2157,7 @@ export interface ModuleRow {
   id: string;
   category: "module" | "card-provider";
   enabled: boolean;
+  revision?: number;
 }
 
 export interface PaymentProviderRow {
@@ -4762,6 +4763,17 @@ export class DashboardApi {
 
   listPaymentProviders(): Promise<PaymentProviderRow[]> {
     return this.#request<PaymentProviderRow[]>("/management-api/payments/providers", "GET");
+  }
+
+  setPaymentProviderState(
+    id: string,
+    enabled: boolean,
+    revision: number,
+  ): Promise<{ enabled: boolean; revision: number }> {
+    return this.#request(`/management-api/payments/providers/${id}/state`, "PUT", {
+      enabled,
+      revision,
+    });
   }
 
   disconnectPaymentProvider(id: string): Promise<void> {

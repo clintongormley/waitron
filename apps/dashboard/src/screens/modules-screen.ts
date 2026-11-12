@@ -14,6 +14,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { CARD_PROVIDER_PANELS, MODULE_LABEL_KEYS } from "@waitron/dashboard-modules";
 import {
@@ -74,6 +75,7 @@ export class ModulesScreen extends LitElement {
       }
     `,
   ];
+  @property({ type: Boolean }) canManageProviders = false;
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
@@ -85,6 +87,9 @@ export class ModulesScreen extends LitElement {
   @state() private filter = "enabled";
   @state() private busy = false;
   @state() private editor?: ModuleRow;
+  @state() private switching?: ModuleRow;
+  @state() private switchError = "";
+  @state() private readerNames: string[] = [];
   #scope?: DraftScope<null>;
   #leave?: LeaveCoordinator;
   #opener?: HTMLElement;
@@ -172,6 +177,26 @@ export class ModulesScreen extends LitElement {
     this.#closed();
     void this.#load();
   }
+  async #switchProvider(): Promise<void> {
+    const row = this.switching;
+    if (!row || this.busy) return;
+    this.busy = true;
+    this.switchError = "";
+    this.readerNames = [];
+    try {
+      await this.api.setPaymentProviderState(row.id, !row.enabled, row.revision ?? 0);
+      this.switching = undefined;
+      void this.#load();
+    } catch (error) {
+      this.switchError = codeOf(error);
+      const names = (error as { params?: { readerNames?: unknown } } | null)?.params?.readerNames;
+      this.readerNames = Array.isArray(names)
+        ? names.filter((name): name is string => typeof name === "string")
+        : [];
+    } finally {
+      this.busy = false;
+    }
+  }
   #columns(): DataTableColumn<ModuleRow>[] {
     return [
       {
@@ -215,7 +240,23 @@ export class ModulesScreen extends LitElement {
                   variant="secondary"
                   @click=${(event: Event) => this.#configure(row, event)}
                   >${text("modules.configure")}</wt-button
-                ></wt-row-actions
+                >${
+                  this.canManageProviders &&
+                  this.catalogue?.find(
+                    (module) => module.id === "payments" && module.category === "module",
+                  )?.enabled !== false
+                    ? html`<wt-button
+                        data-test=${`switch-${row.id}`}
+                        variant="secondary"
+                        @click=${() => {
+                          this.switching = row;
+                          this.switchError = "";
+                          this.readerNames = [];
+                        }}
+                        >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
+                      >`
+                    : nothing
+                }</wt-row-actions
               >`
             : nothing,
       },
@@ -263,6 +304,49 @@ export class ModulesScreen extends LitElement {
       ${this.catalogueError || this.providersError ? html`<p class="error" role="alert">${codeMessage(this.catalogueError || this.providersError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
       ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
+      ${
+        this.switching
+          ? html`<wt-dialog
+              .open=${true}
+              heading=${`${text(this.switching.enabled ? "modules.turn_off" : "modules.turn_on")}: ${this.#name(this.switching)}`}
+              .dismissible=${!this.busy}
+              @wt-close=${() => {
+                this.switching = undefined;
+              }}
+            >
+              <p>
+                ${text(this.switching.enabled ? "modules.off_explanation" : "modules.on_explanation")}
+              </p>
+              ${
+                this.switchError
+                  ? html`<p class="error" role="alert" data-test="provider-state-error">
+                      ${this.switchError === "payment.provider_in_use" ? text("modules.remove_readers") : codeMessage(this.switchError)}
+                      ${this.readerNames.join(", ")}
+                      ${this.switchError === "payment.provider_in_use" ? html`<a data-test="remove-readers" href="/manage/payments">${text("modules.open_readers")}</a>` : nothing}
+                    </p>`
+                  : nothing
+              }
+              <wt-form-actions slot="footer"
+                ><wt-button
+                  slot="cancel"
+                  variant="secondary"
+                  ?disabled=${this.busy}
+                  @click=${() => {
+                    this.switching = undefined;
+                  }}
+                  >${t("action.cancel")}</wt-button
+                ><wt-button
+                  variant="primary"
+                  data-test="confirm-provider-state"
+                  ?loading=${this.busy}
+                  ?disabled=${this.busy}
+                  @click=${() => void this.#switchProvider()}
+                  >${text(this.switching.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
+                ></wt-form-actions
+              >
+            </wt-dialog>`
+          : nothing
+      }
       ${
         editor && panel
           ? html`<wt-dialog

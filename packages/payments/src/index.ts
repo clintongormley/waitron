@@ -158,3 +158,4 @@ export {
   findCaptureWarning,
 } from "./capture-mismatch.js";
 export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";
+export { PAYMENTS_SETTINGS, PAYMENTS_PERMISSIONS } from "./settings.js";
