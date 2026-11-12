@@ -14,6 +14,7 @@ import { writeFileDurable } from "./fs-atomic.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
 import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
+import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { reachDisk } from "./sync-path.js";
 import "./errors.js";
@@ -85,15 +86,18 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
   return true;
 }
 
-const RELAYED_BARE = [
-  "password.invalid",
-  "mirror.bucket_stream_active",
-  "mirror.standby_name_taken",
-  "mirror.spare_already_joined",
-] as const;
+const RELAYED_WITH_PARAMS = ["mirror.clocks_apart", "mirror.standby_series_unsupported"] as const;
 
-function isRelayedBare(code: unknown): code is (typeof RELAYED_BARE)[number] {
-  return (RELAYED_BARE as readonly unknown[]).includes(code);
+type RelayedBare =
+  | "password.invalid"
+  | Exclude<(typeof JOIN_REFUSALS)[number], (typeof RELAYED_WITH_PARAMS)[number]>;
+
+function isRelayedBare(code: unknown): code is RelayedBare {
+  return (
+    code === "password.invalid" ||
+    ((JOIN_REFUSALS as readonly unknown[]).includes(code) &&
+      !(RELAYED_WITH_PARAMS as readonly unknown[]).includes(code))
+  );
 }
 
 /** Text that is an ISO time exactly as `Date.prototype.toISOString` writes one. */
@@ -104,12 +108,11 @@ function isIsoTime(value: unknown): value is string {
 }
 
 /**
- * A refusal from the main box is passed on only when it is on this short list, and each is rebuilt
- * here so nothing the main box wrote travels on: `password.invalid`,
- * `mirror.bucket_stream_active`, `mirror.standby_name_taken` and `mirror.spare_already_joined`
- * with no parameters; `mirror.standby_series_unsupported` with `{ module }` only when it names a
- * module in `ALL_MODULES`; `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are ISO
- * times. Every other code, and any of these whose parameters fail their check, is
+ * A refusal from the main box is passed on only when it is `password.invalid` or one of
+ * `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box wrote travels on: with no
+ * parameters, except `mirror.standby_series_unsupported` with `{ module }` only when it names a
+ * module in `ALL_MODULES`, and `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both
+ * are ISO times. Every other code, and any of these whose parameters fail their check, is
  * `mirror.bundle_fetch_failed`.
  */
 async function refusalFrom(response: Response): Promise<AppError> {

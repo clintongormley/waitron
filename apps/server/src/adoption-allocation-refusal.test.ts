@@ -17,6 +17,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
+import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { writeCredentialsRing } from "./box-secrets.js";
 import {
   readPendingAdoption,
@@ -255,17 +256,19 @@ it("a pending allocated adoption refuses without creating a selling identity and
   ]);
 });
 
-// The main box's answer to the join, as `mirror-bundle-api.ts` sends each refusal.
-it.each([
-  ["mirror.bucket_stream_active", {}],
-  ["mirror.standby_name_taken", {}],
-  ["mirror.spare_already_joined", {}],
-  ["mirror.standby_series_unsupported", { module: "fiscal-verifactu" }],
-  [
-    "mirror.clocks_apart",
-    { primaryAt: "2026-11-10T12:00:00.000Z", standbyAt: "2026-11-10T12:05:00.000Z" },
-  ],
-])(
+// The main box's answer to the join, as `mirror-bundle-api.ts` sends each refusal; typed by
+// `JOIN_REFUSALS`, so a refusal added there without a case here does not compile.
+const JOIN_REFUSAL_CASES: Record<(typeof JOIN_REFUSALS)[number], Record<string, unknown>> = {
+  "mirror.bucket_stream_active": {},
+  "mirror.standby_name_taken": {},
+  "mirror.spare_already_joined": {},
+  "mirror.standby_series_unsupported": { module: "fiscal-verifactu" },
+  "mirror.clocks_apart": {
+    primaryAt: "2026-11-10T12:00:00.000Z",
+    standbyAt: "2026-11-10T12:05:00.000Z",
+  },
+};
+it.each(Object.entries(JOIN_REFUSAL_CASES))(
   "the setup route passes on the main box's %s through the real fetch, writes nothing and does not restart",
   async (code, params) => {
     const main = new Hono();

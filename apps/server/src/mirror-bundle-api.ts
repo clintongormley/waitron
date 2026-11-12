@@ -4,7 +4,7 @@ import "./errors.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "@waitron/shared";
+import { AppError, type ErrorCode } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewer,
   readNodeMembership,
@@ -81,6 +81,22 @@ export interface MirrorBundleApiDeps {
  */
 const MAX_CLOCK_GAP_MS = 10 * 60_000;
 
+/**
+ * This box's refusals of a join that the spare passes on to its wizard (`fetchMirrorBundle`), each
+ * answered 409 here and by the spare's adopt route.
+ */
+export const JOIN_REFUSALS = [
+  "mirror.spare_already_joined",
+  "mirror.bucket_stream_active",
+  "mirror.standby_name_taken",
+  "mirror.clocks_apart",
+  "mirror.standby_series_unsupported",
+] as const satisfies readonly ErrorCode[];
+
+export const JOIN_REFUSAL_STATUS = Object.fromEntries(
+  JOIN_REFUSALS.map((code) => [code, 409]),
+) as Record<(typeof JOIN_REFUSALS)[number], ContentfulStatusCode>;
+
 // `membership.write_contended` is transient, so the caller retries.
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
@@ -88,11 +104,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
-  "mirror.spare_already_joined": 409,
-  "mirror.bucket_stream_active": 409,
-  "mirror.standby_name_taken": 409,
-  "mirror.clocks_apart": 409,
-  "mirror.standby_series_unsupported": 409,
+  ...JOIN_REFUSAL_STATUS,
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
