@@ -42,7 +42,7 @@ export const invoiceCorrections = table(
     correctiveSaleId: id("corrective_sale_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     endedAt: tsString("ended_at"),
-    // Null while open, and on a filing by the background pass.
+    // Plain ids, as on bill refunds: no key yet. Null while open, and on a filing by the background pass.
     endedBy: id("ended_by"),
   },
   (t) => [
@@ -78,5 +78,9 @@ export const invoiceCorrections = table(
       sql`(${t.state} = 'filed') = (${t.correctiveSaleId} is not null)`,
     ),
     check("invoice_corrections_ended_ck", sql`(${t.state} = 'open') = (${t.endedAt} is null)`),
+    check(
+      "invoice_corrections_ended_by_ck",
+      sql`(${t.state} <> 'open' or ${t.endedBy} is null) and (${t.state} not in ('discarded', 'closed') or ${t.endedBy} is not null)`,
+    ),
   ],
 );

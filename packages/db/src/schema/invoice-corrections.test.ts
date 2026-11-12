@@ -195,6 +195,36 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
       db.run(sql`delete from invoice_corrections where id = ${written!.id}`),
     );
     expect(triggerRaised(remove, "an invoice correction is never deleted")).toBe(true);
+    const close = await captureError(() =>
+      db.run(sql`update invoice_corrections set state = 'closed' where id = ${written!.id}`),
+    );
+    expect(triggerRaised(close, GUARD)).toBe(true);
+    const [filed] = await open();
+    await db
+      .update(invoiceCorrections)
+      .set({ state: "filed", correctiveSaleId, endedAt: AT })
+      .where(eq(invoiceCorrections.id, filed!.id));
+    const repoint = await captureError(() =>
+      db.run(
+        sql`update invoice_corrections set corrective_sale_id = ${originalSaleId} where id = ${filed!.id}`,
+      ),
+    );
+    expect(triggerRaised(repoint, GUARD)).toBe(true);
+  });
+
+  it("names who ended a discarded or closed correction, and nobody while it is open", async () => {
+    const openedWithEnder = await captureError(() => open({ endedBy: GHOST }));
+    expect(isRefusal(openedWithEnder, CHECK_VIOLATION)).toBe(true);
+    const [written] = await open();
+    for (const state of ["discarded", "closed"] as const) {
+      const nobody = await captureError(() =>
+        db
+          .update(invoiceCorrections)
+          .set({ state, endedAt: AT })
+          .where(eq(invoiceCorrections.id, written!.id)),
+      );
+      expect(isRefusal(nobody, CHECK_VIOLATION)).toBe(true);
+    }
   });
 
   it("refuses a second link for one refund, and update, delete or insert-or-replace of a link", async () => {

@@ -862,7 +862,8 @@ CREATE TABLE `invoice_corrections` (
 	CONSTRAINT "invoice_corrections_state_ck" CHECK("invoice_corrections"."state" in ('open', 'filed', 'discarded', 'closed')),
 	CONSTRAINT "invoice_corrections_gross_ck" CHECK(typeof("invoice_corrections"."gross") = 'integer' and "invoice_corrections"."gross" > 0),
 	CONSTRAINT "invoice_corrections_filed_ck" CHECK(("invoice_corrections"."state" = 'filed') = ("invoice_corrections"."corrective_sale_id" is not null)),
-	CONSTRAINT "invoice_corrections_ended_ck" CHECK(("invoice_corrections"."state" = 'open') = ("invoice_corrections"."ended_at" is null))
+	CONSTRAINT "invoice_corrections_ended_ck" CHECK(("invoice_corrections"."state" = 'open') = ("invoice_corrections"."ended_at" is null)),
+	CONSTRAINT "invoice_corrections_ended_by_ck" CHECK(("invoice_corrections"."state" <> 'open' or "invoice_corrections"."ended_by" is null) and ("invoice_corrections"."state" not in ('discarded', 'closed') or "invoice_corrections"."ended_by" is not null))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `invoice_corrections_open_key` ON `invoice_corrections` (`original_sale_id`) WHERE "invoice_corrections"."state" = 'open';--> statement-breakpoint
