@@ -70,6 +70,8 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import {
+  PAYMENTS_SETTINGS,
+  PAYMENTS_PERMISSIONS,
   PAYMENTS_ALERTS,
   PAYMENTS_CLASSIFICATION,
   paymentsBackupVerification,
@@ -277,6 +279,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: { kind: "none" },
     alerts: PAYMENTS_ALERTS,
     handover: PAYMENTS_HANDOVER,
+    settings: [PAYMENTS_SETTINGS],
+    permissions: PAYMENTS_PERMISSIONS,
   },
   {
     name: "credentials",

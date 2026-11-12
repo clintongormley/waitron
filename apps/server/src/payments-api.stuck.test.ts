@@ -12,6 +12,7 @@ import {
   devices,
   incidents,
   withTransaction,
+  saveSettings,
   workingOrders,
   venueLocationId,
   readNodeMembership,
@@ -47,6 +48,7 @@ import {
   deviceOrigin,
 } from "@waitron/shared";
 import {
+  PAYMENTS_SETTINGS,
   failAttempting,
   insertAttempting,
   insertCapturedPayment,
@@ -1043,8 +1045,15 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(saleIdsFor(orderId)).toEqual([]);
   });
 
-  it("(a) files ONE sale for a payment Stripe captured, settles the order, and refuses a second resolve", async () => {
+  it("(a) files ONE captured sale while the provider is Off, settles the order, and refuses a second resolve", async () => {
     const v = await setup();
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PAYMENTS_SETTINGS, {
+        doc: { providers: { stripe: false } },
+        expectedRevision: 0,
+        personId: v.managerId,
+      }),
+    );
     const orderId = await openOrder(v);
     const { paymentId, piId } = await strandPayment(v, orderId, {
       status: "succeeded",

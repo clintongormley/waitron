@@ -60,6 +60,52 @@ async function connect(el: StripeConnectForm): Promise<void> {
 }
 
 describe("stripe-connect-form", () => {
+  it.each(["secret-key", "webhook-secret", "success-url", "cancel-url"])(
+    "submits the current credentials with Enter from %s",
+    async (field) => {
+      const request = vi.fn(async () => ({ merchantName: "Deli" })) as unknown as DashboardRequest;
+      const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+      await setInput(el, "secret-key", "sk_key");
+      await setInput(el, "webhook-secret", "whsec_key");
+      await setInput(el, "success-url", "https://example.test/ok");
+      await setInput(el, "cancel-url", "https://example.test/no");
+      const input = q(el, `[data-test=${field}]`)!.shadowRoot!.querySelector("input")!;
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+      await vi.waitFor(() =>
+        expect(request).toHaveBeenCalledWith(CONNECT_PATH, "POST", {
+          secretKey: "sk_key",
+          webhookSecret: "whsec_key",
+          successUrl: "https://example.test/ok",
+          cancelUrl: "https://example.test/no",
+        }),
+      );
+      await vi.waitFor(() =>
+        expect(textOf(el, "[data-test=connected]")).toBe(
+          t("payments.stripe.connected_as").replace("{name}", "Deli"),
+        ),
+      );
+    },
+  );
+  it("cancels the configuration without submitting credentials", async () => {
+    const request = vi.fn();
+    const onCancel = vi.fn();
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", {
+      request,
+      actions: { saveLabel: "Save", cancelLabel: "Cancel", onCancel, onBusy: vi.fn() },
+    });
+    await setInput(el, "secret-key", "key");
+    q(el, "wt-button[slot=cancel]")!.click();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("posts the four fields and shows the merchant name, then calls onConnected", async () => {
     const request = vi.fn(async () => ({
       merchantName: "Deli Gormley",

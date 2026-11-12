@@ -6,7 +6,7 @@ their full text.
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
-  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Provider On/Off is still to build. A483 blocks switching the other five optional modules (workforce, workforce-es, payments, bookings and staffing), so A646 stays OPEN after the provider switches land.
+  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. A483 blocks switching the other five optional modules (workforce, workforce-es, payments, bookings and staffing), so A646 stays OPEN after the provider switches land.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). The
   [switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
@@ -23,7 +23,7 @@ their full text.
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
   separate confirmation and server checks. Stripe/SumUp remain Payments
   contributions. Other optional modules are listed but cannot be switched. Reuse provider
-  connect/disconnect checks; Off blocks new collections while refunds and checks remain available.
+  reader-add checks; Off requires readers removed first, while credentials remain available for refunds and checks.
   Cut live module-code switching, pending-operation records and rerouting every `modules.json` reader
   (watcher, 2026-11-11 14:54).
   **Owner, 2026-11-06 23:03 (A1384 export answer, copied into Lane K queue):** an export from a box with a module off must load on a new box, and “that module starts on and empty”. Configuration import accepts missing optional sets and wholly absent optional-module tables (including Staffing in Workforce’s set), empties those configuration tables and still refuses partial tables, rows naming an absent set, and missing mandatory or provision-only sets; the boundary tests and `boot.setup-routes.test.ts` cover this.
@@ -1726,6 +1726,8 @@ Enabled-default catalogue, Add a module selects Disabled, row-menu Configure/Dis
 modal, red in-row reasons and settings saves separate from Enable/Disable. Disabling Google
 protects every active administrator: the applying administrator gives fresh non-Google proof;
 every other active administrator needs supported recorded password/passkey enrollment. Planning is authorised by the watcher's 2026-11-01 note; build waits for A739 and starts with retained disabled-module protection.
+
+2026-11-11 scope update: the [current A646 entry](#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up) supersedes these Google and build-order parts.
 
 **Practice-sales operation descriptions (owner, 2026-10-23).** Under the owner's approval,
 the demo-test provisioner's practice-sales golden now uses the English operation description

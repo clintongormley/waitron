@@ -2334,17 +2334,17 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 27, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
 
-- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; provider switches and A483 remain).**
+- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; A483 remains).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md); [plan](superpowers/plans/2026-11-11-a646-modules-and-card-providers.md).
-  Remaining build in lane D: card-provider On/Off controls. Other optional modules
-  are listed but cannot be switched. Exports with optional modules off load with those modules on and empty.
+  Administrators can turn card providers on or off while keeping credentials for earlier payments.
+  The other five optional modules are listed but cannot be switched until A483. Exports with optional modules off load with those modules on and empty.
   Google sign-in is no longer part of it (owner, 2026-11-11): see A1507 under Later and parked.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
 - **Printer, reader and device delete wording and tidying** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording-and-tidying)
 
 - **Unchecked: pairing a new reader can undo the SumUp registration it just made** when SumUp is
-  disconnected during the add (the "Disconnected mid-add" branch of the add-reader route,
+  disconnected during the add (the post-provider compensation branch of the add-reader route,
   `apps/server/src/payments-api.ts`), and an adoption running at the same time is not told.
   Believed to predate A435 step 3 (#1520); not reproduced.
 

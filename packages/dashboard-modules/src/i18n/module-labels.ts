@@ -29,6 +29,14 @@ registerCatalogue({
     "modules.configured": "Configured",
     "modules.needs_setup": "Needs setup",
     "modules.configure": "Configure",
+    "modules.turn_on": "Turn on",
+    "modules.turn_off": "Turn off",
+    "modules.off_explanation":
+      "Stop adding readers for this provider. Saved credentials stay available for earlier payments and refunds.",
+    "modules.on_explanation":
+      "Allow readers to be added for this provider. Configure its credentials separately if needed.",
+    "modules.remove_readers": "Remove or unpair these readers before turning the provider off:",
+    "modules.open_readers": "Open Card payments",
     "modules.switch_unavailable": "Switching this module is not available yet.",
     "modules.configure_providers": "Configure card providers",
     "modules.guide": "How to set up modules",
@@ -55,6 +63,15 @@ registerCatalogue({
     "modules.configured": "Configurado",
     "modules.needs_setup": "Necesita configuración",
     "modules.configure": "Configurar",
+    "modules.turn_on": "Activar",
+    "modules.turn_off": "Desactivar",
+    "modules.off_explanation":
+      "Deja de añadir lectores de este proveedor. Las credenciales guardadas siguen disponibles para pagos anteriores y reembolsos.",
+    "modules.on_explanation":
+      "Permite añadir lectores de este proveedor. Configura sus credenciales por separado si hace falta.",
+    "modules.remove_readers":
+      "Elimina o desvincula estos lectores antes de desactivar el proveedor:",
+    "modules.open_readers": "Abrir Pagos con tarjeta",
     "modules.switch_unavailable": "Aún no se puede cambiar el estado de este módulo.",
     "modules.configure_providers": "Configurar proveedores de tarjeta",
     "modules.guide": "Cómo configurar los módulos",

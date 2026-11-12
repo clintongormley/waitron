@@ -1,8 +1,8 @@
 import type { Hono } from "hono";
-import { withTransaction, type Database } from "@waitron/db";
+import { readSettings, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
-import type { CardProviderContribution } from "@waitron/payments";
+import { PAYMENTS_SETTINGS, type CardProviderContribution } from "@waitron/payments";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
@@ -12,6 +12,7 @@ const run = createErrorBoundary(
     "management_session.expired": 401,
     "person.suspended": 403,
     "authorization.not_permitted": 403,
+    "settings.invalid": 500,
   },
   "modules.failed",
 );
@@ -29,9 +30,10 @@ export function mountModulesApi(
   app.get("/management-api/modules", (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
-      await withTransaction(deps.db, (tx) =>
-        authorizeManager(tx, { managementSessionId, permission: "hardware.manage" }),
-      );
+      const { doc, revision } = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId, permission: "hardware.manage" });
+        return readSettings(tx, PAYMENTS_SETTINGS);
+      });
       return c.json([
         ...deps.modules
           .filter((module) => module.tier === "toggleable")
@@ -43,7 +45,9 @@ export function mountModulesApi(
         ...deps.providers.map((provider) => ({
           id: provider.providerId,
           category: "card-provider",
-          enabled: deps.enabled.includes("payments"),
+          enabled:
+            deps.enabled.includes("payments") && doc.providers[provider.providerId] !== false,
+          revision,
         })),
       ]);
     }),

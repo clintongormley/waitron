@@ -17,6 +17,8 @@ import {
   deviceProfiles,
   devices,
   nowIso,
+  readSettings,
+  saveSettings,
   readNodeMembership,
   workingOrders,
   tenderRefunds,
@@ -27,6 +29,7 @@ import {
 } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
+  PAYMENTS_SETTINGS,
   appendReaderToProfiles,
   cardProviderById,
   cardReaders,
@@ -152,6 +155,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.credential_environment_mismatch": 422,
   "payment.provider_merchant_ambiguous": 409,
   "payment.provider_in_use": 409,
+  "payment.provider_disabled": 409,
+  "settings.out_of_date": 409,
+  "settings.invalid": 500,
   "payment.pairing_refused": 422,
   "reader.provider_disconnected": 409,
   "reader.not_found": 404,
@@ -485,6 +491,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     if (credential === undefined)
       throw new AppError("reader.provider_disconnected", { providerId: seat.providerId });
   };
+  const requireEnabled = async (tx: Transaction, seat: CardProviderContribution): Promise<void> => {
+    const { doc } = await readSettings(tx, PAYMENTS_SETTINGS);
+    if (doc.providers[seat.providerId] === false)
+      throw new AppError("payment.provider_disabled", { providerId: seat.providerId });
+  };
   const readerWhere = (id: string) => eq(cardReaders.id, id);
   const requireReader = async (tx: Transaction, id: string) => {
     // No lock is taken: `withTransaction` (`packages/db/src/tenancy.ts`) runs one write
@@ -595,6 +606,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       if (!name) throw new AppError("management.request_invalid", { field: "name" });
       const seat = cardProviderById(deps.providers, providerId);
       await gated(sessionId, (tx) => requireConnected(tx, seat));
+      await gated(sessionId, (tx) => requireEnabled(tx, seat));
       const adopt = { provider: providerId, providerRef, stale: false };
       adopting.add(adopt);
       try {
@@ -605,6 +617,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // Adoption creates nothing at the provider to roll back.
         const row = await gated(sessionId, async (tx) => {
           await requireConnected(tx, seat);
+          await requireEnabled(tx, seat);
           const [existing] = await tx
             .select()
             .from(cardReaders)
@@ -773,6 +786,47 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
+  app.put("/management-api/payments/providers/:id/state", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (
+        typeof body.enabled !== "boolean" ||
+        !Number.isInteger(body.revision) ||
+        (body.revision as number) < 0
+      )
+        throw new AppError("management.request_invalid", {
+          field: typeof body.enabled === "boolean" ? "revision" : "enabled",
+        });
+      const seat = cardProviderById(deps.providers, c.req.param("id"));
+      const result = await gated(sessionId, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "payments.providers.manage",
+        });
+        if (!body.enabled) {
+          const readers = await tx
+            .select({ name: cardReaders.name })
+            .from(cardReaders)
+            .where(and(eq(cardReaders.provider, seat.providerId), eq(cardReaders.active, true)))
+            .orderBy(cardReaders.name);
+          if (readers.length)
+            throw new AppError("payment.provider_in_use", {
+              activeReaders: readers.length,
+              readerNames: readers.map((reader) => reader.name),
+            });
+        }
+        const { doc } = await readSettings(tx, PAYMENTS_SETTINGS);
+        return saveSettings(tx, PAYMENTS_SETTINGS, {
+          doc: { providers: { ...doc.providers, [seat.providerId]: body.enabled as boolean } },
+          expectedRevision: body.revision as number,
+          personId: authorizedBy,
+        });
+      });
+      return c.json({ enabled: result.doc.providers[seat.providerId], revision: result.revision });
+    }),
+  );
+
   app.post("/management-api/payments/providers/:id/disconnect", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -859,6 +913,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const reference =
         body.reference === undefined ? undefined : requireString(body.reference, "reference");
       const seat = cardProviderById(deps.providers, providerId); // payment.provider_unknown
+      await gated(sessionId, (tx) => requireEnabled(tx, seat));
       // The provider must be connected first — else the seat's own credential read would fail with an
       // opaque `credentials.missing`. Pre-check gives the actionable `reader.provider_disconnected`.
       await gated(sessionId, async (tx) => {
@@ -880,7 +935,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
           .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
-        if (cred === undefined) return undefined;
+        if (
+          cred === undefined ||
+          (await readSettings(tx, PAYMENTS_SETTINGS)).doc.providers[providerId] === false
+        )
+          return undefined;
         const [row] = await tx
           .insert(cardReaders)
           .values({
@@ -893,8 +952,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         return row;
       });
       if (inserted === undefined) {
-        // Disconnected mid-add: best-effort unpair the vendor reader so it is not stranded.
         await seat.readers.remove(runtimeDeps(), result.providerRef).catch(() => {});
+        await gated(sessionId, (tx) => requireEnabled(tx, seat));
         throw new AppError("reader.provider_disconnected", { providerId });
       }
       return c.json({ id: inserted.id, status: result.status }, 201);
