@@ -801,7 +801,6 @@ afterEach(() => {
   cleanupWidgets();
   document.documentElement.lang = initialPageLanguage;
   if (vi.isMockFunction(history.pushState)) vi.mocked(history.pushState).mockRestore();
-  sessionStorage.removeItem("waitron.lastMenu");
   history.replaceState(null, "", initialUrl);
 });
 

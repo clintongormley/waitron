@@ -291,7 +291,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanupWidgets();
   vi.useRealTimers();
-  sessionStorage.removeItem("waitron.lastMenu");
 });
 
 describe("device and zone period memory", () => {

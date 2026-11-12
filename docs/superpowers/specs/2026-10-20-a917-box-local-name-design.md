@@ -449,9 +449,8 @@ not have. So:
   paired again stays turned off; pairing it then makes a new device whose settings are set again
   (or a manager removes the old row).
 - Lost, because only the old address's browser storage held them (keys found by round 3 in
-  `apps/till/src`): the last operator (`lastOperator`), zone menu (`zoneMenu.`), last menu
-  (`lastMenu`), diet filter (`dietFilter`), find-bill searches (`find-bill.*`), station screen view
-  (`stationScreenView`), "make now" (`makeNow`), a tender refund saved for a retry
+  `apps/till/src`): the last operator (`lastOperator`), zone menu (`zoneMenu.`), find-bill
+  searches (`find-bill.*`), station screen view (`stationScreenView`), "make now" (`makeNow`), a tender refund saved for a retry
   (`waitron.tender-refund:`), and the server list (`servers`, rebuilt at the first request).
 - This matches CLAUDE.md §3's "A retained hardware registration must remain re-addable" — the row
   comes back under its existing id — through a new path, since the old one needs the cookie.

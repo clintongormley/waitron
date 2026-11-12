@@ -390,7 +390,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanupWidgets();
   vi.useRealTimers();
-  sessionStorage.removeItem("waitron.lastMenu");
 });
 
 describe("a table's send from the marks", () => {

@@ -402,7 +402,6 @@ const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
   localStorage.removeItem("waitron.makeNow.till-dev");
-  sessionStorage.removeItem("waitron.lastMenu");
   history.replaceState(null, "", initialUrl);
 });
 
