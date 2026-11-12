@@ -31,6 +31,7 @@ import {
 } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";
+import { deleteStaffRole } from "./staff-roles.js";
 import { saveSeasonStaffing } from "./paint.js";
 import type { AreaRef } from "./slots.js";
 import type { RotaWeek } from "./staffing-types.js";
@@ -181,6 +182,19 @@ async function addSeason(_cfg: Cfg, name: string, startsOn: string) {
 const hours = (r: RotaWeek) => r.days.map((d) => [d.businessDay, d.hasHours]);
 
 describe("the rota week", () => {
+  it("a future shift in a hidden role still shows its name and outside-role warning", async () => {
+    const v = await venue();
+    const shiftId = await add(v);
+    await tx((t) => deleteStaffRole(t, v.staffRoleId, { personId: null }));
+    const week = await read();
+    expect(week.staffRoles).toContainEqual(
+      expect.objectContaining({ id: v.staffRoleId, name: "Waiter", hidden: true, holderIds: [] }),
+    );
+    expect(week.people.find((p) => p.personId === v.ana)!.staffRoleIds).toEqual([]);
+    expect(week.days.flatMap((d) => d.areas.flatMap((a) => a.match.slots))).toEqual([]);
+    expect(week.shifts.map((s) => s.shiftId)).toContain(shiftId);
+    await expect(add(v)).rejects.toMatchObject({ code: "staff_role.not_found" });
+  });
   it("includes its clock zone for passive warning reads and candidate previews", async () => {
     await venue();
     expect(await read()).toMatchObject({

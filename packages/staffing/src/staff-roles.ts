@@ -1,17 +1,14 @@
-import { personStaffRoles, staffRoles } from "@waitron/db";
+import { insertInChunks, recordActivity, personStaffRoles, staffRoles } from "@waitron/db";
 import { and, asc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import {
-  AppError,
-  createLabelComparator,
-  type DeleteImpact,
-  type ErrorParams,
-} from "@waitron/shared";
+import { AppError, createLabelComparator } from "@waitron/shared";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 import { shiftAssignments, staffingBlocks } from "@waitron/workforce";
 import type { CalendarColour, ListedStaffRole, StaffRole } from "./staffing-types.js";
 import "./errors.js";
+
+type Actor = { personId: string | null };
 
 export interface StaffRoleInput {
   name: string;
@@ -20,7 +17,6 @@ export interface StaffRoleInput {
 
 const invalid = (field: string) => new AppError("staffing.invalid", { field });
 const notFound = (staffRoleId: string) => new AppError("staff_role.not_found", { staffRoleId });
-const tally = sql<number>`count(*)`.mapWith(Number);
 
 function staffRoleValues(input: StaffRoleInput): StaffRoleInput {
   const name = input.name.trim();
@@ -52,7 +48,7 @@ async function assertStaffRoleExists(tx: Transaction, staffRoleId: string): Prom
   const [row] = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(eq(staffRoles.id, staffRoleId));
+    .where(and(eq(staffRoles.id, staffRoleId), isNull(staffRoles.hiddenAt)));
   if (row === undefined) throw notFound(staffRoleId);
 }
 
@@ -88,7 +84,10 @@ function byStaffRole<Row extends { staffRoleId: string }>(
 
 /** Every query is narrowed to `only` when it is given, so a write's answer reads one staff role. */
 async function readStaffRoles(tx: Transaction, only: string | null): Promise<StaffRole[]> {
-  const scope = only === null ? undefined : eq(staffRoles.id, only);
+  const scope = and(
+    isNull(staffRoles.hiddenAt),
+    only === null ? undefined : eq(staffRoles.id, only),
+  );
   const rows = await staffRoleRows(tx, scope);
   const holders = byStaffRole(
     await tx
@@ -111,7 +110,7 @@ export function listStaffRoles(tx: Transaction): Promise<StaffRole[]> {
 
 /** The staff roles as `listStaffRoles` gives them, each with its holders' names. */
 export async function listStaffRolesWithHolderNames(tx: Transaction): Promise<ListedStaffRole[]> {
-  const rows = await staffRoleRows(tx, undefined);
+  const rows = await staffRoleRows(tx, isNull(staffRoles.hiddenAt));
   const holders = byStaffRole(
     await tx
       .select({
@@ -135,7 +134,11 @@ export async function listStaffRolesWithHolderNames(tx: Transaction): Promise<Li
 }
 
 /** Adds a staff role after the last one. */
-export async function createStaffRole(tx: Transaction, input: StaffRoleInput): Promise<StaffRole> {
+export async function createStaffRole(
+  tx: Transaction,
+  input: StaffRoleInput,
+  actor: Actor,
+): Promise<StaffRole> {
   const values = staffRoleValues(input);
   await assertNameFree(tx, values.name, null);
   const [next] = await tx
@@ -145,6 +148,12 @@ export async function createStaffRole(tx: Transaction, input: StaffRoleInput): P
     .insert(staffRoles)
     .values({ ...values, position: next!.position })
     .returning({ id: staffRoles.id });
+  await recordActivity(tx, {
+    kind: "job_role.created",
+    subjectId: row!.id,
+    personId: actor.personId,
+    data: { name: values.name },
+  });
   return readStaffRole(tx, row!.id);
 }
 
@@ -152,11 +161,20 @@ export async function updateStaffRole(
   tx: Transaction,
   staffRoleId: string,
   input: StaffRoleInput,
+  actor: Actor,
 ): Promise<StaffRole> {
   const values = staffRoleValues(input);
   await assertStaffRoleExists(tx, staffRoleId);
   await assertNameFree(tx, values.name, staffRoleId);
+  const previous = await readStaffRole(tx, staffRoleId);
   await tx.update(staffRoles).set(values).where(eq(staffRoles.id, staffRoleId));
+  if (previous.name !== values.name)
+    await recordActivity(tx, {
+      kind: "job_role.renamed",
+      subjectId: staffRoleId,
+      personId: actor.personId,
+      data: { from: previous.name, to: values.name },
+    });
   return readStaffRole(tx, staffRoleId);
 }
 
@@ -165,6 +183,7 @@ export async function setStaffRoleHolders(
   tx: Transaction,
   staffRoleId: string,
   personIds: readonly string[],
+  actor: Actor,
 ): Promise<StaffRole> {
   await assertStaffRoleExists(tx, staffRoleId);
   const unique = [...new Set(personIds)];
@@ -175,9 +194,36 @@ export async function setStaffRoleHolders(
       .where(inArray(persons.id, unique));
     if (found.length !== unique.length) throw invalid("personIds");
   }
-  await tx.delete(personStaffRoles).where(eq(personStaffRoles.staffRoleId, staffRoleId));
-  if (unique.length > 0)
-    await tx.insert(personStaffRoles).values(unique.map((personId) => ({ personId, staffRoleId })));
+  const previous = await readStaffRole(tx, staffRoleId);
+  for (const personId of previous.holderIds) {
+    if (!unique.includes(personId))
+      await recordActivity(tx, {
+        kind: "job_role.member_removed",
+        subjectId: personId,
+        personId: actor.personId,
+        data: { staffRoleId, name: previous.name },
+      });
+  }
+  for (const personId of unique) {
+    if (!previous.holderIds.includes(personId))
+      await recordActivity(tx, {
+        kind: "job_role.member_added",
+        subjectId: personId,
+        personId: actor.personId,
+        data: { staffRoleId, name: previous.name },
+      });
+  }
+  if (
+    previous.holderIds.length !== unique.length ||
+    unique.some((id) => !previous.holderIds.includes(id))
+  ) {
+    await tx.delete(personStaffRoles).where(eq(personStaffRoles.staffRoleId, staffRoleId));
+    await insertInChunks(
+      tx,
+      personStaffRoles,
+      unique.map((personId) => ({ personId, staffRoleId })),
+    );
+  }
   return readStaffRole(tx, staffRoleId);
 }
 
@@ -188,7 +234,8 @@ export async function reorderStaffRoles(
 ): Promise<void> {
   const rows = await tx
     .select({ id: staffRoles.id, position: staffRoles.position })
-    .from(staffRoles);
+    .from(staffRoles)
+    .where(isNull(staffRoles.hiddenAt));
   const current = new Map(rows.map((row) => [row.id, row.position]));
   const unknown = staffRoleIds.find((id) => !current.has(id));
   if (unknown !== undefined) throw notFound(unknown);
@@ -200,60 +247,85 @@ export async function reorderStaffRoles(
   }
 }
 
-/** What deleting the role would do; the delete question reads it and the delete recomputes it. */
-async function staffRoleDeleteRules(tx: Transaction, staffRoleId: string): Promise<DeleteImpact> {
-  const [target] = await tx
-    .select({ id: staffRoles.id, name: staffRoles.name })
-    .from(staffRoles)
-    .where(eq(staffRoles.id, staffRoleId));
-  if (target === undefined) throw notFound(staffRoleId);
-  const [shiftsUsing] = await tx
-    .select({ n: tally })
-    .from(shiftAssignments)
-    .where(eq(shiftAssignments.staffRoleId, staffRoleId));
-  const [blocks] = await tx
-    .select({ n: tally })
-    .from(staffingBlocks)
-    .where(eq(staffingBlocks.staffRoleId, staffRoleId));
-  const compare = createLabelComparator();
-  const holders = (
-    await tx
-      .select({ id: persons.id, name: persons.displayName })
-      .from(personStaffRoles)
-      .innerJoin(persons, eq(persons.id, personStaffRoles.personId))
-      .where(eq(personStaffRoles.staffRoleId, staffRoleId))
-      .orderBy(asc(persons.id))
-  ).sort((a, b) => compare(a.name, b.name));
-  const shiftCount = shiftsUsing!.n;
-  return {
-    target,
-    refusals:
-      shiftCount > 0
-        ? [{ code: "staff_role.in_use", params: { staffRoleId, shiftCount }, targets: [] }]
-        : [],
-    ends: [],
-    removes: [
-      ...(blocks!.n > 0 ? [{ key: "staff_role_blocks", count: blocks!.n, targets: [] }] : []),
-      ...(holders.length > 0
-        ? [{ key: "staff_role_holders", count: holders.length, targets: holders }]
-        : []),
-    ],
-  };
-}
-
-export function readStaffRoleDeleteImpact(
+export async function deleteStaffRole(
   tx: Transaction,
   staffRoleId: string,
-): Promise<DeleteImpact> {
-  return staffRoleDeleteRules(tx, staffRoleId);
+  actor: Actor,
+): Promise<{ outcome: "deleted" | "hidden"; removedFrom: number }> {
+  await assertStaffRoleExists(tx, staffRoleId);
+  const [used] = await tx
+    .select({ id: shiftAssignments.shiftId })
+    .from(shiftAssignments)
+    .where(eq(shiftAssignments.staffRoleId, staffRoleId))
+    .limit(1);
+  const previous = await readStaffRole(tx, staffRoleId);
+  await setStaffRoleHolders(tx, staffRoleId, [], actor);
+  if (used) {
+    await tx.delete(staffingBlocks).where(eq(staffingBlocks.staffRoleId, staffRoleId));
+    await tx
+      .update(staffRoles)
+      .set({ hiddenAt: new Date().toISOString() })
+      .where(eq(staffRoles.id, staffRoleId));
+  } else {
+    await tx.delete(staffRoles).where(eq(staffRoles.id, staffRoleId));
+  }
+  await recordActivity(tx, {
+    kind: used ? "job_role.hidden" : "job_role.deleted",
+    subjectId: staffRoleId,
+    personId: actor.personId,
+    data: { name: previous.name },
+  });
+  return { outcome: used ? "hidden" : "deleted", removedFrom: previous.holderIds.length };
 }
 
-/** Deletes the role with its holders and painted blocks; refused while a shift fills it. */
-export async function deleteStaffRole(tx: Transaction, staffRoleId: string): Promise<DeleteImpact> {
-  const impact = await staffRoleDeleteRules(tx, staffRoleId);
-  const first = impact.refusals[0];
-  if (first !== undefined)
-    throw new AppError(first.code as keyof ErrorParams, first.params as never);
-  await tx.delete(staffRoles).where(eq(staffRoles.id, staffRoleId));
-  return impact;
+export async function setPersonStaffRoles(
+  tx: Transaction,
+  input: {
+    personId: string;
+    staffRoleIds: readonly string[];
+    expectedStaffRoleIds: readonly string[];
+    actorId: string;
+  },
+): Promise<string[]> {
+  const [person] = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.id, input.personId));
+  if (!person) throw new AppError("person.not_found", { personId: input.personId });
+  const current = await tx
+    .select({ id: staffRoles.id, name: staffRoles.name })
+    .from(personStaffRoles)
+    .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
+    .where(eq(personStaffRoles.personId, input.personId));
+  const ids = [...new Set(input.staffRoleIds)].sort();
+  const expected = [...new Set(input.expectedStaffRoleIds)].sort();
+  const saved = current.map((r) => r.id).sort();
+  if (saved.length !== expected.length || saved.some((id, i) => id !== expected[i]))
+    throw new AppError("person.job_roles_changed", {});
+  const roles = await listStaffRoles(tx);
+  for (const id of ids) if (!roles.some((r) => r.id === id)) throw notFound(id);
+  if (saved.length === ids.length && saved.every((id, i) => id === ids[i])) return ids;
+  for (const role of current)
+    if (!ids.includes(role.id))
+      await recordActivity(tx, {
+        kind: "job_role.member_removed",
+        subjectId: input.personId,
+        personId: input.actorId,
+        data: { staffRoleId: role.id, name: role.name },
+      });
+  for (const id of ids)
+    if (!saved.includes(id))
+      await recordActivity(tx, {
+        kind: "job_role.member_added",
+        subjectId: input.personId,
+        personId: input.actorId,
+        data: { staffRoleId: id, name: roles.find((r) => r.id === id)!.name },
+      });
+  await tx.delete(personStaffRoles).where(eq(personStaffRoles.personId, input.personId));
+  await insertInChunks(
+    tx,
+    personStaffRoles,
+    ids.map((staffRoleId) => ({ personId: input.personId, staffRoleId })),
+  );
+  return ids;
 }

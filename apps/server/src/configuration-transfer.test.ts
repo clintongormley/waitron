@@ -62,6 +62,8 @@ import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
+  activityLog,
+  outgoingMail,
   catalogues,
   saveVenueFields,
   readVenueSettings,
@@ -2069,6 +2071,22 @@ it("transfers staff roles, who holds them and a painted season week under new id
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
+  const baseline = await targetSuite.db
+    .select()
+    .from(activityLog)
+    .where(eq(activityLog.kind, "job_role.member_added"));
+  const importedHolder = await targetSuite.db.execute<{ person_id: string; staff_role_id: string }>(
+    sql`select person_id, staff_role_id from person_staff_roles`,
+  );
+  expect(baseline).toEqual([
+    expect.objectContaining({
+      personId: null,
+      subjectKind: "person",
+      subjectId: importedHolder.rows[0]!.person_id,
+      data: { staffRoleId: importedHolder.rows[0]!.staff_role_id, name: "Waiter" },
+    }),
+  ]);
+  expect(await targetSuite.db.select().from(outgoingMail)).toEqual([]);
   const roles = await targetSuite.db.execute(sql`
     select r.name, r.colour, r.position, r.hidden_at, p.display_name as holder
     from staff_roles r

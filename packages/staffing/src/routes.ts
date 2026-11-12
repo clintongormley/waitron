@@ -36,7 +36,7 @@ import {
   createStaffRole,
   deleteStaffRole,
   listStaffRolesWithHolderNames,
-  readStaffRoleDeleteImpact,
+  setPersonStaffRoles,
   reorderStaffRoles,
   setStaffRoleHolders,
   updateStaffRole,
@@ -57,7 +57,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "staffing.invalid": 400,
   "staff_role.not_found": 404,
   "staff_role.name_taken": 409,
-  "staff_role.in_use": 409,
+  "person.job_roles_changed": 409,
+  "person.not_found": 404,
   "season.not_found": 404,
   "shift.not_found": 404,
   "shift.invalid": 400,
@@ -149,14 +150,19 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     const gatedBy = <T>(
       permission: string,
       sessionId: string,
-      fn: (tx: Transaction) => Promise<T>,
+      fn: (tx: Transaction, actor: { personId: string }) => Promise<T>,
     ): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {
-        await authorizeManager(tx, { managementSessionId: sessionId, permission });
-        return fn(tx);
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission,
+        });
+        return fn(tx, { personId: authorizedBy });
       });
-    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-      gatedBy("schedule.manage", sessionId, fn);
+    const gated = <T>(
+      sessionId: string,
+      fn: (tx: Transaction, actor: { personId: string }) => Promise<T>,
+    ): Promise<T> => gatedBy("schedule.manage", sessionId, fn);
     const staffRoleIdParam = (raw: string) => normaliseUuid(raw, "StaffRoleId");
     const cutoverOf = async (tx: Transaction) => (await readVenueClock(tx)).dayCutover;
 
@@ -305,7 +311,9 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readRawJsonBody<unknown>(c);
-        const staffRole = await gated(sessionId, (tx) => createStaffRole(tx, staffRoleInput(body)));
+        const staffRole = await gated(sessionId, (tx, actor) =>
+          createStaffRole(tx, staffRoleInput(body), actor),
+        );
         return c.json(staffRole, 201);
       }),
     );
@@ -326,7 +334,9 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
         const body = await readRawJsonBody<unknown>(c);
         return c.json(
-          await gated(sessionId, (tx) => updateStaffRole(tx, id, staffRoleInput(body))),
+          await gated(sessionId, (tx, actor) =>
+            updateStaffRole(tx, id, staffRoleInput(body), actor),
+          ),
         );
       }),
     );
@@ -337,17 +347,31 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
         const body = await readRawJsonBody<unknown>(c);
         return c.json(
-          await gated(sessionId, (tx) => setStaffRoleHolders(tx, id, uuidList(body, "personIds"))),
+          await gated(sessionId, (tx, actor) =>
+            setStaffRoleHolders(tx, id, uuidList(body, "personIds"), actor),
+          ),
         );
       }),
     );
 
-    // Gated like the delete, as the zone, station, course, department and printer impact reads are.
-    app.get(`${BASE}/:staffRoleId/delete-impact`, (c) =>
+    app.put(`${ROOT}/people/:personId/staff-roles`, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const id = staffRoleIdParam(c.req.param("staffRoleId"));
-        return c.json(await gated(sessionId, (tx) => readStaffRoleDeleteImpact(tx, id)));
+        const personId = normaliseUuid(c.req.param("personId"), "PersonId");
+        const body = await readRawJsonBody<unknown>(c);
+        const staffRoleIds = await gated(sessionId, (tx, actor) => {
+          onlyKeys(body, ["staffRoleIds", "expectedStaffRoleIds"]);
+          return setPersonStaffRoles(tx, {
+            personId,
+            actorId: actor.personId,
+            staffRoleIds: uuidList({ staffRoleIds: body.staffRoleIds }, "staffRoleIds"),
+            expectedStaffRoleIds: uuidList(
+              { expectedStaffRoleIds: body.expectedStaffRoleIds },
+              "expectedStaffRoleIds",
+            ),
+          });
+        });
+        return c.json({ staffRoleIds });
       }),
     );
 
@@ -355,7 +379,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
-        return c.json(await gated(sessionId, (tx) => deleteStaffRole(tx, id)));
+        return c.json(await gated(sessionId, (tx, actor) => deleteStaffRole(tx, id, actor)));
       }),
     );
   },

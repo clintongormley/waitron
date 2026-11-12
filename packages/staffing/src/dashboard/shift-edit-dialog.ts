@@ -139,7 +139,7 @@ export class ShiftEditDialog extends LitElement {
       return t("staffing.shift.invalid_personId");
     if (
       field === "staffRoleId" &&
-      !this.week.staffRoles.some((r) => r.id === this.draft.staffRoleId)
+      !this.week.staffRoles.some((r) => r.id === this.draft.staffRoleId && !r.hidden)
     )
       return t("staffing.shift.invalid_staffRoleId");
     if (
@@ -284,7 +284,9 @@ export class ShiftEditDialog extends LitElement {
         area: this.week.areas
           .filter((a) => a.active)
           .map((a) => ({ value: areaKey(a.area), label: a.name })),
-        staffRoleId: this.week.staffRoles.map((r) => ({ value: r.id, label: r.name })),
+        staffRoleId: this.week.staffRoles
+          .filter((r) => !r.hidden)
+          .map((r) => ({ value: r.id, label: r.name })),
       };
     return keyed(
       identity,

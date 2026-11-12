@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./person-edit.js";
 import type { PersonEdit } from "./person-edit.js";
-import type { PersonSummary } from "../api/client.js";
+import { DashboardApi, type PersonSummary } from "../api/client.js";
 
 // Open the modal before running axe so its controls enter the accessibility tree.
 const person: PersonSummary = {
@@ -63,6 +63,26 @@ describe.each(["light", "dark"] as const)("manager staff editor (%s)", (theme) =
       "dashboard-person-edit",
       {
         person: { ...person, firstNames: "Ada", lastNames: "Lovelace", email: "ada@example.test" },
+        canManageSchedule: true,
+        api: new DashboardApi(
+          "",
+          async () =>
+            new Response(
+              JSON.stringify({
+                staffRoles: [
+                  {
+                    id: "waiter",
+                    name: "Waiter",
+                    holderIds: ["p1"],
+                    holderNames: ["Ada"],
+                    colour: "blue",
+                    position: 0,
+                  },
+                ],
+              }),
+              { headers: { "content-type": "application/json" } },
+            ),
+        ),
         currentPersonId: "another",
         canAdminister: false,
         open: true,
@@ -79,6 +99,12 @@ describe.each(["light", "dark"] as const)("manager staff editor (%s)", (theme) =
         "[data-test=edit-first-names]",
       )!.disabled,
     ).toBe(false);
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="jobRoles"]')!
+          .values,
+      ).toEqual(["waiter"]),
+    );
     await expectNoA11yViolations(host);
   });
 });

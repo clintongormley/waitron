@@ -656,3 +656,19 @@ describe("filling the rota from Everyone", () => {
     );
   });
 });
+
+it("a hidden job role keeps its name and outside-role warning on an existing shift", async () => {
+  const { root } = await mount(false, "1280px", (r) => ({
+    ...r,
+    staffRoles: r.staffRoles.map((role) =>
+      role.id === "head" ? { ...role, hidden: true, holderIds: [] } : role,
+    ),
+    people: r.people.map((p) => ({
+      ...p,
+      staffRoleIds: p.staffRoleIds.filter((id) => id !== "head"),
+    })),
+  }));
+  const card = root.querySelector('[data-shift="filled"]')!;
+  expect(card.textContent).toContain("Head chef");
+  expect(card.textContent).toContain("outside staff role");
+});

@@ -2,8 +2,8 @@ import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type { PersonEditDetails, PersonSummary } from "../api/client.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
+import { DashboardApi, type PersonEditDetails, type PersonSummary } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
@@ -35,9 +35,39 @@ class PersonEditApp extends LitElement {
   readonly leave = new LeaveController(this);
   closes = 0;
   person = person;
+  canManageSchedule = false;
+  api = new DashboardApi(
+    "",
+    async () =>
+      new Response(
+        JSON.stringify({
+          staffRoles: [
+            {
+              id: "waiter",
+              name: "Waiter",
+              colour: "blue",
+              position: 0,
+              holderIds: ["p1"],
+              holderNames: ["Ada"],
+            },
+            {
+              id: "chef",
+              name: "Chef",
+              colour: "red",
+              position: 1,
+              holderIds: [],
+              holderNames: [],
+            },
+          ],
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+  );
   override render() {
     return html`<dashboard-person-edit
         .canAdminister=${true}
+        .canManageSchedule=${this.canManageSchedule}
+        .api=${this.api}
         .person=${this.person}
         .open=${true}
         @wt-close=${() => this.closes++}
@@ -289,4 +319,35 @@ it("Edit staff put back keeps its last saved values as the ones an edit is compa
   await reattachAfterDetachedUpdate(form);
   await edit(form, "email", "submitted@example.com");
   expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+
+it("warns about job-role edits even after the person's details were saved", async () => {
+  const { app, form } = await mount();
+  app.canManageSchedule = true;
+  app.requestUpdate();
+  await app.updateComplete;
+  const roles = () =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="jobRoles"]')!;
+  await expect.poll(() => roles()?.values).toEqual(["waiter"]);
+  await chooseOptions(roles(), ["chef"]);
+  await form.updateComplete;
+  app.person = { ...person, displayName: "Saved name" };
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  await expect.poll(() => roles().disabled).toBe(false);
+  expect(roles().values).toEqual(["chef"]);
+  expect(form.closeSaved({ ...person })).toBe(false);
+  const email = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    '[data-test="edit-email"]',
+  )!;
+  await email.updateComplete;
+  email.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{Escape}");
+  const q = await question(app);
+  await expect.poll(() => q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  await app.updateComplete;
+  expect(roles().values).toEqual(["chef"]);
+  expect(form.open).toBe(true);
 });

@@ -111,6 +111,31 @@ async function answers(response: Response, status: number, body?: unknown) {
 const refusal = (code: string, params: Record<string, unknown>) => ({ error: { code, params } });
 
 describe("the staff-role routes", () => {
+  it("sets per-person job roles only with schedule.manage and returns a stale-save refusal", async () => {
+    const r = await routed();
+    const role = await r.create("Waiter");
+    const path = `/management-api/staffing/people/${r.ana}/staff-roles`;
+    const body = { staffRoleIds: [role.id], expectedStaffRoleIds: [] };
+    await answers(
+      await r.call("PUT", path, r.supervisor, body),
+      403,
+      refusal("authorization.not_permitted", { permission: "schedule.manage" }),
+    );
+    await answers(await r.call("PUT", path, "", body), 401);
+    await answers(await r.call("PUT", path, r.manager, body), 200, { staffRoleIds: [role.id] });
+    await answers(
+      await r.call("PUT", path, r.manager, body),
+      409,
+      refusal("person.job_roles_changed", {}),
+    );
+    for (const bad of [
+      { staffRoleIds: null, expectedStaffRoleIds: [] },
+      { staffRoleIds: [], expectedStaffRoleIds: "no" },
+    ]) {
+      await answers(await r.call("PUT", path, r.manager, bad), 400);
+    }
+  });
+
   it("creates a role and lists it to a viewer", async () => {
     const r = await routed();
     const response = await r.send("POST", "", r.manager, { name: " Waiter ", colour: "green" });
@@ -154,19 +179,8 @@ describe("the staff-role routes", () => {
       ],
     });
     await answers(await r.send("DELETE", `/${staffRole.id}`, r.manager), 200, {
-      target: { id: staffRole.id, name: "Head waiter" },
-      refusals: [],
-      ends: [],
-      removes: [
-        {
-          key: "staff_role_holders",
-          count: 2,
-          targets: expect.arrayContaining([
-            expect.objectContaining({ id: r.ana }),
-            expect.objectContaining({ id: r.marc }),
-          ]) as unknown,
-        },
-      ],
+      outcome: "deleted",
+      removedFrom: 2,
     });
     await answers(await r.send("GET", "", r.manager), 200, { staffRoles: [] });
   });
@@ -254,32 +268,19 @@ describe("the staff-role routes", () => {
         .insert(shiftAssignments)
         .values({ shiftId: shift!.id, departmentId: r.departmentId, staffRoleId: staffRole.id });
     });
-    await answers(
-      await r.send("DELETE", `/${staffRole.id}`, r.manager),
-      409,
-      refusal("staff_role.in_use", { staffRoleId: staffRole.id, shiftCount: 1 }),
-    );
+    await answers(await r.send("DELETE", `/${staffRole.id}`, r.manager), 200, {
+      outcome: "hidden",
+      removedFrom: 0,
+    });
   });
 
-  it("reads what deleting a role would do, and answers staff_role.not_found for an unknown role", async () => {
+  it("answers staff_role.not_found for deleting an unknown role", async () => {
     const r = await routed();
-    const staffRole = await r.create("Waiter");
-    await answers(await r.send("GET", `/${staffRole.id}/delete-impact`, r.manager), 200, {
-      target: { id: staffRole.id, name: "Waiter" },
-      refusals: [],
-      ends: [],
-      removes: [],
-    });
     const unknown = randomUUID();
     await answers(
-      await r.send("GET", `/${unknown}/delete-impact`, r.manager),
+      await r.send("DELETE", `/${unknown}`, r.manager),
       404,
       refusal("staff_role.not_found", { staffRoleId: unknown }),
-    );
-    await answers(
-      await r.send("GET", "/not-a-uuid/delete-impact", r.manager),
-      400,
-      refusal("shared.invalid_id", { kind: "StaffRoleId", value: "not-a-uuid" }),
     );
   });
 
@@ -356,7 +357,7 @@ describe("the staff-role routes", () => {
     },
   );
 
-  it("lets a supervisor read the list but not write or read a delete's impact, and refuses staff and anonymous callers", async () => {
+  it("lets a supervisor read the list but not write, and refuses staff and anonymous callers", async () => {
     const r = await routed();
     const staffRole = await r.create("Waiter");
     const notPermitted = async (response: Response) => {
@@ -377,7 +378,6 @@ describe("the staff-role routes", () => {
       await r.send("PUT", "/order", r.supervisor, { staffRoleIds: [staffRole.id] }),
     );
     await notPermitted(await r.send("DELETE", `/${staffRole.id}`, r.supervisor));
-    await notPermitted(await r.send("GET", `/${staffRole.id}/delete-impact`, r.supervisor));
     // The body's fields are checked only once the caller is authorised, so a bad one is a 403.
     await notPermitted(await r.send("POST", "", r.supervisor, { name: 5, extra: true }));
     await notPermitted(
@@ -407,10 +407,8 @@ describe("the staff-role routes", () => {
     });
     expect(reordered.status).toBe(204);
     await answers(await r.send("DELETE", `/${b.id.toUpperCase()}`, r.manager), 200, {
-      target: { id: b.id, name: "B" },
-      refusals: [],
-      ends: [],
-      removes: [],
+      outcome: "deleted",
+      removedFrom: 0,
     });
     await answers(await r.send("GET", "", r.manager), 200, {
       staffRoles: [

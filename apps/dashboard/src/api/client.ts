@@ -444,6 +444,12 @@ export interface InvoiceCustomerSearchDto {
   invoices: { invoice: string; issuedAt: string; name: string; total: string }[];
 }
 
+export interface JobRole {
+  id: string;
+  name: string;
+  holderIds: string[];
+}
+
 export interface PersonSummary {
   personId: string;
   displayName: string;
@@ -2794,6 +2800,28 @@ export class DashboardApi {
 
   logout(): Promise<void> {
     return this.#request<void>("/management-api/session", "DELETE");
+  }
+
+  async listJobRoles(): Promise<JobRole[]> {
+    const read = await this.#request<{ staffRoles: JobRole[] }>(
+      "/management-api/staffing/staff-roles",
+      "GET",
+      undefined,
+      { passive: true },
+    );
+    return read.staffRoles;
+  }
+
+  setPersonJobRoles(
+    personId: string,
+    staffRoleIds: readonly string[],
+    expectedStaffRoleIds: readonly string[],
+  ): Promise<{ staffRoleIds: string[] }> {
+    return this.#request(
+      `/management-api/staffing/people/${encodeURIComponent(personId)}/staff-roles`,
+      "PUT",
+      { staffRoleIds, expectedStaffRoleIds },
+    );
   }
 
   listStaff(): Promise<PersonSummary[]> {

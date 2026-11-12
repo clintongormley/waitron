@@ -8,6 +8,10 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "person.job_roles_changed": {
+    en: "Someone changed this person's job roles while you were editing. Reload to see them; your changes are kept until you do.",
+    es: "Alguien cambió los puestos de esta persona mientras editabas. Recarga para verlos; tus cambios se conservan hasta entonces.",
+  },
   "management_session.proof_required": {
     en: "Confirm it is you to continue. The action has not been carried out.",
     es: "Confirma que eres tú para continuar. La acción no se ha realizado.",

@@ -1,8 +1,8 @@
 import { useLocale } from "../testing/locale-setup.js";
-import { afterEach, describe, expect, it } from "vitest";
-import type { PersonSummary } from "../api/client.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DashboardApi, type PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -733,5 +733,107 @@ describe("person-edit validation and keyboard submit", () => {
         status: "active",
       },
     ]);
+  });
+});
+
+describe("job roles on the person editor", () => {
+  const roles = [
+    {
+      id: "waiter",
+      name: "Waiter",
+      colour: "blue",
+      position: 0,
+      holderIds: ["p1"],
+      holderNames: ["Ada"],
+    },
+    { id: "chef", name: "Chef", colour: "red", position: 1, holderIds: [], holderNames: [] },
+  ];
+  it("saves job roles with the set it read, independently of the person's details", async () => {
+    const calls: { path: string; init: RequestInit }[] = [];
+    const api = new DashboardApi("", async (path, init) => {
+      calls.push({ path: String(path), init: init! });
+      return new Response(
+        JSON.stringify(init?.method === "PUT" ? { staffRoleIds: ["chef"] } : { staffRoles: roles }),
+        { headers: { "content-type": "application/json" } },
+      );
+    });
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person,
+      open: true,
+      api,
+      canManageSchedule: true,
+    });
+    const field = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="jobRoles"]',
+      )!;
+    await vi.waitFor(() => expect(field()).not.toBeNull());
+    await vi.waitFor(() => expect(field().values).toEqual(["waiter"]));
+    await chooseOptions(field(), ["chef"]);
+    await el.updateComplete;
+    const saveDetails = vi.fn();
+    el.addEventListener("save-person", saveDetails);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-job-roles"]')!.click();
+    await vi.waitFor(() => expect(calls.filter((c) => c.init.method === "PUT")).toHaveLength(1));
+    const put = calls.find((c) => c.init.method === "PUT")!;
+    expect(put.path).toBe("/management-api/staffing/people/p1/staff-roles");
+    expect(JSON.parse(String(put.init.body))).toEqual({
+      staffRoleIds: ["chef"],
+      expectedStaffRoleIds: ["waiter"],
+    });
+    expect(saveDetails).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          '[data-test="save-job-roles"]',
+        )!.disabled,
+      ).toBe(true),
+    );
+    expect(el.open).toBe(true);
+  });
+
+  it("keeps the draft after a stale save until Reload is pressed", async () => {
+    setLocale("en-GB");
+    let reads = 0;
+    const api = new DashboardApi("", async (_path, init) => {
+      if (init?.method === "PUT")
+        return new Response(
+          JSON.stringify({ error: { code: "person.job_roles_changed", params: {} } }),
+          { status: 409, headers: { "content-type": "application/json" } },
+        );
+      reads++;
+      return new Response(
+        JSON.stringify({
+          staffRoles: roles.map((r) => ({ ...r, holderIds: reads === 1 ? r.holderIds : [] })),
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    });
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person,
+      open: true,
+      api,
+      canManageSchedule: true,
+    });
+    const field = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="jobRoles"]',
+      )!;
+    await vi.waitFor(() => expect(field()?.values).toEqual(["waiter"]));
+    await chooseOptions(field(), ["chef"]);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-job-roles"]')!.click();
+    const actions = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+        '[data-test="job-role-actions"]',
+      )!;
+    await vi.waitFor(() =>
+      expect(actions().error).toContain("Someone changed this person's job roles"),
+    );
+    expect(field().values).toEqual(["chef"]);
+    expect(reads).toBe(1);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="reload-job-roles"]')!.click();
+    await vi.waitFor(() => expect(field().values).toEqual([]));
+    expect(actions().error).toBe("");
   });
 });

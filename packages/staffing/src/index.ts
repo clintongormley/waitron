@@ -26,6 +26,7 @@ export {
   listStaffRoles,
   reorderStaffRoles,
   setStaffRoleHolders,
+  setPersonStaffRoles,
   updateStaffRole,
   type StaffRoleInput,
 } from "./staff-roles.js";
