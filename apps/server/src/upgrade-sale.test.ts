@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
-import { beforeAll, afterAll, expect, it } from "vitest";
+import { beforeAll, afterAll, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { writeContentLanguages } from "@waitron/catalogue";
@@ -15,6 +15,7 @@ import { freePort } from "./testing/free-ports.js";
 import { TEST_PRODUCER } from "./testing/test-producer.js";
 import { loadConfig } from "./config.js";
 import { checkUpgradeSale } from "./upgrade-sale.js";
+import * as upgradeChecks from "./upgrade-checks.js";
 
 let venue: OrderVenue;
 const source = useVenueDb({
@@ -107,6 +108,23 @@ it("fails the upgrade when the host has not confirmed this start's clock", async
       "clock.unconfirmed",
     );
   } finally {
+    await f.close();
+  }
+});
+
+it("refuses a sale when the integrity reader reports no additional fiscal record", async () => {
+  const f = await fixture();
+  const original = upgradeChecks.checkUpgradeData;
+  const reader = vi.spyOn(upgradeChecks, "checkUpgradeData").mockImplementation(async (...args) => {
+    const report = await original(...args);
+    return report.mode === "trading" ? { ...report, fiscalRecords: 1 } : report;
+  });
+  try {
+    await expect(checkUpgradeSale(f.config, f.env, { socketPath: f.socketPath })).rejects.toThrow(
+      "Upgrade sale was not persisted with its fiscal history",
+    );
+  } finally {
+    reader.mockRestore();
     await f.close();
   }
 });

@@ -714,6 +714,18 @@ describe("waitron.sh recovery owner", () => {
 });
 
 describe("waitron.sh manual upgrade invocation", () => {
+  it("prepares through the retained script from the same fixed driver revision", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const result = run(sb, ["install", "my-branch"]);
+    expect(result.status).toBe(0);
+    const script = join(sb.root, "host/waitron.sh");
+    expect(existsSync(script)).toBe(true);
+    expect(readFileSync(sb.log, "utf8")).toContain(
+      `cli.mjs apply ${sb.boxDir} bash ${script} __candidate my-branch`,
+    );
+  });
+
   it.each([false, true])(
     "uses the checked host transaction for an installed box (held %s)",
     (held) => {
@@ -726,7 +738,7 @@ describe("waitron.sh manual upgrade invocation", () => {
       expect(result.status).toBe(held ? 1 : 0);
       const calls = readFileSync(sb.log, "utf8");
       expect(calls).toContain(
-        `cli.mjs apply ${sb.boxDir} bash ${sb.script} __candidate my-branch 0123456789abcdef0123456789abcdef01234567:`,
+        `cli.mjs apply ${sb.boxDir} bash ${join(sb.root, "host/waitron.sh")} __candidate my-branch 0123456789abcdef0123456789abcdef01234567:`,
       );
       expect(calls.indexOf("bootstrap ")).toBeLessThan(calls.indexOf("flock -n 9"));
       expect(composeCalls(sb).some((call) => /^up\b/.test(call))).toBe(false);
@@ -2517,7 +2529,7 @@ describe("waitron.sh --reset install", () => {
     expect(readFileSync(sb.script, "utf8")).toBe(before);
     expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([]);
     expect(readFileSync(sb.log, "utf8")).toContain(
-      `cli.mjs apply ${sb.boxDir} bash ${sb.script} __candidate old-branch`,
+      `cli.mjs apply ${sb.boxDir} bash ${join(sb.root, "host/waitron.sh")} __candidate old-branch`,
     );
   });
 

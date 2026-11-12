@@ -199,7 +199,8 @@ it is rather than fetching the ref's `waitron.sh`:
 sudo deploy/waitron.sh install
 ```
 
-An existing box keeps the installer you ran throughout its checked upgrade. Download the
+An existing box keeps the installer you ran throughout its checked upgrade. Candidate
+preparation uses a retained script from the fixed driver revision. Download the
 current installer before upgrading a box that still has an older copy.
 
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
@@ -235,7 +236,9 @@ cash sale, before reopening the candidate. The test sale never reaches the live 
 If a check fails, the box stays stopped. Read `sudo bash waitron.sh status`, then choose
 `sudo bash waitron.sh restore` to return to the stopped copy, or `sudo bash waitron.sh keep`
 to start the candidate despite the failed checks. Keep still uses the ordinary boot guards.
-An interrupted restore starts again from its intact copy. Install and reset refuse while
+Restore puts back the copied data, Compose configuration and old images; the host clock
+service, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
+starts again from its intact copy. Install and reset refuse while
 an attempt is held. On an unfinished setup, Keep continues setup; choose Restore before
 using `--reset install` instead.
 

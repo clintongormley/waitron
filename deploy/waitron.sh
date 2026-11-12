@@ -827,6 +827,7 @@ cmd_upgrade_choice() (
 
 fetch_upgrade_driver() {
   local sha="$1" stage="$2" file
+  fetch "$RAW_BASE/$sha/deploy/waitron.sh" "$stage/waitron.sh" || return 1
   for file in bootstrap.sh cli.mjs host.mjs transaction.mjs copy.mjs candidate.mjs restart.mjs; do
     fetch "$RAW_BASE/$sha/scripts/box/upgrades/$file" "$stage/$file" || return 1
   done
@@ -842,6 +843,7 @@ install_upgrade_driver() {
     install -m 0644 "$file" "$WAITRON_HOST_DIR/box/upgrades/${file##*/}"
   done
   install -m 0755 "$stage/bootstrap.sh" "$WAITRON_HOST_DIR/box/upgrades/bootstrap.sh"
+  install -m 0755 "$stage/waitron.sh" "$WAITRON_HOST_DIR/waitron.sh"
   as_root install -d -m 0755 "$BOX_LIB_DIR" "$BOX_UNIT_DIR"
   as_root install -m 0755 "$stage/upgrade-restart.sh" "$BOX_LIB_DIR/upgrade-restart.sh"
   for file in waitron-app.service waitron-upgrade-recovery.service; do
@@ -890,7 +892,7 @@ cmd_manual_install() (
   enable_time_sync
   install_box_service "$sha"
   echo "waitron.sh: retained upgrade driver $sha ($source)" >&2
-  result="$(upgrade_cli apply bash "${BASH_SOURCE[0]}" __candidate "$ref" "$metadata" "$WAITRON_DIR")"
+  result="$(upgrade_cli apply bash "$WAITRON_HOST_DIR/waitron.sh" __candidate "$ref" "$metadata" "$WAITRON_DIR")"
   printf '%s\n' "$result"
   if upgrade_pending; then
     die "upgrade held — run 'waitron.sh status', then choose restore or keep"
