@@ -7,13 +7,16 @@ import { setNodeModeTx, setRecoveryKeyTx, NODE_MIGRATIONS } from "@waitron/node-
 import * as nodeApi from "@waitron/node-db";
 import * as provisioning from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret } from "@waitron/identity";
+import { hashPassword, hashSecret } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { nodeId } from "@waitron/shared";
+import type { ClockSetAnswer, ClockSetInput } from "./clock-correction.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const node = {
@@ -27,6 +30,8 @@ const promote = {
   targetNodeId: node.nodeId,
 };
 const secret = "paper-key";
+const ADMIN = "e1000000-0000-4000-8000-000000000004";
+const PASSWORD = "synthetic-clock-password";
 let root: string | undefined;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "node-operation-preparation-"));
@@ -45,6 +50,7 @@ function service(
     readState?(): Promise<void>;
     facts?(): void;
     clockCorrection?: Parameters<typeof createNodeOperationPreparation>[0]["clockCorrection"];
+    signIn?: boolean;
   } = {},
 ) {
   let host: ModuleOperationHost;
@@ -56,6 +62,7 @@ function service(
         if (proposal === "set-clock")
           return host.setBoxClock!(operation.binding, {
             offsetMs: 45_000,
+            agreesWithinMs: 12_345,
             measuredAt: { wallMs: Date.now(), monoMs: performance.now() },
             reading: { boxAt: "2026-10-16T12:40:00.000Z", witnessAt: "", uncertaintyMs: 0 },
           });
@@ -95,6 +102,7 @@ function service(
     environment: {},
     isLiveWritable: () => true,
     ...(hooks.clockCorrection === undefined ? {} : { clockCorrection: hooks.clockCorrection }),
+    ...(hooks.signIn === true ? { credentialKeyRing: TOTP_KEY_RING } : {}),
   });
 }
 
@@ -124,6 +132,7 @@ it("hands a promotion that does not mention relinquishment to the module as offl
 });
 
 it("refuses to set the clock under the recovery key, which names no person, and never asks the setter", async () => {
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror"));
   const set = vi.fn();
   const answer = await service({ clockCorrection: { set, steps: () => 0 } }).prepare(
     promote,
@@ -134,6 +143,42 @@ it("refuses to set the clock under the recovery key, which names no person, and 
   );
   expect(answer).toEqual({ status: "refused", reason: "not_admitted" });
   expect(set).not.toHaveBeenCalled();
+});
+
+it("hands boot's setter the agreement limit the module sent, as the signed-in person", async () => {
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror"));
+  await seedPersons(suite.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: hashPassword(PASSWORD),
+  });
+  const set = vi.fn<(input: ClockSetInput) => Promise<ClockSetAnswer>>(async () => ({
+    set: true,
+    confirmationId: null,
+    stepMs: 45_000,
+    confirmedAt: new Date().toISOString(),
+  }));
+  const answer = await service({
+    clockCorrection: { set, steps: () => 3 },
+    signIn: true,
+  }).prepare(
+    promote,
+    { personId: ADMIN, password: PASSWORD },
+    { oldNodeNeutralised: true, noParallelRecovery: true },
+    "set-clock",
+    { onBox: false },
+  );
+  expect(answer).toEqual({ status: "set" });
+  expect(set).toHaveBeenCalledWith(
+    expect.objectContaining({
+      reason: "start",
+      source: "admin",
+      stepsSeen: 3,
+      agreesWithinMs: 12_345,
+      requester: { source: "admin", person: ADMIN },
+    }),
+  );
 });
 
 it("refuses a promotion whose relinquishment answer is not a boolean", async () => {

@@ -413,6 +413,7 @@ it("measures a disagreeing device at the round trip's midpoint, give or take hal
     deviceMs: device,
     request: {
       offsetMs: 120_000,
+      agreesWithinMs: 30_000,
       measuredAt: { wallMs: NOW + 100.5, monoMs: 10_100.5 },
       reading: {
         boxAt: new Date(NOW + 101).toISOString(),

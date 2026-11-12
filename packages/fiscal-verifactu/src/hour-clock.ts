@@ -36,7 +36,7 @@ export interface HourClockDecision {
 }
 
 const decisions = new WeakSet<HourClockDecision>();
-const AGREEMENT_MS = 30_000;
+export const AGREEMENT_MS = 30_000;
 const MINUTE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00.000Z");
 const END_MS = EPOCH_MS + 32 ** 5 * MINUTE_MS;

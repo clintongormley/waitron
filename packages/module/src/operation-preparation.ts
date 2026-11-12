@@ -31,6 +31,9 @@ export interface ModuleRecoveryFacts {
 export interface ModuleClockSetRequest {
   /** The device's time minus the box's wall clock at the round trip's midpoint. */
   readonly offsetMs: number;
+  /** An offset that, with `reading.uncertaintyMs` added, is within this many ms agrees, and the
+   * box's clock is left alone. */
+  readonly agreesWithinMs: number;
   /** The box's wall and steady clocks at that midpoint: `Date.now()` and `performance.now()`,
    * or `testClock`'s when it is set. */
   readonly measuredAt: { readonly wallMs: number; readonly monoMs: number };

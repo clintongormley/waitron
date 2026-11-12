@@ -8,6 +8,7 @@ import type {
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
+  AGREEMENT_MS,
   canSelectHour,
   compareHourClocks,
   type HourClockDecision,
@@ -151,6 +152,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         deviceMs: browser.instantMs,
         request: {
           offsetMs: Math.round(browser.instantMs - wallMs),
+          agreesWithinMs: AGREEMENT_MS,
           measuredAt: { wallMs, monoMs: received.monotonicFinishedMs - halfMs },
           reading: {
             boxAt: new Date(Math.round(wallMs)).toISOString(),

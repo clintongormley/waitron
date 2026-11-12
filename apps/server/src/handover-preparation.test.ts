@@ -10,6 +10,7 @@ import { Agent } from "undici";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  incidents,
   invoiceSeries,
   locations,
   nodes,
@@ -72,6 +73,7 @@ import { createNodeOperationPreparation } from "./node-operation-preparation.js"
 import { establishNodeIdentity } from "./node-identity.js";
 import { startClockState } from "./start-clock-check.js";
 import { promoteMirrorToPrimary } from "./promote.js";
+import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { freePorts } from "./testing/free-ports.js";
 
@@ -1025,7 +1027,23 @@ describe("the handover's preparation route", () => {
           WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
         },
         {},
-        { requestFromBox: () => fromBox },
+        {
+          requestFromBox: () => fromBox,
+          boxHost: {
+            clockStatus: async () => ({
+              available: true,
+              service: "on",
+              unit: null,
+              synchronised: false,
+              lastSyncAt: null,
+            }),
+            setClock: async ({ targetMs }) => {
+              const beforeMs = Date.now();
+              vi.setSystemTime(targetMs);
+              return { available: true, beforeMs, afterMs: targetMs };
+            },
+          },
+        },
       );
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
       const send = async (proposal: unknown) => {
@@ -1065,6 +1083,20 @@ describe("the handover's preparation route", () => {
           browser: { challengeId: setChallenge.id, instantMs: Date.UTC(2101, 0, 1) },
         }),
       ).toEqual({ status: "refused", reason: "target_invalid" });
+      const corrected = () =>
+        suite.db
+          .select({ code: incidents.code })
+          .from(incidents)
+          .where(eq(incidents.code, "clock.corrected"));
+      expect(await corrected()).toEqual([]);
+      const ahead = await send({ action: "clock-challenge" });
+      expect(
+        await send({
+          action: "set-clock",
+          browser: { challengeId: ahead.id, instantMs: Date.now() + 45_000 },
+        }),
+      ).toEqual({ status: "set" });
+      expect(await corrected()).toEqual([{ code: "clock.corrected" }]);
     } finally {
       await agent?.close();
       await server?.close();
@@ -1280,6 +1312,58 @@ describe("setting the spare's clock from this device", () => {
       body: { error: { code: "authorization.not_permitted" } },
     });
     expect(box.set).not.toHaveBeenCalled();
+  });
+
+  it("on a box that is now primary, the older promote preparation route refuses not_mirror and never asks the setter", async () => {
+    const box = setter();
+    const s = service(fiscalModules, box.correction);
+    // The setup a join wrote while this box was a mirror stays in its state folder once promoted.
+    await setupFromAJoin(s);
+    await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary");
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: suite.db,
+      nodeDb: suite.node,
+      nodeId: standby.nodeId,
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: s,
+      requestFromBox: () => false,
+      isMirror: false,
+      run: async () => {
+        throw new Error("not promoting");
+      },
+    });
+    const socket = new TLSSocket(new Socket());
+    sockets.push(socket);
+    const send = async (proposal: unknown) => {
+      const response = await app.request(
+        "https://box.test/management-api/promote/preparation",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            oldNodeNeutralised: true,
+            noParallelRecovery: true,
+            ...credentials,
+            moduleOperation: { binding, input: null },
+            proposal,
+          }),
+        },
+        { incoming: { socket } },
+      );
+      const value = (await response.json()) as { id: string };
+      expect(response.status, JSON.stringify(value)).toBe(200);
+      return value;
+    };
+    const challenge = await send({ action: "clock-challenge" });
+    expect(
+      await send({
+        action: "set-clock",
+        browser: { challengeId: challenge.id, instantMs: Date.now() + 45_000 },
+      }),
+    ).toEqual({ status: "refused", reason: "not_mirror" });
+    expect(box.set).not.toHaveBeenCalled();
+    expect(box.hostSets).toEqual([]);
   });
 
   it("with no setter, the module answers host_unavailable", async () => {

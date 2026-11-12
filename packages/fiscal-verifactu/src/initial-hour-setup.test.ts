@@ -1223,6 +1223,7 @@ it("set-clock hands the host a disagreeing device's measurement and answers what
   const now = Date.now();
   expect(setBoxClock).toHaveBeenCalledWith(context.binding, {
     offsetMs: 120_000,
+    agreesWithinMs: 30_000,
     measuredAt: { wallMs: expect.closeTo(now, -2), monoMs: expect.any(Number) },
     reading: {
       boxAt: new Date(now).toISOString(),

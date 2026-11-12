@@ -62,7 +62,7 @@ export function createNodeOperationPreparation(options: {
   environment: Readonly<Record<string, string | undefined>>;
   testClock?: ModuleOperationHost["testClock"];
   isLiveWritable?: () => boolean;
-  /** Boot's setter, measuring on the same steady clock as `testClock` or `performance.now()`. */
+  /** Boot's setter, behind the module host's `setBoxClock`. */
   clockCorrection?: Pick<ReturnType<typeof clockCorrection>, "set" | "steps">;
 }) {
   const node = Object.freeze({ ...options.node });
@@ -155,6 +155,10 @@ export function createNodeOperationPreparation(options: {
           // Before any await: a step made meanwhile makes the device's offset stale.
           const stepsSeen = correction.steps();
           await authorize(binding);
+          // Only a mirror, which does not trade: the promote preparation route reaches this seat
+          // on any box.
+          if ((await readNodeMode(options.nodeDb, node.nodeId)).mode !== "mirror")
+            return { status: "refused", reason: "not_mirror" };
           const { operatorId } = readOperationAuthority(scopes.getStore()!.authority, binding)!;
           if (typeof operatorId !== "string") return { status: "refused", reason: "not_admitted" };
           const answer = await correction.set({
@@ -164,7 +168,7 @@ export function createNodeOperationPreparation(options: {
             measuredAt: { ...request.measuredAt },
             stepsSeen,
             witnesses: [],
-            agreesWithinMs: 30_000,
+            agreesWithinMs: request.agreesWithinMs,
             admin: {
               personId: operatorId,
               personName: await requiredNameOf(options.db, operatorId),
