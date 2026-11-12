@@ -2906,7 +2906,21 @@ export class TillApp extends LitElement {
           Array.isArray(item.optionSnapshots) &&
           item.optionSnapshots.every(optionSnapshot) &&
           Array.isArray(item.extras) &&
-          item.extras.every((extra: unknown) => typeof extra === "string") &&
+          item.extras.every(
+            (extra: unknown) =>
+              typeof extra === "object" &&
+              extra !== null &&
+              "name" in extra &&
+              typeof extra.name === "string" &&
+              "quantity" in extra &&
+              typeof extra.quantity === "string" &&
+              "unitName" in extra &&
+              (extra.unitName === null || textMap(extra.unitName)) &&
+              "soldInEach" in extra &&
+              typeof extra.soldInEach === "boolean" &&
+              "perDish" in extra &&
+              typeof extra.perDish === "number",
+          ) &&
           (item.note === null || typeof item.note === "string"),
       );
     } catch {

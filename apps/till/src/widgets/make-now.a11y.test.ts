@@ -18,7 +18,9 @@ describe.each(["light", "dark"] as const)("till-make-now a11y (%s)", (theme) => 
             unitName: null,
             soldInEach: true,
             optionSnapshots: [],
-            extras: ["Lime"],
+            extras: [
+              { name: "Lime", quantity: "2.000", unitName: null, soldInEach: true, perDish: 1 },
+            ],
             note: null,
           },
         ],

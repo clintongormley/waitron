@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./make-now.js";
 import type { TillMakeNow } from "./make-now.js";
@@ -23,7 +25,7 @@ describe("till-make-now", () => {
         labelKitchenName: "LG",
       },
     ],
-    extras: ["Lime"],
+    extras: [{ name: "Lime", quantity: "2.000", unitName: null, soldInEach: true, perDish: 1 }],
     note: "Cold",
   };
 
@@ -40,6 +42,50 @@ describe("till-make-now", () => {
     el.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
     expect(dismissed).toHaveBeenCalledOnce();
   });
+
+  for (const [locale, dish, ham] of [
+    ["es-ES", "0,375 kg× Pulpo", "+ Jamón 0,125 rac"],
+    ["en-GB", "0.375 kg× Pulpo", "+ Jamón 0.125 srv"],
+  ] as const)
+    it(`writes a dish and its extras with the ${locale} screen's decimal mark`, async () => {
+      const prior = currentLocale();
+      const priorLanguages = currentContentLanguages();
+      setLocale(locale);
+      setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+      try {
+        const { el } = await mountWidget<TillMakeNow>("till-make-now", {
+          items: [
+            {
+              ...item,
+              name: "Pulpo",
+              quantity: "0.375",
+              unitName: { es: "kg", en: "kg" },
+              soldInEach: false,
+              optionSnapshots: [],
+              extras: [
+                {
+                  name: "Jamón",
+                  quantity: "0.125",
+                  unitName: { en: "srv", es: "rac" },
+                  soldInEach: false,
+                  perDish: 1,
+                },
+                { name: "Lima", quantity: "2.000", unitName: null, soldInEach: false, perDish: 2 },
+              ],
+              note: null,
+            },
+          ],
+        });
+        const details = [...el.shadowRoot!.querySelectorAll(".detail")].map((span) =>
+          span.textContent!.trim(),
+        );
+        expect(el.shadowRoot!.querySelector("strong")!.textContent).toBe(dish);
+        expect(details).toEqual([ham, "+ Lima x2"]);
+      } finally {
+        setContentLanguages(priorLanguages);
+        setLocale(prior);
+      }
+    });
 
   it("renders nothing for an empty list", async () => {
     const { el } = await mountWidget<TillMakeNow>("till-make-now", { items: [] });

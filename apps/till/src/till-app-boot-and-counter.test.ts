@@ -1365,6 +1365,35 @@ describe("till-app session activity", () => {
     );
   });
 
+  it("drops a stored item whose extras are written out rather than data", async () => {
+    const stored = {
+      name: "Lager",
+      quantity: "1.000",
+      unitName: null,
+      soldInEach: true,
+      optionSnapshots: [],
+      note: null,
+    };
+    localStorage.setItem(
+      "waitron.makeNow.till-dev",
+      JSON.stringify([
+        { ...stored, lineId: "bad", name: "Cider", extras: ["Lime"] },
+        {
+          ...stored,
+          lineId: "good",
+          extras: [
+            { name: "Lime", quantity: "2.000", unitName: null, soldInEach: true, perDish: 2 },
+          ],
+        },
+      ]),
+    );
+    const { el } = await mountApp();
+    await flush(el);
+    const card = el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent;
+    expect(card).not.toContain("Cider");
+    expect(card).toContain("+ Lime x2");
+  });
+
   it("keeps Done usable when site data methods throw", async () => {
     const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
