@@ -1,6 +1,6 @@
 # A1473: accept an omitted skipped job in the final CI gate
 
-Superseded 2026-11-12 19:33 (CI-gate-skipped): the exception now covers every needed job.
+Superseded 2026-11-12 19:33 ([CI-gate-skipped](../../backlog/ci.md#decisions-and-deliberate-limits)): the absent-record exception now covers every needed job saved exactly as `skipped`, not only `server-probe`.
 
 **Request:** Watcher, Lane I `questions.md`, 2026-11-12 15:23:
 “New small fix, before the drill: the final ci gate failed #2935 (run 43229439512) after 21 polls with "no job in the jobs API for: server-probe", though its needs result says skipped; GitHub's jobs API omitted the skipped record (an earlier run had it). Make the gate accept the saved needs result "skipped" when the API has no record for it, with a test, one small PR.”
