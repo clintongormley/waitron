@@ -24,7 +24,7 @@ import {
   text,
   till,
 } from "../test/bill-pay-app.js";
-import type { CurrentOrders, PartyBill } from "./api/client.js";
+import type { CurrentOrderRow, CurrentOrders, PartyBill } from "./api/client.js";
 import type { CloseDeferredResult } from "./api/deferred-close-types.js";
 import type { CapabilityFlag } from "./layout.js";
 import type { TillDeferredCloseDialog } from "./widgets/deferred-close-dialog.js";
@@ -624,6 +624,46 @@ it("Cancel on a presented bill's close returns to the presented bill's Pay windo
   expect(api.closeDeferred).not.toHaveBeenCalled();
 });
 
+const unservedDish: CurrentOrderRow = {
+  billStatus: "placed",
+  netAmount: "40.00",
+  readyAt: null,
+  requestedAt: null,
+  firedAt: null,
+  lineId: "dish-4",
+  workingOrderId: "wo-4",
+  lineNo: 1,
+  courseId: null,
+  name: "Paella",
+  quantity: "1.000",
+  unitPrecision: 0,
+  servedQuantity: "0.000",
+  servedAt: null,
+  released: true,
+  kitchen: null,
+  note: null,
+  extras: [],
+};
+
+it("switches a presented bill's close off while a dish is unserved, saying what to do", async () => {
+  const api = deferredApi({
+    getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+    readCurrentOrders: vi.fn().mockResolvedValue({ ...noOrders, ungrouped: [unservedDish] }),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openTable(el);
+  tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+  const pay = presentedPay(el)!.shadowRoot!;
+  const button = pay.querySelector<HTMLElement & { disabled: boolean }>("[data-pay-deferred]")!;
+  expect(button.disabled).toBe(true);
+  expect(text(pay.querySelector("[data-pay-deferred-reason]"))).toBe(t("deferred_close.unserved"));
+  button.click();
+  await flush(el);
+  expect(closing(el)).toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
 const lunch = {
   id: "meal",
   menuItemId: "offer-meal",
@@ -713,6 +753,7 @@ it("closes a Counter bill as a deferred payment, sending a simplified invoice wi
   await flush(el);
   expect(payDialog(el)).toBeNull();
   expect(closing(el)!.bill).toMatchObject({ total: "30.00", customer: null, issued: false });
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
   await confirm(el);
   expect(api.closeDeferred).toHaveBeenCalledExactlyOnceWith(id(), {
     submissionId: expect.any(String),
@@ -728,6 +769,7 @@ it("closes a Counter bill as a deferred payment, sending a simplified invoice wi
   expect(api.getFiledTicket).toHaveBeenCalledExactlyOnceWith(id());
   expect(closing(el)).toBeNull();
   expect(documents(el)).not.toBeNull();
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
 });
 
 it("a failed receipt read after a Counter close lets the order go and reads the held list again", async () => {
