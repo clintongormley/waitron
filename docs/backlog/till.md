@@ -3601,6 +3601,8 @@ behind one Pay button, as a handheld already has (its D16, Owner question 7).
 
 ### A740. Zones on a device
 
+2026-11-12: fk1 folds zone policies into `floor_zones`; see the current [department and zone service settings](../developers/conventions-data.md#department-and-zone-service-settings).
+
 Board 5. Read on 2026-10-15: a zone's menus, prices, trading name and default menu all come from
 its **department** (`zonePeriodMembership`, `packages/venue-service/src/operations.ts`), so every
 zone of a department shows the same menus at the same prices. What a zone sets itself: its sale

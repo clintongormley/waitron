@@ -1,3 +1,9 @@
+import {
+  buildMenuDocument,
+  createCatalogue,
+  menuDocumentHash,
+  publishMenu,
+} from "@waitron/catalogue";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
@@ -7,6 +13,7 @@ import {
   floorPlanSets,
   departmentFloorPlanSets,
   floorZones,
+  readVenueClock,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,7 +25,11 @@ import {
   listServiceZones,
   listSalePolicies,
   resolveZoneContext,
+  menuState,
+  liveDocumentsByZone,
 } from "./operations.js";
+import { resolveZoneClosedDays } from "./day-resolver.js";
+import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { deleteZone } from "./service-delete.js";
 import { dueFloorLayouts } from "./floor-layout-due.js";
 import { readReleaseReminderMinutesByZone } from "./release-reminders.js";
@@ -43,6 +54,10 @@ it("deleted zones leave active zone reads while their department is retained", a
       departmentId: department.id,
     });
     const kept = await createServiceZone(tx, { name: "Dining room", departmentId: department.id });
+    const menu = await createCatalogue(tx, { name: "Dining menu" });
+    const { document } = await buildMenuDocument(tx, menu.id);
+    await publishMenu(tx, menu.id, menuDocumentHash(document), "person-1");
+    await offerMenuThroughZone(tx, kept.id, menu.id);
     const [set] = await tx.insert(floorPlanSets).values({}).returning();
     await tx
       .insert(departmentFloorPlanSets)
@@ -57,6 +72,14 @@ it("deleted zones leave active zone reads while their department is retained", a
     const at = new Date("2026-10-11T12:00:00Z");
     await deleteZone(tx, noFloor, gone.id, at);
     expect((await listServiceZones(tx)).map((row) => row.id)).toEqual([kept.id]);
+    expect((await menuState(tx, gone.id, at)).service.open).toBe(false);
+    expect((await menuState(tx, kept.id, at)).service.open).toBe(true);
+    expect([...(await liveDocumentsByZone(tx)).keys()]).toEqual([kept.id]);
+    expect([
+      ...(
+        await resolveZoneClosedDays(tx, undefined, ["2026-10-11"], await readVenueClock(tx))
+      ).keys(),
+    ]).toEqual([kept.id]);
     expect((await listSalePolicies(tx)).zones.map((row) => row.zoneId)).toEqual([kept.id]);
     await expect(resolveZoneContext(tx, gone.id)).rejects.toMatchObject({
       code: "service_zone.not_found",
