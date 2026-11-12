@@ -71,6 +71,40 @@ export function madridWithNameChanges(
       stable(parts.map((part) => (typeof part === "string" ? alias(part) : part)))
     );
   };
+  recomputeMadridHashes(result, alias, (row) => {
+    const key = String(row.productId ?? row.sectionId ?? row.id);
+    const fields = changed.get(key);
+    if (fields) {
+      const columns = {
+        name: "name",
+        kitchenName: "kitchen_name",
+        internalName: "internal_name",
+        staffName: "staff_name",
+        staffAbbreviation: "staff_abbreviation",
+      };
+      for (const [field, column] of Object.entries(columns))
+        if (Object.hasOwn(row, field) && fields[column] !== undefined) row[field] = fields[column];
+      if (row.presentation !== null && typeof row.presentation === "object") {
+        const presentation = { ...row.presentation } as Record<string, unknown>;
+        if (fields.name !== undefined) presentation.name = fields.name;
+        if (fields.kitchen_name !== undefined) presentation.kitchenName = fields.kitchen_name;
+        row.presentation = presentation;
+      }
+    }
+    if (Object.hasOwn(row, "menuName"))
+      row.menuName = changed.get(String(row.menuId))?.name ?? row.menuName;
+  });
+  return result;
+}
+
+/** Recompute every published menu fingerprint (`content_hash`) from its document, including the
+ * fingerprints one menu's document holds for another. `alias` maps each other string, and
+ * `editDocumentRow` edits a copy of each object inside a document before it is hashed. */
+export function recomputeMadridHashes(
+  result: CanonicalMadridSemantics,
+  alias: (value: string) => string = (value) => value,
+  editDocumentRow: (row: Record<string, unknown>) => void = () => {},
+): void {
   const documents = new Map<string, unknown>();
   for (const row of Object.values(result.tables.menu_versions!.rows))
     documents.set(String(row.content_hash), row.document);
@@ -95,30 +129,7 @@ export function madridWithNameChanges(
     if (Array.isArray(value)) return value.map((child) => rewrite(child, document));
     if (value !== null && typeof value === "object") {
       const row = { ...value } as Record<string, unknown>;
-      if (document) {
-        const key = String(row.productId ?? row.sectionId ?? row.id);
-        const fields = changed.get(key);
-        if (fields) {
-          const columns = {
-            name: "name",
-            kitchenName: "kitchen_name",
-            internalName: "internal_name",
-            staffName: "staff_name",
-            staffAbbreviation: "staff_abbreviation",
-          };
-          for (const [field, column] of Object.entries(columns))
-            if (Object.hasOwn(row, field) && fields[column] !== undefined)
-              row[field] = fields[column];
-          if (row.presentation !== null && typeof row.presentation === "object") {
-            const presentation = { ...row.presentation } as Record<string, unknown>;
-            if (fields.name !== undefined) presentation.name = fields.name;
-            if (fields.kitchen_name !== undefined) presentation.kitchenName = fields.kitchen_name;
-            row.presentation = presentation;
-          }
-        }
-        if (Object.hasOwn(row, "menuName"))
-          row.menuName = changed.get(String(row.menuId))?.name ?? row.menuName;
-      }
+      if (document) editDocumentRow(row);
       return Object.fromEntries(
         Object.entries(row).map(([key, child]) => [alias(key), rewrite(child, document)]),
       );
@@ -140,5 +151,4 @@ export function madridWithNameChanges(
     }
     table.rows = Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b)));
   }
-  return result;
 }

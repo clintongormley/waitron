@@ -22,10 +22,25 @@ import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 import { seedDemoRestaurant } from "./seed.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { madridWithNameChanges, type MadridNameChange } from "./testing/madrid-name-changes.js";
+import { madridWithVatClassChanges } from "./testing/madrid-vat-classes.js";
 import {
   madridWithRenamedColumns,
   type MadridColumnRenames,
 } from "./testing/madrid-renamed-columns.js";
+
+// Drinks served to consume on the spot take the reduced rate (LIVA art. 91.Uno.2.2.º).
+const DINE_IN_DRINKS_REDUCED = [
+  "280134add33e12b0502b965b87238409e8c250f7c3a42c6924bc427e9471a1f1", // cola
+  "3484f1297e957c98ea54ac37a61f8bc699987bca90de4038d5255aa253110bfc", // beer
+  "6a8776dad20e3c5c33c9250d1a6194a4a2ed84d0801d4d8a6ee369898191766c", // house red
+  "881a1845feb901650439bc8782fe901e1dfa72ddfa2f3a6eb567ff38571d2db9", // orange juice
+  "8e1f6221032d4b13be3b36a7498ac093fd0a367ef884cc8e55b1b3c359f1371e", // Negroni
+  "b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c", // coffee
+].map((image) => ({
+  product: `@products:${JSON.stringify([`${image}.webp`])}`,
+  old: "general",
+  new: "reduced",
+}));
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
   nodes: ["location_id"],
@@ -306,6 +321,7 @@ for (const locale of ["en", "es"] as const) {
       await readFile(new URL(`plain-name-changes.${locale}.json`, root), "utf8"),
     ) as MadridNameChange[];
     expected.seeded = madridWithNameChanges(expected.seeded, nameChanges);
+    expected.seeded = madridWithVatClassChanges(expected.seeded, DINE_IN_DRINKS_REDUCED);
     if (locale === "en") {
       const department = '@departments:["Deli"]';
       for (const [position, name] of ["Set up", "Take order", "Anything else?"].entries()) {
