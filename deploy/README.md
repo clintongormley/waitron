@@ -400,8 +400,8 @@ images from that full commit. No checkout or `pnpm` is needed; a failed resoluti
 sudo bash waitron.sh install <branch-or-ref>
 ```
 
-The image it builds names no software producer, so on a Veri\*Factu box set to production it refuses to start trading
-(`sif.producer_unset`); try branches on a preproduction box.
+The image it builds is not a release, so a box set to production refuses to start
+(`server.unreleased_build`, "This box is running a test build."); try branches on a preproduction box.
 
 It tags the image after the ref (`waitron:<ref>`, with unsafe characters dashed and the name capped
 to a valid length) and writes that tag into `.env` as `WAITRON_IMAGE` (and the print agent's
@@ -793,9 +793,16 @@ absent. On a host without apt, install `jq` before using a branch or commit ref.
 
 An image you build yourself names you as the software's producer: pass
 `--build-arg WAITRON_PRODUCER_NAME=…`, `--build-arg WAITRON_PRODUCER_TAX_ID=…` and
-`--build-arg WAITRON_PRODUCER_ADDRESS=…` (the address on one line), or its production start refuses
-with `sif.producer_unset`. A fork's publish job reads three repository secrets of those names and
+`--build-arg WAITRON_PRODUCER_ADDRESS=…` (the address on one line); a release build (below) fails
+without them (`sif.producer_unset`). A fork's publish job reads three repository secrets of those names and
 stops when any is empty, so a fork sets its own.
+
+An image is a release only when built with `--build-arg WAITRON_RELEASE_VERSION=<x.y.z>` and the
+three producer arguments above. That renders the version's declaration into `/app/declaration/`.
+The build fails unless `packages/fiscal-verifactu/declarations/v<x.y.z>.md` is in the folder being
+built, has no release-blocker line, and names that version. Built without it, the image is a
+test build: it has no `/app/declaration/`, and its production start refuses with
+`server.unreleased_build`.
 
 Then point the compose at both in `.env`: `WAITRON_IMAGE=waitron:dev` and
 `WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev`. The print agent is an on-by-default service, so

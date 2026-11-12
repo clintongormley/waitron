@@ -431,7 +431,8 @@ Any other address under `/legal` answers a "Page not found" page.
 ### The folder
 
 The files come from `/app/declaration/` in the image, found beside the bundle as the guides are
-(`declarationRoot()`). Slice 4's release run is to write it; until then no image has it. The folder
+(`declarationRoot()`). An image built with `WAITRON_RELEASE_VERSION` renders it in the Dockerfile's
+`declaration` stage; an image built without one has no folder at all. The folder
 holds four files: `declaration.html` (exactly what slice 2's `renderDeclaration` writes),
 `declaration.pdf`, `declaration.txt` and `release.json` (`{ "version": "1.0.0", "releasedOn":
 "2026-12-03" }`, the date being the day the producer signed). It is read on every request; nothing
