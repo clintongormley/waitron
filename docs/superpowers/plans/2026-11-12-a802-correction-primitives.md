@@ -1,9 +1,15 @@
 # A802: one correction step, or a few simpler pieces? (note for the owner, 2026-11-12)
 
-**Status: for the owner's decision; revised the same day after lane M's second read**
-(`~/waitron-campaign-m/reports/a802-correction-primitives.md`). It answers the owner's two questions about #2867
-(relayed by the watcher, 2026-11-12 01:59). #2867 is held and slice 5, the till screen, waits on the answer. No
-code changed.
+**Status: decided (owner, 2026-11-12, relayed by the watcher at 12:37).** #2867 landed as slice 4
+(`8b6bb438b3`). The owner's answers to §5's two questions, in the owner's words:
+(1) **"When all money is back"**: the corrective invoice is filed once every refund in it has gone through,
+replacing the 2026-10-21 "file when opened". (2) **"Opening approval counts"**: when a card refund is confirmed
+later with nobody signed in, the approval given when the correction was opened counts and Waitron files it
+automatically, falling back to an alert and a manager's Record correction whenever the automatic filing is
+refused; this authorises the small protected fiscal-core change Hole 1 option (a) sizes. Build: five pull
+requests, option (a), each landed by the owner; the build plan is
+[2026-11-12-a802-reshape.md](2026-11-12-a802-reshape.md). The note below is as the owner read it
+(lane M's second read: `~/waitron-campaign-m/reports/a802-correction-primitives.md`).
 
 **Words.** A **simplified invoice** is the ticket a guest gets. A **corrective invoice** (type R5) is a new,
 negative invoice that takes value off an earlier one; once filed with AEAT (the Spanish tax agency) it cannot
