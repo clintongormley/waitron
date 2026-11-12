@@ -436,10 +436,7 @@ export class DevicesScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      this.#showReadError(error);
-      this.requestUpdate();
-    },
+    (error) => this.#showReadError(error),
     () => {
       if (this.#readErrorShown) this.#showError(null);
     },
@@ -2734,40 +2731,36 @@ export class DevicesScreen extends LitElement {
           this.editSaving,
         )}
         ${this.#renderOtherStations()} ${this.#renderGone()}
-        ${PRINTER_ROLES.map((role) =>
-          this.printerListsRead.size < 2
-            ? html`<wt-combobox
-                data-test=${role.test}
-                name=${role.form}
-                label=${t(role.label)}
-                disabled
-                placeholder=${
-                  this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters")
-                    ? t("printers.refresh_failed")
-                    : t("device_profiles.printers_loading")
-                }
-                .options=${[]}
-                .value=${form[role.form]}
-              ></wt-combobox>`
-            : html`<wt-combobox
-                data-test=${role.test}
-                name=${role.form}
-                show-empty-option
-                label=${t(role.label)}
-                search="auto"
-                searchPlaceholder=${t("categories.combobox_search")}
-                noResultsLabel=${t("categories.combobox_no_results")}
-                .options=${this.#printerOptions(role, profile, this.#storedChoice(device, role))}
-                .value=${form[role.form]}
-                ?disabled=${this.editSaving}
-                .error=${errors[role.field]}
-                .invalid=${errors[role.field] !== ""}
-                @wt-change=${(e: CustomEvent<{ value: string }>) =>
-                  this.isConnected &&
-                  epoch === this.#editEpoch &&
-                  this.#setEdit({ [role.form]: e.detail.value }, role.field)}
-              ></wt-combobox>`,
-        )}
+        ${PRINTER_ROLES.map((role) => {
+          const loading = this.printerListsRead.size < 2;
+          return html`<wt-combobox
+            data-test=${role.test}
+            name=${role.form}
+            ?show-empty-option=${!loading}
+            label=${t(role.label)}
+            search="auto"
+            searchPlaceholder=${t("categories.combobox_search")}
+            noResultsLabel=${t("categories.combobox_no_results")}
+            .placeholder=${
+              !loading
+                ? ""
+                : this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters")
+                  ? t("printers.refresh_failed")
+                  : t("device_profiles.printers_loading")
+            }
+            .options=${
+              loading ? [] : this.#printerOptions(role, profile, this.#storedChoice(device, role))
+            }
+            .value=${form[role.form]}
+            ?disabled=${loading || this.editSaving}
+            .error=${errors[role.field]}
+            .invalid=${errors[role.field] !== ""}
+            @wt-change=${(e: CustomEvent<{ value: string }>) =>
+              this.isConnected &&
+              epoch === this.#editEpoch &&
+              this.#setEdit({ [role.form]: e.detail.value }, role.field)}
+          ></wt-combobox>`;
+        })}
         ${this.#renderApproved(errors.approved)} ${kitchen ? nothing : this.#renderMadeHere()}
         ${this.readerState === "hidden" ? nothing : this.#renderReader(errors.reader)}
       </div>

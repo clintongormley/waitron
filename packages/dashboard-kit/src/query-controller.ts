@@ -3,8 +3,8 @@ import type { LiveData, ObservedResource, ResourceQuery } from "./live-data.js";
 
 export class QueryController implements ReactiveController {
   #slots = new Map<string, () => void>();
+  #unrecovered = new Set<string>();
   #failing = new Set<string>();
-  #unread = new Set<string>();
   #lastError: unknown = undefined;
   #failures = 0;
 
@@ -13,7 +13,7 @@ export class QueryController implements ReactiveController {
    * longer waited for, and an apply that finishes after its observation was released or replaced
    * does not count. */
   constructor(
-    host: ReactiveControllerHost,
+    private readonly host: ReactiveControllerHost,
     private readonly data: () => LiveData | undefined,
     private readonly error: (error: unknown) => void,
     private readonly recovered?: (error: unknown) => void,
@@ -40,8 +40,8 @@ export class QueryController implements ReactiveController {
       this.#slots.set(slot, release);
       const reject = (error: unknown): void => {
         if (active) {
-          this.#failing.add(slot);
-          this.#unread.add(slot);
+          this.#unrecovered.add(slot);
+          this.#markFailing(slot, true);
           this.#lastError = error;
           this.#failures += 1;
           this.error(error);
@@ -53,18 +53,20 @@ export class QueryController implements ReactiveController {
       const accept = async (value: T): Promise<void> => {
         if (active) {
           const failures = this.#failures;
+          // Cleared before the apply, so the render the apply schedules already sees it, and a newer
+          // read's failure while the apply is pending is never cleared by it.
+          this.#markFailing(slot, false);
           try {
             await apply(value);
           } catch (error) {
             reject(error);
             return;
           }
-          if (active) this.#unread.delete(slot);
           if (
             active &&
             failures === this.#failures &&
-            this.#failing.delete(slot) &&
-            this.#failing.size === 0
+            this.#unrecovered.delete(slot) &&
+            this.#unrecovered.size === 0
           )
             this.recovered?.(this.#lastError);
         }
@@ -87,22 +89,30 @@ export class QueryController implements ReactiveController {
     });
   }
 
-  /** Whether the slot's latest read, or the apply of its answer, failed. */
+  /** Whether the slot's latest read, or the apply of its answer, failed. The host is asked to update
+   * whenever this answer changes. */
   failing(slot: string): boolean {
-    return this.#unread.has(slot);
+    return this.#failing.has(slot);
+  }
+
+  #markFailing(slot: string, failing: boolean): void {
+    if (this.#failing.has(slot) === failing) return;
+    if (failing) this.#failing.add(slot);
+    else this.#failing.delete(slot);
+    this.host.requestUpdate();
   }
 
   release(slot: string): void {
     this.#slots.get(slot)?.();
     this.#slots.delete(slot);
-    this.#failing.delete(slot);
-    this.#unread.delete(slot);
+    this.#unrecovered.delete(slot);
+    this.#markFailing(slot, false);
   }
 
   hostDisconnected(): void {
     for (const release of this.#slots.values()) release();
     this.#slots.clear();
+    this.#unrecovered.clear();
     this.#failing.clear();
-    this.#unread.clear();
   }
 }

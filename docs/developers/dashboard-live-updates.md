@@ -91,7 +91,11 @@ restarts. Either clear it in the apply callback (on a screen that shares one fie
 actions, clear only a read's message there), or pass `QueryController` (or `DashboardQueries`) a
 fourth argument, `recovered(error)`. The controller calls it once every failed read it still watches
 has applied a value with no new failure reported while that value applied, passing the last error it
-gave the error callback. A screen that shows a read's and an action's failure in one field remembers
+gave the error callback. To tell which read failed, `failing(slot)` answers whether that slot's latest
+read, or the apply of its answer, failed: it turns true when one fails and false when a later answer
+for the slot starts applying, and an older apply that finishes after a newer read failed leaves it
+true. The controller asks the screen to update whenever this answer changes, so a screen need not
+request an update itself, even when the error callback receives the code it already shows. A screen that shows a read's and an action's failure in one field remembers
 whether the message came from a read (Payments' `#readErrorShown`, set only through
 `#showError(code, fromRead)`, `apps/dashboard/src/screens/payments-screen.ts`): `recovered` clears
 only a read's message; a reload that runs after a successful action and can finish after another

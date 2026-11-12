@@ -1321,6 +1321,29 @@ describe("the Edit dialog", () => {
     );
   });
 
+  it("says the printers could not be read once their read fails with the code another read's failure already shows", async () => {
+    const api = Object.assign(
+      editApi({
+        listPagePrinters: vi.fn(() => new Promise<PagePrinterRow[]>(() => {})),
+        pairingMode: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      }),
+      { liveData: new LiveData() },
+    );
+    const el = await openEdit(api);
+    const shown = () =>
+      q(el, "[data-test=edit-receipt-printer]")!
+        .shadowRoot!.querySelector("button.trigger .value")!
+        .textContent!.trim();
+    expect(shown()).toBe(t("device_profiles.printers_loading"));
+
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.invalidate([{ type: "print_jobs" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(api.listDevices).toHaveBeenCalledTimes(1);
+    expect(shown()).toBe(t("printers.refresh_failed"));
+  });
+
   it("shows None as the chosen printer of a device that has none", async () => {
     const el = await openEdit(editApi(), "k1");
     const shown = (id: string) =>

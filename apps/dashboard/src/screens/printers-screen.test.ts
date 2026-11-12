@@ -6266,6 +6266,25 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     },
   );
 
+  it("leaves out the hint about how many jobs are listed whenever the jobs table is left out", async () => {
+    const api = stubApi({
+      listRecentJobs: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "queue");
+    expect(q(el, "[data-test=jobs-table]")).toBeNull();
+    expect(timesShown(el, t("printers.jobs_limit"))).toBe(0);
+
+    q(el, "[data-test=refresh-printer-lists]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=jobs-table]")).not.toBeNull());
+    await flush(el);
+    expect(timesShown(el, t("printers.jobs_limit"))).toBe(1);
+  });
+
   it("says the lists that did read are empty when only another list's read failed", async () => {
     const api = stubApi({
       listPrinters: vi.fn().mockResolvedValue([]),
@@ -6310,6 +6329,55 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull());
     expect(table()).not.toContain(codeMessage("connection.failed"));
     expect(timesShown(el, t("printers.refresh_failed"))).toBe(0);
+  });
+
+  it("draws an empty printers table again once its read answers, while another list's read still fails", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers");
+    const api = Object.assign(stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }), {
+      liveData: new LiveData(),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    const table = () => q(el, "[data-test=printers-table]")?.shadowRoot!.textContent ?? null;
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    vi.mocked(api.listRecentJobs).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull());
+    await flush(el);
+    expect(table()).toBeNull();
+
+    vi.mocked(api.listPrinters).mockResolvedValue([]);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    expect(table()).toContain(t("printers.no_printers"));
+  });
+
+  it("leaves out an empty printers table whose read fails with the code the alert already shows", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers");
+    const api = Object.assign(
+      stubApi({
+        listPrinters: vi.fn().mockResolvedValue([]),
+        listRecentJobs: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    expect(q(el, "[data-test=printers-table]")!.shadowRoot!.textContent).toContain(
+      t("printers.no_printers"),
+    );
+
+    vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.invalidate([{ type: "printer_holders" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=printers-table]")).toBeNull();
+    expect(timesShown(el, t("printers.no_printers"))).toBe(0);
+    expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);
   });
 
   it("says an empty table's read is still failing in the table while Refresh lists reads it again", async () => {

@@ -589,8 +589,6 @@ export class DeviceProfilesScreen extends LitElement {
   /** Both printer reads must answer before the lists are drawn. */
   #printerReads = new Set<PrinterRead>();
   @state() private printerReading: ReadonlySet<PrinterRead> = new Set();
-  /** The printer reads whose latest attempt failed. */
-  @state() private printerUnread: ReadonlySet<PrinterRead> = new Set();
 
   @state() private stations: Station[] = [];
 
@@ -781,12 +779,7 @@ export class DeviceProfilesScreen extends LitElement {
     const others = (from: ReadonlySet<PrinterRead>) => new Set([...from].filter((r) => r !== read));
     this.printerReading = new Set([...this.printerReading, read]);
     try {
-      const value = await send();
-      this.printerUnread = others(this.printerUnread);
-      return value;
-    } catch (error) {
-      this.printerUnread = new Set([...this.printerUnread, read]);
-      throw error;
+      return await send();
     } finally {
       this.printerReading = others(this.printerReading);
     }
@@ -1966,7 +1959,8 @@ export class DeviceProfilesScreen extends LitElement {
         ? PRINTER_LISTS.map((list) => ({ list, choices: this.#printerChoices(list.key) }))
         : [];
     const empty = lists.every(({ choices }) => choices.length === 0);
-    const unread = empty && this.printerUnread.size > 0;
+    const unread =
+      empty && (this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters"));
     // The failed read is the form's bottom message.
     if (unread && this.printerReading.size === 0) return nothing;
     if (this.printersState === "loading" || unread)

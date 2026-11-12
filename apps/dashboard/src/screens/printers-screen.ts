@@ -636,7 +636,6 @@ export class PrintersScreen extends LitElement {
     () => this.api,
     (error) => {
       this.refreshErrorKey = codeOf(error);
-      this.requestUpdate();
     },
     (error) => {
       if (this.refreshErrorKey === codeOf(error)) this.refreshErrorKey = null;
@@ -644,7 +643,6 @@ export class PrintersScreen extends LitElement {
     },
   );
   #loadFailed = false;
-  /** The discovered list's latest read outside its live query failed, or was never made. */
   @state() private discoveredUnread = false;
 
   @state() private view = "";
@@ -3874,37 +3872,37 @@ export class PrintersScreen extends LitElement {
       },
     ];
     return html`<section>
-      <p class="hint">${t("printers.jobs_limit")}</p>
       ${this.#unreadTable(
         this.jobs.length === 0 && this.#queries.failing("listRecentJobs"),
         (errorMessage) =>
-          html`<wt-data-table
-            noMatchesMessage=${tableNoMatches()}
-            data-test="jobs-table"
-            viewKey="waitron.printers.jobs.table"
-            customiseColumnsLabel=${t("table.customise_columns")}
-            customiseLabel=${t("table.customise")}
-            restoreColumnsLabel=${t("table.restore_columns")}
-            doneLabel=${t("table.done")}
-            moveColumnLabel=${t("table.move_column")}
-            showColumnLabel=${t("table.show_column")}
-            hideColumnLabel=${t("table.hide_column")}
-            alwaysShownColumnLabel=${t("table.column_always_shown")}
-            lastShownColumnLabel=${t("table.column_last_shown")}
-            columnPositionLabel=${t("table.column_position")}
-            filtersLabel=${t("table.filters")}
-            filteredColumnLabel=${t("table.filtered_column")}
-            filtersClearAllLabel=${t("table.filters_clear_all")}
-            filtersCloseLabel=${t("table.filters_close")}
-            aria-label=${t("printers.jobs_title")}
-            .rows=${this.jobs}
-            .columns=${columns}
-            .rowKey=${(j: PrintJobRow) => j.id}
-            .loading=${this.loading}
-            .loadingMessage=${t("printers.table_loading")}
-            .emptyMessage=${t("printers.no_jobs")}
-            .errorMessage=${errorMessage}
-          ></wt-data-table>`,
+          html`<p class="hint">${t("printers.jobs_limit")}</p>
+            <wt-data-table
+              noMatchesMessage=${tableNoMatches()}
+              data-test="jobs-table"
+              viewKey="waitron.printers.jobs.table"
+              customiseColumnsLabel=${t("table.customise_columns")}
+              customiseLabel=${t("table.customise")}
+              restoreColumnsLabel=${t("table.restore_columns")}
+              doneLabel=${t("table.done")}
+              moveColumnLabel=${t("table.move_column")}
+              showColumnLabel=${t("table.show_column")}
+              hideColumnLabel=${t("table.hide_column")}
+              alwaysShownColumnLabel=${t("table.column_always_shown")}
+              lastShownColumnLabel=${t("table.column_last_shown")}
+              columnPositionLabel=${t("table.column_position")}
+              filtersLabel=${t("table.filters")}
+              filteredColumnLabel=${t("table.filtered_column")}
+              filtersClearAllLabel=${t("table.filters_clear_all")}
+              filtersCloseLabel=${t("table.filters_close")}
+              aria-label=${t("printers.jobs_title")}
+              .rows=${this.jobs}
+              .columns=${columns}
+              .rowKey=${(j: PrintJobRow) => j.id}
+              .loading=${this.loading}
+              .loadingMessage=${t("printers.table_loading")}
+              .emptyMessage=${t("printers.no_jobs")}
+              .errorMessage=${errorMessage}
+            ></wt-data-table>`,
       )}
     </section>`;
   }

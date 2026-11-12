@@ -1366,7 +1366,9 @@ A third form is a `wt-spinner decorative` beside a status text that itself annou
 Use `wt-data-table` for sortable administrative collections such as people, devices and printers.
 Define columns and cell content in the consuming screen so domain actions stay outside the
 primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
-replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
+replacing the table with unrelated markup. The Printers screen is the exception: while its "Refresh
+lists" alert shows, it leaves out an empty table whose read failed, with the jobs table's hint, so the
+failure is said once (`#unreadTable`, `apps/dashboard/src/screens/printers-screen.ts`). A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
 Text sort values use `compareLabels` from `@waitron/shared` in the page's language, matching the dashboard pickers:
 number runs compare as exact decimals with either comma or point, so "0,25 kg" precedes
