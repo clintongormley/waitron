@@ -5,7 +5,6 @@ import { nodeMirrorLink } from "./schema/node-mirror-link.js";
 /**
  * A mirror's non-secret link to its box: where it dials to reach the box and how it trusts the
  * box's TLS. `originNodeId` is the PRIMARY this mirror was adopted from, never this node's own id.
- * `originUrl` is stored in the `relay_url` column.
  */
 export interface MirrorConnection {
   originUrl: string;
@@ -21,7 +20,7 @@ export async function readMirrorLink(
 ): Promise<MirrorConnection | null> {
   const [row] = await node
     .select({
-      originUrl: nodeMirrorLink.relayUrl,
+      originUrl: nodeMirrorLink.originUrl,
       boxHostname: nodeMirrorLink.boxHostname,
       boxCaPem: nodeMirrorLink.boxCaPem,
       originNodeId: nodeMirrorLink.originNodeId,
@@ -49,14 +48,12 @@ export async function writeMirrorLinkTx(
   nodeId: string,
   link: MirrorConnection,
 ): Promise<void> {
-  const { originUrl, ...rest } = link;
-  const values = { ...rest, relayUrl: originUrl };
   await tx
     .insert(nodeMirrorLink)
-    .values({ nodeId, ...values })
+    .values({ nodeId, ...link })
     .onConflictDoUpdate({
       target: nodeMirrorLink.nodeId,
-      set: { ...values, adoptedAt: now() },
+      set: { ...link, adoptedAt: now() },
     });
 }
 

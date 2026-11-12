@@ -40,7 +40,7 @@ CREATE TABLE `node_handover_restriction` (
 --> statement-breakpoint
 CREATE TABLE `node_mirror_link` (
 	`node_id` text PRIMARY KEY NOT NULL,
-	`relay_url` text NOT NULL,
+	`origin_url` text NOT NULL,
 	`box_hostname` text NOT NULL,
 	`box_ca_pem` text NOT NULL,
 	`origin_node_id` text NOT NULL,

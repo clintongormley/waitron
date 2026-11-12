@@ -119,7 +119,7 @@ describe("node_mirror_link accessors", () => {
     const error = await captureError(() =>
       Promise.resolve(
         suite.node.run(
-          sql`insert into node_mirror_link (node_id, relay_url, box_hostname, box_ca_pem, origin_node_id, adopted_at) values (${NODE}, 'x', 'x', 'x', ${PRIMARY_NODE}, ${new Date().toISOString()})`,
+          sql`insert into node_mirror_link (node_id, origin_url, box_hostname, box_ca_pem, origin_node_id, adopted_at) values (${NODE}, 'x', 'x', 'x', ${PRIMARY_NODE}, ${new Date().toISOString()})`,
         ),
       ),
     );

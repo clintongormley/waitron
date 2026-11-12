@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "78847760-6e9c-4309-aa3a-7695e4665cd5",
+  "id": "9d29d02f-a932-4e51-b9b6-65b444bcf876",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "node_handover_events": {
@@ -254,8 +254,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "relay_url": {
-          "name": "relay_url",
+        "origin_url": {
+          "name": "origin_url",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

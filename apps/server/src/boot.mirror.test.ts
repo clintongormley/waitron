@@ -86,8 +86,9 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
-// Unreachable on purpose: nothing on these boots dials the relay.
-const MIRROR_RELAY_URL = "http://127.0.0.1:1/";
+// Unreachable on purpose: only a start that is not a spare's dials its link's main box, and the one
+// venue here given a link is a spare.
+const MIRROR_ORIGIN_URL = "http://127.0.0.1:1/";
 const MIRROR_BOX_HOSTNAME = "mirror-box.local";
 // The primary's node id, distinct from the mirror's own `WAITRON_NODE_ID`.
 const MIRROR_ORIGIN_NODE = "77777777-7777-4777-8777-777777777777";
@@ -181,7 +182,7 @@ beforeAll(async () => {
 
   // `noConfig` deliberately gets none.
   await writeMirrorLink(stores.mirror.node, TILL_ENV.WAITRON_NODE_ID, {
-    originUrl: MIRROR_RELAY_URL,
+    originUrl: MIRROR_ORIGIN_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
     originNodeId: MIRROR_ORIGIN_NODE,

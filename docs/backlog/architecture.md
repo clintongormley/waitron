@@ -60,7 +60,7 @@ their full text.
   `scripts/module-graph-honesty.test.ts`, a guard reading the repository's own SQL;
   `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/` on the till's locale (CodeQL did
   not flag it); and `/\/+$/` (written `/\/+$/u` in `mailpit-client.ts`) is still used in
-  `apps/server/src/boot.ts` (a peer relay URL from `node_mirror_link`, owner-written config),
+  `apps/server/src/boot.ts` (the main box's origin URL from `node_mirror_link`),
   `apps/server/src/mailpit-client.ts` (the loopback Mailpit base URL) and
   `apps/server/src/mirror-bundle-fetch.ts` (a URL already parsed by `assertSafePrimaryUrl`) — none of
   the three timed; and the email pattern itself is still copied in `apps/dashboard`
