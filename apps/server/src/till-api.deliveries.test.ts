@@ -184,7 +184,7 @@ async function venue(): Promise<Venue> {
     const offers = await offerProducts(tx, scriptCfg, { orderStart: "counter" });
     const [staff] = await tx
       .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Cashier", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     const [agent] = await tx
       .insert(printAgents)
