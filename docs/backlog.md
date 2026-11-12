@@ -1871,7 +1871,7 @@ Not in any track until the standalone primary is done.
   The controlled Servers-to-spare screen is built and checked on simulated boxes; real-box use
   still waits for real-box qualification. Slice 7’s emergency server flow is checked on simulated
   boxes; Slice 8’s page remains open, with a bounded [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
-  awaiting watcher clearance. Slice 12a will derive unknown intervals from the signed
+  cleared by the watcher on 12 November; the page is not built. Slice 12a will derive unknown intervals from the signed
   declarations in `handover_activations.evidence`, without separate gap tables in Slice 7.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked

@@ -3371,9 +3371,9 @@ qualification).
 
 ### Slice 8 — Emergency declaration page and guide
 
-**2026-11-12 proposal:** the bounded [page plan](2026-11-12-a1018-8-emergency-page.md)
+**2026-11-12, cleared by the watcher:** the bounded [page plan](2026-11-12-a1018-8-emergency-page.md)
 accounts for the current API, the one-way declaration decision and Lane A’s checked-address
-persistence. It awaits watcher clearance; the original steps below remain historical.
+persistence. The original steps below remain historical.
 
 Not fiscal. Lands after Slices 6 and 7.
 
