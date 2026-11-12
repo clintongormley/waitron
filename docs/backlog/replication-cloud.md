@@ -1128,7 +1128,9 @@ box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742);
 takes the venue's certificate authority as its own) as
 [#2761](https://github.com/clintongormley/waitron/pull/2761); 3b-4 (box-to-box calls find a `.local` box by
 asking the network, a spare listens on the venue's network, and what it serves there is walked by a
-test) as [#2779](https://github.com/clintongormley/waitron/pull/2779). 3b-5a to 3b-F and slices 3c onwards are still open;
+test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
+the main box refuses before reserving anything and hands out the pair's access key and its backup settings). 3b-5b to 3b-F
+and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
