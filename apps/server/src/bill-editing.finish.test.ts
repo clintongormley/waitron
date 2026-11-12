@@ -81,6 +81,7 @@ async function ask(p: Fixture, mode: Mode, expectedEdits: unknown, actor = venue
       method: "POST",
       headers: { "content-type": "application/json", cookie: adminCookie },
       body: JSON.stringify({
+        billId: p.billId,
         expectedPartyRevision: p.revision,
         expectedEdits,
         reason: "Guests left",
@@ -179,6 +180,11 @@ for (const mode of modes)
         a.billId.localeCompare(b.billId),
       );
       const owned = await own({ ...p, billId: second });
+      if (mode === "departure-http") {
+        expect(await ask(p, mode, old)).toMatchObject({ state: "open" });
+        expect(await edit(second)).toEqual(owned.edit);
+        return;
+      }
       await refused(p, mode, old, "draft.out_of_date", {
         billId: second,
         draftId: owned.draft!.id,

@@ -7,7 +7,20 @@ import {
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notInArray,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Column, SQL } from "drizzle-orm";
 import { productUnits, staffPresentationName, unitOwnerJoin, units } from "@waitron/catalogue";
 import { countsWholePortions } from "./order-state-counts.js";
@@ -23,6 +36,7 @@ import {
   orderDraftLines,
   orderDrafts,
   ticketItems,
+  unpaidDepartures,
   parties,
   products,
   workingOrderLines,
@@ -545,11 +559,13 @@ export async function fireHeldLine(
           quantity: workingOrderLines.quantity,
           workingOrderId: workingOrderLines.workingOrderId,
           billStatus: workingOrders.status,
+          departureId: unpaidDepartures.id,
           state: orderGroups.state,
         })
         .from(workingOrderLines)
         .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
         .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+        .leftJoin(unpaidDepartures, eq(unpaidDepartures.workingOrderId, workingOrders.id))
         .where(
           and(
             eq(workingOrderLines.id, lineId),
@@ -561,7 +577,7 @@ export async function fireHeldLine(
         );
       if (line === undefined) throw new AppError("group.not_found", { lineId });
       if (line.state !== "held") throw new AppError("group.not_held", { groupId: line.groupId! });
-      if (line.billStatus === "abandoned")
+      if (line.billStatus === "abandoned" || line.departureId !== null)
         throw new AppError("tab.not_open", { tabId: line.workingOrderId });
       const cancelled = (await readLineCancellations(tx, [lineId])).get(lineId) ?? 0;
       if (line.quantity <= cancelled)
@@ -972,7 +988,13 @@ async function activeGroupLines(tx: Transaction, groupId: string) {
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)))
+    .where(
+      and(
+        eq(workingOrderLines.groupId, groupId),
+        isNull(workingOrderLines.parentLineId),
+        onShownBill(),
+      ),
+    )
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
   const cancellations = await readLineCancellations(
     tx,
@@ -2001,16 +2023,21 @@ export interface CurrentOrders {
   ungrouped: CurrentOrderRow[];
 }
 
-/** The bills Current orders shows, and serving acts on: every one but an abandoned bill. */
+/** Recorded debts retain their financial history but no longer take part in table service. */
 export function onShownBill(): SQL {
-  return ne(workingOrders.status, "abandoned");
+  return and(
+    ne(workingOrders.status, "abandoned"),
+    notInArray(
+      workingOrders.id,
+      sql`(select ${unpaidDepartures.workingOrderId} from ${unpaidDepartures})`,
+    ),
+  )!;
 }
 
 /**
  * The party's Current orders: its groups in sequence with their dish rows, and the rows in no
  * group, across every bill of the party and of every party merged into it, paid ones included; rows
- * bill by bill in the order the bills were opened. An abandoned bill's lines are left out, as the
- * kitchen's reads leave them out. A row whose group belongs to another party's sequence (on a party
+ * bill by bill in the order the bills were opened. Recorded debts and abandoned bills are left out. A row whose group belongs to another party's sequence (on a party
  * merged away, whose groups moved on) is shown there, not here. Refused `party.not_open` for an
  * unknown party.
  */

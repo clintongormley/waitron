@@ -890,7 +890,11 @@ describe("cancelling a placed order whose invoice was issued", () => {
       supervisorCookie,
       "POST",
       `/api/parties/${party.partyId}/unpaid-departure`,
-      { expectedPartyRevision: party.revision, reason: "Se marcharon sin pagar" },
+      {
+        billId: party.tabId,
+        expectedPartyRevision: party.revision,
+        reason: "Se marcharon sin pagar",
+      },
     );
     expect(departed.status).toBe(200);
     expect(await statusOf(venue, party.tabId)).toBe("placed");
@@ -1833,7 +1837,11 @@ describe("a party's bills name the invoice and its credit notes (GET /api/partie
       supervisorCookie,
       "POST",
       `/api/parties/${party.partyId}/unpaid-departure`,
-      { expectedPartyRevision: party.revision, reason: "Se marcharon sin pagar" },
+      {
+        billId: party.tabId,
+        expectedPartyRevision: party.revision,
+        reason: "Se marcharon sin pagar",
+      },
     );
     expect(departed.status).toBe(200);
     return party;

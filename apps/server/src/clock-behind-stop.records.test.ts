@@ -473,8 +473,9 @@ describe("a held-order save", () => {
 });
 
 describe("an unpaid departure", () => {
-  function depart(app: Hono, partyId: string, pin = ADMIN_PIN) {
+  function depart(app: Hono, partyId: string, billId: string, pin = ADMIN_PIN) {
     return send(app, venue.cookie, "POST", `/api/parties/${partyId}/unpaid-departure`, {
+      billId,
       expectedPartyRevision: revisionOfParty(partyId),
       reason: REASON,
       override: { personId: venue.adminId, pin },
@@ -494,7 +495,7 @@ describe("an unpaid departure", () => {
     const party = await seatedWith(venueAt(now), "Red wine bottle");
     const behind = now - 10 * MINUTE;
 
-    const answer = await depart(at(behind), party.partyId);
+    const answer = await depart(at(behind), party.partyId, party.tabId);
 
     expect(answer.status).toBe(409);
     expect(answer.json).toEqual(behindChain(behind));
@@ -508,7 +509,7 @@ describe("an unpaid departure", () => {
     const now = nowMs();
     const party = await seatedWith(venueAt(now), "Red wine bottle");
 
-    const answer = await depart(at(now - INSIDE), party.partyId);
+    const answer = await depart(at(now - INSIDE), party.partyId, party.tabId);
 
     expect(answer.status).toBe(200);
     expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
@@ -521,7 +522,7 @@ describe("an unpaid departure", () => {
     const behind = now - 10 * MINUTE;
     const records = allRecords();
 
-    const answer = await depart(at(behind), party.partyId);
+    const answer = await depart(at(behind), party.partyId, placedId);
 
     expect(answer.status).toBe(409);
     expect(answer.json).toEqual(behindChain(behind));
@@ -533,10 +534,10 @@ describe("an unpaid departure", () => {
 
   it("records the departure of a bill whose invoice was already filed a minute inside, filing nothing", async () => {
     const now = nowMs();
-    const { party } = await withFiledInvoice(now);
+    const { party, placedId } = await withFiledInvoice(now);
     const records = allRecords();
 
-    const answer = await depart(at(now - INSIDE), party.partyId);
+    const answer = await depart(at(now - INSIDE), party.partyId, placedId);
 
     expect(answer.status).toBe(200);
     expect(allRecords()).toBe(records);
@@ -566,13 +567,13 @@ describe("an unpaid departure", () => {
     );
 
     for (let i = 0; i < 4; i += 1) {
-      const wrong = await depart(app, party.partyId, "0000");
+      const wrong = await depart(app, party.partyId, party.tabId, "0000");
       expect({ status: wrong.status, code: wrong.json.code }).toEqual({
         status: 401,
         code: "pin.invalid",
       });
     }
-    const throttled = await depart(app, party.partyId);
+    const throttled = await depart(app, party.partyId, party.tabId);
 
     expect({ status: throttled.status, code: throttled.json.code }).toEqual({
       status: 429,

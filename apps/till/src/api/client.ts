@@ -1194,8 +1194,9 @@ export interface BillRefundResult {
   balance: BillBalance;
 }
 
-/** `POST /api/parties/:id/unpaid-departure`: the party's guests left without paying. */
+/** `POST /api/parties/:id/unpaid-departure`: one bill left unpaid. */
 export interface UnpaidDepartureRequest {
+  billId: string;
   expectedEdits: BillEditExpected[];
   expectedPartyRevision: number;
   reason: string;
@@ -1204,7 +1205,7 @@ export interface UnpaidDepartureRequest {
 
 /** Each bill the departure left unpaid, with the invoice it owes on. */
 export interface UnpaidDepartureResult {
-  state: "closed";
+  state: "open" | "closed";
   departures: {
     id: string;
     workingOrderId: string;
@@ -2129,6 +2130,7 @@ export interface PartyBill {
   /** The name staff gave the bill; null when it has none. */
   billName: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
+  leftUnpaid?: boolean;
   total: string;
   outstanding: string;
   /** A payment is pending or received on the bill, which the single payment refuses. */
@@ -3799,12 +3801,6 @@ export class TillApi {
     );
   }
 
-  /**
-   * The party's guests left without paying → `POST /api/parties/:partyId/unpaid-departure`: each
-   * bill still to pay with no invoice yet is invoiced for its full amount, each invoice still owing
-   * is recorded unpaid and one owing nothing is settled, and the party closes as Finish closes it.
-   * Refusals: the route in `apps/server/src/unpaid-departure-api.ts` and what it calls.
-   */
   recordUnpaidDeparture(
     partyId: string,
     request: UnpaidDepartureRequest,

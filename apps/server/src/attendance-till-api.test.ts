@@ -152,6 +152,7 @@ describe("till attendance recorder admission", () => {
         method: "POST",
         headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
         body: JSON.stringify({
+          billId: tabId,
           expectedPartyRevision: 0,
           expectedEdits: await withTransaction(suite.db, (tx) => closingEditsForTest(tx, partyId)),
           reason: "Guests left",

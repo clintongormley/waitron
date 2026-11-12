@@ -557,11 +557,12 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     };
   },
   "an unpaid departure": async () => {
-    const { partyId } = await seatedWith(venue, "Red wine bottle");
+    const { partyId, tabId } = await seatedWith(venue, "Red wine bottle");
     const [party] = venue.db.all<{ revision: number }>(
       sql`select revision from parties where id = ${partyId}`,
     );
     const body = {
+      billId: tabId,
       expectedPartyRevision: party!.revision,
       reason: "Left without paying",
       override: OVERRIDE(),

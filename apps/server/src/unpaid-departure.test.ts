@@ -3,7 +3,11 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { closingEditsForTest } from "./testing/party-close-fixture.js";
+import {
+  closingEditsForTest,
+  readBillsOfParties,
+  billOwes,
+} from "./testing/party-close-fixture.js";
 import { addTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -72,11 +76,6 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
-// Record unpaid departure (spec §8; service plan Task 17; owner's Q28 decision of 2026-10-01): an
-// owing bill with no invoice yet is invoiced for its full amount and a bill already invoiced keeps
-// its invoice; each invoice still owing something is left unpaid and recorded with who recorded and
-// who authorised it, one owing nothing is settled, and the party closes as Finish closes it. Driven
-// over HTTP against a venue that files real Veri*Factu records; every case seats its own party.
 let venue: BillVenue;
 let ticketThenPayZone: string;
 let prepayZone: string;
@@ -141,8 +140,12 @@ useVenueDb({
   },
 });
 
-function depart(partyId: string, body: Record<string, unknown>, cookie = supervisorCookie) {
-  return send(venue.app, cookie, "POST", `/api/parties/${partyId}/unpaid-departure`, body);
+async function depart(partyId: string, body: Record<string, unknown>, cookie = supervisorCookie) {
+  const bills = (await readBillsOfParties(venue.db, [partyId])).get(partyId)!;
+  return send(venue.app, cookie, "POST", `/api/parties/${partyId}/unpaid-departure`, {
+    billId: (bills.find(billOwes) ?? bills[0])?.workingOrderId,
+    ...body,
+  });
 }
 
 function revisionOf(partyId: string): number {
@@ -653,6 +656,23 @@ describe("a supervisor's PIN on a departure", () => {
 });
 
 describe("the reason", () => {
+  it.each([undefined, null, "", "not-a-bill"])(
+    "requires the selected bill id (%s)",
+    async (billId) => {
+      const party = await seatedWith(venue, "Red wine bottle");
+      const answer = await depart(party.partyId, {
+        billId,
+        expectedPartyRevision: party.revision,
+        reason: REASON,
+      });
+      expect(answer).toMatchObject({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "billId" } },
+      });
+      await expectNothingWritten(party.partyId, party.tabId);
+    },
+  );
+
   it.each([
     ["missing", undefined],
     ["blank", "   "],
@@ -709,6 +729,7 @@ describe("bills already presented", () => {
     const [invoiced] = await salesOf(placedId);
 
     const answer = await depart(party.partyId, {
+      billId: placedId,
       expectedPartyRevision: revisionOf(party.partyId),
       reason: REASON,
     });
@@ -719,8 +740,8 @@ describe("bills already presented", () => {
     expect(await departuresOf(placedId)).toEqual([
       expect.objectContaining({ saleId: invoiced!.id, amount: 1558 }),
     ]);
-    expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
-    expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 300 })]);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
+    expect(await departuresOf(party.tabId)).toEqual([]);
   });
 
   it("invoices in full a bill placed without an invoice", async () => {
@@ -729,6 +750,7 @@ describe("bills already presented", () => {
     expect(await salesOf(placedId)).toEqual([]);
 
     const answer = await depart(party.partyId, {
+      billId: placedId,
       expectedPartyRevision: revisionOf(party.partyId),
       reason: REASON,
     });
@@ -766,6 +788,7 @@ describe("bills already presented", () => {
     });
 
     const answer = await depart(party.partyId, {
+      billId: id,
       expectedPartyRevision: revisionOf(party.partyId),
       reason: REASON,
     });
@@ -824,6 +847,7 @@ describe("a presented bill whose card is in flight", () => {
         const before = snapshot();
         const revision = revisionOf(party.partyId);
         const answer = await depart(party.partyId, {
+          billId: placedId,
           expectedPartyRevision: revision,
           reason: REASON,
         });
@@ -871,6 +895,7 @@ describe("a presented bill whose card is in flight", () => {
       const revision = revisionOf(party.partyId);
 
       const answer = await depart(party.partyId, {
+        billId: placedId,
         expectedPartyRevision: revision,
         reason: REASON,
       });
@@ -894,6 +919,7 @@ describe("a presented bill whose card is in flight", () => {
       expect(await pay(placedId)).toEqual({ status: 200, json: { outcome: "declined" } });
 
       const answer = await depart(party.partyId, {
+        billId: placedId,
         expectedPartyRevision: revisionOf(party.partyId),
         reason: REASON,
       });
@@ -905,7 +931,7 @@ describe("a presented bill whose card is in flight", () => {
         expect.objectContaining({ saleId: invoiced!.id, amount: 1800 }),
       ]);
       expect(cardPaymentsOf(placedId)).toEqual([{ state: "failed", saleId: null }]);
-      expect((await partyState(party.partyId)).state).toBe("closed");
+      expect((await partyState(party.partyId)).state).toBe("open");
     });
   });
   it("refuses a departure while a card captured for the party's second presented bill is not yet on a sale, writing nothing", async () => {
@@ -917,7 +943,11 @@ describe("a presented bill whose card is in flight", () => {
     const before = snapshot();
     const revision = revisionOf(party.partyId);
 
-    const answer = await depart(party.partyId, { expectedPartyRevision: revision, reason: REASON });
+    const answer = await depart(party.partyId, {
+      billId: secondId,
+      expectedPartyRevision: revision,
+      reason: REASON,
+    });
 
     expect(answer).toMatchObject({
       status: 409,
@@ -947,6 +977,16 @@ describe("a bill that owes nothing", () => {
     });
 
     expect(answer.status).toBe(200);
+    expect((await partyState(party.partyId)).state).toBe("open");
+    expect(
+      (
+        await depart(party.partyId, {
+          billId: placedId,
+          expectedPartyRevision: revisionOf(party.partyId),
+          reason: REASON,
+        })
+      ).status,
+    ).toBe(200);
     expect(answer.json.departures).toEqual([
       expect.objectContaining({ workingOrderId: party.tabId, amount: "30.00" }),
     ]);
@@ -985,9 +1025,17 @@ describe("a bill that owes nothing", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(answer.json.departures).toEqual([
-      expect.objectContaining({ workingOrderId: luis.tabId, amount: "30.00" }),
-    ]);
+    expect(answer.json.departures).toEqual([]);
+    expect(
+      (
+        await depart(ana.partyId, {
+          billId: luis.tabId,
+          expectedPartyRevision: revisionOf(ana.partyId),
+          reason: REASON,
+        })
+      ).status,
+    ).toBe(200);
+    expect(await departuresOf(luis.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
     expect(await departuresOf(ana.tabId)).toEqual([]);
     expect(fiscalRecordCount(venue, ana.tabId)).toBe(1);
     const [given] = await salesOf(ana.tabId);
@@ -1100,22 +1148,28 @@ describe("two departures at once, and a failure part-way", () => {
   it("records a party once when two departures of it are sent together", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
-    const body = { expectedPartyRevision: revisionOf(party.partyId), reason: REASON };
+    const body = {
+      billId: party.tabId,
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    };
 
     const answers = await Promise.all([depart(party.partyId, body), depart(party.partyId, body)]);
 
     expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
     expect(answers.find((answer) => answer.status === 409)!.json).toMatchObject({
-      code: "party.not_open",
+      code: "party.out_of_date",
     });
-    for (const billId of [party.tabId, placedId]) {
+    for (const billId of [party.tabId]) {
       expect(await salesOf(billId)).toHaveLength(1);
       expect(fiscalRecordCount(venue, billId)).toBe(1);
       expect(await departuresOf(billId)).toHaveLength(1);
     }
+    expect(await salesOf(placedId)).toEqual([]);
+    expect(await departuresOf(placedId)).toEqual([]);
   });
 
-  it("keeps nothing when filing the second bill's invoice fails after the first was filed", async () => {
+  it("keeps nothing when filing the selected bill’s invoice fails", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
     let filed = 0;
@@ -1124,7 +1178,7 @@ describe("two departures at once, and a failure part-way", () => {
         if (property === "recordSale") {
           return (...args: Parameters<FiscalBackend["recordSale"]>) => {
             filed += 1;
-            if (filed === 2) throw new Error("the second invoice could not be filed");
+            if (filed === 1) throw new Error("the selected invoice could not be filed");
             return target.recordSale(...args);
           };
         }
@@ -1155,13 +1209,14 @@ describe("two departures at once, and a failure part-way", () => {
       "POST",
       `/api/parties/${party.partyId}/unpaid-departure`,
       {
+        billId: party.tabId,
         expectedPartyRevision: revisionOf(party.partyId),
         expectedEdits: await inTx(venue, (tx) => closingEditsForTest(tx, party.partyId)),
         reason: REASON,
       },
     );
 
-    expect(filed).toBe(2);
+    expect(filed).toBe(1);
     expect(answer.status).toBe(500);
     await expectNothingWritten(party.partyId, party.tabId);
     await expectNothingWritten(party.partyId, placedId, "placed");
@@ -1759,11 +1814,22 @@ describe("a merged party", () => {
     expect(joined.status).toBe(200);
 
     const answer = await depart(ana.partyId, {
+      billId: ana.tabId,
       expectedPartyRevision: revisionOf(ana.partyId),
       reason: REASON,
     });
 
     expect(answer.status).toBe(200);
+    expect(answer.json.state).toBe("open");
+    expect(
+      (
+        await depart(ana.partyId, {
+          billId: luis.tabId,
+          expectedPartyRevision: revisionOf(ana.partyId),
+          reason: REASON,
+        })
+      ).status,
+    ).toBe(200);
     expect(fiscalRecordCount(venue, ana.tabId)).toBe(1);
     expect(fiscalRecordCount(venue, luis.tabId)).toBe(1);
     expect(await departuresOf(ana.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
@@ -1772,7 +1838,7 @@ describe("a merged party", () => {
     expect(await tableHeldBy(luis.tableId)).toBeNull();
   });
 
-  it("A803 departure order: invoices the bill opened first first, when its bill number is the higher one", async () => {
+  it("invoices merged bills in the order staff mark them unpaid", async () => {
     const ana = await seatedWith(venue, "Red wine bottle");
     const luis = await seatedWith(venue, "Octopus");
     const joined = await send(
@@ -1800,11 +1866,21 @@ describe("a merged party", () => {
     expect([numberOf(luis.tabId), numberOf(ana.tabId)]).toEqual([1, 2]);
 
     const answer = await depart(luis.partyId, {
+      billId: ana.tabId,
       expectedPartyRevision: revisionOf(luis.partyId),
       reason: REASON,
     });
 
     expect(answer.status).toBe(200);
+    expect(
+      (
+        await depart(luis.partyId, {
+          billId: luis.tabId,
+          expectedPartyRevision: revisionOf(luis.partyId),
+          reason: REASON,
+        })
+      ).status,
+    ).toBe(200);
     const filed = (billId: string) => {
       const [row] = venue.db.all<{ number: number; num: string; previous: string | null }>(sql`
         select s.invoice_number as number, r.num_serie_factura as num,

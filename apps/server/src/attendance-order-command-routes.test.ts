@@ -222,6 +222,7 @@ describe("accepted till order command attendance", () => {
         "POST",
         `/api/parties/${party.partyId}/unpaid-departure`,
         {
+          billId: party.tabId,
           expectedEdits: await closingEditsForTest(suite.db, party.partyId),
           expectedPartyRevision: party.revision,
           reason: "Guests left",

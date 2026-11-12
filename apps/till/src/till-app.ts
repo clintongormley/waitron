@@ -1341,9 +1341,10 @@ interface BillRefunding extends PayingOrder {
   reasonsLoading: boolean;
 }
 
-/** The unpaid departure dialog, opened from the refusal of Finish table on party `partyId`. */
+/** A selected bill and its opening observations, retained through PIN approval. */
 interface Departing {
   composition: BillComposition;
+  bill: DepartingBill;
   id: number;
   partyId: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
@@ -11978,7 +11979,9 @@ export class TillApp extends LitElement {
       bills.bills !== null &&
       this.orderParty?.id === bills.partyId
     ) {
-      const outstanding = sumDecimals(bills.bills.map((bill) => decimal(bill.outstanding)));
+      const outstanding = sumDecimals(
+        bills.bills.filter((bill) => !bill.leftUnpaid).map((bill) => decimal(bill.outstanding)),
+      );
       this.orderParty = {
         ...this.orderParty,
         outstanding: toScale(outstanding, MONEY_SCALE),
@@ -17864,33 +17867,35 @@ export class TillApp extends LitElement {
     await this.#refreshFloor();
   }
 
-  /** Record unpaid departure, offered beside Take payment when Finish is refused: its dialog opens. */
-  #onRecordUnpaidDeparture(): void {
+  #onRecordUnpaidDeparture(event: Event): void {
+    const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     const party = this.orderParty;
-    if (party === null || this.departing !== null) return;
-    const composition = this.#billComposition(this.partyBills.map((bill) => bill.workingOrderId));
+    const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
+    if (
+      party === null ||
+      this.departing !== null ||
+      bill === undefined ||
+      bill.leftUnpaid ||
+      !owing(bill) ||
+      compareDecimal(decimal(bill.amountDue ?? bill.outstanding), decimal("0")) <= 0 ||
+      this.activeTabId !== workingOrderId
+    )
+      return;
+    const composition = this.#billComposition(this.partyBills.map((row) => row.workingOrderId));
     if (composition === null || !this.#billCompositionUnchanged(composition)) return;
     this.departing = {
       composition,
+      bill: {
+        workingOrderId,
+        name: billName(party.displayName, bill),
+        outstanding: bill.amountDue ?? bill.outstanding,
+      },
       id: ++this.#departings,
       partyId: party.id,
       reason: "",
       refusal: null,
       busy: false,
     };
-  }
-
-  /** The bills the departure leaves unpaid: those still owing something, named as the table
-   * screen names them. An invoiced bill owes what the departure records for it, its invoice's
-   * amount due: its total plus its credit notes. */
-  #departingBills(): DepartingBill[] {
-    const party = this.orderParty?.displayName ?? "";
-    return shownBills(this.partyBills).flatMap((bill) => {
-      const due = bill.amountDue ?? bill.outstanding;
-      return owing(bill) && compareDecimal(decimal(due), decimal("0")) > 0
-        ? [{ workingOrderId: bill.workingOrderId, name: billName(party, bill), outstanding: due }]
-        : [];
-    });
   }
 
   #departingNow(id: number): Departing | null {
@@ -17937,11 +17942,19 @@ export class TillApp extends LitElement {
       return;
     }
     const asked = open.composition;
-    if (!this.#billCompositionUnchanged(asked)) return;
+    if (!this.#billCompositionCurrent(asked) || this.#orderVisit !== asked.visit) return;
+    const selectedEdit = asked.expectedEdits.find(
+      (edit) => edit.billId === open.bill.workingOrderId,
+    )!;
+    if (!this.#billChoiceCurrent(selectedEdit)) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
     const live = () => this.api === asked.api && this.#operatorSession === asked.session;
     const sending: Departing = { ...open, refusal: null, busy: true };
     this.departing = sending;
     const request: UnpaidDepartureRequest = {
+      billId: open.bill.workingOrderId,
       expectedPartyRevision: asked.revisions.expectedPartyRevision!,
       expectedEdits: asked.expectedEdits,
       reason: open.reason,
@@ -17951,8 +17964,9 @@ export class TillApp extends LitElement {
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let sends = 0;
+    let state: "open" | "closed";
     try {
-      await this.#resend(
+      const result = await this.#resend(
         (signal) => {
           sends++;
           return asked.api.recordUnpaidDeparture(party.id, request, { signal });
@@ -17960,13 +17974,33 @@ export class TillApp extends LitElement {
         limit.signal,
         live,
       );
+      state = result.state;
     } catch (error) {
       if (!live()) return;
-      // The server closes the party in the departure's own transaction, so a resend that finds it
-      // closed most likely follows a first send that was recorded but whose answer was lost.
-      if (sends > 1 && refusalOf(error).code === "party.not_open") {
-        await this.#onDepartureRecorded(open.id, party.id, visit, sent);
-        if (sent.session === this.#operatorSession) this.errorKey = "departure.probably_recorded";
+      if (sends > 1) {
+        try {
+          const bills = await asked.api.getPartyBills(party.id);
+          if (!live()) return;
+          if (
+            bills.some(
+              (bill) => bill.workingOrderId === open.bill.workingOrderId && bill.leftUnpaid,
+            )
+          ) {
+            const tables = await asked.api.getTablesState();
+            if (!live()) return;
+            state = tables.some((table) => table.party?.id === party.id) ? "open" : "closed";
+            await this.#onDepartureRecorded(open.id, party.id, visit, sent, state);
+            return;
+          }
+        } catch {
+          /* Keep the uncertain request available for confirmation. */
+        }
+        await this.#onDepartureRefused(
+          sending,
+          new TypeError("Unconfirmed departure"),
+          false,
+          sent,
+        );
         return;
       }
       await this.#onDepartureRefused(sending, error, override === undefined, sent);
@@ -17974,18 +18008,23 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
     }
-    if (live()) await this.#onDepartureRecorded(open.id, party.id, visit, sent);
+    if (live()) await this.#onDepartureRecorded(open.id, party.id, visit, sent, state);
   }
 
-  /** The dialog closes and the table leaves the screen as a finished one does. */
   async #onDepartureRecorded(
     id: number,
     partyId: string,
     visit: number,
     sent: Sent,
+    state: "open" | "closed",
   ): Promise<void> {
     if (this.#departingNow(id) !== null) this.#closeDeparting();
-    await this.#onTableClosed(partyId, visit, sent);
+    if (state === "closed") await this.#onTableClosed(partyId, visit, sent);
+    else if (!this.#hasLeftParty(partyId, sent)) {
+      this.finishRefused = false;
+      const billId = this.activeTabId;
+      if (billId !== undefined) await this.#rereadAmounts(billId, visit);
+    }
   }
 
   /** The people who can approve the departure in dialog `id` are read, and their PIN prompt opens. */
@@ -18235,7 +18274,7 @@ export class TillApp extends LitElement {
     const open = this.departing;
     if (open === null) return nothing;
     return html`<till-unpaid-departure-dialog
-        .bills=${this.#departingBills()}
+        .bill=${open.bill}
         .refusal=${open.refusal}
         .busy=${open.busy}
         @unpaid-departure-continue=${(event: Event) => void this.#onDepartureContinue(event)}
@@ -21193,7 +21232,7 @@ export class TillApp extends LitElement {
         @merge-bills=${(event: Event) => void this.#ownBillsChange(() => this.#onMergeBills(event))}
         @move-dishes=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveDishes(event))}
         @finish-table=${() => void this.#onFinishTable()}
-        @record-unpaid-departure=${() => this.#onRecordUnpaidDeparture()}
+        @record-unpaid-departure=${(event: Event) => this.#onRecordUnpaidDeparture(event)}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onSwitchBill(event)}

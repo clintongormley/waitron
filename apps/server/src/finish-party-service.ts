@@ -271,7 +271,9 @@ async function readFinishState(tx: Transaction, args: FinishStateArgs) {
       and(
         inArray(
           workingOrders.id,
-          bills.filter((bill) => bill.status === "settled").map((bill) => bill.id),
+          bills
+            .filter((bill) => bill.status === "settled" && !bill.leftUnpaid)
+            .map((bill) => bill.id),
         ),
         isNull(workingOrderLines.parentLineId),
       ),

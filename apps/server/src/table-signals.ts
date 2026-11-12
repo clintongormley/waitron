@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   parentJoin,
@@ -20,7 +20,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { classifyBand, worstBand, compareStationNames } from "@waitron/shared";
 import type { KitchenSignal, ReadyAtStation, TableSignal } from "@waitron/shared";
-import { readHeldCounts } from "./order-groups.js";
+import { readHeldCounts, onShownBill } from "./order-groups.js";
 import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
@@ -206,7 +206,10 @@ export async function readPartySignals(
   const partyIds = seated.map((party) => party.id);
   if (partyIds.length === 0) return new Map();
   const billsOf = new Map(
-    partyIds.map((id) => [id, facts.get(id)!.bills.filter((bill) => bill.status !== "abandoned")]),
+    partyIds.map((id) => [
+      id,
+      facts.get(id)!.bills.filter((bill) => bill.status !== "abandoned" && !bill.leftUnpaid),
+    ]),
   );
   const kitchen = groupBy(
     await readKitchenLines(
@@ -231,7 +234,7 @@ export async function readPartySignals(
       and(
         inArray(orderGroups.partyId, partyIds),
         eq(orderGroups.state, "held"),
-        ne(workingOrders.status, "abandoned"),
+        onShownBill(),
         sql`not ${productSellable}`,
       ),
     )

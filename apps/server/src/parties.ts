@@ -13,6 +13,7 @@ import {
   partyTables,
   parties,
   ticketItems,
+  unpaidDepartures,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -79,6 +80,7 @@ export interface PartyBill {
   /** The name staff gave the bill; null when it has none. */
   billName: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
+  leftUnpaid?: boolean;
   total: string;
   /**
    * What is still to pay: the total of an open or placed bill less the money received against it
@@ -615,6 +617,7 @@ export async function readPartyBills(
       billNumber: bill.billNumber,
       billName: bill.billName,
       status: bill.status,
+      leftUnpaid: bill.leftUnpaid,
       total: bill.total,
       outstanding: bill.outstanding,
       hasPayments: bill.hasPayments,
@@ -664,10 +667,12 @@ export async function readBillsOfParties(
       partyId: workingOrders.partyId,
       label: workingOrders.label,
       status: workingOrders.status,
+      leftUnpaid: sql<boolean>`${unpaidDepartures.id} is not null`.mapWith(Boolean),
       total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
       lines: sql<number>`count(${workingOrderLines.id})`,
     })
     .from(workingOrders)
+    .leftJoin(unpaidDepartures, eq(unpaidDepartures.workingOrderId, workingOrders.id))
     .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .where(inArray(workingOrders.partyId, members))
     .groupBy(workingOrders.id)
@@ -701,6 +706,7 @@ export async function readBillsOfParties(
       billNumber: abandoned ? null : (identity?.number ?? null),
       billName: identity?.name ?? null,
       status: row.status,
+      leftUnpaid: row.leftUnpaid,
       total,
       outstanding: owing
         ? outstandingOf(total, received.get(row.workingOrderId))
@@ -865,22 +871,30 @@ export async function closePartyTables(tx: Transaction, partyId: string): Promis
 export async function readFamilyBills(
   tx: Transaction,
   family: readonly string[],
-): Promise<{ id: string; status: PartyBill["status"]; lines: number }[]> {
+): Promise<{ id: string; status: PartyBill["status"]; lines: number; leftUnpaid: boolean }[]> {
   return tx
     .select({
       id: workingOrders.id,
       status: workingOrders.status,
+      leftUnpaid: sql<boolean>`${unpaidDepartures.id} is not null`.mapWith(Boolean),
       lines: sql<number>`count(${workingOrderLines.id})`,
     })
     .from(workingOrders)
+    .leftJoin(unpaidDepartures, eq(unpaidDepartures.workingOrderId, workingOrders.id))
     .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .where(inArray(workingOrders.partyId, [...family]))
     .groupBy(workingOrders.id);
 }
 
-/** A bill still to pay: presented, or open with a line on it. */
-export function billOwes(bill: { status: PartyBill["status"]; lines: number }): boolean {
-  return bill.status === "placed" || (bill.status === "open" && bill.lines > 0);
+/** A bill that still blocks finishing service; recorded debts are collected separately. */
+export function billOwes(bill: {
+  status: PartyBill["status"];
+  lines: number;
+  leftUnpaid?: boolean;
+}): boolean {
+  return (
+    !bill.leftUnpaid && (bill.status === "placed" || (bill.status === "open" && bill.lines > 0))
+  );
 }
 
 /** The table is ready for the next party. Clearing a table that does not need it is not refused. */

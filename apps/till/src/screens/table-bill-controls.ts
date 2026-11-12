@@ -5,8 +5,8 @@ import type { PartyBill, TableParty } from "../api/client.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
 
-/** What a bill still owes, or "Paid" once it is settled. */
 function owes(bill: PartyBill): string {
+  if (bill.leftUnpaid && bill.status !== "settled") return t("departure.left_unpaid");
   return bill.status === "settled"
     ? t("table.bill_paid")
     : formatMoney(decimal(bill.outstanding), currentLocale());

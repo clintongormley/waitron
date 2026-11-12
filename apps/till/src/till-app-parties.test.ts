@@ -10394,13 +10394,6 @@ describe("till-app: recording an unpaid departure", () => {
     state: "closed",
     departures: [
       { id: "ud-1", workingOrderId: "wo-4", saleId: "s-4", invoiceNumber: "F-4", amount: "14.00" },
-      {
-        id: "ud-2",
-        workingOrderId: "wo-check",
-        saleId: "s-5",
-        invoiceNumber: "F-5",
-        amount: "30.00",
-      },
     ],
   };
   const dialog = (el: TillApp) =>
@@ -10410,7 +10403,6 @@ describe("till-app: recording an unpaid departure", () => {
       "till-supervisor-override-dialog[data-departure-approval]",
     );
 
-  /** Finish is refused for an unpaid bill, and the refusal's Record unpaid departure is pressed. */
   async function openDeparture(
     overrides: Record<string, unknown> = {},
     props: Partial<TillApp> = {},
@@ -10429,8 +10421,7 @@ describe("till-app: recording an unpaid departure", () => {
     const order = await openPartyTable(mounted.el);
     emit(order, "finish-table", {});
     await flush(mounted.el);
-    const screen = tableOrder(mounted.el)!.shadowRoot!;
-    screen.querySelector<HTMLElement>("[data-finish-refusal] [data-record-departure]")!.click();
+    emit(tableOrder(mounted.el)!, "record-unpaid-departure", { workingOrderId: "wo-4" });
     await flush(mounted.el);
     return mounted;
   }
@@ -10470,13 +10461,31 @@ describe("till-app: recording an unpaid departure", () => {
     expect(updateBar(el)).not.toBeNull();
   });
 
+  it("records the selected bill and refreshes a table that stays open", async () => {
+    const { el } = await openDeparture({
+      recordUnpaidDeparture: vi
+        .fn()
+        .mockResolvedValue({ state: "open", departures: [recorded.departures[0]] }),
+    });
+    await typeReason(el, "Guest left");
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ billId: "wo-4" }),
+      expect.anything(),
+    );
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
   it("opens over the table and shows each bill left unpaid, named as the table screen names it", async () => {
     const { el } = await openDeparture();
 
-    expect(dialog(el)!.bills).toEqual([
-      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
-      { workingOrderId: "wo-check", name: "4 · Bill 2", outstanding: "30.00" },
-    ]);
+    expect(dialog(el)!.bill).toEqual({
+      workingOrderId: "wo-4",
+      name: "4 · Bill 1",
+      outstanding: "14.00",
+    });
     expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
   });
 
@@ -10514,9 +10523,11 @@ describe("till-app: recording an unpaid departure", () => {
         .mockResolvedValue([tabBill, { ...creditedBill("wo-credited", "0.00"), billNumber: 2 }]),
     });
 
-    expect(dialog(el)!.bills).toEqual([
-      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
-    ]);
+    expect(dialog(el)!.bill).toEqual({
+      workingOrderId: "wo-4",
+      name: "4 · Bill 1",
+      outstanding: "14.00",
+    });
     expect(confirmText(el)).toBe(
       t("departure.confirm").replace("{amount}", formatMoney("14.00", "en")),
     );
@@ -10527,15 +10538,16 @@ describe("till-app: recording an unpaid departure", () => {
     const { el } = await openDeparture({
       getPartyBills: vi
         .fn()
-        .mockResolvedValue([tabBill, { ...creditedBill("wo-part", "15.58"), billNumber: 2 }]),
+        .mockResolvedValue([{ ...creditedBill("wo-4", "15.58"), billNumber: 1 }, checkBill]),
     });
 
-    expect(dialog(el)!.bills).toEqual([
-      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
-      { workingOrderId: "wo-part", name: "4 · Bill 2", outstanding: "15.58" },
-    ]);
+    expect(dialog(el)!.bill).toEqual({
+      workingOrderId: "wo-4",
+      name: "4 · Bill 1",
+      outstanding: "15.58",
+    });
     expect(confirmText(el)).toBe(
-      t("departure.confirm").replace("{amount}", formatMoney("29.58", "en")),
+      t("departure.confirm").replace("{amount}", formatMoney("15.58", "en")),
     );
   });
 
@@ -10558,7 +10570,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(api.recordUnpaidDeparture).toHaveBeenCalledOnce();
     expect(vi.mocked(api.recordUnpaidDeparture).mock.calls[0]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
+      { billId: "wo-4", expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
     ]);
     expect(dialog(el)).toBeNull();
     expect(tableOrder(el)).toBeNull();
@@ -10584,6 +10596,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
       "v1",
       {
+        billId: "wo-4",
         expectedPartyRevision: 3,
         expectedEdits: closingEdits,
         reason: "Ran off",
@@ -10729,6 +10742,7 @@ describe("till-app: recording an unpaid departure", () => {
 
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
     expect(recordUnpaidDeparture.mock.calls[1]![1]).toEqual({
+      billId: "wo-4",
       expectedPartyRevision: 3,
       expectedEdits: closingEdits,
       reason: "Ran off after the dessert was cancelled",
@@ -10776,35 +10790,56 @@ describe("till-app: recording an unpaid departure", () => {
     expect(text).toContain(t("party.changed").replace("{table}", "4"));
     expect(text).toContain(t("party.try_again"));
 
-    emit(tableOrder(el)!, "record-unpaid-departure", {});
+    emit(tableOrder(el)!, "record-unpaid-departure", { workingOrderId: "wo-4" });
     await flush(el);
     await typeReason(el, "Ran off");
     await confirmDeparture(el);
     expect(recordUnpaidDeparture).toHaveBeenLastCalledWith(
       "v1",
-      { expectedPartyRevision: 5, expectedEdits: closingEdits, reason: "Ran off" },
+      { billId: "wo-4", expectedPartyRevision: 5, expectedEdits: closingEdits, reason: "Ran off" },
       expect.anything(),
     );
   });
 
-  it("when a resend after a lost reply finds the table closed, says the departure was probably recorded, never to try again", async () => {
+  it("keeps uncertainty when a closed table does not confirm the selected departure", async () => {
     const recordUnpaidDeparture = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockRejectedValueOnce({ code: "party.not_open", status: 409 });
     const { el } = await openDeparture({ recordUnpaidDeparture });
     await typeReason(el, "Ran off");
-
     await confirmDeparture(el);
-    await expect.poll(() => tableOrder(el), { timeout: GIVE_UP_MS }).toBeNull();
-    await flush(el);
-
+    await expect.poll(() => dialog(el)?.busy, { timeout: GIVE_UP_MS }).toBe(false);
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
-    expect(dialog(el)).toBeNull();
-    const text = banner(el)!.textContent!;
-    expect(text).toContain(t("departure.probably_recorded"));
-    expect(text).not.toContain(codeMessage("party.not_open"));
+    expect(tableOrder(el)).not.toBeNull();
+    expect(dialog(el)!.refusal?.code).toBe("network");
   });
+
+  it.each(["party.out_of_date", "party.not_open"])(
+    "confirms a lost reply from the selected bill’s saved departure after %s",
+    async (code) => {
+      let recorded = false;
+      const recordUnpaidDeparture = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          recorded = true;
+          throw new TypeError("Failed to fetch");
+        })
+        .mockRejectedValueOnce({ code, status: 409 });
+      const { el } = await openDeparture({
+        recordUnpaidDeparture,
+        getPartyBills: vi.fn(async () => [{ ...tabBill, leftUnpaid: recorded }, checkBill]),
+      });
+      await typeReason(el, "Ran off");
+      await confirmDeparture(el);
+      await expect.poll(() => dialog(el), { timeout: GIVE_UP_MS }).toBeNull();
+      expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
+      expect(tableOrder(el)).not.toBeNull();
+      expect(tableOrder(el)!.bills.find((bill) => bill.workingOrderId === "wo-4")!.leftUnpaid).toBe(
+        true,
+      );
+    },
+  );
 
   it("when the first send finds the table closed, says the table changed, as Finish does", async () => {
     const { el } = await openDeparture({
@@ -10870,13 +10905,24 @@ describe("till-app: recording an unpaid departure", () => {
 
   it("A803 bill names: the dialog lists bills by the number each holds, with the name staff gave one", async () => {
     const { el } = await openDeparture({
-      getPartyBills: vi.fn().mockResolvedValue([{ ...checkBill, billName: "Clint" }, tabBill]),
+      getPartyBills: vi.fn().mockResolvedValue([checkBill, { ...tabBill, billName: "Clint" }]),
     });
 
-    expect(dialog(el)!.bills).toEqual([
-      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
-      { workingOrderId: "wo-check", name: "4 · Bill 2 · Clint", outstanding: "30.00" },
-    ]);
+    expect(dialog(el)!.bill).toEqual({
+      workingOrderId: "wo-4",
+      name: "4 · Bill 1 · Clint",
+      outstanding: "14.00",
+    });
+  });
+
+  it("does not open unpaid departure for the selected fully credited bill", async () => {
+    const { el } = await openDeparture({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, status: "placed", amountDue: "0.00" }, checkBill]),
+    });
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
   });
 
   it("leaves out of the dialog a bill with nothing left to pay", async () => {
@@ -10892,10 +10938,11 @@ describe("till-app: recording an unpaid departure", () => {
       getPartyBills: vi.fn().mockResolvedValue([tabBill, empty, { ...checkBill, billNumber: 3 }]),
     });
 
-    expect(dialog(el)!.bills).toEqual([
-      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
-      { workingOrderId: "wo-check", name: "4 · Bill 3", outstanding: "30.00" },
-    ]);
+    expect(dialog(el)!.bill).toEqual({
+      workingOrderId: "wo-4",
+      name: "4 · Bill 1",
+      outstanding: "14.00",
+    });
   });
 
   for (const action of ["Escape"]) {
@@ -10958,7 +11005,7 @@ describe("till-app: recording an unpaid departure", () => {
     await confirmDeparture(el);
     expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
+      { billId: "wo-4", expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
     ]);
     expect(question.open).toBe(false);
     expect(dialog(el)).toBeNull();
@@ -12285,7 +12332,7 @@ describe("till-app: closing editing observations", () => {
     });
   }
   async function openDeparture(el: TillApp) {
-    emit(tableOrder(el)!, "record-unpaid-departure", {});
+    emit(tableOrder(el)!, "record-unpaid-departure", { workingOrderId: "wo-4" });
     await flush(el);
     return el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>("till-unpaid-departure-dialog");
   }
@@ -12325,6 +12372,7 @@ describe("till-app: closing editing observations", () => {
       "v1",
       {
         expectedPartyRevision: 3,
+        billId: "wo-4",
         expectedEdits: edits,
         reason: "Guests left",
       },
@@ -12339,7 +12387,7 @@ describe("till-app: closing editing observations", () => {
     async (event) => {
       const { el } = await mountClosing({ listDrafts: observations("wo-check") });
       const order = await openPartyTable(el);
-      emit(order, event, {});
+      emit(order, event, event === "record-unpaid-departure" ? { workingOrderId: "wo-4" } : {});
       await flush(el);
       expect(api.finishTable).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("till-unpaid-departure-dialog")).toBeNull();
@@ -12354,7 +12402,7 @@ describe("till-app: closing editing observations", () => {
       const read = observations();
       const listDrafts = vi.fn(async () => {
         const snapshot = await read();
-        if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")![field] = 9;
+        if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-4")![field] = 9;
         return snapshot;
       });
       const { el } = await mountClosing({ listDrafts });
@@ -12370,6 +12418,34 @@ describe("till-app: closing editing observations", () => {
       expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
     },
   );
+
+  it("does not hold the selected departure back when another bill’s editor changes", async () => {
+    let changed = false;
+    const read = observations();
+    const listDrafts = vi.fn(async () => {
+      const snapshot = await read();
+      if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion = 9;
+      return snapshot;
+    });
+    const { el } = await mountClosing({
+      listDrafts,
+      recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "open", departures: [] }),
+    });
+    await openPartyTable(el);
+    await openDeparture(el);
+    changed = true;
+    const reads = listDrafts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+    await flush(el);
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ billId: "wo-4", expectedEdits: edits }),
+      expect.anything(),
+    );
+    expect(tableOrder(el)).not.toBeNull();
+  });
 
   it("unpaid departure retains its opening party revision after a guest-count update", async () => {
     let changed = false;
@@ -12393,6 +12469,7 @@ describe("till-app: closing editing observations", () => {
       "v1",
       {
         expectedPartyRevision: 3,
+        billId: "wo-4",
         expectedEdits: edits,
         reason: "Guests left",
       },

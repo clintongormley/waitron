@@ -43,7 +43,11 @@ async function namedDebt(name: string) {
     venue.supervisorTill,
     "POST",
     `/api/parties/${party.partyId}/unpaid-departure`,
-    { expectedPartyRevision: row!.revision, reason: "Se marcharon sin pagar" },
+    {
+      billId: party.tabId,
+      expectedPartyRevision: row!.revision,
+      reason: "Se marcharon sin pagar",
+    },
   );
   expect(left.status).toBe(200);
   return party;

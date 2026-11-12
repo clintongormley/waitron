@@ -139,6 +139,11 @@ describe("billToShow", () => {
     expect(billToShow("wo-0", [paidThree, dropped, paidTwo])).toBe("wo-2");
   });
 
+  it("prefers a live bill to a recorded debt when opening the table", () => {
+    expect(billToShow(undefined, [{ ...two, leftUnpaid: true }, three])).toBe("wo-3");
+    expect(stillToPay({ ...two, leftUnpaid: true })).toBe(false);
+  });
+
   it("none when no bill is shown", () => {
     expect(billToShow("wo-1", [])).toBeUndefined();
     expect(billToShow("wo-0", [dropped])).toBeUndefined();

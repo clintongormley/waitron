@@ -1,5 +1,6 @@
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import { clearBillRequestIfPaid } from "./bill-request.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { and, inArray, isNull } from "drizzle-orm";
 import {
@@ -22,9 +23,10 @@ import {
   closeParty,
   handOverFinishedBills,
   readBillsOfParties,
-  requirePartyClosingEdits,
 } from "./parties.js";
-import type { FamilyBill } from "./parties.js";
+import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
+import { assertBillHasNoUnsent } from "./bill-unsent.js";
+import { readPartyFinishReadiness } from "./finish-party-service.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
@@ -49,6 +51,7 @@ import {
 } from "./line-service-cancel.js";
 
 export interface UnpaidDepartureRequest {
+  billId: string;
   expectedPartyRevision: number;
   expectedEdits: BillEditExpected[];
   /** Trimmed, 1 to 500 characters. */
@@ -65,18 +68,6 @@ export interface RecordedDeparture {
   amount: string;
 }
 
-/**
- * The party's guests left without paying: each invoice of its family's bills still to pay that
- * still owes something gets one `unpaid_departures` row with the reason, who recorded it and who
- * authorised it, and the party then closes as Finish table closes it ({@link closeParty}). Needs
- * `sale.void` from the operator or the override.
- *
- * An open bill is invoiced now without a receipt; a
- * presented bill keeps the invoice it has, and one presented without an invoice is invoiced now.
- * A bill owing nothing once invoiced (its credit notes cancel its invoice, or every line was given
- * away) gets no row and is settled as collecting it settles it ({@link settleIssuedOwingNothing}),
- * so the party closes with no departure rows when every bill owes nothing (why: B17, #991).
- */
 export async function recordUnpaidDeparture(
   tx: Transaction,
   deps: {
@@ -91,7 +82,7 @@ export async function recordUnpaidDeparture(
   partyId: string,
   req: UnpaidDepartureRequest,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
-): Promise<{ state: "closed"; departures: RecordedDeparture[] }> {
+): Promise<{ state: "open" | "closed"; departures: RecordedDeparture[] }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const { authorizedBy } = await authorize(
     tx,
@@ -101,55 +92,39 @@ export async function recordUnpaidDeparture(
   const reading = deps.clock.now();
   await deps.backend.refuseWhileClockBehind(tx, reading);
   await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
-  await requirePartyClosingEdits(tx, partyId, operator.personId, req.expectedEdits);
-
-  const bills = await inOpeningOrder(tx, (await readBillsOfParties(tx, [partyId])).get(partyId)!);
-  const owing = bills.filter(billOwes);
-  if (owing.length === 0) {
+  const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
+  const bill = bills.find((row) => row.workingOrderId === req.billId);
+  if (bill === undefined || !billOwes(bill))
     throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
-  }
-  const owingIds = owing.map((bill) => bill.workingOrderId);
-  const invoiced = await readIssuedSales(tx, owingIds);
-  const toInvoice = owing.filter((bill) => !invoiced.has(bill.workingOrderId));
-  const unfired = await ordersWithUnfiredDish(
+  const expectedEdits = parseBillEditExpecteds(req.expectedEdits);
+  await requireBillEditors(
     tx,
-    toInvoice.map((bill) => bill.workingOrderId),
+    [req.billId],
+    operator.personId,
+    expectedEdits.filter((edit) => edit.billId === req.billId),
   );
-  const firstUnfired = toInvoice.find((bill) => unfired.has(bill.workingOrderId));
-  if (firstUnfired !== undefined) {
-    throw new AppError("unpaid_departure.unfired_dishes", {
-      workingOrderId: firstUnfired.workingOrderId,
-    });
+  await assertBillHasNoUnsent(tx, req.billId);
+  const issued = (await readIssuedSales(tx, [req.billId])).get(req.billId);
+  if (issued === undefined) {
+    if ((await ordersWithUnfiredDish(tx, [req.billId])).has(req.billId))
+      throw new AppError("unpaid_departure.unfired_dishes", { workingOrderId: req.billId });
+    if (bill.hasPayments)
+      throw new AppError("unpaid_departure.bill_holds_payment", { workingOrderId: req.billId });
   }
-  const open = owing.filter((bill) => bill.status === "open");
-  const openIds = new Set(open.map((bill) => bill.workingOrderId));
-  const holding = toInvoice.find((bill) => bill.hasPayments);
-  if (holding !== undefined) {
-    throw new AppError("unpaid_departure.bill_holds_payment", {
-      workingOrderId: holding.workingOrderId,
-    });
-  }
-  await refusePaymentInFlight(tx, [...openIds]);
-  await refusePlacedPaymentInFlight(
-    deps.db,
-    tx,
-    owing.filter((bill) => bill.status === "placed").map((bill) => bill.workingOrderId),
-  );
+  if (bill.status === "open") await refusePaymentInFlight(tx, [req.billId]);
+  else await refusePlacedPaymentInFlight(deps.db, tx, [req.billId]);
 
-  const issueClock = pinnedAt(deps.clock, reading);
-  const invoices = [];
-  for (const bill of toInvoice) {
-    invoices.push(await priceForIssuance(tx, issueClock, deps.backend, cfg, bill.workingOrderId));
-  }
-  const due = new Map<string, Decimal>([
-    ...[...invoiced].map(([id, sale]) => [id, sale.amountDue] as const),
-    ...invoices.map((invoice) => [invoice.id, invoice.priced.total] as const),
-  ]);
-  const departing = owingIds.filter((id) => decimalToCents(due.get(id)!) > 0);
-
-  const saleOf = new Map<string, SaleId>([...invoiced].map(([id, sale]) => [id, sale.saleId]));
-  for (const invoice of invoices) {
-    const { saleId } = await issueUnpaidInvoice(
+  let saleId = issued?.saleId;
+  let due = issued?.amountDue;
+  if (issued === undefined) {
+    const invoice = await priceForIssuance(
+      tx,
+      pinnedAt(deps.clock, reading),
+      deps.backend,
+      cfg,
+      req.billId,
+    );
+    const recorded = await issueUnpaidInvoice(
       tx,
       deps.backend,
       cfg,
@@ -158,21 +133,15 @@ export async function recordUnpaidDeparture(
       deps.admission,
       deps.log,
     );
-    saleOf.set(invoice.id, saleId);
-    if (openIds.has(invoice.id)) {
-      await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId, deps.attendance);
-    }
+    saleId = recorded.saleId;
+    due = invoice.priced.total;
+    if (bill.status === "open")
+      await markOrderPlaced(tx, deps.clock, cfg, req.billId, operator.personId, deps.attendance);
   }
-  for (const id of owingIds) {
-    if (decimalToCents(due.get(id)!) === 0) {
-      await settleIssuedOwingNothing(tx, deps, id, saleOf.get(id)!);
-    }
-  }
-
   const departures =
-    departing.length === 0
+    decimalToCents(due!) === 0
       ? []
-      : await insertDepartures(tx, departing, saleOf, due, {
+      : await insertDeparture(tx, req.billId, saleId!, due!, {
           partyId,
           reason: req.reason,
           recordedBy: operator.personId,
@@ -180,38 +149,43 @@ export async function recordUnpaidDeparture(
           source: cfg.origin.source,
           deviceId: cfg.origin.deviceId,
         });
-
-  const stopped = await stopDepartureKitchen(
-    tx,
-    cfg,
-    bills.map((bill) => bill.workingOrderId),
-    operator.personId,
-  );
+  if (decimalToCents(due!) === 0) await settleIssuedOwingNothing(tx, deps, req.billId, saleId!);
+  const stopped = await stopDepartureKitchen(tx, cfg, [req.billId], operator.personId);
   await captureKitchenActivity(
     tx,
     deps.attendance === undefined ? undefined : { recorder: deps.attendance, clock: deps.clock },
     operator.personId,
-    [
-      ...new Set([
-        ...departing.filter((id) => !openIds.has(id)),
-        ...stopped.cancelledBillIds.filter((id) => !openIds.has(id)),
-      ]),
-    ],
+    bill.status === "open"
+      ? []
+      : [...new Set([...departures.map((row) => row.workingOrderId), ...stopped.cancelledBillIds])],
     `unpaid-departure:${partyId}:${req.expectedPartyRevision}`,
   );
-
-  const empty = bills
-    .filter((bill) => bill.status === "open" && bill.lines === 0)
-    .map((bill) => bill.workingOrderId);
+  // Service stops when the bill departs, even while other guests keep the table.
+  await tx
+    .update(workingOrders)
+    .set({ collectedAt: nowIso() })
+    .where(
+      and(inArray(workingOrders.id, stopped.kitchenBillIds), isNull(workingOrders.collectedAt)),
+    );
+  await clearBillRequestIfPaid(tx, req.billId, deps.log);
+  const readiness = await readPartyFinishReadiness(tx, {
+    partyId,
+    expectedPartyRevision: req.expectedPartyRevision + 1,
+    operatorId: operator.personId,
+    expectedEdits,
+  });
+  if (!readiness.ready) return { state: "open", departures };
   const closed = await closeParty(
     tx,
     partyId,
-    empty,
+    bills
+      .filter((row) => row.status === "open" && row.lines === 0)
+      .map((row) => row.workingOrderId),
     operator.personId,
     deps.attendance === undefined ? undefined : { recorder: deps.attendance },
-    req.expectedEdits,
+    expectedEdits,
   );
-  await handOverFinishedBills(tx, partyId, stopped.kitchenBillIds);
+  await handOverFinishedBills(tx, partyId);
   return { ...closed, departures };
 }
 
@@ -290,31 +264,11 @@ async function stopDepartureKitchen(
   return { kitchenBillIds, cancelledBillIds };
 }
 
-/**
- * `bills` in the order they were opened; a departure's invoices follow it, not the list's
- * bill-number order (plan D15 addendum).
- */
-async function inOpeningOrder(tx: Transaction, bills: FamilyBill[]): Promise<FamilyBill[]> {
-  const opened = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(
-      inArray(
-        workingOrders.id,
-        bills.map((bill) => bill.workingOrderId),
-      ),
-    )
-    .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
-  const rank = new Map(opened.map((row, index) => [row.id, index]));
-  return [...bills].sort((a, b) => rank.get(a.workingOrderId)! - rank.get(b.workingOrderId)!);
-}
-
-/** One `unpaid_departures` row for each of `departing`, at what its invoice owes in `due`. */
-async function insertDepartures(
+async function insertDeparture(
   tx: Transaction,
-  departing: readonly string[],
-  saleOf: ReadonlyMap<string, SaleId>,
-  due: ReadonlyMap<string, Decimal>,
+  workingOrderId: string,
+  saleId: SaleId,
+  amount: Decimal,
   common: {
     partyId: string;
     reason: string;
@@ -324,32 +278,16 @@ async function insertDepartures(
     deviceId: DeviceId;
   },
 ): Promise<RecordedDeparture[]> {
-  const numbers = await readInvoiceNumbers(
-    tx,
-    departing.map((id) => saleOf.get(id)!),
-  );
-  const recordedAt = nowIso();
-  const rows = await tx
+  const numbers = await readInvoiceNumbers(tx, [saleId]);
+  const [row] = await tx
     .insert(unpaidDepartures)
-    .values(
-      departing.map((workingOrderId) => ({
-        ...common,
-        workingOrderId,
-        saleId: saleOf.get(workingOrderId)!,
-        amount: decimalToCents(due.get(workingOrderId)!),
-        recordedAt,
-      })),
-    )
-    .returning({ id: unpaidDepartures.id, workingOrderId: unpaidDepartures.workingOrderId });
-  const idOf = new Map(rows.map((row) => [row.workingOrderId, row.id]));
-  return departing.map((workingOrderId): RecordedDeparture => {
-    const saleId = saleOf.get(workingOrderId)!;
-    return {
-      id: idOf.get(workingOrderId)!,
+    .values({
+      ...common,
       workingOrderId,
       saleId,
-      invoiceNumber: numbers.get(saleId)!,
-      amount: due.get(workingOrderId)!,
-    };
-  });
+      amount: decimalToCents(amount),
+      recordedAt: nowIso(),
+    })
+    .returning({ id: unpaidDepartures.id });
+  return [{ id: row!.id, workingOrderId, saleId, invoiceNumber: numbers.get(saleId)!, amount }];
 }

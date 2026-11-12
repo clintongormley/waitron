@@ -426,12 +426,17 @@ completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
-una cuenta sin pagar para que la cobres, y **Registrar salida sin pagar** registra que los clientes
-se fueron sin pagar.
+una cuenta sin pagar para que la cobres.
 
-**Registrar salida sin pagar** cancela automáticamente los platos pendientes de la cocina y envía
-los tiques de cancelación. No tienes que cancelarlos uno a uno. La cuenta sigue pendiente de pago
-por el importe completo.
+Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Registrar salida sin
+pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
+elige un responsable o encargado y pídele que introduzca su PIN.
+
+Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la
+cocina. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
+pagado. La cuenta sigue pendiente por el importe completo. La mesa sigue abierta mientras quede
+otra cuenta por cerrar o comida pagada por servir. Sirve lo que queda y elige **Cerrar mesa**
+cuando todos hayan terminado.
 
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba

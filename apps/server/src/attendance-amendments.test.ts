@@ -291,6 +291,7 @@ describe("amendment attendance in the command transaction", () => {
             v.cfg,
             partyId,
             {
+              billId: tabId,
               expectedPartyRevision,
               expectedEdits: await closingEditsForTest(tx, partyId),
               reason: "Guests left",

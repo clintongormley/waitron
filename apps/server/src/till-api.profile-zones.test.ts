@@ -1155,7 +1155,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/unpaid-departure",
     "POST",
     (x) => `/api/parties/${x.deliParty}/unpaid-departure`,
-    () => ({ expectedPartyRevision: 0, reason: "Left" }),
+    (x) => ({ billId: x.deliTab, expectedPartyRevision: 0, reason: "Left" }),
     deliTableZone,
   ],
   [

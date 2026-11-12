@@ -46,8 +46,8 @@ decir **Comprobar la hora** en su lugar, como se explica más abajo.
 rojo. El reloj del servidor marca más de un minuto antes que la última venta que registró. Hasta que
 marque como mucho un minuto antes, o hasta que se confirme la hora del servidor, el servidor rechaza
 los cobros, las devoluciones y todo lo que registraría una venta o movería dinero: cobros en
-efectivo o con tarjeta, en el mostrador o en una mesa, devoluciones y reintentos de devoluciones, una
-mesa que se va sin pagar, anular un pedido que ya tiene factura, y un cambio o un envío a cocina que
+efectivo o con tarjeta, en el mostrador o en una mesa, devoluciones y reintentos de devoluciones,
+registrar una cuenta sin pagar, anular un pedido que ya tiene factura, y un cambio o un envío a cocina que
 terminaría de pagar una cuenta ya pagada en parte. En el panel, los encargados tampoco pueden
 resolver cobros ni devoluciones atascados o retenidos.
 

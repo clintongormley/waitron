@@ -9,7 +9,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { REASON_MAX, moneyPlus, type DialogRefusal } from "../state/bill-payment.js";
+import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
 
 /** One bill the departure leaves unpaid, named as the table screen names it. */
 export interface DepartingBill {
@@ -69,7 +69,7 @@ export class TillUnpaidDepartureDialog extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) bills: DepartingBill[] = [];
+  @property({ attribute: false }) bill: DepartingBill | null = null;
   @property({ attribute: false }) refusal: DialogRefusal | null = null;
   @property({ type: Boolean }) busy = false;
 
@@ -114,7 +114,7 @@ export class TillUnpaidDepartureDialog extends LitElement {
   }
 
   #total(): string {
-    return this.bills.reduce((sum, bill) => moneyPlus(sum, bill.outstanding), "0.00");
+    return this.bill?.outstanding ?? "0.00";
   }
 
   #ownError(): string | null {
@@ -205,13 +205,14 @@ export class TillUnpaidDepartureDialog extends LitElement {
     >
       <div class="body">
         <dl class="summary">
-          ${this.bills.map(
-            (bill) =>
-              html`<div data-departure-bill=${bill.workingOrderId}>
-                <dt>${bill.name}</dt>
-                <dd>${this.#money(bill.outstanding)}</dd>
-              </div>`,
-          )}
+          ${
+            this.bill === null
+              ? null
+              : html`<div data-departure-bill=${this.bill.workingOrderId}>
+                  <dt>${this.bill.name}</dt>
+                  <dd>${this.#money(this.bill.outstanding)}</dd>
+                </div>`
+          }
           <div class="total" data-departure-total>
             <dt>${t("departure.left_unpaid")}</dt>
             <dd>${this.#money(this.#total())}</dd>

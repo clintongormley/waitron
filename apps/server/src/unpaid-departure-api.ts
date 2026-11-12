@@ -2,7 +2,7 @@ import { withIssuanceTransaction } from "@waitron/core";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
-import { readRawJsonBody } from "@waitron/server-kit";
+import { requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
 import { asObject } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
@@ -31,6 +31,7 @@ function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
   const reason = parseReason(body.reason);
   const override = parseOverrideField(body.override);
   return {
+    billId: requireBodyUuid(body.billId, "billId").toLowerCase(),
     expectedPartyRevision,
     expectedEdits: body.expectedEdits as BillEditExpected[],
     reason,

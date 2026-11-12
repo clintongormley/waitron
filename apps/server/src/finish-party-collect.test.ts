@@ -1074,7 +1074,7 @@ describe("a finished table's paid bills are collected (A1344)", () => {
     expect((await billRow(t.billIds[0]!)).collectedAt).toBeNull();
   });
 
-  it("clears paid and unpaid bills' cards after an unpaid departure", async () => {
+  it("hands over paid, served bills when the last unpaid departure closes the table", async () => {
     const t = await table([{ name: "Burger" }, { name: "Burger" }], "fire", [[2]], ["12.00", null]);
     const [paid, unpaid] = t.billIds as [string, string];
     await serveAll(t, paid);
@@ -1084,6 +1084,7 @@ describe("a finished table's paid bills are collected (A1344)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: venue.cookie.staff },
       body: JSON.stringify({
+        billId: unpaid,
         expectedPartyRevision,
         expectedEdits,
         reason: "Left",

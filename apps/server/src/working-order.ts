@@ -8791,6 +8791,7 @@ export async function listTablesWithState(
       join family f on f.root = pt.party_id
       join working_orders wo
         on wo.party_id = f.id and wo.status <> 'abandoned'
+        and wo.id not in (select working_order_id from unpaid_departures)
       left join working_order_lines wol
         on wol.working_order_id = wo.id
       left join ticket_items ti
@@ -8942,7 +8943,7 @@ async function readTodayTables(tx: Transaction): Promise<Map<string, TableToday>
 
 /** {@link TableParty.openingBillId}; `bills` come in number order, unnumbered last. */
 function openingBillOf(bills: readonly FamilyBill[]): string | null {
-  const shown = bills.filter((bill) => bill.status !== "abandoned");
+  const shown = bills.filter((bill) => bill.status !== "abandoned" && !bill.leftUnpaid);
   const owing = shown.find((bill) => bill.status === "open" || bill.status === "placed");
   return (owing ?? shown.at(-1))?.workingOrderId ?? null;
 }
@@ -9012,7 +9013,12 @@ async function readSeatedParties(
       name: member.name,
       displayName: partyDisplayName(member.name, labels.get(member.partyId)!),
       openingBillId: openingBillOf(own),
-      outstanding: toScale(sumDecimals(own.map((bill) => decimal(bill.outstanding))), MONEY_SCALE),
+      outstanding: toScale(
+        sumDecimals(
+          own.filter((bill) => !bill.leftUnpaid).map((bill) => decimal(bill.outstanding)),
+        ),
+        MONEY_SCALE,
+      ),
       billCount: own.filter((bill) => bill.status !== "abandoned").length,
       tableIds: [member.tableId],
       unsentDrafts: unsentDrafts.get(member.partyId)!,

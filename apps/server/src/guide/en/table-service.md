@@ -401,11 +401,16 @@ are unsent.
 
 If you choose **Finish table** while a bill is still unpaid, the till says **A bill for this table
 is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
-unpaid bill on screen so you can take its payment, and **Record unpaid departure** records that the
-guests left without paying.
+unpaid bill on screen so you can take its payment.
 
-**Record unpaid departure** stops the kitchen's unserved dishes automatically and sends
-cancellation slips. You do not need to cancel them one by one. The bill remains owed in full.
+If a guest leaves without paying, select their bill, open **⋮**, then choose **Record unpaid
+departure** under that bill. Check its amount and give a reason. If approval is needed, choose a
+supervisor or manager and ask them to enter their PIN.
+
+Only that bill’s unserved food is stopped, with cancellation slips for the kitchen. The other
+bills keep their food, so you can still serve a paid guest’s dessert. The bill remains owed in full.
+The table stays open while another bill needs closing or paid food still needs serving. Serve the
+remaining food, then choose **Finish table** when everyone has finished.
 
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this

@@ -378,7 +378,7 @@ describe("late issuance rolls back its initiating command", () => {
     },
   );
 
-  it("a second refused departure invoice rolls back both bills and the party close", async () => {
+  it("a refused departure invoice rolls back its bill while preserving the other bills", async () => {
     const [product] = await suite.db.select().from(products);
     const party = await seatedWith(venue, product!.name);
     const zone = await withTransaction(suite.db, (tx) =>
@@ -387,6 +387,7 @@ describe("late issuance rolls back its initiating command", () => {
     await placedCounterBillMovedTo(venue, zone.zoneId, party);
     const [row] = await suite.db.select().from(parties).where(eq(parties.id, party.partyId));
     const body = {
+      billId: party.tabId,
       expectedPartyRevision: row!.revision,
       expectedEdits: await withTransaction(suite.db, (tx) =>
         closingEditsForTest(tx, party.partyId),
@@ -396,7 +397,7 @@ describe("late issuance rolls back its initiating command", () => {
     };
     const before = snapshot();
     fault.enabled = true;
-    fault.failAt = 2;
+    fault.failAt = 1;
     const answer = await send(
       venue.app,
       venue.cookie,
@@ -404,7 +405,7 @@ describe("late issuance rolls back its initiating command", () => {
       `/api/parties/${party.partyId}/unpaid-departure`,
       body,
     );
-    expect(fault.calls).toBe(2);
+    expect(fault.calls).toBe(1);
     expect(answer).toEqual({
       status: 409,
       json: { code: "fiscal.fingerprint_mismatch", params: {} },

@@ -1691,6 +1691,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         "POST",
         `/api/parties/${party.partyId}/unpaid-departure`,
         {
+          billId: party.tabId,
           expectedPartyRevision: row!.revision,
           reason: "Se fueron",
           override: { personId: venue.adminId, pin: "1234" },
