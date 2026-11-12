@@ -3701,7 +3701,7 @@ the layout's order and hidden columns but not collapse, which the pass's narrow 
 
 Left open by A773-2 B4a's reviews (A13b, A15b). The board's card reader (`readCardRows`,
 `apps/server/src/pass-board.ts`) filters its own rows with `liveKitchenDish`
-(`apps/server/src/working-order.ts`); with that filter removed from the card reader and from
+(`apps/server/src/kitchen-print.ts`); with that filter removed from the card reader and from
 `readPassRows`' own read, the board suites the A13b review ran stayed green. A fully served dish stays off the board anyway, because `buildPassBoard` drops a
 row with nothing remaining. The filter's other conditions are the candidates a case could pin: a dish
 made at the till (`madeHere`), and one bill of a two-bill group card collected or abandoned while the
