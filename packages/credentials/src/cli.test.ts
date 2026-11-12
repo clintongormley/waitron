@@ -1,8 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, withNodeTransaction } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
+import { writePairLinkTx } from "./node-pair-link.js";
+import { sealNodeSigningKeyTx } from "./node-signing-key.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 const RING = loadKeyRing({
@@ -27,7 +30,7 @@ const STRIPE_JSON = JSON.stringify({
   cancelUrl: "https://example.test/no",
 });
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {
@@ -339,6 +342,67 @@ describe("waitron-credentials rotate", () => {
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBeGreaterThanOrEqual(1);
     expect(printed).not.toContain("sk_test_cli");
+  });
+
+  describe("with this box's node file", () => {
+    const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const SIGNING_KEY = "MC4CAQAwBQYDK2VwBCIEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    beforeEach(async () => {
+      await suite.node.execute(sql`delete from node_pair_link`);
+      await suite.node.execute(sql`delete from node_signing_key`);
+      await runCli(["set", "--purpose", "payments.stripe"], harness(STRIPE_JSON).deps);
+      await withNodeTransaction(suite.node, (tx) =>
+        sealNodeSigningKeyTx(tx, RING, NODE, SIGNING_KEY),
+      );
+    });
+
+    function keyVersions(): unknown[] {
+      return [
+        ...suite.db.all(sql`select key_version from tenant_credentials`),
+        ...suite.node.all(sql`select key_version from node_signing_key`),
+        ...suite.node.all(sql`select key_version from node_pair_link`),
+      ];
+    }
+
+    it("rotate refuses while a spare is joined and re-seals nothing", async () => {
+      await withNodeTransaction(suite.node, (tx) =>
+        writePairLinkTx(tx, RING, NODE, {
+          role: "streams",
+          state: "streaming",
+          peerNodeId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          peerPublicKey: "peer-public-key",
+          storeUrl: "https://spare.example:7443",
+          venueId: "venue-a",
+          accessKeyId: "waitron0123456789abcdef",
+          secretAccessKey: "0f".repeat(32),
+        }),
+      );
+
+      const h = harness("", {}, ROTATED_RING);
+      const code = await runCli(["rotate"], { ...h.deps, node: suite.node });
+
+      expect(code).toBe(1);
+      expect(h.out).toEqual([]);
+      expect(h.err).toEqual([
+        "credentials.rotation_spare_joined {}",
+        "This box has a standby server, which holds this key ring too. Rotating here would leave " +
+          "the standby unable to open the venue's keys. Nothing was changed. If the standby never " +
+          "finished joining, remove it in the dashboard (Servers, then Remove on its row) and " +
+          "rotate again. A standby that finished joining cannot be removed in this version, so " +
+          "this key ring cannot be rotated while it is joined.",
+      ]);
+      expect(keyVersions()).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
+    });
+
+    it("rotate runs with no pair link", async () => {
+      const h = harness("", {}, ROTATED_RING);
+      const code = await runCli(["rotate"], { ...h.deps, node: suite.node });
+
+      expect(code).toBe(0);
+      expect(h.out).toEqual(["rotated 2, already current 0"]);
+      expect(keyVersions()).toEqual([{ key_version: 2 }, { key_version: 2 }]);
+    });
   });
 
   it("rejects rather than crashes when rows still need a key the ring no longer carries", async () => {

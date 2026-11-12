@@ -2,7 +2,9 @@ import { parseArgs } from "node:util";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import type { KeyRing } from "./keyring.js";
+import { holdsPairLink } from "./node-pair-link.js";
 import { PURPOSES, isPurpose } from "./purposes.js";
+import "./errors.js";
 import {
   deleteCredential,
   listCredentials,
@@ -177,9 +179,22 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
   return 0;
 }
 
+const SPARE_JOINED = [
+  "This box has a standby server, which holds this key ring too.",
+  "Rotating here would leave the standby unable to open the venue's keys. Nothing was changed.",
+  "If the standby never finished joining, remove it in the dashboard (Servers, then Remove on its row) and rotate again.",
+  "A standby that finished joining cannot be removed in this version, so this key ring cannot be rotated while it is joined.",
+].join(" ");
+
 async function rotate(deps: CliDeps): Promise<number> {
   let result: RotationResult;
   try {
+    // Nothing sends a new ring to the spare (decision D7, plan 2026-11-04-a947-3b-spare-hosts-store).
+    if (deps.node !== undefined && (await holdsPairLink(deps.node))) {
+      reportFailure(new AppError("credentials.rotation_spare_joined", {}), deps);
+      deps.io.stderr(SPARE_JOINED);
+      return 1;
+    }
     result = await rotateCredentials(deps.db, deps.ring, deps.node);
   } catch (error) {
     return reportFailure(error, deps);

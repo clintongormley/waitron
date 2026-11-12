@@ -996,6 +996,14 @@ files `scripts/write-path-tables.json` names, which is where such a write is all
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
 
+`waitron-credentials rotate` re-seals nothing while `node.db` holds a pair link under any node id:
+it refuses with `credentials.rotation_spare_joined`, because the spare holds the same key ring and
+nothing sends it a new one (decision D7 in
+[the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). Removing a spare that
+never finished joining deletes the link, and rotation then runs. A spare that finished joining
+cannot be removed in this version, so while it is joined the ring is not rotated. A ring changed by
+hand in `secrets.env` is not stopped by this.
+
 **What the guard does not see.** `scripts/write-path-tables.test.ts` reads TEXT, so a table name
 reached through a variable is invisible to it; it judges a FILE against an allowance list rather
 than a call chain, so a request path that calls into an allowed file writes through it unseen; and

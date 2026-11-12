@@ -41,6 +41,9 @@ declare module "@waitron/shared" {
      * generic text.
      */
     "node.identity_mismatch": Record<string, never>;
+    /** `rotate` was refused because this box holds a pair link: the spare holds the same ring,
+     * and nothing sends it a new one. */
+    "credentials.rotation_spare_joined": Record<string, never>;
     /** No row for this purpose. Not provisioned. */
     "credentials.missing": { purpose: string };
     /** Not a purpose this package knows. `known` lets a CLI print the legal set. */

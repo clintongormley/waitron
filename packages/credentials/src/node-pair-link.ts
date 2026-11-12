@@ -127,6 +127,14 @@ export async function rotateNodePairLinks(
   return result;
 }
 
+/** Whether `node` holds any pair link, under any node id: every one is a row `rotate` would
+ * re-seal. */
+export async function holdsPairLink(node: NodeDatabase): Promise<boolean> {
+  if (!(await tableExists(node, "node_pair_link"))) return false;
+  const [row] = await node.select({ nodeId: nodePairLink.nodeId }).from(nodePairLink).limit(1);
+  return row !== undefined;
+}
+
 /** Moves this node's pair link to `state`; the table's check refuses a state outside its role. */
 export async function setPairLinkStateTx(
   tx: NodeTransaction,
