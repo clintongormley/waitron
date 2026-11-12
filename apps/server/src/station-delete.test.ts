@@ -472,6 +472,27 @@ describe("permanent station deletion", () => {
     ])
       expect(after[key]).toEqual(before[key]);
   });
+  it("deletes a station and clears an unsent dish's make-at while a card is at the reader for its order", async () => {
+    const { v, id } = await fixture();
+    const unsent = await food(v, id, { ticket: false });
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: at })
+        .where(eq(workingOrders.id, unsent.order.id)),
+    );
+    expect((await inTx(v, (tx) => deleteStation(tx, id, new Date(at)))).refusals).toEqual([]);
+    expect((await inTx(v, (tx) => listStations(tx))).some((row) => row.id === id)).toBe(false);
+    const [line] = await inTx(v, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, unsent.line.id)),
+    );
+    expect(line!.makeAtStationId).toBeNull();
+    const [order] = await inTx(v, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, unsent.order.id)),
+    );
+    expect(order!.paymentAttemptAt).toBe(at);
+    expect(order!.revision).toBe(unsent.order.revision + 1);
+  });
   it("leaves finished unsent orders and closed drafts unchanged and increments each affected parent once", async () => {
     const { v, id } = await fixture();
     const unsent = await food(v, id, { ticket: false });

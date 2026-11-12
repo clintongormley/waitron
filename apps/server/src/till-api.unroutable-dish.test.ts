@@ -1249,6 +1249,44 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect((await stale.json()).error.code).toBe("working_order.out_of_date");
   });
 
+  it("stores a dish's make-at station while a card is at the reader for its order", async () => {
+    const made = await strandedDish("Paying question");
+    const chosen = await station("Paying bar");
+    const id = randomUUID();
+    await park(id, [made]);
+    const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
+    await inTx(v, (tx) =>
+      tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, id)),
+    );
+    const [line] = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    );
+    const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
+    const saved = await app.request(`/api/working-orders/${id}/make-at`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ revision, lines: { [line!.id]: chosen } }),
+    });
+    expect(saved.status, await saved.clone().text()).toBe(200);
+    const [stored] = await inTx(v, (tx) =>
+      tx
+        .select({ makeAt: workingOrderLines.makeAtStationId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, line!.id)),
+    );
+    expect(stored?.makeAt).toBe(chosen);
+    const [order] = await inTx(v, (tx) =>
+      tx
+        .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id)),
+    );
+    expect(order?.paymentAttemptAt).toBe(paymentAttemptAt);
+  });
+
   it("copies the chosen station to both parts of a split dish", async () => {
     const made = await dish("Split lager");
     const chosen = await station("Split bar");

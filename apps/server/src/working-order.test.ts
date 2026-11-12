@@ -5724,6 +5724,36 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       });
     });
   });
+
+  it("moves a held line to another course while a card is at the reader for its bill", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const post = await createCourse(tx, { name: "Desserts", displayOrder: 2 });
+      const starter = await makeProduct(tx, catalogueId, {});
+      const main = await makeProduct(tx, catalogueId, {});
+      await setProductCourse(tx, starter, starterCourse.id);
+      await setProductCourse(tx, main, mainCourse.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
+      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
+      await tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, tabId));
+
+      await setLineCourse(tx, cfg, tabId, 2, post.id);
+
+      const after = await courseItemsFor(tx, tabId);
+      expect(byLine(after, main).courseId).toBe(post.id);
+      expect(byLine(after, main).firedAt).toBeNull();
+      const [order] = await tx
+        .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      expect(order!.paymentAttemptAt).toBe(paymentAttemptAt);
+    });
+  });
 });
 
 // sendLines releases selected held items, refreshes queue time and enqueues their kitchen prints.
@@ -5916,6 +5946,34 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
         .from(printJobs)
         .where(eq(printJobs.printerId, barPrinterId));
       expect(barJobsAfter).toHaveLength(1);
+    });
+  });
+
+  it("sends a held line while a card is at the reader for its bill", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const starter = await makeProduct(tx, catalogueId, {});
+      const main = await makeProduct(tx, catalogueId, {});
+      await setProductCourse(tx, starter, starterCourse.id);
+      await setProductCourse(tx, main, mainCourse.id);
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
+      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
+      await tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, tabId));
+      expect((await itemsByLineNo(tx, tabId)).get(2)!.firedAt).toBeNull();
+
+      await sendLines(tx, cfg, tabId, [2]);
+
+      expect((await itemsByLineNo(tx, tabId)).get(2)!.firedAt).not.toBeNull();
+      const [order] = await tx
+        .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      expect(order!.paymentAttemptAt).toBe(paymentAttemptAt);
     });
   });
 });
