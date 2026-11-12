@@ -1971,13 +1971,15 @@ outstanding on code that exists.
 - **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build
   plan is written (eleven pull requests; Q1 is the owner's); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
   3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)), 3b-4 ([#2779](https://github.com/clintongormley/waitron/pull/2779))
-  and 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898); the pair link, and a spare joins with no Cloud relay) landed, 3b-5b onwards are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
+  3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898); the pair link, and a spare joins with no Cloud relay)
+  and 3b-5b (a spare runs its store, which admits only its main box; nothing streams to it yet) landed, 3b-G and 3b-6a onwards are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
   venue's network), one step **Hand over the venue** needs on real boxes. It is not live yet: a spare
   still never leaves its joining start (`finish-adoption.ts`'s `PendingAdoption`), and handover also
   needs 3b-G and 3b-6a. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
-  ring only when it joins. For slices 3b and 3c.
+  ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link
+  exists (decision D7); the two related risks in the detail stay open.
   [Detail](backlog/replication-cloud.md#a1273-the-shared-key-ring-has-no-rotation-path-to-the-spare)
 
 - **A1274: a lost node.db beside an intact venue.db reads as a sole primary.**
