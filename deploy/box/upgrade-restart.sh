@@ -22,25 +22,9 @@ fi
 [ "$1" = run ] || exit 0
 [ -x "$node" ] || refuse 'retained runtime unavailable; retain the copy and runtime' 78
 cd "$box"
-if command -v aa-enabled >/dev/null 2>&1 && aa-enabled; then
-  apparmor_parser -r /etc/apparmor.d/waitron-print-agent
+if command -v aa-enabled >/dev/null 2>&1 && aa-enabled && apparmor_parser -r /etc/apparmor.d/waitron-print-agent; then
   export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
+else
+  export WAITRON_PRINT_AGENT_APPARMOR=docker-default
 fi
-compose_command=(docker compose)
-if [ -n "$(docker compose --profile staff-tunnel ps -a -q tunnel)" ]; then
-  compose_command+=(--profile staff-tunnel)
-fi
-"${compose_command[@]}" up -d --pull never --remove-orphans
-finish() {
-  trap - EXIT
-  docker compose --profile staff-tunnel stop --timeout 10
-}
-trap finish EXIT
-trap 'exit 0' TERM INT
-ids="$(docker compose ps -q)"
-flock -u 9
-exec 9>&-
-[ -n "$ids" ] || exit 1
-# Container exits include the app's deliberate restart after setup, even with exit code zero.
-"$node" "$host/box/upgrades/restart.mjs" $ids
-exit 1
+docker compose up -d --pull never

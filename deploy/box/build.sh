@@ -44,7 +44,7 @@ install -D -m 0644 "$repo/deploy/box/docker-waitron-disk.conf" "$root/etc/system
 # Recovery precedes Docker; only the disk gate may precede recovery.
 sed -i 's/ waitron-upgrade-recovery.service//g' "$root/etc/systemd/system/waitron-upgrade-recovery.service.d/waitron-disk.conf"
 systemctl --root="$root" enable waitron-app.service waitron-upgrade-recovery.service
-for module in cli host transaction copy candidate restart; do
+for module in cli host transaction copy candidate; do
   install -D -m 0644 "$repo/scripts/box/upgrades/$module.mjs" "$root/opt/waitron-host/box/upgrades/$module.mjs"
 done
 install -D -m 0755 "$repo/scripts/box/upgrades/bootstrap.sh" "$root/opt/waitron-host/box/upgrades/bootstrap.sh"
@@ -73,7 +73,7 @@ for unit in docker.service docker.socket; do
 done
 install -d -m 0755 "$root/usr/lib/dracut/modules.d/95waitron"
 install -m 0755 "$repo/deploy/box/dracut/95waitron/"*.sh "$root/usr/lib/dracut/modules.d/95waitron/"
-sed '/^    restart: unless-stopped$/d' "$repo/deploy/compose.yml" > "$root/opt/waitron/compose.yml"
+install -m 0644 "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
 mkdir "$output/input-stage"
 for kind in app agent mailpit; do
   archive="$inputs/$kind.tar"

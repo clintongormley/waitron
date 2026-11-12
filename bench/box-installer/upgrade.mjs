@@ -68,7 +68,7 @@ cp /run/a950-inputs/fixture-env.json /opt/waitron/fixture-env.json
 umount /run/a950-inputs
 cd /opt/waitron
 COMPOSE_PROFILES=staff-tunnel docker compose config --format json >/run/a950-compose.json
-${run(`import fs from 'node:fs'; import {execFileSync} from 'node:child_process'; const c=JSON.parse(fs.readFileSync('/run/a950-compose.json','utf8')); Object.assign(c.services.app.environment,JSON.parse(fs.readFileSync('/opt/waitron/fixture-env.json','utf8'))); for(const [name,s] of Object.entries(c.services)){delete s.restart; if(name!=='tunnel')s.image=execFileSync('docker',['image','inspect',s.image,'--format','{{.Id}}'],{encoding:'utf8'}).trim();} fs.writeFileSync('/opt/waitron/compose.yml',JSON.stringify(c));`)}
+${run(`import fs from 'node:fs'; import {execFileSync} from 'node:child_process'; const c=JSON.parse(fs.readFileSync('/run/a950-compose.json','utf8')); Object.assign(c.services.app.environment,JSON.parse(fs.readFileSync('/opt/waitron/fixture-env.json','utf8'))); for(const [name,s] of Object.entries(c.services)){if(name!=='tunnel')s.image=execFileSync('docker',['image','inspect',s.image,'--format','{{.Id}}'],{encoding:'utf8'}).trim();} fs.writeFileSync('/opt/waitron/compose.yml',JSON.stringify(c));`)}
 printf '%s\\n' ${quote(`#!/bin/bash\n${prepare}\n`)} >/opt/waitron-host/prepare-fixture.sh
 mkdir /opt/waitron-host/probe-bin
 printf '%s' ${quote(shim)} >/opt/waitron-host/probe-bin/cp

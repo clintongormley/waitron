@@ -337,6 +337,12 @@ writeFileSync(
   HOST_NODE_STUB,
   `#!/bin/bash
 printf 'host:%s\\n' "$*" >> "$WT_LOG"
+if [ "\${WT_HOST_ERROR:-0}" = 1 ]; then echo 'unreadable attempt' >&2; exit 1; fi
+case "$2" in
+  restore|keep)
+    if [ ! -d "\${WAITRON_DIR}.upgrades" ]; then printf 'null\\n'; exit 0; fi
+    rm -rf "\${WAITRON_DIR}.upgrades" ;;
+esac
 if [ "\${WT_UPGRADE_HELD:-0}" = 1 ]; then
   mkdir -p "\${WAITRON_DIR}.upgrades/attempt"
   printf '{"phase":"awaiting-choice"}\\n'
@@ -701,11 +707,40 @@ describe("waitron.sh published candidate", () => {
 });
 
 describe("waitron.sh recovery owner", () => {
+  it.each(["restore", "keep"])(
+    "leaves a trading box alone when %s has no pending attempt",
+    (verb) => {
+      const sb = sandbox({ systemd: true });
+      const host = join(sb.root, "host");
+      mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+      copyFileSync(HOST_NODE_STUB, join(host, "node-v26.7.0/bin/node"));
+      writeFileSync(join(sb.root, "units/waitron-app.service"), "installed owner");
+      const result = run(sb, [verb]);
+      expect(result.status).toBe(0);
+      expect(loggedCalls(sb).some((line) => line.includes("restart waitron-app.service"))).toBe(
+        false,
+      );
+    },
+  );
+  it("still shows image versions when the attempt cannot be read", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const host = join(sb.root, "host");
+    mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+    copyFileSync(HOST_NODE_STUB, join(host, "node-v26.7.0/bin/node"));
+    mkdirSync(`${sb.boxDir}.upgrades/unreadable`, { recursive: true });
+    const result = run(sb, ["status"], { WT_HOST_ERROR: "1" });
+    expect(result.status).toBe(0);
+    expect(loggedCalls(sb).some((line) => line.startsWith("docker inspect"))).toBe(true);
+    expect(result.stderr).toContain("unreadable attempt");
+  });
+
   it.each(["restore", "keep"])("restarts the installed owner after a successful %s", (verb) => {
     const sb = sandbox({ systemd: true });
     const host = join(sb.root, "host");
     mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
     copyFileSync(HOST_NODE_STUB, join(host, "node-v26.7.0/bin/node"));
+    mkdirSync(`${sb.boxDir}.upgrades/attempt`, { recursive: true });
     writeFileSync(join(sb.root, "units/waitron-app.service"), "installed owner");
     const result = run(sb, [verb]);
     expect(result.status).toBe(0);
@@ -759,11 +794,12 @@ describe("waitron.sh manual upgrade invocation", () => {
       WAITRON_SH_REFRESHED: "1",
     });
     expect(result.status).toBe(0);
-    for (const name of ["cli", "host", "candidate", "copy", "transaction", "restart"]) {
+    for (const name of ["cli", "host", "candidate", "copy", "transaction"]) {
       expect(readFileSync(join(sb.root, "host", "box/upgrades", `${name}.mjs`), "utf8")).toContain(
         `/0123456789abcdef0123456789abcdef01234567/scripts/box/upgrades/${name}.mjs`,
       );
     }
+    expect(existsSync(join(sb.root, "host/box/upgrades/restart.mjs"))).toBe(false);
     expect(result.stderr).toContain("resolved Git fallback");
   });
 });
@@ -2833,4 +2869,17 @@ describe("waitron.sh when a run does not finish", () => {
     // The call log is the thing that says WHICH command hung.
     expect(caught.message).toMatch(/docker/);
   });
+});
+
+it.each([
+  ["reset", "--yes"],
+  ["--reset", "--yes", "install"],
+])("refuses %j while another host operation owns the managed box", (...args) => {
+  const sb = sandbox({ systemd: true });
+  installedBox(sb);
+  writeFileSync(join(sb.root, "units/waitron-app.service"), "installed gate");
+  const result = run(sb, args, { WT_UPGRADE_BUSY: "1" });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("another host operation");
+  expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
 });

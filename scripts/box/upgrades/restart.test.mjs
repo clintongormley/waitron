@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, expect, it } from "vitest";
@@ -13,10 +13,8 @@ for (const [name, body] of Object.entries({
   "aa-enabled": '[ "${AA_ENABLED:-1}" = 1 ]',
   apparmor_parser: 'echo apparmor >> "$CALLS"; exit "${APPARMOR_EXIT:-0}"',
   docker: `printf 'docker %s\\n' "$*" >> "$CALLS"
+case "$*" in *'up -d'*) printf 'profile:%s\\n' "$WAITRON_PRINT_AGENT_APPARMOR" >> "$CALLS" ;; esac
 case "$*" in
- 'compose --profile staff-tunnel ps -a -q tunnel') printf '%s' "\${TUNNEL:-}" ;;
- 'compose ps -q') printf 'app-id\\nagent-id\\n' ;;
- 'wait '*) exit 0 ;;
  'compose up '*) exit "\${UP_EXIT:-0}" ;;
 esac`,
 }))
@@ -34,13 +32,9 @@ function invoke(mode, { held = false, runtime = true, ...knobs } = {}) {
   if (runtime) {
     mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
     mkdirSync(join(host, "box/upgrades"), { recursive: true });
-    copyFileSync(
-      resolve("scripts/box/upgrades/restart.mjs"),
-      join(host, "box/upgrades/restart.mjs"),
-    );
     writeFileSync(
       join(host, "node-v26.7.0/bin/node"),
-      `#!/bin/bash\nprintf 'node %s\\n' "$*" >> "$CALLS"\nif [[ "$1" == */restart.mjs ]]; then exec '${process.execPath}' "$@"; fi\n`,
+      `#!/bin/bash\nprintf 'node %s\\n' "$*" >> "$CALLS"\n`,
       { mode: 0o700 },
     );
   }
@@ -90,34 +84,27 @@ it("refuses missing retained runtime or a busy host before Docker", () => {
   }
 });
 
-it("starts under the lock, releases it, and ends the group when a container exits", () => {
+it("opens under the lock and returns without a persistent monitor or stopping other services", () => {
   const result = invoke("run");
-  expect(result.status).toBe(1);
-  expect(result.calls.indexOf("apparmor")).toBeLessThan(result.calls.indexOf("docker compose up"));
-  expect(result.calls).toContain("docker compose up -d --pull never --remove-orphans\n");
-  expect(result.calls.indexOf("docker compose ps -q")).toBeLessThan(
-    result.calls.indexOf("flock -u 9"),
-  );
-  expect(result.calls).toContain("docker compose --profile staff-tunnel stop --timeout 10\n");
+  expect(result.status).toBe(0);
+  expect(result.calls).toContain("docker compose up -d --pull never\n");
+  expect(result.calls).toContain("profile:waitron-print-agent\n");
+  expect(result.calls).not.toContain("restart.mjs");
+  expect(result.calls).not.toContain("docker wait");
+  expect(result.calls).not.toContain("--profile staff-tunnel");
+  expect(result.calls).not.toContain(" stop ");
 });
 
-it("does not start a group whose AppArmor profile could not be loaded", () => {
+it("uses Docker's default profile if the custom profile cannot load", () => {
   const result = invoke("run", { APPARMOR_EXIT: "7" });
-  expect(result.status).toBe(7);
-  expect(result.calls).not.toContain("docker ");
-});
-
-it("includes a previously installed tunnel when reopening the group", () => {
-  const result = invoke("run", { TUNNEL: "tunnel-id" });
-  expect(result.status).toBe(1);
-  expect(result.calls).toContain(
-    "docker compose --profile staff-tunnel up -d --pull never --remove-orphans\n",
-  );
+  expect(result.status).toBe(0);
+  expect(result.calls).toContain("docker compose up -d --pull never\n");
+  expect(result.calls).toContain("profile:docker-default\n");
 });
 
 it("starts with Docker's default profile when AppArmor is disabled on the host", () => {
   const result = invoke("run", { AA_ENABLED: "0" });
-  expect(result.status).toBe(1);
-  expect(result.calls).toContain("docker compose up -d --pull never --remove-orphans\n");
+  expect(result.status).toBe(0);
+  expect(result.calls).toContain("docker compose up -d --pull never\n");
   expect(result.calls).not.toContain("apparmor\n");
 });

@@ -270,10 +270,11 @@ runs again, and until then Waitron cannot set its clock or see whether it keeps 
 every start a box that files invoices takes no payment until two tills or handhelds that are
 switched on and connected agree with its clock or someone confirms it.
 
-The source Compose template uses Docker restart policies. The installed USB recipe and a
-checked manual upgrade use `waitron-app.service` to reopen the group after a container exits.
-`waitron-upgrade-recovery.service` runs before Docker after a restart; a held manual attempt
-keeps the app stopped for your choice.
+Docker restarts individual containers. `waitron-app.service` checks recovery once at boot
+before opening the group; it does not monitor running containers. An upgrade disables the
+existing containers' restart policies before recording its attempt, and Compose restores
+them when reopening after the recorded decision. `waitron-upgrade-recovery.service` runs
+before Docker after a restart; a held manual attempt keeps the app stopped for your choice.
 
 After a fresh installation or `--reset install` whose box comes up healthy, `install`
 deletes each image the `app` and `print-agent` containers ran before it that Docker still holds and

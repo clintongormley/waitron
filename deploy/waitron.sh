@@ -592,7 +592,7 @@ print_image_versions() {
 
 cmd_status() {
   if [ -x "$WAITRON_HOST_DIR/node-v26.7.0/bin/node" ]; then
-    upgrade_cli status
+    upgrade_cli status || echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2
   elif upgrade_pending; then
     echo "waitron.sh: upgrade pending; the retained host runtime is unavailable" >&2
   fi
@@ -809,6 +809,13 @@ refuse_pending_upgrade() {
   fi
 }
 
+lock_managed_box() {
+  [ -f "$BOX_UNIT_DIR/waitron-app.service" ] || return 0
+  exec 9>"${WAITRON_DIR}.upgrade.lock"
+  flock -n 9 || die "another host operation is running"
+  refuse_pending_upgrade
+}
+
 upgrade_cli() {
   local node="$WAITRON_HOST_DIR/node-v26.7.0/bin/node"
   [ -x "$node" ] || die "the retained host runtime is unavailable — retain the upgrade copy and runtime; do not reset"
@@ -819,8 +826,12 @@ upgrade_cli() {
 cmd_upgrade_choice() (
   exec 9>"${WAITRON_DIR}.upgrade.lock"
   flock -n 9 || die "another host operation is running"
-  upgrade_cli "$1"
-  if ! upgrade_pending && [ -f "$BOX_UNIT_DIR/waitron-app.service" ]; then
+  local result
+  result="$(upgrade_cli "$1")"
+  printf '%s\n' "$result"
+  if [ "$result" != null ] && ! upgrade_pending && [ -f "$BOX_UNIT_DIR/waitron-app.service" ]; then
+    flock -u 9
+    exec 9>&-
     as_root systemctl --no-block restart waitron-app.service
   fi
 )
@@ -828,7 +839,7 @@ cmd_upgrade_choice() (
 fetch_upgrade_driver() {
   local sha="$1" stage="$2" file
   fetch "$RAW_BASE/$sha/deploy/waitron.sh" "$stage/waitron.sh" || return 1
-  for file in bootstrap.sh cli.mjs host.mjs transaction.mjs copy.mjs candidate.mjs restart.mjs; do
+  for file in bootstrap.sh cli.mjs host.mjs transaction.mjs copy.mjs candidate.mjs; do
     fetch "$RAW_BASE/$sha/scripts/box/upgrades/$file" "$stage/$file" || return 1
   done
   for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service; do
@@ -897,6 +908,8 @@ cmd_manual_install() (
   if upgrade_pending; then
     die "upgrade held — run 'waitron.sh status', then choose restore or keep"
   fi
+  flock -u 9
+  exec 9>&-
   as_root systemctl --no-block restart waitron-app.service
   announce_ready
 )
@@ -932,8 +945,7 @@ prepare_upgrade_candidate() (
     app="$(docker image inspect "$(sed -n 's/^WAITRON_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
     agent="$(docker image inspect "$(sed -n 's/^WAITRON_PRINT_AGENT_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
   fi
-  sed '/^    restart: unless-stopped$/d' "$WAITRON_DIR/compose.yml" > "$work/managed-compose.yml"
-  jq -Rsc --arg app "$app" --arg agent "$agent" '{compose:.,images:{app:$app,"print-agent":$agent}}' "$work/managed-compose.yml"
+  jq -Rsc --arg app "$app" --arg agent "$agent" '{compose:.,images:{app:$app,"print-agent":$agent}}' "$WAITRON_DIR/compose.yml"
 )
 
 cmd_install() {
@@ -944,6 +956,7 @@ cmd_install() {
     cmd_manual_install "$ref"
     return
   fi
+  lock_managed_box
   refresh_self "$ref"
   ensure_docker
   if [ "$wipe" -eq 1 ]; then
@@ -1042,6 +1055,7 @@ cmd_reset() {
   done
   refuse_pending_upgrade
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
+  lock_managed_box
   confirm_reset
   cd "$WAITRON_DIR"
   wipe_box

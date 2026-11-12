@@ -159,6 +159,13 @@ export async function createUpgradeHost({
           }
           await assertCopyRoom(paths, dirname(directory), { run });
           pinnedCompose(rawCandidate, next);
+          const ids = (
+            await run("docker", [...compose, "--profile", "staff-tunnel", "ps", "-a", "-q"])
+          ).stdout
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+          if (ids.length > 0) await run("docker", ["update", "--restart=no", ...ids]);
           return { old, candidate: next };
         } catch (error) {
           await Promise.allSettled(tags.map((tag) => removeImageTag(tag, run)));

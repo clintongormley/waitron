@@ -165,7 +165,8 @@ rm -rf "$inputs"
 ## Check a manual upgrade and interrupted recovery
 
 Supply a synthetic preproduction state archive as `B3_UPGRADE_STATE`, with its producer
-environment in the adjacent `<archive>.json`. The fixture must contain one fiscal sale
+and operator TLS environment in the adjacent `<archive>.json`. Keep operator TLS settings
+in that deployment environment rather than the credentials file. The fixture must contain one fiscal sale
 and one open order with a line; the rig checks those facts and compares their rows after
 each operation. Build the fixture with the same migration set as the image.
 

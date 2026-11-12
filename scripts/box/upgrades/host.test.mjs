@@ -97,6 +97,7 @@ async function imageFixture({
   reopenFailure = false,
   serviceChange = false,
   prepareCandidate,
+  writers = false,
 } = {}) {
   const fs = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -186,7 +187,12 @@ async function imageFixture({
       return { stdout: JSON.stringify([{ Mountpoint: join(root, args[2].slice(8)) }]) };
     if (args.includes("ps"))
       return {
-        stdout: (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel" ? "tunnel-id\n" : "",
+        stdout:
+          (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel"
+            ? "tunnel-id\n"
+            : writers && args.at(-1) === "-q"
+              ? "app-id\nagent-id\n"
+              : "",
       };
     if (args[0] === "inspect")
       return {
@@ -205,7 +211,13 @@ async function imageFixture({
           : `sha256:${resolved.get(args[2]) ?? args[2]}\n`,
       };
     }
-    if (args[0] === "image" || args[0] === "pull" || args.includes("up") || args.includes("stop"))
+    if (
+      args[0] === "update" ||
+      args[0] === "image" ||
+      args[0] === "pull" ||
+      args.includes("up") ||
+      args.includes("stop")
+    )
       return { stdout: "" };
     throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
   };
@@ -699,3 +711,25 @@ it("relays only the real clock status line and refuses a clock change without co
     await new Promise((done) => upstream.close(done));
   }
 });
+
+it.each([false, true])(
+  "disables container restart before the marker and restores policies on reopen (%s)",
+  async (realCompose) => {
+    const t = await imageFixture({ realCompose, writers: true, prepare: false, stage: false });
+    const path = t.join(t.root, "compose.yml");
+    if (!realCompose) {
+      for (const service of Object.values(t.config.services)) service.restart = "unless-stopped";
+      await t.fs.writeFile(path, JSON.stringify(t.config));
+    }
+    const original = await t.fs.readFile(path, "utf8");
+    const images = await t.f.host.prepareImages();
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=no", "app-id", "agent-id"]);
+    expect(await t.fs.readFile(path, "utf8")).toBe(original);
+    await t.f.host.resume(images.old);
+    const resolved = JSON.parse(
+      (await t.run("docker", ["compose", "-f", path, "config", "--format", "json"])).stdout,
+    );
+    for (const service of Object.values(resolved.services))
+      expect(service.restart).toBe("unless-stopped");
+  },
+);

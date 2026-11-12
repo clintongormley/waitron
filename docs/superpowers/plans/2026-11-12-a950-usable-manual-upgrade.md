@@ -113,3 +113,13 @@ Compose omits restart policies; the source template retains them for unmanaged u
 Docker healthcheck, then read status once; remove the separate 90-second status wait.
 Linux tests, docs and review fixes may reach about 2,600 changed lines; the ten-hour
 working budget stays. These are watcher clearances, not owner design approval.
+
+**13 November 00:32 amendment, watcher:** replace the persistent restart owner described
+above with a oneshot boot gate; retain pre-Docker offline recovery and ordinary Docker
+restart policies. Disable existing containers' policies before the durable attempt marker;
+Compose restores them on reopen after the recorded decision. Remove restart.mjs and its
+monitor tests; the wrapper's boot-gate tests remain. The discriminating control with only
+B3's pending guard reopened all three running containers before stop, but held after the
+stopped copy. A control adding policy-disable must hold at both boundaries before the one
+fresh fixes read. No new review wave. Mandatory copy-sale and manual/interrupted-restore
+qualification remain. This amendment supersedes the policy-removal/monitor references above.

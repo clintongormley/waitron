@@ -24,7 +24,7 @@ const DEFAULT_DEPS: ShutdownDeps = {
 
 /**
  * How long shutdown may take before the process is forced to exit anyway. A box's restart mechanism
- * is SIGTERM → shutdown → exit → the host reopens it in trading mode, so a shutdown that never
+ * is SIGTERM → shutdown → exit → Docker restarts it into trading mode, so a shutdown that never
  * finishes is a box that never comes back. Kept below Docker's default ~10s stop grace so the
  * deliberate exit wins the race against SIGKILL.
  */
