@@ -1,26 +1,19 @@
-import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   partyTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorResetTables,
-  floorTodaySplitParts,
   floorTodayTables,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
-  refuseInJoinedTable,
   refuseNeedsMoving,
   refuseUnfree,
   refuseUnmovable,
   todayOf,
   type Today,
 } from "./floor-today-table.js";
-import { partsOf, passGuests, type Part } from "./floor-today-parts.js";
-import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
-import type { Placement } from "./floor-reset-plan.js";
-import { partPlaces } from "./joined-split-layout.js";
 import { holderOf, partyRevision } from "./parties.js";
 import type { SlipsLater } from "./moved-slips.js";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
@@ -155,7 +148,7 @@ export async function joinMergeMembers(
  */
 export async function writeMerge(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   args: { movingId: string; targetId: string; side: JoinSide; seats: number | null; free: boolean },
 ): Promise<void> {
   if (args.movingId === args.targetId) {
@@ -165,7 +158,6 @@ export async function writeMerge(
   const target = await todayOf(tx, args.targetId);
   const { zoneId } = target;
   refuseUnmovable(moving, target);
-  await refuseInJoinedTable(tx, [moving.tableId, target.tableId]);
   if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
   if (args.free) {
     await refuseUnfree(tx, [moving.tableId, target.tableId]);
@@ -181,154 +173,22 @@ export async function writeMerge(
   if (args.seats === null) throw new AppError("merge.seats_required", {});
   const { seats } = args;
 
-  const movingParts = await partsOf(tx, moving.tableId);
-  const targetParts = target.merge === null ? await partsOf(tx, target.tableId) : [];
-  if (movingParts.length > 0) await refuseDeliveryPending(tx, moving.tableId);
-  if (targetParts.length > 0) await refuseDeliveryPending(tx, target.tableId);
-  if (args.free) {
-    const joining = [...movingParts, ...targetParts].flatMap((part) =>
-      part.stillJoined ? [part.tableId] : [],
-    );
-    await refuseUnfree(tx, joining);
-    await refuseNeedsMoving(tx, joining);
-  }
-  await splitInUse(tx, moving.tableId, movingParts);
-  await splitInUse(tx, target.tableId, targetParts);
-
-  // A joined table split into a group gives it its name if the group has none; in a new group,
-  // the one pushed onto wins.
-  const targetGives = targetParts.length > 0 ? target.row.name : null;
-  const movingGives = movingParts.length > 0 ? moving.row.name : null;
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {
-    const [join] = await tx
-      .insert(floorTodayJoins)
-      .values({ zoneId, seats, name: targetGives ?? movingGives })
-      .returning({ id: floorTodayJoins.id });
+    const [join] = await tx.insert(floorTodayJoins).values({ zoneId, seats }).returning({ id: floorTodayJoins.id });
     joinId = join!.id;
-    if (targetParts.length === 0) {
-      await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));
-    }
+    await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));
   } else {
     await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
-    if (movingGives !== null) {
-      await tx
-        .update(floorTodayJoins)
-        .set({ name: movingGives })
-        .where(and(eq(floorTodayJoins.id, joinId), isNull(floorTodayJoins.name)));
-    }
   }
-  for (const joined of [
-    targetParts.length > 0 ? target : null,
-    movingParts.length > 0 ? moving : null,
-  ]) {
-    if (joined === null || joined.row.name === null) continue;
-    await tx
-      .update(floorTodayTables)
-      .set({ name: null })
-      .where(eq(floorTodayTables.id, joined.row.id));
-  }
-
-  const targetRow = placementOf(target.row)!;
-  const targetTables = laidInside(targetRow, targetParts);
-  for (const laid of targetTables) {
-    await standApart(tx, joinId, target.tableId, laid.tableId, laid.place, laid.place);
-  }
-  if (targetParts.length > 0) {
-    await passGuests(
-      tx,
-      cfg,
-      target.tableId,
-      targetTables.map((laid) => laid.tableId),
-      "caller",
-    );
-  }
-
   const goes = { width: moving.row.width!, height: moving.row.height! };
   const against = placeOf(target.row);
-  const members =
-    targetParts.length > 0
-      ? targetTables.map((laid) => laid.place)
-      : (target.merge?.members ?? [target.row]).filter((m) => m.x !== null).map(placeOf);
+  const members = (target.merge?.members ?? [target.row]).filter((m) => m.x !== null).map(placeOf);
   const side = freeSide(against, goes, members, args.side);
   const at = touchingPlace(against, goes, side);
 
-  if (movingParts.length === 0) {
-    await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, moving));
-    await tx.update(floorTodayTables).set(at).where(eq(floorTodayTables.id, moving.row.id));
-    return;
-  }
-  const outline = placementOf(moving.row)!;
-  const from = laidInside(outline, movingParts);
-  const to = laidInside({ ...outline, ...at }, movingParts);
-  for (const [index, laid] of to.entries()) {
-    await standApart(tx, joinId, moving.tableId, laid.tableId, laid.place, from[index]!.place);
-  }
-  await passGuests(
-    tx,
-    cfg,
-    moving.tableId,
-    to.map((laid) => laid.tableId),
-    "caller",
-  );
-}
-
-/** Each table of the joined table still joined, in number order, where it stands inside `outline`. */
-function laidInside(
-  outline: Placement,
-  parts: readonly Part[],
-): { tableId: string; place: Placement }[] {
-  const covered = parts.findIndex((part) => !part.splitOff);
-  const places = partPlaces(outline, parts, covered);
-  return parts.flatMap((part, index) =>
-    part.stillJoined ? [{ tableId: part.tableId, place: places[index]! }] : [],
-  );
-}
-
-/**
- * Each table of the joined table in use, so neither still joined nor split off, is split off where
- * it stands and stays out of the group: the joined table is apart from now on, so once free the
- * table is an ordinary one. Marking its reset row placed stops the catch-up taking it off the map
- * when it frees.
- */
-async function splitInUse(
-  tx: Transaction,
-  joinedId: string,
-  parts: readonly Part[],
-): Promise<void> {
-  for (const part of parts) {
-    if (part.stillJoined || part.splitOff) continue;
-    await tx
-      .insert(floorTodaySplitParts)
-      .values({ joinedTableId: joinedId, partTableId: part.tableId });
-    await tx
-      .update(floorResetTables)
-      .set({ placed: true })
-      .where(eq(floorResetTables.tableId, part.tableId));
-  }
-}
-
-/** `partId` is split off `joinedId`, stands at `place` and joins the merge as having stood at `before`. */
-async function standApart(
-  tx: Transaction,
-  joinId: string,
-  joinedId: string,
-  partId: string,
-  place: Placement,
-  before: Placement,
-): Promise<void> {
-  await tx.insert(floorTodaySplitParts).values({ joinedTableId: joinedId, partTableId: partId });
-  await tx
-    .update(floorTodayTables)
-    .set({ ...placementColumns(place), takenOff: false })
-    .where(eq(floorTodayTables.tableId, partId));
-  await tx.insert(floorTodayJoinTables).values({
-    joinId,
-    tableId: partId,
-    beforeX: before.x,
-    beforeY: before.y,
-    beforeRotation: before.rotation,
-  });
+  await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, moving));
+  await tx.update(floorTodayTables).set(at).where(eq(floorTodayTables.id, moving.row.id));
 }
 
 function placeOf(row: Today["row"]): JoinPlace {

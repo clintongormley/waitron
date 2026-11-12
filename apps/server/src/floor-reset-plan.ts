@@ -40,7 +40,6 @@ export interface LiveTable {
   /** It is in a today's merge holding a waiting table: held, refused, or in a waiting split group. */
   mergedWithHeld: boolean;
   /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
-  splitWithBusy: boolean;
   /** It needs clearing, so it waits as a held table does, and is seeded as one is. */
   clearing: boolean;
   /** It is in a joined group of the reset, a joined table and its parts, with a waiting member. */
@@ -113,7 +112,6 @@ export function planReset(input: {
         table.refused ||
         table.clearing ||
         table.mergedWithHeld ||
-        table.splitWithBusy ||
         table.joinedWithWaiting ||
         table.blocked)
     ) {
@@ -186,12 +184,11 @@ export function movesTable(
     placement: Placement | null;
     takenOff: boolean;
     inMerge: boolean;
-    splitOff: boolean;
   } | null,
   target: { placement: Placement | null },
 ): boolean {
   if (today === null || today.placement === null || today.takenOff) return false;
-  if (today.inMerge || today.splitOff || target.placement === null) return true;
+  if (today.inMerge || target.placement === null) return true;
   const [from, to] = [today.placement, target.placement];
   return (
     from.x !== to.x ||

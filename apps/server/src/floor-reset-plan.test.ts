@@ -28,7 +28,6 @@ const l = (id: string, label: string, over: Partial<LiveTable> = {}): LiveTable 
   tied: false,
   hasToday: true,
   mergedWithHeld: false,
-  splitWithBusy: false,
   clearing: false,
   joinedWithWaiting: false,
   blocked: false,
@@ -74,10 +73,10 @@ describe("planReset", () => {
     expect(plan.seed).toEqual([]);
   });
 
-  it("keeps a table whose split group is busy waiting, as a table merged with a held one waits", () => {
+  it("keeps a member waiting while its saved group is busy", () => {
     const plan = planReset({
       targets: [t("a", "T1"), t("b", "T2")],
-      live: [l("a", "T1", { splitWithBusy: true }), l("b", "T2")],
+      live: [l("a", "T1", { joinedWithWaiting: true }), l("b", "T2")],
       takenElsewhere: none,
       shortNameKeysElsewhere: none,
     });
@@ -562,7 +561,7 @@ describe("movesTable", () => {
   const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
   const drawn = (
     x: number,
-    over: { takenOff?: boolean; inMerge?: boolean; splitOff?: boolean } = {},
+    over: { takenOff?: boolean; inMerge?: boolean;  } = {},
   ) => ({
     placement: at(x),
     takenOff: false,
@@ -571,12 +570,11 @@ describe("movesTable", () => {
     ...over,
   });
 
-  it("is true for a new place, a new size, store, a table in a merge and a split-off table", () => {
+  it("is true for a new place, a new size, store, a table in a merge", () => {
     expect(movesTable(drawn(0), t("a", "T1", { placement: at(20) }))).toBe(true);
     expect(movesTable(drawn(0), t("a", "T1", { placement: { ...at(0), width: 10 } }))).toBe(true);
     expect(movesTable(drawn(0), t("a", "T1", { placement: null }))).toBe(true);
     expect(movesTable(drawn(0, { inMerge: true }), t("a", "T1", { placement: at(0) }))).toBe(true);
-    expect(movesTable(drawn(0, { splitOff: true }), t("a", "T1", { placement: at(0) }))).toBe(true);
   });
 
   it("is true for each placement field alone: y, height, shape and rotation", () => {

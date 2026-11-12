@@ -16,9 +16,6 @@ function today(seats: number, over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     ...over,
   };
@@ -46,7 +43,7 @@ function table(id: string, label: string, todayRow: TableToday, over: Partial<Ta
 const joined = table(
   "long",
   "Long table",
-  today(10, { joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false } }),
+  today(10, { }),
   {
     state: "open-tab",
     condition: "held",
@@ -68,9 +65,9 @@ const joined = table(
   },
 );
 const parts = [
-  table("c3", "Counter 3", today(2, { inJoinedTable: "Long table" })),
-  table("c4", "Counter 4", today(6, { inJoinedTable: "Long table" })),
-  table("c5", "Counter 5", today(4, { inJoinedTable: "Long table" })),
+  table("c3", "Counter 3", today(2, { })),
+  table("c4", "Counter 4", today(6, { })),
+  table("c5", "Counter 5", today(4, { })),
 ];
 
 async function choose(el: TillSplitJoinedDialog, values: string[]) {
@@ -85,7 +82,7 @@ describe.each(["light", "dark"] as const)("till-split-joined-dialog a11y (%s the
     setLocale("es-ES");
     return mountWidget<TillSplitJoinedDialog>(
       "till-split-joined-dialog",
-      { joined, parts, name: "Long table" },
+      { joined, parts, name: "Long table", guestsMoveTo: () => ["Counter 3"] },
       theme,
     );
   }
@@ -93,7 +90,7 @@ describe.each(["light", "dark"] as const)("till-split-joined-dialog a11y (%s the
   it("has no violations on a group, with Seats for what stays shown", async () => {
     setLocale("es-ES");
     const inGroup = (id: string, label: string, seats: number) =>
-      table(id, label, today(seats, { joinId: "g", splitOffFrom: "long" }));
+      table(id, label, today(seats, { joinId: "g", }));
     const bar = table("bar", "Bar", today(4, { joinId: "g" }));
     const { el, host } = await mountWidget<TillSplitJoinedDialog>(
       "till-split-joined-dialog",
@@ -113,7 +110,7 @@ describe.each(["light", "dark"] as const)("till-split-joined-dialog a11y (%s the
   it("has no violations on a group with every table the guests hold ticked", async () => {
     setLocale("es-ES");
     const bar = table("bar", "Bar", today(4, { joinId: "g" }));
-    const c3 = table("c3", "Counter 3", today(2, { joinId: "g", splitOffFrom: "long" }));
+    const c3 = table("c3", "Counter 3", today(2, { joinId: "g", }));
     const { el, host } = await mountWidget<TillSplitJoinedDialog>(
       "till-split-joined-dialog",
       {
@@ -154,7 +151,7 @@ describe.each(["light", "dark"] as const)("till-split-joined-dialog a11y (%s the
   it("has no violations with a refusal under Tables to split off", async () => {
     const { el, host } = await mount();
     await choose(el, ["c4", "c5"]);
-    el.refusal = { code: "joined_table.part_invalid", field: "partIds" };
+    el.refusal = { code: "merge.member_invalid", field: "partIds" };
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("wt-combobox")!.error).not.toBe("");
     await expectNoA11yViolations(host);

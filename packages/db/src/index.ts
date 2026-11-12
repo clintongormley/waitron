@@ -32,12 +32,8 @@ export { runMigrations } from "./migrate.js";
 export { tableExists } from "./table-exists.js";
 export { tableInService } from "./table-in-service.js";
 export {
-  joinedOutOfService,
-  joinedTableApart,
   needsMoving,
   resetRowMoves,
-  savedPart,
-  stillJoinedPart,
 } from "./joined-parts.js";
 export type { MigrationDatabase, MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";

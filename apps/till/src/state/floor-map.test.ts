@@ -34,9 +34,6 @@ function today(over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     ...over,
   };
@@ -251,24 +248,24 @@ describe("zones and their tables", () => {
   it.each([
     ["map", (tables: TableState[]) => mapTables(tables, now)],
     ["list", listedTables],
-  ] as const)("a still-joined part that kept its place is absent from the %s", (_name, read) => {
+  ] as const)("a placed real table remains visible in the %s", (_name, read) => {
     const part = table({
       id: "c3",
       label: "Counter 3",
-      today: today({ inJoinedTable: "Long table" }),
+      today: today({ }),
     });
     const joined = table({ id: "long", label: "Long table", today: today() });
-    expect(read([part, joined]).map((each) => each.id)).toEqual(["long"]);
+    expect(read([part, joined]).map((each) => each.id)).toEqual(["c3", "long"]);
   });
 
-  it("lists a still-joined part that needs clearing, and does not draw it", () => {
+  it("lists and draws a real table that needs clearing", () => {
     const part = table({
       id: "c3",
       condition: "needs_clearing",
-      today: today({ inJoinedTable: "Long table" }),
+      today: today({ }),
     });
     expect(listedTables([part])).toEqual([part]);
-    expect(mapTables([part], now)).toEqual([]);
+    expect(mapTables([part], now).map((each) => each.id)).toEqual(["c3"]);
   });
 
   it("reads seats only from today or its merge, with none without a today row", () => {
@@ -276,64 +273,5 @@ describe("zones and their tables", () => {
     expect(seatsFor(table({ today: today({ seats: 6, joinId: "j1", joinSeats: 10 }) }))).toBe(10);
     expect(seatsFor(table({}))).toBeNull();
     expect(seatsFor(table({ today: today({ seats: null }) }))).toBeNull();
-  });
-});
-
-describe("a joined table split today", () => {
-  it("draws a part split off after its joined table, so it sits on top", () => {
-    const c5 = table({
-      id: "c5",
-      label: "Counter 5",
-      today: today({ splitOffFrom: "long" }),
-    });
-    const long = table({
-      id: "long",
-      label: "Long table",
-      today: today({ joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false } }),
-    });
-    const stool = table({ id: "stool", label: "Stool 2", today: today() });
-    expect(mapTables([c5, long, stool], now).map((each) => each.id)).toEqual([
-      "long",
-      "stool",
-      "c5",
-    ]);
-    expect(mapTables([long, c5, stool], now).map((each) => each.id)).toEqual([
-      "long",
-      "stool",
-      "c5",
-    ]);
-  });
-
-  it("draws a part split off on top when it is merged with a table listed before its joined table", async () => {
-    const bar2 = table({
-      id: "bar2",
-      label: "Bar 2",
-      today: today({ joinId: "J", placement: { ...placement, x: 0 } }),
-    });
-    const long = table({
-      id: "long",
-      label: "Long table",
-      today: today({ joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false } }),
-    });
-    const c5 = table({
-      id: "c5",
-      label: "Counter 5",
-      today: today({ splitOffFrom: "long", joinId: "J" }),
-    });
-    const map = document.createElement("wt-floor-map");
-    map.style.cssText = "display: block; width: 600px; height: 300px";
-    map.tables = mapTables([bar2, long, c5], now);
-    document.body.append(map);
-    try {
-      await new Promise(requestAnimationFrame);
-      await new Promise(requestAnimationFrame);
-      await map.updateComplete;
-      const drawn = [...map.shadowRoot!.querySelectorAll<HTMLElement>('[part="table"]')].map(
-        (group) => group.dataset["tableId"],
-      );
-      expect(drawn).toEqual(["long", "bar2"]);
-    } finally {
-      map.remove();
-    }
   });
 });

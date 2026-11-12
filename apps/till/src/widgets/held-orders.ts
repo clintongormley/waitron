@@ -8,7 +8,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
 import { seatedRead, tableTarget, tableTargetStyles, type SeatedRead } from "./table-targets.js";
 import { billName, paidInPart } from "../state/bill-state.js";
-import { outOfServiceJoined, seatsGuests, shownName } from "../state/floor-today.js";
+import { seatsGuests, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
@@ -298,7 +298,7 @@ export class TillHeldOrders extends LitElement {
   #picker(order: HeldOrderSummary): TemplateResult {
     const tables = this.tables.filter(
       (table) =>
-        !outOfServiceJoined(table) &&
+
         (table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId))),
     );
     return html`<wt-dialog

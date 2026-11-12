@@ -380,9 +380,6 @@ const joinedFloor = (): TableState[] => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
     },
     party: null,
@@ -561,7 +558,7 @@ it("offers a table renamed for today by its name, sorted by it", async () => {
   const [, counter4, , , stool2] = joinedFloor();
   const window = {
     ...counter4!,
-    today: { ...counter4!.today!, inJoinedTable: null, name: "Window" },
+    today: { ...counter4!.today!, name: "Window" },
   };
   const { el } = await mount(undefined, [window, stool2!]);
   click(el, "[data-accept]");

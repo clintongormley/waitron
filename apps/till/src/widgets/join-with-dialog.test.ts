@@ -104,9 +104,6 @@ it("lists a table that needs moving but cannot pick it, saying why, and Needs cl
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     needsMoving: true,
   };

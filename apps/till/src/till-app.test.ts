@@ -18000,9 +18000,6 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 1,
     ...over,
   });

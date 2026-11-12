@@ -104,9 +104,6 @@ describe("till-table-details-sheet", () => {
         takenOff: false,
         joinId: null,
         joinSeats: null,
-        inJoinedTable: null,
-        joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false },
-        splitOffFrom: null,
         zoneRevision: 0,
       },
     });
@@ -125,9 +122,6 @@ describe("till-table-details-sheet", () => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       ...over,
     });
@@ -136,10 +130,9 @@ describe("till-table-details-sheet", () => {
       label: "Long table",
       today: todayOf({
         seats: 10,
-        joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false },
       }),
     });
-    const c5 = table({ id: "c5", label: "Counter 5", today: todayOf({ splitOffFrom: "long" }) });
+    const c5 = table({ id: "c5", label: "Counter 5", today: todayOf({ }) });
 
     it("labels Reset table in English and Spanish", async () => {
       const el = await mount({
@@ -183,9 +176,6 @@ describe("till-table-details-sheet", () => {
           takenOff: false,
           joinId: "j1",
           joinSeats: 6,
-          inJoinedTable: null,
-          joined: null,
-          splitOffFrom: null,
           zoneRevision: 0,
         },
       }),
@@ -597,9 +587,6 @@ describe("till-table-details-sheet", () => {
           takenOff: false,
           joinId: null,
           joinSeats: null,
-          inJoinedTable: null,
-          joined: null,
-          splitOffFrom: null,
           zoneRevision: 0,
         },
         signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],

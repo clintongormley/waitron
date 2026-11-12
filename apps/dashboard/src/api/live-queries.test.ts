@@ -237,10 +237,6 @@ it.each([
   ["getFloorPlan", ["s1", "z1"], "floor_plan_table_parts"],
   ["getFloorPlan", ["s1", "z1"], "dining_tables"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_table_sizes"],
-  ["getSalesOverview", [], "floor_reset_tables"],
-  ["getSalesOverview", [], "floor_reset_table_parts"],
-  ["getSalesOverview", [], "floor_today_join_tables"],
-  ["getSalesOverview", [], "floor_today_split_parts"],
   ["getSalesOverview", [], "party_tables"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",

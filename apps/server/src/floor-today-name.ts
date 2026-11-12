@@ -1,8 +1,8 @@
-import { and, eq, isNotNull, not } from "drizzle-orm";
-import { diningTables, floorTodayJoins, floorTodayTables, joinedOutOfService } from "@waitron/db";
+import { eq, isNotNull } from "drizzle-orm";
+import { diningTables, floorTodayJoins, floorTodayTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, normalisePartyName } from "@waitron/shared";
-import { refuseInJoinedTable, todayOf } from "./floor-today-table.js";
+import { todayOf } from "./floor-today-table.js";
 import { withMovedSlips } from "./moved-slips.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
@@ -24,7 +24,6 @@ export async function nameToday(
 ): Promise<void> {
   const today = await todayOf(tx, tableId);
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
-  await refuseInJoinedTable(tx, [tableId]);
   let wanted = normalisePartyName(name);
 
   if (today.merge !== null) {
@@ -88,7 +87,7 @@ async function refuseInUse(
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
     .where(
-      and(isNotNull(floorTodayTables.name), not(joinedOutOfService(floorTodayTables.tableId))),
+      isNotNull(floorTodayTables.name),
     );
   if (todays.some((t) => t.tableId !== selfTable && sameName(t.name!, name))) throw taken;
 

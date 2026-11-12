@@ -637,9 +637,6 @@ describe("till-app: seating a party", () => {
       takenOff: false,
       joinId,
       joinSeats: joinId === null ? null : 8,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
     });
     const getTablesState = vi
@@ -675,9 +672,6 @@ describe("till-app: seating a party", () => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       ...names,
     };
@@ -730,9 +724,6 @@ describe("till-app: seating a party", () => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       needsMoving: true,
       name: "Ventana",
@@ -2064,9 +2055,6 @@ describe("till-app: reads and refusals around the party", () => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 1,
       name,
     });

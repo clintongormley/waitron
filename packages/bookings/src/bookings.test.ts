@@ -766,221 +766,24 @@ describe("a part of a joined table on a layout", () => {
     );
   }
 
-  it("refuses a booking at Counter 4, for any date", async () => {
+  it("books a saved group's member for today or a future date", async () => {
     const { createdBy } = await setupVenue();
     const table = await longTable();
     for (const date of ["2026-08-20", "2027-01-15"]) {
-      await expect(book(createdBy, date, table.c4)).rejects.toMatchObject({
-        code: "table.in_joined_table",
-        params: { tableId: table.c4, field: "tableId" },
-      });
+      const { id } = await book(createdBy, date, table.c4);
+      expect((await scoped((tx) => getBooking(tx, id)))!).toMatchObject({ tableId: table.c4, bookingDate: date });
     }
     const count = await db.execute<{ n: number }>(sql`select count(*) as n from bookings`);
-    expect(count.rows[0]!.n).toBe(0);
+    expect(count.rows[0]!.n).toBe(2);
   });
 
-  it("books Long table", async () => {
+  it("moves a booking between saved members and changes its date", async () => {
     const { createdBy } = await setupVenue();
     const table = await longTable();
-    const { id } = await book(createdBy, "2026-08-20", table.long);
-    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(table.long);
-  });
-
-  it("refuses an edit that moves a booking to Counter 5", async () => {
-    const { createdBy } = await setupVenue();
-    const table = await longTable();
-    const { id } = await book(createdBy, "2026-08-20", table.long);
-    await expect(
-      scoped((tx) => updateBooking(tx, id, { tableId: table.c5 })),
-    ).rejects.toMatchObject({
-      code: "table.in_joined_table",
-      params: { tableId: table.c5, field: "tableId" },
-    });
-    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(table.long);
-  });
-});
-
-describe("books table 4 while today's recorded layout stands it", () => {
-  const TODAY = "2026-10-10";
-  const TOMORROW = "2026-10-11";
-
-  /**
-   * Zone Inside with 4, 5 and 4+5 made of them; Standard places 4 and 5 and leaves 4+5 off,
-   * Dinner places 4+5. Today's plan records Standard for TODAY.
-   */
-  async function inside() {
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: "Inside" })
-      .returning({ id: floorZones.id });
-    const [standard, dinner] = await db
-      .insert(floorPlanSets)
-      .values([{}, {}])
-      .returning({ id: floorPlanSets.id });
-    const [standardPlan, dinnerPlan] = await db
-      .insert(floorPlans)
-      .values([
-        { zoneId: zone!.id, setId: standard!.id, savedAt: nowIso() },
-        { zoneId: zone!.id, setId: dinner!.id, savedAt: nowIso() },
-      ])
-      .returning({ id: floorPlans.id });
-    const master = {} as Record<"t4" | "t5" | "t45", string>;
-    const live = {} as Record<"t4" | "t5" | "t45", string>;
-    const reset = {} as Record<"t4" | "t5" | "t45", string>;
-    for (const [key, label] of [
-      ["t4", "4"],
-      ["t5", "5"],
-      ["t45", "4+5"],
-    ] as const) {
-      const [row] = await db
-        .insert(floorPlanTables)
-        .values({ zoneId: zone!.id, label, seats: 4 })
-        .returning({ id: floorPlanTables.id });
-      master[key] = row!.id;
-      const table = await db.execute<{ id: string }>(sql`
-        insert into dining_tables (id, created_at, zone_id, label, plan_table_id)
-        values (${newId()}, ${nowIso()}, ${zone!.id}, ${label}, ${row!.id})
-        returning id`);
-      live[key] = table.rows[0]!.id;
-      await db.insert(floorTodayTables).values({ tableId: live[key] });
-      const [resetRow] = await db
-        .insert(floorResetTables)
-        .values({ zoneId: zone!.id, tableId: live[key], label, seats: 4, planTableId: row!.id })
-        .returning({ id: floorResetTables.id });
-      reset[key] = resetRow!.id;
-    }
-    await db.insert(floorPlanTableParts).values([
-      { joinedTableId: master.t45, partTableId: master.t4 },
-      { joinedTableId: master.t45, partTableId: master.t5 },
-    ]);
-    await db.insert(floorResetTableParts).values([
-      { joinedResetTableId: reset.t45, partResetTableId: reset.t4 },
-      { joinedResetTableId: reset.t45, partResetTableId: reset.t5 },
-    ]);
-    const at = { y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
-    const standardAt = { t4: 0, t5: 20 } as Partial<Record<"t4" | "t5" | "t45", number>>;
-    const dinnerAt = { t45: 0 } as Partial<Record<"t4" | "t5" | "t45", number>>;
-    await db.insert(floorPlanPlacements).values([
-      { planId: standardPlan!.id, planTableId: master.t4, x: 0, ...at },
-      { planId: standardPlan!.id, planTableId: master.t5, x: 20, ...at },
-      { planId: dinnerPlan!.id, planTableId: master.t45, x: 0, ...at },
-    ]);
-    await db
-      .insert(floorTodayZones)
-      .values({ zoneId: zone!.id, businessDay: TODAY, setId: standard!.id });
-    /** Records `setId` and copies where its layout puts each table into the reset rows, as a reset does. */
-    const record = async (setId: string, xs: Partial<Record<"t4" | "t5" | "t45", number>>) => {
-      await db.update(floorTodayZones).set({ setId }).where(eq(floorTodayZones.zoneId, zone!.id));
-      for (const key of ["t4", "t5", "t45"] as const) {
-        const x = xs[key];
-        await db
-          .update(floorResetTables)
-          .set(
-            x === undefined
-              ? { x: null, y: null, width: null, height: null, shape: null, rotation: null }
-              : { x, ...at },
-          )
-          .where(eq(floorResetTables.id, reset[key]));
-      }
-    };
-    await record(standard!.id, standardAt);
-    /** A dashboard save of Standard that places 4+5 and puts 4 and 5 away, applied by no reset. */
-    const saveStandardJoined = async () => {
-      await db.delete(floorPlanPlacements).where(eq(floorPlanPlacements.planId, standardPlan!.id));
-      await db
-        .insert(floorPlanPlacements)
-        .values({ planId: standardPlan!.id, planTableId: master.t45, x: 0, ...at });
-    };
-    return { live, recordDinner: () => record(dinner!.id, dinnerAt), saveStandardJoined };
-  }
-
-  function book(createdBy: string, bookingDate: string, tableId: string) {
-    return scoped((tx) =>
-      createBooking(tx, {
-        bookingDate,
-        bookingTime: "20:00",
-        partySize: 4,
-        contactName: "Taylor",
-        tableId,
-        createdBy,
-      }),
-    );
-  }
-
-  const inJoined = (tableId: string) => ({
-    code: "table.in_joined_table",
-    params: { tableId, field: "tableId" },
-  });
-
-  it("accepts a booking for today at 4 and refuses one at 4+5", async () => {
-    const { createdBy } = await setupVenue();
-    const { live } = await inside();
-    const { id } = await book(createdBy, TODAY, live.t4);
-    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
-    await expect(book(createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
-  });
-
-  it("refuses 4 with Dinner recorded", async () => {
-    const { createdBy } = await setupVenue();
-    const { live, recordDinner } = await inside();
-    await recordDinner();
-    await expect(book(createdBy, TODAY, live.t4)).rejects.toMatchObject(inJoined(live.t4));
-  });
-
-  it("books 4 for today after a save of Standard that no reset has applied", async () => {
-    const { createdBy } = await setupVenue();
-    const { live, saveStandardJoined } = await inside();
-    await saveStandardJoined();
-    const { id } = await book(createdBy, TODAY, live.t4);
-    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
-    await expect(book(createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
-  });
-
-  it("refuses a booking for tomorrow at 4", async () => {
-    const { createdBy } = await setupVenue();
-    const { live } = await inside();
-    await expect(book(createdBy, TOMORROW, live.t4)).rejects.toMatchObject(inJoined(live.t4));
-  });
-
-  it("judges an edit by the patch's date, else the stored booking's", async () => {
-    const { createdBy } = await setupVenue();
-    const { live } = await inside();
-    const { id } = await book(createdBy, TOMORROW, live.t45);
-    await expect(scoped((tx) => updateBooking(tx, id, { tableId: live.t5 }))).rejects.toMatchObject(
-      inJoined(live.t5),
-    );
-    await scoped((tx) => updateBooking(tx, id, { bookingDate: TODAY, tableId: live.t5 }));
-    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t5);
-    await scoped((tx) => updateBooking(tx, id, { tableId: live.t4 }));
-    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(live.t4);
-  });
-
-  it("judges an edit that changes only the date against the booking's table", async () => {
-    const { createdBy } = await setupVenue();
-    const { live } = await inside();
-    const { id } = await book(createdBy, TODAY, live.t4);
-    await expect(
-      scoped((tx) => updateBooking(tx, id, { bookingDate: TOMORROW })),
-    ).rejects.toMatchObject(inJoined(live.t4));
-    const stored = await scoped((tx) => getBooking(tx, id));
-    expect(stored).toMatchObject({ bookingDate: TODAY, tableId: live.t4 });
-    await scoped((tx) => updateBooking(tx, id, { bookingDate: TODAY, notes: "window" }));
-    expect((await scoped((tx) => getBooking(tx, id)))!.notes).toBe("window");
-  });
-
-  it("moves a booking with no table to any date", async () => {
-    const { createdBy } = await setupVenue();
-    await inside();
-    const { id } = await scoped((tx) =>
-      createBooking(tx, {
-        bookingDate: TODAY,
-        bookingTime: "20:00",
-        partySize: 4,
-        contactName: "Taylor",
-        createdBy,
-      }),
-    );
-    await scoped((tx) => updateBooking(tx, id, { bookingDate: TOMORROW }));
-    expect((await scoped((tx) => getBooking(tx, id)))!.bookingDate).toBe(TOMORROW);
+    const { id } = await book(createdBy, "2026-08-20", table.c3);
+    await scoped((tx) => updateBooking(tx, id, { tableId: table.c5 }));
+    expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(table.c5);
+    await scoped((tx) => updateBooking(tx, id, { bookingDate: "2027-01-15" }));
+    expect((await scoped((tx) => getBooking(tx, id)))!).toMatchObject({ bookingDate: "2027-01-15", tableId: table.c5 });
   });
 });

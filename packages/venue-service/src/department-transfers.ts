@@ -3,7 +3,6 @@ import type {
   DepartmentTransferActor,
   DepartmentTransferReceiver,
 } from "@waitron/module";
-export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   departments,
@@ -12,7 +11,6 @@ import {
   departmentTransferRequests,
   orderServiceContexts,
   orderTableLabels,
-  joinedOutOfService,
   tableInService,
   billPayments,
   billPaymentRefunds,
@@ -32,6 +30,7 @@ import {
 import { assertZoneTakesNewOrders } from "./zone-closed-times.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
+export type { DepartmentTransferActor,DepartmentTransferReceiver } from "@waitron/module";
 
 export interface DepartmentTransferSettings {
   departmentId: string;
@@ -392,7 +391,7 @@ export async function acceptDepartmentTransfer(
     throw new AppError("department_transfer.destination_invalid", { field: "zoneId" });
   if (input.tableId !== null) {
     const [table] = await tx
-      .select({ joined: joinedOutOfService(diningTables.id).mapWith(Boolean) })
+      .select({ id: diningTables.id })
       .from(diningTables)
       .where(
         and(
@@ -403,8 +402,6 @@ export async function acceptDepartmentTransfer(
       );
     if (table === undefined)
       throw new AppError("department_transfer.destination_invalid", { field: "tableId" });
-    if (table.joined)
-      throw new AppError("table.in_joined_table", { tableId: input.tableId, field: "tableId" });
   }
   await assertZoneTakesNewOrders(tx, input.zoneId, new Date());
   const accepted = await resolveRequest(tx, request.id, receiver, {

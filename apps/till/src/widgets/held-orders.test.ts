@@ -607,9 +607,6 @@ describe("till-held-orders: moving a counter order to a table", () => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       name,
     });
@@ -643,8 +640,6 @@ describe("till-held-orders: moving a counter order to a table", () => {
       joinId: null,
       joinSeats: null,
       inJoinedTable,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
     });
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
@@ -675,9 +670,6 @@ describe("till-held-orders: moving a counter order to a table", () => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       needsMoving,
     });

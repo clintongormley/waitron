@@ -38,7 +38,6 @@ import {
 import { finishTable, markTableCleared } from "./party-close-fixture.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, OPERATOR, seat, type PartyVenue } from "./party-venue.js";
-import { partsOf } from "../floor-today-parts.js";
 import { holdersOf, partyRevision } from "../parties.js";
 
 export interface PlannedEntry {
@@ -455,7 +454,6 @@ export async function withSplitPartyReads(
     const ids = Array.isArray(body.partIds)
       ? body.partIds.filter((id): id is string => typeof id === "string")
       : [];
-    if ((await partsOf(tx, tableId)).some((part) => part.stillJoined)) ids.push(tableId);
     const expectedParties = [];
     for (const id of new Set((await holdersOf(tx, ids)).values()))
       expectedParties.push({ id, revision: await partyRevision(tx, id) });

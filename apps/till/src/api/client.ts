@@ -2228,12 +2228,6 @@ export interface TableToday {
   takenOff: boolean;
   joinId: string | null;
   joinSeats: number | null;
-  /** The joined table's name while this table is one of its parts, which the till never offers. */
-  inJoinedTable: string | null;
-  /** For a joined table of today's copy: its parts' ids still joined and split off today. */
-  joined: { parts: string[]; splitOff: string[]; apart: boolean } | null;
-  /** For a part split off today, its joined table's id. */
-  splitOffFrom: string | null;
   /** The revision of this table's room, sent back with each change to today's floor. */
   zoneRevision: number;
   /** This table's name for today. Optional so hand-built fixtures need not say it; the server always does. */
@@ -4690,24 +4684,6 @@ export class TillApi {
         partIds: split.partIds,
         expectedParties: split.expectedParties,
         ...(split.seats === undefined ? {} : { seats: split.seats }),
-      },
-      zoneRevision,
-    );
-  }
-
-  /** Take split-off tables back into their joined table →
-   * `POST /api/tables/:id/today/reset`. `seats` is left out when unset: the server refuses a null. */
-  resetTableToday(
-    tableId: string,
-    join: { partIds: string[]; seats?: number },
-    zoneRevision: number,
-  ): Promise<FloorAnswer> {
-    return this.#todayChange(
-      tableId,
-      "reset",
-      {
-        partIds: join.partIds,
-        ...(join.seats === undefined ? {} : { seats: join.seats }),
       },
       zoneRevision,
     );

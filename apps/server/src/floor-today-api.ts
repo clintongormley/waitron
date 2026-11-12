@@ -28,7 +28,6 @@ import {
 import { plannedZones } from "./floor-layout-due.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { leaveHere, markMoved } from "./floor-today-mark-moved.js";
-import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { nameToday } from "./floor-today-name.js";
 import type { Logger } from "./logger.js";
@@ -252,19 +251,6 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       others: partIds,
     };
   });
-  tableRoute("reset", (body) => {
-    const { partIds, seats } = partsBody(body);
-    return {
-      write: (tx, joinedId) =>
-        resetTable(tx, removals, deps.clock.now().instant, {
-          tableId: joinedId,
-          partIds,
-          seats,
-        }),
-      others: partIds,
-    };
-  });
-
   app.post("/api/zones/:id/today/reset", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

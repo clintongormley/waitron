@@ -39,9 +39,6 @@ function today(x: number, over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     ...over,
   };
@@ -998,14 +995,13 @@ describe("till-floor-screen: today's names", () => {
 
   it("Split tables… on a renamed joined table is headed with its name for today", async () => {
     const part = (id: string, label: string) => ({
-      ...planned(id, 0, { placement: null, inJoinedTable: "Long table" }),
+      ...planned(id, 0, { placement: null, }),
       label,
       shortName: label,
     });
     const long = {
       ...planned("tl", 2, {
         name: "Window table",
-        joined: { parts: ["t3", "t6"], splitOff: [], apart: false },
       }),
       label: "Long table",
       shortName: "Long table",

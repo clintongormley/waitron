@@ -194,13 +194,7 @@ export const QUERY_DEPENDENCIES = {
     "dining_tables",
     "floor_today_tables",
     "floor_zones",
-    // The open-tables count: who holds a table, and which are out of service because of a joined
-    // table (`joinedOutOfService`).
     "party_tables",
-    "floor_reset_tables",
-    "floor_reset_table_parts",
-    "floor_today_join_tables",
-    "floor_today_split_parts",
     "products",
     "settings.business_day",
     "settings.venue",

@@ -1,5 +1,4 @@
-import { joinedOutOfService, tableInService } from "@waitron/db";
-// Registers `management.request_invalid`, which the query screens below throw.
+import { tableInService } from "@waitron/db";
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -162,7 +161,6 @@ async function countOpenTables(tx: Transaction): Promise<{ open: number; total: 
            )) as text) as open
     from dining_tables dt
     where ${tableInService(sql`dt.id`)}
-      and not ${joinedOutOfService(sql`dt.id`)}
   `);
   return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
 }

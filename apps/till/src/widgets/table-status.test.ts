@@ -491,9 +491,6 @@ const today = (over: Partial<NonNullable<TableState["today"]>> = {}): TableState
   takenOff: false,
   joinId: null,
   joinSeats: null,
-  inJoinedTable: null,
-  joined: null,
-  splitOffFrom: null,
   zoneRevision: 1,
   ...over,
 });

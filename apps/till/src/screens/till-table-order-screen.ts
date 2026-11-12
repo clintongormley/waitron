@@ -173,7 +173,6 @@ import {
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
 import {
-  outOfServiceJoined,
   seatsGuests,
   shownName as tableShownName,
 } from "../state/floor-today.js";
@@ -5646,7 +5645,6 @@ export class TillTableOrderScreen extends LitElement {
       (this.actionVerb === "move-bill" &&
         (this.#shownBill === undefined || this.#shownBill.status === "open"));
     const tables = this.tables
-      .filter((table) => !outOfServiceJoined(table))
       .filter((table) => zoneId === null || table.zoneId === zoneId)
       .filter(
         (table) =>

@@ -1,4 +1,4 @@
-import { joinedOutOfService, needsMoving, tableInService } from "@waitron/db";
+import { needsMoving, tableInService } from "@waitron/db";
 import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   diningTables,
@@ -437,7 +437,6 @@ async function inspectTargetTable(
   const [table] = await tx
     .select({
       inService: tableInService(diningTables.id).mapWith(Boolean),
-      joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
       needsMoving: needsMoving(diningTables.id).mapWith(Boolean),
@@ -446,7 +445,6 @@ async function inspectTargetTable(
     .where(eq(diningTables.id, tableId));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   if (!table.inService) throw new AppError("table.inactive", { tableId });
-  if (table.joined) throw new AppError("table.in_joined_table", { tableId });
   if (table.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
   if (table.needsMoving) throw new AppError("table.needs_moving", { tableId });
   return { holding, zoneId: table.zoneId };

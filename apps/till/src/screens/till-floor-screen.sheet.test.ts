@@ -64,9 +64,6 @@ function planned(
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       ...over,
     },
@@ -294,10 +291,10 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     const el = await mount(
       [
         planned("t1", 2),
-        planned("tL", 20, { joined: { parts: [], splitOff: ["t3"], apart: true } }),
-        planned("t3", 30, { splitOffFrom: "tL" }),
-        planned("tM", 40, { joined: { parts: ["t5", "t6"], splitOff: [], apart: false } }),
-        planned("t5", 60, { inJoinedTable: "M" }),
+        planned("tL", 20, { }),
+        planned("t3", 30, { }),
+        planned("tM", 40, { }),
+        planned("t5", 60, { }),
       ],
       stubApi(),
     );

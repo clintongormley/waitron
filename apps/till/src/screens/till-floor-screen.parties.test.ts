@@ -15,9 +15,6 @@ function today(): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
   };
 }

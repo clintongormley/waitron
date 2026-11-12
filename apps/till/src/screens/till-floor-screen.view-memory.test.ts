@@ -42,9 +42,6 @@ function table(id: string, zoneId: string, placed: boolean): TableState {
           takenOff: false,
           joinId: null,
           joinSeats: null,
-          inJoinedTable: null,
-          joined: null,
-          splitOffFrom: null,
           zoneRevision: 0,
         }
       : null,

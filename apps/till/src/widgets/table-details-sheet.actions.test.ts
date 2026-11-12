@@ -17,9 +17,6 @@ function today(over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     ...over,
   };

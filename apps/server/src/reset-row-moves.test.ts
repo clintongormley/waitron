@@ -7,7 +7,6 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodaySplitParts,
   floorTodayTables,
   needsMoving,
 } from "@waitron/db";
@@ -36,7 +35,6 @@ interface Case {
   /** Today's row; null for a table with none. */
   today: { placement: Placement | null; takenOff?: boolean; seats?: number } | null;
   inMerge?: boolean;
-  splitOff?: boolean;
   target: Placement | null;
   moves: boolean;
 }
@@ -61,7 +59,6 @@ const CASES: Case[] = [
   },
   { name: "into store", today: { placement: at }, target: null, moves: true },
   { name: "in a merge", today: { placement: at }, inMerge: true, target: at, moves: true },
-  { name: "split off", today: { placement: at }, splitOff: true, target: at, moves: true },
   {
     name: "taken off",
     today: { placement: at, takenOff: true },
@@ -112,11 +109,7 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
             .insert(floorTodayJoinTables)
             .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
         }
-        if (c.splitOff) {
-          await tx
-            .insert(floorTodaySplitParts)
-            .values({ joinedTableId: table.joined!, partTableId: tableId });
-        }
+
       }
     });
 
@@ -136,7 +129,6 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
               placement: c.today.placement,
               takenOff: c.today.takenOff ?? false,
               inMerge: c.inMerge ?? false,
-              splitOff: c.splitOff ?? false,
             },
         { placement: c.target },
       ),

@@ -28,17 +28,7 @@ export function drawnGroupKey(table: TableState, linkId: string | null): string 
  * look, as `wt-floor-map` requires; the party's tables also carry its id as `linkId`.
  */
 export function mapTables(zoneTables: readonly TableState[], now: number): FloorMapTable[] {
-  // `wt-floor-map` draws each merge where its first member is listed, so a part split off, and any
-  // merge holding one, goes last to land on top of its joined table.
-  const onPlan = zoneTables.filter(onTodaysPlan);
-  const liftedJoins = new Set(
-    onPlan.flatMap(({ today }) =>
-      today!.splitOffFrom !== null && today!.joinId !== null ? [today!.joinId] : [],
-    ),
-  );
-  const lifted = ({ today }: TableState): boolean =>
-    today!.splitOffFrom !== null || (today!.joinId !== null && liftedJoins.has(today!.joinId));
-  const drawn = [...onPlan.filter((table) => !lifted(table)), ...onPlan.filter(lifted)];
+  const drawn = zoneTables.filter(onTodaysPlan);
   const groupsOfParty = new Map<string, Set<string>>();
   for (const table of drawn) {
     if (table.party === null) continue;

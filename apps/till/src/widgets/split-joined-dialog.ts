@@ -13,7 +13,7 @@ import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { totalSeats } from "../state/floor-map.js";
-import { shownName, splitsGroup } from "../state/floor-today.js";
+import { shownName } from "../state/floor-today.js";
 
 export interface SplitJoinedDetail {
   partIds: string[];
@@ -234,12 +234,7 @@ export class TillSplitJoinedDialog extends LitElement {
     const footError =
       invalid || partsMessage !== "" || seatsMessage !== "" ? t("form.fix_fields") : refusalText;
     const actionState = saveActionState(this.#scope);
-    const left = this.#left();
-    const guestsMove = splitsGroup(this.joined)
-      ? this.guestsMoveTo(this.#chosen())
-      : this.joined.party !== null && left.length === 1
-        ? [shownName(left[0]!)]
-        : [];
+    const guestsMove = this.guestsMoveTo(this.#chosen());
     const heading = (key: "floor.split_title" | "floor.seats_title") =>
       t(key).replace("{table}", () => this.name);
     return html`<wt-dialog
@@ -279,7 +274,7 @@ export class TillSplitJoinedDialog extends LitElement {
                 required
                 .min=${1}
                 .max=${SEATS_MAX}
-                .label=${splitsGroup(this.joined) ? t("floor.seats_staying") : heading("floor.seats_title")}
+                .label=${t("floor.seats_staying")}
                 .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
                 .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
                 .value=${live(this.seats)}

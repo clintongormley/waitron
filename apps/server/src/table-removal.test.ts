@@ -14,7 +14,6 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodaySplitParts,
   floorTodayTables,
   floorZones,
   partyTables,
@@ -29,7 +28,7 @@ import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
-import { splitJoinedTable } from "./floor-today-split.js";
+import { splitOff } from "./floor-today-split-group.js";
 import { finishTable, leaveTables } from "./testing/party-close-fixture.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { removeLiveTables, tablesTied } from "./table-removal.js";
@@ -497,10 +496,8 @@ describe("removing a table of a joined table split today", () => {
     await giveKeptSize(v, zone.master.c3!, { width: 2, height: 2 });
     await giveKeptSize(v, zone.master.c4!, { width: 2, height: 2 });
     await inTx(v, (tx) =>
-      splitJoinedTable(tx, v.cfg, {
-        tableId: zone.table.long!,
-        partIds: [zone.table.c5!],
-        seats: 6,
+      splitOff(tx, v.cfg, NONE, NOW, {
+        tableId: zone.table.c3!, partIds: [zone.table.c5!], seats: 6, expectedParties: [],
       }),
     );
     return zone;
@@ -533,44 +530,35 @@ describe("removing a table of a joined table split today", () => {
     );
   }
 
-  const splitRows = () => inTx(v, (tx) => tx.select().from(floorTodaySplitParts));
-  const splitRowsOf = async (joinedTableId: string) =>
-    (await splitRows()).filter((row) => row.joinedTableId === joinedTableId);
-
-  it("removes a joined table for good, with its split record", async () => {
+  it("removing a saved group leaves its real tables available", async () => {
     const { zoneId, table, master } = await longTableSplit();
     await saveWithout(zoneId, master.long!);
 
     await reset(zoneId);
 
-    expect(await tableExists(table.long!)).toBe(false);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    for (const id of [table.c3!, table.c4!, table.c5!]) expect(await tableExists(id)).toBe(true);
   });
 
-  it("removes a part split off for good, with its split record", async () => {
+  it("removes an ordinary member that was split away", async () => {
     const { zoneId, table, master } = await longTableSplit();
     await saveWithout(zoneId, master.c5!);
 
     await reset(zoneId);
 
     expect(await tableExists(table.c5!)).toBe(false);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
   });
 
-  it("keeps the split record of a table something unknown still names", async () => {
+  it("keeps a removed member and its reset row while something unknown still names it", async () => {
     const { zoneId, table, master } = await longTableSplit();
-    const { partyId } = await seat(v, table.long!);
+    const { partyId } = await seat(v, table.c5!);
     await finish(partyId);
-    await strayPartyRow(partyId, table.long!);
-    const before = await splitRowsOf(table.long!);
-    expect(before).toHaveLength(1);
-    await saveWithout(zoneId, master.long!);
+    await strayPartyRow(partyId, table.c5!);
+    await saveWithout(zoneId, master.c5!);
 
     await reset(zoneId);
 
-    expect(await tableExists(table.long!)).toBe(true);
-    expect(await resetRowOf(table.long!)).toMatchObject({ remove: true, pending: true });
-    expect(await splitRowsOf(table.long!)).toEqual(before);
+    expect(await tableExists(table.c5!)).toBe(true);
+    expect(await resetRowOf(table.c5!)).toMatchObject({ remove: true, pending: true });
   });
 });
 

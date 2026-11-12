@@ -4404,8 +4404,6 @@ describe("till-table-order-screen", () => {
         joinId: null,
         joinSeats: null,
         inJoinedTable,
-        joined: null,
-        splitOffFrom: null,
         zoneRevision: 0,
       });
       const { el } = await mount({
@@ -4450,9 +4448,6 @@ describe("till-table-order-screen", () => {
           takenOff: false,
           joinId: null,
           joinSeats: null,
-          inJoinedTable: null,
-          joined: null,
-          splitOffFrom: null,
           zoneRevision: 0,
           needsMoving,
         });
@@ -4529,9 +4524,6 @@ describe("till-table-order-screen", () => {
         takenOff: false,
         joinId: null,
         joinSeats: null,
-        inJoinedTable: null,
-        joined: null,
-        splitOffFrom: null,
         zoneRevision: 1,
         name,
       },

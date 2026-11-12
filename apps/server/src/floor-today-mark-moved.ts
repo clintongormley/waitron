@@ -5,7 +5,6 @@ import {
   floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
-  floorTodaySplitParts,
   needsMoving,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -136,23 +135,7 @@ async function refuseHeldBack(
       .select({ id: floorTodayJoinTables.tableId })
       .from(floorTodayJoinTables)
       .where(inArray(floorTodayJoinTables.joinId, joins));
-    const split = await tx
-      .select({
-        part: floorTodaySplitParts.partTableId,
-        joined: floorTodaySplitParts.joinedTableId,
-      })
-      .from(floorTodaySplitParts)
-      .where(
-        or(
-          inArray(floorTodaySplitParts.partTableId, ids),
-          inArray(floorTodaySplitParts.joinedTableId, ids),
-        ),
-      );
     for (const row of merged) tied.add(row.id);
-    for (const row of split) {
-      tied.add(row.part);
-      tied.add(row.joined);
-    }
     for (const id of await pendingGroupTables(tx, ids)) tied.add(id);
   }
   const ids = [tableId, ...[...tied].filter((id) => id !== tableId)];
