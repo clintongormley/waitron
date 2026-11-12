@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, devices, invoiceCorrections, sales, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  floorZones,
+  invoiceCorrections,
+  sales,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
