@@ -911,7 +911,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Pass board code and missing test pins** (bundle of 3, size M). [Detail](backlog/till.md#bundle-pass-board-code-and-missing-test-pins)
 
-- **Status words on the pass and beside it** (bundle of 6, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
+- **Status words on the pass and beside it** (bundle of 5, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
 
 - **A station move of dishes from several stations prints each station's slips in an order that
   can change between runs (left open by A773-2 B3's reviews; predates it).** `moveDishesToStation`
