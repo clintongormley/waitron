@@ -30,7 +30,6 @@ export interface CorrectionMoney {
   completed: number;
   pending: number;
   pendingRefundId: string | null;
-  firstCompletedAt: string | null;
 }
 
 /** A correction's refunds, oldest link first and, among links made at one time, oldest payment
@@ -61,17 +60,10 @@ export async function readCorrectionLegs(
     completed: 0,
     pending: 0,
     pendingRefundId: null,
-    firstCompletedAt: null,
   };
   for (const leg of refunds) {
-    if (leg.state === "completed") {
-      money.completed += leg.appliedAmount;
-      if (
-        leg.completedAt !== null &&
-        (money.firstCompletedAt === null || leg.completedAt < money.firstCompletedAt)
-      )
-        money.firstCompletedAt = leg.completedAt;
-    } else if (leg.state === "pending") {
+    if (leg.state === "completed") money.completed += leg.appliedAmount;
+    else if (leg.state === "pending") {
       money.pending += leg.appliedAmount;
       money.pendingRefundId ??= leg.id;
     }
@@ -91,10 +83,9 @@ export async function readCorrectionMoney(
  * Refuses unless the correction is this sale's and open (`invoice_correction.not_open`
  * { correctionId, state }), a cash leg comes through the correction's cash request
  * (`invoice_correction.cash_route_only` { correctionId }), the tip is zero (`invalid("tipAmount")`),
- * no cancellation ids are named
- * (`invalid("cancellationIds")`), and the leg fits what is left (`invoice_correction.leg_too_large`
- * { correctionId, left }). Answers the correction. Reads the correction and its money unless `read`
- * hands them in; every check runs either way.
+ * no cancellation ids are named (`invalid("cancellationIds")`), and the leg fits what is left
+ * (`invoice_correction.leg_too_large` { correctionId, left }). Answers the correction. Reads the
+ * correction and its money unless `read` hands them in; every check runs either way.
  */
 export async function checkCorrectionLeg(
   tx: Transaction,

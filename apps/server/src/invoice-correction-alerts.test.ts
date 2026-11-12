@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { incidents, sales, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -9,6 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
+import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
 import {
   fileInvoiceCorrectionNow,
@@ -82,13 +83,19 @@ async function fifteenBack() {
       },
     ),
   );
+  await giveCash(correction.id, "15.00");
+  return { saleId, correctionId: correction.id, since: new Date(start).toISOString() };
+}
+
+/** Gives `amount` of correction `correctionId` back in cash now. */
+async function giveCash(correctionId: string, amount: string) {
   await inTx(v, (tx) =>
     giveCorrectionCash(
       tx,
       deps(),
       v.cfg,
-      correction.id,
-      parseCorrectionCash({ submissionId: randomUUID(), amount: "15.00" }),
+      correctionId,
+      parseCorrectionCash({ submissionId: randomUUID(), amount }),
       {
         personId: v.adminId,
         authz: { sessionId: v.operator.sessionId },
@@ -96,7 +103,6 @@ async function fifteenBack() {
       },
     ),
   );
-  return { saleId, correctionId: correction.id, since: new Date(start).toISOString() };
 }
 
 async function splitOf(saleId: SaleId, gross: string) {
@@ -207,6 +213,37 @@ describe("the unfinished-correction alert", () => {
       errors: [refusal],
     });
     expect(await alertsFor(saleId)).toHaveLength(1);
+  });
+
+  it("measures the hour from the earliest completed refund, not the latest", async () => {
+    const { saleId, correctionId, since } = await fifteenBack();
+    at(45);
+    await giveCash(correctionId, "3.00");
+    at(61);
+    await sweepInvoiceCorrections(v.deps, v.deps.clock.now().instant);
+    expect(await alertsFor(saleId)).toEqual([
+      {
+        params: { correctionId, saleId, moneyBack: "18.00", since },
+        severity: "warning",
+        source: "payment_check",
+      },
+    ]);
+  });
+
+  it("takes the write lock only when a correction is due an alert", async () => {
+    await fifteenBack();
+    const lock = vi.spyOn(v.db, "withWriteLock");
+    try {
+      // Earlier cases leave open corrections in this database, so only an hour before any case's
+      // first refund is nothing due.
+      await sweepInvoiceCorrections(v.deps, new Date("2026-10-14T08:00:00.000Z"));
+      expect(lock).not.toHaveBeenCalled();
+      at(61);
+      await sweepInvoiceCorrections(v.deps, v.deps.clock.now().instant);
+      expect(lock).toHaveBeenCalledOnce();
+    } finally {
+      lock.mockRestore();
+    }
   });
 
   it("raises the alert while refunds are paused", async () => {
