@@ -80,15 +80,20 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
    a released version's tag is missing"). Nothing in a checkout says which versions were released
    except the tags, so the rule is: every `declarations/v*.md` except the highest version must have
    its tag, and every `v*` tag must have its file, unchanged. The highest may lack a tag (prepared,
-   not yet tagged). A checkout without tags therefore fails as soon as a second version is
-   prepared, which is when the guard first has something to protect.
+   not yet tagged). **Watcher, 2026-11-12 17:59, against design §8:** the guard also fails when
+   the checkout holds no tags at all and any `declarations/v*.md` exists, because a tagless
+   checkout cannot tell a prepared version from a released one. The repository's own checkout is
+   never tagless: `git ls-remote --tags origin` lists `refs/tags/pre-sqlite-migration`
+   (2026-11-12), which `root-guards` fetches once Task 8 sets `fetch-tags: true`.
 7. **The tag must be on `main`.** §5.1 defines a release as a tag "on a commit of `main`"; only
    `pnpm release tag` enforced it. The publish job refuses a tag whose commit is not an ancestor of
    `origin/main`.
 8. **The GitHub Release is made by its own job** (`release`), the only one given
    `contents: write`, after `publish`. It pulls the published image by its tag and copies the two
    files out of it, so the archive's PDF is the box's PDF byte for byte (§5.3). A re-run replaces
-   the two files from the image the tag names then (`gh release upload --clobber`).
+   the two files from the image the tag names then (`gh release upload --clobber`). **Watcher,
+   2026-11-12 17:59:** the publish step refuses when `:X.Y.Z` already exists on the registry, so a
+   re-run never replaces a published image and only redoes the Release upload (Task 5's case).
 9. **What `releasedOn` is read from.** `release.json`'s `releasedOn` is the day in item 1.l)'s
    "Fecha" line of the committed `v<version>.md`, read back from its Spanish words
    (`3 de diciembre de 2026` → `2026-12-03`) and accepted only when `spanishDate` of the result
@@ -287,7 +292,11 @@ Branch `feat/a940-4-release-image`. Path: FULL (the box's start path).
   stamped `null` started with `WAITRON_ENV: "production"` and a fresh state folder fails its start
   with `server.unreleased_build` (read from its recovery state or its output, whichever the existing
   built-server cases read), and one stamped `1.2.3` gets past that check (the case that must still
-  start: it fails later or serves, but never with that code).
+  start: it fails later or serves, but never with that code). **The setup wizard's "live" choice
+  (watcher, 2026-11-12 17:59):** choosing live makes first setup write `WAITRON_ENV=production` into
+  `trading.env` (`apps/server/src/trading-config.ts:35`), so on a test build the start after setup
+  refuses. One case shows it: a first setup that saves live on a bundle stamped `null`, then the
+  next start reaches the recovery page with `server.unreleased_build`'s EN words.
 - [ ] **Step 2: Run; each fails.**
   `pnpm --filter @waitron/server exec vitest run src/release-check.test.ts src/recovery-surface.test.ts`
   and `-t "unreleased"` on `src/boot.test.ts`.
@@ -378,7 +387,9 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
   `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`, comes before the first build; a step "Check the release inside the built image",
   only for tags, runs `timeout 120 docker run --rm --pull never --network none --entrypoint node
   "$CHECK_IMAGE" /app/server.js check-release "$RELEASE_VERSION"` after the build for checking and
-  before "Publish to GHCR".
+  before "Publish to GHCR"; and "Publish to GHCR", on a tag, first asks the registry for
+  `:<release_version>` (`docker manifest inspect`, bounded) and refuses when it exists (departure 8,
+  watcher 17:59), one guard case pinning that the check precedes the push.
 - [ ] **Step 2: Run; they fail.** `pnpm exec vitest run scripts/ci-workflow.test.mjs`.
 - [ ] **Step 3: Implement.** `release_version` is set in the existing `refs/tags/v*` branch of the
   case statement; a tag whose rest is not `X.Y.Z` is refused there (`exit 1`, naming it), before the
@@ -436,7 +447,8 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
   version with no tag `v<v>`. Git runs with `GIT_*` cleared.
 
 - [ ] **Step 1: Failing tests** in a scratch repository per case (`mktemp -d`, `git init`): no
-  files, no tags → `[]`; one file, no tag → `[]`; `v1.0.0` and `v1.0.1` files, no tags → one problem
+  files, no tags → `[]`; one file, no tags at all → one problem (departure 6, watcher 17:59);
+  one file, no tag of its own but another tag such as `pre-sqlite-migration` → `[]`; `v1.0.0` and `v1.0.1` files, no tags → one problem
   naming `v1.0.0`; tag `v1.0.0` and its file unchanged → `[]`; the file edited after the tag → one
   problem; the file deleted after the tag → one problem; a tag `pre-sqlite-migration` → ignored. One
   case runs against the real repository and expects `[]`. Run the file once with `GIT_DIR` set to
