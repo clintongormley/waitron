@@ -645,7 +645,6 @@ declare module "@waitron/shared" {
      */
     "submission.id_reused": { submissionId: string };
     "invoice_correction.not_settled": { saleId: string };
-    "invoice_correction.not_cash": { saleId: string };
     /** The cash a correction's cash request asks for is more than the invoice's cash payments still
      * hold for the sale, tips not counted. */
     "invoice_correction.cash_short": { correctionId: string; cashLeft: string; amount: string };
@@ -673,6 +672,12 @@ declare module "@waitron/shared" {
       moneyRefundable: string;
     };
     "invoice_correction.chain_unsound": { saleId: string };
+    /** A refund on the invoice is still waiting for the card company's answer: one of the
+     * correction's when filing or ending it, any refund on the invoice when opening one. */
+    "invoice_correction.refund_pending": { saleId: string; refundId: string };
+    /** A cash payment asked to join a correction through Refund a payment; cash goes back through
+     * the correction's own cash request. */
+    "invoice_correction.cash_route_only": { correctionId: string };
     /** The bill cannot be closed as a deferred payment: it is not one whole, positive bill. */
     "deferred_close.ineligible": {
       workingOrderId: string;

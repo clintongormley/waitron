@@ -89,7 +89,9 @@ export async function readCorrectionMoney(
 
 /**
  * Refuses unless the correction is this sale's and open (`invoice_correction.not_open`
- * { correctionId, state }), the tip is zero (`invalid("tipAmount")`), no cancellation ids are named
+ * { correctionId, state }), a cash leg comes through the correction's cash request
+ * (`invoice_correction.cash_route_only` { correctionId }), the tip is zero (`invalid("tipAmount")`),
+ * no cancellation ids are named
  * (`invalid("cancellationIds")`), and the leg fits what is left (`invoice_correction.leg_too_large`
  * { correctionId, left }). Answers the correction. Reads the correction and its money unless `read`
  * hands them in; every check runs either way.
@@ -112,6 +114,8 @@ export async function checkCorrectionLeg(
       correctionId: correction.id,
       state: correction.state,
     });
+  if (leg.method === "cash" && link.cashRoute !== true)
+    throw new AppError("invoice_correction.cash_route_only", { correctionId: correction.id });
   if (leg.tipCents !== 0) throw invalid("tipAmount");
   if (leg.cancellationIds !== undefined) throw invalid("cancellationIds");
   const left =

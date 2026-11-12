@@ -17,7 +17,13 @@ import { createProduct } from "@waitron/catalogue";
 import { previewCorrectionAmounts } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { latestRecord } from "@waitron/fiscal-verifactu/src/clock-behind.js";
-import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  createPinThrottle,
+  hashPin,
+  loginWithPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -25,6 +31,7 @@ import {
   centsToDecimal,
   decimal,
   decimalToCents,
+  deviceOrigin,
   saleId as brandSaleId,
 } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -32,6 +39,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
+import { refundSettledTender } from "./tender-refunds.js";
 import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import {
@@ -48,6 +56,7 @@ import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { systemClock } from "./till-backend.js";
+import { overridePinAttempts } from "./till-api.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
 let venue: BillVenue;
@@ -270,7 +279,9 @@ async function giveBack(
         reason: "Goodwill",
         ...(correctionId === undefined
           ? {}
-          : { invoiceCorrection: { id: correctionId, requestId: randomUUID() } }),
+          : {
+              invoiceCorrection: { id: correctionId, requestId: randomUUID(), cashRoute: true },
+            }),
       },
       { requestedBy: managerId, authorizedBy: managerId },
       reading.instant.toISOString(),
@@ -781,17 +792,6 @@ describe("openInvoiceCorrection refuses", () => {
     await expect(open(saleId, ask)).resolves.toEqual({ ...first, replayed: true });
     expect(counts()).toEqual(after);
   });
-
-  it.each([[[{ card: "40.00" }]], [["20.00", { card: "20.00" }]]])(
-    "an invoice with a payment that is not cash (%j)",
-    async (parts) => {
-      const saleId = await soldForCash("Set menu", parts);
-      await refusedWithNothingWritten(
-        () => open(saleId, { submissionId: randomUUID(), gross: "5.00" }),
-        { code: "invoice_correction.not_cash", params: { saleId } },
-      );
-    },
-  );
 
   it("more than the money left, naming €7.00 after €3.00 of €10.00 went back, and opens €7.00", async () => {
     const saleId = await soldForCash("Rice platter", ["10.00"]);
@@ -1350,6 +1350,155 @@ describe("File now and Close", () => {
     expect(await correctionRow(correction.id)).toMatchObject({
       state: "closed",
       endedBy: managerId,
+    });
+  });
+});
+
+/** The sale's payment by `method`, as Refund a payment lists it. */
+async function paymentBy(saleId: string, method: "cash" | "card") {
+  return (await inTx(venue, (tx) => readRefundableTenders(tx, saleId))).find(
+    (row) => row.method === method,
+  )!;
+}
+
+/** `amount` back on the sale's hand-keyed card payment through Refund a payment, as a leg of
+ * `correctionId`, confirmed returned with the manager's PIN. */
+async function handKeyedLeg(
+  saleId: string,
+  correctionId: string,
+  amount: string,
+  tipAmount = "0.00",
+) {
+  const submissionId = randomUUID();
+  const cfg = { ...venue.cfg, origin: deviceOrigin(venue.deviceId) };
+  return refundSettledTender(
+    {
+      db: venue.db,
+      backend: venue.backend,
+      admission: testTradingAdmission(),
+      cfg,
+      clock: venue.clock,
+      attendance: recordAttendanceFact,
+    },
+    cfg,
+    saleId,
+    {
+      submissionId,
+      tenderId: (await paymentBy(saleId, "card")).tenderId,
+      appliedAmount: amount,
+      tipAmount,
+      reason: "Goodwill",
+      manualConfirmed: true,
+      override: { personId: managerId, pin: "8888" },
+      invoiceCorrection: { id: correctionId, requestId: submissionId },
+    },
+    {
+      personId: managerId,
+      sessionId: managerSessionId,
+      attempts: overridePinAttempts(createPinThrottle(), venue.deviceId),
+    },
+  );
+}
+
+const MENU_TWENTY_FIVE = [{ rate: "21.00", base: "20.66", tax: "4.34" }];
+
+describe("a correction's hand-keyed card legs", () => {
+  it("opens a correction of a ticket paid €20 cash and €20 by hand-keyed card", async () => {
+    const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }]);
+    const was = counts();
+
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+
+    expect(correction).toMatchObject({ state: "open", gross: "25.00", left: "25.00", legs: [] });
+    expect(counts()).toEqual({ ...was, corrections: was.corrections + 1 });
+  });
+
+  it("records a hand-keyed card last leg and files nothing", async () => {
+    const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    await cash(correction.id, "15.00");
+    const was = counts();
+
+    const leg = await handKeyedLeg(saleId, correction.id, "10.00");
+
+    expect(leg).toMatchObject({ state: "completed", appliedAmount: "10.00" });
+    expect(counts()).toEqual({ ...was, refunds: was.refunds + 1 });
+    const view = await inTx(venue, (tx) =>
+      readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id),
+    );
+    expect(view).toMatchObject({
+      state: "open",
+      moneyBack: "25.00",
+      left: "0.00",
+      correctiveSaleId: null,
+      fileNow: { gross: "25.00", vatBreakdown: MENU_TWENTY_FIVE },
+    });
+
+    const filed = await fileNow(correction.id, MENU_TWENTY_FIVE);
+
+    expect(filed).toMatchObject({ state: "filed", moneyBack: "25.00" });
+    const [corrective] = await venue.db
+      .select()
+      .from(sales)
+      .where(eq(sales.id, filed.correctiveSaleId!));
+    expect(corrective).toMatchObject({ correctsSaleId: saleId, total: -2500 });
+  });
+
+  it("refuses a cash payment joining a correction through Refund a payment", async () => {
+    const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    const was = counts();
+
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${saleId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: (await paymentBy(saleId, "cash")).tenderId,
+        appliedAmount: "15.00",
+        tipAmount: "0.00",
+        reason: "Goodwill",
+        invoiceCorrectionId: correction.id,
+        cashRoute: true,
+        override: { personId: managerId, pin: "8888" },
+      },
+    );
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: {
+        code: "invoice_correction.cash_route_only",
+        params: { correctionId: correction.id },
+      },
+    });
+    expect(counts()).toEqual(was);
+    await expect(cash(correction.id, "15.00")).resolves.toMatchObject({
+      correction: { moneyBack: "15.00" },
+    });
+  });
+
+  it("refuses a card leg with a tip, and takes it without", async () => {
+    const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }], "1.00");
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "20.00" });
+
+    await refusedWithNothingWritten(() => handKeyedLeg(saleId, correction.id, "20.00", "1.00"), {
+      code: "management.request_invalid",
+      params: { field: "tipAmount" },
+    });
+    await expect(handKeyedLeg(saleId, correction.id, "20.00")).resolves.toMatchObject({
+      state: "completed",
+    });
+  });
+
+  it("answers a cash request on a ticket with no cash payment as no cash left", async () => {
+    const saleId = await soldForCash("Set menu", [{ card: "40.00" }]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+
+    await refusedWithNothingWritten(() => cash(correction.id, "5.00"), {
+      code: "invoice_correction.cash_short",
+      params: { correctionId: correction.id, cashLeft: "0.00", amount: "5.00" },
     });
   });
 });

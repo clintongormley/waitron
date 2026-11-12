@@ -46,7 +46,6 @@ export function mountInvoiceCorrectionApi(
       "sale.correction_not_admitted": 409,
       "adjustment_reason.not_found": 400,
       "invoice_correction.not_settled": 409,
-      "invoice_correction.not_cash": 409,
       "invoice_correction.already_open": 409,
       "invoice_correction.money_short": 409,
       "invoice_correction.split_changed": 409,
@@ -56,6 +55,7 @@ export function mountInvoiceCorrectionApi(
       "invoice_correction.cash_short": 409,
       "invoice_correction.nothing_back": 409,
       "invoice_correction.still_correctable": 409,
+      "invoice_correction.refund_pending": 409,
     },
     "invoice_correction.failed",
   );

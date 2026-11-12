@@ -625,6 +625,14 @@ it("refuses a refund with 409 while the ticket has an unfinished correction, nam
   });
   expect((await effects()).refunds).toHaveLength(0);
 });
+it.each(["bad", 42, null])("refuses a malformed invoiceCorrectionId %j", async (value) => {
+  const t = await target();
+  expect(await create(t.saleId, { ...ask(t.tenderId), invoiceCorrectionId: value })).toMatchObject({
+    status: 400,
+    json: { code: "management.request_invalid", params: { field: "invoiceCorrectionId" } },
+  });
+  expect((await effects()).refunds).toHaveLength(0);
+});
 it("records the requesting session's device, including when it differs from the invoice's device", async () => {
   const t = await target();
   const result = await create(

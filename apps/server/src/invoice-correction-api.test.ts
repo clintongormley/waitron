@@ -95,7 +95,7 @@ async function serveOnly(zoneId: string) {
 }
 
 /** A €10.00 croquettes order paid through the till in `parts`; issued unpaid when `parts` is empty. */
-async function sold(parts: readonly (string | { card: string })[]) {
+async function sold(parts: readonly (string | { card: string } | { reader: string })[]) {
   const id = randomUUID();
   const deps = {
     db: venue.db,
@@ -111,14 +111,14 @@ async function sold(parts: readonly (string | { card: string })[]) {
   });
   if (parts.length === 0) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
   for (const part of parts) {
-    const amount = typeof part === "string" ? part : part.card;
+    const amount = typeof part === "string" ? part : "card" in part ? part.card : part.reader;
     const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
       amount,
       ...(typeof part === "string"
         ? { method: "cash", tendered: amount }
-        : { method: "card", entry: "manual" }),
+        : { method: "card", entry: "card" in part ? "manual" : "reader" }),
       applied: amount,
       tip: "0.00",
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
@@ -338,11 +338,6 @@ describe("POST /api/transactions/:saleId/corrections", () => {
 
   const refusals: [string, () => Promise<{ saleId: string; patch?: Record<string, unknown> }>][] = [
     ["invoice_correction.not_settled", async () => ({ saleId: await sold([]) })],
-    ["invoice_correction.not_cash", async () => ({ saleId: await sold([{ card: "10.00" }]) })],
-    [
-      "invoice_correction.not_cash",
-      async () => ({ saleId: await sold(["4.00", { card: "6.00" }]) }),
-    ],
     [
       "invoice_correction.already_open",
       async () => {
@@ -390,6 +385,33 @@ describe("POST /api/transactions/:saleId/corrections", () => {
           checked: 1,
           issues: [{ code: "predecessor-hash-mismatch", params: {} }],
         } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+        return { saleId };
+      },
+    ],
+    [
+      "invoice_correction.refund_pending",
+      async () => {
+        const saleId = await sold([{ reader: "10.00" }]);
+        const [card] = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
+        venue.card.scriptNextRefund({
+          made: false,
+          answer: { kind: "uncertain", reason: "network" },
+        });
+        const goodwill = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/transactions/${saleId}/refunds`,
+          {
+            submissionId: randomUUID(),
+            tenderId: card!.tenderId,
+            appliedAmount: "1.00",
+            tipAmount: "0.00",
+            reason: "Goodwill",
+            override: supervisor(),
+          },
+        );
+        expect(goodwill).toMatchObject({ status: 200, json: { state: "pending" } });
         return { saleId };
       },
     ],
