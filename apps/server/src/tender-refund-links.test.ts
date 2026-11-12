@@ -618,6 +618,26 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     ]);
   });
 
+  it("replay and retry keep independent approval when it differs from the saved cancel approver", async () => {
+    const { paid, burger } = await oneCancel();
+    const ask = refundBody(paid, "12.00", [burger]);
+    const approved = await staffRefund(paid, {
+      ...ask,
+      override: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+    const id = (approved.json as { id: string }).id;
+    const before = await ledgers();
+    expect((await staffRefund(paid, ask)).json).toMatchObject({
+      code: "authorization.not_permitted",
+    });
+    expect(
+      (await send(venue.app, venue.cookie.staff, "POST", `/api/tender-refunds/${id}/retry`, {}))
+        .json,
+    ).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await ledgers()).toEqual(before);
+  });
+
   it.each([false, true])(
     "fresh approval permits excess amount or tip, without granting saved replay authority (tip=%s)",
     async (tip) => {

@@ -411,6 +411,36 @@ describe("settled-tender refund authorization before reservation", () => {
       request(t.tenderId, { manualConfirmed: true }),
     );
   });
+  it("a standalone terminal cannot use saved cancellation authority instead of a fresh PIN", async () => {
+    const t = await target("card", "manual");
+    await role("staff");
+    await expect(
+      withTenderRefundAuthorization(
+        store.db,
+        cfg,
+        t.saleId,
+        request(t.tenderId, { manualConfirmed: true }),
+        operator(),
+        (_tx, authorize) => authorize(managerId),
+      ),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+    expect(await rows()).toEqual([]);
+  });
+  it("saved cancellation authority does not rescue an explicitly unqualified approving PIN", async () => {
+    const t = await target();
+    await role("staff");
+    await expect(
+      withTenderRefundAuthorization(
+        store.db,
+        cfg,
+        t.saleId,
+        request(t.tenderId, { override: { personId, pin: PIN } }),
+        operator(),
+        (_tx, authorize) => authorize(managerId),
+      ),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+    expect(await rows()).toEqual([]);
+  });
   it("a standalone terminal needs handover confirmation", async () => {
     const t = await target("card", "manual");
     await refused(t, "management.request_invalid", request(t.tenderId, { override: override() }));
