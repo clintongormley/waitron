@@ -2288,7 +2288,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local alert, box-host call, attendance-fact, bill-editor transition, transfer-close and orders
   route fixtures use English staff display-name samples.
   Local portion-sale projection, station-queue and station-move staff samples use Anna and Lewis.
-  Local adjustment-report staff use Lucy, Paul and Rose; session-person and box-alert-email samples use Anna.
+  Local adjustment-report staff use Lucy, Paul and Rose; `till-session.person` and box-alert-email samples use Anna.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
