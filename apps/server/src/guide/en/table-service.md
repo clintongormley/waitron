@@ -361,8 +361,8 @@ At the counter, use **Parked orders** to retrieve or discard a table's bill. Dis
 bill leaves a seated table with a fresh empty bill. To free the table, use **Finish table**.
 
 Tap the switcher to list the table's bills in number order. Each row shows the bill's number and
-name, what it still owes or **Paid ✓**, and a line such as **Ana has an unsent order: 3 items** for
-each person with dishes on that bill not yet sent. When another bill holds dishes you have not
+name, what it still owes or **Paid ✓** (**Deferred payment** for a bill closed as a deferred
+payment), and a line such as **Ana has an unsent order: 3 items** for each person with dishes on that bill not yet sent. When another bill holds dishes you have not
 sent, the switcher says so, such as **✎ Bill 2 unsent**, and the list marks that bill **✎ Unsent**.
 Choose a row to put that bill on screen. A paid
 bill opens too, so you can name it or, when it has a receipt, print a copy, but it takes no new
@@ -627,6 +627,14 @@ separate action after payment.
 
 ## Close a bill as a deferred payment {#deferred-payment}
 
-When the customer will pay the whole bill later, outside Waitron, open **Pay** and choose **Close as
-deferred payment**. This closes the bill now, and Waitron will not record the payment when it
-arrives.
+Use this when the customer will pay the whole bill later, outside Waitron. Open **Pay**, choose
+**Whole bill**, then **Close as deferred payment**. Check the bill, the invoice and the total, then
+confirm. Waitron issues the invoice if it has not been issued yet and closes the bill for good. It
+records no payment for the bill, now or later, and the bill shows **Deferred payment** from then on.
+
+The button is there only on a bill with nothing paid yet. Every dish on the bill must be served or
+cancelled first. A manager allows it for a device by switching on **Closes bills as deferred
+payments** in the device's profile, under **Device profiles** on the dashboard.
+
+Your accountant gets the list of these bills from **Export deferred payments (CSV)**, on the
+dashboard's **Sales & takings** page.

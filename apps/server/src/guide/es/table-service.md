@@ -383,7 +383,8 @@ Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. 
 usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
-el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un
+el nombre de la cuenta, lo que queda por pagar o **Pagada ✓** (**Pago aplazado** si se cerró
+como pago aplazado), y una línea como **Ana tiene un
 pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Cuando otra
 cuenta tiene platos tuyos sin enviar, el selector lo indica, como **✎ Cuenta 2 sin enviar**, y la
 lista marca esa cuenta con **✎ Sin enviar**. Elige una fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
@@ -665,6 +666,15 @@ una acción aparte, después del cobro.
 
 ## Cerrar una cuenta como pago aplazado {#deferred-payment}
 
-Cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron, abre **Cobrar** y elige
-**Cerrar como pago aplazado**. Esto cierra la cuenta ahora y Waitron no registrará el pago cuando
-llegue.
+Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. Abre **Cobrar**,
+elige **Toda la cuenta** y luego **Cerrar como pago aplazado**. Comprueba la cuenta, la factura y el
+total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
+definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y la cuenta muestra
+**Pago aplazado** desde entonces.
+
+El botón solo aparece en una cuenta sin ningún pago. Todos los platos de la cuenta tienen que estar
+servidos o cancelados antes. Un responsable lo permite en un dispositivo activando **Cierra cuentas
+como pago aplazado** en el perfil del dispositivo, en **Perfiles de dispositivo** del panel.
+
+Tu gestor obtiene la lista de estas cuentas con **Exportar pagos aplazados (CSV)**, en la página
+**Ventas y recaudación** del panel.
