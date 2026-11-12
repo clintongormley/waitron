@@ -4351,6 +4351,32 @@ jobs:
           git rev-parse --is-shallow-repository
           find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
+      # The checkout is one commit deep, and a shallow fetch of main answers "not an ancestor" for a
+      # tag behind main's tip, so main is fetched whole.
+      - name: Refuse a release tag that is not on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        timeout-minutes: 4
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+        run: |
+          set -euo pipefail
+          fetched=0
+          for attempt in 1 2; do
+            if timeout 90 git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main; then
+              fetched=1
+              break
+            fi
+            echo "fetching main failed (attempt $attempt)" >&2
+            for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+          done
+          [ "$fetched" -eq 1 ] || exit 1
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "the tag $GITHUB_REF_NAME is on $GITHUB_SHA, which is not a commit of main" >&2
+            exit 1
+          fi
+          echo "the tag $GITHUB_REF_NAME is on a commit of main"
+
       # The release image carries the software producer's settings from three repository secrets. A
       # fork has none of them until it sets its own, so its publish stops here.
       - name: Refuse to publish without the producer's three settings
@@ -4398,6 +4424,8 @@ jobs:
           short="sha-$(printf '%s' "$SHA" | cut -c1-7)"
           tags="$repo:$short"
           agent_tags="$agent_repo:$short"
+          release_version=""
+          release_image=""
           case "$REF" in
             # What deploy/compose.yml defaults to: `docker compose pull` on a box follows main.
             # Full runs can overlap; never move the stable tag behind an already published commit.
@@ -4423,6 +4451,13 @@ jobs:
             # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
             # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
             refs/tags/v*)
+              release_version=${REF#refs/tags/v}
+              # The same form the bundle build accepts (`isReleaseVersion`), refused here before any read.
+              if ! [[ $release_version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || [ "${#release_version}" -gt 50 ]; then
+                echo "the tag ${REF#refs/tags/} is not a release: a release tag is v followed by X.Y.Z" >&2
+                exit 1
+              fi
+              release_image="$repo:$release_version"
               # A release tag moves no `:main`, but the producer guard below still compares with
               # `:main`'s settings: the same single registry read, with no decision. Exit 3 means
               # nothing is published under `:main` yet, which leaves the file empty.
@@ -4432,12 +4467,14 @@ jobs:
                 echo "cannot read :main's settings for the producer guard (exit $read_status)" >&2
                 exit 1
               fi
-              tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}"
+              tags="$tags,$release_image"; agent_tags="$agent_tags,$agent_repo:$release_version"
               ;;
           esac
           echo "$tags"; echo "$agent_tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "release_image=$release_image" >> "$GITHUB_OUTPUT"
 
       # A production box refuses to start on a chain made under another producer tax number
       # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
@@ -4513,6 +4550,7 @@ jobs:
           tags: waitron-publish-check:local
           build-args: |
             WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
             WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
             WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
             WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
@@ -4556,6 +4594,38 @@ jobs:
           set -euo pipefail
           timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/server.js check-producer
 
+      - name: Check the release inside the built image
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          CHECK_IMAGE: waitron-publish-check:local
+          RELEASE_VERSION: ${{ steps.tags.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/server.js check-release "$RELEASE_VERSION"
+
+      # A published release is never replaced. Only these words mean "not published" (measured with
+      # docker 29.9.3 against ghcr.io, 2026-11-12: a missing tag answers `manifest unknown`); any
+      # other failure, such as `denied`, stops the publish.
+      - name: Refuse a release version the registry already holds
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_IMAGE: ${{ steps.tags.outputs.release_image }}
+        run: |
+          set -euo pipefail
+          errors=$(mktemp)
+          status=0
+          timeout 60 docker manifest inspect "$RELEASE_IMAGE" >/dev/null 2>"$errors" || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "$RELEASE_IMAGE is already published; a release is never published twice" >&2
+            exit 1
+          elif grep -qE '^(manifest unknown|no such manifest: )' "$errors"; then
+            echo "$RELEASE_IMAGE is not published yet"
+          else
+            cat "$errors" >&2
+            echo "cannot ask the registry whether $RELEASE_IMAGE is published (exit $status)" >&2
+            exit 1
+          fi
+
       - name: Publish to GHCR
         uses: docker/build-push-action@v7
         with:
@@ -4566,6 +4636,7 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
             WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
             WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
             WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
@@ -4583,7 +4654,9 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.agent_tags }}
-          build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}

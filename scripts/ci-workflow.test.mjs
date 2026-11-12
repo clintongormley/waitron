@@ -7057,3 +7057,315 @@ describe("the publish job carries the producer's settings into the image", () =>
     });
   });
 });
+
+const RELEASE_ON_MAIN_STEP = "Refuse a release tag that is not on main";
+const RELEASE_CHECK_STEP = "Check the release inside the built image";
+const RELEASE_UNPUBLISHED_STEP = "Refuse a release version the registry already holds";
+const ON_A_RELEASE_TAG = "        if: startsWith(github.ref, 'refs/tags/v')";
+
+describe("the publish job on a release tag", () => {
+  const steps = publishSteps();
+  const at = (name) => steps.findIndex((step) => step.name === name);
+  const builds = steps.filter((step) => /uses: docker\/build-push-action@/.test(step.text));
+  const stubBin = (prefix, files) => {
+    const bin = mkdtempSync(join(tmpdir(), prefix));
+    afterAll(() => rmSync(bin, { recursive: true, force: true }));
+    for (const [name, body] of Object.entries(files)) {
+      writeFileSync(join(bin, name), body);
+      chmodSync(join(bin, name), 0o755);
+    }
+    return bin;
+  };
+  // macOS has no `timeout`; this stands in for it and records each command it was given.
+  const TIMEOUT_STUB =
+    '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/timeout.args"\nshift\n' +
+    'if [ "$1" = scripts/main-tag-guard.sh ]; then echo hold; exit 0; fi\nexec "$@"\n';
+
+  describe("the tags step", () => {
+    const bin = stubBin("release-tags-bin-", {
+      docker: '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/docker.args"\nexit 0\n',
+      timeout: TIMEOUT_STUB,
+    });
+    const run = (ref) => {
+      const dir = mkdtempSync(join(tmpdir(), "release-tags-"));
+      try {
+        writeFileSync(join(dir, "output"), "");
+        const result = runPublishScript(
+          publishStepNamed("Work out the tags to publish").script,
+          {
+            OWNER: "Example",
+            REF: ref,
+            SHA: "a".repeat(40),
+            REPOSITORY: "example/waitron",
+            GITHUB_OUTPUT: join(dir, "output"),
+            MAIN_TAG_GUARD_ENV_OUT: join(dir, "main-image.env"),
+            STUB_DIR: dir,
+          },
+          bin,
+        );
+        const read = (name) =>
+          existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
+        return { ...result, output: read("output"), dockerArgs: read("docker.args") };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+    const outputs = (output) =>
+      Object.fromEntries(
+        output
+          .split("\n")
+          .filter((line) => line.includes("="))
+          .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+      );
+
+    it("hands on the tag's version without its `v`, and the image it will publish", () => {
+      const result = run("refs/tags/v1.20.3");
+      expect(result.status, result.stderr).toBe(0);
+      expect(outputs(result.output)).toMatchObject({
+        release_version: "1.20.3",
+        release_image: "ghcr.io/example/waitron:1.20.3",
+      });
+    });
+
+    it("hands on an empty version on main", () => {
+      const result = run("refs/heads/main");
+      expect(result.status, result.stderr).toBe(0);
+      expect(outputs(result.output)).toMatchObject({ release_version: "", release_image: "" });
+    });
+
+    it.each(["v1.2.3-rc1", "v01.2.3", "v1.2", "v1.2.3.4", "vx.y.z", `v1.2.${"9".repeat(50)}`])(
+      "refuses the tag %s before reading the registry or naming any tag",
+      (tag) => {
+        const result = run(`refs/tags/${tag}`);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(tag);
+        expect(result.dockerArgs).toBe("");
+        expect(result.output).not.toContain("tags=");
+      },
+    );
+  });
+
+  it("passes the tag's version to both app builds and the print-agent build", () => {
+    expect(builds.map((step) => step.name)).toEqual([
+      PRODUCER_LOAD_STEP,
+      "Publish to GHCR",
+      "Publish the print-agent image to GHCR",
+    ]);
+    for (const build of builds)
+      expect(withBlock(build), build.name).toContain(
+        "            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}",
+      );
+  });
+
+  describe("the step refusing a tag that is not on main", () => {
+    const step = () => publishStepNamed(RELEASE_ON_MAIN_STEP);
+
+    it("runs on a release tag only, before the first build, bounded as a checkout is", () => {
+      expect(step().step).toContain(ON_A_RELEASE_TAG);
+      expect(at(RELEASE_ON_MAIN_STEP)).toBeGreaterThan(-1);
+      expect(at(RELEASE_ON_MAIN_STEP)).toBeLessThan(steps.indexOf(builds[0]));
+      expect(step().step.some((line) => /^ {8}timeout-minutes: [1-9]\d*$/.test(line))).toBe(true);
+      expect(step().envOf("GIT_HTTP_LOW_SPEED_LIMIT")).toMatch(/^[1-9]\d*$/);
+      expect(step().envOf("GIT_HTTP_LOW_SPEED_TIME")).toMatch(/^[1-9]\d*$/);
+      expect(step().script).toMatch(/timeout \d+ git fetch /);
+      expect(step().script).toContain('git merge-base --is-ancestor "$GITHUB_SHA" origin/main');
+      // A shallow fetch answered "not an ancestor" for a tag behind main's tip.
+      expect(step().text).not.toMatch(/--depth|--shallow/);
+    });
+
+    // Real git, against a local origin fetched as actions/checkout fetches a tag's commit: that
+    // commit alone, one deep, with no branch.
+    describe("against a real repository", () => {
+      const bin = stubBin("release-on-main-bin-", { timeout: TIMEOUT_STUB });
+      const root = mkdtempSync(join(tmpdir(), "release-on-main-"));
+      afterAll(() => rmSync(root, { recursive: true, force: true }));
+      const gitEnv = {
+        PATH: process.env.PATH,
+        HOME: root,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_AUTHOR_NAME: "Example",
+        GIT_AUTHOR_EMAIL: "example@example.invalid",
+        GIT_COMMITTER_NAME: "Example",
+        GIT_COMMITTER_EMAIL: "example@example.invalid",
+      };
+      const git = (cwd, ...args) => {
+        const result = spawnSync("git", args, { cwd, encoding: "utf8", env: gitEnv });
+        if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+        return result.stdout.trim();
+      };
+      const origin = join(root, "origin");
+      mkdirSync(origin);
+      git(origin, "init", "-q", "-b", "main");
+      git(origin, "commit", "-q", "--allow-empty", "-m", "one");
+      const tagged = git(origin, "rev-parse", "HEAD");
+      for (const message of ["two", "three"])
+        git(origin, "commit", "-q", "--allow-empty", "-m", message);
+      git(origin, "checkout", "-q", "-b", "side", tagged);
+      git(origin, "commit", "-q", "--allow-empty", "-m", "off main");
+      const offMain = git(origin, "rev-parse", "HEAD");
+      git(origin, "checkout", "-q", "main");
+
+      const run = (sha) => {
+        const dir = mkdtempSync(join(root, "run-"));
+        const work = join(dir, "work");
+        mkdirSync(work);
+        git(work, "init", "-q");
+        git(work, "remote", "add", "origin", `file://${origin}`);
+        git(work, "fetch", "-q", "--no-tags", "--depth", "1", "origin", sha);
+        git(work, "checkout", "-q", "--detach", sha);
+        expect(git(work, "rev-parse", "--is-shallow-repository")).toBe("true");
+        const result = spawnSync("bash", ["-c", step().script], {
+          cwd: work,
+          encoding: "utf8",
+          timeout: 30_000,
+          env: {
+            ...gitEnv,
+            PATH: `${bin}:${process.env.PATH}`,
+            GITHUB_SHA: sha,
+            GITHUB_REF_NAME: "v1.2.3",
+            STUB_DIR: dir,
+          },
+        });
+        return { ...result, timeoutArgs: readFileSync(join(dir, "timeout.args"), "utf8") };
+      };
+
+      it("passes a tag on a commit of main behind its tip, in a one-commit-deep checkout", () => {
+        const result = run(tagged);
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.timeoutArgs).toMatch(/^\d+ git fetch /);
+      });
+
+      it("refuses a tag on a commit main does not hold, naming the tag", () => {
+        const result = run(offMain);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("v1.2.3");
+        expect(result.stderr).toContain("main");
+      });
+    });
+  });
+
+  describe("the release check inside the built image", () => {
+    const step = () => publishStepNamed(RELEASE_CHECK_STEP);
+    const bin = stubBin("release-check-bin-", {
+      docker:
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/docker.args"\n' +
+        'printf \'%s\' "$STUB_STDERR" >&2\nexit "${STUB_STATUS:-0}"\n',
+      timeout: TIMEOUT_STUB,
+    });
+    const run = ({ status = 0, stderr = "" } = {}) => {
+      const dir = mkdtempSync(join(tmpdir(), "release-check-"));
+      try {
+        const result = runPublishScript(
+          step().script,
+          {
+            CHECK_IMAGE: "waitron:check",
+            RELEASE_VERSION: "1.2.3",
+            STUB_DIR: dir,
+            STUB_STATUS: String(status),
+            STUB_STDERR: stderr,
+          },
+          bin,
+        );
+        const read = (name) =>
+          existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
+        return { ...result, dockerArgs: read("docker.args"), timeoutArgs: read("timeout.args") };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    it("runs on a release tag only, on the loaded image, after the checks and before the push", () => {
+      expect(step().step).toContain(ON_A_RELEASE_TAG);
+      expect(step().envOf("CHECK_IMAGE")).toBe(
+        publishStepNamed(PRODUCER_VALID_STEP).envOf("CHECK_IMAGE"),
+      );
+      expect(step().envOf("RELEASE_VERSION")).toBe("${{ steps.tags.outputs.release_version }}");
+      expect(at(RELEASE_CHECK_STEP)).toBeGreaterThan(at(PRODUCER_LOAD_STEP));
+      expect(at(RELEASE_CHECK_STEP)).toBeLessThan(at("Publish to GHCR"));
+    });
+
+    it("runs the image's own check-release under a time limit, with no pull or network", () => {
+      const result = run();
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.timeoutArgs).toMatch(/^120 docker run /);
+      expect(result.dockerArgs.trim().split(" ")).toEqual([
+        "run",
+        "--rm",
+        "--pull",
+        "never",
+        "--network",
+        "none",
+        "--entrypoint",
+        "node",
+        "waitron:check",
+        "/app/server.js",
+        "check-release",
+        "1.2.3",
+      ]);
+    });
+
+    it("fails on the program's refusal and leaves its words in the log", () => {
+      const result = run({ status: 1, stderr: "declaration.missing\n" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("declaration.missing");
+    });
+  });
+
+  describe("the registry check before the push", () => {
+    const step = () => publishStepNamed(RELEASE_UNPUBLISHED_STEP);
+    const bin = stubBin("release-unpublished-bin-", {
+      docker:
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/docker.args"\n' +
+        'printf \'%s\' "$STUB_STDERR" >&2\nexit "${STUB_STATUS:-0}"\n',
+      timeout: TIMEOUT_STUB,
+    });
+    const run = ({ status, stderr = "" }) => {
+      const dir = mkdtempSync(join(tmpdir(), "release-unpublished-"));
+      try {
+        const result = runPublishScript(
+          step().script,
+          {
+            RELEASE_IMAGE: "ghcr.io/example/waitron:1.2.3",
+            STUB_DIR: dir,
+            STUB_STATUS: String(status),
+            STUB_STDERR: stderr,
+          },
+          bin,
+        );
+        const read = (name) =>
+          existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
+        return { ...result, dockerArgs: read("docker.args"), timeoutArgs: read("timeout.args") };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    it("runs on a release tag only, after the release check and just before the push", () => {
+      expect(step().step).toContain(ON_A_RELEASE_TAG);
+      expect(step().envOf("RELEASE_IMAGE")).toBe("${{ steps.tags.outputs.release_image }}");
+      expect(at(RELEASE_UNPUBLISHED_STEP)).toBeGreaterThan(at(RELEASE_CHECK_STEP));
+      expect(at(RELEASE_UNPUBLISHED_STEP)).toBe(at("Publish to GHCR") - 1);
+    });
+
+    it("asks the registry under a time limit, and refuses a version already published", () => {
+      const result = run({ status: 0 });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("ghcr.io/example/waitron:1.2.3");
+      expect(result.timeoutArgs).toMatch(/^\d+ docker manifest inspect /);
+      expect(result.dockerArgs.trim()).toBe("manifest inspect ghcr.io/example/waitron:1.2.3");
+    });
+
+    it("lets a version through that the registry does not know", () => {
+      expect(run({ status: 1, stderr: "manifest unknown\n" }).status).toBe(0);
+      expect(
+        run({ status: 1, stderr: "no such manifest: ghcr.io/example/waitron:1.2.3\n" }).status,
+      ).toBe(0);
+    });
+
+    it("fails when the registry cannot be read, rather than publishing", () => {
+      const result = run({ status: 1, stderr: 'Get "https://ghcr.io/v2/x": denied\n' });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("denied");
+    });
+  });
+});
