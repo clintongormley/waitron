@@ -81,7 +81,8 @@ by the answers):
   `adjustments.json` the line voids, comps and discounts. What is left:
   - **The core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
     lists as not in the download yet, by table: `sales` (`operator_id`, who rang a sale;
-    `authorized_by`, who authorised a corrective invoice); `unpaid_departures` (`authorized_by`,
+    `authorized_by`, who authorised a corrective invoice); `invoice_corrections` (`requested_by`,
+    `authorized_by`, `ended_by`: who asked for, approved and ended a correction); `unpaid_departures` (`authorized_by`,
     `recorded_by`); `receipt_reprints.person_id`; `invoice_pdf_downloads.person_id`;
     `invoice_deliveries.person_id`; `bill_payments` (`requested_by`, `attested_by`);
     `order_amendments.actor_id`; `ticket_item_moves.moved_by_person_id`; `order_drafts.owner_id`;
