@@ -22,12 +22,7 @@ import {
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import {
-  createDepartment,
-  createServiceZone,
-  linkFloorPlanSet,
-  zoneServicePolicies,
-} from "@waitron/venue-service";
+import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
 import {
   checkLayoutSave,
   readLayout,
@@ -95,9 +90,9 @@ async function zone(): Promise<string> {
   const id = randomUUID();
   await inTx(v, async (tx) => {
     const [tables] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, v.tables.zoneId));
     await seedZone(tx, { id, name: `Zone ${id.slice(0, 8)}` });
     await tx
       .update(floorZones)

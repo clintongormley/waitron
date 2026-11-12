@@ -12,14 +12,13 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedZone } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { floorZones } from "@waitron/db";
 import { writePartyAllergy } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { createTable } from "./testing/live-table.js";
@@ -73,10 +72,7 @@ useVenueDb({
       const productIds = [...product.values()];
       counter = await offerProducts(tx, venue.cfg, { productIds });
       tables = await offerProducts(tx, venue.cfg, { zone: "tables", productIds });
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra pago posterior" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra pago posterior" })];
       ticketThenPay = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",

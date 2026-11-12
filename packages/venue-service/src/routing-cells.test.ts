@@ -455,7 +455,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${closed.id})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${closed.id})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${closed.id}`);
       })(),

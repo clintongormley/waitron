@@ -477,21 +477,19 @@ describe("seedDemoRestaurant", () => {
         menus: string;
       }>(sql`
         select z.name as zone_name, d.name as department_name,
-               coalesce(zp.order_start, dp.order_start) as order_start,
-               p.is_counter_default,
+               coalesce(z.order_start, dp.order_start) as order_start,
+               z.is_counter_default,
                json_group_array(c.name order by dm.display_order) as menus
-        from zone_service_policies p
-        join floor_zones z on z.id = p.zone_id
-        join departments d on d.id = p.department_id
+        from floor_zones z
+        join departments d on d.id = z.department_id
         join department_sale_policies dp on dp.department_id = d.id
-        join zone_sale_policies zp on zp.zone_id = z.id
         join (
           select department_id, menu_id, 0 as display_order from menu_periods
           union
           select department_id, menu_id, display_order + 1 from menu_period_staff_menus
-        ) dm on dm.department_id = p.department_id
+        ) dm on dm.department_id = z.department_id
         join catalogues c on c.id = dm.menu_id
-        group by z.name, d.name, zp.order_start, dp.order_start, p.is_counter_default
+        group by z.name, d.name, z.order_start, dp.order_start, z.is_counter_default
         order by z.name`);
       const serviceZoneRows = serviceZoneRaw.map((row) => ({
         ...row,
@@ -760,9 +758,9 @@ describe("seedDemoRestaurant", () => {
       });
 
       const restaurantPeriods = await suite.db.execute<{ count: number }>(sql`
-        select count(*) as count from zone_service_policies p
-        join menu_periods d on d.department_id = p.department_id
-        where p.is_counter_default`);
+        select count(*) as count from floor_zones z
+        join menu_periods d on d.department_id = z.department_id
+        where z.is_counter_default`);
       expect(restaurantPeriods.rows).toEqual([{ count: 1 }]);
 
       const read = await withTransaction(suite.db, async (tx) => {

@@ -2584,10 +2584,10 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     it("a PATCH naming a zone the profile's pass screen does not offer is kitchen_screen.zone_not_allowed 400", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const [offered, other] = await suite.db
-        .insert(floorZones)
-        .values([{ name: "Terrace" }, { name: "Bar" }])
-        .returning({ id: floorZones.id });
+      const [offered, other] = [
+        await seedZone(suite.db, { name: "Terrace" }),
+        await seedZone(suite.db, { name: "Bar" }),
+      ];
       const profileId = await seedProfile("kds");
       await withTransaction(suite.db, (tx) =>
         VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {

@@ -13,11 +13,12 @@ import {
   sales,
   tenderRefunds,
   tenders,
+  floorZones,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import { inTx, send, seatedWith } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -293,10 +294,7 @@ it("checks every original source zone on read and reprint and admits the allowed
   expect((await print(row.id)).status).toBe(200);
   const id = await profile();
   await inTx(venue, async (tx) => {
-    const [policy] = await tx
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
+    const [policy] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
     await setProfileServiceAccess(tx, id, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId],
@@ -401,10 +399,7 @@ it("requires every substituted original order's zone before exposing an acknowle
   expect((await get(row.id)).status).toBe(200);
   const id = await profile();
   await inTx(venue, async (tx) => {
-    const [policy] = await tx
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
+    const [policy] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.counterZone));
     await setProfileServiceAccess(tx, id, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId],

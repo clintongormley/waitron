@@ -1148,7 +1148,7 @@ it.each(["Zone", "Department"] as const)(
       "device_profile_kitchen_screen_zones",
       "routing_cells",
       "routing_cell_periods",
-          "zone_extensions",
+      "zone_extensions",
       "department_sale_policies",
       "service_steps",
       "menu_periods",

@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -10,7 +11,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   devices,
-  floorZones,
   kitchenStations,
   orderGroupEvents,
   orderGroups,
@@ -80,10 +80,7 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     ticketThenPayZone = await inTx(v, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Invoice counter" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Invoice counter" })];
       return (
         await offerProducts(tx, v.cfg, {
           zone: { zoneId: zone!.id },

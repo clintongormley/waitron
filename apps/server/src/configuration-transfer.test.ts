@@ -1,6 +1,6 @@
 import { seedPersons, builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
-import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
@@ -146,7 +146,6 @@ import {
   setStationToday,
   stationStates,
   STARTER_SEASON_NAMES,
-  zoneSalePolicies,
 } from "@waitron/venue-service";
 import { decimal, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { moduleCoreServices } from "./parties.js";
@@ -393,7 +392,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 19,
+  version: 20,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -3463,12 +3462,7 @@ it("leaves a table's clearing state behind", async () => {
   });
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(diningTables).values({
-      zoneId: (
-        await tx
-          .insert(floorZones)
-          .values({ name: "Clearing tables" })
-          .returning({ id: floorZones.id })
-      )[0]!.id,
+      zoneId: [await seedZone(tx, { name: "Clearing tables" })][0]!.id,
       id: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee",
       label: "T9",
     });
@@ -4095,7 +4089,7 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
 
   const policies = await targetSuite.db.execute<{
     zone_id: string;
-  }>(sql`select zone_id from zone_service_policies`);
+  }>(sql`select id as zone_id from floor_zones`);
   expect(policies.rows.length).toBeGreaterThan(0);
   const targetMenus = new Set(
     (await targetSuite.db.select({ id: catalogues.id }).from(catalogues)).map((row) => row.id),
@@ -5419,7 +5413,7 @@ describe("venue detail edits and configuration boundaries", () => {
   );
 });
 
-it.each(["department_sale_policies", "zone_sale_policies"])(
+it.each(["department_sale_policies", "floor_zones"])(
   "refuses obsolete %s receipt data before changing the target venue",
   async (table) => {
     const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
@@ -5452,7 +5446,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
     const before = {
       departments: targetSuite.db.all(sql`select * from departments`),
       departmentPolicies: targetSuite.db.all(sql`select * from department_sale_policies`),
-      zonePolicies: targetSuite.db.all(sql`select * from zone_sale_policies`),
+      zonePolicies: targetSuite.db.all(sql`select * from floor_zones`),
     };
     await expect(
       withTransaction(targetSuite.db, (tx) =>
@@ -5466,7 +5460,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
     expect(targetSuite.db.all(sql`select * from department_sale_policies`)).toEqual(
       before.departmentPolicies,
     );
-    expect(targetSuite.db.all(sql`select * from zone_sale_policies`)).toEqual(before.zonePolicies);
+    expect(targetSuite.db.all(sql`select * from floor_zones`)).toEqual(before.zonePolicies);
   },
 );
 
@@ -5494,9 +5488,9 @@ it("A725 transfers station and department choices", async () => {
       .set({ printTradingName: false })
       .where(eq(departmentSalePolicies.departmentId, department.id));
     await tx
-      .update(zoneSalePolicies)
+      .update(floorZones)
       .set({ collectionNumber: "numbered" })
-      .where(eq(zoneSalePolicies.zoneId, explicit.id));
+      .where(eq(floorZones.id, explicit.id));
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const exported = await buildConfigurationBundle(
@@ -5506,7 +5500,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(19);
+  expect(exported.version).toBe(20);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5525,11 +5519,10 @@ it("A725 transfers station and department choices", async () => {
   const targetVenueId = await venueLocationId(targetSuite.db);
   expect(targetVenueId).not.toBe(sourceVenueId);
   const modes = await targetSuite.db.execute(sql`
-    select z.name, p.print_trading_name as trading_name, q.collection_number as zone_collection
-    from floor_zones z join zone_service_policies s on s.zone_id=z.id
-    join departments d on d.id=s.department_id
+    select z.name, p.print_trading_name as trading_name, z.collection_number as zone_collection
+    from floor_zones z
+    join departments d on d.id=z.department_id
     join department_sale_policies p on p.department_id=d.id
-    join zone_sale_policies q on q.zone_id=z.id
     where d.name='Receipt department' order by z.name`);
   expect(modes.rows).toEqual([
     { name: "Explicit receipts", trading_name: 0, zone_collection: "numbered" },
@@ -5588,12 +5581,11 @@ it("transfers a department's customer and staff period menus to its zone under n
     department: string;
     menu: string;
   }>(sql`
-    select o.zone_id, o.department_id, p.menu_id, z.name as zone, d.name as department,
+    select z.id as zone_id, z.department_id, p.menu_id, z.name as zone, d.name as department,
       c.name as menu
-    from zone_service_policies o
-    join menu_periods p on p.department_id=o.department_id and p.name='Menus service'
-    join floor_zones z on z.id = o.zone_id
-    join departments d on d.id = o.department_id
+    from floor_zones z
+    join menu_periods p on p.department_id=z.department_id and p.name='Menus service'
+    join departments d on d.id = z.department_id
     join catalogues c on c.id = p.menu_id
     where z.name = 'Menus bar'`);
   expect(zone.rows).toEqual([
@@ -6635,8 +6627,8 @@ it("transfers order start policies under new department and zone ids", async () 
     });
     await tx.execute(sql`update department_sale_policies set order_start = 'table'
       where department_id = ${department.id}`);
-    await tx.execute(sql`update zone_sale_policies set order_start = 'counter'
-      where zone_id = ${explicit.id}`);
+    await tx.execute(sql`update floor_zones set order_start = 'counter'
+      where id = ${explicit.id}`);
     return { departmentId: department.id, explicitId: explicit.id, inheritedId: inherited.id };
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -6653,12 +6645,10 @@ it("transfers order start policies under new department and zone ids", async () 
     )!.order_start,
   ).toBe("table");
   expect(
-    exported.tables.zone_sale_policies!.find((row) => row.zone_id === sourceIds.explicitId)!
-      .order_start,
+    exported.tables.floor_zones!.find((row) => row.id === sourceIds.explicitId)!.order_start,
   ).toBe("counter");
   expect(
-    exported.tables.zone_sale_policies!.find((row) => row.zone_id === sourceIds.inheritedId)!
-      .order_start,
+    exported.tables.floor_zones!.find((row) => row.id === sourceIds.inheritedId)!.order_start,
   ).toBeNull();
   const decoded = decodeConfigurationBundle(
     encodeConfigurationBundle(exported, "a strong passphrase"),
@@ -6678,11 +6668,10 @@ it("transfers order start policies under new department and zone ids", async () 
     department_start: string;
     zone_start: string | null;
   }>(sql`select d.id as department_id, z.id as zone_id, z.name,
-    p.order_start as department_start, q.order_start as zone_start
-    from floor_zones z join zone_service_policies s on s.zone_id = z.id
-    join departments d on d.id = s.department_id
+    p.order_start as department_start, z.order_start as zone_start
+    from floor_zones z
+    join departments d on d.id = z.department_id
     join department_sale_policies p on p.department_id = d.id
-    join zone_sale_policies q on q.zone_id = z.id
     where d.name = 'Order start department' order by z.name`);
   expect(
     imported.rows.map(({ name, department_start, zone_start }) => ({
@@ -7283,9 +7272,9 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       updated_at: expect.any(String),
     },
   ]);
-  for (const table of ["department_sale_policies", "zone_service_policies", "zone_sale_policies"])
+  for (const table of ["department_sale_policies", "floor_zones"])
     expect(JSON.stringify(transferred.tables[table])).not.toContain(ids.old);
-  expect(JSON.stringify(transferred.tables.zone_sale_policies)).not.toContain(ids.oldZone);
+  expect(JSON.stringify(transferred.tables.floor_zones)).not.toContain(ids.oldZone);
   expect(transferred.tables.dining_tables!.map((row) => row.id)).toEqual([ids.table]);
   await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
@@ -7299,7 +7288,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     table_id: string;
     receipt: string;
   }>(
-    sql`select d.id department, z.id zone, t.id table_id, r.receipt from departments d join zone_service_policies s on s.department_id=d.id join floor_zones z on z.id=s.zone_id join dining_tables t on t.zone_id=z.id join department_receipts r on r.department_id=d.id where d.name='Shared service name'`,
+    sql`select d.id department, z.id zone, t.id table_id, r.receipt from departments d join floor_zones z on z.department_id=d.id join dining_tables t on t.zone_id=z.id join department_receipts r on r.department_id=d.id where d.name='Shared service name'`,
   );
   expect(rows.rows).toHaveLength(1);
   const imported = rows.rows[0]!;
@@ -7927,7 +7916,7 @@ describe("special days in a configuration transfer", () => {
       .from(departments)
       .where(and(eq(departments.name, "Fiesta restaurant")));
     const zone = await targetSuite.db.execute<{ id: string }>(
-      sql`select z.id from floor_zones z join zone_service_policies p on p.zone_id=z.id
+      sql`select z.id from floor_zones z
         where z.name='Fiesta terrace'`,
     );
     const answers = await withTransaction(targetSuite.db, async (tx) => ({

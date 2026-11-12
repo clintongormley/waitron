@@ -27,12 +27,7 @@ import {
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import {
-  createDepartment,
-  createServiceZone,
-  linkFloorPlanSet,
-  zoneServicePolicies,
-} from "@waitron/venue-service";
+import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { createTable } from "./testing/live-table.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -93,9 +88,9 @@ async function zone(): Promise<string> {
   const id = randomUUID();
   await inTx(v, async (tx) => {
     const [tables] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, v.tables.zoneId));
     await seedZone(tx, { id, name: `Zone ${id.slice(0, 8)}` });
     await tx
       .update(floorZones)
@@ -1898,10 +1893,7 @@ describe("resets onto a set's layout", () => {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
       });
-      await tx
-        .update(zoneServicePolicies)
-        .set({ departmentId: moved.id })
-        .where(eq(zoneServicePolicies.zoneId, zone.id));
+      await tx.update(floorZones).set({ departmentId: moved.id }).where(eq(floorZones.id, zone.id));
       const [unlinked] = await tx
         .insert(floorPlanSets)
         .values({})
@@ -2002,9 +1994,9 @@ describe("resets onto a set's layout", () => {
         orderStart: "table",
       });
       await tx
-        .update(zoneServicePolicies)
+        .update(floorZones)
         .set({ departmentId: gaining.id })
-        .where(eq(zoneServicePolicies.zoneId, zone.id));
+        .where(eq(floorZones.id, zone.id));
       const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
       await linkFloorPlanSet(tx, {
         setId: set!.id,

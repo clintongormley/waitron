@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -9,7 +10,6 @@ import {
   catalogues,
   categories,
   drawerOpens,
-  floorZones,
   saleSettlements,
   sales,
   ticketItems,
@@ -285,18 +285,15 @@ describe("the card reader on a bill whose every line was given away", () => {
 
   it("leaves a party's unsent dish unsent in a zone that sends before payment, where the same dish with no party is sent once", async () => {
     const ticketZone = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra ticket" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra ticket" })];
       const offered = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
         productIds: [productIdOf("Caña")],
       });
       await tx.execute(sql`
-        update zone_sale_policies set paid_when = 'ticket_then_pay'
-        where zone_id = ${offered.zoneId}`);
+        update floor_zones set paid_when = 'ticket_then_pay'
+        where id = ${offered.zoneId}`);
       return offered;
     });
     const [partyBill, walkUp] = [randomUUID(), randomUUID()];

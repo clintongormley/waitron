@@ -9,7 +9,6 @@ import {
   floorZones,
   withTransaction,
   venueLocationId,
-  zoneServicePolicies,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
@@ -220,7 +219,7 @@ describe("a profile's service access", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${venue.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${venue.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${venue.deli}`);
       })(),
@@ -432,7 +431,7 @@ describe("a profile's service access", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${venue.restaurant})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${venue.restaurant})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${venue.restaurant}`);
       })(),
@@ -444,9 +443,9 @@ describe("a profile's service access", () => {
     });
     await scoped((tx) =>
       tx
-        .update(zoneServicePolicies)
+        .update(floorZones)
         .set({ departmentId: venue.restaurant })
-        .where(eq(zoneServicePolicies.zoneId, venue.counter)),
+        .where(eq(floorZones.id, venue.counter)),
     );
     await expect(read(venue)).resolves.toMatchObject({ allowedZoneIds: [], startingZoneId: null });
   });
@@ -772,10 +771,7 @@ describe("a zone checked against a profile", () => {
 
 describe("a new order's zone for a profile", () => {
   async function makeCounterDefault(zoneId: string): Promise<void> {
-    await db
-      .update(zoneServicePolicies)
-      .set({ isCounterDefault: true })
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    await db.update(floorZones).set({ isCounterDefault: true }).where(eq(floorZones.id, zoneId));
   }
   const start = (venue: Venue, input: { zoneId?: string } = {}) =>
     outcome(

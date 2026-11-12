@@ -64,10 +64,10 @@ describe("readTablesNeedingClearing", () => {
     );
   });
 
-  it("leaves out a table whose zone has no department", async () => {
+  it("leaves out a table whose zone is inactive", async () => {
     await seedLocation("Clearing without department");
     const a = await departmentWithTable("A");
-    const zone = await seedZone(db, { name: "No department" });
+    const zone = await seedZone(db, { name: "Inactive zone", active: false });
     const [table] = await db
       .insert(diningTables)
       .values({ zoneId: zone!.id, label: randomUUID() })

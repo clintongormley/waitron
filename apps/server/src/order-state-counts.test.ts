@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
@@ -9,7 +10,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
-  floorZones,
   lineServiceCancellations,
   nowIso,
   orderDrafts,
@@ -68,15 +68,12 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     for (const mode of ["prepay", "ticket_then_pay"] as const) {
       zones[mode] = await inTx(venue, async (tx) => {
-        const [zone] = await tx
-          .insert(floorZones)
-          .values({ name: `Bar ${mode}` })
-          .returning({ id: floorZones.id });
+        const [zone] = [await seedZone(tx, { name: `Bar ${mode}` })];
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
         if (mode === "ticket_then_pay") {
           await tx.execute(sql`
-            update zone_sale_policies set paid_when = 'ticket_then_pay'
-            where zone_id = ${zone!.id}`);
+            update floor_zones set paid_when = 'ticket_then_pay'
+            where id = ${zone!.id}`);
         }
         return zone!.id;
       });

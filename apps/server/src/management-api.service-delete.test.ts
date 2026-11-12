@@ -34,7 +34,6 @@ import {
   setProfileServiceScope,
   VENUE_SERVICE_ROUTES,
   VENUE_SERVICE_PERMISSIONS,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout } from "./floor-plan.js";
 import {
@@ -145,7 +144,7 @@ async function rows(tx: Transaction) {
     allTables,
     zones: await tx.select().from(floorZones),
     departments: await tx.select().from(departments),
-    policies: await tx.select().from(zoneServicePolicies),
+    policies: await tx.select().from(floorZones),
     tables: await tx.select().from(diningTables),
     orders: await tx.select().from(workingOrders),
     contexts: await tx.select().from(orderServiceContexts),
@@ -175,7 +174,7 @@ describe("permanent service delete HTTP contracts", () => {
         refusals: [],
         ends: [],
         removes: [
-          { key: "zone_policies", count: 2, targets: [] },
+          { key: "zone_policies", count: 1, targets: [] },
           ...(kind === "department"
             ? [
                 { key: "department_periods", count: 1, targets: [] },
@@ -379,8 +378,8 @@ it.each([
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 99 });
       const [source] = await tx
         .select()
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, v.counter.zoneId));
+        .from(floorZones)
+        .where(eq(floorZones.id, v.counter.zoneId));
       await tx.insert(departmentTransferRequests).values({
         tabId: order!.id,
         sourceDepartmentId: source!.departmentId,

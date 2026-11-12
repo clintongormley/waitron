@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   floorZones,
+  departmentSalePolicies,
   kitchenCourses,
   printers,
   printJobs,
@@ -38,8 +39,6 @@ import {
   createServiceZone,
   setProfileServiceAccess,
   setRoutingCell,
-  zoneServicePolicies,
-  zoneSalePolicies,
 } from "@waitron/venue-service";
 import {
   createPinThrottle,
@@ -2107,7 +2106,7 @@ describe("zone-offer catalogue routes", () => {
     const headers = { cookie: `${SESSION_COOKIE}=${token}` };
     await suite.db.execute(sql`
       update department_sale_policies set paid_when = 'ticket_then_pay'
-      where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+      where department_id = (select department_id from floor_zones where id = ${counterZoneId})`);
     try {
       for (const path of [
         "/api/default-service-zone/offers",
@@ -2122,7 +2121,7 @@ describe("zone-offer catalogue routes", () => {
     } finally {
       await suite.db.execute(sql`
         update department_sale_policies set paid_when = 'prepay'
-        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+        where department_id = (select department_id from floor_zones where id = ${counterZoneId})`);
     }
   });
 
@@ -2134,11 +2133,11 @@ describe("zone-offer catalogue routes", () => {
       const token = await openSession(suite.db);
       const headers = { cookie: `${SESSION_COOKIE}=${token}` };
       await suite.db.execute(
-        sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${counterZoneId}`,
+        sql`update floor_zones set order_start = 'counter' where id = ${counterZoneId}`,
       );
       await suite.db.execute(sql`
         update department_sale_policies set paid_when = ${paidWhen}
-        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+        where department_id = (select department_id from floor_zones where id = ${counterZoneId})`);
       try {
         for (const path of [
           "/api/default-service-zone/offers",
@@ -2152,11 +2151,11 @@ describe("zone-offer catalogue routes", () => {
         }
       } finally {
         await suite.db.execute(
-          sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${counterZoneId}`,
+          sql`update floor_zones set order_start = 'counter' where id = ${counterZoneId}`,
         );
         await suite.db.execute(sql`
           update department_sale_policies set paid_when = 'prepay'
-          where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+          where department_id = (select department_id from floor_zones where id = ${counterZoneId})`);
       }
     },
   );
@@ -2168,9 +2167,7 @@ describe("zone-offer catalogue routes", () => {
     const headers = { cookie: `${SESSION_COOKIE}=${token}` };
     const second = await seedZone(suite.db, { name: "Collect at counter" });
     await suite.db.execute(sql`
-      insert into zone_service_policies (zone_id, department_id)
-      select ${second!.id}, department_id
-      from zone_service_policies where zone_id = ${counterZoneId}`);
+      update floor_zones set department_id = (select department_id from floor_zones where id = ${counterZoneId}) where id = ${second!.id}`);
     await suite.db.execute(
       sql`update floor_zones set order_start = 'counter', paid_when = 'ticket_then_pay' where id = ${second!.id}`,
     );
@@ -2184,24 +2181,29 @@ describe("zone-offer catalogue routes", () => {
         expect(await response.json()).toMatchObject({ context: { zoneId, serviceMode } });
       }
     } finally {
-      await suite.db.execute(sql`delete from zone_sale_policies where zone_id = ${second!.id}`);
-      await suite.db.execute(sql`delete from zone_service_policies where zone_id = ${second!.id}`);
+      await suite.db.execute(sql`delete from floor_zones where id = ${second!.id}`);
       await suite.db.delete(floorZones).where(eq(floorZones.id, second!.id));
     }
   });
 
   it.each(["default", "selected"] as const)(
-    "refuses %s-zone offers while its sale policy needs repair",
+    "refuses %s-zone offers while its department sale policy needs repair",
     async (route) => {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
       const token = await openSession(suite.db);
       const [policy] = await suite.db
         .select()
-        .from(zoneSalePolicies)
-        .where(eq(zoneSalePolicies.zoneId, counterZoneId));
+        .from(floorZones)
+        .where(eq(floorZones.id, counterZoneId));
       expect(policy).toBeDefined();
-      await suite.db.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, counterZoneId));
+      const [salePolicy] = await suite.db
+        .select()
+        .from(departmentSalePolicies)
+        .where(eq(departmentSalePolicies.departmentId, policy!.departmentId));
+      await suite.db
+        .delete(departmentSalePolicies)
+        .where(eq(departmentSalePolicies.departmentId, policy!.departmentId));
       try {
         const path =
           route === "default"
@@ -2215,7 +2217,7 @@ describe("zone-offer catalogue routes", () => {
           error: { code: "service_zone.not_found" },
         });
       } finally {
-        await suite.db.insert(zoneSalePolicies).values(policy!);
+        await suite.db.insert(departmentSalePolicies).values(salePolicy!);
       }
     },
   );
@@ -2247,19 +2249,15 @@ describe("zone-offer catalogue routes", () => {
     const otherCookie = await enrolTillDeviceCookie(suite.db);
     const second = await seedZone(suite.db, { name: `Device zone ${deviceId}` });
     await suite.db.execute(sql`
-      insert into zone_service_policies
-        (zone_id, department_id)
-      select ${second!.id}, department_id
-      from zone_service_policies
-      where zone_id = ${counterZoneId}`);
+      update floor_zones set department_id = (select department_id from floor_zones where id = ${counterZoneId}) where id = ${second!.id}`);
     await suite.db.execute(
       sql`update floor_zones set order_start = 'counter' where id = ${second!.id}`,
     );
     await withTransaction(suite.db, async (tx) => {
       const [policy] = await tx
-        .select({ departmentId: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, counterZoneId));
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, counterZoneId));
       await setProfileServiceAccess(tx, profileId, {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,
@@ -4860,10 +4858,10 @@ describe("sale-policy order flow routes", () => {
           departmentId: department.id,
         });
         await tx.execute(
-          sql`update department_sale_policies set order_start = ${zoneOverride ? "table" : "counter"} where department_id = (select department_id from zone_service_policies where zone_id = ${zone.id})`,
+          sql`update department_sale_policies set order_start = ${zoneOverride ? "table" : "counter"} where department_id = (select department_id from floor_zones where id = ${zone.id})`,
         );
         await tx.execute(
-          sql`update zone_sale_policies set order_start = ${zoneOverride ? "counter" : null} where zone_id = ${zone.id}`,
+          sql`update floor_zones set order_start = ${zoneOverride ? "counter" : null} where id = ${zone.id}`,
         );
         return zone;
       });
@@ -4907,10 +4905,10 @@ describe("sale-policy order flow routes", () => {
           departmentId: department.id,
         });
         await tx.execute(
-          sql`update department_sale_policies set order_start = ${start} where department_id = (select department_id from zone_service_policies where zone_id = ${zone.id})`,
+          sql`update department_sale_policies set order_start = ${start} where department_id = (select department_id from floor_zones where id = ${zone.id})`,
         );
         await tx.execute(
-          sql`update zone_sale_policies set order_start = null, paid_when = ${paidWhen} where zone_id = ${zone.id}`,
+          sql`update floor_zones set order_start = null, paid_when = ${paidWhen} where id = ${zone.id}`,
         );
         await offerMenuThroughZone(tx, zone.id, waterProduct.catalogueId, {
           makeDefault: true,

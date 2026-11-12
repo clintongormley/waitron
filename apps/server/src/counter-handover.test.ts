@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
@@ -7,7 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorZones, invoiceSeries, workingOrders } from "@waitron/db";
+import { invoiceSeries, workingOrders } from "@waitron/db";
 import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -63,18 +64,15 @@ useVenueDb({
     };
     for (const mode of ["ticket_then_pay", "prepay"] as const) {
       zones[mode] = await inTx(venue, async (tx) => {
-        const [zone] = await tx
-          .insert(floorZones)
-          .values({ name: `Barra ${mode}` })
-          .returning({ id: floorZones.id });
+        const [zone] = [await seedZone(tx, { name: `Barra ${mode}` })];
         await offerProducts(tx, venue.cfg, {
           zone: { zoneId: zone!.id },
           orderStart: "counter",
         });
         if (mode === "ticket_then_pay") {
           await tx.execute(sql`
-            update zone_sale_policies set paid_when = 'ticket_then_pay'
-            where zone_id = ${zone!.id}`);
+            update floor_zones set paid_when = 'ticket_then_pay'
+            where id = ${zone!.id}`);
         }
         return zone!.id;
       });

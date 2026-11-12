@@ -383,7 +383,7 @@ async function seed(
       const departmentId = departmentIds[Math.floor(z / zonesPerDepartment)]!;
       const [zone] = await tx
         .insert(floorZones)
-        .values({ name: `Bench zone ${z + 1}` })
+        .values({ name: `Bench zone ${z + 1}`, departmentId })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: zone!.id, departmentId, orderStart: "table" });
       await offerProducts(tx, cfg, { zone: { zoneId: zone!.id }, orderStart: "table" });

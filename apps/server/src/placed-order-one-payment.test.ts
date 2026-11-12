@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
@@ -5,13 +6,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  billPayments,
-  floorZones,
-  isUniqueViolation,
-  constraintTarget,
-  withTransaction,
-} from "@waitron/db";
+import { billPayments, isUniqueViolation, constraintTarget, withTransaction } from "@waitron/db";
 import { captureAttempting, failAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -53,10 +48,7 @@ useVenueDb({
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
     zoneOf.uninvoiced = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra ticket" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra ticket" })];
       return offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
     });
   },

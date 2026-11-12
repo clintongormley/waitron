@@ -13,13 +13,14 @@ import {
   tenderRefunds,
   printJobs,
   withTransaction,
+  floorZones,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deviceProfileAdmissionPersons, persons, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
-import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import {
   billlessSale,
   collect,
@@ -295,10 +296,7 @@ it("checks every original source zone for all four routes and admits them once a
     .insert(saleSubstitutions)
     .values({ substitutionSaleId: t.saleId, substitutedSaleId: source!.id });
   const profileId = await profile(),
-    [policy] = await store.db
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
+    [policy] = await store.db.select().from(floorZones).where(eq(floorZones.id, venue.counterZone));
   await inTx(venue, (tx) =>
     setProfileServiceAccess(tx, profileId, {
       departmentId: policy!.departmentId,

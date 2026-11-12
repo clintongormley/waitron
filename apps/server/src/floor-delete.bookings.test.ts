@@ -92,8 +92,6 @@ for (const enabled of [true, false]) {
         "device_profile_kitchen_screen_zones",
         "routing_cells",
         "routing_cell_periods",
-        "zone_service_policies",
-        "zone_sale_policies",
         "zone_extensions",
         "department_sale_policies",
         "menu_periods",

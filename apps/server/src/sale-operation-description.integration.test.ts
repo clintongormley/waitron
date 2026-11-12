@@ -5,13 +5,8 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
-import {
-  departmentReceipts,
-  zoneServicePolicies,
-  createDepartment,
-  configureZone,
-} from "@waitron/venue-service";
+import { withTransaction, floorZones } from "@waitron/db";
+import { departmentReceipts, createDepartment, configureZone } from "@waitron/venue-service";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
@@ -36,10 +31,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    const [zone] = await db
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
+    const [zone] = await db.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
     departmentId = zone!.departmentId;
     await db.run(
       sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Generic location service"}) where module = 'venue'`,
@@ -133,10 +125,7 @@ it("integrated capture files the department description and replay keeps its fil
 it("a counter sale sent without a zone records the selected zone and files that department's description", async () => {
   const counter = await withTransaction(venue.db, async (tx) => {
     const offers = await offerProducts(tx, venue.cfg, { zone: "counter" });
-    const [zone] = await tx
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, offers.zoneId));
+    const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, offers.zoneId));
     await tx
       .update(departmentReceipts)
       .set({ receipt: { operationDescription: "Counter drinks" } })

@@ -46,14 +46,14 @@ describe("leaveForClearing", () => {
     });
   }
 
-  async function tableInZoneWithoutDepartment(): Promise<string> {
+  async function tableInInactiveZone(): Promise<string> {
     const zoneId = randomUUID();
     const tableId = randomUUID();
     await inTx(v, async (tx) => {
-      await seedZone(tx, { id: zoneId, name: `No department ${zoneId}` });
+      await seedZone(tx, { id: zoneId, name: `Inactive ${zoneId}`, active: false });
       await tx.insert(diningTables).values({
         id: tableId,
-        label: "Table without department",
+        label: "Table in inactive zone",
         zoneId,
       });
       await tx.insert(floorTodayTables).values({ tableId });
@@ -80,8 +80,8 @@ describe("leaveForClearing", () => {
     expect((await tableRow(v, b)).needsClearingSince).toBeNull();
   });
 
-  it("leaves a table whose zone has no department free, even with every department on", async () => {
-    const loose = await tableInZoneWithoutDepartment();
+  it("leaves a table whose zone is inactive free, even with every department on", async () => {
+    const loose = await tableInInactiveZone();
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
 
     await inTx(v, (tx) => leaveForClearing(tx, [loose], at));
@@ -93,7 +93,7 @@ describe("leaveForClearing", () => {
     const other = await secondDepartment();
     const a = await v.table("Table A");
     const b = await v.table("Table B", other.zoneId);
-    const c = await tableInZoneWithoutDepartment();
+    const c = await tableInInactiveZone();
     const asked = vi.spyOn(VENUE_SERVICE, "readTablesNeedingClearing");
     try {
       await inTx(v, (tx) => leaveForClearing(tx, [a, b, c], at));

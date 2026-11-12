@@ -1,7 +1,13 @@
 import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { categories, diningTables, kitchenStations, type Transaction } from "@waitron/db";
+import {
+  categories,
+  floorZones,
+  diningTables,
+  kitchenStations,
+  type Transaction,
+} from "@waitron/db";
 import {
   addStarterServiceSteps,
   createServiceZone,

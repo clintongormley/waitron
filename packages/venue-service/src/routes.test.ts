@@ -76,7 +76,11 @@ async function fixture(
   });
   await seedBusinessDay(db, {});
   const scopedLocationId = location!.id;
-  const zone = await seedZone(db, { name: "Terrace" });
+  const [unavailable] = await db
+    .insert(departments)
+    .values({ name: "Unavailable", tradingName: "Unavailable", active: false })
+    .returning();
+  const zone = await seedZone(db, { name: "Terrace", departmentId: unavailable!.id });
   const [station] = await db
     .insert(kitchenStations)
     .values({ name: "Terrace bar", isDefault: true })
@@ -1148,7 +1152,9 @@ describe("venue service management routes", () => {
         );
         return [source, target];
       });
-      const before = await db.all(sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`);
+      const before = await db.all(
+        sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`,
+      );
       const response = await send(
         fx.app,
         "PUT",
@@ -1157,7 +1163,11 @@ describe("venue service management routes", () => {
         { departmentId: target!.id },
       );
       expect(response.status).toBe(204);
-      expect(await db.all(sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`)).toEqual(before);
+      expect(
+        await db.all(
+          sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`,
+        ),
+      ).toEqual(before);
       expect(
         await db
           .select({ departmentId: floorZones.departmentId })
@@ -1335,6 +1345,10 @@ describe("venue service management routes", () => {
           .where(eq(departments.id, department.id));
         await tx.update(floorZones).set({ active }).where(eq(floorZones.id, fx.zoneId));
       });
+      const original = await db
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, fx.zoneId));
       const before = await rawSettingsSnapshot();
       const response = await send(
         fx.app,
@@ -1354,7 +1368,7 @@ describe("venue service management routes", () => {
         .select({ departmentId: floorZones.departmentId })
         .from(floorZones)
         .where(eq(floorZones.id, fx.zoneId));
-      expect(policies).toEqual([]);
+      expect(policies).toEqual(original);
       expect(
         await db
           .select({ active: floorZones.active })
@@ -1407,6 +1421,7 @@ describe("venue service management routes", () => {
         name: "Garden service",
       })
     ).json()) as { id: string };
+    const original = await db.select().from(floorZones).where(eq(floorZones.id, fx.zoneId));
     const response = await send(
       fx.app,
       "POST",
@@ -1416,7 +1431,9 @@ describe("venue service management routes", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: { code: "zone.name_taken" } });
-    expect(await db.select().from(floorZones).where(eq(floorZones.id, fx.zoneId))).toEqual([]);
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, fx.zoneId))).toEqual(
+      original,
+    );
   });
 
   it("rolls back the floor zone when its department assignment fails", async () => {
@@ -1506,7 +1523,7 @@ describe("venue service management routes", () => {
             name,
           })),
         },
-        { key: "zone_policies", count: 4, targets: [] },
+        { key: "zone_policies", count: 2, targets: [] },
         { key: "department_policy", count: 1, targets: [] },
         { key: "service_steps", count: 3, targets: [] },
         {
@@ -3601,25 +3618,22 @@ describe("atomic zone editor save", () => {
     expect(await rawSettingsSnapshot()).toEqual(before);
   });
 
-  it.each(["deleted", "unassigned", "unknown"])(
-    "refuses a %s zone without writes",
-    async (kind) => {
-      const fx = await settingsFixture();
-      let id = fx.zoneId;
-      if (kind === "deleted")
-        await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
-      if (kind === "unassigned") {
-        const zone = await seedZone(db, { name: "Unassigned" });
-        id = zone!.id;
-      }
-      if (kind === "unknown") id = randomUUID();
-      const before = await rawSettingsSnapshot();
-      const response = await send(fx.app, "PUT", path(id), fx.managerCookie, edited);
-      expect(response.status).toBe(404);
-      expect(await response.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
-      expect(await rawSettingsSnapshot()).toEqual(before);
-    },
-  );
+  it.each(["deleted", "inactive", "unknown"])("refuses a %s zone without writes", async (kind) => {
+    const fx = await settingsFixture();
+    let id = fx.zoneId;
+    if (kind === "deleted")
+      await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
+    if (kind === "inactive") {
+      const zone = await seedZone(db, { name: "Inactive", active: false });
+      id = zone!.id;
+    }
+    if (kind === "unknown") id = randomUUID();
+    const before = await rawSettingsSnapshot();
+    const response = await send(fx.app, "PUT", path(id), fx.managerCookie, edited);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
+    expect(await rawSettingsSnapshot()).toEqual(before);
+  });
 
   it("requires the shared venue permission for service settings and renaming", async () => {
     const fx = await settingsFixture();

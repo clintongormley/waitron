@@ -46,7 +46,6 @@ import {
   deleteZone,
   setProfileServiceScope,
   setDepartmentTransferSettings,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { ALL_MODULES, enabledFloorAnnotators, enabledTableRemovals } from "./modules.js";
 import { finishTable, leaveTables, moduleCoreServices } from "./testing/party-close-fixture.js";
@@ -422,9 +421,9 @@ describe("real module floor deletion", () => {
     });
     const [source] = await run((tx) =>
       tx
-        .select({ departmentId: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId)),
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, venue.tables.zoneId)),
     );
     const before = await run((tx) => tx.select().from(departmentTransferRequests));
     const held = gate();
@@ -559,10 +558,7 @@ describe("mounted authenticated service deletion races", () => {
           operatorId: venue.operator.personId,
         });
         const [source] = await run((tx) =>
-          tx
-            .select()
-            .from(zoneServicePolicies)
-            .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId)),
+          tx.select().from(floorZones).where(eq(floorZones.id, venue.tables.zoneId)),
         );
         sourceDepartmentId = source!.departmentId;
       }
@@ -737,10 +733,7 @@ describe("mounted authenticated service deletion races", () => {
       operatorId: venue.operator.personId,
     });
     const [source] = await run((tx) =>
-      tx
-        .select()
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId)),
+      tx.select().from(floorZones).where(eq(floorZones.id, venue.tables.zoneId)),
     );
     const layout = await run((tx) => defaultLayout(tx, venue.cfg, f.zoneId));
     const held = gate();
@@ -1063,8 +1056,8 @@ it.each(["zone", "department"] as const)(
     await run(async (tx) => {
       const [counterPolicy] = await tx
         .select()
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, venue.counter.zoneId));
+        .from(floorZones)
+        .where(eq(floorZones.id, venue.counter.zoneId));
       await tx.insert(departmentTransferRequests).values({
         tabId: delivery,
         sourceDepartmentId: f.departmentId,
@@ -1108,8 +1101,8 @@ it.each(["zone", "department"] as const)(
     const replacementZone = await run(async (tx) => {
       const [counterPolicy] = await tx
         .select()
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, venue.counter.zoneId));
+        .from(floorZones)
+        .where(eq(floorZones.id, venue.counter.zoneId));
       return createServiceZone(tx, {
         name: `Replacement ${randomUUID()}`,
         departmentId: counterPolicy!.departmentId,

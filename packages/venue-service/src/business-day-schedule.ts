@@ -1,5 +1,5 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { asc, eq, isNotNull, sql } from "drizzle-orm";
 import {
   departmentDayRanges,
   departmentDays,
@@ -87,7 +87,7 @@ export async function businessDayClockConflicts(
     .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
     .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(and(isNotNull(zoneDays.seasonId), eq(floorZones.active, true)))
+    .where(isNotNull(zoneDays.seasonId))
     .orderBy(asc(zoneDayRanges.id));
   const specialDayList = await tx
     .select({
@@ -134,7 +134,7 @@ export async function businessDayClockConflicts(
         .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
         .innerJoin(floorZones, eq(floorZones.id, zoneDays.zoneId))
         .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-        .where(and(isNotNull(zoneDays.specialDayDateId), eq(floorZones.active, true))),
+        .where(isNotNull(zoneDays.specialDayDateId)),
     );
   const specialDayOf = new Map(specialDayList.map((day) => [day.dateId, day]));
   const specialPlacements: Placement[] = specialPaint.flatMap((row) => {
@@ -291,7 +291,7 @@ export async function keptOpenConflicts(
     .from(zoneExtensions)
     .innerJoin(floorZones, eq(floorZones.id, zoneExtensions.zoneId))
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(and(eq(zoneExtensions.businessDay, tonight), eq(floorZones.active, true)))
+    .where(eq(zoneExtensions.businessDay, tonight))
     .orderBy(asc(zoneExtensions.id));
   const oldCutover = cutoverForBusinessDay(before, tonight);
   const newEnd = serviceDayWallContext(candidate, tonight).endMinute;

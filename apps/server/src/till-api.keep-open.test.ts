@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deviceProfiles, withTransaction, type Transaction } from "@waitron/db";
+import { departments, deviceProfiles, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCatalogue, addProductToMenu } from "@waitron/catalogue";
@@ -187,9 +187,16 @@ describe("the till's keep-open read", () => {
 });
 
 describe("the till keeps a zone open today", () => {
-  it("lists a floor zone with no service policy with a null closing time", async () => {
+  it("lists a floor zone of an inactive department with a null closing time", async () => {
     await suite.db.delete(deviceProfileServiceAccess);
-    const plain = await seedZone(suite.db, { name: "Unassigned" });
+    const [unavailable] = await suite.db
+      .insert(departments)
+      .values({ name: "Unavailable", tradingName: "Unavailable", active: false })
+      .returning();
+    const plain = await seedZone(suite.db, {
+      name: "Unavailable department",
+      departmentId: unavailable!.id,
+    });
     const answer = await call("GET", "/api/zones");
     expect(answer.status).toBe(200);
     expect(answer.json).toEqual(

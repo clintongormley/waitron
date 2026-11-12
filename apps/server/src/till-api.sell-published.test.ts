@@ -248,7 +248,7 @@ async function setupLunch(): Promise<Lunch> {
     const postres = await createSectionIn(tx, rootId, { internalName: "Postres" });
     await addProducts(tx, postres.id, [flan.id]);
     const zone = await tx.execute<{ id: string }>(sql`
-      select zone_id as id from zone_service_policies
+      select id from floor_zones
       where is_counter_default`);
     const zoneId = zone.rows[0]!.id;
     await offerMenuThroughZone(tx, zoneId, lunch.id, { makeDefault: true });

@@ -2287,26 +2287,6 @@ CREATE TABLE `working_line_contexts` (
 	CONSTRAINT "working_line_contexts_vat_class_ck" CHECK("working_line_contexts"."vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
-CREATE TABLE `zone_sale_policies` (
-	`zone_id` text PRIMARY KEY NOT NULL,
-	`order_start` text,
-	`paid_when` text,
-	`collection_number` text,
-	FOREIGN KEY (`zone_id`) REFERENCES `zone_service_policies`(`zone_id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "zone_sale_policies_order_start_ck" CHECK("zone_sale_policies"."order_start" in ('table', 'counter')),
-	CONSTRAINT "zone_sale_policies_paid_when_ck" CHECK("zone_sale_policies"."paid_when" in ('prepay', 'ticket_then_pay')),
-	CONSTRAINT "zone_sale_policies_collection_number_ck" CHECK("zone_sale_policies"."collection_number" in ('none', 'numbered'))
-);
---> statement-breakpoint
-CREATE TABLE `zone_service_policies` (
-	`zone_id` text PRIMARY KEY NOT NULL,
-	`department_id` text NOT NULL,
-	`is_counter_default` integer DEFAULT false NOT NULL,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `zone_service_policies_one_counter_default_key` ON `zone_service_policies` (`is_counter_default`) WHERE "zone_service_policies"."is_counter_default";--> statement-breakpoint
 CREATE TABLE `kitchen_notices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,

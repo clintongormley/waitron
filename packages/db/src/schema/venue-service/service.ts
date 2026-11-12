@@ -46,31 +46,6 @@ export const departments = table(
   ],
 );
 
-export const zoneServicePolicies = table(
-  "zone_service_policies",
-  {
-    zoneId: id("zone_id").notNull(),
-    departmentId: id("department_id").notNull(),
-    isCounterDefault: flag("is_counter_default").notNull().default(false),
-  },
-  (t) => [
-    primaryKey({ columns: [t.zoneId], name: "zone_service_policies_pk" }),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "zone_service_policies_zone_fk",
-    }),
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "zone_service_policies_department_fk",
-    }),
-    uniqueIndex("zone_service_policies_one_counter_default_key")
-      .on(t.isCounterDefault)
-      .where(sql`${t.isCounterDefault}`),
-  ],
-);
-
 export const departmentSalePolicies = table(
   "department_sale_policies",
   {
@@ -89,26 +64,6 @@ export const departmentSalePolicies = table(
     check("department_sale_policies_order_start_ck", enumCheck(t.orderStart)),
     check("department_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
     check("department_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
-  ],
-);
-
-export const zoneSalePolicies = table(
-  "zone_sale_policies",
-  {
-    zoneId: id("zone_id").primaryKey(),
-    orderStart: orderStart("order_start"),
-    paidWhen: paidWhen("paid_when"),
-    collectionNumber: collectionNumber("collection_number"),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [zoneServicePolicies.zoneId],
-      name: "zone_sale_policies_zone_fk",
-    }),
-    check("zone_sale_policies_order_start_ck", enumCheck(t.orderStart)),
-    check("zone_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
-    check("zone_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
   ],
 );
 

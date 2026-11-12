@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 19,
+  version: 20,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -212,7 +212,7 @@ describe("staged configuration import", () => {
     ],
     ["pre-payment-policy-retirement export without it", { version: 16 }],
     ["pre-receipt-policy-retirement export", { version: 17 }],
-    ["future version", { version: 20 }],
+    ["future version", { version: 21 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
@@ -301,8 +301,8 @@ describe("staged configuration import", () => {
   it.each([
     ["department_sale_policies", "tab"],
     ["department_sale_policies", null],
-    ["zone_sale_policies", ["counter"]],
-    ["zone_sale_policies", 1],
+    ["floor_zones", ["counter"]],
+    ["floor_zones", 1],
   ])("refuses malformed %s order start %j before replacing staged files", async (table, value) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
@@ -315,13 +315,16 @@ describe("staged configuration import", () => {
     const serviceModule = {
       ...modules[0],
       name: "venue-service",
-      configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
+      configurationTransfer: {
+        ...VENUE_SERVICE_CONFIGURATION_TRANSFER,
+        tables: [...VENUE_SERVICE_CONFIGURATION_TRANSFER.tables, { name: "floor_zones" }],
+      },
     } satisfies WaitronModule;
     const candidate: ConfigurationBundle = {
       ...bundle,
       modules: { "venue-service": 1 },
       tables: Object.fromEntries(
-        VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map(({ name }) => [
+        serviceModule.configurationTransfer.tables.map(({ name }) => [
           name,
           name === table ? [{ order_start: value }] : [],
         ]),
@@ -726,10 +729,8 @@ describe("routing cells in a staged import", () => {
   it.each([
     ["departments", "active", 0],
     ["floor_zones", "active", 0],
-    ["zone_service_policies", "department_id", "absent-deleted-parent"],
-    ["zone_service_policies", "zone_id", "absent-deleted-parent"],
+    ["floor_zones", "department_id", "absent-deleted-parent"],
     ["department_sale_policies", "department_id", "absent-deleted-parent"],
-    ["zone_sale_policies", "zone_id", "absent-deleted-parent"],
   ])(
     "refuses a deleted hierarchy bundle at staging and import: %s.%s",
     async (table, field, value) => {
@@ -880,8 +881,8 @@ describe("routing cells in a staged import", () => {
 
     const diningRoomZones = new Set(
       withoutCell.tables
-        .zone_service_policies!.filter((row) => row.department_id === diningRoom.id)
-        .map((row) => row.zone_id),
+        .floor_zones!.filter((row) => row.department_id === diningRoom.id)
+        .map((row) => row.id),
     );
     expect(diningRoomZones.has(terrace.id)).toBe(true);
     const zonesOff: ConfigurationBundle = {

@@ -12,7 +12,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import type { ZoneFloorLayout } from "@waitron/module";
 import { linkFloorPlanSet } from "./floor-plan-set-store.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
@@ -33,11 +33,7 @@ const key = (departmentId: string, day: string, periodId: string, startsAt: stri
   JSON.stringify([departmentId, day, periodId, startsAt]);
 
 async function newZone(tx: Transaction, cfg: { locationId: string }, name: string) {
-  const [zone] = await tx
-    .insert(floorZones)
-    .values({ ...cfg, name })
-    .returning();
-  return zone!.id;
+  return (await seedZone(tx, { name })).id;
 }
 
 async function newSet(tx: Transaction, departmentId: string, name: string) {
@@ -63,7 +59,9 @@ async function fixture() {
     const terrace = await newZone(tx, cfg, "Terrace");
     const garden = await newZone(tx, cfg, "Garden");
     const counter = await newZone(tx, cfg, "Counter");
-    const loose = await newZone(tx, cfg, "Store room");
+    const loose = (
+      await seedZone(tx, { name: "Store room", departmentId: restaurant, active: false })
+    ).id;
     for (const zoneId of [dining, terrace, garden])
       await configureZone(tx, { zoneId, departmentId: restaurant });
     await configureZone(tx, { zoneId: counter, departmentId: bar });
@@ -262,7 +260,7 @@ describe("which floor layout is due", () => {
     });
   });
 
-  it("is null for a zone in no department and for a department with no set", async () => {
+  it("is null for an inactive zone and for a department with no set", async () => {
     const f = await fixture();
     const layouts = await due([f.zones.loose, f.zones.counter], at("14:00"));
     const none = { setId: null, setName: null, occurrence: null, periodName: null };
@@ -302,7 +300,7 @@ describe("which floor layout is due", () => {
     expect(facts(f.zones.counter)).toEqual({ planned: true, recordedSetName: null });
   });
 
-  it("is not planned, and reads no set, for zones in no department with nothing recorded", async () => {
+  it("is not planned, and reads no set, for inactive zones with nothing recorded", async () => {
     const f = await fixture();
     await run(async (tx) => {
       const session = (

@@ -457,7 +457,7 @@ describe("applyVenue", () => {
            where is_default and active) as default_stations,
         (select count(*) from departments
            where is_default and active) as default_departments,
-        (select count(*) from zone_service_policies
+        (select count(*) from floor_zones
            where is_counter_default) as counter_zones`);
     expect(counts.rows[0]).toEqual({
       tenants: 1,

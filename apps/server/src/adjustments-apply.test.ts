@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
@@ -10,7 +11,6 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  floorZones,
   kitchenStations,
   serviceCommands,
   orderGroups,
@@ -3834,7 +3834,7 @@ describe("a counter order (B11c)", () => {
 
   async function counterZoneNamed(name: string) {
     return inTx(venue, async (tx) => {
-      const [zone] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name })];
       return (
         await offerProducts(tx, venue.cfg, {
           zone: { zoneId: zone!.id },

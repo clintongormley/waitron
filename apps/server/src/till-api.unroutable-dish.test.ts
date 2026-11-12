@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
@@ -7,7 +7,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  floorZones,
   incidents,
   kitchenStations,
   sales,
@@ -444,10 +443,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
   it("does the same for a counter order never sent in a zone that sends before payment, which then has nothing to hand over", async () => {
     const made = await strandedDish("Croqueta");
     const zoneId = await inTx(v, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: `Barra ticket ${randomUUID()}` })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: `Barra ticket ${randomUUID()}` })];
       return (
         await offerProducts(tx, v.cfg, {
           zone: { zoneId: zone!.id },

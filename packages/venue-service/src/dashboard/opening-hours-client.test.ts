@@ -255,7 +255,6 @@ describe("OpeningHoursApi", () => {
           "zone_day_ranges",
           "special_days",
           "special_day_dates",
-          "zone_service_policies",
           "floor_zones",
         ].map((type) => ({ type })),
       );
@@ -333,7 +332,6 @@ describe("OpeningHoursApi", () => {
           "settings.business_day",
           "settings.venue",
           "day_cutover_changes",
-          "zone_service_policies",
           "floor_zones",
           "routing_cells",
           "routing_cell_periods",

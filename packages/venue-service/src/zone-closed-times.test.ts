@@ -140,7 +140,7 @@ describe("zone closed times", () => {
     await tx((db) =>
       (async () => {
         await db.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${b.departmentId})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${b.departmentId})`,
         );
         await db.execute(sql`update departments set active = false where id = ${b.departmentId}`);
       })(),

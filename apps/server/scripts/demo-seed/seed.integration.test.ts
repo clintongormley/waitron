@@ -7,7 +7,7 @@ import { venueMenus } from "../../src/testing/venue-menus.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { withTransaction, floorZones } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -16,7 +16,6 @@ import {
   readLiveDocuments,
   documentOffers,
 } from "@waitron/catalogue";
-import { zoneServicePolicies } from "@waitron/venue-service";
 import { computeDailyClose } from "@waitron/reporting";
 import {
   compareDecimal,
@@ -226,9 +225,9 @@ describe("demo seed end-to-end", () => {
     const cfg = tillConfigFor(venue);
     const { zoneId, casaOffer, diaOffer } = await withTransaction(suite.db, async (tx) => {
       const [counter] = await tx
-        .select({ zoneId: zoneServicePolicies.zoneId })
-        .from(zoneServicePolicies)
-        .where(and(eq(zoneServicePolicies.isCounterDefault, true)));
+        .select({ zoneId: floorZones.id })
+        .from(floorZones)
+        .where(and(eq(floorZones.isCounterDefault, true)));
       const offerOf = async (product: { id: string; catalogueId: string }) => {
         const [item] = await tx
           .select({ id: menuItems.id })

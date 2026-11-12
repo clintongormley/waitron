@@ -1,11 +1,6 @@
 import { asc, eq } from "drizzle-orm";
-import { parties, withTransaction, type Database } from "@waitron/db";
-import {
-  saveServiceSteps,
-  serviceSteps,
-  floorZones,
-  type ServiceStepInput,
-} from "@waitron/venue-service";
+import { floorZones, parties, withTransaction, type Database } from "@waitron/db";
+import { saveServiceSteps, serviceSteps, type ServiceStepInput } from "@waitron/venue-service";
 
 interface HasVenue {
   db: Database;

@@ -159,8 +159,8 @@ describe("an order whose delivery table was let go", () => {
     const v = await setupPartyVenue(suite.db);
     await inTx(v, async (tx) => {
       await tx.execute(sql`
-        update zone_sale_policies set paid_when = 'ticket_then_pay'
-        where zone_id = ${v.counter.zoneId}`);
+        update floor_zones set paid_when = 'ticket_then_pay'
+        where id = ${v.counter.zoneId}`);
     });
     const t7 = await deliveryTable(v, "Terrace 7");
     const id = randomUUID();

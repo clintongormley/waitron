@@ -113,10 +113,10 @@ describe("readTableStepRules", () => {
     expect(read.get(empty.tableIds[0]!)).toEqual({ departmentId: empty.departmentId, rules: [] });
   });
 
-  it("leaves out a table whose zone has no department", async () => {
+  it("leaves out a table whose zone is inactive", async () => {
     const cfg = { locationId: await seedLocation("Steps without department") };
     const a = await departmentWithTables(cfg, "A");
-    const zone = await seedZone(db, { name: "No department" });
+    const zone = await seedZone(db, { name: "Inactive", active: false });
     const [table] = await db
       .insert(diningTables)
       .values({ zoneId: zone!.id, label: randomUUID() })

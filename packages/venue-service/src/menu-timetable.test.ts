@@ -925,7 +925,7 @@ describe("the menu a zone starts on", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),
@@ -1802,7 +1802,7 @@ describe("the editor's model", () => {
     await scoped(async (tx) => {
       await (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })();
@@ -2253,7 +2253,7 @@ describe("department service periods", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),
@@ -2284,7 +2284,7 @@ describe("department service periods", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),

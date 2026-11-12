@@ -3692,7 +3692,7 @@ describe("integrated answer receipt presentation", () => {
   it("includes current department fields on connected capture and refreshes them on replay", async () => {
     const { cfg, coffee } = await setupVenue();
     const [{ department_id: departmentId }] = suite.db.all<{ department_id: string }>(
-      sql`select department_id from zone_service_policies where zone_id = ${coffee.zoneId}`,
+      sql`select department_id from floor_zones where id = ${coffee.zoneId}`,
     );
     await suite.db
       .delete(departmentReceipts)
@@ -3752,7 +3752,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["ca-ES","es-ES"]')) where module = 'venue'`,
       );
       const [{ department_id: departmentId }] = suite.db.all<{ department_id: string }>(
-        sql`select department_id from zone_service_policies where zone_id = ${coffee.zoneId}`,
+        sql`select department_id from floor_zones where id = ${coffee.zoneId}`,
       );
       const otherId = randomUUID();
       suite.db
@@ -3839,7 +3839,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         jobs: suite.db.all(sql`select * from print_jobs order by id`),
       };
       suite.db.run(
-        sql`update zone_service_policies set department_id = ${otherId} where zone_id = ${coffee.zoneId}`,
+        sql`update floor_zones set department_id = ${otherId} where id = ${coffee.zoneId}`,
       );
       suite.db.run(
         sql`update departments set trading_name = 'Changed brand' where id = ${departmentId}`,

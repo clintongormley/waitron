@@ -3188,7 +3188,7 @@ describe("saving a cell's period choices", () => {
       .select({ periodId: routingCellPeriods.periodId, stationId: routingCellPeriods.stationId })
       .from(routingCellPeriods);
 
-  it("gives each zone of the model its department, or null where it serves none", async () =>
+  it("gives each zone of the model its department", async () =>
     scoped(async (tx) => {
       const f = await choicesFixture(tx);
       const [garden] = await tx
@@ -3197,18 +3197,18 @@ describe("saving a cell's period choices", () => {
         .returning();
       const { zones } = await routingModel(tx, at);
       expect(zones).toEqual([
-        { id: garden!.id, name: "Garden", departmentId: null },
+        { id: garden!.id, name: "Garden", departmentId: f.department },
         { id: f.patio, name: "Patio", departmentId: f.barDepartment },
         { id: f.terrace, name: "Terrace", departmentId: f.department },
       ]);
     }));
 
-  it("refuses a cell with period lines at a zone that serves no department, writing nothing", async () =>
+  it("refuses a cell with period lines at an inactive zone, writing nothing", async () =>
     scoped(async (tx) => {
       const f = await choicesFixture(tx);
       const [garden] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, departmentId: f.department, name: "Garden" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Garden", active: false })
         .returning();
       const address: CellAddress = { row: categoryRow(f.cocktails), zoneId: garden!.id };
       for (const write of [

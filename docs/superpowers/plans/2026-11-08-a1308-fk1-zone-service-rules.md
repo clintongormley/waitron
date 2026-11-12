@@ -10,6 +10,8 @@
 > [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules" below), which this plan cites
 > and does not repeat.
 
+> 2026-11-12, watcher 11:06: remaining impossible fixtures may use inactive zones or known absent ids, preserving behaviour assertions; configuration-transfer retires BARE_ZONE beside its retained absent/closed cases. Clock-compatibility reads retain inactive zones, as does recorded-receipt resolution (10:34). Revised combined forecast about 2,400 counted additions; stop beyond about 2,600.
+
 **Goal:** `zone_service_policies` (a zone's department and the "counter default" mark) and
 `zone_sale_policies` (a zone's four sale-rule overrides) fold into `floor_zones`, so a zone is one
 row.

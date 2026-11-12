@@ -1,4 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { createZone as createTableZone } from "./testing/service-zone.js";
 import type { ModuleRouteContext, TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -843,7 +844,7 @@ describe("/management-api/tables", () => {
       await withTransaction(suite.db, (tx) =>
         (async () => {
           await tx.execute(
-            sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${departmentId})`,
+            sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${departmentId})`,
           );
           await tx.execute(sql`update departments set active = false where id = ${departmentId}`);
         })(),
@@ -865,13 +866,10 @@ describe("/management-api/tables", () => {
 
     it("refuses active PATCH on a deleted zone without a department", async () => {
       const [zone] = await withTransaction(suite.db, (tx) =>
-        tx
-          .insert(floorZones)
-          .values({
-            name: unique("Unassigned disabled"),
-            active: false,
-          })
-          .returning({ id: floorZones.id }),
+        seedZone(tx, {
+          name: unique("Unassigned disabled"),
+          active: false,
+        }).then((zone) => [zone]),
       );
       const response = await req(
         `/zones/${zone!.id}`,
@@ -900,7 +898,7 @@ describe("/management-api/tables", () => {
         await withTransaction(suite.db, (tx) =>
           (async () => {
             await tx.execute(
-              sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${destination.departmentId})`,
+              sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${destination.departmentId})`,
             );
             await tx.execute(
               sql`update departments set active = false where id = ${destination.departmentId}`,
@@ -927,11 +925,11 @@ describe("/management-api/tables", () => {
               : { code: "service_zone.not_found", params: { zoneId: source.zoneId } },
         });
         const stored = await suite.db.execute<{ department_id: string; active: number }>(
-          sql`select p.department_id, z.active from zone_service_policies p join floor_zones z on z.id = p.zone_id where z.id = ${source.zoneId}`,
+          sql`select z.department_id, z.active from floor_zones z where z.id = ${source.zoneId}`,
         );
-        expect(stored.rows).toEqual(
-          state === "active" ? [{ department_id: source.departmentId, active: 1 }] : [],
-        );
+        expect(stored.rows).toEqual([
+          { department_id: source.departmentId, active: state === "active" ? 1 : 0 },
+        ]);
         const table = (await listInService()).find((table) => table.id === source.tableId);
         if (state === "active") expect(table).toMatchObject({ zoneId: source.zoneId });
         else expect(table).toBeUndefined();
@@ -951,7 +949,7 @@ describe("/management-api/tables", () => {
       );
       expect(response.status).toBe(204);
       const stored = await suite.db.execute<{ department_id: string }>(
-        sql`select department_id from zone_service_policies where zone_id = ${source.zoneId}`,
+        sql`select department_id from floor_zones where id = ${source.zoneId}`,
       );
       expect(stored.rows).toEqual([{ department_id: destination.departmentId }]);
       expect((await listInService()).find((table) => table.id === source.tableId)).toMatchObject({

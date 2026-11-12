@@ -1,9 +1,9 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { personRole, roleHasPermission } from "@waitron/identity";
-import { floorZones, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mountJoinApi } from "./join-api.js";
@@ -162,15 +162,8 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
     { db: suite.db, cfg: venue.cfg, pairingMode, deviceAddress: "https://waitron.local" },
     () => {},
   );
-  const [offered, other] = await suite.db
-    .insert(floorZones)
-    .values([{ name: "Terrace" }, { name: "Bar" }])
-    .returning({ id: floorZones.id });
-  const [profile] = await seedDeviceProfiles(suite.db, {
-    name: "Pass KDS",
-    formFactor: "kds",
-    capabilities: [],
-  });
+  const [offered, other] = [await seedZone(suite.db, { name: "Terrace" }), await seedZone(suite.db, { name: "Bar" })];
+  const [profile] = await seedDeviceProfiles(suite.db, { name: "Pass KDS", formFactor: "kds", capabilities: [] });
   await withTransaction(suite.db, (tx) =>
     VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       pass: { stationIds: null, zoneIds: [offered!.id] },

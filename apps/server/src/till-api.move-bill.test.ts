@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
@@ -10,7 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentLines, billPaymentRefunds, floorZones, saleLines, sales } from "@waitron/db";
+import { billPaymentLines, billPaymentRefunds, saleLines, sales } from "@waitron/db";
 import { parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -45,10 +46,7 @@ useVenueDb({
       )
     ).zoneId;
     prepayZone = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra prepago" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra prepago" })];
       return (
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" })
       ).zoneId;

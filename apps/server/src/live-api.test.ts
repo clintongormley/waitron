@@ -8,14 +8,18 @@ import {
   CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
   diningTables,
-  floorZones,
   installChangeFeed,
   locations,
   subscribeToChanges,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedTenant,
+  seedVenueSettings,
+  seedBusinessDay,
+  seedZone,
+} from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   hashSessionToken,
@@ -353,10 +357,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
       operationDescription: "probe",
     });
     await seedBusinessDay(tx, {});
-    const [zone] = await tx
-      .insert(floorZones)
-      .values({ name: "Probe tables" })
-      .returning({ id: floorZones.id });
+    const [zone] = [await seedZone(tx, { name: "Probe tables" })];
     return { location: location!, zone: zone! };
   });
   await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);

@@ -1,8 +1,9 @@
+import { seedZone as seedFloorZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { floorZones, withTransaction, venueLocationId } from "@waitron/db";
+import { withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -42,10 +43,7 @@ async function routeCategory(_locationId: string, categoryId: string, zoneId?: s
 }
 
 async function seedZone(): Promise<string> {
-  const [zone] = await suite.db
-    .insert(floorZones)
-    .values({ name: "Terrace" })
-    .returning({ id: floorZones.id });
+  const [zone] = [await seedFloorZone(suite.db, { name: "Terrace" })];
   return zone!.id;
 }
 

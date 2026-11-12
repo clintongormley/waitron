@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -61,7 +62,7 @@ const seatFor = () => floorDeletionFor([BOOKINGS_TABLE_REMOVAL]);
 
 async function zone(name: string) {
   const id = randomUUID();
-  await inTx(v, (tx) => tx.insert(floorZones).values({ id, name: `${name} ${id}` }));
+  await inTx(v, (tx) => seedZone(tx, { id, name: `${name} ${id}` }));
   return id;
 }
 async function impact(zoneIds: string[]) {

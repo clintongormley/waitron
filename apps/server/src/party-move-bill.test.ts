@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -10,7 +11,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   captureError,
   diningTables,
-  floorZones,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -79,7 +79,7 @@ async function zoneNamed(
   name: string,
   serviceMode: "ticket_then_pay" | "table_tab",
 ): Promise<string> {
-  const [zone] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
+  const [zone] = [await seedZone(tx, { name })];
   return (
     await offerProducts(tx, v.cfg, {
       zone: { zoneId: zone!.id },

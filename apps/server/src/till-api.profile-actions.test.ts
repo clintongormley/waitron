@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, kitchenStations, withTransaction } from "@waitron/db";
+import { devices, kitchenStations, withTransaction, floorZones } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
@@ -22,7 +22,6 @@ import {
   createDepartment,
   createServiceZone,
   setProfileServiceAccess,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { mountDeviceLiveApi } from "./device-live-api.js";
 import { LiveEvents } from "./live-api.js";
@@ -958,9 +957,9 @@ describe("the order of a sale's refusals", () => {
     const restaurantOnly = await profile(allBut("take-orders"));
     await withTransaction(suite.db, async (tx) => {
       const [policy] = await tx
-        .select({ departmentId: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, v.counter.zoneId));
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, v.counter.zoneId));
       await setProfileServiceAccess(tx, restaurantOnly, {
         departmentId: policy!.departmentId,
         allowedZoneIds: null,

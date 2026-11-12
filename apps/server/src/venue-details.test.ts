@@ -32,7 +32,6 @@ import {
   saleVoids,
   kitchenStations,
   diningTables,
-  floorZones,
 } from "@waitron/db";
 import { BOOKINGS_FLOOR_ANNOTATIONS, bookings } from "@waitron/bookings";
 import {
@@ -46,7 +45,7 @@ import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedBusinessDay, seedNode } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedNode, seedZone } from "@waitron/db/testing/seed.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
@@ -1145,12 +1144,7 @@ describe("venue detail consumer reads", () => {
       .insert(diningTables)
       .values({
         label: "Booking clock control",
-        zoneId: (
-          await suite.db
-            .insert(floorZones)
-            .values({ name: "Booking tables" })
-            .returning({ id: floorZones.id })
-        )[0]!.id,
+        zoneId: [await seedZone(suite.db, { name: "Booking tables" })][0]!.id,
       })
       .returning({ id: diningTables.id });
     await suite.db.insert(floorTodayTables).values({ tableId: table!.id });

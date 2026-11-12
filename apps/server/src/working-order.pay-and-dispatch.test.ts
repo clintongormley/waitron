@@ -1680,8 +1680,8 @@ describe("prepare & collect — zone payment timing", () => {
       offerProducts(tx, cfg, { zone: "tables", orderStart: "counter" }),
     );
     await suite.db.execute(sql`
-      update zone_sale_policies set paid_when = 'ticket_then_pay'
-      where zone_id = ${collectZone.zoneId}`);
+      update floor_zones set paid_when = 'ticket_then_pay'
+      where id = ${collectZone.zoneId}`);
 
     const prepayId = randomUUID();
     const prepay = await payWorkingOrder(

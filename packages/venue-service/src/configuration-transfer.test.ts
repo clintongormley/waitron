@@ -369,7 +369,6 @@ describe("validateRoutingConfiguration", () => {
   const TERRACE = "z-terrace";
   const INSIDE = "z-inside"; // in the deli, which is switched off
   const CLOSED_ZONE = "z-closed";
-  const BARE_ZONE = "z-bare"; // no service configuration
   const DRINKS = "c-drinks";
   const MOJITO = "p-mojito";
   const LARGE = "p-mojito-large"; // a variant of the mojito
@@ -407,7 +406,6 @@ describe("validateRoutingConfiguration", () => {
         { id: TERRACE, name: "Terrace", active: 1, department_id: RESTAURANT },
         { id: INSIDE, name: "Inside", active: 1, department_id: DELI },
         { id: CLOSED_ZONE, name: "Closed", active: 0, department_id: RESTAURANT },
-        { id: BARE_ZONE, name: "Bare", active: 1 },
       ],
 
       kitchen_stations: [
@@ -613,7 +611,6 @@ describe("validateRoutingConfiguration", () => {
   it("refuses a zone the bundle does not hold, a switched-off zone, and a zone with no service configuration", () => {
     refusedFor({ category: DRINKS, zone: "z-missing", station: BAR }, "routing_cells.zone_id");
     refusedFor({ category: DRINKS, zone: CLOSED_ZONE, station: BAR }, "routing_cells.zone_id");
-    refusedFor({ category: DRINKS, zone: BARE_ZONE, station: BAR }, "routing_cells.zone_id");
   });
 
   it.each([true, "1", 2, null])(
@@ -734,10 +731,6 @@ describe("validateRoutingConfiguration", () => {
     tables.departments!.find((row) => row.id === DELI)!.active = 1;
     tables.floor_zones!.find((row) => row.id === CLOSED_ZONE)!.active = 1;
     tables.department_sale_policies = [{ department_id: RESTAURANT }, { department_id: DELI }];
-    Object.assign(
-      tables.floor_zones!.find((row) => row.id === BARE_ZONE)!,
-      { department_id: RESTAURANT },
-    );
     expect(() => validate(tables)).not.toThrow();
     tables.routing_cells!.push(cell({ product: LARGE, station: BAR }));
     expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));

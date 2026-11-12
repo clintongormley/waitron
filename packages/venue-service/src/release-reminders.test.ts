@@ -79,10 +79,10 @@ describe("readReleaseReminderMinutesByZone", () => {
     );
   });
 
-  it("leaves out a zone with no department, and an id that is no zone", async () => {
+  it("leaves out an inactive zone, and an id that is no zone", async () => {
     await seedLocation("Reminder without department");
     const a = await departmentWithZone("A");
-    const bare = await seedZone(db, { name: "No department" });
+    const bare = await seedZone(db, { name: "Inactive zone", active: false });
     const unknown = randomUUID();
     const found = await scoped((tx) =>
       readReleaseReminderMinutesByZone(tx, [a.zoneId, bare!.id, unknown]),

@@ -423,11 +423,11 @@ describe("readTableSteps", () => {
     });
   });
 
-  it("a table whose zone has no department shows no step", async () => {
+  it("a table whose zone is inactive shows no step", async () => {
     const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const outside = await inTx(v, async (tx) => {
-      const zone = await seedZone(tx, { name: "Loose" });
+      const zone = await seedZone(tx, { name: "Inactive", active: false });
       const [table] = await tx
         .insert(diningTables)
         .values({ label: "L1", zoneId: zone!.id })
