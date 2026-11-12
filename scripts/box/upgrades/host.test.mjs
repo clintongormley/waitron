@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { URL } from "node:url";
+import { Buffer } from "node:buffer";
 import { stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
@@ -85,11 +86,13 @@ it.each([
 
 async function imageFixture({
   activeTunnel = false,
+  stoppedTunnel = false,
   noEnv = false,
   realCompose = false,
   stage = true,
   prepare = true,
   pullFailure = false,
+  cleanupFailure = false,
   inUse = false,
   reopenFailure = false,
   serviceChange = false,
@@ -128,10 +131,13 @@ async function imageFixture({
   await fs.writeFile(join(root, "compose.yml"), realCompose ? shipped : JSON.stringify(config));
   if (!noEnv) await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/first\n");
   const created = new Set();
+  const resolved = new Map();
   const run = async (file, args, input) => {
     calls.push([file, ...args]);
-    if (pullFailure && args[0] === "pull" && args[1] === "agent:old")
+    if (pullFailure && args[0] === "pull" && resolved.get(args[1]) === "agent:old")
       throw new Error("registry offline");
+    if (cleanupFailure && args[0] === "image" && args[1] === "rm")
+      throw new Error("cleanup failed");
     if (reopenFailure && args.includes("up") && args.includes("--wait"))
       throw new Error("app exited before healthy");
     if (inUse && args[0] === "image" && args[1] === "rm" && args[2].includes("old-app"))
@@ -139,6 +145,19 @@ async function imageFixture({
         code: 1,
         stderr: "container selected is using its referenced image",
       });
+    if (args[0] === "manifest") {
+      const digest =
+        "sha256:" + Buffer.from(args.at(-1)).toString("hex").padEnd(64, "0").slice(0, 64);
+      resolved.set(args.at(-1).replace(/:[^/:]+$/, "") + "@" + digest, args.at(-1));
+      return {
+        stdout: JSON.stringify({
+          Descriptor: {
+            digest,
+            platform: { os: "linux", architecture: process.arch === "x64" ? "amd64" : "arm64" },
+          },
+        }),
+      };
+    }
     if (args[0] === "volume" && args[1] === "create") {
       created.add(args.at(-1));
       return { stdout: args.at(-1) + "\n" };
@@ -165,17 +184,25 @@ async function imageFixture({
     if (args[0] === "volume" && args[1] === "inspect")
       return { stdout: JSON.stringify([{ Mountpoint: join(root, args[2].slice(8)) }]) };
     if (args.includes("ps"))
-      return { stdout: activeTunnel && args.at(-1) === "tunnel" ? "tunnel-id\n" : "" };
+      return {
+        stdout: (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel" ? "tunnel-id\n" : "",
+      };
     if (args[0] === "inspect")
       return {
         stdout:
-          args.at(-1) === "{{.Image}}"
-            ? "sha256:running-tunnel\n"
-            : join(root, "compose.yml") + "\n",
+          args.at(-1) === "{{.State.Running}}"
+            ? String(!stoppedTunnel)
+            : args.at(-1) === "{{.Image}}"
+              ? "sha256:running-tunnel\n"
+              : join(root, "compose.yml") + "\n",
       };
     if (args[0] === "image" && args[1] === "inspect") {
       if (args[2] === "tunnel:dev") throw new Error("tunnel is not installed");
-      return { stdout: realCompose ? `sha256:${"1".repeat(64)}\n` : `sha256:${args[2]}\n` };
+      return {
+        stdout: realCompose
+          ? `sha256:${"1".repeat(64)}\n`
+          : `sha256:${resolved.get(args[2]) ?? args[2]}\n`,
+      };
     }
     if (args[0] === "image" || args[0] === "pull" || args.includes("up") || args.includes("stop"))
       return { stdout: "" };
@@ -262,7 +289,7 @@ it("pins all old images before pulling any candidate, and resumes only recorded 
     "--remove-orphans",
     "--wait",
     "--wait-timeout",
-    "60",
+    "180",
   ]);
   expect(f.paths).toEqual(
     ["state", "print_agent", "mailpit", "tunnel_control", "tunnel_keys", "compose.yml", ".env"].map(
@@ -393,7 +420,7 @@ it("does not mistake a retained completion from an earlier container run for thi
   );
 });
 
-it("a fresh Keep retries the resolved candidate configuration when installation failed before replacing Compose", async () => {
+it("a fresh Keep retries the saved candidate configuration when installation failed before replacing Compose", async () => {
   const { recoverInstalledUpgrade } = await import("./host.mjs");
   const { root, directory, fs, join, config, run, images, f } = await imageFixture();
   await fs.writeFile(join(root, "compose.yml"), JSON.stringify(config));
@@ -446,7 +473,7 @@ it("captures an installed box without an optional .env without inventing one", a
 });
 
 it.each(["missing", "unreadable"])(
-  "refuses Keep when the resolved candidate Compose is %s",
+  "refuses Keep when the saved candidate Compose is %s",
   async (kind) => {
     const { recoverInstalledUpgrade } = await import("./host.mjs");
     const { root, directory, fs, join, run, images, f } = await imageFixture();
@@ -516,12 +543,18 @@ it("pulls and pins the candidate service set when a release adds or removes a se
   expect(images.old.mailpit).toBe("sha256:mail:old");
   expect(images.candidate).not.toHaveProperty("mailpit");
   expect(images.candidate.sidecar).toBe("sha256:sidecar:new");
-  expect(calls).toContainEqual(["docker", "pull", "sidecar:new"]);
+  expect(calls.some((args) => args[1] === "pull" && args[2].startsWith("sidecar@sha256:"))).toBe(
+    true,
+  );
 });
 
-it("cleans preparation tags and preserves the registry error before a marker is published", async () => {
+it("attempts every preparation tag cleanup and preserves the registry error if cleanup also fails", async () => {
   const { applyUpgrade } = await import("./transaction.mjs");
-  const { f, directory, fs, calls } = await imageFixture({ prepare: false, pullFailure: true });
+  const { f, directory, fs, calls } = await imageFixture({
+    prepare: false,
+    pullFailure: true,
+    cleanupFailure: true,
+  });
   await expect(
     applyUpgrade({ directory, paths: f.paths, host: f.host, mode: "manual" }),
   ).rejects.toThrow("registry offline");
@@ -565,4 +598,25 @@ it("allows a source already stopped before a manual repair, after stopping the o
   await stopUpgradeWriters({ run: f.run, compose: ["compose"] });
   expect(f.calls.some((args) => args.includes("--profile"))).toBe(true);
   expect(f.calls.some((args) => args[1] === "stop")).toBe(false);
+});
+
+it("refuses an unsupported installed Compose layout before any pull or stop", async () => {
+  const { f, root, fs, join, calls } = await imageFixture({ prepare: false });
+  await fs.writeFile(join(root, "compose.yml"), "services: { app: { image: app:old } }\n");
+  await expect(f.host.prepareImages()).rejects.toThrow("unsupported Compose image layout");
+  expect(calls.some((args) => args[1] === "pull" || args[1] === "stop")).toBe(false);
+});
+
+it("pulls digest references without moving the installed tags", async () => {
+  const { calls } = await imageFixture();
+  const pulls = calls.filter((args) => args[1] === "pull");
+  expect(pulls).toHaveLength(3);
+  expect(pulls.every((args) => args[2].includes("@sha256:"))).toBe(true);
+});
+
+it("keeps an already-stopped tunnel off when reopening", async () => {
+  const { f, images, calls } = await imageFixture({ stoppedTunnel: true });
+  expect(images.old).not.toHaveProperty("tunnel");
+  await f.host.resume(images.old);
+  expect(calls.find((args) => args.includes("up"))).not.toContain("staff-tunnel");
 });

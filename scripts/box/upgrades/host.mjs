@@ -87,7 +87,14 @@ export async function createUpgradeHost({
   const old = {};
   for (const [key, service] of Object.entries(config.services)) {
     const container = (await run("docker", [...compose, "ps", "-a", "-q", key])).stdout.trim();
-    if (service.profiles?.length && !container) continue;
+    if (
+      service.profiles?.length &&
+      (!container ||
+        (
+          await run("docker", ["inspect", container, "--format", "{{.State.Running}}"])
+        ).stdout.trim() !== "true")
+    )
+      continue;
     if (container) {
       const files = (
         await run("docker", [
@@ -123,6 +130,7 @@ export async function createUpgradeHost({
     host: {
       async prepareImages() {
         try {
+          pinnedCompose(await fs.readFile(join(boxDirectory, "compose.yml"), "utf8"), old);
           for (const [key, id] of Object.entries(old)) {
             const tag = `waitron-upgrade-old-${key}:${id.replace("sha256:", "")}`;
             await run("docker", ["image", "tag", id, tag]);
@@ -134,8 +142,9 @@ export async function createUpgradeHost({
             if (key === "tunnel" && service.image === config.services[key]?.image) {
               next[key] = old[key];
             } else {
-              await run("docker", ["pull", service.image]);
-              next[key] = await idOf(service.image);
+              const reference = await candidateReference(service.image, run);
+              await run("docker", ["pull", reference]);
+              next[key] = await idOf(reference);
             }
             const tag = `waitron-upgrade-candidate-${key}:${next[key].replace("sha256:", "")}`;
             await run("docker", ["image", "tag", next[key], tag]);
@@ -145,7 +154,7 @@ export async function createUpgradeHost({
           pinnedCompose(rawCandidate, next);
           return { old, candidate: next };
         } catch (error) {
-          for (const tag of tags) await removeImageTag(tag, run);
+          await Promise.allSettled(tags.map((tag) => removeImageTag(tag, run)));
           throw error;
         }
       },
@@ -410,7 +419,7 @@ function pinnedCompose(raw, images) {
   let service;
   const found = new Set();
   const lines = raw.split("\n").map((line) => {
-    const top = /^(\S[^:]*):/.exec(line);
+    const top = /^([^\s#][^:]*):/.exec(line);
     if (top) {
       section = top[1];
       service = undefined;
@@ -463,8 +472,26 @@ async function reopenImages(compose, images, run) {
     "--remove-orphans",
     "--wait",
     "--wait-timeout",
-    "60",
+    "180",
   ]);
+}
+
+async function candidateReference(image, run) {
+  if (/@sha256:[a-f0-9]{64}$/.test(image)) return image;
+  const manifest = JSON.parse(
+    (await run("docker", ["manifest", "inspect", "--verbose", image])).stdout,
+  );
+  const entries = Array.isArray(manifest) ? manifest : [manifest];
+  const descriptor = entries
+    .map((entry) => entry.Descriptor)
+    .find(
+      (entry) =>
+        entry?.platform?.os === "linux" &&
+        entry.platform.architecture === (process.arch === "x64" ? "amd64" : "arm64"),
+    );
+  if (!/^sha256:[a-f0-9]{64}$/.test(descriptor?.digest))
+    throw new Error("candidate image has no host-platform digest");
+  return image.replace(/:[^/:]+$/, "") + "@" + descriptor.digest;
 }
 
 async function removeImageTag(tag, run) {
