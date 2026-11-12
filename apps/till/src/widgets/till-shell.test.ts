@@ -626,7 +626,7 @@ describe("till-shell", () => {
             "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(11);
+        expect(controls.length).toBe(12);
         expect(controls.filter((c) => c.classList.contains("zones"))).toHaveLength(1);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
@@ -816,6 +816,7 @@ describe("till-shell's Zones on this device entry", () => {
             "equipment",
             "wt-language-chooser",
             "theme-choices",
+            "about",
             "logout",
           ]);
           expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
@@ -900,6 +901,7 @@ describe("a handheld's More", () => {
         "theme",
         "]",
         "—",
+        "About Waitron",
         "Log out",
       ]);
     }).finally(() => setLocale(locale));
@@ -958,6 +960,7 @@ describe("a handheld's More", () => {
         "theme",
         "]",
         "—",
+        "About Waitron",
         "Log out",
       ]);
     }).finally(() => setLocale(locale));
@@ -1037,6 +1040,7 @@ describe("a handheld's More", () => {
         "profile",
         "wt-language-chooser",
         "settings",
+        "about",
         "logout",
       ]);
     }).finally(() => setLocale(locale));
@@ -1549,6 +1553,7 @@ describe("till-shell at phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "about",
         "logout",
       ]);
       expect(menu.querySelector(".operator")!.textContent).toContain("Ana Fernández");
@@ -1588,7 +1593,7 @@ describe("till-shell at phone width", () => {
       for (const [, type] of phoneMenuActions) el.addEventListener(type, () => fired.push(type));
       const tabsEls = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
       // Tab stops into More for each action: they rise in More's order, and before Log out come
-      // the two languages and the three Theme choices.
+      // the two languages, the three Theme choices and About Waitron.
       const steps: number[] = [];
       for (const [selector] of phoneMenuActions) {
         tabsEls[tabsEls.length - 1]!.focus();
@@ -1612,7 +1617,7 @@ describe("till-shell at phone width", () => {
       }
       expect(fired).toEqual(phoneMenuActions.map(([, type]) => type));
       expect(steps.slice(0, -1)).toEqual(steps.slice(0, -1).map((_, index) => index + 1));
-      expect(steps.at(-1)).toBe(steps.at(-2)! + 2 + 3 + 1);
+      expect(steps.at(-1)).toBe(steps.at(-2)! + 2 + 3 + 1 + 1);
     });
   });
 
@@ -1752,6 +1757,7 @@ describe("till-shell at phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "about",
         "logout",
       ]);
       expect(el.shadowRoot!.querySelector("header .session > .operator")).not.toBeNull();
@@ -1788,6 +1794,7 @@ describe("till-shell at phone width", () => {
           "equipment",
           "wt-language-chooser",
           "theme-choices",
+          "about",
           "logout",
         ]),
       );
@@ -1931,6 +1938,7 @@ describe("till-shell above phone width", () => {
     "equipment",
     "wt-language-chooser",
     "theme-choices",
+    "about",
     "logout",
   ];
 
@@ -2131,6 +2139,7 @@ describe("till-shell above phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "about",
         "logout",
       ];
       expect(order.length).toBeGreaterThan(0);
@@ -2209,6 +2218,7 @@ describe("till-shell above phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "about",
         "logout",
       ]);
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
@@ -2226,6 +2236,7 @@ describe("till-shell above phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "about",
         "logout",
       ]);
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();

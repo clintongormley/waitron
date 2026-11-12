@@ -39,6 +39,7 @@ import "@waitron/ui/src/components/wt-powered-by.js";
 import { PHONE_WIDTH, chooserStyles } from "./chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
+import { aboutHeading, readLegalAbout } from "../legal-about.js";
 
 /** The screens a tab names: a handheld draws no Order tab. */
 type TabScreen = Exclude<BuiltInScreen, "order">;
@@ -95,10 +96,7 @@ export class TillShell extends LitElement {
     // idle minutes.
     new HelpIdleController(this, {
       applies: () => this.#drawsCorner(),
-      onIdle: () => {
-        this.guideHref = "";
-        this.#guideBadge = undefined;
-      },
+      onIdle: () => void this.#hideGuide(),
     });
     // A handheld refits with no step back, since its bar draws the logo only while no step is
     // taken; a counter measures its room again. An error is heard here because a box failing a
@@ -112,18 +110,65 @@ export class TillShell extends LitElement {
 
   /** The guide a help box's link asked for, shown over the till rather than in a new tab. */
   @state() private guideHref = "";
-  #guideBadge?: HTMLElement;
+  @state() private guideHeading = "";
+  /** The badge, More or ⓘ that opened the sheet; its inner button takes focus back on Close. */
+  #guideOpener?: HTMLElement;
+  /** Counts each opening and closing, so a late version read heads only the sheet it was for. */
+  #guideShowings = 0;
+
+  #showGuide(href: string, heading: string, opener: HTMLElement): void {
+    this.#guideShowings++;
+    this.#guideOpener = opener;
+    this.guideHref = href;
+    this.guideHeading = heading;
+  }
+
+  #hideGuide(): HTMLElement | undefined {
+    this.#guideShowings++;
+    this.guideHref = "";
+    this.guideHeading = "";
+    const opener = this.#guideOpener;
+    this.#guideOpener = undefined;
+    return opener;
+  }
 
   #onGuideOpen(event: CustomEvent<{ href: string }>): void {
     event.preventDefault();
-    this.#guideBadge = event.composedPath()[0] as HTMLElement;
-    this.guideHref = event.detail.href;
+    this.#showGuide(event.detail.href, "", event.composedPath()[0] as HTMLElement);
   }
 
   #onGuideClose(): void {
-    this.guideHref = "";
-    this.#guideBadge?.shadowRoot?.querySelector("button")?.focus();
-    this.#guideBadge = undefined;
+    this.#hideGuide()?.shadowRoot?.querySelector("button")?.focus();
+  }
+
+  #openAbout(opener: HTMLElement): void {
+    this.#showGuide("/legal/declaration", aboutHeading(null), opener);
+    const showing = this.#guideShowings;
+    void readLegalAbout().then((about) => {
+      if (this.#guideShowings === showing) this.guideHeading = aboutHeading(about);
+    });
+  }
+
+  /** More's About Waitron: focus goes back to More's own button, the menu having closed. */
+  #aboutOption(): TemplateResult {
+    return html`<wt-button
+      class="about"
+      variant="ghost"
+      align="start"
+      @click=${(event: Event) =>
+        this.#openAbout((event.currentTarget as HTMLElement).closest("wt-row-actions")!)}
+      >${t("about.title")}</wt-button
+    >`;
+  }
+
+  #aboutCorner(): TemplateResult {
+    return html`<wt-button
+      class="about"
+      variant="ghost"
+      aria-label=${t("about.title")}
+      @click=${(event: Event) => this.#openAbout(event.currentTarget as HTMLElement)}
+      ><span aria-hidden="true">ⓘ</span></wt-button
+    >`;
   }
 
   static override styles = [
@@ -1188,7 +1233,7 @@ export class TillShell extends LitElement {
     });
   }
 
-  /** A handheld's More, in the design's order: the name's group, the screens, Settings, Log out,
+  /** A handheld's More, in the design's order: the name's group, the screens, Settings, About Waitron, Log out,
    * then Powered by while a venue logo is in use. */
   #menu(nameInMore: boolean): TemplateResult {
     const items = this.#items();
@@ -1239,6 +1284,7 @@ export class TillShell extends LitElement {
         ${items.zones}${items.equipment}${this.#chooser("group")}${this.#themeChoices()}
       </div>
       <hr class="menu-rule" />
+      ${this.#aboutOption()}
       <wt-button class="logout" variant="ghost" align="start" @click=${() => this.#emit("logout")}
         >${t("shell.logout")}</wt-button
       >
@@ -1275,7 +1321,7 @@ export class TillShell extends LitElement {
       ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open"), "help.more.profile") : nothing}
       ${this.#chooser("group")}
       ${action("settings", "open-settings", t("device_zones.settings"), "help.more.settings")}
-      ${action("logout", "logout", t("shell.logout"))}
+      ${this.#aboutOption()} ${action("logout", "logout", t("shell.logout"))}
       ${
         this.testingKitchen && this.affordances.includes("station")
           ? html`<details data-testing>
@@ -1434,7 +1480,7 @@ export class TillShell extends LitElement {
           this.#barless()
             ? this.#drawsCorner()
               ? html`<div class="language-corner">
-                  ${this.#helpSwitch()}${themeChooser()}${this.#chooser()}
+                  ${this.#helpSwitch()}${this.#aboutCorner()}${themeChooser()}${this.#chooser()}
                 </div>`
               : nothing
             : html`
@@ -1469,6 +1515,7 @@ export class TillShell extends LitElement {
       </div>
       <till-guide-sheet
         .href=${this.guideHref}
+        .heading=${this.guideHeading}
         @guide-close=${() => this.#onGuideClose()}
       ></till-guide-sheet>
     `;

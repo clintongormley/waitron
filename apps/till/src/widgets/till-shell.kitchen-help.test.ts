@@ -79,17 +79,25 @@ describe("till-shell's Help switch in the kitchen corner", () => {
       const help = corner.firstElementChild as HTMLElement & LitElement;
       expect(help.localName).toBe("wt-help-switch");
       expect(help.getAttribute("data-test")).toBe("help-switch");
-      expect(help.nextElementSibling!.localName).toBe("wt-theme-chooser");
+      expect(
+        [...corner.children].map((child) =>
+          child.localName === "wt-button" ? `wt-button.${child.className}` : child.localName,
+        ),
+      ).toEqual(["wt-help-switch", "wt-button.about", "wt-theme-chooser", "wt-language-chooser"]);
       expect(el.shadowRoot!.querySelectorAll("wt-help-switch")).toHaveLength(1);
       await help.updateComplete;
-      const r = buttonOf(el).getBoundingClientRect();
+      const about = corner.querySelector<HTMLElement & LitElement>("wt-button.about")!;
+      await about.updateComplete;
       const region = el.shadowRoot!.querySelector(".region")!.getBoundingClientRect();
-      expect(r.width).toBeGreaterThanOrEqual(44);
-      expect(r.height).toBeGreaterThanOrEqual(44);
-      expect(r.left).toBeGreaterThanOrEqual(0);
-      expect(r.top).toBeGreaterThanOrEqual(0);
-      expect(r.right).toBeLessThanOrEqual(window.innerWidth);
-      expect(r.bottom).toBeLessThanOrEqual(region.top);
+      for (const target of [buttonOf(el), about.shadowRoot!.querySelector("button")!]) {
+        const r = target.getBoundingClientRect();
+        expect(r.width).toBeGreaterThanOrEqual(44);
+        expect(r.height).toBeGreaterThanOrEqual(44);
+        expect(r.left).toBeGreaterThanOrEqual(0);
+        expect(r.top).toBeGreaterThanOrEqual(0);
+        expect(r.right).toBeLessThanOrEqual(window.innerWidth);
+        expect(r.bottom).toBeLessThanOrEqual(region.top);
+      }
       expect(buttonOf(el).getAttribute("aria-label")).toBe(helpText("help.label", locale));
     },
   );

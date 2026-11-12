@@ -303,8 +303,8 @@ Si tocas **Sala** después de una mesa, se abre la zona de esa mesa, si este dis
 Todo lo demás está en **Más** (☰): tu nombre, con las acciones de fichaje si fichas en este
 dispositivo, cuando no cabe en la barra, lo que en un móvil ocurre siempre; las pantallas que
 permite tu perfil; **Zonas en este dispositivo**, **Equipo**, **Idioma** y **Tema** bajo el
-título **Ajustes**; **Salir**; y, mientras el local tiene un logotipo, **Con la tecnología de
-Waitron** debajo.
+título **Ajustes**; **Acerca de Waitron**; **Salir**; y, mientras el local tiene un logotipo,
+**Con la tecnología de Waitron** debajo.
 
 ## Tomar un pedido en un móvil {#phone-order}
 
