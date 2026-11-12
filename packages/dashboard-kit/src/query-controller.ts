@@ -89,8 +89,9 @@ export class QueryController implements ReactiveController {
     });
   }
 
-  /** Whether the slot's latest read, or the apply of its answer, failed. The host is asked to update
-   * whenever this answer changes. */
+  /** Whether the slot's latest read, or the apply of its answer, failed; an older apply that throws
+   * after a newer answer started also sets it. The host is asked to update whenever this answer
+   * changes, except at disconnect, which clears it. */
   failing(slot: string): boolean {
     return this.#failing.has(slot);
   }
