@@ -5,6 +5,7 @@ import {
   devices,
   deviceProfiles,
   drawerOpens,
+  invoiceCorrections,
   sales,
   saleLines,
   saleSettlements,
@@ -592,6 +593,37 @@ it("does not expose a refund command or its reads on a shared kitchen display", 
   expect(await effects()).toEqual(before);
   expect(venue.card.refundCalls).toHaveLength(1);
   expect(venue.card.lookupCalls).toHaveLength(0);
+});
+it("refuses a refund with 409 while the ticket has an unfinished correction, naming it", async () => {
+  const t = await target();
+  const [correction] = await inTx(venue, (tx) =>
+    tx
+      .insert(invoiceCorrections)
+      .values({
+        originalSaleId: t.saleId,
+        submissionId: randomUUID(),
+        fingerprint: "seeded",
+        gross: 500,
+        reason: "Overcooked",
+        requestedBy: venue.operatorId,
+        authorizedBy: venue.operatorId,
+        viaOverride: false,
+        source: "device",
+        deviceId: venue.deviceId,
+        nodeId: venue.cfg.nodeId,
+        state: "open",
+      })
+      .returning({ id: invoiceCorrections.id }),
+  );
+
+  expect(await create(t.saleId, ask(t.tenderId))).toEqual({
+    status: 409,
+    json: {
+      code: "invoice_correction.already_open",
+      params: { saleId: t.saleId, correctionId: correction!.id },
+    },
+  });
+  expect((await effects()).refunds).toHaveLength(0);
 });
 it("records the requesting session's device, including when it differs from the invoice's device", async () => {
   const t = await target();

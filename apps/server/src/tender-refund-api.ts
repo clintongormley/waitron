@@ -125,6 +125,7 @@ export function mountTenderRefundApi(
       "tender.refund_exceeds_payment": 409,
       "tender.refund_exceeds_cancelled": 409,
       "tender.refund_unavailable": 409,
+      "invoice_correction.already_open": 409,
     },
     "tender_refund.failed",
   );
