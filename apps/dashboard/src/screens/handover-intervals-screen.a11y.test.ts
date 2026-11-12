@@ -34,7 +34,7 @@ describe.each(["light", "dark"] as const)("handover intervals (%s)", (theme) => 
       .mockResolvedValue({ intervals: [], timeZone: "Europe/Madrid" });
     const { el, host } = await mountWidget<HandoverIntervalsScreen>(
       "dashboard-handover-intervals-screen",
-      { api: { listHandoverIntervals: list } },
+      { api: { listHandoverIntervals: list } as unknown as DashboardApi },
       theme,
     );
     await vi.waitFor(() =>
