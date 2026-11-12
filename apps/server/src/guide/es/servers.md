@@ -95,15 +95,18 @@ principal conserva sus propios datos de pago. Restablecer el equipo anterior bor
 local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen
 en esta devolución; conserva los datos del equipo anterior si los necesitas.
 
-Si la devolución se detiene porque hay diferencias en los datos de facturación o de pago, mantén
-ambos equipos encendidos y conserva sus datos. Una persona administradora puede consultar y
-aceptar una diferencia de pago admisible mediante la API interna del principal; aún no hay una
-pantalla para hacerlo. Después, apaga y enciende el equipo detenido para reintentarlo. Repite si
-otro lote se detiene por una diferencia de pago.
-Las diferencias de factura, posición en la cadena y corrección siguen siendo avisos y aún no se
-pueden aceptar. Los registros posteriores a una factura con diferencias pueden seguir pendientes
-en este equipo. Puedes restablecerlo, pero eso borra sus datos del local sin que la devolución esté
-confirmada.
+Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
+equipo principal, sigue usando el principal y conserva los datos del equipo anterior si aún los
+necesitas. La devolución no está confirmada. Puedes restablecer el equipo, pero eso borra sus
+datos del local, incluidos los registros que sigan pendientes.
+
+Si otros datos devueltos difieren, mantén ambos equipos encendidos y conserva sus datos. Solo se
+pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora
+puede consultarlas con GET `/management-api/return-clashes`
+en el principal y aceptar una con POST `/management-api/return-clashes/:clashId/accept`, indicando
+`actionKey` y `reason`. Todavía no hay una pantalla para ello. Después, apaga y enciende el equipo
+detenido para reintentarlo. Cada nuevo lote en conflicto requiere su propia aceptación; solo
+cuenta el grupo exacto aceptado.
 
 Si la página avisa de una diferencia de reloj, comprueba los relojes de ambos equipos y manténlos
 encendidos mientras se vuelve a intentar la devolución. No restablezcas el equipo anterior.

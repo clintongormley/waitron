@@ -529,11 +529,8 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A1342: return a stopped box's records before reset
 
-Invoice, chain-position and correction clashes still stop the return; their acceptance rule
-awaits the owner's answer. They warn and never prevent reset. Eligible payment clashes can be
-inspected and specifically accepted through the current main's internal API, with no screen yet.
-The stopped box must be switched off and on to retry; later clashing batches need separate decisions.
-Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain open.
+Payment-clash acceptance is an internal API without a screen. Sale lines, reprints, the
+returned-invoices reporting marker and real-box qualification remain open.
 
 Normal return preserves original identities and chains and uses the main box’s outbox.
 Completed and pending tender refunds travel with their payments. Pending card refunds carry
@@ -1000,6 +997,12 @@ acceptance rule in fiscal-verifactu”; `filing-cases.ts` remains untouched. The
 payment-only [PR2 plan](../superpowers/plans/2026-11-11-a1342-clash-acceptance.md) at 16:59 on
 11 November. Node-local signed evidence and decisions drive retry; venue activity history retains
 who accepted which clash across backup and handover, without deciding product behaviour.
+
+**2026-11-12, A1342-3:** The owner's 13:52 direction is that a spare taking over becomes the new
+main, and the old main returns its data to it; switching roles again uses the same handover.
+The watcher at 15:58 cleared the [plain-stop rework](../superpowers/plans/2026-11-12-a1342-plain-stop-rework.md):
+record clashes stop the return with a specific message on the old box, without record acceptance,
+downloads or a new receipt field. Payment-clash acceptance stays separate.
 
 The owner said at 16:25 on 11 November, recorded by the watcher in Lane J's `questions.md`:
 “i don't think we should refuse, just warn. It may be impossible to transfer the data for some

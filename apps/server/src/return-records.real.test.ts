@@ -319,6 +319,40 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       sql`select estado, csv from envios where registro_id = ${corrected.registroId}`,
     ),
   ).toEqual([{ estado: "aceptado", csv: expect.any(String) }]);
+  const clashing = await modules[0]!.handover!.returnRecords!.read(old.db, source.nodeId);
+  (clashing[0] as unknown as { records: ReturnRow[] }).records[0]!.offset_minutos = 60;
+  const heldBeforeStop = current.db.all<ReturnRow>(sql`select * from registros_facturacion`);
+  const read = vi.spyOn(modules[0]!.handover!.returnRecords!, "read").mockResolvedValue(clashing);
+  try {
+    let status = 0;
+    let refusal: unknown;
+    expect(
+      await runReturnRecordsPass({
+        db: old.db,
+        node: old.node,
+        ring,
+        nodeId: source.nodeId,
+        modules,
+        stopped: () => false,
+        fetch: async (url, init) => {
+          const response = await app.request(String(url), init);
+          status = response.status;
+          refusal = await response.clone().json();
+          return response;
+        },
+      }),
+    ).toBe("record-clash");
+    expect(status).toBe(409);
+    expect(refusal).toMatchObject({ error: { code: "fiscal.return_record_clash" } });
+    expect(old.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+      originals.records,
+    );
+    expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+      heldBeforeStop,
+    );
+  } finally {
+    read.mockRestore();
+  }
 });
 
 async function copyBase() {

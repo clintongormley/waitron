@@ -388,47 +388,58 @@ it("shows a retryable clock refusal when the receiver cannot yet accept the reco
   }
 });
 
-it("retries a clock refusal and confirms once the main can accept the dates", async () => {
-  const app = destination();
-  let paused!: () => void;
-  let resume!: () => void;
-  const waiting = new Promise<void>((resolve) => {
-    paused = resolve;
-  });
-  const release = new Promise<void>((resolve) => {
-    resume = resolve;
-  });
-  const sleep = vi.spyOn(loop, "realSleep").mockImplementationOnce(async () => {
-    paused();
-    await release;
-  });
-  let ahead = true;
-  const duty = startReturnRecordsDuty({
-    db: suite.db,
-    node: suite.node,
-    ring,
-    nodeId: source,
-    modules,
-    log: () => {},
-    fetch: async (url, init) =>
-      ahead
-        ? Response.json({ error: { code: "fiscal.return_clock_ahead" } }, { status: 409 })
-        : app.request(String(url), init),
-  });
-  try {
-    await waiting;
-    expect(duty.state()).toBe("clock");
-    ahead = false;
-    resume();
-    await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
-    await duty.stop();
-    expect(received).toEqual(["first", "second"]);
-  } finally {
-    resume();
-    await duty.stop();
-    sleep.mockRestore();
-  }
-});
+it.each([
+  ["fiscal.return_clock_ahead", "clock"],
+  ["fiscal.return_record_clash", "record-clash"],
+] as const)(
+  "retries unsigned %s and confirms once the main accepts the return",
+  async (code, state) => {
+    const app = destination();
+    let paused!: () => void;
+    let resume!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      paused = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const sleep = vi.spyOn(loop, "realSleep").mockImplementationOnce(async () => {
+      paused();
+      await release;
+    });
+    let refusing = true;
+    let batchesSent = 0;
+    const duty = startReturnRecordsDuty({
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: source,
+      modules,
+      log: () => {},
+      fetch: async (url, init) => {
+        batchesSent++;
+        return refusing
+          ? Response.json({ error: { code } }, { status: 409 })
+          : app.request(String(url), init);
+      },
+    });
+    try {
+      await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(1));
+      await waiting;
+      expect(duty.state()).toBe(state);
+      expect(batchesSent).toBe(1);
+      refusing = false;
+      resume();
+      await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
+      await duty.stop();
+      expect(received).toEqual(["first", "second"]);
+    } finally {
+      resume();
+      await duty.stop();
+      sleep.mockRestore();
+    }
+  },
+);
 
 it("distinguishes a signed unaccounted batch from a request refusal", async () => {
   accounted = false;
@@ -822,5 +833,40 @@ it("stores a signed batch once and accounts separately for two clashes inside it
     inspect.mockRestore();
     receive.mockRestore();
     verify.mockRestore();
+  }
+});
+
+it("commits received venue facts before answering a record-clash refusal", async () => {
+  const receive = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "receive")
+    .mockImplementation(async (tx) => {
+      await tx.execute(
+        sql`update nodes set name = 'Received before record clash' where id = ${receiver}`,
+      );
+      return { refusal: "fiscal.return_record_clash" };
+    });
+  const inspect = vi.spyOn(modules[0]!.handover!.returnRecords!, "inspect");
+  try {
+    const app = destination();
+    let status = 0;
+    let refusal: unknown;
+    await send(async (url, init) => {
+      const response = await app.request(String(url), init);
+      status = response.status;
+      refusal = await response.clone().json();
+      return response;
+    });
+    expect(status).toBe(409);
+    expect(refusal).toMatchObject({ error: { code: "fiscal.return_record_clash" } });
+    expect(suite.db.all(sql`select name from nodes where id = ${receiver}`)).toEqual([
+      { name: "Received before record clash" },
+    ]);
+    expect(inspect).not.toHaveBeenCalled();
+    expect(
+      suite.node.all(sql`select * from node_handover_events where kind = 'return-clash-evidence'`),
+    ).toEqual([]);
+  } finally {
+    receive.mockRestore();
+    inspect.mockRestore();
   }
 });

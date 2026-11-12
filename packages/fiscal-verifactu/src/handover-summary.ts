@@ -129,8 +129,15 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
     acceptPermission: FISCAL_REMEDY,
     inspect: async (tx, source, batch) =>
       inspectReturnedPayments(tx, source, readReturnedBatch(batch)),
-    receive: async (tx, source, batch, now, accepted) =>
-      (await receiveReturnedOriginals(tx, source, readReturnedBatch(batch), now, accepted))
-        .complete,
+    receive: async (tx, source, batch, now, accepted) => {
+      const result = await receiveReturnedOriginals(
+        tx,
+        source,
+        readReturnedBatch(batch),
+        now,
+        accepted,
+      );
+      return result.refusal ? { refusal: result.refusal } : result.complete;
+    },
   },
 };

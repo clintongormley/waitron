@@ -205,7 +205,7 @@ export async function receiveReturnedOriginals(
   returned: ReturnedOriginals,
   now: Date,
   accepted: readonly string[] = [],
-): Promise<{ complete: boolean }> {
+): Promise<{ complete: boolean; refusal?: "fiscal.return_record_clash" }> {
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
   if (
@@ -471,7 +471,9 @@ export async function receiveReturnedOriginals(
       missing = true;
     }
   }
-  return { complete: !blocked && !missing };
+  return blocked
+    ? { complete: false, refusal: "fiscal.return_record_clash" }
+    : { complete: !missing };
 }
 
 function orderedSales(sales: ReturnRow[]): ReturnRow[] {

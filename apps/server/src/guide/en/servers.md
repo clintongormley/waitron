@@ -87,13 +87,15 @@ for an accepted difference, the main box keeps its own payment facts.
 Resetting the old box deletes its venue data, including sale lines and local backups. Those are
 not included in this return; keep the old box's data if you need them.
 
-If the return stops because invoice or payment facts differ, keep both boxes running with their
-data intact. An administrator can inspect and accept an eligible payment difference through the
-main box's internal API; there is no screen for this yet. After acceptance, switch the stopped box
-off and on to retry. Repeat if a later batch stops on another payment difference.
-Invoice, chain-position and correction clashes still only warn and cannot be accepted yet.
-Records after a clashing invoice may still be waiting on this box. Reset remains available, but
-it deletes this box's venue data before the return is confirmed.
+If the return stops because an invoice record clashes with one on the main box, continue using
+the main box and keep the old box's data if you still need it. The return is not confirmed.
+Reset remains available, but deletes the old box's venue data, including any records still waiting.
+
+If other returned facts differ, keep both boxes running with their data intact. Only eligible
+payment differences can be accepted through the internal API. An administrator can inspect them
+with GET `/management-api/return-clashes` on the main box and accept one with POST `/management-api/return-clashes/:clashId/accept`, giving `actionKey` and `reason`.
+There is no screen for this yet. Then switch the stopped box off and on to retry. Each newly
+reached clashing batch needs its own acceptance; only the exact accepted group counts.
 
 If the page reports a clock difference, check the clocks on both boxes and keep both running
 while the return retries. Do not reset the old box.

@@ -1,6 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import type { CanonicalValue } from "@waitron/membership";
-import { AppError } from "@waitron/shared";
+import { AppError, type ErrorCode } from "@waitron/shared";
 import type { BackupQuery } from "@waitron/store";
 import type { WaitronModule } from "./module.js";
 import "./errors.js";
@@ -32,7 +32,7 @@ export interface ModuleHandoverContribution {
       batch: CanonicalValue,
       now: Date,
       accepted?: readonly string[],
-    ): Promise<boolean>;
+    ): Promise<boolean | { refusal: ErrorCode }>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;
 }

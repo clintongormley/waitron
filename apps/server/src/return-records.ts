@@ -23,7 +23,7 @@ export interface ReturnRecordsDeps extends PeerStatusApiDeps {
   now?: () => Date;
 }
 export type ReturnState =
-  "waiting" | "sending" | "needs-attention" | "clock" | "clash" | "confirmed";
+  "waiting" | "sending" | "needs-attention" | "clock" | "clash" | "record-clash" | "confirmed";
 export const returnDigest = (value: CanonicalValue) => sha256Hex(canonicalize(value));
 
 export async function returnVenue(deps: Pick<ReturnRecordsDeps, "db">) {
@@ -82,6 +82,7 @@ export async function runReturnRecordsPass(
         try {
           const refusal = JSON.parse(answer.text) as { error?: { code?: string } };
           if (refusal.error?.code === "fiscal.return_clock_ahead") return "clock";
+          if (refusal.error?.code === "fiscal.return_record_clash") return "record-clash";
         } catch {
           return "needs-attention";
         }

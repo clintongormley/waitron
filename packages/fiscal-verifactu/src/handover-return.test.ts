@@ -1,3 +1,4 @@
+import type { CanonicalValue } from "@waitron/membership";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +30,7 @@ import { clockBehindChain } from "./clock-behind.js";
 import {
   makeReturnedBatches,
   readReturnedOriginals,
+  readReturnedBatch,
   receiveReturnedOriginals,
   type ReturnRow,
 } from "./handover-return.js";
@@ -771,7 +773,10 @@ it("stops when both boxes independently settled the same sale", async () => {
   expect(await receive(changedSale)).toEqual({ complete: false });
   const changedRecord = structuredClone(returned);
   changedRecord.records[0]!.offset_minutos = 60;
-  expect(await receive(changedRecord)).toEqual({ complete: false });
+  expect(await receive(changedRecord)).toEqual({
+    complete: false,
+    refusal: "fiscal.return_record_clash",
+  });
   const pending = structuredClone(returned);
   pending.refunds.push({ id: "pending", sale_id: source.saleId, state: "pending" });
   expect((await inspect(receiver.db, source.nodeId, pending))[0]!.eligible).toBe(false);
@@ -829,7 +834,7 @@ it("preflights a different-id record clash before importing its orphan sale", as
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, suffix, now),
     ),
-  ).toEqual({ complete: false });
+  ).toEqual({ complete: false, refusal: "fiscal.return_record_clash" });
   expect(receiver.db.all<{ id: string }>(sql`select id from sales`)).toEqual([
     { id: "receiver-sale" },
   ]);
@@ -881,7 +886,7 @@ it("withholds confirmation when a held id has different immutable bytes", async 
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, different, now),
     ),
-  ).toEqual({ complete: false });
+  ).toEqual({ complete: false, refusal: "fiscal.return_record_clash" });
   expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
     returned.records,
   );
@@ -1105,7 +1110,7 @@ it("stops when both boxes have corrected the same original", async () => {
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, returned, now),
     ),
-  ).toEqual({ complete: false });
+  ).toEqual({ complete: false, refusal: "fiscal.return_record_clash" });
   expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion order by id`)).toEqual(
     before,
   );
@@ -1130,7 +1135,7 @@ it.each(["chain position", "invoice identity"])(
       await withTransaction(receiver.db, (tx) =>
         receiveReturnedOriginals(tx, source.nodeId, conflicting, now),
       ),
-    ).toEqual({ complete: false });
+    ).toEqual({ complete: false, refusal: "fiscal.return_record_clash" });
     expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
       returned.records,
     );
@@ -1344,3 +1349,85 @@ it.each([
     }
   },
 );
+
+it.each([null, [], {}, { extra: [] }, { records: [false] }])(
+  "refuses a malformed return batch %j before using its rows",
+  (raw) => {
+    expect(() => readReturnedBatch(raw as CanonicalValue)).toThrowError(
+      expect.objectContaining({
+        code: "fiscal.return_invalid",
+        params: { reason: "malformed batch" },
+      }),
+    );
+  },
+);
+
+it("batches pending refund recovery anchors and preserves receiver progress on replay", async () => {
+  const source = await original("Source", 1, copyBase);
+  const order = await seedWorkingOrder(suite.db, {
+    nodeId: source.nodeId,
+    status: "settled",
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  await suite.db.insert(tenders).values({
+    id: "pending-tender",
+    saleId: source.saleId,
+    method: "card",
+    amount: 100,
+    tipAmount: 100,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  await suite.db.execute(sql`insert into payments
+    (id, working_order_id, source, device_id, node_id, sale_id, provider, payment_ref,
+      amount, state, settled_at, created_at, updated_at)
+    values ('capture', ${order.id}, 'device', ${source.deviceId}, ${source.nodeId}, ${source.saleId},
+      'recorded-provider', 'recorded-charge', 100, 'captured',
+      '2026-07-20T17:21:00.000Z', '2026-07-20T17:21:00.000Z', '2026-07-20T17:21:00.000Z')`);
+  await suite.db.insert(tenderRefunds).values({
+    id: "pending-refund",
+    saleId: source.saleId,
+    tenderId: "pending-tender",
+    submissionId: "pending-submission",
+    fingerprint: "pending-fingerprint",
+    appliedAmount: 0,
+    tipAmount: 100,
+    reason: "Goodwill",
+    authorizedBy: "manager",
+    requestedBy: "operator",
+    source: "device",
+    deviceId: source.deviceId,
+    nodeId: source.nodeId,
+    method: "card",
+    provider: "recorded-provider",
+    providerPaymentRef: "recorded-charge",
+    state: "pending",
+    createdAt: "2026-07-20T17:21:01.000Z",
+  });
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const [batch] = makeReturnedBatches(returned);
+  expect(batch!.captures.map((row) => row.id)).toEqual(["capture"]);
+  expect(batch!.orders.map((row) => row.id)).toEqual([order.id]);
+  expect(batch!.devices.map((row) => row.id)).toContain(source.deviceId);
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  const receive = (payload = batch!) =>
+    withTransaction(receiver.db, (tx) => receiveReturnedOriginals(tx, source.nodeId, payload, now));
+  const invalidOrder = structuredClone(batch!);
+  invalidOrder.orders[0]!.status = "held";
+  await expect(receive(invalidOrder)).rejects.toMatchObject({ code: "fiscal.return_invalid" });
+  expect(await receive()).toEqual({ complete: true });
+  expect(receiver.db.all<ReturnRow>(sql`select * from payments`)).toEqual(batch!.captures);
+  expect(receiver.db.all<ReturnRow>(sql`select * from working_orders`)).toEqual(batch!.orders);
+  await receiver.db.execute(sql`update tender_refunds set state = 'completed',
+    completed_at = '2026-07-20T17:22:00.000Z' where id = 'pending-refund'`);
+  await receiver.db.execute(sql`update payments set state = 'refunded',
+    updated_at = '2026-07-20T17:22:00.000Z' where id = 'capture'`);
+  expect(await receive()).toEqual({ complete: true });
+  expect(receiver.db.all<{ state: string }>(sql`select state from tender_refunds`)).toEqual([
+    { state: "completed" },
+  ]);
+  expect(receiver.db.all<{ state: string }>(sql`select state from payments`)).toEqual([
+    { state: "refunded" },
+  ]);
+});
