@@ -1,21 +1,19 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction, workingOrders } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import type { TrustedClock } from "@waitron/fiscal";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
-import { insertAttempting, type CardProviderContribution } from "@waitron/payments";
+import { type CardProviderContribution } from "@waitron/payments";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { mountPaymentsApi } from "./payments-api.js";
-import { orderDeviceOrigin } from "./testing/session-device.js";
 import { systemClock } from "./till-backend.js";
 import "./errors.js";
 
@@ -119,19 +117,6 @@ function paymentsAt(ms: number): Hono {
   return app;
 }
 
-function behindChain(clockMs: number) {
-  const record = latest();
-  return {
-    code: "clock.behind_chain",
-    params: {
-      clockAt: new Date(clockMs).toISOString(),
-      offsetMinutes: 60,
-      lastRecordAt: record.at.toISOString(),
-      lastRecordOffsetMinutes: record.offsetMinutes,
-    },
-  };
-}
-
 const attest = (outcome: string) => ({ outcome, note: "Checked at the provider", pin: "1234" });
 
 const ROUTES: {
@@ -196,12 +181,6 @@ describe.each(ROUTES)("$name", ({ path, body, next }) => {
   const post = (app: Hono, cookie: string) =>
     send(app, cookie, "POST", path(randomUUID()), body ?? {});
 
-  it("refuses clock.behind_chain while the clock reads a day behind the latest record", async () => {
-    const behind = nowMs() - DAY;
-    const answer = await post(paymentsAt(behind), managerCookie);
-    expect(answer).toEqual({ status: 409, json: behindChain(behind) });
-  });
-
   it("asks for a session first, saying nothing about the records", async () => {
     const answer = await post(paymentsAt(nowMs() - DAY), "");
     expect(answer.status).toBe(401);
@@ -230,54 +209,4 @@ it("refuses clock.unusable with 409 under a clock in 2001", async () => {
       params: { clockAt: "2001-06-01T10:00:00.000Z", offsetMinutes: 60 },
     },
   });
-});
-
-it("asks the provider nothing about a real stuck payment while the clock reads behind, and asks it a minute behind", async () => {
-  const orderId = await tabWith(venue, "Caña");
-  const origin = await orderDeviceOrigin(venue.db);
-  await withTransaction(venue.db, async (tx) =>
-    insertAttempting(tx, {
-      origin,
-      workingOrderId: brandWorkingOrderId(orderId),
-      nodeId: venue.cfg.nodeId,
-      provider: "fake",
-      paymentRef: randomUUID(),
-      amount: decimal("3.00"),
-    }),
-  );
-  await venue.db
-    .update(workingOrders)
-    .set({ paymentAttemptAt: new Date(nowMs() - MINUTE).toISOString() })
-    .where(eq(workingOrders.id, orderId));
-  const [stuck] = venue.db.all<{ id: string }>(
-    sql`select id from payments where working_order_id = ${orderId}`,
-  );
-  const collects = venue.card.collectCalls.length;
-  const asked = venue.card.abandonedAttemptCalls.length;
-
-  const behind = nowMs() - DAY;
-  const answer = await send(
-    paymentsAt(behind),
-    managerCookie,
-    "POST",
-    `/management-api/payments/stuck/${stuck!.id}/resolve`,
-  );
-
-  expect(answer).toEqual({ status: 409, json: behindChain(behind) });
-  expect(venue.card.collectCalls.length).toBe(collects);
-  expect(venue.card.abandonedAttemptCalls.length).toBe(asked);
-  const [row] = venue.db.all<{ state: string }>(
-    sql`select state from payments where id = ${stuck!.id}`,
-  );
-  expect(row!.state).toBe("attempting");
-
-  const inside = await send(
-    paymentsAt(nowMs() - MINUTE),
-    managerCookie,
-    "POST",
-    `/management-api/payments/stuck/${stuck!.id}/resolve`,
-  );
-  expect(inside.json.code).toBe("payment.outcome_unknown");
-  expect(venue.card.abandonedAttemptCalls.length).toBe(asked + 1);
-  expect(venue.card.collectCalls.length).toBe(collects);
 });

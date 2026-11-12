@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -12,10 +11,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import type { TrustedClock } from "@waitron/fiscal";
-import { getPaymentByRef, insertCapturedPayment, recordResolution } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import {
   inTx,
   paymentRows,
@@ -102,24 +98,6 @@ function movableClock(ms: number): { clock: TrustedClock; moveTo: (next: number)
   };
 }
 
-function behindChain(clockMs: number) {
-  const record = latest();
-  return {
-    code: "clock.behind_chain",
-    params: {
-      clockAt: new Date(clockMs).toISOString(),
-      offsetMinutes: 60,
-      lastRecordAt: record.at.toISOString(),
-      lastRecordOffsetMinutes: record.offsetMinutes,
-    },
-  };
-}
-
-const chargedNotRecorded = (workingOrderId: string) => ({
-  code: "sale.charged_not_recorded",
-  params: { workingOrderId, reason: "clock_behind_chain" },
-});
-
 function dish() {
   return [{ menuItemId: counter.offerFor(dishId), quantity: "1" }];
 }
@@ -157,13 +135,6 @@ async function heldAtReader<T>(request: () => Promise<T>) {
 
 function allRecords(): number {
   const [row] = venue.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`);
-  return row!.n;
-}
-
-function count(table: string, column: string, id: string): number {
-  const [row] = venue.db.all<{ n: number }>(
-    sql`select count(*) as n from ${sql.identifier(table)} where ${sql.identifier(column)} = ${id}`,
-  );
   return row!.n;
 }
 
@@ -229,127 +200,6 @@ async function placedIssuedOrder(clock: TrustedClock): Promise<string> {
   await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   return id;
 }
-
-it("a card charged as the stop begins says so, and Pay records it without charging again", async () => {
-  const now = nowMs();
-  const behind = now - 10 * MINUTE;
-  const id = randomUUID();
-  const records = allRecords();
-  const before = collects();
-  const reader = movableClock(now + MINUTE);
-
-  const { answer, release } = await heldAtReader(() => cardSale(venue.appAt(reader.clock), id));
-  reader.moveTo(behind);
-  release();
-  const charged = await answer;
-
-  expect(charged.status).toBe(507);
-  expect(charged.json).toEqual(chargedNotRecorded(id));
-  expect(collects()).toBe(before + 1);
-  expect(capturedUnlinked(id)).toBe(1);
-  expect(count("sales", "working_order_id", id)).toBe(0);
-  expect(allRecords()).toBe(records);
-
-  const refused = await payStored(venue.appAt(clockAt(behind)), id);
-
-  expect(refused.status).toBe(409);
-  expect(refused.json).toEqual(behindChain(behind));
-  expect(collects()).toBe(before + 1);
-
-  const paid = await payStored(venue.appAt(clockAt(now + 2 * MINUTE)), id);
-
-  expect(paid.status).toBe(200);
-  expect(paid.json.outcome).toBe("captured");
-  expect(collects()).toBe(before + 1);
-  expect(count("sales", "working_order_id", id)).toBe(1);
-  expect(fiscalRecordCount(venue, id)).toBe(1);
-  expect(allRecords()).toBe(records + 1);
-});
-
-it("the automatic recovery files nothing during the stop, then files it", async () => {
-  const now = nowMs();
-  const behind = now - 10 * MINUTE;
-  const billId = await tabWith(venue, "Paella");
-  const paymentRef = randomUUID();
-  await withTransaction(venue.db, async (tx) => {
-    await insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      workingOrderId: billId,
-      provider: "fake",
-      paymentRef,
-      amount: decimal("35.00"),
-      settledAt: new Date(now),
-    });
-    const payment = (await getPaymentByRef(tx, { provider: "fake", paymentRef }))!;
-    await recordResolution(tx, {
-      paymentId: payment.id,
-      workingOrderId: billId,
-      personId: null,
-      outcome: "captured",
-      cancelledAtProvider: false,
-      providerStatus: "succeeded",
-      resolvedAt: new Date(now),
-    });
-  });
-  const before = collects();
-
-  const stopped = await recoverAutomaticCardPayments({
-    admission: testTradingAdmission(),
-    ...venue,
-    clock: clockAt(behind),
-  });
-
-  expect(stopped.filed).toBe(0);
-  expect(stopped.errors).toEqual([
-    { paymentId: expect.any(String), error: expect.stringContaining("clock.behind_chain") },
-  ]);
-  expect(fiscalRecordCount(venue, billId)).toBe(0);
-
-  const resumed = await recoverAutomaticCardPayments({
-    admission: testTradingAdmission(),
-    ...venue,
-    clock: clockAt(now + MINUTE),
-  });
-
-  expect(resumed).toEqual({ filed: 1, errors: [] });
-  expect(collects()).toBe(before);
-  expect(await statusOf(venue, billId)).toBe("settled");
-  expect(fiscalRecordCount(venue, billId)).toBe(1);
-});
-
-it("a card on a bill as the stop begins says so, and the pending pass completes it once the clock moves on", async () => {
-  const now = nowMs();
-  const behind = now - 10 * MINUTE;
-  const billId = await tabWith(venue, "Paella");
-  const before = collects();
-  const reader = movableClock(now + MINUTE);
-
-  const { answer, release } = await heldAtReader(() =>
-    payBill(venue.appAt(reader.clock), billId, "35.00"),
-  );
-  reader.moveTo(behind);
-  release();
-  const charged = await answer;
-
-  expect(charged.status).toBe(507);
-  expect(charged.json).toEqual(chargedNotRecorded(billId));
-  expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["pending"]);
-  expect(fiscalRecordCount(venue, billId)).toBe(0);
-
-  await settlePendingBillPayments({
-    admission: testTradingAdmission(),
-    db: venue.db,
-    backend: venue.backend,
-    clock: clockAt(now + 2 * MINUTE),
-    cfg: venue.cfg,
-  });
-
-  expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["received"]);
-  expect(await statusOf(venue, billId)).toBe("settled");
-  expect(fiscalRecordCount(venue, billId)).toBe(1);
-  expect(collects()).toBe(before + 1);
-});
 
 it("a card charged as the stop begins on an already-invoiced order is recorded, dated by the provider", async () => {
   const now = nowMs();

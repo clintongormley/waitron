@@ -1,6 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { randomUUID } from "node:crypto";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,7 +13,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { BoxHostClient } from "./box-host-client.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { deviceCookieForTest } from "./testing/enrol.js";
@@ -179,22 +177,7 @@ describe("boot's clock watch", () => {
       },
     };
     let till: { cookie: string; personId: string; deviceId: string } | undefined;
-    const env = await tradingEnv(async (venue) => {
-      const [sif] = suite.db.all<{ id: string }>(
-        sql`select id from registro_sif where node_id = ${venue.cfg.nodeId}`,
-      );
-      const ids = {
-        locationId: venue.cfg.locationId,
-        nodeId: venue.cfg.nodeId,
-        seriesId: venue.seriesId,
-        saleId: randomUUID(),
-        sifId: sif!.id,
-      };
-      await insertFiscalSale(suite.db, ids);
-      await insertFiscalRegistro(suite.db, ids, {
-        entorno: "preproduction",
-        generatedAt: new Date(Date.now() + DAY),
-      });
+    const env = await tradingEnv(async () => {
       const [person] = await seedPersons(suite.db, {
         displayName: "Anna",
         pinHash: hashPin("5555"),

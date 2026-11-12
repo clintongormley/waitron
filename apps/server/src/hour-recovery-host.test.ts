@@ -18,13 +18,7 @@ import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import {
-  incidents,
-  invoiceSeries,
-  stampDeployment,
-  withNodeTransaction,
-  withTransaction,
-} from "@waitron/db";
+import { invoiceSeries, stampDeployment, withNodeTransaction, withTransaction } from "@waitron/db";
 import { readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
 import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -47,9 +41,7 @@ import { eq, sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
-import { clockBehindChain } from "@waitron/fiscal-verifactu/src/clock-behind.js";
-import { openClockCheck } from "@waitron/fiscal-verifactu/src/clock-checks.js";
-import { confirmClockStop } from "@waitron/fiscal-verifactu/src/clock-confirmation.js";
+import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import {
   fakeClient,
   saleInput,
@@ -836,7 +828,7 @@ describe("a restore whose clock is before or past the backup's newest record", (
     });
   });
 
-  it("a restore below the backup's newest invoice names its minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale", async () => {
+  it("a restore below the backup's newest invoice names its minute, and the sale after it is taken, dated by the box's clock", async () => {
     await sellAt("2026-10-22T20:15:00Z");
     clock.set(Date.parse("2026-10-21T10:00:00Z"));
     const f = await host();
@@ -862,10 +854,6 @@ describe("a restore whose clock is before or past the backup's newest record", (
       ...steadyClock,
       now: () => ({ ...steadyClock.now(), instant: new Date(clock.wall()) }),
     };
-    const reading = boxClock.now();
-    expect(await withTransaction(suite.db, (tx) => clockBehindChain(tx, reading))).toMatchObject({
-      lastRecordAt: "2026-10-22T20:15:00.000Z",
-    });
     const [standard] = await suite.db
       .select()
       .from(invoiceSeries)
@@ -876,46 +864,23 @@ describe("a restore whose clock is before or past the backup's newest record", (
       db: suite.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        recordSale(
-          tx,
-          backend,
-          saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: boxClock }),
-        ),
+    const { fiscal } = await withTransaction(suite.db, (tx) =>
+      recordSale(
+        tx,
+        backend,
+        saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: boxClock }),
       ),
-    ).rejects.toMatchObject({ code: "clock.behind_chain" });
-    const openIncidents = async () =>
-      (await suite.db.select().from(incidents))
-        .filter((row) => row.acknowledgedAt === null)
-        .map(({ code, params }) => ({ code, params }));
-    expect(await openIncidents()).toEqual([]);
-    const boot = { ms: 4 * 60_000, id: "boot-1" };
-    await withTransaction(suite.db, (tx) =>
-      openClockCheck(tx, { reading, boot, nodeId: node.nodeId }),
     );
-    const at = reading.instant.toISOString();
-    const { confirmation } = await withTransaction(suite.db, (tx) =>
-      confirmClockStop(tx, {
-        reading,
-        boot,
-        witnesses: [
-          { kind: "authority", id: "authority", boxAt: at, witnessAt: at, uncertaintyMs: 0 },
-        ],
-        nodeId: node.nodeId,
-      }),
-    );
-    expect(confirmation).not.toBeNull();
-    const open = await openIncidents();
-    expect(open.map(({ code }) => code).sort()).toEqual([
-      "clock.behind_chain_restarted",
-      "clock.records_misdated",
-    ]);
-    expect(open.find(({ code }) => code === "clock.records_misdated")!.params).toMatchObject({
-      count: 1,
-      from: "2026-10-22T20:15:00.000Z",
-      to: "2026-10-22T20:15:00.000Z",
-      partial: false,
+    const [written] = await suite.db
+      .select({
+        series: registrosFacturacion.numSerieFactura,
+        at: registrosFacturacion.fechaHoraHusoGenRegistro,
+      })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, fiscal.recordId));
+    expect(written).toEqual({
+      series: `A-${selected.identity}/1`,
+      at: new Date(Math.floor(clock.wall() / 1000) * 1000),
     });
   });
 

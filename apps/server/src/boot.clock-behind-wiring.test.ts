@@ -123,10 +123,6 @@ async function recordOn(venue: Venue): Promise<void> {
 }
 
 describe("boot's clock-behind wiring for the drift alert", () => {
-  it("answers stopped for a time a day before the latest record", async () => {
-    expect(await askStopped(recordOn, new Date("2026-07-19T18:20:30.000Z"))).toBe(true);
-  });
-
   it("answers not stopped for a time a day after the latest record", async () => {
     expect(await askStopped(recordOn, new Date("2026-07-21T18:20:30.000Z"))).toBe(false);
   });

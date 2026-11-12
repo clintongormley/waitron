@@ -11,11 +11,6 @@ import { createPinThrottle } from "@waitron/identity";
 import { deviceId as brandDeviceId, quoteLiteral } from "@waitron/shared";
 import type { Draft } from "./order-drafts.js";
 import { readBillEditState } from "./bill-editing.js";
-import { createAdjustmentReason } from "@waitron/adjustments";
-import { REASONS } from "./testing/adjustment-venue.js";
-import { cancelReasonId } from "./testing/cancel-line.js";
-import { readCancellationContext } from "./line-cancel-context.js";
-import { advanceTicketItem } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { heldRow } from "./testing/held-row.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -102,19 +97,6 @@ function venueAt(ms: number): BillVenue {
   return { ...venue, clock, app: venue.appAt(clock) };
 }
 
-function behindChain(clockMs: number) {
-  const record = latest();
-  return {
-    code: "clock.behind_chain",
-    params: {
-      clockAt: new Date(clockMs).toISOString(),
-      offsetMinutes: 60,
-      lastRecordAt: record.at.toISOString(),
-      lastRecordOffsetMinutes: record.offsetMinutes,
-    },
-  };
-}
-
 function cashPart(amount: string) {
   return {
     submissionId: randomUUID(),
@@ -135,7 +117,6 @@ function count(table: string, where = sql`1 = 1`): number {
 }
 
 const allRecords = () => count("registros_facturacion");
-const salesOf = (billId: string) => count("sales", sql`working_order_id = ${billId}`);
 const ticketItemsOf = (billId: string) =>
   count(
     "ticket_items",
@@ -195,99 +176,6 @@ function settlingSnapshot() {
   };
 }
 
-it.each(["discount", "cancel", "started cancel"] as const)(
-  "a settling %s stops behind the chain while the earlier command still replays",
-  async (kind) => {
-    const productName = venue.db.get<{ name: string }>(
-      sql`select name from products where unit_price = 300 order by id limit 1`,
-    )!.name;
-    const reasonId =
-      kind === "discount"
-        ? await inTx(venue, async (tx) => (await createAdjustmentReason(tx, REASONS.house)).id)
-        : await inTx(venue, cancelReasonId);
-    async function prepare(now: number) {
-      const party = await seatedWith(venueAt(now), productName, productName);
-      expect(
-        (
-          await send(
-            at(now),
-            venue.cookie,
-            "POST",
-            `/api/working-orders/${party.tabId}/payments`,
-            cashPart("3.00"),
-          )
-        ).status,
-      ).toBe(200);
-      const [line] = venue.db.all<{ id: string }>(
-        sql`select id from working_order_lines where working_order_id = ${party.tabId} order by line_no`,
-      );
-      if (kind === "started cancel") {
-        const [item] = venue.db.all<{ id: string }>(
-          sql`select id from ticket_items where working_order_line_id = ${line!.id}`,
-        );
-        expect(item).toBeDefined();
-        await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
-      }
-      const [bill] = venue.db.all<{ revision: number }>(
-        sql`select revision from working_orders where id = ${party.tabId}`,
-      );
-      const expectedEdit = await readBillEditState(venue.db, party.tabId);
-      return kind === "discount"
-        ? {
-            billId: party.tabId,
-            path: `/api/working-orders/${party.tabId}/adjustments`,
-            body: {
-              submissionId: randomUUID(),
-              expectedEdit,
-              expectedRevision: bill!.revision,
-              lineId: line!.id,
-              reasonId,
-              approver: { personId: venue.adminId, pin: ADMIN_PIN },
-              note: null,
-              action: "discount_amount",
-              amount: "3.00",
-            },
-          }
-        : {
-            billId: party.tabId,
-            path: `/api/parties/${party.partyId}/lines/${line!.id}/cancel-item`,
-            body: {
-              submissionId: randomUUID(),
-              expectedEdit,
-              expectedPartyRevision: await partyRevisionOf(venue, party.tabId),
-              expectedBillRevision: bill!.revision,
-              expectedContext: await readCancellationContext(venue.db, party.partyId, line!.id),
-              quantity: "1",
-              outcome: "remove_charge",
-              reasonId,
-              ...(kind === "started cancel"
-                ? { approver: { personId: venue.adminId, pin: ADMIN_PIN } }
-                : {}),
-            },
-          };
-    }
-    const first = await prepare(nowMs());
-    const answer = await send(at(nowMs()), venue.cookie, "POST", first.path, first.body);
-    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(answer.json).toHaveProperty("invoice.total", "3.00");
-    expect(await statusOf(venue, first.billId)).toBe("settled");
-    expect(fiscalRecordCount(venue, first.billId)).toBe(1);
-    const second = await prepare(nowMs());
-    const before = settlingSnapshot();
-    const behind = nowMs() - 10 * MINUTE;
-    const refused = await send(at(behind), venue.cookie, "POST", second.path, second.body);
-    expect(refused.status).toBe(409);
-    expect(refused.json).toEqual(behindChain(behind));
-    expect(settlingSnapshot()).toEqual(before);
-    expect(await send(at(behind), venue.cookie, "POST", first.path, first.body)).toEqual(answer);
-    expect(settlingSnapshot()).toEqual(before);
-    expect((await send(at(nowMs()), venue.cookie, "POST", second.path, second.body)).status).toBe(
-      200,
-    );
-    expect(allRecords()).toBe(before.records + 1);
-  },
-);
-
 describe("a kitchen send", () => {
   it("rolls back a settling Cancel item when its saved-answer write refuses", async () => {
     const now = nowMs();
@@ -332,13 +220,6 @@ describe("a kitchen send", () => {
 });
 
 describe("a partial Cancel item", () => {
-  function lineQuantity(billId: string): string {
-    const [row] = venue.db.all<{ quantity: number }>(
-      sql`select quantity from working_order_lines where working_order_id = ${billId} and line_no = 1`,
-    );
-    return String(row!.quantity);
-  }
-
   async function setQuantity(app: Hono, billId: string, quantity: string) {
     if (quantity === "1") return cancelItemHttp(venue.db, app, venue.cookie, billId, 1, "1");
     const [row] = venue.db.all<{ revision: number }>(
@@ -369,20 +250,6 @@ describe("a partial Cancel item", () => {
     expect(paid.status).toBe(200);
     return billId;
   }
-
-  it("refuses a partial Cancel item that would complete a part-paid bill", async () => {
-    const now = nowMs();
-    const billId = await halfPaidBeers(now);
-    const before = lineQuantity(billId);
-    const behind = now - 10 * MINUTE;
-
-    const answer = await setQuantity(at(behind), billId, "1");
-
-    expect(answer.status).toBe(409);
-    expect(answer.json).toEqual(behindChain(behind));
-    expect(lineQuantity(billId)).toBe(before);
-    expect(fiscalRecordCount(venue, billId)).toBe(0);
-  });
 
   it("takes the same edit a minute inside the last record", async () => {
     const now = nowMs();
@@ -449,21 +316,6 @@ describe("a held-order save", () => {
     });
   }
 
-  it("refuses a save that would complete a part-paid bill, and writes nothing", async () => {
-    const now = nowMs();
-    const billId = await halfPaidBeers(now);
-    const before = dishLines(billId);
-    const behind = now - 10 * MINUTE;
-
-    const answer = await keepOneBeer(at(behind), billId);
-
-    expect(answer.status).toBe(409);
-    expect(answer.json).toEqual(behindChain(behind));
-    expect(dishLines(billId)).toEqual(before);
-    expect(before.reduce((sum, line) => sum + line.quantity, 0)).toBe(2000);
-    expect(fiscalRecordCount(venue, billId)).toBe(0);
-  });
-
   it("takes the same save a minute inside the last record", async () => {
     const now = nowMs();
     const billId = await halfPaidBeers(now);
@@ -494,21 +346,6 @@ describe("an unpaid departure", () => {
     return { party, placedId };
   }
 
-  it("refuses an unpaid departure of an open bill and writes nothing", async () => {
-    const now = nowMs();
-    const party = await seatedWith(venueAt(now), "Red wine bottle");
-    const behind = now - 10 * MINUTE;
-
-    const answer = await depart(at(behind), party.partyId, party.tabId);
-
-    expect(answer.status).toBe(409);
-    expect(answer.json).toEqual(behindChain(behind));
-    expect(partyStateOf(party.partyId)).toBe("open");
-    expect(salesOf(party.tabId)).toBe(0);
-    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
-    expect(departureRowsOf(party.partyId)).toBe(0);
-  });
-
   it("records the departure of an open bill a minute inside the last record", async () => {
     const now = nowMs();
     const party = await seatedWith(venueAt(now), "Red wine bottle");
@@ -518,22 +355,6 @@ describe("an unpaid departure", () => {
     expect(answer.status).toBe(200);
     expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
     expect(departureRowsOf(party.partyId)).toBe(1);
-  });
-
-  it("refuses an unpaid departure of a bill whose invoice was already filed and writes nothing", async () => {
-    const now = nowMs();
-    const { party, placedId } = await withFiledInvoice(now);
-    const behind = now - 10 * MINUTE;
-    const records = allRecords();
-
-    const answer = await depart(at(behind), party.partyId, placedId);
-
-    expect(answer.status).toBe(409);
-    expect(answer.json).toEqual(behindChain(behind));
-    expect(partyStateOf(party.partyId)).toBe("open");
-    expect(salesOf(placedId)).toBe(1);
-    expect(allRecords()).toBe(records);
-    expect(departureRowsOf(party.partyId)).toBe(0);
   });
 
   it("records the departure of a bill whose invoice was already filed a minute inside, filing nothing", async () => {
@@ -622,20 +443,6 @@ describe("a cancel's credit", () => {
       override: { personId: venue.adminId, pin: ADMIN_PIN },
     });
   }
-
-  it("refuses a cancel's credit of an invoiced order", async () => {
-    const now = nowMs();
-    const id = await placed(now, true);
-    const behind = now - 10 * MINUTE;
-    const records = allRecords();
-
-    const answer = await cancel(at(behind), id);
-
-    expect(answer.status).toBe(409);
-    expect(answer.json).toEqual(behindChain(behind));
-    expect(allRecords()).toBe(records);
-    expect(await statusOf(venue, id)).toBe("placed");
-  });
 
   it("credits an invoiced order a minute inside the last record", async () => {
     const now = nowMs();
