@@ -2,8 +2,8 @@ import { cancelItemHttp } from "./testing/cancel-line.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
-import { addTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
-import { readBillEditState } from "./bill-editing.js";
+import { addTabRound, placeOrder, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
+import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -52,7 +52,7 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { markServed, readOrderRevision } from "./working-order.js";
+import { markServed, parkOrder, readOrderRevision } from "./working-order.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -749,6 +749,60 @@ describe("bills already presented", () => {
     expect(await departuresOf(placedId)).toEqual([
       expect.objectContaining({ saleId: invoiced!.id, amount: 1800 }),
     ]);
+  });
+
+  it("refuses a bill presented after a part payment at the counter, and writes nothing", async () => {
+    const party = await seatedWith(venue, "Caña");
+    const id = randomUUID();
+    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+    await parkOrder(deps, venue.cfg, {
+      id,
+      lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+      zoneId: prepayZone,
+      operatorId: venue.operatorId,
+    });
+    await placeOrder(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    const part = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "5.00",
+      method: "cash",
+      tendered: "5.00",
+      applied: "5.00",
+      tip: "0.00",
+      expectedEdit: null,
+    });
+    expect(part.status).toBe(200);
+    const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${id}/move`, {
+      to: { tableId: party.tableId },
+      expectedEdits: await inTx(venue, async (tx) => {
+        const edits = [];
+        for (const billId of [id, ...(await readPartyBillIds(tx, [party.partyId]))].sort())
+          edits.push(await readBillEditState(tx, billId));
+        return edits;
+      }),
+      otherPartyId: party.partyId,
+      expectedOtherPartyRevision: revisionOf(party.partyId),
+    });
+    expect(moved.status).toBe(200);
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.bill_holds_payment", params: { workingOrderId: id } },
+    });
+    expect(await salesOf(id)).toEqual([]);
+    await expectNothingWritten(party.partyId, id, "placed");
+    expect(await departuresOf(party.tabId)).toEqual([]);
   });
 });
 
