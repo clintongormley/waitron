@@ -1166,21 +1166,33 @@ it("creates an extras list, closes the editor and reloads", async () => {
   await vi.waitFor(() => expect(client.listExtraLists).toHaveBeenCalledTimes(2));
 });
 
-it("updates the options list that was opened rather than creating one", async () => {
+it("updates the options list with its save body and commits the full draft", async () => {
   const client = api();
   const el = await mount(client);
   await selectTab(el, "options");
   await clickInTable(el, "option-lists", "edit-option-o1");
   const form = optionForm(el);
+  const closeSaved = vi.spyOn(form, "closeSaved");
+  const value = { ...optionList, name: "Doneness" };
+  const body = {
+    ...value,
+    labels: value.labels.map(({ id, name, customerName, kitchenName }) => ({
+      id,
+      name,
+      customerName,
+      kitchenName,
+    })),
+  };
   form.dispatchEvent(
     new CustomEvent("wt-submit", {
-      detail: { value: { ...optionList, labels: [] } },
+      detail: { value, body },
       bubbles: true,
       composed: true,
     }),
   );
   await vi.waitFor(() => expect(form.open).toBe(false));
-  expect(client.updateOptionList).toHaveBeenCalledWith("o1", { ...optionList, labels: [] });
+  expect(client.updateOptionList).toHaveBeenCalledWith("o1", body);
+  expect(closeSaved).toHaveBeenCalledWith(value);
   expect(client.createOptionList).not.toHaveBeenCalled();
 });
 

@@ -74,6 +74,59 @@ const sauces: OptionList = {
 };
 
 describe("option list authoring contract", () => {
+  it("resolves omitted flags by normalized id before choosing an available default", () => {
+    const storedId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const parsed = parseOptionListInput(
+      {
+        ...cooked,
+        defaultLabelId: storedId,
+        labels: [
+          { ...mediumRare, id: storedId.toUpperCase(), available: undefined },
+          { ...wellDone, available: undefined },
+          { name: "Blue" },
+        ],
+      },
+      [{ id: storedId, available: false }],
+    );
+    expect(parsed.labels.map(({ available }) => available)).toEqual([false, true, true]);
+    expect(parsed.labels[0]!.id).toBe(storedId);
+    expect(parsed.defaultLabelId).toBe(wellDoneId);
+  });
+
+  it("applies explicit availability edits over stored flags", () => {
+    const parsed = parseOptionListInput(cooked, [
+      { id: mediumRareId, available: false },
+      { id: wellDoneId, available: false },
+    ]);
+    expect(parsed.labels.map(({ available }) => available)).toEqual([true, true]);
+    expect(
+      parseOptionListInput(
+        {
+          ...cooked,
+          labels: [{ ...mediumRare, available: false }, wellDone],
+        },
+        cooked.labels,
+      ).labels[0]!.available,
+    ).toBe(false);
+  });
+
+  it("refuses an active list after its only available stored choice is removed", () => {
+    expect(() =>
+      parseOptionListInput(
+        {
+          ...cooked,
+          labels: [{ ...mediumRare, available: undefined }],
+        },
+        [
+          { id: mediumRareId, available: false },
+          { id: wellDoneId, available: true },
+        ],
+      ),
+    ).toThrowError(
+      expect.objectContaining({ code: "options.invalid", params: { field: "labels" } }),
+    );
+  });
+
   it("refuses a list whose staff name is blank", () => {
     expect(() => parseOptionListInput({ ...cooked, name: "   " })).toThrowError(
       expect.objectContaining({ code: "options.invalid", params: { field: "name" } }),

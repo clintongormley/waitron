@@ -259,10 +259,10 @@ export async function updateOptionList(
   value: unknown,
   fallbackLanguage: string,
 ): Promise<OptionList> {
-  const input = parseOptionListInput(value);
   // Stored ids are lower-case and an id column compares byte for byte (packages/shared/src/ids.ts).
   const optionListId = callerListId.toLowerCase();
   const stored = await getOptionList(tx, optionListId);
+  const input = parseOptionListInput(value, stored.labels);
   if (
     (stored.defaultLabelId === null ||
       input.labels.some((label) => label.id === stored.defaultLabelId)) &&

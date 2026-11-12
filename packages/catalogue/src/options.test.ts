@@ -51,6 +51,41 @@ const cookedList = () => ({
 });
 
 describe("option label availability", () => {
+  it("keeps till-marked sold-out choices and the preferred default on an unrelated stale save", async () => {
+    const opened = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const preferred = opened.defaultLabelId!;
+    await run((tx) => setOptionLabelAvailability(tx, opened.id, preferred, false));
+
+    const saved = await run((tx) =>
+      updateOptionList(
+        tx,
+        opened.id,
+        {
+          name: "Dinner cooking",
+          customerName: opened.customerName,
+          kitchenName: opened.kitchenName,
+          active: opened.active,
+          defaultLabelId: opened.defaultLabelId,
+          labels: [...opened.labels].reverse().map(({ id, name, customerName, kitchenName }) => ({
+            id,
+            name,
+            customerName,
+            kitchenName,
+          })),
+        },
+        "en",
+      ),
+    );
+
+    expect(saved.name).toBe("Dinner cooking");
+    expect(saved.defaultLabelId).toBe(preferred);
+    expect(saved.labels.map(({ id, available }) => ({ id, available }))).toEqual([
+      { id: opened.labels[2]!.id, available: false },
+      { id: opened.labels[1]!.id, available: true },
+      { id: opened.labels[0]!.id, available: false },
+    ]);
+  });
+
   it("stops and restores only the named label while keeping the preferred default", async () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
     const labelId = created.defaultLabelId!;

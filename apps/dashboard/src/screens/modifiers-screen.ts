@@ -27,6 +27,7 @@ import type {
   OptionList,
   OptionListDependants,
   OptionListInput,
+  OptionListSaveBody,
   OptionListRow,
   Product,
 } from "../api/client.js";
@@ -286,7 +287,7 @@ export class ModifiersScreen extends LitElement {
   }
   async #save(
     kind: Kind,
-    event: CustomEvent<{ value: ExtraListInput | OptionListInput }>,
+    event: CustomEvent<{ value: ExtraListInput | OptionListInput; body?: OptionListSaveBody }>,
   ): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
@@ -302,7 +303,7 @@ export class ModifiersScreen extends LitElement {
         else await this.api.createExtraList(input);
       } else {
         const input = value as OptionListInput;
-        if (editing.value) await this.api.updateOptionList(editing.value.id, input);
+        if (editing.value) await this.api.updateOptionList(editing.value.id, event.detail.body!);
         else await this.api.createOptionList(input);
       }
     } catch (error) {
@@ -674,7 +675,7 @@ export class ModifiersScreen extends LitElement {
         .busy=${this.busy}
         .languages=${this.locales ?? { defaultLanguage: "en", languages: ["en"] }}
         .fieldErrors=${this.fieldErrors}
-        @wt-submit=${(event: CustomEvent<{ value: OptionListInput }>) =>
+        @wt-submit=${(event: CustomEvent<{ value: OptionListInput; body: OptionListSaveBody }>) =>
           void this.#save("options", event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();

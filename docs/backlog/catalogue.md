@@ -1137,12 +1137,6 @@ What the design has to settle:
   dish on the kitchen ticket);
 - when it can be sold: service periods already limit a menu to its times and days.
 
-## A1516. Mark a dish sold out from the till
-
-**Go-live.** The remaining sold-out work is A1516-3: a dashboard option list opened before a till
-change must not put that choice back on sale when saved.
-
-
 ## A1517. Allergen points to revisit before go-live
 
 **Before go-live (owner, 2026-11-11).** The original observations below came from reading,

@@ -24,6 +24,7 @@ import type {
   ExtraListInput,
   OptionList,
   OptionListInput,
+  OptionListSaveBody,
   Product,
   ProductEditorInput,
   ProductEditorValue,
@@ -668,14 +669,16 @@ export class CatalogueScreen extends LitElement {
     );
   }
 
-  #submitOptionList(event: CustomEvent<{ value: OptionListInput }>): void {
+  #submitOptionList(
+    event: CustomEvent<{ value: OptionListInput; body: OptionListSaveBody }>,
+  ): void {
     event.stopPropagation();
     const editing = this.editingList?.kind === "options" ? this.editingList.value : null;
     const form = this.shadowRoot!.querySelector("dashboard-option-list-form")!;
     void this.#submitChild(
       async () =>
         editing
-          ? await this.api.updateOptionList(editing.id, event.detail.value)
+          ? await this.api.updateOptionList(editing.id, event.detail.body)
           : await this.api.createOptionList(event.detail.value),
       () => form.closeSaved(event.detail.value),
     );

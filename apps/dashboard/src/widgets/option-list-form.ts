@@ -23,7 +23,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { optionalTextFields, textField, translations, type FieldContext } from "./form-fields.js";
 import "./option-label-form.js";
 import type { DraftLabel } from "./option-label-form.js";
-import type { OptionList, OptionListInput } from "../api/client.js";
+import type { OptionList, OptionListInput, OptionListSaveBody } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 /**
@@ -469,7 +469,7 @@ export class OptionListForm extends LitElement {
   #emit(
     event: Event,
     type: "wt-submit" | "wt-cancel",
-    detail: { value: OptionListInput } | Record<string, never>,
+    detail: { value: OptionListInput; body: OptionListSaveBody } | Record<string, never>,
   ): void {
     event.stopPropagation();
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -485,7 +485,15 @@ export class OptionListForm extends LitElement {
       void this.#focusFirstInvalid();
       return;
     }
-    this.#emit(event, "wt-submit", { value: this.#comparisonValue() });
+    const value = this.#comparisonValue();
+    const baseline = new Map(this.#baseline?.labels.map((label) => [label.id, label.available]));
+    const body: OptionListSaveBody = {
+      ...value,
+      labels: value.labels.map(({ available, ...label }) =>
+        baseline.get(label.id) === available ? label : { ...label, available },
+      ),
+    };
+    this.#emit(event, "wt-submit", { value, body });
   }
 
   #comparisonValue(): OptionListInput {

@@ -61,7 +61,10 @@ function id(value: unknown, field: string): string {
   return value.toLowerCase();
 }
 
-export function parseOptionListInput(value: unknown): ParsedOptionList {
+export function parseOptionListInput(
+  value: unknown,
+  storedLabels: readonly Pick<OptionLabel, "id" | "available">[] = [],
+): ParsedOptionList {
   const row = record(value, "optionList");
   keys(
     row,
@@ -78,6 +81,7 @@ export function parseOptionListInput(value: unknown): ParsedOptionList {
     active: flag(row.active, "active"),
   };
   if (!Array.isArray(row.labels)) invalid("labels");
+  const availableById = new Map(storedLabels.map(({ id, available }) => [id, available]));
   const seen = new Set<string>();
   const labels = row.labels.map((entry, index): OptionLabel => {
     const field = `labels.${index}`;
@@ -91,7 +95,10 @@ export function parseOptionListInput(value: unknown): ParsedOptionList {
       name: staffName(label.name, `${field}.name`),
       customerName: translations(label.customerName, `${field}.customerName`),
       kitchenName: kitchenName(label.kitchenName, `${field}.kitchenName`),
-      available: flag(label.available, `${field}.available`),
+      available:
+        label.available === undefined
+          ? (availableById.get(labelId) ?? true)
+          : flag(label.available, `${field}.available`),
     };
   });
   // An active list is asked on every order of a dish carrying it, and `validateOptionSelections`

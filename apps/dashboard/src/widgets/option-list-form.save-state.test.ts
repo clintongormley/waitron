@@ -5,7 +5,7 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { OptionListForm } from "./option-list-form.js";
 import type { OptionLabelForm } from "./option-label-form.js";
-import type { OptionList, OptionListInput } from "../api/client.js";
+import type { OptionList, OptionListInput, OptionListSaveBody } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -80,7 +80,8 @@ async function press(el: OptionListForm | OptionLabelForm) {
   await el.updateComplete;
 }
 function submissions(el: OptionListForm) {
-  const submit = vi.fn<(event: CustomEvent<{ value: OptionListInput }>) => void>();
+  const submit =
+    vi.fn<(event: CustomEvent<{ value: OptionListInput; body: OptionListSaveBody }>) => void>();
   el.addEventListener("wt-submit", submit as unknown as EventListener);
   return submit;
 }
@@ -253,4 +254,62 @@ it("Escape on a changed list with no leave coordinator closes the window and rep
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => cancel.mock.calls.length).toBe(1);
   expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+});
+
+async function flipAvailability(el: OptionListForm, index: number) {
+  const window = await openOption(el, index);
+  const toggle = window.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    '[name="label-available"]',
+  )!;
+  await toggle.updateComplete;
+  await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
+  await press(window);
+  await el.updateComplete;
+}
+
+it("omits unchanged and toggled-back availability while keeping full draft values", async () => {
+  const { el } = await mount(COOKED);
+  const submit = submissions(el);
+  await flipAvailability(el, 2);
+  await flipAvailability(el, 2);
+  await type(el, "name", "Doneness");
+  await press(el);
+  const { value, body } = submit.mock.calls[0]![0].detail;
+  expect(value.labels.map(({ available }) => available)).toEqual([true, true, false]);
+  expect(body).toEqual({
+    ...value,
+    labels: value.labels.map(({ id, name, customerName, kitchenName }) => ({
+      id,
+      name,
+      customerName,
+      kitchenName,
+    })),
+  });
+});
+
+it("matches availability edits by id through reorder, removal and addition", async () => {
+  const { el } = await mount(COOKED);
+  const submit = submissions(el);
+  await flipAvailability(el, 2);
+  await flipAvailability(el, 1);
+  const handle = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${BLUE}"]`)!;
+  handle.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-label-0"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-option"]')!.click();
+  await el.updateComplete;
+  const window = el.shadowRoot!.querySelector<OptionLabelForm>("dashboard-option-label-form")!;
+  await window.updateComplete;
+  await window.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  await type(window, "label-name", "Well done");
+  await press(window);
+  await el.updateComplete;
+  await press(el);
+  const { value, body } = submit.mock.calls[0]![0].detail;
+  expect(body.labels.map(({ id }) => id)).toEqual([BLUE, MEDIUM, value.labels[2]!.id]);
+  expect(body.labels[0]).toEqual({ ...value.labels[0], available: true });
+  expect(body.labels[1]).toEqual({ ...value.labels[1], available: false });
+  expect(body.labels[2]).toEqual({ ...value.labels[2], available: true });
 });

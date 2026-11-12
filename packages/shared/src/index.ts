@@ -385,6 +385,7 @@ export type {
   OptionListRow,
   OptionLabelInput,
   OptionListInput,
+  OptionListSaveBody,
   ExtraListItem,
   ExtraList,
   ExtraListRow,
