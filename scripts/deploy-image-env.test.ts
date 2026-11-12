@@ -307,7 +307,7 @@ describe("the release's declaration folder", () => {
     }
     expect(declaration).toContain("mkdir /release-root;");
     expect(declaration).toContain(
-      'if [ -n "$WAITRON_RELEASE_VERSION" ]; then \\\n' +
+      'if [ -n "${WAITRON_RELEASE_VERSION:-}" ]; then \\\n' +
         '    pnpm --filter @waitron/fiscal-verifactu declaration render --version "$WAITRON_RELEASE_VERSION" --out /release-root/declaration; \\\n' +
         "  fi",
     );

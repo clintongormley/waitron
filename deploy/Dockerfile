@@ -87,7 +87,7 @@ ARG WAITRON_PRODUCER_TAX_ID
 ARG WAITRON_PRODUCER_ADDRESS
 RUN set -eu; \
   mkdir /release-root; \
-  if [ -n "$WAITRON_RELEASE_VERSION" ]; then \
+  if [ -n "${WAITRON_RELEASE_VERSION:-}" ]; then \
     pnpm --filter @waitron/fiscal-verifactu declaration render --version "$WAITRON_RELEASE_VERSION" --out /release-root/declaration; \
   fi
 
