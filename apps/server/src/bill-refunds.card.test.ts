@@ -1,6 +1,7 @@
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { TradingAdmission } from "./trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -1706,6 +1707,47 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     expect(again.errors).toContainEqual({ refundId, error: "Error: attendance unavailable" });
     expect(await alerts()).toHaveLength(1);
     expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending" });
+  });
+
+  it("leaves a refund under an hour old alone between lookups, even once trading is refused", async () => {
+    const { refundId } = await pendingRefund();
+    venue.db.run(
+      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending' and id <> ${refundId}`,
+    );
+    const admission = new TradingAdmission();
+    admission.admit();
+    const pass = (ms: number) =>
+      settlePendingBillPayments({
+        admission,
+        db: venue.db,
+        backend: venue.backend,
+        clock: clockPlus(ms),
+        cfg: venue.cfg,
+        refundProviderFor: (name) => venue.pool.get(name),
+      });
+    await pass(20 * 60_000);
+    const lookups = venue.card.lookupCalls.filter((query) => query.refundId === refundId).length;
+    const original = venue.backend.clockBehindLatestRecord.bind(venue.backend);
+    const closing = vi
+      .spyOn(venue.backend, "clockBehindLatestRecord")
+      .mockImplementation((tx, reading) => {
+        admission.requireRestart();
+        return original(tx, reading);
+      });
+    let refused: Awaited<ReturnType<typeof pass>>;
+    try {
+      refused = await pass(21 * 60_000);
+    } finally {
+      closing.mockRestore();
+    }
+
+    expect(admission.snapshot()).toEqual({ state: "restart_required" });
+    expect(venue.card.lookupCalls.filter((query) => query.refundId === refundId)).toHaveLength(
+      lookups,
+    );
+    expect(refused.errors.filter((error) => "refundId" in error)).toEqual([]);
+    expect(refused.pending).toBeGreaterThanOrEqual(1);
   });
 
   it("lists the pending refunds nothing is driving, with their payment, bill and send", async () => {

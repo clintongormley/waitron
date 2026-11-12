@@ -282,6 +282,7 @@ async function settlePendingBillRefunds(
     } catch (error) {
       pass.errors.push({ refundId: id, error: String(error) });
     }
+    if (now.getTime() - Date.parse(found.createdAt) <= REFUND_UNRESOLVED_AFTER_MS) continue;
     try {
       await withTransaction(deps.db, async (tx) => {
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
@@ -290,7 +291,6 @@ async function settlePendingBillRefunds(
           .from(billPaymentRefunds)
           .where(eq(billPaymentRefunds.id, id));
         if (refund?.state !== "pending") return;
-        if (now.getTime() - Date.parse(refund.createdAt) <= REFUND_UNRESOLVED_AFTER_MS) return;
         pass.refundsUnresolved += 1;
         await raiseRefundUnresolved(tx, refund, workingOrderId, now);
       });
