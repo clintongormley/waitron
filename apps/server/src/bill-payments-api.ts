@@ -329,6 +329,7 @@ export function mountBillPaymentsApi(
               simulator: deps.cardProvider,
               pool: deps.pool,
             }),
+            clockUnconfirmed: deps.clockUnconfirmed,
           },
           saleCfg,
           id,

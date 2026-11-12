@@ -2547,6 +2547,7 @@ async function bootServer(
       cardProvider,
       pool: cardPool,
       disk: diskFull,
+      clockUnconfirmed: startClockHolds,
       providers: CARD_PROVIDERS,
       venueLocale,
       onboardingIntent: config.onboardingIntent,
@@ -2867,6 +2868,7 @@ async function bootServer(
         providers: CARD_PROVIDERS,
         simulator: cardProvider,
         attendance: attendanceRecorder,
+        clockUnconfirmed: startClockHolds,
       },
       log,
     );
