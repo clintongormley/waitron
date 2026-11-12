@@ -4707,6 +4707,41 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     ).toEqual([{ firedAt: expect.any(String) }]);
   });
 
+  it("placeOrder refuses an archived recorded dish without placing or sending it", async () => {
+    const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
+    const coffeeProduct = await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      return makeProduct(tx, catalogueId, {});
+    });
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [line(coffeeProduct)] });
+    const linesOf = () =>
+      db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
+    const before = await linesOf();
+    await db.execute(sql`update products set active = 0 where id = ${coffeeProduct}`);
+
+    await expect(
+      placeOrder(
+        { admission: testTradingAdmission(), db, backend: stubBackend, clock: stubClock },
+        cfg,
+        id,
+        OPERATOR,
+      ),
+    ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: coffeeProduct } });
+    const [order] = await db
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    expect(order!.status).toBe("open");
+    expect(await linesOf()).toEqual(before);
+    expect(
+      await db
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, id)),
+    ).toEqual([]);
+  });
+
   it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {
     const { cfg, coffeeId } = await setupVenue();
     const id = randomUUID();

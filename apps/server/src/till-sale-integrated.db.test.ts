@@ -1581,7 +1581,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     ]);
   });
 
-  it("an open ticket_then_pay counter order paid by card sends its dish once, and a replay sends nothing more", async () => {
+  it("a sold-out open ticket_then_pay counter order paid by card sends its dish once, and a replay sends nothing more", async () => {
     const { cfg, coffee } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
@@ -1590,11 +1590,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       zoneId: coffee.zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
+    suite.db.run(sql`update products set available = 0 where id = ${coffee.id}`);
     const { deps } = integratedDeps(suite.db);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("captured");
+    expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await preparationTicketCount(id)).toBe(1);
     expect(await stationQueueOrderIds(station)).toEqual([id]);
 
