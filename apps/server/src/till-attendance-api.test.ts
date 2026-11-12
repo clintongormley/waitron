@@ -971,7 +971,7 @@ it("lists a Manager holding workforce.self_approve as their own approver", async
   try {
     const response = await request(`items/${itemId}/approvers?action=approve`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toContainEqual({ personId: venue.personId, displayName: "Ana" });
+    expect(await response.json()).toContainEqual({ personId: venue.personId, displayName: "Anna" });
     const declined = await request(`items/${itemId}/approvers?action=decline`);
     expect(declined.status).toBe(200);
     expect(
