@@ -7,6 +7,7 @@ import {
   drawerOpens,
   invoiceCorrectionRefunds,
   invoiceCorrections,
+  invoiceSeries,
   saleLines,
   sales,
   tenderRefunds,
@@ -14,7 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { createProduct } from "@waitron/catalogue";
-import { previewCorrectionAmounts } from "@waitron/core";
+import { previewCorrectionAmounts, recordSubstitution } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { latestRecord } from "@waitron/fiscal-verifactu/src/clock-behind.js";
 import {
@@ -33,9 +34,11 @@ import {
   decimalToCents,
   deviceOrigin,
   saleId as brandSaleId,
+  seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
+import { resolveTransactionScope } from "./find-bill-transactions.js";
 import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
@@ -732,6 +735,69 @@ describe("openInvoiceCorrection refuses", () => {
     await expect(
       open(saleId, { submissionId: randomUUID(), gross: "6.05" }),
     ).resolves.toMatchObject({ correction: { state: "open" } });
+  });
+
+  it("a corrective invoice and a substitution invoice, whose source order is another ticket's", async () => {
+    const corrected = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(corrected, { submissionId: randomUUID(), gross: "6.05" });
+    const corrective = brandSaleId(
+      (await cash(correction.id, "6.05")).correction.correctiveSaleId!,
+    );
+    const substituted = await soldForCash("Rib steak", ["12.10"]);
+    const [full] = await venue.db
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.purpose, "full"));
+    const { saleId: substitution } = await inTx(venue, (tx) =>
+      recordSubstitution(tx, venue.backend, {
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(full!.id),
+        substitutedSaleIds: [substituted],
+        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+        total: "12.10",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Rib steak",
+            descriptions: { [venue.cfg.locale]: "House Rib steak" },
+            quantity: "1",
+            unitPrice: "10.00",
+            vatRate: "21.00",
+            lineTotal: "10.00",
+          },
+        ],
+        locale: venue.cfg.locale,
+        invoiceLocales: [venue.cfg.locale],
+        clock: venue.clock,
+      }),
+    );
+
+    for (const [saleId, source] of [
+      [corrective, corrected],
+      [substitution, substituted],
+    ] as const) {
+      const [sale] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
+      const [sourceSale] = await venue.db.select().from(sales).where(eq(sales.id, source));
+      expect(sale!.workingOrderId).toBeNull();
+      expect(await inTx(venue, (tx) => resolveTransactionScope(tx, saleId))).toEqual({
+        workingOrderIds: [sourceSale!.workingOrderId],
+      });
+      await refusedWithNothingWritten(
+        () => open(saleId, { submissionId: randomUUID(), gross: "1.00", split: STEAK_HALF }),
+        { code: "invoice_correction.not_settled", params: { saleId } },
+      );
+      await expect(
+        inTx(venue, (tx) =>
+          previewCorrectionAmounts(tx, venue.backend, saleId, venue.cfg.nodeId, {
+            gross: decimal("1.00"),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "sale.correction_not_admitted",
+        params: { reason: "not_simplified" },
+      });
+    }
   });
 
   it("a reason that is not a Void reason, and opens with a Void reason", async () => {
