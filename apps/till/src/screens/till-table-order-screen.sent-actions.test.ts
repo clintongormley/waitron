@@ -518,7 +518,6 @@ it("Sent Comp opens one combined adjustment for the parent and its priced extras
   expect(
     events.map((e) => [
       e.detail.kind,
-      e.detail.combined,
       e.detail.target.lineId,
       e.detail.target.total,
       e.detail.target.extras.map(
@@ -531,7 +530,7 @@ it("Sent Comp opens one combined adjustment for the parent and its priced extras
       e.bubbles,
       e.composed,
     ]),
-  ).toEqual([["comp", true, "l-flan", "6.00", [["cream", "2.00", null]], true, true]]);
+  ).toEqual([["comp", "l-flan", "6.00", [["cream", "2.00", null]], true, true]]);
   expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
 });
 it.each(["paid", "owner", "missing-line"] as const)(

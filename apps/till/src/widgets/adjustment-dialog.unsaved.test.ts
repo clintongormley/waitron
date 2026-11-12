@@ -22,19 +22,20 @@ const regular: AdjustmentReason = {
 class AdjustmentLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   closes = 0;
+  kind: TillAdjustmentDialog["kind"] = "discount";
   target: AdjustTarget = {
-    lineId: "line-2",
-    name: "Steak",
-    quantity: "2",
+    lineId: null,
+    name: "Whole bill",
+    quantity: null,
     total: "50.00",
-    unitTotal: "25.00",
+    unitTotal: null,
   };
   reasons: AdjustmentReason[] = [regular];
   previews: AdjustmentChoice[] = [];
   confirms: AdjustmentChoice[] = [];
   override render() {
     return html`<till-adjustment-dialog
-        kind="discount"
+        kind=${this.kind}
         .target=${this.target}
         .reasons=${this.reasons}
         @adjust-close=${() => this.closes++}
@@ -47,7 +48,7 @@ class AdjustmentLeaveApp extends LitElement {
 customElements.define("adjustment-leave-test-app", AdjustmentLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-async function mount(over: Partial<Pick<AdjustmentLeaveApp, "target" | "reasons">> = {}) {
+async function mount(over: Partial<Pick<AdjustmentLeaveApp, "kind" | "target" | "reasons">> = {}) {
   const { el: app } = await mountWidget<AdjustmentLeaveApp>("adjustment-leave-test-app", over);
   const form = app.shadowRoot!.querySelector("till-adjustment-dialog")!;
   await form.updateComplete;
@@ -86,7 +87,6 @@ function unload() {
 for (const action of ["Cancel", "Escape"]) {
   it(`adjustment ${action} keeps raw values and focus until Discard without applying anything`, async () => {
     const { app, form } = await mount();
-    await pick(form, "quantity", "1");
     await pick(form, "reason", "regular");
     await fill(form, "percent", "12,50");
     const input = await fill(form, "note", "  Repeat customer  ");
@@ -105,7 +105,6 @@ for (const action of ["Cancel", "Escape"]) {
         action: "discount_percent",
         reasonId: "regular",
         note: "Repeat customer",
-        quantity: "1",
         percentBp: 1250,
       },
     ]);
@@ -127,13 +126,25 @@ for (const action of ["Cancel", "Escape"]) {
 }
 it("adjustment defaults and reverted choices close without a question", async () => {
   const { app, form } = await mount();
-  await pick(form, "quantity", "1");
-  expect(unload()).toBe(true);
-  await pick(form, "quantity", "all");
   await pick(form, "discountKind", "amount");
+  expect(unload()).toBe(true);
   await pick(form, "discountKind", "percent");
   await fill(form, "note", "typed");
   await fill(form, "note", "  ");
+  expect(unload()).toBe(false);
+  click(form, "[data-adjust-close]");
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
+});
+it("a cancel's one-or-all choice reverted closes without a question", async () => {
+  const { app, form } = await mount({
+    kind: "cancel",
+    target: { lineId: "line-2", name: "Steak", quantity: "2", total: "50.00", unitTotal: "25.00" },
+    reasons: [{ ...regular, id: "void", name: "Void", kind: "void", actions: ["cancel"] }],
+  });
+  await pick(form, "quantity", "1");
+  expect(unload()).toBe(true);
+  await pick(form, "quantity", "all");
   expect(unload()).toBe(false);
   click(form, "[data-adjust-close]");
   await expect.poll(() => app.closes).toBe(1);

@@ -190,7 +190,6 @@ it.each(["fired", "served"] as const)(
       {
         detail: {
           kind: "comp",
-          combined: true,
           target: {
             lineId: "stored-dish",
             name: "Recorded dish",

@@ -21,7 +21,6 @@ describe.each(["en", "es"] as const)("combined Comp %s", (locale) => {
         const { el, host } = await mountWidget<TillAdjustmentDialog>(
           "till-adjustment-dialog",
           {
-            combined: true,
             kind: "comp",
             target: {
               lineId: "dish",

@@ -1311,7 +1311,7 @@ describe("till-app: comping a stored counter order", () => {
     });
 
     await press(el, inBasket(el, '[data-comp-line="1"]')!);
-    expect(dialog(el)!.combined).toBe(true);
+    expect(dialog(el)!.kind).toBe("comp");
     await chooseReason(el, "Complaint");
     const stepper = inDialog(el, '[name="adjustQuantity"]') as HTMLElement & {
       updateComplete: Promise<unknown>;

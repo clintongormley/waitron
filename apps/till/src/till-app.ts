@@ -1259,7 +1259,6 @@ interface Adjusting {
   revision: number;
   visit: number;
   kind: AdjustKind;
-  combined?: true;
   target: AdjustTarget;
   reasons: AdjustmentReason[];
   choice: AdjustmentChoice | null;
@@ -10991,7 +10990,6 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     return html`<till-adjustment-dialog
         .kind=${open.kind}
-        .combined=${open.combined === true}
         .target=${open.target}
         .reasons=${open.reasons}
         .preview=${open.preview}
@@ -14945,7 +14943,7 @@ export class TillApp extends LitElement {
   }
 
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target, counter, combined } = (event as CustomEvent<AdjustDetail>).detail;
+    const { kind, target, counter } = (event as CustomEvent<AdjustDetail>).detail;
     const surface = counter === true ? "counter" : "table";
     const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
     if (
@@ -15005,7 +15003,6 @@ export class TillApp extends LitElement {
       id: ++this.#adjustments,
       ...opened,
       kind,
-      ...(combined === true ? { combined } : {}),
       target,
       reasons,
       choice: null,
@@ -15076,7 +15073,7 @@ export class TillApp extends LitElement {
   #adjustmentReady(open: Adjusting): boolean {
     if (this.#adjustingNow(open.id) === null) return false;
     if (
-      open.combined === true &&
+      open.kind === "comp" &&
       open.surface === "table" &&
       this.#draftSync?.billStatus !== "open"
     ) {
@@ -15226,7 +15223,7 @@ export class TillApp extends LitElement {
       return;
     }
     const refusal = code ?? "server.internal";
-    const kind = open.combined === true && open.choice?.action !== "comp" ? "discount" : open.kind;
+    const kind = open.kind === "comp" && open.choice?.action !== "comp" ? "discount" : open.kind;
     const onField = refusalField(refusal, kind, open.target.unitTotal !== null) !== null;
     let reasons = open.reasons;
     if (REASON_REFUSALS.has(refusal)) {

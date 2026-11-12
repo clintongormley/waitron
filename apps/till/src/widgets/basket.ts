@@ -1331,7 +1331,7 @@ export class TillBasket extends LitElement {
         data-comp-line=${row === "line" ? place : nothing}
         data-comp-extra=${row === "extra" ? place : nothing}
         aria-label=${`${t("comp.title")} · ${name}`}
-        @click=${() => this.#adjust("comp", target(), true)}
+        @click=${() => this.#adjust("comp", target())}
       >
         ${t("comp.title")}
       </wt-button>
@@ -1359,8 +1359,8 @@ export class TillBasket extends LitElement {
     </div>`;
   }
 
-  #adjust(kind: AdjustKind, target: AdjustTarget, combined?: true): void {
-    const detail: AdjustDetail = { kind, target, counter: true, ...(combined ? { combined } : {}) };
+  #adjust(kind: AdjustKind, target: AdjustTarget): void {
+    const detail: AdjustDetail = { kind, target, counter: true };
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 

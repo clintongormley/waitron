@@ -53,6 +53,14 @@ const steaks: AdjustTarget = {
   total: "50.00",
   unitTotal: "25.00",
 };
+const wholeBill: AdjustTarget = {
+  lineId: null,
+  name: "Whole bill",
+  quantity: null,
+  total: "50.00",
+  unitTotal: null,
+};
+const voiding = reason("Void", { kind: "void", actions: ["cancel"] });
 
 async function mount(over: Partial<TillAdjustmentDialog> = {}) {
   const { el } = await mountWidget<TillAdjustmentDialog>("till-adjustment-dialog", {
@@ -94,7 +102,10 @@ const shownMessages = (el: TillAdjustmentDialog) => [
 
 async function chooseReason(el: TillAdjustmentDialog, name: string): Promise<void> {
   const radio = [...root(el).querySelectorAll<HTMLInputElement>('input[name="reason"]')].find(
-    (candidate) => candidate.closest("label")!.textContent!.trim() === name,
+    (candidate) => {
+      const label = candidate.closest("label")!.textContent!.trim();
+      return label === name || label.startsWith(`${name} · `);
+    },
   )!;
   radio.click();
   await el.updateComplete;
@@ -126,18 +137,13 @@ async function press(button: HTMLElement, el: TillAdjustmentDialog): Promise<voi
 const money = (amount: string) => formatMoney(amount, currentLocale());
 
 describe("till-adjustment-dialog: the reasons it offers", () => {
-  it("lists only the reasons that allow a give-away", async () => {
-    const el = await mount({ kind: "comp" });
-    expect(reasonNames(el)).toEqual(["Complaint", "Staff meal"]);
-  });
-
   it("lists only the reasons that allow a cancel", async () => {
     const el = await mount({ kind: "cancel" });
     expect(reasonNames(el)).toEqual(["Mistake"]);
   });
 
   it("lists the reasons for the kind of discount chosen", async () => {
-    const el = await mount({ kind: "discount" });
+    const el = await mount({ kind: "discount", target: wholeBill });
     expect(reasonNames(el)).toEqual(["Complaint", "Regular"]);
     await chooseReason(el, "Complaint");
 
@@ -153,7 +159,7 @@ describe("till-adjustment-dialog: the reasons it offers", () => {
   });
 
   it("offers only the kinds of discount some reason allows", async () => {
-    const el = await mount({ kind: "discount", reasons: [staffMeal] });
+    const el = await mount({ kind: "discount", target: wholeBill, reasons: [staffMeal] });
     expect(root(el).querySelector('input[name="discountKind"]')).toBeNull();
     expect(field(el, "amount")).not.toBeNull();
     expect(root(el).querySelector('wt-input[name="percent"]')).toBeNull();
@@ -169,7 +175,7 @@ describe("till-adjustment-dialog: the reasons it offers", () => {
   });
 
   it("says so for a discount when no reason allows either kind", async () => {
-    const el = await mount({ kind: "discount", reasons: [mistake] });
+    const el = await mount({ kind: "discount", target: wholeBill, reasons: [mistake] });
     expect(text(root(el))).toContain(t("adjust.no_reasons"));
   });
 });
@@ -212,41 +218,33 @@ describe("till-adjustment-dialog: the form", () => {
     };
     const hint = (el: TillAdjustmentDialog) =>
       root(el).querySelector("[data-weighed-hint]")?.textContent?.trim() ?? null;
-    for (const kind of ["comp", "discount"] as const) {
-      const el = await mount({ kind, target: ham });
-      expect(hint(el), kind).toBe(codeMessage("adjustment.weighed_partial"));
-      expect(root(el).querySelector("[data-quantity]"), kind).toBeNull();
-      // Above the action: the last thing before the row holding it.
-      expect(root(el).querySelector("[data-weighed-hint]")!.nextElementSibling!.tagName).toBe(
-        "WT-FORM-ACTIONS",
-      );
-    }
+    const el = await mount({ kind: "comp", target: ham });
+    expect(hint(el)).toBe(codeMessage("adjustment.weighed_partial"));
+    expect(root(el).querySelector("[data-quantity]")).toBeNull();
+    // Above the action: the last thing before the row holding it.
+    expect(root(el).querySelector("[data-weighed-hint]")!.nextElementSibling!.tagName).toBe(
+      "WT-FORM-ACTIONS",
+    );
     expect(hint(await mount({ kind: "cancel", target: ham }))).toBeNull();
-    expect(hint(await mount({ kind: "discount", target: burger }))).toBeNull();
+    expect(hint(await mount({ kind: "comp", target: burger }))).toBeNull();
 
     setLocale("es-ES");
-    expect(hint(await mount({ kind: "discount", target: ham }))).toBe(
+    expect(hint(await mount({ kind: "comp", target: ham }))).toBe(
       codeMessage("adjustment.weighed_partial", "es"),
     );
   });
 
-  it("titles an extra's dialogs with an extra, and a dish's with an item, in both languages", async () => {
+  it("titles an extra's cancel with an extra, and a dish's with an item, in both languages", async () => {
     const olives: AdjustTarget = { ...burger, name: "Olives (with Pizza)", extra: true };
     const heading = async (kind: TillAdjustmentDialog["kind"], target: AdjustTarget) =>
       root(await mount({ kind, target })).querySelector<HTMLElement & { heading: string }>(
         "wt-dialog",
       )!.heading;
 
-    expect(await heading("comp", olives)).toBe("Comp an extra");
-    expect(await heading("discount", olives)).toBe("Discount an extra");
     expect(await heading("cancel", olives)).toBe("Cancel an extra");
-    expect(await heading("comp", burger)).toBe("Comp an item");
-    expect(await heading("discount", burger)).toBe("Discount an item");
     expect(await heading("cancel", burger)).toBe("Cancel an item");
 
     setLocale("es-ES");
-    expect(await heading("comp", olives)).toBe(t("adjust.comp_extra_title"));
-    expect(await heading("discount", olives)).toBe("Descuento en un extra");
     expect(await heading("cancel", olives)).toBe("Cancelar un extra");
   });
 
@@ -288,7 +286,7 @@ describe("till-adjustment-dialog: the form", () => {
   });
 
   it("marks the reason and the value required, and explains an empty submission beside each field and above the action", async () => {
-    const el = await mount({ kind: "discount" });
+    const el = await mount({ kind: "discount", target: wholeBill });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     expect(root(el).querySelector("[data-reason-required]")).not.toBeNull();
     expect(field(el, "percent").required).toBe(true);
@@ -335,7 +333,7 @@ describe("till-adjustment-dialog: the form", () => {
   });
 
   it("refuses a percentage above 100 and an amount above what it applies to", async () => {
-    const el = await mount({ kind: "discount", target: steaks });
+    const el = await mount({ kind: "discount", target: wholeBill });
     await chooseReason(el, "Regular");
     await type(el, "percent", "101");
     await press(continueButton(el), el);
@@ -349,16 +347,10 @@ describe("till-adjustment-dialog: the form", () => {
     );
     await type(el, "amount", "2.555");
     expect(field(el, "amount").error).toBe(t("adjust.amount_invalid"));
-    // One of the two: no more than one steak's price.
-    await choose(el, "quantity", "1");
-    await type(el, "amount", "25.01");
-    expect(field(el, "amount").error).toBe(
-      t("adjust.amount_too_large").replace("{total}", money("25.00")),
-    );
   });
 
   it("sends an amount with a point, whichever separator was typed", async () => {
-    const el = await mount({ kind: "discount", reasons: [staffMeal] });
+    const el = await mount({ kind: "discount", target: wholeBill, reasons: [staffMeal] });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await chooseReason(el, "Staff meal");
     await type(el, "amount", "2,5");
@@ -369,7 +361,7 @@ describe("till-adjustment-dialog: the form", () => {
   });
 
   it("offers one or all of a line of several whole units, and sends one when chosen", async () => {
-    const el = await mount({ kind: "comp", target: steaks });
+    const el = await mount({ kind: "cancel", target: steaks, reasons: [voiding] });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     const labels = [...root(el).querySelectorAll('input[name="quantity"]')].map((radio) =>
       radio.closest("label")!.textContent!.trim(),
@@ -378,28 +370,28 @@ describe("till-adjustment-dialog: the form", () => {
       t("adjust.quantity_one"),
       t("adjust.quantity_all").replace("{n}", "2"),
     ]);
-    await chooseReason(el, "Complaint");
+    await chooseReason(el, "Void");
     await press(continueButton(el), el);
     await choose(el, "quantity", "1");
     await press(continueButton(el), el);
     expect(asked).toEqual([
-      { action: "comp", reasonId: "Complaint", note: null },
-      { action: "comp", reasonId: "Complaint", note: null, quantity: "1" },
+      { action: "cancel", reasonId: "Void", note: null },
+      { action: "cancel", reasonId: "Void", note: null, quantity: "1" },
     ]);
   });
 
   it("goes back to all of the dish when All is chosen again", async () => {
-    const el = await mount({ kind: "comp", target: steaks });
+    const el = await mount({ kind: "cancel", target: steaks, reasons: [voiding] });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
-    await chooseReason(el, "Complaint");
+    await chooseReason(el, "Void");
     await choose(el, "quantity", "1");
     await choose(el, "quantity", "all");
     await press(continueButton(el), el);
-    expect(asked).toEqual([{ action: "comp", reasonId: "Complaint", note: null }]);
+    expect(asked).toEqual([{ action: "cancel", reasonId: "Void", note: null }]);
   });
 
   it("continues on Enter in the note and in the amount", async () => {
-    const el = await mount({ kind: "discount", reasons: [staffMeal] });
+    const el = await mount({ kind: "discount", target: wholeBill, reasons: [staffMeal] });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await chooseReason(el, "Staff meal");
     for (const name of ["amount", "note"]) {
@@ -423,7 +415,7 @@ describe("till-adjustment-dialog: the form", () => {
   });
 
   it("asks no quantity of a line that can only be done whole", async () => {
-    const el = await mount({ kind: "comp", target: burger });
+    const el = await mount({ kind: "cancel", target: burger });
     expect(root(el).querySelector('input[name="quantity"]')).toBeNull();
   });
 
@@ -454,7 +446,7 @@ describe("till-adjustment-dialog: the form", () => {
 
 describe("till-adjustment-dialog: what a request out holds still", () => {
   it("holds every field while a request is out", async () => {
-    const el = await mount({ kind: "discount", target: steaks, busy: true });
+    const el = await mount({ kind: "discount", target: wholeBill, busy: true });
     const fieldsets = [...root(el).querySelectorAll<HTMLFieldSetElement>("fieldset")];
     expect(fieldsets.length).toBeGreaterThan(0);
     expect(fieldsets.every((fieldset) => fieldset.disabled)).toBe(true);
@@ -463,10 +455,10 @@ describe("till-adjustment-dialog: what a request out holds still", () => {
   });
 
   it("confirms the choice it was previewed with, whatever the form now holds", async () => {
-    const el = await mount({ kind: "comp", target: steaks });
-    await chooseReason(el, "Complaint");
+    const el = await mount({ kind: "cancel", target: steaks });
+    await chooseReason(el, "Mistake");
     const previewed: AdjustmentChoice = {
-      action: "comp",
+      action: "cancel",
       reasonId: "Staff meal",
       note: "cold",
       quantity: "1",
@@ -524,25 +516,28 @@ describe("till-adjustment-dialog: before confirming", () => {
     expect(text(root(el).querySelector("[data-adjust-scope]")!)).toBe(
       `Burger ×1 · ${money("12.00")}`,
     );
-    expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.do_comp"));
+    expect(confirmButton(el).textContent!.trim()).toBe(t("comp.make_free").replace("{n}", "1"));
 
     await press(confirmButton(el), el);
     expect(confirmed).toEqual(asked);
   });
 
   it("restates that it acts on one of several units", async () => {
-    const { el } = await atConfirm({ kind: "comp", target: steaks }, async (el) => {
-      await chooseReason(el, "Complaint");
-      await choose(el, "quantity", "1");
-    });
+    const { el } = await atConfirm(
+      { kind: "cancel", target: steaks, reasons: [voiding] },
+      async (el) => {
+        await chooseReason(el, "Void");
+        await choose(el, "quantity", "1");
+      },
+    );
     expect(text(root(el).querySelector("[data-quantity-shown]")!)).toBe(
       t("adjust.quantity_shown").replace("{n}", "2"),
     );
   });
 
   it("says nothing of a quantity when it acts on all of the dish", async () => {
-    const { el } = await atConfirm({ kind: "comp", target: steaks }, (el) =>
-      chooseReason(el, "Complaint"),
+    const { el } = await atConfirm({ kind: "cancel", target: steaks, reasons: [voiding] }, (el) =>
+      chooseReason(el, "Void"),
     );
     expect(root(el).querySelector("[data-quantity-shown]")).toBeNull();
   });
@@ -589,6 +584,7 @@ describe("till-adjustment-dialog: before confirming", () => {
     const { el } = await atConfirm(
       {
         kind: "discount",
+        target: wholeBill,
         reasons: [regular],
         preview: preview({
           needsApproval: {
@@ -701,7 +697,12 @@ describe("till-adjustment-dialog: before confirming", () => {
 
   it("says when the prices allow a different amount than the one asked for", async () => {
     const { el } = await atConfirm(
-      { kind: "discount", reasons: [staffMeal], preview: preview({ reduction: "3.28" }) },
+      {
+        kind: "discount",
+        target: wholeBill,
+        reasons: [staffMeal],
+        preview: preview({ reduction: "3.28" }),
+      },
       async (el) => {
         await chooseReason(el, "Staff meal");
         await type(el, "amount", "3.27");
@@ -758,7 +759,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
   });
 
   it("puts a refusal that names no shown field above the action, and the action stays enabled", async () => {
-    const el = await mount({ kind: "comp", refusal: "bill.line_paid" });
+    const el = await mount({ kind: "cancel", refusal: "bill.line_paid" });
     expect(actions(el).error).toBe(codeMessage("bill.line_paid"));
     expect(continueButton(el).disabled).toBe(false);
   });
@@ -778,13 +779,13 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "order.payment_in_flight",
     "tab.not_open",
   ])("shows %s in its own words", async (code) => {
-    const el = await mount({ kind: "discount", target: steaks, refusal: code });
+    const el = await mount({ kind: "discount", target: wholeBill, refusal: code });
     expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));
     expect(shownMessages(el).join(" ")).toContain(codeMessage(code));
   });
 
   it("keeps choices and Close usable when approval is required", async () => {
-    const el = await mount({ kind: "discount", target: steaks });
+    const el = await mount({ kind: "discount", target: wholeBill });
     await chooseReason(el, "Regular");
     el.refusal = "adjustment.approval_required";
     await el.updateComplete;
@@ -816,7 +817,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
   });
 
   it("puts the server's refusal of everything off under the value, in both languages", async () => {
-    const el = await mount({ kind: "discount", target: steaks });
+    const el = await mount({ kind: "discount", target: wholeBill });
     await chooseReason(el, "Regular");
     await type(el, "percent", "99.99");
     el.refusal = "adjustment.free_not_allowed";
@@ -839,7 +840,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     setLocale("es");
     const el = await mount({
       kind: "discount",
-      target: steaks,
+      target: wholeBill,
       refusal: "adjustment.approval_required",
     });
     expect(actions(el).error).toBe("Alguien que pueda autorizarlo debe introducir su PIN");
@@ -885,7 +886,7 @@ for (const locale of ["en", "es"]) {
   for (const value of ["05,50", "05.50", "000000005.50", "00.01"]) {
     it(`sends the leading-zero amount ${value} as an exact decimal in ${locale}`, async () => {
       setLocale(locale);
-      const el = await mount({ kind: "discount", reasons: [staffMeal] });
+      const el = await mount({ kind: "discount", target: wholeBill, reasons: [staffMeal] });
       const asked = capture<AdjustmentChoice>(el, "adjust-preview");
       await chooseReason(el, "Staff meal");
       await type(el, "amount", value);
@@ -904,10 +905,10 @@ for (const locale of ["en", "es"]) {
 
   it(`keeps the amount limits for leading-zero input in ${locale}`, async () => {
     setLocale(locale);
-    const el = await mount({ kind: "discount", target: steaks });
+    const el = await mount({ kind: "discount", target: { ...wholeBill, total: "25.00" } });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await choose(el, "discountKind", "amount");
-    // Staff meal offers Free, so it may take the whole steak off (owner, 2026-10-28).
+    // Staff meal offers Free, so it may take the whole bill off (owner, 2026-10-28).
     await chooseReason(el, "Staff meal");
     for (const value of ["00.00", "0000000005.50", "05.555", "-05.50", "05,5.0"]) {
       await type(el, "amount", value);
@@ -916,7 +917,6 @@ for (const locale of ["en", "es"]) {
       expect(actions(el).error, value).toBe(t("form.fix_fields"));
       expect(continueButton(el).disabled, value).toBe(true);
     }
-    await choose(el, "quantity", "1");
     await type(el, "amount", "025,01");
     expect(field(el, "amount").error).toBe(
       t("adjust.amount_too_large").replace("{total}", money("25.00")),
@@ -933,7 +933,6 @@ for (const locale of ["en", "es"]) {
         action: "discount_amount",
         reasonId: "Staff meal",
         note: null,
-        quantity: "1",
         amount: "25.00",
       },
     ]);
@@ -941,7 +940,7 @@ for (const locale of ["en", "es"]) {
 
   it(`decimal input in a till discount follows ${locale}`, async () => {
     setLocale(locale);
-    const el = await mount({ kind: "discount", reasons: [staffMeal] });
+    const el = await mount({ kind: "discount", target: wholeBill, reasons: [staffMeal] });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await chooseReason(el, "Staff meal");
     const control = field(el, "amount") as HTMLElement & { updateComplete: Promise<unknown> };
