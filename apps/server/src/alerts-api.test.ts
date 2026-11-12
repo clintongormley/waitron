@@ -103,9 +103,9 @@ async function seedVenueWithStaff(): Promise<Venue> {
     });
   return {
     deviceId,
-    manager: await cookie("manager", "Marta"),
-    supervisor: await cookie("supervisor", "Sergio"),
-    admin: await cookie("admin", "Ana"),
+    manager: await cookie("manager", "Martha"),
+    supervisor: await cookie("supervisor", "Simon"),
+    admin: await cookie("admin", "Anna"),
   };
 }
 
@@ -237,7 +237,7 @@ describe("alert routes", () => {
     expect(handled.alerts).toEqual([
       expect.objectContaining({
         key: `incident:${id}`,
-        handledBy: "Marta",
+        handledBy: "Martha",
         handledAt: NOW.toISOString(),
       }),
     ]);

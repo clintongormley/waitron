@@ -92,7 +92,7 @@ beforeEach(async () => {
   deviceId = (await seedDevice(suite.db)).deviceId;
   const people = await seedPersons(
     suite.db,
-    ["Ana", "Bea", "Caro", "Diego"].map((displayName) => ({
+    ["Anna", "Beth", "Carol", "David"].map((displayName) => ({
       displayName,
       pinHash: "scrypt$00$00",
       role: "admin" as const,

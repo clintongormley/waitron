@@ -29,7 +29,7 @@ async function fixture() {
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const [ana, luis] = await seedPersons(tx, [{ displayName: "Ana" }, { displayName: "Luis" }]);
+    const [ana, luis] = await seedPersons(tx, [{ displayName: "Anna" }, { displayName: "Lewis" }]);
     const [party] = await tx.insert(parties).values({ openedBy: ana!.id }).returning();
     const bill = await seedWorkingOrder(tx, { orderNumber: 1, partyId: party!.id });
     const other = await seedWorkingOrder(tx, { orderNumber: 2, partyId: party!.id });
@@ -120,7 +120,7 @@ describe("bill editor lifecycle", () => {
     expect(edit).toEqual({
       billId: data.bill.id,
       editorId: data.ana.id,
-      editorName: "Ana",
+      editorName: "Anna",
       editorVersion: 1,
       draftId: draft.id,
       draftRevision: 0,
@@ -151,7 +151,7 @@ describe("bill editor lifecycle", () => {
     await refused(
       (tx) => editing.acquireBillEditor(tx, data.bill.id, data.luis.id, blank(data.bill.id)),
       "draft.taken_over",
-      { billId: data.bill.id, draftId: draft.id, ownerId: data.ana.id, ownerName: "Ana", edit },
+      { billId: data.bill.id, draftId: draft.id, ownerId: data.ana.id, ownerName: "Anna", edit },
     );
   });
 
@@ -229,7 +229,7 @@ describe("bill editor lifecycle", () => {
     expect(next.edit).toEqual({
       billId: data.bill.id,
       editorId: data.luis.id,
-      editorName: "Luis",
+      editorName: "Lewis",
       editorVersion: 3,
       draftId: next.draft.id,
       draftRevision: 0,
@@ -268,7 +268,7 @@ describe("bill editor lifecycle", () => {
     expect(transferred).toEqual({
       billId: data.bill.id,
       editorId: data.luis.id,
-      editorName: "Luis",
+      editorName: "Lewis",
       editorVersion: 2,
       draftId: draft.id,
       draftRevision: 1,
@@ -332,7 +332,7 @@ describe("bill editor lifecycle", () => {
         billId: data.bill.id,
         draftId: draft.id,
         ownerId: data.luis.id,
-        ownerName: "Luis",
+        ownerName: "Lewis",
         edit: current,
       },
     );
@@ -417,7 +417,7 @@ describe("bill editor lifecycle", () => {
         billId: data.bill.id,
         draftId: accepted.draft.id,
         ownerId: data[first].id,
-        ownerName: first === "ana" ? "Ana" : "Luis",
+        ownerName: first === "ana" ? "Anna" : "Lewis",
         edit: accepted.edit,
       });
       expect(await suite.db.select().from(orderDrafts)).toEqual([accepted.draft]);

@@ -850,6 +850,8 @@ the helper's constant status is not evidence of the write.
   delivery, published-menu sale and unroutable-dish staff samples use Cashier.
   Local box-host, box-health, disk-stop and clock set/confirm route fixtures use Martha, Anna
   and Simon for their manager, administrator and supervisor samples; the clock suites' administrators remain Mario and Berta.
+  Local alert, box-host call, attendance-fact, bill-editor transition, transfer-close and orders
+  route fixtures use English staff display-name samples.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot

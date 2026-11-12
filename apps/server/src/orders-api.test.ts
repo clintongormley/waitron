@@ -233,7 +233,7 @@ describe("Orders routes", () => {
 
   it("keeps a deactivated colleague in the Staff filter", async () => {
     const [person] = await withTransaction(venue.db, (tx) =>
-      seedPersons(tx, { displayName: "Pablo", pinHash: hashPin("8888"), role: "staff" }),
+      seedPersons(tx, { displayName: "Paul", pinHash: hashPin("8888"), role: "staff" }),
     );
     await parkedBy(venue, person!.id, "Caña");
     await withTransaction(venue.db, (tx) =>
@@ -245,7 +245,7 @@ describe("Orders routes", () => {
     const answer = await get(venue.staffDashboard, "/staff");
     expect(answer).toMatchObject({
       status: 200,
-      json: { staff: expect.arrayContaining([{ id: person!.id, name: "Pablo" }]) },
+      json: { staff: expect.arrayContaining([{ id: person!.id, name: "Paul" }]) },
     });
   });
 
