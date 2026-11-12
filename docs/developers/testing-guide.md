@@ -1862,6 +1862,35 @@ be `--`. Ctrl-C stops the owned attempt and load through
 commands, without shell expansion. Keep the printed evidence directory until you have recorded
 the result, then remove it yourself.
 
+### Loaded browser sample, 12 November 2026
+
+At `3bfbe6bce1`, the following commands ran through the repeated-run rig without
+coverage. Every attempt retained the default reporter, file-progress and per-case
+traces, and `DEBUG=pw:api`. Two CPU-burning worker threads accompanied the four-file
+till sample; a second pair accompanied the standalone parties sample. The named
+browser batches overlapped; preflight free-memory readings were 61–62%.
+
+| Sample | Completed attempts | Passing cases per attempt |
+| --- | --- | --- |
+| Till: concurrent whole `till-app.theme.test.ts`, `widgets/basket.adjustments.test.ts`, `till-app-parties.test.ts` and `till-app-counter-adjustments.test.ts` | 5 | 841 |
+| Till: standalone `till-app-parties.test.ts` | 3 | 665 |
+| Dashboard: whole `payments-screen.test.ts`, `units-reassignment.unsaved.test.ts`, `department-receipt-editor.preview.test.ts` and `printers-screen.save-state.test.ts` | 10 | 197 |
+| UI: `wt-data-table.test.ts`, filtered to “edge scroll reaches hidden column choices during a stationary reorder” | 20 | 1; 584 skipped |
+| Till: `screens/till-find-bill-screen.a11y.test.ts` and `till-app-drafts.test.ts`, filtered to the four language/theme saved-view cases, fresh-line local splitting and retaining edits after a refused save | 10 | 6; 373 skipped |
+
+The old reassignment Cancel case changed in `2ba87ae891`; the current whole file
+exercises Escape and explicit cancellation. The old recorded-line split/save case
+was removed in `a9e8f379b7`; the selected draft cases exercise fresh-line splitting
+and save-refusal retention. These samples did not reproduce the named failures.
+They establish neither a historical cause nor a repair, and they do not qualify a
+whole-package coverage run.
+
+All 48 attempts exited successfully, with 8,250 passing case executions. Each till
+parties attempt had a 900-second outer limit. In the first concurrent attempt,
+that file completed in 374.8 seconds, with no gap between its case or hook events
+longer than 6.072 seconds. This records continued progress beyond five minutes in
+that sample; it does not explain the older interruption.
+
 **Timers and real work**
 
 ## A child’s exit can precede its readable output

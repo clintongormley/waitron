@@ -2054,8 +2054,6 @@ For package distribution and the four-minute target, use the
 
 - **A1398-2. Finish the four-minute target for dashboard and till jobs.** Selected draft autosave waits advance without sleeping, the menu test's loading wait polls sooner, static editor layout fixtures use a shorter disclosure animation, and the product-list layout tests, Menus structure matrix and printer pick-up-role matrix no longer save unused PNGs. Dashboard packing uses refreshed complete-run file durations; the remaining whole-job costs still need current-head measurement before another cut. The optional native add-on builds are suppressed; coverage-on whole-job timing and the archiver wait still need measurement. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
 
-- **Investigate the named test failures under load** (bundle of 6, size M). [Detail](backlog/ci.md#bundle-investigate-the-named-test-failures-under-load)
-
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
 - **One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker.**
