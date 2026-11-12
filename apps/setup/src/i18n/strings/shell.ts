@@ -47,6 +47,8 @@ export const shellEn = {
   "shell.theme.light": "Light",
   "shell.theme.dark": "Dark",
   "shell.theme.device": "Follow device",
+  "shell.about.title": "About Waitron",
+  "shell.about.close": "Close",
 
   "shell.connection.already_set_up": "This server is already set up. Reload to open it.",
   "shell.connection.server_problem": "This server reported a problem. Try again in a moment.",
@@ -263,6 +265,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.theme.light": "Claro",
   "shell.theme.dark": "Oscuro",
   "shell.theme.device": "Según el dispositivo",
+  "shell.about.title": "Acerca de Waitron",
+  "shell.about.close": "Cerrar",
 
   "shell.connection.already_set_up": "Este servidor ya está configurado. Recarga para abrirlo.",
   "shell.connection.server_problem":

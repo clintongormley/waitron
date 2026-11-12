@@ -94,6 +94,15 @@ describe("the user guides", () => {
     ]);
   });
 
+  it.each(GUIDE_LANGUAGES)("the About Waitron guide in %s registers its section", (lang) => {
+    expect(GUIDE_PAGES).toContain("about");
+    const markdown = readGuide(root, lang, "about");
+    expect(markdown).toBeDefined();
+    expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+      "declaration",
+    ]);
+  });
+
   it.each(GUIDE_LANGUAGES)("the servers guide in %s registers its sections", (lang) => {
     expect(GUIDE_PAGES).toContain("servers");
     const markdown = readGuide(root, lang, "servers");

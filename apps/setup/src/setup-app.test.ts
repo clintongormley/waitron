@@ -3370,6 +3370,74 @@ describe("page shell", () => {
     expect(Math.abs(pageBox.left - hostBox.left - (hostBox.right - pageBox.right))).toBeLessThan(1);
   });
 
+  const aboutInfo = (el: SetupApp) =>
+    wizard(el).querySelector<HTMLElement & LitElement>(".header-controls > wt-button.about")!;
+  const aboutSheet = (el: SetupApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & LitElement>("setup-about-sheet")!;
+  const aboutModal = (el: SetupApp) =>
+    aboutSheet(el).shadowRoot!.querySelector<HTMLElement & LitElement & { open: boolean }>(
+      "wt-modal",
+    )!;
+
+  it.each([
+    ["en-GB", shellEn],
+    ["es-ES", shellEs],
+  ] as const)("the header's ⓘ opens the declaration in a sheet (%s)", async (locale, words) => {
+    try {
+      const el = await mountSetupApp();
+      setLocale(locale);
+      await el.updateComplete;
+      const controls = wizard(el).querySelector(".header-controls")!;
+      const info = aboutInfo(el);
+      expect(controls.firstElementChild).toBe(info);
+      expect(info.getAttribute("variant")).toBe("ghost");
+      expect(info.querySelector('span[aria-hidden="true"]')!.textContent).toBe("ⓘ");
+      await expect
+        .element(page.elementLocator(info.shadowRoot!.querySelector("button")!))
+        .toHaveAccessibleName(words["shell.about.title"]);
+      expect(aboutModal(el).open).toBe(false);
+
+      await userEvent.click(info.shadowRoot!.querySelector("button")!);
+      await el.updateComplete;
+      await aboutSheet(el).updateComplete;
+      await aboutModal(el).updateComplete;
+      expect(aboutModal(el).open).toBe(true);
+      expect(aboutSheet(el).shadowRoot!.querySelector("iframe")!.getAttribute("src")).toBe(
+        "/legal/declaration",
+      );
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+  it.each([
+    [
+      "Close",
+      (el: SetupApp) =>
+        userEvent.click(
+          aboutSheet(el)
+            .shadowRoot!.querySelector<HTMLElement & LitElement>('wt-button[slot="footer"]')!
+            .shadowRoot!.querySelector("button")!,
+        ),
+    ],
+    ["Escape", () => userEvent.keyboard("{Escape}")],
+  ] as const)("%s closes the About sheet and returns focus to the ⓘ", async (_name, close) => {
+    const el = await mountSetupApp();
+    const info = aboutInfo(el);
+    // A tap that does not focus the ⓘ, as Safari's does.
+    info.shadowRoot!.querySelector("button")!.click();
+    await el.updateComplete;
+    await aboutSheet(el).updateComplete;
+    await aboutModal(el).updateComplete;
+    expect(aboutModal(el).open).toBe(true);
+
+    await close(el);
+    await vi.waitFor(() => expect(aboutModal(el).open).toBe(false));
+    await el.updateComplete;
+    expect(aboutSheet(el).shadowRoot!.querySelector("iframe")).toBeNull();
+    expect(info.shadowRoot!.activeElement).toBe(info.shadowRoot!.querySelector("button"));
+  });
+
   it.each([1280, 390])(
     "puts the language chooser at the trailing end of the card's header, beside the logo, %ipx wide",
     async (width) => {

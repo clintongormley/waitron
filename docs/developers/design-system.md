@@ -5799,7 +5799,9 @@ holds an ⓘ after the Help switch and before Theme, a ghost `wt-button` named "
 (`about.title`), drawn as the basket's ⓘ; it opens `/legal/declaration` in the shell's guide sheet, as More's About Waitron does on a till or
 a handheld. The sign-in and join screens' corner starts with the same ⓘ
 (`till-about-button`), which opens the declaration in a sheet of its own, since those screens are
-drawn outside the shell.
+drawn outside the shell. Setup's card header starts its controls with the same ⓘ
+(`shell.about.title`), before Theme; it opens `/legal/declaration` in `setup-about-sheet`, a
+`wt-modal size="full"` of its own, and Close or Escape returns focus to the ⓘ.
 
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card header,
 the till's sign-in and join screens and the kitchen display's and kiosk mode's corner, and in the

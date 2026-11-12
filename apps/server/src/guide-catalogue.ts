@@ -23,6 +23,7 @@ export const GUIDE_PAGES = [
   "servers",
   "printers",
   "email",
+  "about",
 ] as const;
 
 export function guideRoot(): string {
