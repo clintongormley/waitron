@@ -1,9 +1,4 @@
-import {
-  readVenueClock,
-  readVenueClockAndPlace,
-  type Transaction,
-  type VenuePlace,
-} from "@waitron/db";
+import { readVenueClock, readVenueClockAndPlace, type Transaction } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
 import { calendarCutAnchor } from "./calendar-cut.js";
@@ -150,8 +145,6 @@ export interface CalendarMonthPlan {
   clock: BusinessDayClock;
   /** `clock`, with a zone this runtime cannot place read as UTC, as the days' changeovers are. */
   wallClock: BusinessDayClock;
-  place: VenuePlace;
-  /** The holiday reads at `place`, sharing the address read the plan's special days made. */
   holidays: HolidayReads;
   plan: DayPlan;
   /** The whole Monday-to-Sunday weeks that cover `month`. */
@@ -185,7 +178,7 @@ export async function readCalendarMonthPlan(
   const clock = wallClock(stored);
   const seasons = await readSeasons(tx);
   const holidays = holidayReadsAt(tx, place);
-  const plan = await readDayPlan(tx, dates, seasons, place, holidays.dates);
+  const plan = await readDayPlan(tx, dates, seasons, holidays.dates);
   const touched = new Map<string, Season & { lastDay: string }>();
   for (const date of dates) {
     const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
@@ -198,7 +191,6 @@ export async function readCalendarMonthPlan(
     seasons: [...touched.values()],
     clock: stored,
     wallClock: clock,
-    place,
     holidays,
     plan,
     days: dates.map((date) => {

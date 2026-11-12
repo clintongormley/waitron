@@ -126,10 +126,9 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     tx: Transaction,
     from: LocalDate,
     to: LocalDate,
-    place?: VenuePlace,
   ): Promise<HolidayRead> {
     rangeDates(from, to);
-    const address = await readAddress(tx, place);
+    const address = await readAddress(tx);
     const current = currentArea(address);
     return holidaysAt(address, current, from, to);
   }
@@ -191,9 +190,8 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     tx: Transaction,
     fromYear: number,
     toYear: number,
-    place?: VenuePlace,
   ): Promise<HolidayDates> {
-    return holidayReadsAt(tx, place).dates(fromYear, toYear);
+    return holidayReadsAt(tx).dates(fromYear, toYear);
   }
 
   /** Reads nothing until a method is first called. */
@@ -237,8 +235,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     return byYear;
   }
 
-  const readHolidayFacts: HolidayReader = async (tx, from, to, place) =>
-    (await readHolidays(tx, from, to, place)).facts;
+  const readHolidayFacts: HolidayReader = (tx, from, to) => holidayReadsAt(tx).facts(from, to);
 
   async function readHolidayEnglishNames(
     tx: Transaction,
