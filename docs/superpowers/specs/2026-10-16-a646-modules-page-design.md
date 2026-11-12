@@ -7,9 +7,10 @@
 **2026-11-07 planning note:** the dated A646 decisions in [the backlog](../../backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up) supersede the historical pending-approval wording below; [the plan](../plans/2026-11-07-a646-modules-page.md) records the watcher's 21:38 answer applying the later shared-settings and Google storage decisions.
 
 
-**DESIGN PROPOSED, 2026-10-16. Awaiting owner agreement.** This is the design author's
-proposal, not an owner-approved decision or an implementation plan. Nothing here is built or
-behaviorally verified. Build waits for owner agreement and **A739 and A764 to land**. The retained
+**Agreed by the owner 2026-10-17 00:05 (watcher window).** The agreement is recorded in
+`~/waitron-campaign-f/archive/questions-to-2026-10-23.md:1169`. This is a design, not an
+implementation plan or runtime verification. Later scope decisions are linked above. The original
+build prerequisites were **A739 and A764**. The retained
 append-only protection repair below must be the first independent build PR, before any UI state controls.
 
 You should be able to set up Google login or a card provider in one place, without restarting

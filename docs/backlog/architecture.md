@@ -5,7 +5,8 @@ their full text.
 
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
-- **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
+- **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17 00:05, watcher window).**
+  Agreement receipt: `~/waitron-campaign-f/archive/questions-to-2026-10-23.md:1169`.
   [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. A483 blocks switching the other five optional modules (workforce, workforce-es, payments, bookings and staffing), so A646 stays OPEN after the provider switches land.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). The
