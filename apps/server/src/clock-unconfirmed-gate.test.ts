@@ -257,7 +257,7 @@ function rowCount(table: string, where = sql`1 = 1`): number {
 
 function moneyState() {
   return {
-    records: rowCount("registros_facturacion"),
+    records: fiscalRecordCount(venue),
     sales: rowCount("sales"),
     tenders: rowCount("tenders"),
     payments: rowCount("payments"),
@@ -396,12 +396,17 @@ const revisionOf = (billId: string) =>
     sql`select revision from working_orders where id = ${billId}`,
   )[0]!.revision;
 
+/** The name of the venue's first 3.00 dish. */
+function threeEuroDish(): string {
+  return venue.db.all<{ name: string }>(
+    sql`select name from products where unit_price = 300 order by id limit 1`,
+  )[0]!.name;
+}
+
 /** A party of two 3.00 dishes sent to the kitchen, 3.00 of it paid: taking line 1 off settles it. */
 async function halfPaidParty(started: boolean) {
-  const [dish] = venue.db.all<{ name: string }>(
-    sql`select name from products where unit_price = 300 order by id limit 1`,
-  );
-  const { tabId } = await seatedWith(venue, dish!.name, dish!.name);
+  const dish = threeEuroDish();
+  const { tabId } = await seatedWith(venue, dish, dish);
   expect(
     (await as(venue.app, "POST", `/api/working-orders/${tabId}/payments`, cashPart("3.00"))).status,
   ).toBe(200);
@@ -414,7 +419,7 @@ async function halfPaidParty(started: boolean) {
   return tabId;
 }
 
-/** Line 1 of `billId`, one Caña, raised to two with 3.00 paid: cutting it back to one settles it. */
+/** Line 1 of `billId`, one 3.00 dish, raised to two with 3.00 paid: cutting it back to one settles it. */
 async function halfPaidBeers(billId: string) {
   const raised = await as(venue.app, "PUT", `/api/working-orders/${billId}/lines/1`, {
     portionLineNos: [],
@@ -463,7 +468,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     };
   },
   "POST /api/pay, a bill that owes nothing": async () => {
-    const { tabId } = await seatedWith(venue, "Caña");
+    const { tabId } = await seatedWith(venue, threeEuroDish());
     await giveAway(venue, tabId, 1);
     return {
       send: (app) => as(app, "POST", "/api/pay", { id: tabId, lines: [] }),
@@ -621,9 +626,9 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
   "a Cancel item of a dish the kitchen started that settles a part-paid bill": async () =>
     settlingCancelItem(await halfPaidParty(true), true),
   "a partial Cancel item that settles a part-paid bill": async () =>
-    settlingCancelItem(await halfPaidBeers(await groupedTabWith(venue, "Caña"))),
+    settlingCancelItem(await halfPaidBeers(await groupedTabWith(venue, threeEuroDish()))),
   "a held-order Save that settles a part-paid bill": async () => {
-    const billId = await halfPaidBeers(await tabWith(venue, "Caña"));
+    const billId = await halfPaidBeers(await tabWith(venue, threeEuroDish()));
     const dishes = venue.db.all<{ id: string }>(sql`
       select id from working_order_lines
       where working_order_id = ${billId} and parent_line_id is null order by line_no`);
@@ -633,7 +638,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       lines: heldRow(
         dishes.map((line) => line.id),
         "1",
-        { menuItemId: venue.offerFor("Caña") },
+        { menuItemId: venue.offerFor(threeEuroDish()) },
       ),
     };
     return {
@@ -756,7 +761,7 @@ const NOT_CHARGED = { outcome: "failed", cancelledAtProvider: true } as const;
 // Each row builds its own payment, hold or refund, so rows never share one.
 const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
   "a stuck card payment's resolve": async () => {
-    const orderId = await tabWith(venue, "Caña");
+    const orderId = await tabWith(venue, threeEuroDish());
     await withTransaction(venue.db, async (tx) => {
       await insertAttempting(tx, {
         origin: deviceOrigin(venue.deviceId),
@@ -1122,7 +1127,7 @@ describe("money already moved while the start waits", () => {
 
   it("the webhook stores a hosted payment, with no seat to refuse it", async () => {
     // The webhook takes no fiscal seat (`WebhookDeps`), so no gate can stand in front of it.
-    const orderId = await tabWith(venue, "Caña");
+    const orderId = await tabWith(venue, threeEuroDish());
     const sessionId = `cs_${randomUUID()}`;
     await withTransaction(venue.db, (tx) =>
       insertInitiated(tx, {
