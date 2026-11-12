@@ -385,7 +385,9 @@ describe("A803 no tab panel", () => {
       const record = q(el, "[data-table-menu] [data-record-departure]")!;
       expect(record.checkVisibility()).toBe(true);
       await userEvent.click(record);
-      expect(departures.map((event) => event.detail)).toEqual([{ workingOrderId: footerBill.workingOrderId }]);
+      expect(departures.map((event) => event.detail)).toEqual([
+        { workingOrderId: footerBill.workingOrderId },
+      ]);
       await userEvent.click(take);
       expect(payments.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-5" }]);
     },
