@@ -1,6 +1,6 @@
 # A790: orderless historical F1 delivery
 
-Lane F `queue.md` A790, watcher release 2026-11-11 20:15: “Remaining: orderless historical F1 Invoice delivery”. A separate Sol-high writer drafted this plan; the driver incorporated Claude’s 12-Nov read (445 seconds). Watcher clearance remains pending. The queue authorises the outcome, not this design. Build inline after clearance.
+Lane F `queue.md` A790, watcher release 2026-11-11 20:15: “Remaining: orderless historical F1 Invoice delivery”. A separate Sol-high writer drafted this plan; the driver incorporated Claude’s 12-Nov read (445 seconds). The watcher cleared the revised plan and its bounded destination metadata on 12 November at 15:23, inside the queue's 17 October decisions. The queue authorises the outcome; no owner approval of this design is recorded. Build inline.
 
 **Result:** From Transactions, open an orderless F1 and print its Invoice on the device’s Invoice printer, A4 or receipt paper, with status, recovery and handover. Receipt remains a copy after an original completes; no new Receipt-original command. Confirmations name destinations. Selection, saving, Refresh and Back print nothing. Preserve F2 history, basket and Transactions position.
 
@@ -14,7 +14,7 @@ Source inspection at `26e3ab2930`, runtime unverified: `transaction-receipt-api.
 
 2. **Till.** Modify `apps/till/src/api/client.ts`, `till-app.ts`, `screens/till-ticket-view.ts`, `i18n/strings.ts`. Add sale-based wrappers and one local order/transaction delivery target across status, send, retry, fallback, handover, refresh, live updates and polling. Transaction targets are orderless F1 only; F2 keeps today’s path. Keep `ticketWorkingOrderId` an order ID. Guard/reset by target/session/visit. Enable `invoicePrintersEnabled` and `historicalDelivery` for orderless F1. Reuse Equipment saves/defaults/takeover and confirmed-save gating. Hide Receipt-original and guard its handler; allow copies only as duplicates through `#deliveryAction`, retaining auditing, language cancellation and both-status refresh.
 
-**Naming decision for watcher:** retain job printer ID/name on the new sale-based status for EN/ES retry labels; fallback names the saved Receipt destination. Keep shared readers and order-linked answers unchanged. Claude recommends deferring this field/naming or covering both paths together. The driver recommends retaining it here because the queue’s 17-Oct decision says “always name the destination for originals, copies and retries”; existing generic order-linked labels remain later A790 work.
+**Watcher-cleared naming, 12 November 15:23:** retain job printer ID/name on the new sale-based status for EN/ES retry labels; fallback names the saved Receipt destination. Keep shared readers and order-linked answers unchanged. This follows the queue’s 17-Oct decision to “always name the destination for originals, copies and retries”; existing generic order-linked labels remain later A790 work.
 
 ## Proof and finish, 45 minutes
 
