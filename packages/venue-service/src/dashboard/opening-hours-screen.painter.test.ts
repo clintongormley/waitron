@@ -1174,7 +1174,7 @@ describe("the Calendar window address", () => {
       }
       const guard = screenGuard(() => app);
       try {
-        const { list, table } = await periodsWindow(el);
+        const { table } = await periodsWindow(el);
         await expect.poll(() => table.shadowRoot!.querySelector("a[part~=chip]")).not.toBeNull();
         const chip = table.shadowRoot!.querySelector<HTMLAnchorElement>("a[part~=chip]")!;
         const pushes = pushedPaths();
