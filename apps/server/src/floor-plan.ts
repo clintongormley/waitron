@@ -581,10 +581,9 @@ async function writeSave(
   const partOf = new Map(
     tables.flatMap((table) => table.partKeys.map((key) => [ids.get(key)!, ids.get(table.key)!])),
   );
-  const membership = tables.flatMap((table) => {
+  const membership = tables.map((table) => {
     const id = ids.get(table.key)!;
-    const parent = partOf.get(id) ?? null;
-    return (masterOf.get(id)?.partOf ?? null) === parent ? [] : [{ id, parent }];
+    return { id, parent: partOf.get(id) ?? null };
   });
   for (const rows of statementChunks(floorPlanTables, membership)) {
     await tx

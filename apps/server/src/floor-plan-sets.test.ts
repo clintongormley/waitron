@@ -267,7 +267,10 @@ describe("the floor plan sets port", () => {
       ],
     });
     await inTx(v, async (tx) => {
-      const [plan] = await tx.select().from(floorPlans).where(eq(floorPlans.zoneId, d.zoneId));
+      const [plan] = await tx
+        .select()
+        .from(floorPlans)
+        .where(and(eq(floorPlans.zoneId, d.zoneId), eq(floorPlans.setId, d.dinner)));
       await tx.insert(floorPlanPlacements).values({
         planId: plan!.id,
         planTableId: ids.c!,
