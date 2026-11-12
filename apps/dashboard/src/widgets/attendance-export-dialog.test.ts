@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { WtButton, WtCombobox, WtDialog, WtInput } from "@waitron/ui";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { AttendanceExportDialog } from "./attendance-export-dialog.js";
 const modules = import.meta.glob<typeof import("./attendance-export-dialog.js")>(
@@ -362,4 +362,23 @@ it("closing and reopening an identical scope rejects old A before any new downlo
   await send(el);
   await expect.poll(() => clicked).toHaveLength(1);
   expect(created).toEqual([b]);
+});
+
+it("keeps invalid fields quiet until a new submission after reopening", async () => {
+  const { el } = await fixture();
+  await change(el, "exportFrom", "");
+  await send(el);
+  expect(field(el, "exportFrom").error).not.toBe("");
+  el.open = false;
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.updateComplete;
+  await closeReportsDelivered();
+  el.open = true;
+  await el.updateComplete;
+  await expect
+    .poll(() => el.shadowRoot!.querySelector<WtButton>("[data-test=export-download]")!.disabled)
+    .toBe(false);
+  await change(el, "exportFrom", "");
+  expect(field(el, "exportFrom").error).toBe("");
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
 });
