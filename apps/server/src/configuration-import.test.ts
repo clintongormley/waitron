@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 20,
+  version: 21,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -212,8 +212,8 @@ describe("staged configuration import", () => {
     ],
     ["pre-payment-policy-retirement export without it", { version: 16 }],
     ["pre-receipt-policy-retirement export", { version: 17 }],
-    ["pre-comp-permissions export", { version: 19 }],
-    ["future version", { version: 21 }],
+    ["pre-comp-permissions export", { version: 20 }],
+    ["future version", { version: 22 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));

@@ -76,7 +76,7 @@ it("exports the stored privacy contact at the top level, never inside the venue"
       }),
     );
   });
-  expect(bundle.version).toBe(20);
+  expect(bundle.version).toBe(21);
   expect(bundle.privacyContact).toEqual({
     privacyNoticeUrl: "https://example.com/privacy",
     privacyEmail: "privacy@example.com",
