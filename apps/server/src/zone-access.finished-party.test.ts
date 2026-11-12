@@ -233,6 +233,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
         await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, moved.billId, patio));
         await inTx(venue, async (tx) =>
           mergeBills(tx, venue.cfg, p.billId, moved.billId, {
+            admission: testTradingAdmission(),
             operatorId: venue.staffId,
             expectedPartyRevision: await revisionOf(p.partyId),
             expectedEdits: [

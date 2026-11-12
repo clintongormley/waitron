@@ -170,6 +170,7 @@ async function explicitMerge(
   const [row] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
   return inTx(venue, (tx) =>
     mergeBills(tx, venue.cfg, into, from, {
+      admission: testTradingAdmission(),
       partyId,
       expectedPartyRevision: row!.revision,
       operatorId,

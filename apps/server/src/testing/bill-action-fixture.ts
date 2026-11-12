@@ -173,7 +173,7 @@ export async function mergeBills(
   cfg: TradingContext,
   into: string,
   from: string,
-  command: BillCommand & { expectedEdits?: BillEditExpected[] },
+  command: BillCommand & { expectedEdits?: BillEditExpected[]; admission?: TradingAdmission },
   attendance?: OrderAttendance,
 ) {
   return merge(
@@ -181,7 +181,11 @@ export async function mergeBills(
     cfg,
     into,
     from,
-    { ...command, expectedEdits: command.expectedEdits ?? (await editsFor(tx, [into, from])) },
+    {
+      admission: testTradingAdmission(),
+      ...command,
+      expectedEdits: command.expectedEdits ?? (await editsFor(tx, [into, from])),
+    },
     attendance,
   );
 }

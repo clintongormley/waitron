@@ -4234,6 +4234,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const fromBillId = requireOtherBill(body.fromBillId, "fromBillId");
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, deps.cfg, deps.admission);
         await checkZones(tx, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
         let attendance: OrderAttendance | undefined;
         if (deps.attendance !== undefined) {
@@ -4252,7 +4253,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           cfg,
           intoBillId,
           fromBillId,
-          { ...command, expectedEdits: parseBillEditExpecteds(body.expectedEdits) },
+          {
+            admission: deps.admission,
+            ...command,
+            expectedEdits: parseBillEditExpecteds(body.expectedEdits),
+          },
           attendance,
         );
         await captureKitchenActivity(tx, attendance, personId, [intoBillId, fromBillId]);

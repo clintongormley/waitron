@@ -30,12 +30,12 @@ import {
   cancelPlacedOrder,
   markOrderPlaced,
 } from "./working-order.js";
-import { moveDishes } from "./bill-actions.js";
+import { mergeBills, moveDishes } from "./bill-actions.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { createTable } from "./testing/live-table.js";
-import { openPartyTab, fireAll } from "./testing/serve-line.js";
+import { openPartyTab, fireAll, splitPartyBill } from "./testing/serve-line.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recordTillSale } from "./till-sale.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -157,6 +157,12 @@ async function received(id: string, amount: number, fire = true) {
   });
 }
 
+function partyRevision(partyId: string) {
+  return venue.db.all<{ revision: number }>(
+    sql`select revision from parties where id = ${partyId}`,
+  )[0]!.revision;
+}
+
 function snapshot() {
   const tables = [
     "working_orders",
@@ -197,6 +203,7 @@ describe("direct economic orchestration before startup admission", () => {
       "save",
       "line",
       "move-dishes",
+      "merge",
       "adjustment",
       "departure",
       "cancel",
@@ -206,6 +213,15 @@ describe("direct economic orchestration before startup admission", () => {
     ] as const)(`${state} blocks %s before economic writes`, async (operation) => {
       let { id, line } = await held();
       let partyId = "";
+      let fromBillId = "";
+      if (operation === "merge") {
+        ({ tabId: id, partyId } = await tableBill());
+        fromBillId = (
+          await withTransaction(venue.db, (tx) =>
+            splitPartyBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }]),
+          )
+        ).billId;
+      }
       if (operation === "departure") {
         const table = await tableBill();
         id = table.tabId;
@@ -264,6 +280,15 @@ describe("direct economic orchestration before startup admission", () => {
             return moveDishes(tx, venue.cfg, id, null, [line.id], {
               ...authority,
               expectedEdits: [await readBillEditState(tx, id)],
+            });
+          if (operation === "merge")
+            return mergeBills(tx, venue.cfg, id, fromBillId, {
+              ...authority,
+              expectedPartyRevision: partyRevision(partyId),
+              expectedEdits: [
+                await readBillEditState(tx, id),
+                await readBillEditState(tx, fromBillId),
+              ],
             });
           if (operation === "adjustment") return applyAdjustment(tx, venue.cfg, command, "en-GB");
           if (operation === "departure")
@@ -402,10 +427,29 @@ it("returns an authenticated settled replay without reading a current issue cloc
   expect(snapshot()).toEqual(before);
 });
 
-it.each(["save", "line", "move-dishes", "adjustment"] as const)(
+it.each(["save", "line", "move-dishes", "merge", "adjustment"] as const)(
   "the actual closed till route refuses %s and changes no economic rows",
   async (operation) => {
-    const { id, line } = await held();
+    const { id: heldId, line } = await held();
+    let id = heldId;
+    let merge = {};
+    if (operation === "merge") {
+      const { tabId, partyId } = await tableBill();
+      const from = await withTransaction(venue.db, (tx) =>
+        splitPartyBill(tx, venue.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+      );
+      id = tabId;
+      merge = {
+        fromBillId: from.billId,
+        partyId,
+        expectedPartyRevision: partyRevision(partyId),
+        expectedEdits: await withTransaction(venue.db, async (tx) =>
+          [await readBillEditState(tx, tabId), await readBillEditState(tx, from.billId)].sort(
+            (a, b) => a.billId.localeCompare(b.billId),
+          ),
+        ),
+      };
+    }
     const admission = closed("invalid");
     const app = new Hono();
     mountTillApi(
@@ -427,23 +471,25 @@ it.each(["save", "line", "move-dishes", "adjustment"] as const)(
           ? { revision: 0, expectedEdit, quantity: "1", portionLineNos: [] }
           : operation === "move-dishes"
             ? { expectedEdits: [expectedEdit], lineIds: [line.id], toBillId: null }
-            : {
-                expectedEdit,
-                expectedRevision: 0,
-                submissionId: randomUUID(),
-                lineId: null,
-                action: "discount_percent",
-                reasonId: randomUUID(),
-                percentBp: 5000,
-              };
+            : operation === "merge"
+              ? merge
+              : {
+                  expectedEdit,
+                  expectedRevision: 0,
+                  submissionId: randomUUID(),
+                  lineId: null,
+                  action: "discount_percent",
+                  reasonId: randomUUID(),
+                  percentBp: 5000,
+                };
     const method = operation === "save" || operation === "line" ? "PUT" : "POST";
     const path =
       operation === "save"
         ? `/api/working-orders/${id}`
         : operation === "line"
           ? `/api/working-orders/${id}/lines/1`
-          : operation === "move-dishes"
-            ? `/api/bills/${id}/move-dishes`
+          : operation === "move-dishes" || operation === "merge"
+            ? `/api/bills/${id}/${operation}`
             : `/api/working-orders/${id}/adjustments`;
     const before = snapshot();
     const response = await app.request(path, {
