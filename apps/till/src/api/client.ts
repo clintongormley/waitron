@@ -1358,6 +1358,8 @@ export interface HeldOrder {
   revision: number;
   /** The receipt language staff chose for the order; absent while the venue's own applies. */
   receiptLanguage?: string;
+  /** The invoice the order is set to issue: `F1` once a full invoice has been chosen for it. */
+  invoiceType: "F1" | "F2";
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**

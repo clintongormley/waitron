@@ -123,6 +123,7 @@ function heldOrder(
     id: "wo-9",
     expectedEdit: null,
     orderNumber: 12,
+    invoiceType: "F2",
     label: "Table 4",
     revision,
     lines: [

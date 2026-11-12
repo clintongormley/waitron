@@ -729,6 +729,67 @@ it("closes a Counter bill as a deferred payment, sending a simplified invoice wi
   expect(documents(el)).not.toBeNull();
 });
 
+/** The Counter Pay window on held order `wo-9`, retrieved from the held list with the invoice type
+ * the server stored on it, which this till never chose. */
+async function heldCounterPay(invoiceType: "F1" | "F2") {
+  const api = deferredApi({
+    retrieveWorkingOrder: vi.fn().mockResolvedValue({
+      id: "wo-9",
+      orderNumber: 9,
+      revision: 2,
+      label: null,
+      expectedEdit: null,
+      invoiceType,
+      kitchenNote: { scope: { workingOrderId: "wo-9" }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [
+        {
+          workingOrderLineId: "dish-1",
+          menuItemId: "offer-meal",
+          quantity: "1.000",
+          product: lunch,
+        },
+      ],
+    }),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 2,
+      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+    }),
+    getBillBalance: vi
+      .fn()
+      .mockResolvedValue(
+        balanceOf({ workingOrderId: "wo-9", total: "30.00", outstanding: "30.00" }),
+      ),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  emit(counter, "retrieve-order", { id: "wo-9" });
+  await flush(el);
+  emit(counter, "counter-bill-pay", {});
+  await flush(el, 6);
+  expect(payDialog(el)).not.toBeNull();
+  return { api, el };
+}
+
+it("switches the Counter close off for a held order stored for a full invoice this till never chose", async () => {
+  const { api, el } = await heldCounterPay("F1");
+  expect(deferredButton(el)!.disabled).toBe(true);
+  expect(text(payDialog(el)!.shadowRoot!.querySelector("[data-pay-deferred-reason]"))).toBe(
+    t("deferred_close.counter_full_invoice"),
+  );
+  deferredButton(el)!.click();
+  await flush(el);
+  expect(closing(el)).toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+it("offers the Counter close for a held order stored for a simplified invoice", async () => {
+  const { el } = await heldCounterPay("F2");
+  expect(deferredButton(el)!.disabled).toBe(false);
+});
+
 it("switches the Counter close off when the bill is set for a full invoice, saying what to do", async () => {
   const { api, el } = await counterPay({}, async (app) => {
     emit(app.shadowRoot!.querySelector("till-counter-screen")!, "choose-invoice");

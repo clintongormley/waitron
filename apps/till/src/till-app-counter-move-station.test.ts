@@ -286,6 +286,7 @@ function placedServer() {
     orderNumber: 12,
     label: "Lunch",
     revision: 7,
+    invoiceType: "F2",
     kitchenNote: {
       scope: { workingOrderId: "wo-placed" },
       note: null,

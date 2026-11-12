@@ -78,6 +78,7 @@ import {
   priceStoredOrderForIssuance,
   readTabLines,
   sendToPrep,
+  setOrderInvoiceChoice,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -1528,6 +1529,35 @@ describe("listHeldOrders", () => {
 
 describe("getHeldOrder", () => {
   it.each(["open", "placed"] as const)(
+    "reads the invoice type stored on a %s counter order",
+    async (status) => {
+      const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
+      const id = randomUUID();
+      await parkOrder({ db }, cfg, {
+        id,
+        zoneId,
+        lines: [{ menuItemId: premiumCoffeeOfferId, quantity: "1" }],
+      });
+      expect((await getHeldOrder({ db }, id)).invoiceType).toBe("F2");
+      await setOrderInvoiceChoice(db, { recipientNameMaxLength: null }, cfg, id, {
+        revision: 0,
+        operatorId: undefined,
+        expectedEdit: null,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+      });
+      await db.execute(sql`update working_orders set status = ${status} where id = ${id}`);
+      const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
+      expect((await read({ db }, id)).invoiceType).toBe("F1");
+    },
+  );
+
+  it.each(["open", "placed"] as const)(
     "refuses a %s counter line whose stored menu offer is missing",
     async (status) => {
       const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
@@ -2070,6 +2100,7 @@ describe("getHeldOrder", () => {
       orderNumber: 1,
       label: "Table 7",
       revision: 0,
+      invoiceType: "F2",
       kitchenNote: { note: null, revision: 0, ownerRevision: 0, scope: { workingOrderId: id } },
       lines: [
         {

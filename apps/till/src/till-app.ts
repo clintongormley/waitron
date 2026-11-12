@@ -3963,6 +3963,9 @@ export class TillApp extends LitElement {
   /** The delivery options are being read before the full-invoice dialog opens. */
   @state() private invoiceRecipientReading = false;
   private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail };
+  /** The invoice type stored on the Counter order last read into the basket, which
+   * {@link invoiceChoice} does not hold for an order this till did not set it on. */
+  #counterStoredInvoice?: { orderId: string; invoiceType: "F1" | "F2" };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
   @state() private parking = false;
   /** Re-entry guard for {@link TillApp.#onPlaceOrder}; also disables Place while in flight. */
@@ -8027,6 +8030,7 @@ export class TillApp extends LitElement {
       foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
       order.revision,
     );
+    this.#counterStoredInvoice = { orderId: id, invoiceType: order.invoiceType };
     this.counterLines = listed;
     this.#commitBasket(this.#basketPayload());
     unlock();
@@ -9405,6 +9409,7 @@ export class TillApp extends LitElement {
       visit: this.#store.loadGeneration,
       expectedEdit: structuredClone(order.expectedEdit),
     };
+    this.#counterStoredInvoice = { orderId: order.id, invoiceType: order.invoiceType };
     this.#rememberReceiptLanguage(
       order.id,
       offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
@@ -11232,7 +11237,12 @@ export class TillApp extends LitElement {
         this.#unansweredWholePayments.has(billId),
       currentOrders: null,
       currentOrdersUnread: false,
-      counter: { fullInvoice: this.invoiceChoice?.orderId === billId },
+      counter: {
+        fullInvoice:
+          this.invoiceChoice?.orderId === billId ||
+          (this.#counterStoredInvoice?.orderId === billId &&
+            this.#counterStoredInvoice.invoiceType === "F1"),
+      },
     });
   }
 
