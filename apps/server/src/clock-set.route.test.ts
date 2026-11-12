@@ -70,7 +70,7 @@ useVenueDb({
       await assignCatalogueToVenue(tx, catalogue.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
-    marta = await seedPerson("manager", "Marta");
+    marta = await seedPerson("manager", "Martha");
     mario = await seedPerson("admin", "Mario");
   },
 });

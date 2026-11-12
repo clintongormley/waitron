@@ -848,6 +848,8 @@ the helper's constant status is not evidence of the write.
   The device-join suite uses Server and Manager for its local staff-role display samples.
   The main till API and profile-zone suites use Anna, Martha and Beatrice where present; local
   delivery, published-menu sale and unroutable-dish staff samples use Cashier.
+  Local box-host, box-health, disk-stop and clock set/confirm route fixtures use Martha, Anna
+  and Simon where those staff roles are seeded.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
