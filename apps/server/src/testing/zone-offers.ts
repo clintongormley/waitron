@@ -93,9 +93,9 @@ async function resolveZone(
       .select({ zoneId: floorZones.id })
       .from(floorZones)
       .where(and(eq(floorZones.isCounterDefault, true)));
-    zoneId = counter?.zoneId ?? (await floorZone(tx, COUNTER_ZONE));
+    zoneId = counter?.zoneId ?? (await floorZone(tx, COUNTER_ZONE, orderStart));
   } else {
-    zoneId = await floorZone(tx, TABLES_ZONE);
+    zoneId = await floorZone(tx, TABLES_ZONE, orderStart);
   }
 
   const [policy] = await tx
@@ -118,11 +118,15 @@ async function resolveZone(
   return zoneId;
 }
 
-async function floorZone(tx: Transaction, name: string): Promise<string> {
+async function floorZone(
+  tx: Transaction,
+  name: string,
+  orderStart: "table" | "counter",
+): Promise<string> {
   const where = and(eq(floorZones.name, name));
   const [existing] = await tx.select({ id: floorZones.id }).from(floorZones).where(where);
   if (existing !== undefined) return existing.id;
-  const created = await seedZone(tx, { name });
+  const created = await seedZone(tx, { name, departmentId: await department(tx, orderStart) });
   return created!.id;
 }
 

@@ -1162,8 +1162,8 @@ describe("openTab service context", () => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments )`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
-        insert into floor_zones (id, name, created_at)
-        values (${randomUUID()}, 'Downstairs', ${nowIso()}) returning id`);
+        insert into floor_zones (id, name, department_id, created_at)
+        values (${randomUUID()}, 'Downstairs', ${department.rows[0]!.id}, ${nowIso()}) returning id`);
       await tx.execute(
         sql`update floor_zones set department_id = ${department.rows[0]!.id} where id = ${downstairsZone.rows[0]!.id}`,
       );

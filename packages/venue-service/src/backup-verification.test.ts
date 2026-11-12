@@ -15,6 +15,7 @@ const migrations = [CORE_MIGRATIONS];
 const original = useVenueDb({ migrations });
 const restored = useVenueDb({ migrations });
 const absent = useVenueDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   // A source from before these tables existed: core's set now creates them, so they are dropped.
   setup: async (db) => {
@@ -47,7 +48,7 @@ beforeEach(() => {
       sql`insert into sale_receipt_headers (sale_id,department_id,trading_name,print_trading_name) values ('sale','department','Issued business',1)`,
     );
     db.run(
-      sql`insert into floor_zones (id,name,created_at) values ('zone','Room','2026-10-20T08:00:00.000Z')`,
+      sql`insert into floor_zones (id,name,department_id,created_at) values ('zone','Room','department','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into working_orders (id,source,order_number,opened_at) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z')`,
