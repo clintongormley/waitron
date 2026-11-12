@@ -3190,18 +3190,12 @@ export class TillApp extends LitElement {
   });
   /** The PIN screen's reads, so the server hears this device's clock with nobody signed in. */
   readonly #pinScreenPoll = new EquipmentPoll({
-    read: async (signal) => {
-      try {
-        return await this.api.getDeviceEquipment({ signal });
-      } catch (error) {
-        // The poll stops on this refusal, so no later read would clear the line.
-        if ((error as { code?: string } | undefined)?.code === "device.unauthorized")
-          this.pinClockNotice = undefined;
-        throw error;
-      }
-    },
+    read: (signal) => this.api.getDeviceEquipment({ signal }),
     onEquipment: (read) => {
       this.pinClockNotice = waitingStartNotice(this.pinClockNotice, read);
+    },
+    onRefused: () => {
+      this.pinClockNotice = undefined;
     },
   });
   @state() private pinClockNotice?: StaffNotice;

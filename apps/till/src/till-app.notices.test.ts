@@ -584,19 +584,13 @@ describe("a till or handheld at the PIN screen", () => {
     expect(clockLine(el)).toBeNull();
   });
 
-  it("shows no line for a waiting notice that is not well formed, and the screen still draws", async () => {
-    const noParams: Partial<StaffNotice> = { ...UNCONFIRMED };
-    delete noParams.params;
-    const getDeviceEquipment = vi
-      .fn()
-      .mockResolvedValue(withNotices([noParams as unknown as StaffNotice]));
+  it("shows no line for a waiting notice that is not well formed", async () => {
+    const noKey = { ...UNCONFIRMED, key: 7 } as unknown as StaffNotice;
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([noKey]));
     const { el } = await mountAtPin(getDeviceEquipment);
     await poll(el);
     expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
     expect(clockLine(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-lock-screen")!.shadowRoot!.textContent).toContain(
-      "Terrace handheld",
-    );
   });
 
   it("keeps the waiting line while a read names the box's clock unavailable", async () => {

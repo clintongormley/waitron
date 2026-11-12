@@ -3,9 +3,9 @@
 Algunos problemas del servidor impiden trabajar al personal, y quien está en el terminal suele ser
 el primero en notarlo. Por eso, cuando alguien ha iniciado sesión, cada caja registradora y cada
 terminal de camarero muestran una línea bajo su barra superior si el servidor necesita atención. La
-línea no aparece en las pantallas de inicio de sesión, de fichaje ni de preguntas de asistencia.
-Mientras el servidor espera a confirmar su hora, la pantalla de inicio de sesión también muestra esa
-línea. Dice qué ocurre y qué hacer. Nunca tapa tu trabajo y nunca tienes que cerrarla.
+pantalla de inicio de sesión solo muestra la línea de que los cobros esperan a la hora del servidor;
+las de fichaje y de preguntas de asistencia, ninguna. La línea dice qué ocurre y qué hacer. Nunca
+tapa tu trabajo y nunca tienes que cerrarla.
 
 Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.
 

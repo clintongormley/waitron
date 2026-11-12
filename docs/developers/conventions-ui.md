@@ -2093,10 +2093,7 @@ order's draft arrangement slots its own name into the basket's `lead-<n>`
 **Notices.** The till's staff notices (the strip under its top bar, see
 [design-system.md](design-system.md#the-notice-strip-till)) come with every read of `GET
 /api/device/equipment`: the equipment poll's, every 15 seconds from sign-in (`POLL_MS`,
-`apps/till/src/state/equipment-poll.ts`), and every other read of the device's equipment. At the
-PIN screen a second `EquipmentPoll` (`#pinScreenPoll`) reads every 15 seconds with nobody signed
-in; it keeps only the box's `clock.unconfirmed`, drawn as one line without its action, and stops at
-sign-in. Each goes
+`apps/till/src/state/equipment-poll.ts`), and every other read of the device's equipment. Each goes
 through `#readDeviceEquipment` (`apps/till/src/till-app.ts`), which numbers the read when it is sent
 and applies its notices only when no read sent after it has been applied and the person who was
 signed in when it was sent still is (`#operatorSession`). Its notices apply even when an equipment
@@ -2114,6 +2111,12 @@ carries from one session to the next. A kitchen display in device mode signs no 
 equipment poll and draws no strip. Pinned by `apps/till/src/till-app.notices.test.ts`, under "the
 staff notices an open till keeps", and `apps/till/src/state/staff-notices.test.ts`. The printer source is pinned by
 `apps/server/src/box-staff-notices.test.ts` and `apps/server/src/device-equipment-api.test.ts`.
+At the PIN screen a second `EquipmentPoll` (`#pinScreenPoll`) reads every 15 seconds with nobody
+signed in, not through `#readDeviceEquipment`. `waitingStartNotice`
+(`apps/till/src/state/staff-notices.ts`) keeps only a well-formed `clock.unconfirmed` from
+`box-clock`, and keeps it while `box-clock` is unavailable; it is drawn as one line without its
+action, and cleared on `device.unauthorized`, at sign-in and at boot. Pinned under "a till or
+handheld at the PIN screen" in `apps/till/src/till-app.notices.test.ts`.
 
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
 `apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in

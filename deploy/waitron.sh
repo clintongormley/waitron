@@ -329,7 +329,7 @@ enable_time_sync() {
   if as_root ${limit:+"$limit" 60} timedatectl set-ntp true >/dev/null 2>&1; then
     echo "waitron.sh: asked the system to keep its clock in step with internet time (timedatectl set-ntp true)"
   else
-    echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, Waitron stops taking payments while the clock reads earlier than its last sale, and every start of a box that files invoices takes no payment until the system reports its clock in step with internet time, two tills or handhelds that are switched on agree with its clock, or someone confirms it — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
+    echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, Waitron stops taking payments while the clock reads earlier than its last sale, and every start of a box that files invoices takes no payment until the system reports its clock in step with internet time, two tills or handhelds that are switched on and connected agree with its clock, or someone confirms it — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
   fi
 }
 
@@ -360,7 +360,7 @@ box_group_refusal() {
 }
 install_box_service() {
   local ref="$1" refusal tmp socket_changed=no
-  local cannot="so Waitron cannot set this machine's clock itself when a confirmed time shows it is wrong, or see whether it keeps internet time, so at every start a box that files invoices takes no payment until two tills or handhelds that are switched on agree with its clock or someone confirms it"
+  local cannot="so Waitron cannot set this machine's clock itself when a confirmed time shows it is wrong, or see whether it keeps internet time, so at every start a box that files invoices takes no payment until two tills or handhelds that are switched on and connected agree with its clock or someone confirms it"
   if [ ! -d "$SYSTEMD_RUN_DIR" ]; then
     env_unset WAITRON_BOX_SOCKET_DIR
     echo "waitron.sh: no systemd on this host, so the box's clock service is not installed — $cannot"

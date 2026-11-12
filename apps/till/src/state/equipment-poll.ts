@@ -15,6 +15,8 @@ export interface EquipmentPollOptions<T = DeviceEquipment> {
   live?(): TillLiveConnection | undefined;
   read(signal: AbortSignal): Promise<T>;
   onEquipment(equipment: T): void;
+  /** Called when the poll stops on `device.unauthorized`. */
+  onRefused?(): void;
 }
 
 /**
@@ -66,7 +68,10 @@ export class EquipmentPoll<T = DeviceEquipment> {
       this.#options.onEquipment(equipment);
     } catch (error) {
       if (read.signal.aborted || request < this.#applied) return;
-      if ((error as { code?: string } | undefined)?.code === "device.unauthorized") this.stop();
+      if ((error as { code?: string } | undefined)?.code === "device.unauthorized") {
+        this.stop();
+        this.#options.onRefused?.();
+      }
     } finally {
       clearTimeout(limit);
       this.#reads.delete(read);
