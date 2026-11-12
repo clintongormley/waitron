@@ -55,7 +55,11 @@ export function pathId(value: string, kind: "sale" | "refund"): string {
   return value.toLowerCase();
 }
 
-export async function checkAccess(tx: Transaction, session: Session, saleId: string) {
+export async function checkAccess(
+  tx: Transaction,
+  session: Pick<Session, "deviceId" | "personId" | "sessionId">,
+  saleId: string,
+) {
   await assertStillSignedIn(tx, session);
   const [row] = await tx
     .select(deviceBindingColumns)

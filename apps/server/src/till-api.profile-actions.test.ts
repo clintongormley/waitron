@@ -616,6 +616,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/drawer/authorizers",
       "GET /api/expo/board",
       "GET /api/find-bill/options",
+      "GET /api/invoice-corrections/:id",
       "GET /api/invoice-delivery-options",
       "GET /api/invoices/lookup",
       "GET /api/menu-state",
@@ -661,6 +662,13 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "POST /api/working-orders/:id/adjustments/preview",
       "POST /api/working-orders/:id/payments/preview",
     ],
+  },
+  {
+    proof: "matching request (source)",
+    actions: [],
+    basis:
+      'Opening an invoice correction records what is to be corrected and moves no money, so it needs no payment or drawer action; each refund in it checks its own. invoice-correction-api.ts; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, and answers it once the zone is its own"',
+    routes: ["POST /api/transactions/:saleId/corrections"],
   },
   {
     proof: "matching request (tested)",
