@@ -54,3 +54,8 @@ The watcher cleared setting `--wt-duration-disclosure` to `1ms` only on the host
 ## Watcher-cleared screenshot save removal, 2026-11-12 01:03
 
 The watcher cleared removing only the two save-only `page.screenshot` calls in the product-list alignment and root-controls matrices, keeping every row, frame wait and assertion. The diagnostic timed three PNG saves at 1,131.4 ms in one 1.94-second passing case; no image comparison was found at those sites. Keep the paired coverage-on file runs and identical expanded inventory, then the normal finish-branch review. This is a narrow exception to preserving each browser action, not permission to remove assertions or change rendering, polling or motion.
+
+
+## Watcher-cleared Menus structure capture cut, 2026-11-12 03:30
+
+The watcher cleared removing only the Menus structure matrix’s screenshot saves: “drop only the save, reuse settleStructure and the two-frame waits, remove the unused argument, and keep every row, action, cleanup and assertion” (Lane I `questions.md`, 03:30). An unchanged coverage-on 390px English/light case passed in2,695ms; its six screenshot calls took1,865.7ms. The matrix has eight rows. The helper now only settles the view and preserves both frames. The historical viewport-hook receipt remains. Compare paired coverage-on whole-file runs and identical expanded case/assertion inventory; the four-minute goal remains open. No other matrix, production code, polling or motion changes.

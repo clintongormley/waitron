@@ -12855,15 +12855,11 @@ it.each(
   });
   const el = await mount(client, LUNCH_PATH, theme);
   await vi.waitFor(() => expect(structure(el)).not.toBeNull());
-  const capture = async (state: string) => {
+  const settleView = async () => {
     await settleStructure(el);
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
-    await page.screenshot({
-      element: el,
-      path: `__screenshots__/a461-task9/menus-${locale}-${theme}-${width}-${state}.png`,
-    });
   };
   const search = async (value: string) => {
     type(q(el, 'wt-input[name="structure-search"]')!, value);
@@ -12875,23 +12871,23 @@ it.each(
   const boxes = allInStructure<HTMLInputElement>(el, "td.select input");
   expect(boxes.length).toBeGreaterThan(0);
   boxes[0]!.click();
-  await capture("long-path");
+  await settleView();
   await search("Drinks");
   expect(rowOf(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
-  await capture("flat");
+  await settleView();
   await toggleRow(el, "m-drinks");
   expect(rowOf(el, "m-drinks/m-lemonade")).not.toBeNull();
-  await capture("opened");
+  await settleView();
   await search("Burger");
   expect(structure(el).selected.length).toBe(1);
-  await capture("hidden-selected");
+  await settleView();
   await search("zz-no-match");
   expect(allInStructure(el, "tbody tr[data-row-key]")).toHaveLength(0);
-  await capture("no-match");
+  await settleView();
   await search("");
   expect(structure(el).selected.length).toBe(1);
   expect(inStructure(el, '[part~="search-path"]')).toBeNull();
-  await capture("restored");
+  await settleView();
 });
 
 it.each(["en", "es"])("A462 Structure has one Select mode in %s", async (locale) => {
