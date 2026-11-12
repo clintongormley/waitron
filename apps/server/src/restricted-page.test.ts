@@ -401,3 +401,17 @@ it("distinguishes accepted payment differences from imported facts in both langu
     );
   }
 });
+
+it.each(["en-GB", "es-ES"] as const)(
+  "renders the record-clash stop separately from payment acceptance in %s",
+  async (language) => {
+    await handOver(await seedSuccessor("Main <box>"));
+    const html = await (await request(language, suite.db, "record-clash")).text();
+    expect(html).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language]["record-clash"]));
+    expect(html).not.toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].clash));
+    expect(html).toContain("Main &lt;box&gt;");
+    expect(html).not.toContain("Main <box>");
+    expect(html).not.toContain("/accept");
+    expect(html).not.toContain("/download");
+  },
+);

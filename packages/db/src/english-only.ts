@@ -89,7 +89,7 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
   },
   "apps/server/src/return-records.real.test.ts": {
     reason: VERIFACTU_NAMES,
-    findings: 104,
+    findings: 77,
   },
   "apps/server/src/start-again-full-disk.e2e.test.ts": {
     reason: VERIFACTU_NAMES,

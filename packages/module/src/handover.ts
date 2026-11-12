@@ -1,13 +1,11 @@
 import type { Transaction } from "@waitron/db";
 import type { CanonicalValue } from "@waitron/membership";
-import { AppError } from "@waitron/shared";
+import { AppError, type ErrorCode } from "@waitron/shared";
 import type { BackupQuery } from "@waitron/store";
 import type { WaitronModule } from "./module.js";
 import "./errors.js";
 
 export interface ReturnDiscrepancy {
-  kind?: "record";
-  readable?: string;
   saleId: string;
   fingerprint: string;
   outstanding: CanonicalValue;
@@ -34,8 +32,7 @@ export interface ModuleHandoverContribution {
       batch: CanonicalValue,
       now: Date,
       accepted?: readonly string[],
-      priorAccepted?: readonly ReturnDiscrepancy[],
-    ): Promise<boolean>;
+    ): Promise<boolean | { refusal: ErrorCode }>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;
 }

@@ -30,9 +30,6 @@ import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./members
 import { returnDigest, returnVenue, type ReturnRecordsDeps } from "./return-records.js";
 import "./errors.js";
 
-const RECORD_WARNING =
-  "The new main will not submit the old box's conflicting record. Check its filing status and tax-agency receipt; it may already have been submitted. The download includes each waiting record's totals, tax and payment facts, with each payment row's current presence on the new main. After accepting, restart the old box to retry, then download again before resetting. Handle only payment facts still absent manually; do not enter present payments again, and check reported differences. Later records may remain blocked. Later batches have not been downloaded. Resetting the old box deletes those records too, including sale lines and local backups.";
-
 type Deps = ReturnRecordsDeps & { requireWritable(): void };
 export function refuseReturn(reason: string): never {
   throw new AppError("handover.return_refused", { reason });
@@ -146,11 +143,7 @@ export async function retainReturnClashes(
   );
   const fresh = clashes
     .filter((clash) => !group?.clashes.some((held) => held.clashId === evidenceId(body, clash)))
-    .map((clash) => {
-      const stored = { ...clash, clashId: evidenceId(body, clash) };
-      delete stored.readable;
-      return stored;
-    });
+    .map((clash) => ({ ...clash, clashId: evidenceId(body, clash) }));
   if (!fresh.length) return;
   await appendHandoverEventTx(node, {
     nodeId: deps.nodeId,
@@ -188,48 +181,33 @@ async function decisionBody(deps: ReturnRecordsDeps, event: HandoverEvent) {
   return { decision, body: verified.body };
 }
 
-export async function acceptedReturnDecisions(
+export async function acceptedReturnFingerprints(
   deps: ReturnRecordsDeps,
   body: Record<string, CanonicalValue>,
   tx: Transaction,
 ) {
-  const fingerprints: string[] = [];
-  const priorAccepted: ReturnDiscrepancy[] = [];
-  const decisions = [];
-  for (const event of await events(deps, "return-clash-acceptance"))
-    decisions.push(await decisionBody(deps, event));
-  for (const group of evidenceGroups(await events(deps, "return-clash-evidence"))) {
+  const group = evidenceGroups(await events(deps, "return-clash-evidence")).find(
+    (row) => row.event.detail.batchId === batchId(body),
+  );
+  if (!group) return [];
+  const evidence = await readEvidence(deps, group, tx);
+  const accepted: string[] = [];
+  for (const event of await events(deps, "return-clash-acceptance")) {
+    const decision = await decisionBody(deps, event);
+    const clash = evidence.current.find(
+      (row) => row.eligible && row.fingerprint === decision.body.fingerprint,
+    );
+    if (!clash || decision.body.evidenceDigest !== evidenceId(body, clash)) continue;
     if (
-      ["venue", "sourceNodeId", "destinationNodeId", "module"].some(
-        (key) =>
-          canonicalize((group.event.detail[key] ?? null) as CanonicalValue) !==
-          canonicalize(body[key]!),
+      canonicalize(binding(body)) !==
+      canonicalize(
+        Object.fromEntries(Object.keys(binding(body)).map((key) => [key, decision.body[key]!])),
       )
     )
       continue;
-    const evidence = await readEvidence(deps, group, tx);
-    const currentBatch = group.event.detail.batchId === batchId(body);
-    for (const decision of decisions) {
-      const clash = evidence.current.find(
-        (row) =>
-          row.fingerprint === decision.body.fingerprint &&
-          (currentBatch ? row.eligible : row.kind === "record"),
-      );
-      if (!clash || decision.body.evidenceDigest !== evidenceId(evidence.body, clash)) continue;
-      if (
-        canonicalize(binding(evidence.body)) !==
-        canonicalize(
-          Object.fromEntries(
-            Object.keys(binding(evidence.body)).map((key) => [key, decision.body[key]!]),
-          ),
-        )
-      )
-        continue;
-      if (currentBatch) fingerprints.push(clash.fingerprint);
-      else priorAccepted.push(clash);
-    }
+    accepted.push(clash.fingerprint);
   }
-  return { fingerprints, priorAccepted };
+  return accepted;
 }
 
 export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
@@ -294,12 +272,6 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
               batchId: event.detail.batchId,
               ...binding(evidence.body),
               ...clash,
-              ...(clash.kind === "record"
-                ? {
-                    downloadUrl: `/management-api/return-clashes/${clashId}/download`,
-                    next: `Download both versions before accepting. ${RECORD_WARNING}`,
-                  }
-                : {}),
               eligible: evidence.current.some(
                 (row) => row.fingerprint === clash.fingerprint && row.eligible,
               ),
@@ -313,35 +285,10 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
       return c.json(report);
     }),
   );
-  app.get("/management-api/return-clashes/:clashId/download", (c) =>
-    run(c, log, async () => {
-      const token = requireManagementSession(c);
-      const clashId = c.req.param("clashId");
-      const readable = await withTransaction(deps.db, async (tx) => {
-        await authorize(tx, token);
-        const group = evidenceGroups(await events(deps, "return-clash-evidence")).find((row) =>
-          row.clashes.some((clash) => clash.clashId === clashId),
-        );
-        if (!group) throw new AppError("handover.return_clash_not_found", { clashId });
-        const evidence = await readEvidence(deps, group, tx);
-        const current = evidence.current.find((row) => evidenceId(evidence.body, row) === clashId);
-        if (!current) refuseReturn("clash changed");
-        if (current.readable === undefined)
-          throw new AppError("handover.return_clash_not_found", { clashId });
-        return current.readable;
-      });
-      c.header("Content-Type", "text/plain; charset=utf-8");
-      c.header("Content-Disposition", `attachment; filename="return-clash-${clashId}.txt"`);
-      c.header("Cache-Control", "no-store");
-      c.header("X-Content-Type-Options", "nosniff");
-      return c.body(readable);
-    }),
-  );
   app.post("/management-api/return-clashes/:clashId/accept", (c) =>
     run(c, log, async () => {
       const token = requireManagementSession(c);
       const raw = await readJsonBody<unknown>(c);
-      let next = "Restart the stopped box; repeat for any later clashing batch.";
       const result = await withNodeTransaction(deps.node, async (node) => {
         const decision = await withTransaction(deps.db, async (tx) => {
           const personId = await authorize(tx, token);
@@ -367,8 +314,6 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
           );
           if (!group) throw new AppError("handover.return_clash_not_found", { clashId });
           const evidence = await readEvidence(deps, group, tx);
-          if (group.clashes.some((clash) => clash.clashId === clashId && clash.kind === "record"))
-            next = `Keep the download for manual handling. Restart the stopped box to retry; the return may stay unconfirmed. ${RECORD_WARNING}`;
           for (const event of await events(deps, "return-clash-acceptance", node)) {
             const prior = await decisionBody(deps, event);
             if (prior.body.actionKey === raw.actionKey || prior.body.evidenceDigest === clashId) {
@@ -421,7 +366,7 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
       c.header("Cache-Control", "no-store");
       return c.json({
         decision: result,
-        next,
+        next: "Restart the stopped box; repeat for any later clashing batch.",
       });
     }),
   );

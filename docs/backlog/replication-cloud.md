@@ -529,18 +529,8 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A1342: return a stopped box's records before reset
 
-Eligible invoice, chain-position and correction clashes can be downloaded as readable text and
-specifically accepted through the current main's internal API, alongside payment clashes. There
-is no screen yet. The download shows both versions and their filing status; the new main does not
-submit the discarded version, which may already have an AEAT answer. The download lists every
-waiting record in the batch with its totals, tax and tender/refund/capture facts. It says whether
-each sale and payment row is on the main at download time. After retrying the return, download
-again and handle only still-absent payment facts manually; check reported payment differences
-before entering payments again. Later missing records stay blocked after an accepted record clash,
-including across batches; later batches have not been downloaded. Reset warns and
-remains available. Keep the file: node-local evidence survives restart but not venue backup or the
-next handover. The stopped box must be switched off and on to retry.
-Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain open.
+Payment-clash acceptance is an internal API without a screen. Sale lines, reprints, the
+returned-invoices reporting marker and real-box qualification remain open.
 
 Normal return preserves original identities and chains and uses the main box’s outbox.
 Completed and pending tender refunds travel with their payments. Pending card refunds carry
@@ -1008,11 +998,11 @@ payment-only [PR2 plan](../superpowers/plans/2026-11-11-a1342-clash-acceptance.m
 11 November. Node-local signed evidence and decisions drive retry; venue activity history retains
 who accepted which clash across backup and handover, without deciding product behaviour.
 
-**2026-11-12, A1342-3:** The watcher cleared the [record-clash plan](../superpowers/plans/2026-11-11-a1342-3-record-clash-acceptance.md)
-at 23:21 on 11 November, inside the owner's acceptance and download ask. Option B keeps an
-already-answered old record eligible, shows its status and warns that the new main will not submit
-it. An accepted clash never allows a missing suffix to be inserted. Evidence and decisions reuse
-PR2's node-local events; downloading is not an extra acknowledgement or permission gate.
+**2026-11-12, A1342-3:** The owner's 13:52 direction is that a spare taking over becomes the new
+main, and the old main returns its data to it; switching roles again uses the same handover.
+The watcher at 15:58 cleared the [plain-stop rework](../superpowers/plans/2026-11-12-a1342-plain-stop-rework.md):
+record clashes stop the return with a specific message on the old box, without record acceptance,
+downloads or a new receipt field. Payment-clash acceptance stays separate.
 
 The owner said at 16:25 on 11 November, recorded by the watcher in Lane J's `questions.md`:
 “i don't think we should refuse, just warn. It may be impossible to transfer the data for some
