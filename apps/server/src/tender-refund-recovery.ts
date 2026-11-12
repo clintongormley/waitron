@@ -82,18 +82,25 @@ export async function recoverTenderRefunds(
           .where(eq(tenderRefunds.id, id));
         return !live && (row.sentAt === null || lookupDue);
       });
-      if (work) await resumeTenderRefund(deps, id, "loop");
+      const failures: unknown[] = [];
+      if (work)
+        await resumeTenderRefund(deps, id, "loop").catch((error: unknown) => {
+          failures.push(error);
+        });
       await withTransaction(deps.db, async (tx) => {
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
         const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
         if (row?.state === "pending" && now.getTime() - Date.parse(row.createdAt) > UNRESOLVED_MS)
           await raiseTenderRefundUnresolved(tx, row, now);
+      }).catch((error: unknown) => {
+        failures.push(error);
       });
+      return failures;
     }),
   );
-  const errors = results
-    .filter((result) => result.status === "rejected")
-    .map((result) => result.reason as unknown);
+  const errors = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason as unknown] : result.value,
+  );
   if (errors.length > 0) throw new AggregateError(errors, "Settled-tender refund recovery failed");
   const [summary] = await deps.db
     .select({
