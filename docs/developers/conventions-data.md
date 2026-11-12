@@ -1001,8 +1001,9 @@ it refuses with `credentials.rotation_spare_joined`, because the spare holds the
 nothing sends it a new one (decision D7 in
 [the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). Removing a spare that
 never finished joining deletes the link, and rotation then runs. A spare that finished joining
-cannot be removed in this version, so while it is joined the ring is not rotated. A ring changed by
-hand in `secrets.env` is not stopped by this.
+cannot be removed in this version, so while it is joined the ring is not rotated. On the spare,
+whose own link names its main box, `rotate` refuses too. A ring changed by hand in `secrets.env` is
+not stopped by this.
 
 **What the guard does not see.** `scripts/write-path-tables.test.ts` reads TEXT, so a table name
 reached through a variable is invisible to it; it judges a FILE against an allowance list rather
