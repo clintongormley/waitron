@@ -60,14 +60,32 @@ describe("setup-role-screen", () => {
 
 describe("setup-role-screen in Spanish", () => {
   const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
+  /** The heading the choice row draws in its own shadow root, and the copy slotted into it. */
+  const row = (el: SetupRoleScreen, id: string): { heading: string; copy: string } => {
+    const choice = q(el, `[data-test=${id}]`)!;
+    expect(choice.localName).toBe("wt-choice-row");
+    return {
+      heading: text(choice.shadowRoot!.querySelector("[part=heading]")!),
+      copy: text(choice),
+    };
+  };
 
   it("names every choice in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRoleScreen>("setup-role-screen", {});
     expect(text(q(el, "h1")!)).toBe("Unirse a un restaurante existente o recuperarlo");
-    expect(text(q(el, "[data-test=choose-mirror]")!)).toBe("Añadir una réplica");
-    expect(text(q(el, "[data-test=choose-restore]")!)).toBe("Restaurar una copia de seguridad");
-    expect(text(q(el, "[data-test=choose-restore-bucket]")!)).toBe("Restaurar desde mi bucket");
+    expect(row(el, "choose-mirror")).toEqual({
+      heading: "Añadir un nodo réplica",
+      copy: "Añadir una réplica aún no está terminado en esta versión: este servidor puede unirse al principal, pero todavía no recibe los datos del restaurante, así que no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+    });
+    expect(row(el, "choose-restore")).toEqual({
+      heading: "Restaurar desde una copia de seguridad",
+      copy: "Recupera el restaurante en este servidor nuevo desde una copia de seguridad cifrada de Waitron cuando no haya ningún otro servidor funcionando con datos más recientes del restaurante.",
+    });
+    expect(row(el, "choose-restore-bucket")).toEqual({
+      heading: "Restaurar desde mi bucket",
+      copy: "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit.",
+    });
     expect(text(q(el, "[data-test=back]")!)).toBe("Volver");
   });
 

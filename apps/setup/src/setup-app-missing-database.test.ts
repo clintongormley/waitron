@@ -14,6 +14,7 @@ import {
   missingDatabaseFixture,
   namedSummary,
   openMissing,
+  shown,
 } from "../test/missing-database-browser.js";
 
 const reached = (app: Element) =>
@@ -400,9 +401,8 @@ it.each(locales)(
   "a damaged record reaches the confirmation, never 'wait a moment' and never support ($locale)",
   async ({ locale, browser }) => {
     const { app } = await damagedConfirmation(browser);
-    const text = app.shadowRoot!.textContent!;
-    expect(text).not.toContain(shells[locale]["shell.not_ready"]);
-    expect(text).not.toContain(shells[locale]["shell.first_setup.attempt_invalid"]);
+    expect(shown(app)).not.toContain(shells[locale]["shell.not_ready"]);
+    expect(shown(app)).not.toContain(shells[locale]["shell.first_setup.attempt_invalid"]);
     expect(q(app, "confirm-start-again")).not.toBeNull();
   },
 );

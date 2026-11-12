@@ -498,7 +498,7 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle: Setup wizard tidy
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   Several small wizard leftovers remain.
@@ -508,11 +508,6 @@ that operation's reader. Do not remove exact-content checks to make a large file
 - **The setup route `GET /setup-api/venue-defaults` has no production reader** — left open by
   A1315 PR 5, which took setup's only call to it away (`apps/server/src/setup-api.ts`). Retiring it
   means removing the route's two direct cases in `apps/server/src/setup-api.test.ts`.
-- **The setup role screen shows its choices as cards with buttons, not `wt-choice-row` rows**
-  (`apps/setup/src/screens/role-screen.ts`, reached from Join or recover). Split out of A237.
-- **The certificate help page the setup wizard opens writes the browser's warning as “not secure”
-  in quotes** (`/setup/trust`, `apps/server/src/trust-page.ts`), where the wizard's first screen
-  (#1107) writes Not secure without them. Split out of A237.
 
 ## Bundle: File input sweep
 

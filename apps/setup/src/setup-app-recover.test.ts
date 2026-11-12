@@ -1,21 +1,20 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import type { WtButton } from "@waitron/ui";
+import type { WtButton, WtChoiceRow } from "@waitron/ui";
 import type { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { setLocale, t as say } from "./i18n/t.js";
 import { shellEn } from "./i18n/strings/shell.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { initial, venue } from "../test/first-setup-browser.js";
-import { click, namedSummary, q } from "../test/missing-database-browser.js";
+import { click, formErrors, namedSummary, q } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import {
   OWNER_HEADER,
   cases,
   confirmation,
   fieldsIn,
-  formErrors,
   oldRecoveryRequests,
   sends,
   summaryReads,
@@ -455,7 +454,7 @@ it("from Join or recover, Restore from backup opens the fresh-box restore screen
   await expect.poll(() => q(app, "screen-role")).not.toBeNull();
   const role = q<LitElement>(app, "screen-role")!;
   await role.updateComplete;
-  const choose = role.shadowRoot!.querySelector<WtButton>("[data-test=choose-restore]")!;
+  const choose = role.shadowRoot!.querySelector<WtChoiceRow>("[data-test=choose-restore]")!;
   await userEvent.click(choose.shadowRoot!.querySelector("button")!);
   await expect.poll(() => q(app, "screen-restore")).not.toBeNull();
   expect(oldRecoveryRequests(requests)).toEqual([]);

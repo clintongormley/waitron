@@ -415,7 +415,7 @@ that slice 3 has to restore:
   happened and either what to fix before pressing Connect again or to choose Back.
   Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
-  `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
+  `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` row together.
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
   box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.

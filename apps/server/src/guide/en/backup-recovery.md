@@ -37,7 +37,7 @@ includes a setup whose own record cannot be read: then the only way out is to re
 Over a plain connection neither works: set up the secure connection first.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
-or recover an existing restaurant", where you choose **Restore a backup** or **Restore from my
+or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
 bucket**, as on a new box; restoring needs the backup's own key and its node recovery key. After
 **Start again**, **Reconnect** opens "Set up this Waitron server", where you choose how to set up
 this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
@@ -74,12 +74,12 @@ only one person should recover this taxpayer at a time.
 
 ## Choose your copy {#source}
 
-On "Join or recover an existing restaurant", choose **Restore a backup** for a backup file, or
+On "Join or recover an existing restaurant", choose **Restore from backup** for a backup file, or
 **Restore from my bucket** for the continuous copy in your own storage bucket. For a Waitron Cloud
-copy, choose **Restore a backup** and then **Restore from Waitron Cloud**.
+copy, choose **Restore from backup** and then **Restore from Waitron Cloud**.
 
-**Add a mirror** is not finished in this version: the new server does not receive the restaurant's
-data. Choose a restore option to recover an existing restaurant.
+**Add a mirror node** is not finished in this version: the new server does not receive the
+restaurant's data. Choose a restore option to recover an existing restaurant.
 
 For a backup file, choose it in **Backup file**, enter the key that unlocks it in **Recovery key**,
 and choose its **Backup environment**. For your bucket, choose your recovery pack or kit file in

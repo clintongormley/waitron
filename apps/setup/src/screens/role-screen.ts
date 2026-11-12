@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-choice-row.js";
 import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto } from "../events.js";
 import { t } from "../i18n/t.js";
@@ -24,19 +24,7 @@ export class SetupRoleScreen extends LitElement {
       }
 
       .choices {
-        display: grid;
-        gap: var(--wt-space-4);
         margin-top: var(--wt-space-4);
-      }
-
-      h2 {
-        margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-lg);
-      }
-
-      .choice-copy {
-        margin: 0 0 var(--wt-space-3);
-        color: var(--wt-color-text-muted);
       }
     `,
   ];
@@ -52,36 +40,24 @@ export class SetupRoleScreen extends LitElement {
       <p class="intro">${t("role.intro")}</p>
 
       <div class="choices">
-        <wt-card raised>
-          <h2>${t("role.mirror.heading")}</h2>
-          <p class="choice-copy">${t("role.mirror.copy")}</p>
-          <wt-button
-            variant="primary"
-            data-test="choose-mirror"
-            @click=${() => dispatchSetupGoto(this, "connect")}
-            >${t("role.mirror.button")}</wt-button
-          >
-        </wt-card>
-        <wt-card raised>
-          <h2>${t("role.restore.heading")}</h2>
-          <p class="choice-copy">${t("role.restore.copy")}</p>
-          <wt-button
-            variant="secondary"
-            data-test="choose-restore"
-            @click=${() => dispatchSetupGoto(this, "restore")}
-            >${t("role.restore.button")}</wt-button
-          >
-        </wt-card>
-        <wt-card raised>
-          <h2>${t("role.bucket.heading")}</h2>
-          <p class="choice-copy">${t("role.bucket.copy")}</p>
-          <wt-button
-            variant="secondary"
-            data-test="choose-restore-bucket"
-            @click=${() => dispatchSetupGoto(this, "restore-bucket")}
-            >${t("role.bucket.button")}</wt-button
-          >
-        </wt-card>
+        <wt-choice-row
+          data-test="choose-mirror"
+          heading=${t("role.mirror.heading")}
+          @click=${() => dispatchSetupGoto(this, "connect")}
+          >${t("role.mirror.copy")}</wt-choice-row
+        >
+        <wt-choice-row
+          data-test="choose-restore"
+          heading=${t("role.restore.heading")}
+          @click=${() => dispatchSetupGoto(this, "restore")}
+          >${t("role.restore.copy")}</wt-choice-row
+        >
+        <wt-choice-row
+          data-test="choose-restore-bucket"
+          heading=${t("role.bucket.heading")}
+          @click=${() => dispatchSetupGoto(this, "restore-bucket")}
+          >${t("role.bucket.copy")}</wt-choice-row
+        >
       </div>
       <div class="actions">
         <wt-button variant="ghost" data-test="back" @click=${() => dispatchSetupGoto(this, "mode")}

@@ -15,16 +15,13 @@ export const startEn = {
     "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. Adding a mirror is not finished in this version.",
   "role.mirror.heading": "Add a mirror node",
   "role.mirror.copy":
-    "Adding a mirror is not finished in this version: this server can join the primary, but it does not yet receive the restaurant's data, so it cannot take over. To recover a restaurant, choose Restore a backup or Restore from my bucket.",
-  "role.mirror.button": "Add a mirror",
+    "Adding a mirror is not finished in this version: this server can join the primary, but it does not yet receive the restaurant's data, so it cannot take over. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
   "role.restore.heading": "Restore from backup",
   "role.restore.copy":
     "Recover onto this fresh server from an encrypted Waitron backup when no other server is still running with newer restaurant data.",
-  "role.restore.button": "Restore a backup",
   "role.bucket.heading": "Restore from my bucket",
   "role.bucket.copy":
     "Rebuild onto this fresh server from the continuous copy in your own storage bucket, when the old server is gone. You need the recovery pack or kit file.",
-  "role.bucket.button": "Restore from my bucket",
   "role.back": "Back",
 
   "connect.heading": "Connect to the primary",
@@ -144,16 +141,13 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Restaura una copia de seguridad en este servidor cuando no haya otro servidor funcionando con datos más recientes del restaurante, o reconstrúyelo desde la copia continua de tu propio bucket cuando el servidor anterior ya no esté. Añadir una réplica aún no está terminado en esta versión.",
   "role.mirror.heading": "Añadir un nodo réplica",
   "role.mirror.copy":
-    "Añadir una réplica aún no está terminado en esta versión: este servidor puede unirse al principal, pero todavía no recibe los datos del restaurante, así que no puede sustituirlo. Para recuperar un restaurante, elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
-  "role.mirror.button": "Añadir una réplica",
+    "Añadir una réplica aún no está terminado en esta versión: este servidor puede unirse al principal, pero todavía no recibe los datos del restaurante, así que no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
   "role.restore.heading": "Restaurar desde una copia de seguridad",
   "role.restore.copy":
     "Recupera el restaurante en este servidor nuevo desde una copia de seguridad cifrada de Waitron cuando no haya ningún otro servidor funcionando con datos más recientes del restaurante.",
-  "role.restore.button": "Restaurar una copia de seguridad",
   "role.bucket.heading": "Restaurar desde mi bucket",
   "role.bucket.copy":
     "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit.",
-  "role.bucket.button": "Restaurar desde mi bucket",
   "role.back": "Volver",
 
   "connect.heading": "Conectar con el servidor principal",

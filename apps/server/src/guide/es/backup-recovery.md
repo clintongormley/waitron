@@ -43,7 +43,7 @@ ninguna: configura antes la conexión segura.
 
 Cuando se ha borrado la configuración, el equipo se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges
-**Restaurar una copia de seguridad** o **Restaurar desde mi bucket**, como en un equipo nuevo;
+**Restaurar desde una copia de seguridad** o **Restaurar desde mi bucket**, como en un equipo nuevo;
 restaurar necesita la clave de la propia copia y la clave de recuperación de su nodo. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor Waitron», donde eliges cómo
 configurar este equipo. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
@@ -82,13 +82,13 @@ Apaga la caja anterior y coordínate con los otros locales: solo una persona deb
 
 ## Elige tu copia {#source}
 
-En «Unirse a un restaurante existente o recuperarlo», elige **Restaurar una copia de seguridad**
-para un archivo de copia, o **Restaurar desde mi bucket** para la copia continua de tu propio bucket
-de almacenamiento. Para una copia de Waitron Cloud, elige **Restaurar una copia de seguridad** y
-después **Restaurar desde Waitron Cloud**.
+En «Unirse a un restaurante existente o recuperarlo», elige **Restaurar desde una copia de
+seguridad** para un archivo de copia, o **Restaurar desde mi bucket** para la copia continua de tu
+propio bucket de almacenamiento. Para una copia de Waitron Cloud, elige **Restaurar desde una copia
+de seguridad** y después **Restaurar desde Waitron Cloud**.
 
-**Añadir una réplica** aún no está terminado en esta versión: el nuevo servidor no recibe los datos
-del restaurante. Elige una opción de restauración para recuperar un restaurante existente.
+**Añadir un nodo réplica** aún no está terminado en esta versión: el nuevo servidor no recibe los
+datos del restaurante. Elige una opción de restauración para recuperar un restaurante existente.
 
 Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, introduce la clave que lo
 abre en **Clave de recuperación** y elige su **Entorno de la copia**. Para tu bucket, elige tu
