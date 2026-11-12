@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { decimal } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, documentProduct, menuDocument, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  documentProduct,
+  menuDocument,
+  mountMenuPreview as mountWidget,
+} from "./test-helpers.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
 import type { MenuPreview } from "../api/client.js";
 

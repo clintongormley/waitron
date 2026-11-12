@@ -118,8 +118,8 @@ describe.each(["light", "dark"] as const)("menu publications (%s)", (theme) => {
     );
     await settle(el);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    if (state === "failed") expect(table.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-    if (state === "loading") expect(table.loading).toBe(true);
+    if (state === "failed") expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    if (state === "loading" || state === "empty") expect(table).toBeNull();
     if (state.startsWith("cancel")) {
       const menu = table.shadowRoot!.querySelector('tr[data-row-key="v-lunch-2"] wt-row-actions')!;
       menu.querySelector<HTMLElement>('[data-test="cancel-v-lunch-2"]')!.click();

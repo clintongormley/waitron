@@ -1509,7 +1509,9 @@ layout, and applies again once the list is wide. The key changed when Changes wa
 saved before it, when Status was the only movable column, is not read.
 
 **A menu's queued versions sit above Unpublished changes on its Preview tab.** The "Scheduled
-versions" panel lists only waiting schedules, soonest first, with their time on the venue's clock.
+versions" heading and table appear only while a version is queued. The table lists waiting
+schedules soonest first, with their time on the venue's clock. Publish later and Publish now share
+a row above the list, in that order; each appears independently when its own conditions allow it.
 Cancelled and activated editions stay in the API response but have no row or Status column here.
 The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
@@ -5452,9 +5454,9 @@ A menu's Preview shows frozen customer content beside unpublished changes. Choos
 language independently of the dashboard language, or select Internal names for staff inspection.
 Keep the live version in the editor header rather than repeating it in Preview. Show price clashes
 as a red sentence, with each conflicting price and its source below it. A menu included by other
-menus names those includers as links to their Preview tabs beside Publish; omit that note when
-there are none. Keep Publish now outside the scrolling panes. Put Scheduled versions and its
-Publish later action above unpublished changes on the left, and the proposed menu on the right.
+menus names those includers as links to their Preview tabs directly below the publish row; omit
+that note when there are none. Keep the publish row and Scheduled versions outside the scrolling
+changes pane, above unpublished changes on the left, and the proposed menu on the right.
 Stack the panes with changes first when the host
 has less than 800px available. Each pane has its own accessible name and keyboard focus.
 

@@ -399,7 +399,7 @@ it("sends no Undo while the preview's read has failed", async () => {
 
 const scheduleButton = (panel: MenuPreviewPanel) =>
   panel
-    .querySelector("dashboard-menu-publications")
+    .shadowRoot!.querySelector("dashboard-menu-publications")
     ?.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>(
       '[data-test="schedule-open"]',
     ) ?? null;

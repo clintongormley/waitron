@@ -3183,6 +3183,9 @@ export class MenusScreen extends LitElement {
 
   #renderPreview() {
     return html`<dashboard-menu-preview
+      .api=${this.api}
+      .menuId=${this.menuId!}
+      .lateRefusalFor=${this.#lateScheduleRefusalFor}
       menuName=${this.#menuName()}
       .includedBy=${this.structure?.includedBy ?? []}
       .status=${this.status}
@@ -3211,15 +3214,6 @@ export class MenusScreen extends LitElement {
         event.stopPropagation();
         void this.#watchPreview(this.menuId!);
       }}
-      ><dashboard-menu-publications
-        slot="schedule"
-        .api=${this.api}
-        menuId=${this.menuId!}
-        menuName=${this.#menuName()}
-        .lateRefusalFor=${this.#lateScheduleRefusalFor}
-        .preview=${this.previewError ? null : this.preview}
-        .blocked=${this.undoOut?.menuId === this.menuId}
-      ></dashboard-menu-publications
     ></dashboard-menu-preview>`;
   }
 

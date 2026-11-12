@@ -11,7 +11,7 @@ import {
   documentProduct,
   documentSection,
   menuDocument,
-  mountWidget,
+  mountMenuPreview as mountWidget,
 } from "./test-helpers.js";
 
 vi.mock("@waitron/catalogue/src/menu-undo.js", { spy: true });

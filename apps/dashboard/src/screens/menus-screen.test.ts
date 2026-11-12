@@ -9025,9 +9025,9 @@ describe("publishing", () => {
         .mockResolvedValue({ number: 3, versionId: "v3", activatesAt: "2030-01-01T12:00:00Z" }),
     });
     const el = await mountPreview(client);
-    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
-      "dashboard-menu-publications",
-    )!;
+    const schedule = panel(el).shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-menu-publications"]
+    >("dashboard-menu-publications")!;
     const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
     await expect.poll(() => sq('[data-test="schedule-open"]')).not.toBeNull();
     await userEvent.click(sq('[data-test="schedule-open"]'));
@@ -9101,7 +9101,7 @@ describe("publishing", () => {
           rescheduleMenuPublication: vi.fn(() => pending.promise),
         });
         const el = await mountPreview(client);
-        const schedule = panel(el).querySelector("dashboard-menu-publications")!;
+        const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
         const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector);
         if (action === "Schedule") {
           await expect.poll(() => sq('[data-test="schedule-open"]')).toBeTruthy();
@@ -9179,6 +9179,7 @@ describe("publishing", () => {
     const publication = () =>
       app
         .shadowRoot!.querySelector("dashboard-menus-screen")
+        ?.shadowRoot?.querySelector("dashboard-menu-preview")
         ?.shadowRoot?.querySelector("dashboard-menu-publications");
     await expect
       .poll(() => publication()?.shadowRoot?.querySelector('[data-test="schedule-open"]'))
@@ -9234,7 +9235,7 @@ describe("publishing", () => {
       scheduleMenuPublication: vi.fn(() => pending.promise),
     });
     const el = await mountPreview(client);
-    const schedule = panel(el).querySelector("dashboard-menu-publications")!;
+    const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
     const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
     await expect.poll(() => sq('[data-test="schedule-open"]')).toBeTruthy();
     sq('[data-test="schedule-open"]').click();
@@ -9260,18 +9261,18 @@ describe("publishing", () => {
   it("renders the publications widget for the open menu with the preview it read", async () => {
     const client = api();
     const el = await mountPreview(client);
-    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
-      "dashboard-menu-publications",
-    )!;
-    expect(schedule.slot).toBe("schedule");
+    const schedule = panel(el).shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-menu-publications"]
+    >("dashboard-menu-publications")!;
+    expect(schedule.closest('[data-test="changes-column"]')).not.toBeNull();
     expect(schedule.menuId).toBe("menu-lunch");
     expect(schedule.menuName).toBe("Lunch Menu");
     expect(schedule.api).toBe(client);
     expect(schedule.preview).toBe(panel(el).preview);
     expect(schedule.preview?.hash).toBe(LUNCH_HASH);
-    const slot = panel(el).shadowRoot!.querySelector('slot[name="schedule"]');
+    const slot = schedule.shadowRoot!.querySelector("slot:not([name])");
     expect(slot).not.toBeNull();
-    expect(schedule.assignedSlot).toBe(slot);
+    expect(inPanel(el, "publish")!.assignedSlot).toBe(slot);
     await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalledWith("menu-lunch"));
   });
 
@@ -9282,9 +9283,9 @@ describe("publishing", () => {
       getMenuPreview: vi.fn().mockResolvedValue(lunchPreview()),
     });
     const el = await mountPreview(client);
-    const schedule = panel(el).querySelector<HTMLElementTagNameMap["dashboard-menu-publications"]>(
-      "dashboard-menu-publications",
-    )!;
+    const schedule = panel(el).shadowRoot!.querySelector<
+      HTMLElementTagNameMap["dashboard-menu-publications"]
+    >("dashboard-menu-publications")!;
     expect(schedule.preview?.hash).toBe(LUNCH_HASH);
     client.getMenuPreview.mockRejectedValue({ code: "server.internal" });
     live.invalidate([{ type: "products" }]);
@@ -9639,7 +9640,9 @@ describe("publishing", () => {
       const [left, right] = panes();
       if (width === 1280) {
         expect(right!.left).toBeGreaterThanOrEqual(left!.right);
-        expect(Math.abs(right!.top - left!.top)).toBeLessThan(1);
+        expect(
+          Math.abs(right!.top - inPanel(el, "changes-column")!.getBoundingClientRect().top),
+        ).toBeLessThan(1);
       } else expect(right!.top).toBeGreaterThanOrEqual(left!.bottom);
       expect(inPanel(el, "publish")!.getBoundingClientRect().bottom).toBeLessThanOrEqual(left!.top);
       const selector = panel(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
@@ -10780,7 +10783,7 @@ describe("patching the live menu", () => {
     });
     const el = await mount(client, PREVIEW_PATH);
     const schedule = () =>
-      q(el, "dashboard-menu-preview")!.querySelector<
+      q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector<
         HTMLElementTagNameMap["dashboard-menu-publications"]
       >("dashboard-menu-publications")!;
     const version = (id: string) =>

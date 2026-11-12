@@ -10,7 +10,7 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   menuDocument,
-  mountWidget,
+  mountMenuPreview as mountWidget,
 } from "./test-helpers.js";
 
 const viewport = { width: window.innerWidth, height: window.innerHeight };

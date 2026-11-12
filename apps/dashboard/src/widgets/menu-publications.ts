@@ -190,10 +190,13 @@ export class MenuPublicationsPanel extends LitElement {
       /* The preview panel lets its text break anywhere, which would also let the table squeeze
          the pinned Actions heading mid-word. */
       :host {
-        display: grid;
-        gap: var(--wt-space-3);
+        display: block;
         min-width: 0;
         overflow-wrap: normal;
+      }
+      .content {
+        display: grid;
+        gap: var(--wt-space-3);
       }
       h2 {
         margin: 0;
@@ -211,6 +214,8 @@ export class MenuPublicationsPanel extends LitElement {
       }
       .schedule {
         display: flex;
+        align-items: start;
+        gap: var(--wt-space-2);
       }
       .intro {
         margin: 0 0 var(--wt-space-4);
@@ -236,7 +241,6 @@ export class MenuPublicationsPanel extends LitElement {
   @property({ type: Boolean }) blocked = false;
 
   @state() private answer: MenuPublicationsAnswer | null = null;
-  @state() private loading = true;
   @state() private readError: string | null = null;
   /** A Cancel waiting for its confirmation; a refused one stays open with its refusal. */
   @state() private cancelling: Edition | null = null;
@@ -298,6 +302,7 @@ export class MenuPublicationsPanel extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.tabIndex = -1;
     this.#follow();
   }
 
@@ -339,7 +344,6 @@ export class MenuPublicationsPanel extends LitElement {
   async #load(): Promise<void> {
     const menuId = this.menuId;
     this.#watching = menuId;
-    this.loading = true;
     this.readError = null;
     try {
       await this.#queries.watch("getMenuPublications", [menuId], (answer) => {
@@ -350,8 +354,6 @@ export class MenuPublicationsPanel extends LitElement {
       });
     } catch {
       // The query's error callback has already recorded the failure.
-    } finally {
-      if (menuId === this.menuId) this.loading = false;
     }
   }
 
@@ -394,8 +396,7 @@ export class MenuPublicationsPanel extends LitElement {
     this.cancelling = null;
     this.cancelError = null;
     requestAnimationFrame(() => {
-      if (this.#focusTarget?.isConnected) this.#focusTarget.focus();
-      else this.renderRoot.querySelector<HTMLElement>("h2")?.focus();
+      this.#returnFocus(this.#focusTarget);
     });
   }
 
@@ -418,10 +419,31 @@ export class MenuPublicationsPanel extends LitElement {
     } finally {
       this.busy = false;
     }
-    // The cancelled row loses its menu, so focus goes to the heading.
+    // The cancelled row loses its menu; the heading can also disappear after the read.
     this.#focusTarget = null;
     this.#close();
+    await this.#refreshAfterWrite();
+  }
+
+  #returnFocus(opener: HTMLElement | null = null): void {
+    const publish = this.renderRoot.querySelector("slot")?.assignedElements()[0] as
+      HTMLElement | undefined;
+    (opener?.isConnected
+      ? opener
+      : (this.renderRoot.querySelector<HTMLElement>("h2") ?? publish ?? this)
+    ).focus();
+  }
+
+  async #refreshAfterWrite(): Promise<void> {
+    const menuId = this.menuId;
     await this.#refresh();
+    await this.updateComplete;
+    if (
+      menuId === this.menuId &&
+      this.isConnected &&
+      this.ownerDocument.activeElement === this.ownerDocument.body
+    )
+      this.#returnFocus();
   }
 
   /** Not while the draft cannot be published, nor when it is the edition it would follow. */
@@ -495,7 +517,7 @@ export class MenuPublicationsPanel extends LitElement {
           ? this.#focusTarget
           : null
         : this.renderRoot.querySelector<HTMLElement>('[data-test="schedule-open"]');
-      (opener ?? this.renderRoot.querySelector<HTMLElement>("h2"))?.focus();
+      this.#returnFocus(opener);
     });
   }
 
@@ -603,7 +625,7 @@ export class MenuPublicationsPanel extends LitElement {
     this.#scope?.commit(submitted);
     this.#scheduleDialog().closeAfter("saved");
     this.#scheduleClosed();
-    await this.#refresh();
+    await this.#refreshAfterWrite();
   }
 
   async #placeRefusal(
@@ -883,53 +905,59 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   override render(): TemplateResult {
-    return html`<h2 tabindex="-1">${t("menu_publications.heading")}</h2>
-      ${
-        this.#canSchedule()
-          ? html`<div class="schedule">
-              <wt-button
-                variant="secondary"
-                data-test="schedule-open"
-                .disabled=${this.blocked}
-                @click=${() => {
-                  if (!this.blocked) this.#openSchedule(null);
-                }}
-                >${t("menu_publications.schedule")}</wt-button
-              >
-            </div>`
-          : nothing
-      }
-      ${
-        this.lateRefusal
-          ? html`<p class="late-refusal" role="alert" data-test="late-refusal">
-              ${t("menu_publications.late_refusal")}
-            </p>`
-          : nothing
-      }
-      <wt-data-table
-        data-test="editions"
-        aria-label=${t("menu_publications.heading")}
-        noMatchesMessage=${tableNoMatches()}
-        .rows=${this.answer?.editions.filter((edition) => edition.state === "queued") ?? []}
-        .columns=${this.#columns()}
-        .rowKey=${(edition: Edition) => edition.versionId}
-        .loading=${this.loading}
-        .loadingMessage=${t("menu_publications.loading")}
-        .emptyMessage=${t("menu_publications.empty")}
-        .errorMessage=${this.readError === null ? "" : codeMessage(this.readError)}
-      ></wt-data-table>
-      ${
-        this.readError === null
-          ? nothing
-          : html`<div class="retry">
-              <wt-button
-                data-test="editions-retry"
-                variant="secondary"
-                @click=${() => void this.#load()}
-                >${t("menus.retry")}</wt-button
-              >
-            </div>`
-      }
+    const queued = this.answer?.editions.filter((edition) => edition.state === "queued") ?? [];
+    return html`<div class="content">
+        <div class="schedule">
+          ${
+            this.#canSchedule()
+              ? html`<wt-button
+                  variant="secondary"
+                  data-test="schedule-open"
+                  .disabled=${this.blocked}
+                  @click=${() => {
+                    if (!this.blocked) this.#openSchedule(null);
+                  }}
+                  >${t("menu_publications.schedule")}</wt-button
+                >`
+              : nothing
+          }
+          <slot></slot>
+        </div>
+        <slot name="publish-note"></slot>
+        ${
+          this.lateRefusal
+            ? html`<p class="late-refusal" role="alert" data-test="late-refusal">
+                ${t("menu_publications.late_refusal")}
+              </p>`
+            : nothing
+        }
+        ${
+          queued.length === 0
+            ? nothing
+            : html`<h2 tabindex="-1">${t("menu_publications.heading")}</h2>
+                <wt-data-table
+                  data-test="editions"
+                  aria-label=${t("menu_publications.heading")}
+                  noMatchesMessage=${tableNoMatches()}
+                  .rows=${queued}
+                  .columns=${this.#columns()}
+                  .rowKey=${(edition: Edition) => edition.versionId}
+                ></wt-data-table>`
+        }
+        ${this.readError === null ? nothing : html`<p class="late-refusal" role="alert" data-test="editions-error">${codeMessage(this.readError)}</p>`}
+        ${
+          this.readError === null
+            ? nothing
+            : html`<div class="retry">
+                <wt-button
+                  data-test="editions-retry"
+                  variant="secondary"
+                  @click=${() => void this.#load()}
+                  >${t("menus.retry")}</wt-button
+                >
+              </div>`
+        }
+      </div>
       ${this.#renderDialog()} ${this.#renderSchedule()}
       ${
         this.confirming === null

@@ -3,7 +3,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
+import type { DashboardApi, DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 declare module "vitest/browser" {
@@ -59,6 +59,24 @@ export async function mountWidget<T extends HTMLElement>(
   host.appendChild(el);
   await (el as T & { updateComplete: Promise<unknown> }).updateComplete;
   return { el, host };
+}
+
+export function mountMenuPreview<T extends HTMLElement>(
+  tag: string,
+  props: Partial<T>,
+  theme?: Theme,
+) {
+  return mountWidget<T>(
+    tag,
+    {
+      menuId: "menu-fixture",
+      api: {
+        getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),
+      } as unknown as DashboardApi,
+      ...props,
+    },
+    theme,
+  );
 }
 
 /**

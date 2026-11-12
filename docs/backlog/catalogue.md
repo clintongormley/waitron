@@ -586,24 +586,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
   appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
   Left out of A689-21 as wider than its plan's Decision 8.
 
-## A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions" shows only when something is scheduled
-
-**A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
-shows only when something is scheduled** (owner, 2026-10-12). Today "Publish now" is on its own
-line, then a "Scheduled versions" heading, the "Publish later" button and a table that says "No
-versions are scheduled." Wanted: the two
-buttons on one line, Publish later first; the heading and table drawn only while at least one
-version is queued. The two buttons live in different widgets: Publish now in
-`apps/dashboard/src/widgets/menu-preview.ts` (`#renderPublish`), Publish later with the heading,
-table and schedule dialog in `apps/dashboard/src/widgets/menu-publications.ts`, which the menus
-screen slots into the preview's changes pane — so putting them side by side needs a choice of
-which widget draws the row; the implementer picks one and says why. Points to settle in the
-change: each button still shows on its own when the other does not (Publish later hides on a
-clash or when the draft matches the newest live or queued version; Publish now hides when the
-draft matches live); a failed read of the schedule still shows its message and Retry rather than
-hiding; and closing the schedule dialog or cancelling the last queued version currently sends
-focus to the "Scheduled versions" heading, which may no longer be there.
-
 ## Translate all: a job the box ends itself is marked released without a call to Cloud, and Cloud can still hold it
 
 - The box ends a job without asking Cloud when the job's own 24-hour

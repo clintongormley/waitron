@@ -11,7 +11,7 @@ import {
   documentProduct,
   documentSection,
   menuDocument,
-  mountWidget,
+  mountMenuPreview as mountWidget,
 } from "./test-helpers.js";
 
 beforeEach(() => {

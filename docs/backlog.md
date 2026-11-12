@@ -527,11 +527,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   N4).
   [Detail](backlog/catalogue.md#two-price-rules-disagree-about-a-value-that-is-not-negative)
 
-- **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
-  shows only when something is scheduled** (owner, 2026-10-12). Wanted: the two buttons on one
-  line, Publish later first; the heading and table drawn only while at least one version is queued.
-  [Detail](backlog/catalogue.md#a547--preview-tab-publish-later-sits-to-the-left-of-publish-now-and-scheduled-versions-shows-only-when-something-is-scheduled)
-
 - **Menu home tab** (bundle of 4, size M). [Detail](backlog/catalogue.md#bundle-menu-home-tab)
 
 - **Tree drag shared** (bundle of 2, size M). [Detail](backlog/catalogue.md#bundle-tree-drag-shared)

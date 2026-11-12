@@ -3334,8 +3334,6 @@ export const en = {
   "menu_publications.state_activated": "Activated",
   "menu_publications.time": "{date}, {time}",
   "menu_publications.repeated_time": "{time} (UTC{offset})",
-  "menu_publications.loading": "Loading the scheduled versions…",
-  "menu_publications.empty": "No versions are scheduled.",
   "menu_publications.cancel": "Cancel this version",
   "menu_publications.cancel_heading": "Cancel a scheduled version",
   "menu_publications.cancel_question":
@@ -7303,8 +7301,6 @@ export const es: Record<StringKey, string> = {
   "menu_publications.state_activated": "Activada",
   "menu_publications.time": "{date}, {time}",
   "menu_publications.repeated_time": "{time} (UTC{offset})",
-  "menu_publications.loading": "Cargando las versiones programadas…",
-  "menu_publications.empty": "No hay versiones programadas.",
   "menu_publications.cancel": "Cancelar esta versión",
   "menu_publications.cancel_heading": "Cancelar una versión programada",
   "menu_publications.cancel_question":

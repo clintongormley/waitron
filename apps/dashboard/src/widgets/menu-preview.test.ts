@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
-import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
+import type { DashboardApi, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
@@ -11,7 +11,7 @@ import {
   documentProduct,
   documentSection,
   menuDocument,
-  mountWidget,
+  mountMenuPreview as mountWidget,
 } from "./test-helpers.js";
 
 // The wording is asserted as a person reads it, in English unless a case says otherwise.
@@ -72,9 +72,79 @@ async function mount(props: Partial<MenuPreviewPanel>) {
   return (await mountIn(props)).el;
 }
 
+it.each([
+  [1280, "en"],
+  [1280, "es-ES"],
+  [390, "en"],
+  [390, "es-ES"],
+] as const)(
+  "A547 keeps Publish later before Publish now on one line at %i px in %s",
+  async (width, language) => {
+    const viewport = { width: innerWidth, height: innerHeight };
+    onTestFinished(() => page.viewport(viewport.width, viewport.height));
+    await page.viewport(width, 900);
+    setLocale(language);
+    const el = await mount({
+      menuId: "menu-lunch",
+      api: {
+        getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),
+      } as unknown as DashboardApi,
+    });
+    const publications = el.shadowRoot!.querySelector("dashboard-menu-publications")!;
+    expect(publications).not.toBeNull();
+    await expect
+      .poll(() => publications.shadowRoot?.querySelector('[data-test="schedule-open"]') ?? null)
+      .not.toBeNull();
+    const later = publications
+      .shadowRoot!.querySelector<HTMLElement>('[data-test="schedule-open"]')!
+      .getBoundingClientRect();
+    const now = q(el, '[data-test="publish"]')!.getBoundingClientRect();
+    expect(later.width).toBeGreaterThan(0);
+    expect(now.width).toBeGreaterThan(0);
+    expect(later.right).toBeLessThanOrEqual(now.left);
+    expect(later.top).toBeLessThan(now.bottom);
+    expect(now.top).toBeLessThan(later.bottom);
+    expect(
+      q(el, '[data-test="changes-pane"]')!.getBoundingClientRect().top - now.bottom,
+    ).toBeCloseTo(parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3")), 0);
+    expect(publications.closest('[data-test="changes-pane"]')).toBeNull();
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+  },
+);
+
 function q<T extends HTMLElement = HTMLElement>(el: MenuPreviewPanel, selector: string): T | null {
   return el.shadowRoot!.querySelector<T>(selector);
 }
+
+it.each(["now", "later"] as const)("A547 shows Publish %s on its own", async (action) => {
+  const el = await mount({
+    preview: { ...preview([]), hash: action === "now" ? NEW_HASH : LIVE_HASH },
+    api: {
+      getMenuPublications: async () => ({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: [
+          {
+            versionId: "queued",
+            number: 3,
+            state: "queued",
+            contentHash: NEW_HASH,
+            activatesAt: "2030-01-01T12:00:00Z",
+            queuedAt: PUBLISHED_AT,
+            cancelledAt: null,
+            local: { date: "2030-01-01", time: "13:00", offset: "+01:00", repeated: false },
+          },
+        ],
+      }),
+    } as unknown as DashboardApi,
+  });
+  const publications = q(el, "dashboard-menu-publications")!;
+  await expect.poll(() => publications.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+  const now = q(el, '[data-test="publish"]');
+  expect((now?.getBoundingClientRect().width ?? 0) > 0).toBe(action === "now");
+  const later = publications.shadowRoot!.querySelector('[data-test="schedule-open"]');
+  expect((later?.getBoundingClientRect().width ?? 0) > 0).toBe(action === "later");
+});
 
 function text(node: Element | null): string {
   return (node?.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -1141,7 +1211,9 @@ it.each([
         expect(Math.abs(right.left - left.left)).toBeLessThan(1);
       } else {
         expect(right.left).toBeGreaterThanOrEqual(left.right);
-        expect(Math.abs(right.top - left.top)).toBeLessThan(1);
+        expect(
+          Math.abs(right.top - q(el, '[data-test="changes-column"]')!.getBoundingClientRect().top),
+        ).toBeLessThan(1);
       }
       expect(documentPane!.contains(q(el, '[data-test="document"]'))).toBe(true);
       expect(changesPane!.contains(q(el, '[data-test="changes"]'))).toBe(true);
@@ -1274,13 +1346,9 @@ it("A498 places schedules over changes and keeps document and change controls on
     ]),
   });
   el.style.width = "1200px";
-  const schedules = document.createElement("div");
-  schedules.slot = "schedule";
-  schedules.textContent = "Scheduled versions";
-  el.append(schedules);
-  await el.updateComplete;
-  const slot = el.shadowRoot!.querySelector('slot[name="schedule"]')!;
-  expect(slot.closest('[data-test="changes-pane"]')).not.toBeNull();
+  const schedules = el.shadowRoot!.querySelector("dashboard-menu-publications")!;
+  expect(schedules.closest('[data-test="changes-column"]')).not.toBeNull();
+  expect(schedules.closest('[data-test="changes-pane"]')).toBeNull();
   const heading = q(el, "#changes-heading")!.getBoundingClientRect();
   const showAll = q(el, '[data-test="show-all-changes"]')!.getBoundingClientRect();
   expect(showAll.top).toBeLessThan(heading.bottom);

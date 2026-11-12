@@ -3,7 +3,12 @@ import { page } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { MenuPreview } from "../api/client.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
-import { cleanupWidgets, documentProduct, menuDocument, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  documentProduct,
+  menuDocument,
+  mountMenuPreview as mountWidget,
+} from "./test-helpers.js";
 
 let locale: string;
 beforeEach(() => {
@@ -53,7 +58,9 @@ it.each([
     const b = menu.getBoundingClientRect();
     if (width === 1280) {
       expect(a.right).toBeLessThanOrEqual(b.left);
-      expect(a.top).toBe(b.top);
+      expect(
+        el.shadowRoot!.querySelector('[data-test="changes-column"]')!.getBoundingClientRect().top,
+      ).toBe(b.top);
     } else {
       expect(a.bottom).toBeLessThanOrEqual(b.top);
       expect(a.left).toBe(b.left);
