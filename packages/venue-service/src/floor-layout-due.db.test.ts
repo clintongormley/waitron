@@ -5,7 +5,6 @@ import {
   CORE_MIGRATIONS,
   departmentFloorPlanSets,
   floorPlanSets,
-  floorZones,
   menuPeriods,
   withTransaction,
   type Transaction,

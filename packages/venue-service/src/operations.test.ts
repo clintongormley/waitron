@@ -1342,7 +1342,7 @@ describe("service zone name refusals", () => {
 });
 
 describe("departments", () => {
-  it("repairs a missing zone sale policy when configuring its existing assignment", async () => {
+  it("keeps inherited sale rules when configuring its existing assignment", async () => {
     await seedLocation("Repair zone policy");
     await scoped(async (tx) => {
       const department = await createDepartment(tx, { name: "Dining", orderStart: "table" });
