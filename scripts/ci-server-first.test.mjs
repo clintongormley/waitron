@@ -66,7 +66,13 @@ function route(
     },
     matrix: { shard: 1 },
     needs: { changes: { outputs: { server_route: health } } },
-    fromJSON: JSON.parse,
+    fromJSON: (text) => {
+      const value = JSON.parse(text);
+      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+      // GitHub's missing JSON properties compare numerically as zero and serialize as null.
+      const missing = { valueOf: () => 0, toJSON: () => null };
+      return new Proxy(value, { get: (object, key) => (key in object ? object[key] : missing) });
+    },
     toJSON: JSON.stringify,
     format: (template, ...values) =>
       template.replace(/\{(\d+)\}/g, (_, index) => values[Number(index)]),
@@ -76,6 +82,10 @@ function route(
     : expression;
 }
 describe("server-first workflow routing", () => {
+  it("uses GitHub's missing JSON numeric comparison and serialization", () => {
+    expect(route("${{ fromJSON('{}').missing == 0 }}")).toBe(true);
+    expect(route("${{ toJSON(fromJSON('{}').missing) }}")).toBe("null");
+  });
   it.each([
     [{ mode: "hosted" }, "hosted"],
     [{ headRepoName: "foreign/waitron" }, "hosted"],
