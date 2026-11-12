@@ -47,6 +47,7 @@ import {
   resetZone,
   todayBusinessDay,
 } from "./floor-today-store.js";
+import { splitOff } from "./floor-today-split-group.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
 import { splitJoinedTable } from "./floor-today-split.js";
@@ -2542,3 +2543,113 @@ describe("resets onto a set's layout", () => {
     expect(await liveTablesOf(zoneId)).toHaveLength(1);
   });
 });
+
+it("a saved joined table resets to one named group of its real tables", async () => {
+  const { zoneId, table, master } = await plannedZone(
+    v,
+    [
+      { key: "t2", label: "Table 2", seats: 2, place: null },
+      { key: "t10", label: "Table 10", seats: 4, place: null },
+      {
+        key: "long",
+        label: "Long table",
+        seats: 5,
+        place: { x: 20, y: 30, width: 12, height: 8 },
+        partKeys: ["t10", "t2"],
+      },
+    ],
+    NOW,
+  );
+  await giveKeptSize(v, master.t2!, { width: 4, height: 6 });
+  await reset(zoneId);
+  const live = await liveTablesOf(zoneId);
+  expect(live.map((t) => t.planTableId).sort()).toEqual([master.t2, master.t10].sort());
+  const group = await mergeOf(v, table.t2!);
+  expect(group).not.toBeNull();
+  const [saved] = await inTx(v, (tx) =>
+    tx.select().from(floorPlanTables).where(eq(floorPlanTables.id, master.long!)),
+  );
+  expect(
+    await inTx(v, (tx) =>
+      tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, zoneId)),
+    ),
+  ).toEqual([expect.objectContaining({ id: group!.joinId, name: saved!.label, seats: 5 })]);
+  const members = await inTx(v, (tx) =>
+    tx.select().from(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, group!.joinId)),
+  );
+  expect(
+    members
+      .map((m) => ({ tableId: m.tableId, x: m.beforeX, y: m.beforeY, rotation: m.beforeRotation }))
+      .sort((a, b) => a.x - b.x),
+  ).toEqual([
+    { tableId: table.t2, x: 20, y: 31, rotation: 0 },
+    { tableId: table.t10, x: 24, y: 30, rotation: 0 },
+  ]);
+  expect(await todayRow(table.t2!)).toMatchObject({ x: 20, y: 31, width: 4, height: 6 });
+  expect(await todayRow(table.t10!)).toMatchObject({ x: 24, y: 30, width: 8, height: 8 });
+  const revision = (await todayZone(zoneId))!.revision;
+  await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
+  expect(await mergeOf(v, table.t2!)).toEqual(group);
+  expect((await todayZone(zoneId))!.revision).toBe(revision);
+  await inTx(v, (tx) =>
+    splitOff(tx, v.cfg, NONE, NOW, {
+      tableId: table.t2!,
+      partIds: [table.t2!],
+      seats: null,
+      expectedParties: [],
+    }),
+  );
+  expect(await mergeOf(v, table.t2!)).toBeNull();
+  expect(await todayRow(table.t2!)).toMatchObject({ x: 20, y: 31, rotation: 0 });
+});
+
+it.each(["guests", "another group"] as const)(
+  "a saved group waits for a member held by %s",
+  async (heldBy) => {
+    const { zoneId, table, master } = await plannedZone(
+      v,
+      [
+        { key: "t1", label: "Waiting 1", place: { x: 0, y: 0 } },
+        { key: "t2", label: "Waiting 2", place: { x: 20, y: 0 } },
+        { key: "t3", label: "Waiting 3", place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
+    const partyId = heldBy === "guests" ? (await seat(v, table.t1!)).partyId : null;
+    if (heldBy === "another group")
+      await inTx(v, (tx) =>
+        writeMerge(tx, v.cfg, {
+          movingId: table.t1!,
+          targetId: table.t3!,
+          side: "right",
+          seats: 8,
+          free: true,
+        }),
+      );
+    const other = await mergeOf(v, table.t1!);
+    await resave(zoneId, (tables) => [
+      ...tables.map((t) => (t.id === master.t3 ? t : { ...t, placement: null })),
+      {
+        key: "long",
+        label: `Waiting group ${floorLabelSuffix()}`,
+        seats: 6,
+        fixed: false,
+        placement: placed(20),
+        partKeys: [master.t1!, master.t2!],
+      },
+    ]);
+    await reset(zoneId);
+    expect(await mergeOf(v, table.t2!)).toBeNull();
+    expect(await mergeOf(v, table.t1!)).toEqual(other);
+    await catchUp(zoneId);
+    expect(await mergeOf(v, table.t1!)).toEqual(other);
+    if (partyId !== null) {
+      await finish(partyId);
+      await catchUp(zoneId);
+      await inTx(v, (tx) => markMoved(tx, NONE, table.t1!, NOW));
+      expect((await mergeOf(v, table.t1!))!.members.map((m) => m.tableId).sort()).toEqual(
+        [table.t1!, table.t2!].sort(),
+      );
+    }
+  },
+);

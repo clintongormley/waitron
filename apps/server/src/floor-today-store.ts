@@ -37,7 +37,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { venueMomentAt } from "@waitron/reporting";
-import { AppError, NEW_TABLE_SIZE, groupStep, shortNameKey } from "@waitron/shared";
+import { AppError, NEW_TABLE_SIZE, compareLabels, groupStep, shortNameKey } from "@waitron/shared";
 import {
   blockedMoves,
   movesTable,
@@ -50,7 +50,7 @@ import {
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
-import { blocksPlaceSql } from "./joined-split-layout.js";
+import { blocksPlaceSql, partPlaces } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
@@ -223,7 +223,26 @@ async function resetZoneFor(
     await tx.update(floorTodayZones).set(record).where(eq(floorTodayZones.id, today.id));
   }
 
-  const master = placedAsRead(await layoutTables(tx, zoneId, layout?.id ?? null));
+  const recorded = await layoutTables(tx, zoneId, layout?.id ?? null);
+  const master = placedAsRead(recorded);
+  const sizeOf = new Map(recorded.map((row) => [row.id, row.placement ?? row.keptSize]));
+  const joinedIds = new Set(master.flatMap((row) => (row.partOf === null ? [] : [row.partOf])));
+  const slots = new Map<string, Placement>();
+  for (const joined of master.filter((row) => joinedIds.has(row.id) && row.placement !== null)) {
+    const parts = master
+      .filter((row) => row.partOf === joined.id)
+      .sort((a, b) => compareLabels(a.label, b.label));
+    const places = partPlaces(
+      joined.placement!,
+      parts.map((row) => ({
+        tableId: row.id,
+        width: sizeOf.get(row.id)?.width ?? NEW_TABLE_SIZE,
+        height: sizeOf.get(row.id)?.height ?? NEW_TABLE_SIZE,
+      })),
+      0,
+    );
+    for (const [index, part] of parts.entries()) slots.set(part.id, places[index]!);
+  }
   const live = await zoneTables(tx, zoneId);
   const targets = targetsFromMaster(
     master.map((row) => ({
@@ -232,9 +251,10 @@ async function resetZoneFor(
       shortName: row.shortName,
       seats: row.seats,
       fixed: row.fixed,
-      placement: row.placement,
+      placement: slots.get(row.id) ?? row.placement,
     })),
     live,
+    joinedIds,
   );
   await tx
     .delete(floorResetTableParts)
@@ -403,6 +423,7 @@ async function catchUpPass(
   }
   const rowOf = new Map<Target, (typeof rows)[number]>();
   for (const row of rows) {
+    if (groupOf.has(row.id)) continue;
     const target: Target = {
       tableId: row.tableId,
       planTableId: row.planTableId,
@@ -493,7 +514,17 @@ async function catchUpPass(
       )
     ).keys(),
   );
-  const waiting = new Set([...held, ...refused, ...clearing]);
+  const otherGroup = groups.flatMap((group) => {
+    const ids = new Set(group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])));
+    const joins = new Set(merges.filter((m) => ids.has(m.tableId)).map((m) => m.joinId));
+    return [...joins].some((joinId) => {
+      const members = merges.filter((m) => m.joinId === joinId);
+      return members.length !== ids.size || members.some((m) => !ids.has(m.tableId));
+    })
+      ? [...ids]
+      : [];
+  });
+  const waiting = new Set([...held, ...refused, ...clearing, ...otherGroup]);
   const foodComing = await foodComingTo(
     tx,
     inZone.flatMap((table) => (table.splitOffFrom === null ? [] : [table.id, table.splitOffFrom])),
@@ -773,6 +804,39 @@ async function catchUpPass(
         tableId: createdIds.get(target) ?? row.tableId,
       })
       .where(eq(floorResetTables.id, row.id));
+  }
+  for (const [joinedId, group] of groupOf) {
+    const joined = byId.get(joinedId)!;
+    const parts = await tx
+      .select()
+      .from(floorResetTables)
+      .where(
+        inArray(
+          floorResetTables.id,
+          group.rows.filter((r) => r.id !== joinedId).map((r) => r.id),
+        ),
+      );
+    if (parts.some((row) => row.pending || row.tableId === null)) continue;
+    if (joined.x !== null) {
+      const [merge] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId, name: joined.label, seats: joined.seats! })
+        .returning({ id: floorTodayJoins.id });
+      await tx.insert(floorTodayJoinTables).values(
+        parts.map((row) => ({
+          joinId: merge!.id,
+          tableId: row.tableId!,
+          beforeX: row.x!,
+          beforeY: row.y!,
+          beforeRotation: row.rotation!,
+        })),
+      );
+    }
+    await tx
+      .update(floorResetTables)
+      .set({ pending: false, placed: true, readyToMove: false })
+      .where(eq(floorResetTables.id, joinedId));
+    changed = true;
   }
   return changed;
 }

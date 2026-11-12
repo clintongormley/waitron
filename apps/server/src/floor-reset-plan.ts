@@ -240,12 +240,16 @@ export function targetsFromMaster(
     planTableId: string | null;
     shortName: string | null;
   }[],
+  joinedIds: ReadonlySet<string> = new Set(),
 ): Target[] {
   const byId = new Map(master.map((table) => [table.id, table]));
   const followed = new Set<string>();
   const targets: Target[] = [];
   for (const table of live) {
-    const source = table.planTableId === null ? undefined : byId.get(table.planTableId);
+    const source =
+      table.planTableId === null || joinedIds.has(table.planTableId)
+        ? undefined
+        : byId.get(table.planTableId);
     if (source) {
       followed.add(source.id);
       const { label, shortName, seats, fixed, placement } = source;
