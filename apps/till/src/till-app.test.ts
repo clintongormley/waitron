@@ -2094,7 +2094,7 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("en-GB");
   });
 
-  it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and starts the poll once for a signed-in till", async () => {
+  it("never starts the equipment poll or reads equipment on an enrolled kds_station device, and for a till starts the PIN-screen poll, then a separate signed-in poll", async () => {
     const start = vi.spyOn(EquipmentPoll.prototype, "start");
     try {
       const { el: kds } = await mountApp({
@@ -2136,8 +2136,13 @@ describe("till-app", () => {
       kds.remove();
 
       const { el } = await mountApp();
-      await toCounter(el);
+      // The PIN-screen poll starts once the device is proved, before anyone signs in.
+      await vi.waitFor(() => expect(lock(el)?.deviceId).toBeDefined());
       expect(start).toHaveBeenCalledTimes(1);
+      const pinScreenPoll = start.mock.contexts[0];
+      await toCounter(el);
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(start.mock.contexts[1]).not.toBe(pinScreenPoll);
     } finally {
       start.mockRestore();
     }
@@ -20336,7 +20341,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(toast(el).open).toBe(false);
   });
 
-  it("reads the equipment on no tick while nobody is signed in, and makes no activity of its own", async () => {
+  it("reads the equipment once a tick at the PIN screen and once a tick signed in, and makes no activity of its own", async () => {
     const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOn("held", R1));
     const sessionActivity = fakeSessionActivity();
     currentApi = stubApi({ getDeviceEquipment });
@@ -20344,21 +20349,24 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
       api: currentApi,
       sessionActivity: sessionActivity as never,
     });
-    await flush(el);
+    await vi.waitFor(() => expect(lock(el)?.deviceId).toBeDefined());
+    const atPinScreen = sessionActivity.noteInteraction.mock.calls.length;
     await poll(el);
-    expect(getDeviceEquipment).not.toHaveBeenCalled();
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(sessionActivity.noteInteraction.mock.calls.length).toBe(atPinScreen);
 
     await toCounter(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
     const interactions = sessionActivity.noteInteraction.mock.calls.length;
     await poll(el);
     await poll(el);
-    expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(4);
     expect(sessionActivity.noteInteraction.mock.calls.length).toBe(interactions);
 
     emit(shell(el)!, "logout");
     await flush(el);
     await poll(el);
-    expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(5);
   });
 
   it("after choosing another reader in the equipment dialog, the pay screen pays on the new one without a reload", async () => {

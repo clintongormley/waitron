@@ -2111,6 +2111,12 @@ carries from one session to the next. A kitchen display in device mode signs no 
 equipment poll and draws no strip. Pinned by `apps/till/src/till-app.notices.test.ts`, under "the
 staff notices an open till keeps", and `apps/till/src/state/staff-notices.test.ts`. The printer source is pinned by
 `apps/server/src/box-staff-notices.test.ts` and `apps/server/src/device-equipment-api.test.ts`.
+At the PIN screen a second `EquipmentPoll` (`#pinScreenPoll`) reads every 15 seconds with nobody
+signed in, not through `#readDeviceEquipment`. `waitingStartNotice`
+(`apps/till/src/state/staff-notices.ts`) keeps only a well-formed `clock.unconfirmed` from
+`box-clock`, and keeps it while `box-clock` is unavailable; it is drawn as one line without its
+action, and cleared on `device.unauthorized`, at sign-in and at boot. Pinned under "a till or
+handheld at the PIN screen" in `apps/till/src/till-app.notices.test.ts`.
 
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,
 `apps/till/src/i18n/staff-notices.ts`) from `staff_notice.<code>` in

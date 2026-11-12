@@ -572,9 +572,10 @@ resueltas en Estado del equipo.**
 
 Un equipo no puede saber por sí solo que su reloj está mal, así que lo compara con otros relojes.
 Las cajas registradoras y los terminales de camarero envían su propia hora al equipo cada 15
-segundos, más o menos, mientras hay alguien con la sesión iniciada en ellos. Las pantallas de cocina
-no envían la suya. Una caja o un terminal que funciona en el propio equipo no cuenta, y los
-dispositivos con una misma dirección de red cuentan como uno.
+segundos, más o menos, mientras hay alguien con la sesión iniciada en ellos o mientras muestran la
+pantalla de inicio de sesión. Las pantallas de cocina no envían la suya. Una caja o un terminal que
+funciona en el propio equipo no cuenta, y los dispositivos con una misma dirección de red cuentan
+como uno.
 
 Cuando dos o más dispositivos coinciden entre sí en que el reloj del equipo va desviado más de un
 minuto, la campana avisa a las personas que pueden gestionar el sistema, estén parados o no los

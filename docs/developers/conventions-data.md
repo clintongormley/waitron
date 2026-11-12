@@ -4623,8 +4623,9 @@ How it moves (plan D3):
   devices at different network addresses, each within 5 seconds (`START_CLOCK_MARGIN_MS`) of the
   box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
   `devices` and their ids. They set nothing. A till or handheld sends its clock with each
-  equipment read, every 15 seconds while someone is signed in on it, and the store keeps a reading
-  for five minutes (plan R11), so in PR 1a only signed-in devices count.
+  equipment read, every 15 seconds while it shows the PIN screen or someone is signed in on it, and
+  the store keeps a reading for five minutes (plan R11). Tablets at the PIN screen count: two
+  switched on and connected confirm the box's time with nobody signed in (PR 1c).
 - **A person on a till** (below) confirms `by_person`.
 - **Back to waiting.** A clock set that moved the clock by more than a second but could not be
   verified (the host gave no successful answer, or the clock did not land within 2 seconds of the target) sends a start that is
@@ -4661,7 +4662,7 @@ production enables none of them (plan R7, run).
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
 staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
 devices to connect and agree with its time (… of 2 so far)", with “Check the time”, whatever the
-start-up window and AEAT say. The count shows at most 1, since two confirm at the next look. While
+start-up window and AEAT say. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
 the start waits, the challenge needs no stop and asks neither the start-up window nor AEAT; it
 answers `keepOffered: true` unless the clock-behind stop or the before-28-10-2024 stop holds. The
 till's profile and the person are still checked. The confirm then takes one of three paths:
@@ -6412,7 +6413,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   under it, readings stay within a minute of the latest record written since.** Sources: the box's
   time service; during the stop, AEAT and two agreeing devices at different addresses (not while the
   stop found at start-up lasts); while a start waits, two devices at different addresses within 5
-  seconds, signed in, which confirm and set nothing; a Box administration holder's own device; or a till's time
+  seconds, at the PIN screen or signed in, which confirm and set nothing; a Box administration holder's own device; or a till's time
   confirmed on it by a holder of Box administration at any time or, by a staff member signed in on it, while the
   start waits for its time, during a stop before the internet confirms that start, or during a stop
   found at start-up once AEAT has not answered or cannot be asked (owner, 2026-10-31; 2026-11-10); never a box device outside development. Guards:

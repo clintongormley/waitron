@@ -2,7 +2,7 @@ import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection
 import { liveGate } from "./live-gate.js";
 import type { DeviceEquipment } from "../api/client.js";
 
-/** How often a signed-in till reads its equipment, so it learns when another device took an item. */
+/** How often a till or handheld reads its equipment. */
 const POLL_MS = 15_000;
 
 /** Longer than {@link POLL_MS}, so a slow server's answer still lands, and due well before the tick
@@ -15,6 +15,8 @@ export interface EquipmentPollOptions<T = DeviceEquipment> {
   live?(): TillLiveConnection | undefined;
   read(signal: AbortSignal): Promise<T>;
   onEquipment(equipment: T): void;
+  /** Called when the poll stops on `device.unauthorized`. */
+  onRefused?(): void;
 }
 
 /**
@@ -66,7 +68,10 @@ export class EquipmentPoll<T = DeviceEquipment> {
       this.#options.onEquipment(equipment);
     } catch (error) {
       if (read.signal.aborted || request < this.#applied) return;
-      if ((error as { code?: string } | undefined)?.code === "device.unauthorized") this.stop();
+      if ((error as { code?: string } | undefined)?.code === "device.unauthorized") {
+        this.stop();
+        this.#options.onRefused?.();
+      }
     } finally {
       clearTimeout(limit);
       this.#reads.delete(read);

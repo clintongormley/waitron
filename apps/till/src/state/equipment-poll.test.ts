@@ -127,6 +127,52 @@ describe("EquipmentPoll", () => {
     expect(read).toHaveBeenCalledOnce();
   });
 
+  it("tells onRefused once when a read is refused device.unauthorized", async () => {
+    const { read, reads } = pendingRead();
+    const onRefused = vi.fn();
+    const poll = new EquipmentPoll({ read, onEquipment: vi.fn(), onRefused });
+    poll.start();
+    vi.advanceTimersByTime(15_000);
+    reads[0]!.fail({ code: "device.unauthorized", status: 401 });
+    await settle();
+    expect(onRefused).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(60_000);
+    expect(onRefused).toHaveBeenCalledOnce();
+  });
+
+  it("does not tell onRefused of another failure, a read cancelled by a stop, or an overtaken read", async () => {
+    const onRefused = vi.fn();
+    const other = pendingRead();
+    const failing = new EquipmentPoll({ read: other.read, onEquipment: vi.fn(), onRefused });
+    failing.start();
+    vi.advanceTimersByTime(15_000);
+    other.reads[0]!.fail(new TypeError("Failed to fetch"));
+    await settle();
+    failing.stop();
+
+    const cancelled = pendingRead();
+    const restarted = new EquipmentPoll({ read: cancelled.read, onEquipment: vi.fn(), onRefused });
+    restarted.start();
+    vi.advanceTimersByTime(15_000);
+    restarted.stop();
+    restarted.start();
+    cancelled.reads[0]!.fail({ code: "device.unauthorized", status: 401 });
+    await settle();
+    restarted.stop();
+
+    const overtaken = pendingRead();
+    const outrun = new EquipmentPoll({ read: overtaken.read, onEquipment: vi.fn(), onRefused });
+    outrun.start();
+    vi.advanceTimersByTime(30_000);
+    overtaken.reads[1]!.answer(equipment("R1"));
+    await settle();
+    overtaken.reads[0]!.fail({ code: "device.unauthorized", status: 401 });
+    await settle();
+    outrun.stop();
+
+    expect(onRefused).not.toHaveBeenCalled();
+  });
+
   it("keeps polling after any other failure", async () => {
     const { read, reads } = pendingRead();
     const poll = new EquipmentPoll({ read, onEquipment: vi.fn() });

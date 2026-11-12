@@ -489,3 +489,140 @@ describe("the open notice list beside an open order", () => {
     expect(order.getBoundingClientRect().top).toBeGreaterThanOrEqual(listBox.bottom);
   });
 });
+
+const UNCONFIRMED: StaffNotice = {
+  owner: "box-clock",
+  key: "clock.unconfirmed",
+  code: "clock.unconfirmed",
+  severity: "error",
+  params: { agreed: 1 },
+};
+
+function clockLine(el: TillApp): string | null {
+  const line = el
+    .shadowRoot!.querySelector("till-lock-screen")
+    ?.shadowRoot?.querySelector("[data-clock-notice]");
+  return line === null || line === undefined ? null : line.textContent!.replace(/\s+/g, " ").trim();
+}
+
+/** Mounted, with the device proved: its identity names the PIN screen's heading. */
+async function mountAtPin(getDeviceEquipment: ReturnType<typeof vi.fn>) {
+  const mounted = await mountEquipmentApp({ getDeviceEquipment });
+  await vi.waitFor(() =>
+    expect(
+      mounted.el.shadowRoot!.querySelector("till-lock-screen")!.shadowRoot!.textContent,
+    ).toContain("Terrace handheld"),
+  );
+  return mounted;
+}
+
+describe("a till or handheld at the PIN screen", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] }));
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanupWidgets();
+  });
+
+  it("reads its equipment every 15 s, so the server hears its clock with nobody signed in", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await settle(el);
+    expect(getDeviceEquipment).not.toHaveBeenCalled();
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(getDeviceEquipment).toHaveBeenLastCalledWith({ signal: expect.any(AbortSignal) });
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads once a tick after sign-in, and again from the PIN screen after sign-out", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await signIn(el);
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalledTimes(1));
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops reading once the device is no longer proved", async () => {
+    const getDeviceEquipment = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+    await poll(el);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the waiting line with its count, and drops it once a read answers without it", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([UNCONFIRMED]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    expect(clockLine(el)).toBeNull();
+    await poll(el);
+    expect(clockLine(el)).toBe(
+      "Payments wait: the server is waiting for devices to connect and agree with its time (1 of 2 so far)",
+    );
+    getDeviceEquipment.mockResolvedValue(withNotices([]));
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(clockLine(el)).toBeNull();
+  });
+
+  it("drops the waiting line once the device is refused, and reads no more", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([UNCONFIRMED]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(clockLine(el)).toContain("(1 of 2 so far)");
+    getDeviceEquipment.mockRejectedValue({ code: "device.unauthorized" });
+    await poll(el);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(clockLine(el)).toBeNull();
+  });
+
+  it("shows no line for a waiting notice that is not well formed", async () => {
+    const noKey = { ...UNCONFIRMED, key: 7 } as unknown as StaffNotice;
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([noKey]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(clockLine(el)).toBeNull();
+  });
+
+  it("keeps the waiting line while a read names the box's clock unavailable", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([UNCONFIRMED]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(clockLine(el)).toContain("(1 of 2 so far)");
+    getDeviceEquipment.mockResolvedValue({
+      ...withNotices([]),
+      noticesUnavailable: ["box-clock"],
+    });
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
+    expect(clockLine(el)).toContain("(1 of 2 so far)");
+  });
+
+  it("shows no line for a waiting notice from anyone but the box's clock", async () => {
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValue(withNotices([{ ...UNCONFIRMED, owner: "fiscal-verifactu" }]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(clockLine(el)).toBeNull();
+  });
+
+  it("shows no other notice at the PIN screen", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([CLOCK, DISK]));
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+    expect(clockLine(el)).toBeNull();
+    expect(seen(el).staffNotices).toEqual([]);
+  });
+});

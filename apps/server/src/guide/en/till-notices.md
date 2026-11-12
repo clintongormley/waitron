@@ -2,8 +2,9 @@
 
 Some problems with the server stop staff from working, and the person at the till is often the first
 to notice. So once someone has signed in, every till and handheld shows a line under its top bar
-when the server needs attention. The line does not show on the sign-in, clock-in or attendance pages.
-It says what is wrong and what to do. It never covers your work, and you never have to dismiss it.
+when the server needs attention. The sign-in page shows only the line saying payments wait for the
+server's time; the clock-in and attendance pages show none. The line says what is wrong and what to
+do. It never covers your work, and you never have to dismiss it.
 
 If Waitron cannot verify this device for an action, reload or reopen Waitron on this device, then try again.
 
@@ -71,10 +72,11 @@ the server also restart payments, unless the stop has lasted since the server st
 the clock.
 
 **Payments wait: the server is waiting for devices to connect and agree with its time (0 of 2 so
-far) · Check the time** is red. Each time the server starts, it confirms its time before it takes
-payments: by itself once it has the internet's time, or once two tills or handhelds where someone is
-signed in agree with its time. Until then, payments and refunds wait, as for the line above; other
-work carries on. You can wait, or confirm the time yourself with **Check the time**.
+far) · Check the time** is red. When the server starts without the internet's time, payments wait.
+They start again by themselves once two tills or handhelds are switched on and connected, even at
+the sign-in screen, and agree with the server's time. Otherwise, use **Check the time**: keep the
+server's time if it is right, or use this device's time if that is. The sign-in page shows the same
+words, without **Check the time**: sign in to use it.
 
 **Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server
 started with its clock in doubt and could not confirm it by itself. It ends any of the three red

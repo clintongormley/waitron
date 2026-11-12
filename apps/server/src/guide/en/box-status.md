@@ -532,8 +532,8 @@ was not saved. Add it from Handled lists on the Box status page.**
 
 A box can't tell by itself that its own clock is wrong, so it compares it with other clocks. Tills
 and handhelds send their own clock to the box about every 15 seconds while someone is signed in on
-them. Kitchen screens do not send theirs. A till or handheld running on the box itself does not
-count, and devices at one network address count as one.
+them or while they show the sign-in screen. Kitchen screens do not send theirs. A till or handheld
+running on the box itself does not count, and devices at one network address count as one.
 
 When two or more devices agree with each other that the box's clock is more than a minute off, the
 bell warns the people who can manage the system, whether or not payments have stopped: **2 devices
