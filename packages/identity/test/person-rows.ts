@@ -7,10 +7,7 @@ export async function seedPersons(
   db: Database | Transaction,
   values: PersonSeed | readonly PersonSeed[],
 ): Promise<(typeof persons.$inferSelect)[]> {
-  return db
-    .insert(persons)
-    .values(Array.isArray(values) ? values : [values as PersonSeed])
-    .returning();
+  return db.insert(persons).values([values].flat()).returning();
 }
 export async function setBuiltInRoleForTest(
   db: Database | Transaction,
