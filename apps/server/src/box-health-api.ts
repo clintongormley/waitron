@@ -135,7 +135,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
     steady: clockConfirm.steady,
     wall: () => clockConfirm.clock.now().instant.getTime(),
   });
-  // An administrator confirms or sets the box's clock against a clock that is not the box's.
+  // An administrator sets the box's clock against a clock that is not the box's.
   const refuseOnTheBox = (c: Context) => {
     if (!clockConfirm.devMode && (clockConfirm.requestFromBox ?? requestFromBox)(c))
       throw new AppError("clock.set_refused", { reason: "same_machine" });
