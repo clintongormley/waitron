@@ -1671,9 +1671,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
   applies today; behaviour is kept site by site. Raised by #2331's review, not yet designed.
 
-- **AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply.**
-  [Detail](backlog/box.md#aeats-time-for-a-confirmation-comes-from-its-qr-validation-host-not-from-a-consultar-reply)
-
 - **The start on a full disk deletes backups by stamp alone after a clock step.**
   [Detail](backlog/box.md#the-start-on-a-full-disk-deletes-backups-by-stamp-alone-after-a-clock-step)
 
