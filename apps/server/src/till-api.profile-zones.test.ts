@@ -161,7 +161,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/tables/:id/today/leave-here                   | table                  | refuses POST /api/tables/:id/today/leave-here        |
  * | POST /api/tables/:id/today/merge                        | table; body target     | refuses .../today/merge (table), (target)            |
  * | POST /api/tables/:id/today/split-off                    | table; body parts      | refuses .../today/split-off (table), (part)          |
- * | POST /api/tables/:id/today/reset                        | table; body parts      | refuses .../today/reset (table), (part)              |
  * | POST /api/tables/:id/today/name                         | table                  | refuses POST /api/tables/:id/today/name              |
  * | POST /api/zones/:id/today/reset                         | path zone              | refuses POST /api/zones/:id/today/reset              |
  * | POST /api/zones/:id/today/update-layout                 | path zone              | refuses POST /api/zones/:id/today/update-layout      |
@@ -899,20 +898,6 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/tables/${x.restFreeTable}/today/split-off`,
     (x) => ({ expectedParties: [], partIds: [x.deliTable], zoneRevision: 0 }),
-    deliTableZone,
-  ],
-  [
-    "POST /api/tables/:id/today/reset (table)",
-    "POST",
-    (x) => `/api/tables/${x.deliTable}/today/reset`,
-    (x) => ({ partIds: [x.restFreeTable], zoneRevision: 0 }),
-    deliTableZone,
-  ],
-  [
-    "POST /api/tables/:id/today/reset (part)",
-    "POST",
-    (x) => `/api/tables/${x.restFreeTable}/today/reset`,
-    (x) => ({ partIds: [x.deliTable], zoneRevision: 0 }),
     deliTableZone,
   ],
   [

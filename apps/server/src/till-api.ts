@@ -569,10 +569,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.inactive": 409,
   "table.not_on_today_plan": 409,
   "table.taken_off": 409,
-  "table.in_joined_table": 409,
   "table.fixed": 409,
   "table.merged": 409,
-  "table.split_off": 409,
   "table.delivery_pending": 409,
   "table.label_taken": 409,
   "floor_plan.invalid": 400,
@@ -580,14 +578,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "merge.member_invalid": 400,
   "merge.split_all": 409,
   "merge.strands_party": 409,
-  "joined_table.not_found": 404,
-  "joined_table.part_invalid": 400,
-  "joined_table.split_all": 409,
-  "joined_table.seats_required": 400,
-  "joined_table.parts_split_off": 409,
-  "joined_table.nothing_to_join": 409,
-  "joined_table.out_of_date": 409,
-  "joined_table.tables_in_group": 409,
   "floor_today.out_of_date": 409,
   "floor_today.layout_changed": 409,
   "zone.not_found": 404,
@@ -963,7 +953,6 @@ interface JoinMerge {
   seats: number | null;
 }
 
-/** A join's merge, absent for none: `moving` or `target` is the joined table, the other one the party must hold. */
 function requireMerge(value: unknown, tableId: string): JoinMerge | null {
   if (value === undefined) return null;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("merge");

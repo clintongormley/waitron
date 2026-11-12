@@ -52,7 +52,6 @@ function kitchenProgress(table: TableState): string {
 const ACTION_LABELS = {
   "join-with": "floor.join_with",
   "split-off": "floor.split_tables",
-  "reset-table": "floor.reset_table",
   rotate: "floor.rotate",
   seats: "floor.change_seats",
   rename: "floor.rename",
@@ -130,7 +129,7 @@ export class TillTableDetailsSheet extends LitElement {
   @property({ attribute: false }) now?: number;
   /** Today's changes are offered on the floor only; the order screen's status pin leaves this off. */
   @property({ type: Boolean }) actions = false;
-  /** The zone's tables, which Reset table reads to find the joined table and its split-off tables. */
+
   @property({ attribute: false }) tables: readonly TableState[] = [];
   /** False leaves Join with… out. */
   @property({ attribute: false }) offersJoinWith = true;
@@ -164,9 +163,7 @@ export class TillTableDetailsSheet extends LitElement {
 
   #todayActions(table: TableState): TemplateResult | typeof nothing {
     const offered = this.actions
-      ? sheetActions(table, this.tables).filter(
-          (action) => this.offersJoinWith || action !== "join-with",
-        )
+      ? sheetActions(table).filter((action) => this.offersJoinWith || action !== "join-with")
       : [];
     if (offered.length === 0) return nothing;
     return html`<div class="today-actions">

@@ -64,9 +64,6 @@ function planned(
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       ...over,
     },
@@ -290,19 +287,19 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(targetIds(el)).toEqual(["t3"]);
   });
 
-  it("Join with… leaves out a joined table that has come apart and a part still joined, though each kept a place", async () => {
+  it("Join with… lists ordinary tables under their own ids", async () => {
     const el = await mount(
       [
         planned("t1", 2),
-        planned("tL", 20, { joined: { parts: [], splitOff: ["t3"], apart: true } }),
-        planned("t3", 30, { splitOffFrom: "tL" }),
-        planned("tM", 40, { joined: { parts: ["t5", "t6"], splitOff: [], apart: false } }),
-        planned("t5", 60, { inJoinedTable: "M" }),
+        planned("tL", 20, {}),
+        planned("t3", 30, {}),
+        planned("tM", 40, {}),
+        planned("t5", 60, {}),
       ],
       stubApi(),
     );
     await press(el, "t1", "join-with");
-    expect(targetIds(el)).toEqual(["t3", "tM"]);
+    expect(targetIds(el)).toEqual(["t3", "t5", "tL", "tM"]);
   });
 
   it("Join with… closed without a pick changes nothing", async () => {

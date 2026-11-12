@@ -4395,17 +4395,14 @@ describe("till-table-order-screen", () => {
       ["Join a table", "join"],
       ["Move guests", "move"],
       ["Move this bill", "move-bill"],
-    ])("%s lists Long table but none of its parts", async (_name, action) => {
-      const spare = (inJoinedTable: string | null) => ({
+    ])("%s lists real tables under their own ids", async (_name, action) => {
+      const spare = () => ({
         placement: null,
         seats: 2,
         fixed: false,
         takenOff: false,
         joinId: null,
         joinSeats: null,
-        inJoinedTable,
-        joined: null,
-        splitOffFrom: null,
         zoneRevision: 0,
       });
       const { el } = await mount({
@@ -4421,11 +4418,11 @@ describe("till-table-order-screen", () => {
             condition: "held",
             party: anaParty,
           }),
-          tableState({ id: "c3", label: "Counter 3", today: spare("Long table") }),
-          tableState({ id: "c4", label: "Counter 4", today: spare("Long table") }),
-          tableState({ id: "c5", label: "Counter 5", today: spare("Long table") }),
+          tableState({ id: "c3", label: "Counter 3", today: spare() }),
+          tableState({ id: "c4", label: "Counter 4", today: spare() }),
+          tableState({ id: "c5", label: "Counter 5", today: spare() }),
           tableState({ id: "long", label: "Long table" }),
-          tableState({ id: "stool-2", label: "Stool 2", today: spare(null) }),
+          tableState({ id: "stool-2", label: "Stool 2", today: spare() }),
         ],
       });
       await toMenu(el);
@@ -4433,7 +4430,11 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(targetIds(el)).toContain("long");
       expect(targetIds(el)).toContain("stool-2");
-      expect(targetIds(el).filter((id) => ["c3", "c4", "c5"].includes(id!))).toEqual([]);
+      expect(targetIds(el).filter((id) => ["c3", "c4", "c5"].includes(id!))).toEqual([
+        "c3",
+        "c4",
+        "c5",
+      ]);
     });
 
     it.each([
@@ -4450,9 +4451,6 @@ describe("till-table-order-screen", () => {
           takenOff: false,
           joinId: null,
           joinSeats: null,
-          inJoinedTable: null,
-          joined: null,
-          splitOffFrom: null,
           zoneRevision: 0,
           needsMoving,
         });
@@ -4529,9 +4527,6 @@ describe("till-table-order-screen", () => {
         takenOff: false,
         joinId: null,
         joinSeats: null,
-        inJoinedTable: null,
-        joined: null,
-        splitOffFrom: null,
         zoneRevision: 1,
         name,
       },

@@ -224,9 +224,6 @@ const todayRow = (x: number, placed = true) => ({
   takenOff: false,
   joinId: null,
   joinSeats: null,
-  inJoinedTable: null,
-  joined: null,
-  splitOffFrom: null,
   zoneRevision: 0,
 });
 

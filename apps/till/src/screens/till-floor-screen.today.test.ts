@@ -39,9 +39,6 @@ function today(x: number, over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     ...over,
   };
@@ -996,22 +993,15 @@ describe("till-floor-screen: today's names", () => {
     expect(options.map((option) => option.label)).toEqual(["Window", "Counter 5"]);
   });
 
-  it("Split tables… on a renamed joined table is headed with its name for today", async () => {
-    const part = (id: string, label: string) => ({
-      ...planned(id, 0, { placement: null, inJoinedTable: "Long table" }),
-      label,
-      shortName: label,
-    });
-    const long = {
-      ...planned("tl", 2, {
-        name: "Window table",
-        joined: { parts: ["t3", "t6"], splitOff: [], apart: false },
-      }),
-      label: "Long table",
-      shortName: "Long table",
-    };
-    const el = await mount([long, part("t3", "Counter 3"), part("t6", "Counter 6")], stubApi());
-    await press(el, "tl", "split-off");
+  it("Split tables… on a named group is headed with its name for today", async () => {
+    const el = await mount(
+      [
+        planned("t3", 2, { joinId: "J", joinSeats: 4, joinName: "Window table" }),
+        planned("t6", 4, { joinId: "J", joinSeats: 4, joinName: "Window table" }),
+      ],
+      stubApi(),
+    );
+    await press(el, "t3", "split-off");
     expect(splitWindow(el).name).toBe("Window table");
   });
 

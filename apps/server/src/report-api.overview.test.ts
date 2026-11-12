@@ -1,4 +1,4 @@
-import { floorTodayTables, venueLocationId } from "@waitron/db";
+import { floorTodayTables } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -6,9 +6,8 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import {
   CORE_MIGRATIONS,
   diningTables,
-  floorResetTableParts,
-  floorResetTables,
-  floorTodaySplitParts,
+  floorTodayJoins,
+  floorTodayJoinTables,
   floorZones,
   parties,
   partyTables,
@@ -36,7 +35,6 @@ const noopLog: Logger = () => {};
 let deviceId: string;
 let nodeId: string;
 let secondNodeId: string;
-let locationId: string;
 let seriesId: string;
 let managerCookie: string;
 let staffCookie: string;
@@ -149,7 +147,6 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = await venueLocationId(db);
     ({ deviceId } = await seedDevice(db));
     nodeId = await seedNode(db);
     // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
@@ -240,40 +237,34 @@ describe("mountReportApi — /reports/overview", () => {
     expect(((await response.json()) as OverviewBody).openTables).toEqual({ open: 1, total: 2 });
   });
 
-  it("does not count a part still joined", async () => {
+  it("counts a group's real tables under their own ids", async () => {
     const [zone] = await suite.db.insert(floorZones).values({ name: "Counter" }).returning();
     const tables = await suite.db
       .insert(diningTables)
       .values(
-        ["Long table", "Counter 3", "Counter 4", "Counter 5"].map((label) => ({
-          locationId,
+        [3, 4, 5].map((n) => ({
           zoneId: zone!.id,
-          label,
+          label: `Counter ${n}`,
         })),
       )
       .returning();
     await suite.db.insert(floorTodayTables).values(tables.map((t) => ({ tableId: t.id })));
-    const rows = await suite.db
-      .insert(floorResetTables)
-      .values(
-        tables.map((t, i) => ({
-          zoneId: zone!.id,
-          tableId: t.id,
-          label: t.label,
-          seats: [10, 2, 6, 4][i]!,
-        })),
-      )
+    const [group] = await suite.db
+      .insert(floorTodayJoins)
+      .values({ zoneId: zone!.id, name: "Long table", seats: 10 })
       .returning();
-    await suite.db
-      .insert(floorResetTableParts)
-      .values(
-        rows.slice(1).map((row) => ({ joinedResetTableId: rows[0]!.id, partResetTableId: row.id })),
-      );
+    await suite.db.insert(floorTodayJoinTables).values(
+      tables.map((t) => ({
+        joinId: group!.id,
+        tableId: t.id,
+        beforeX: 0,
+        beforeY: 0,
+        beforeRotation: 0,
+      })),
+    );
     onTestFinished(async () => {
-      await suite.db
-        .delete(floorResetTableParts)
-        .where(eq(floorResetTableParts.joinedResetTableId, rows[0]!.id));
-      await suite.db.delete(floorResetTables).where(eq(floorResetTables.zoneId, zone!.id));
+      await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, group!.id));
+      await suite.db.delete(floorTodayJoins).where(eq(floorTodayJoins.id, group!.id));
       for (const t of tables) {
         await suite.db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t.id));
         await suite.db.delete(diningTables).where(eq(diningTables.id, t.id));
@@ -282,58 +273,7 @@ describe("mountReportApi — /reports/overview", () => {
     });
     const response = await get(mountApp());
     expect(response.status).toBe(200);
-    expect(((await response.json()) as OverviewBody).openTables).toEqual({ open: 1, total: 3 });
-  });
-
-  it("does not count a joined table that has come apart", async () => {
-    const [zone] = await suite.db.insert(floorZones).values({ name: "Counter" }).returning();
-    const tables = await suite.db
-      .insert(diningTables)
-      .values(
-        ["Long table", "Counter 3", "Counter 4", "Counter 5"].map((label) => ({
-          locationId,
-          zoneId: zone!.id,
-          label,
-        })),
-      )
-      .returning();
-    await suite.db.insert(floorTodayTables).values(tables.map((t) => ({ tableId: t.id })));
-    const rows = await suite.db
-      .insert(floorResetTables)
-      .values(
-        tables.map((t, i) => ({
-          zoneId: zone!.id,
-          tableId: t.id,
-          label: t.label,
-          seats: [10, 2, 6, 4][i]!,
-        })),
-      )
-      .returning();
-    await suite.db
-      .insert(floorResetTableParts)
-      .values(
-        rows.slice(1).map((row) => ({ joinedResetTableId: rows[0]!.id, partResetTableId: row.id })),
-      );
-    await suite.db
-      .insert(floorTodaySplitParts)
-      .values(tables.slice(2).map((t) => ({ joinedTableId: tables[0]!.id, partTableId: t.id })));
-    onTestFinished(async () => {
-      await suite.db
-        .delete(floorTodaySplitParts)
-        .where(eq(floorTodaySplitParts.joinedTableId, tables[0]!.id));
-      await suite.db
-        .delete(floorResetTableParts)
-        .where(eq(floorResetTableParts.joinedResetTableId, rows[0]!.id));
-      await suite.db.delete(floorResetTables).where(eq(floorResetTables.zoneId, zone!.id));
-      for (const t of tables) {
-        await suite.db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t.id));
-        await suite.db.delete(diningTables).where(eq(diningTables.id, t.id));
-      }
-      await suite.db.delete(floorZones).where(eq(floorZones.id, zone!.id));
-    });
-    const response = await get(mountApp());
-    expect(response.status).toBe(200);
-    expect(((await response.json()) as OverviewBody).openTables).toEqual({ open: 1, total: 4 });
+    expect(((await response.json()) as OverviewBody).openTables).toEqual({ open: 1, total: 5 });
   });
 
   it("200 returns the overview with the seeded takings, counts, open tables and top sellers", async () => {

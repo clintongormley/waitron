@@ -10,7 +10,6 @@ import {
   floorPlanTableSizes,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   floorZones,
@@ -38,7 +37,6 @@ import {
 import { finishTable, markTableCleared } from "./party-close-fixture.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, OPERATOR, seat, type PartyVenue } from "./party-venue.js";
-import { partsOf } from "../floor-today-parts.js";
 import { holdersOf, partyRevision } from "../parties.js";
 
 export interface PlannedEntry {
@@ -342,15 +340,6 @@ export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
   return { ...z, tableId, spare };
 }
 
-/** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */
-export async function splitOffRow(
-  v: PartyVenue,
-  joinedTableId: string,
-  partTableId: string,
-): Promise<void> {
-  await inTx(v, (tx) => tx.insert(floorTodaySplitParts).values({ joinedTableId, partTableId }));
-}
-
 export async function todayRow(
   v: PartyVenue,
   tableId: string,
@@ -455,7 +444,6 @@ export async function withSplitPartyReads(
     const ids = Array.isArray(body.partIds)
       ? body.partIds.filter((id): id is string => typeof id === "string")
       : [];
-    if ((await partsOf(tx, tableId)).some((part) => part.stillJoined)) ids.push(tableId);
     const expectedParties = [];
     for (const id of new Set((await holdersOf(tx, ids)).values()))
       expectedParties.push({ id, revision: await partyRevision(tx, id) });

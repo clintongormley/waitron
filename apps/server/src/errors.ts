@@ -575,8 +575,6 @@ declare module "@waitron/shared" {
     "table.fixed": { tableId: string };
     /** A change to today's plan would turn or take off a table in one of today's merges. */
     "table.merged": { tableId: string };
-    /** Back to its saved place or Take off for today named a table split off a joined table. */
-    "table.split_off": { tableId: string };
     /** Taking a table off for today found an order with food on its way to it. */
     "table.delivery_pending": { tableId: string };
     /**
@@ -948,34 +946,6 @@ declare module "@waitron/shared" {
     "merge.split_all": { tableId: string; field: "partIds" };
     /** The split names every table a party holds, which would leave it with none. */
     "merge.strands_party": { tableId: string; field: "partIds" };
-    /** The path's table is not the joined table of any part in today's copy. */
-    "joined_table.not_found": { tableId: string };
-    /** A table named to split off is not a part of this joined table still joined to it. */
-    "joined_table.part_invalid": { tableId: string; field: "partIds" };
-    /** The split names every part still joined, which would leave the joined table with none. */
-    "joined_table.split_all": { tableId: string; field: "partIds" };
-    /**
-     * A split that leaves two or more parts joined, or a Reset table that leaves some apart, must
-     * say the joined table's seats.
-     */
-    "joined_table.seats_required": Record<string, never>;
-    /** Back to its saved place is refused for a joined table while any of its parts is split off. */
-    "joined_table.parts_split_off": { tableId: string };
-    /**
-     * Reset table finds no table split off it may take back, or would leave the joined
-     * table with fewer than two parts.
-     */
-    "joined_table.nothing_to_join": { tableId: string };
-    /**
-     * Reset table names other tables than the ones split off it may take back: the till
-     * read an older floor.
-     */
-    "joined_table.out_of_date": { tableId: string };
-    /**
-     * Reset table would take back nothing, or leave fewer than two tables joined, while `partIds`
-     * (number order) are in a group with guests.
-     */
-    "joined_table.tables_in_group": { tableId: string; partIds: string[] };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */

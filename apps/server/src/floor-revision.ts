@@ -4,7 +4,6 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   type Transaction,
@@ -85,14 +84,12 @@ export async function roomPrints(
       beforeRotation: floorTodayJoinTables.beforeRotation,
       groupSeats: floorTodayJoins.seats,
       groupName: floorTodayJoins.name,
-      splitOffFrom: floorTodaySplitParts.joinedTableId,
       readyToMove: floorResetTables.readyToMove,
     })
     .from(diningTables)
     .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
-    .leftJoin(floorTodaySplitParts, eq(floorTodaySplitParts.partTableId, diningTables.id))
     .leftJoin(floorResetTables, eq(floorResetTables.tableId, diningTables.id))
     .where(inArray(diningTables.zoneId, [...zoneIds]))
     .orderBy(asc(diningTables.id));

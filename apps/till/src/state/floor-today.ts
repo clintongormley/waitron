@@ -195,11 +195,7 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
   if (draggedGroup.members.length > 1) return { kind: "say", message: t("floor.drop_merge") };
 
   const both = [...draggedGroup.members, ...targetGroup.members];
-  const heading =
-    targetGroup.members[0]!.today?.joinName ??
-    handedName(targetGroup) ??
-    handedName(draggedGroup) ??
-    mergeLabel(both.flatMap((table) => joinedLabels(zoneTables, table)));
+  const heading = targetGroup.members[0]!.today?.joinName ?? mergeLabel(both.map(shownName));
   const dropped: TodayPlacement = { ...from, x: drop.x, y: drop.y };
   const nearest = nearestMember(targetGroup.members, centre(dropped));
   const fixedSide = draggedGroup.fixed || targetGroup.fixed;
@@ -246,23 +242,6 @@ export function seatsGuests(zone: FloorZone | undefined): boolean {
  * (a party joined onto a free table) refuse outside table service. */
 export function seatsAtFreeTable(action: DropAction): boolean {
   return action.kind === "seat" || (action.kind === "join" && action.other === null);
-}
-
-/** The name for today a lone joined table gives the group a drop makes, as `writeMerge` does. */
-function handedName(group: Group): string | null {
-  const [table] = group.members;
-  if (group.members.length !== 1 || (table!.today?.joined?.parts.length ?? 0) === 0) return null;
-  return table!.today?.name ?? null;
-}
-
-/** A joined table's still-joined tables' shown names; any other table's own. */
-function joinedLabels(zoneTables: readonly TableState[], table: TableState): string[] {
-  const parts = table.today?.joined?.parts ?? [];
-  const names = parts.flatMap((id) => {
-    const part = zoneTables.find((each) => each.id === id);
-    return part === undefined ? [] : [shownName(part)];
-  });
-  return names.length === 0 ? [shownName(table)] : names;
 }
 
 /** The placed member whose centre is nearest `point`; the first on a tie. */
@@ -320,15 +299,6 @@ export function pendingPlaces(
   return places;
 }
 
-/** A still-joined part, or a joined table that has come apart: the map, Join with… and every
- * picker that calls this leave it out. */
-export function outOfServiceJoined(table: TableState): boolean {
-  return (
-    table.today !== null &&
-    (table.today.inJoinedTable !== null || table.today.joined?.apart === true)
-  );
-}
-
 /** A reset left this table's change waiting: it is not seated, joined or given a party until
  * someone marks it moved. */
 export function needsMovingToday(table: TableState): boolean {
@@ -336,24 +306,16 @@ export function needsMovingToday(table: TableState): boolean {
 }
 
 export function onTodaysPlan(table: TableState): boolean {
-  return (
-    table.today !== null &&
-    table.today.placement !== null &&
-    !table.today.takenOff &&
-    !outOfServiceJoined(table)
-  );
+  return table.today !== null && table.today.placement !== null && !table.today.takenOff;
 }
 
-/** Today's tables with no place, not taken off, not fixed and in no joined table: what Add a spare
- * table offers. */
 export function sparesOf(zoneTables: readonly TableState[]): TableState[] {
   return zoneTables.filter(
     (table) =>
       table.today !== null &&
       table.today.placement === null &&
       !table.today.takenOff &&
-      !table.today.fixed &&
-      !outOfServiceJoined(table),
+      !table.today.fixed,
   );
 }
 
@@ -373,98 +335,30 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
   };
 }
 
-export type ApartReason = "guests" | "group" | "food";
-
-export interface ResetTablePlan {
-  joined: TableState;
-  back: TableState[];
-  apart: { table: TableState; reason: ApartReason }[];
-  whole: boolean;
-  /** Offered only to be refused: too few tables would be joined because the rest are in a group
-   * with guests, which the server refuses `joined_table.tables_in_group` whatever the seats. */
-  refusedInGroup: boolean;
-}
-
-/** What Reset table on `table` would take back: `table` is the joined table or a free table split
- * off it. `null` when it offers nothing. Mirrors the server's rule in
- * `apps/server/src/floor-today-reset-table.ts`, and also offers one case that rule refuses
- * (`refusedInGroup`). */
-export function resetTableOf(
-  table: TableState,
-  zoneTables: readonly TableState[],
-): ResetTablePlan | null {
-  const today = table.today;
-  if (today === null) return null;
-  const joined =
-    today.joined !== null
-      ? table
-      : today.splitOffFrom !== null
-        ? zoneTables.find((each) => each.id === today.splitOffFrom)
-        : undefined;
-  const state = joined?.today?.joined;
-  if (joined === undefined || state == null) return null;
-  if (joined !== table && apartReason(table, zoneTables) !== null) return null;
-  const byId = new Map(zoneTables.map((each) => [each.id, each]));
-  const splitOff = state.splitOff.flatMap((id) => byId.get(id) ?? []);
-  const back = splitOff.filter((each) => apartReason(each, zoneTables) === null);
-  const apart = splitOff.flatMap((each) => {
-    const reason = apartReason(each, zoneTables);
-    return reason === null ? [] : [{ table: each, reason }];
-  });
-  const plan = { joined, back, apart, whole: apart.length === 0, refusedInGroup: false };
-  if (back.length > 0 && state.parts.length + back.length >= 2) return plan;
-  // Offered so that pressing it shows the server's `joined_table.tables_in_group` refusal, which
-  // names the tables to split off the group first.
-  const blockedByGroup =
-    joined !== table &&
-    apart.some(
-      ({ table: each, reason }) =>
-        (reason === "guests" || reason === "group") && each.today?.joinId != null,
-    );
-  return blockedByGroup ? { ...plan, refusedInGroup: true } : null;
-}
-
-function apartReason(table: TableState, zoneTables: readonly TableState[]): ApartReason | null {
-  if (table.condition === "held") return "guests";
-  if (mergeMembersOf(zoneTables, table).some((each) => each.condition === "held")) return "group";
-  if (table.pendingDeliveries > 0) return "food";
-  return null;
-}
-
 export type SheetAction =
-  "join-with" | "split-off" | "reset-table" | "rotate" | "seats" | "rename" | "back" | "take-off";
+  "join-with" | "split-off" | "rotate" | "seats" | "rename" | "back" | "take-off";
 
-/** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in
- * order. Reset table is offered only when `zoneTables` holds the joined table and its split-off tables. */
-export function sheetActions(
-  table: TableState,
-  zoneTables: readonly TableState[] = [],
-): SheetAction[] {
+export function sheetActions(table: TableState): SheetAction[] {
   const today = table.today;
   if (today === null || today.placement === null || today.takenOff) return [];
   const merged = today.joinId !== null;
   const clearing = table.condition === "needs_clearing";
   // A party-held table is `held`, never `free` (`tableCondition`, apps/server/src/working-order.ts).
   const free = table.condition === "free" && table.pendingDeliveries === 0;
-  const joined = today.joined;
-  const splitOff = today.splitOffFrom !== null;
   const applies: [SheetAction, boolean][] = [
     ["join-with", !merged && !clearing && !needsMovingToday(table)],
-    ["split-off", merged || (joined !== null && joined.parts.length >= 2)],
-    ["reset-table", resetTableOf(table, zoneTables) !== null],
+    ["split-off", merged],
     ["rotate", !today.fixed && !merged],
     ["seats", true],
     ["rename", true],
-    ["back", !splitOff && (joined === null || joined.splitOff.length === 0)],
-    ["take-off", free && !merged && !splitOff],
+    ["back", true],
+    ["take-off", free && !merged],
   ];
   return applies.filter(([, offered]) => offered).map(([action]) => action);
 }
 
-/** Split tables… on `table` splits its group, as the server's `splitOff` decides: a joined table
- * with a table still joined splits as a joined table even in a group. */
 export function splitsGroup(table: TableState): boolean {
-  return table.today?.joinId != null && (table.today.joined?.parts.length ?? 0) === 0;
+  return table.today?.joinId != null;
 }
 
 export interface GroupSplit {
@@ -480,31 +374,12 @@ export interface GroupSplit {
   strandsGuests(ticked: readonly string[]): boolean;
 }
 
-/** Split tables… on a table in a group: its members in number order, its name, and whether the
- * tables `staying` need seats. None are asked when no member has a party (as `splitGroup`'s holders
- * check in apps/server/src/floor-today-split-group.ts) and what stays is every table split off one
- * joined table with none of its tables still joined, none with food on its way. Left to the server:
- * a part held by a party when the joined table went live, which the till's tables do not show, and
- * whether each stands where that joined table's layout puts it. Its seats refusal makes the window
- * ask Seats. */
 export function groupSplitOf(
   table: TableState,
   zoneTables: readonly TableState[],
 ): GroupSplit | null {
   if (!splitsGroup(table)) return null;
   const members = mergeMembersOf(zoneTables, table).sort((a, b) => inNumberOrder(a.label, b.label));
-  const rejoins = (staying: readonly string[]): boolean => {
-    if (members.some((each) => each.party !== null)) return false;
-    const tables = members.filter((each) => staying.includes(each.id));
-    const from = tables[0]?.today?.splitOffFrom ?? null;
-    const joined = zoneTables.find((each) => each.id === from)?.today?.joined;
-    return (
-      joined != null &&
-      joined.parts.length === 0 &&
-      tables.every((each) => each.today?.splitOffFrom === from && each.pendingDeliveries === 0) &&
-      joined.splitOff.every((id) => staying.includes(id))
-    );
-  };
   /** For each party a ticked table holds, the ids of the tables it keeps. */
   const keptBy = (ticked: readonly string[]): string[][] => {
     const parties = new Map<string, TableParty>();
@@ -531,7 +406,7 @@ export function groupSplitOf(
   return {
     members,
     name: groupName(members),
-    asksSeats: (staying) => staying.length >= 2 && !rejoins(staying),
+    asksSeats: (staying) => staying.length >= 2,
     guestsMoveTo,
     strandsGuests: (ticked) => keptBy(ticked).some((kept) => kept.length === 0),
   };

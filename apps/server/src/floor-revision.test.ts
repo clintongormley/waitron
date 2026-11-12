@@ -19,7 +19,7 @@ import {
 } from "./floor-revision.js";
 import { ensureToday, moveToday, resetZone } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
-import { splitJoinedTable } from "./floor-today-split.js";
+import { splitOff } from "./floor-today-split-group.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import {
@@ -34,7 +34,6 @@ import {
   giveKeptSize,
   mergeOf,
   plannedZone,
-  splitOffRow,
   todayRow,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
@@ -253,7 +252,7 @@ describe("roomPrints", () => {
     await inTx(v, (tx) =>
       writeMerge(tx, v.cfg, {
         movingId: table.bar!,
-        targetId: table.long!,
+        targetId: table.c3!,
         side: "left",
         seats: 14,
         free: true,
@@ -292,7 +291,7 @@ describe("roomPrints", () => {
     await inTx(v, (tx) =>
       writeMerge(tx, v.cfg, {
         movingId: table.bar!,
-        targetId: table.long!,
+        targetId: table.c3!,
         side: "left",
         seats: 14,
         free: true,
@@ -311,16 +310,18 @@ describe("roomPrints", () => {
     expect(await printOf(zoneId)).not.toBe(before);
   });
 
-  it("differs after a split row is written", async () => {
+  it("differs after a member leaves a saved group", async () => {
     const { zoneId, table } = await LONG_TABLE();
-    await inTx(v, (tx) =>
-      splitJoinedTable(tx, v.cfg, { tableId: table.long!, partIds: [table.c5!], seats: 6 }),
-    );
-    expect(await todayRow(v, table.c5!)).toMatchObject({ x: 14, y: 20, width: 2, height: 2 });
     const before = await printOf(zoneId);
-
-    await splitOffRow(v, table.long!, table.c4!);
-
+    await inTx(v, (tx) =>
+      splitOff(tx, v.cfg, REMOVALS, NOW, {
+        tableId: table.c3!,
+        partIds: [table.c5!],
+        seats: 6,
+        expectedParties: [],
+      }),
+    );
+    expect(await mergeOf(v, table.c5!)).toBeNull();
     expect(await printOf(zoneId)).not.toBe(before);
   });
 

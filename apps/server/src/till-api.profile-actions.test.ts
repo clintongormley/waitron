@@ -329,7 +329,6 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/tables/${id}/today/leave-here`),
   ordering("POST", `/api/tables/${id}/today/merge`),
   ordering("POST", `/api/tables/${id}/today/split-off`),
-  ordering("POST", `/api/tables/${id}/today/reset`),
   ordering("POST", `/api/tables/${id}/today/name`),
   ordering("POST", `/api/zones/${id}/today/reset`),
   ordering("POST", `/api/zones/${id}/today/update-layout`),

@@ -1,7 +1,7 @@
 // Booking operations run on the caller's transaction. Route handlers own authorization.
 import "./errors.js";
-import { and, asc, eq, inArray, sql, type InferSelectModel } from "drizzle-orm";
-import { savedPart, tableInService, diningTables, type Transaction } from "@waitron/db";
+import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
+import { tableInService, diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
@@ -39,21 +39,13 @@ function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
-/** `bookingDate` stands in for the business day `savedPart` is asked about. */
-async function requireActiveTable(
-  tx: Transaction,
-  tableId: string,
-  bookingDate: string | null,
-): Promise<void> {
+async function requireActiveTable(tx: Transaction, tableId: string): Promise<void> {
   const [table] = await tx
-    .select({ part: sql<number>`${savedPart(diningTables.id, bookingDate)}` })
+    .select({ id: diningTables.id })
     .from(diningTables)
     .where(and(eq(diningTables.id, tableId), tableInService(diningTables.id)));
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId });
-  }
-  if (table.part === 1) {
-    throw new AppError("table.in_joined_table", { tableId, field: "tableId" });
   }
 }
 
@@ -65,7 +57,7 @@ export async function createBooking(
     throw new AppError("booking.invalid", { partySize: input.partySize });
   }
   if (input.tableId !== undefined) {
-    await requireActiveTable(tx, input.tableId, input.bookingDate);
+    await requireActiveTable(tx, input.tableId);
   }
   const [row] = await tx
     .insert(bookings)
@@ -117,12 +109,11 @@ export async function updateBooking(
       .select({ bookingDate: bookings.bookingDate, tableId: bookings.tableId })
       .from(bookings)
       .where(eq(bookings.id, id));
-    // Whether a table may be booked depends on the date, so a new date re-judges the kept table.
     const tableId = patch.tableId === undefined ? (stored?.tableId ?? null) : patch.tableId;
     const dateChanges =
       patch.bookingDate !== undefined && patch.bookingDate !== stored?.bookingDate;
     if (tableId !== null && (tableChanges || dateChanges)) {
-      await requireActiveTable(tx, tableId, patch.bookingDate ?? stored?.bookingDate ?? null);
+      await requireActiveTable(tx, tableId);
     }
   }
   const updated = await tx

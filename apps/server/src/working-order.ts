@@ -16,7 +16,6 @@ import {
   decimal,
   decimalToCents,
   decimalToThousandths,
-  compareLabels,
   compareStationNames,
   divideDecimal,
   partyDisplayName,
@@ -78,13 +77,7 @@ import {
 import type { PassRow } from "./pass-card.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import {
-  joinedOutOfService,
-  joinedTableApart,
-  needsMoving,
-  stillJoinedPart,
-  tableInService,
-} from "@waitron/db";
+import { needsMoving, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import {
@@ -131,8 +124,6 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { offeredKey } from "@waitron/venue-service";
 import type { RetainedCourseLine } from "./retained-course.js";
-// Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
-// its codes.
 import "./errors.js";
 import { rerouteHeldAtRelease, stillMovable } from "./station-move.js";
 import type { Rerouted } from "./station-move.js";
@@ -1447,14 +1438,12 @@ export async function createOpenOrder(
       .select({
         id: diningTables.id,
         zoneId: diningTables.zoneId,
-        joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       })
       .from(diningTables)
       .where(eq(diningTables.id, deliveryTableId));
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }
-    if (table.joined) throw new AppError("table.in_joined_table", { tableId: deliveryTableId });
     effectiveZoneId = table.zoneId;
   }
   if (effectiveZoneId === undefined) {
@@ -1578,12 +1567,6 @@ export async function parkOrder(
   }
 }
 
-/**
- * Open the party's first bill at a table. Refused while the table is out of service because of a
- * joined table, while it needs clearing and while a party holds it (an active `party_tables` row);
- * the caller adds the party's membership afterwards. The check cannot interleave with a second
- * `openTab`, because `withTransaction` IS the venue file's write lock.
- */
 export async function openTab(
   tx: Transaction,
   cfg: OriginConfig,
@@ -1598,7 +1581,6 @@ export async function openTab(
   const [table] = await tx
     .select({
       inService: tableInService(diningTables.id).mapWith(Boolean),
-      joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
       needsMoving: needsMoving(diningTables.id).mapWith(Boolean),
@@ -1610,9 +1592,6 @@ export async function openTab(
   }
   if (!table.inService) {
     throw new AppError("table.inactive", { tableId: req.tableId });
-  }
-  if (table.joined) {
-    throw new AppError("table.in_joined_table", { tableId: req.tableId });
   }
   if (table.needsClearingSince !== null) {
     throw new AppError("table.needs_clearing", { tableId: req.tableId });
@@ -8656,12 +8635,6 @@ export interface TableToday {
   takenOff: boolean;
   joinId: string | null;
   joinSeats: number | null;
-  /** The live name of the joined table this table is still a part of; `null` when it is in none. */
-  inJoinedTable: string | null;
-  /** For a joined table of today's copy: its parts still joined and split off, by label; else `null`. */
-  joined: { parts: string[]; splitOff: string[]; apart: boolean } | null;
-  /** For a part split off today: its joined table's live id. */
-  splitOffFrom: string | null;
   /** The revision of the table's room; 0 for a room with no today's plan. */
   zoneRevision: number;
   /** The table's own name for today; `null` for its saved name. */
@@ -8931,60 +8904,6 @@ async function readTodayTables(tx: Transaction): Promise<Map<string, TableToday>
     .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, diningTables.zoneId))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId));
-  const copyParts = await tx.execute<{
-    joined_id: string;
-    joined_label: string;
-    part_id: string;
-    label: string;
-    still: number;
-  }>(sql`
-    select joined_row.table_id as joined_id, joined_table.label as joined_label,
-      part_table.id as part_id, part_table.label,
-      ${stillJoinedPart(sql`part_table.id`)} as still
-    from floor_reset_table_parts joined_part
-    inner join floor_reset_tables part_row on part_row.id = joined_part.part_reset_table_id
-    inner join floor_reset_tables joined_row on joined_row.id = joined_part.joined_reset_table_id
-    inner join dining_tables joined_table on joined_table.id = joined_row.table_id
-    inner join dining_tables part_table on part_table.id = part_row.table_id
-  `);
-  const apart = await tx.execute<{ id: string }>(sql`
-    select id from dining_tables
-    where ${joinedTableApart(sql`dining_tables.id`)}
-  `);
-  const splits = await tx.execute<{ joined_id: string; part_id: string; label: string }>(sql`
-    select split.joined_table_id as joined_id, split.part_table_id as part_id, part_table.label
-    from floor_today_split_parts split
-    inner join dining_tables part_table on part_table.id = split.part_table_id
-  `);
-  const apartIds = new Set(apart.rows.map((row) => row.id));
-  const joinedOf = new Map<string, { parts: Labelled[]; splitOff: Labelled[] }>();
-  const entryOf = (joinedId: string) => {
-    let entry = joinedOf.get(joinedId);
-    if (entry === undefined) {
-      entry = { parts: [], splitOff: [] };
-      joinedOf.set(joinedId, entry);
-    }
-    return entry;
-  };
-  const joinedName = new Map<string, string>();
-  for (const part of copyParts.rows) {
-    const entry = entryOf(part.joined_id);
-    if (!part.still) continue;
-    entry.parts.push({ id: part.part_id, label: part.label });
-    joinedName.set(part.part_id, part.joined_label);
-  }
-  const splitOffFrom = new Map<string, string>();
-  for (const split of splits.rows) {
-    entryOf(split.joined_id).splitOff.push({ id: split.part_id, label: split.label });
-    splitOffFrom.set(split.part_id, split.joined_id);
-  }
-  const ids = (labelled: Labelled[]) =>
-    labelled.sort((a, b) => compareLabels(a.label, b.label)).map((part) => part.id);
-  const joinedState = (tableId: string): TableToday["joined"] => {
-    const entry = joinedOf.get(tableId);
-    if (entry === undefined) return null;
-    return { parts: ids(entry.parts), splitOff: ids(entry.splitOff), apart: apartIds.has(tableId) };
-  };
   return new Map(
     rows.map((row) => [
       row.tableId,
@@ -8995,9 +8914,6 @@ async function readTodayTables(tx: Transaction): Promise<Map<string, TableToday>
         takenOff: row.takenOff,
         joinId: row.joinId,
         joinSeats: row.joinSeats,
-        inJoinedTable: joinedName.get(row.tableId) ?? null,
-        joined: joinedState(row.tableId),
-        splitOffFrom: splitOffFrom.get(row.tableId) ?? null,
         zoneRevision: row.zoneRevision ?? 0,
         name: row.name,
         joinName: row.joinName,
@@ -9012,11 +8928,6 @@ function openingBillOf(bills: readonly FamilyBill[]): string | null {
   const shown = bills.filter((bill) => bill.status !== "abandoned");
   const owing = shown.find((bill) => bill.status === "open" || bill.status === "placed");
   return (owing ?? shown.at(-1))?.workingOrderId ?? null;
-}
-
-interface Labelled {
-  id: string;
-  label: string;
 }
 
 /**

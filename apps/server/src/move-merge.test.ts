@@ -82,7 +82,6 @@ import {
   type SplitSelection,
 } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { passGuests } from "./floor-today-parts.js";
 import { discardDraft, readDrafts, type BillEditExpected } from "./order-drafts.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
@@ -1353,7 +1352,10 @@ describe("A803 split: what the kitchen is told", () => {
       const second = await v.table("Mesa 210");
       vi.useFakeTimers({ toFake: ["Date"] });
       try {
-        await inTx(v, (tx) => passGuests(tx, v.cfg, first, [second], "now"));
+        const command = await commandFor(v, partyId);
+        await inTx(v, (tx) =>
+          moveGuests(tx, v.cfg, partyId, second, { ...command, otherPartyId: null }),
+        );
       } finally {
         vi.useRealTimers();
       }

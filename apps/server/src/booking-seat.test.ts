@@ -333,7 +333,7 @@ describe("bookings seat route → real seatTable", () => {
     });
   });
 
-  it("refuses seating a booking at a part still in a joined table with 409 table.in_joined_table", async () => {
+  it("seats a booking at a saved group's real member", async () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const table = await withTransaction(db, async (tx: Transaction) => {
@@ -373,7 +373,7 @@ describe("bookings seat route → real seatTable", () => {
       bookingTime: "21:00",
       partySize: 8,
       contactName: "López",
-      tableId: table.long,
+      tableId: table.c3,
     });
     expect(created.status).toBe(201);
     const bookingId = ((await created.json()) as { id: string }).id;
@@ -382,19 +382,16 @@ describe("bookings seat route → real seatTable", () => {
       tableId: table.c3,
     });
 
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "table.in_joined_table", params: { tableId: table.c3 } },
-    });
+    expect(res.status, await res.clone().text()).toBe(200);
     await withTransaction(db, async (tx) => {
       const booking = await tx.execute<{ status: string; tab_id: string | null }>(
         sql`select status, tab_id from bookings where id = ${bookingId}`,
       );
-      expect(booking.rows[0]).toEqual({ status: "booked", tab_id: null });
+      expect(booking.rows[0]).toMatchObject({ status: "seated", tab_id: expect.any(String) });
       const open = await tx.execute<{ n: number }>(
         sql`select count(*) as n from parties where state = 'open'`,
       );
-      expect(open.rows[0]!.n).toBe(0);
+      expect(open.rows[0]!.n).toBe(1);
     });
   });
 });

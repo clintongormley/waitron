@@ -37,10 +37,9 @@ export interface LiveTable {
   tied: boolean;
   /** It has a today's row. */
   hasToday: boolean;
-  /** It is in a today's merge holding a waiting table: held, refused, or in a waiting split group. */
+  /** It shares an ordinary group with a waiting table. */
   mergedWithHeld: boolean;
-  /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
-  splitWithBusy: boolean;
+
   /** It needs clearing, so it waits as a held table does, and is seeded as one is. */
   clearing: boolean;
   /** It is in a joined group of the reset, a joined table and its parts, with a waiting member. */
@@ -78,7 +77,6 @@ export function planReset(input: {
   takenElsewhere: ReadonlySet<string>;
   /** Short-name keys of the venue's live tables in other zones. */
   shortNameKeysElsewhere: ReadonlySet<string>;
-  /** Targets with no table yet, a joined table to create whose group waits. */
   waitingToCreate?: ReadonlySet<Target>;
 }): ResetPlan {
   const live = new Map(input.live.map((table) => [table.id, table]));
@@ -113,7 +111,6 @@ export function planReset(input: {
         table.refused ||
         table.clearing ||
         table.mergedWithHeld ||
-        table.splitWithBusy ||
         table.joinedWithWaiting ||
         table.blocked)
     ) {
@@ -186,12 +183,11 @@ export function movesTable(
     placement: Placement | null;
     takenOff: boolean;
     inMerge: boolean;
-    splitOff: boolean;
   } | null,
   target: { placement: Placement | null },
 ): boolean {
   if (today === null || today.placement === null || today.takenOff) return false;
-  if (today.inMerge || today.splitOff || target.placement === null) return true;
+  if (today.inMerge || target.placement === null) return true;
   const [from, to] = [today.placement, target.placement];
   return (
     from.x !== to.x ||
@@ -240,12 +236,16 @@ export function targetsFromMaster(
     planTableId: string | null;
     shortName: string | null;
   }[],
+  joinedIds: ReadonlySet<string> = new Set(),
 ): Target[] {
   const byId = new Map(master.map((table) => [table.id, table]));
   const followed = new Set<string>();
   const targets: Target[] = [];
   for (const table of live) {
-    const source = table.planTableId === null ? undefined : byId.get(table.planTableId);
+    const source =
+      table.planTableId === null || joinedIds.has(table.planTableId)
+        ? undefined
+        : byId.get(table.planTableId);
     if (source) {
       followed.add(source.id);
       const { label, shortName, seats, fixed, placement } = source;

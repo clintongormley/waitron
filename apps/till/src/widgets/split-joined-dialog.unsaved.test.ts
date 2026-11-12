@@ -16,9 +16,6 @@ function today(seats: number, over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     ...over,
   };
@@ -42,15 +39,11 @@ function table(id: string, label: string, todayRow: TableToday): TableState {
     party: null,
   };
 }
-const joined = table(
-  "long",
-  "Long table",
-  today(10, { joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false } }),
-);
+const joined = table("long", "Long table", today(10, {}));
 const parts = [
-  table("c3", "Counter 3", today(2, { inJoinedTable: "Long table" })),
-  table("c4", "Counter 4", today(6, { inJoinedTable: "Long table" })),
-  table("c5", "Counter 5", today(4, { inJoinedTable: "Long table" })),
+  table("c3", "Counter 3", today(2, {})),
+  table("c4", "Counter 4", today(6, {})),
+  table("c5", "Counter 5", today(4, {})),
 ];
 
 class SplitJoinedLeaveApp extends LitElement {
@@ -156,7 +149,7 @@ it("after commit() nothing is left unsaved", async () => {
 
 it("closing a group's window with a table ticked asks first", async () => {
   const bar = table("bar", "Bar", today(4, { joinId: "g" }));
-  const c3 = table("c3", "Counter 3", today(2, { joinId: "g", splitOffFrom: "long" }));
+  const c3 = table("c3", "Counter 3", today(2, { joinId: "g" }));
   const { app, form } = await mount({ joined: bar, parts: [bar, c3], name: "Bar+Counter 3" });
   await choose(form, ["bar"]);
   expect(unload()).toBe(true);

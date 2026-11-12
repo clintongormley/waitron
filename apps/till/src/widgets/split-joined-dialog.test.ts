@@ -19,9 +19,6 @@ function today(seats: number | null, over: Partial<TableToday> = {}): TableToday
     takenOff: false,
     joinId: null,
     joinSeats: null,
-    inJoinedTable: null,
-    joined: null,
-    splitOffFrom: null,
     zoneRevision: 0,
     ...over,
   };
@@ -59,18 +56,18 @@ const party: TableParty = {
   openingBillId: null,
   outstanding: "0.00",
   billCount: 1,
-  tableIds: ["long"],
+  tableIds: ["c3", "c4", "c5"],
   unsentDrafts: [],
   reminder: null,
 };
 
 const longTable = (over: Partial<TableState> = {}) =>
   table("long", "Long table", {
-    today: today(10, { joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false } }),
+    today: today(10, {}),
     ...over,
   });
 const part = (id: string, label: string, seats: number | null) =>
-  table(id, label, { today: today(seats, { inJoinedTable: "Long table" }) });
+  table(id, label, { today: today(seats, {}) });
 const parts = () => [
   part("c3", "Counter 3", 2),
   part("c4", "Counter 4", 6),
@@ -82,6 +79,14 @@ async function mount(props: Partial<TillSplitJoinedDialog> = {}): Promise<TillSp
     joined: longTable(),
     parts: parts(),
     name: "Long table",
+    guestsMoveTo: groupSplitOf(
+      { ...(props.parts ?? parts())[0]!, today: today(10, { joinId: "g" }) },
+      (props.parts ?? parts()).map((each) => ({
+        ...each,
+        today: { ...each.today!, joinId: "g" },
+        party: props.joined?.party?.tableIds.includes(each.id) ? props.joined.party : each.party,
+      })),
+    )!.guestsMoveTo,
     ...props,
   });
   return el;
@@ -160,7 +165,7 @@ it("suggests Long table's remaining seats, required only while two or more would
   expect(seats.required).toBe(true);
   expect(seats.value).toBe("8");
   expect([seats.min, seats.max]).toEqual([1, 999]);
-  expect(seats.label).toBe("Seats for Long table");
+  expect(seats.label).toBe("Seats for what stays");
   await choose(el, ["c5", "c4"]);
   expect(seatsField(el)).toBeNull();
 });
@@ -232,7 +237,7 @@ it("says Long table is reserved today", async () => {
 it("says the guests move to the part left", async () => {
   const el = await mount({ joined: longTable({ party, condition: "held", state: "open-tab" }) });
   await choose(el, ["c5"]);
-  expect(text(el)).not.toContain("Guests move");
+  expect(text(el)).toContain("Guests move to Counter 3+4");
   await choose(el, ["c3", "c5"]);
   expect(text(el)).toContain("Guests move to Counter 4");
   const empty = await mount();
@@ -243,19 +248,19 @@ it("says the guests move to the part left", async () => {
 it("shows a refusal naming partIds under Tables to split off until the choice changes", async () => {
   const el = await mount();
   await choose(el, ["c4", "c5"]);
-  el.refusal = { code: "joined_table.part_invalid", field: "partIds" };
+  el.refusal = { code: "merge.member_invalid", field: "partIds" };
   await el.updateComplete;
-  expect(pick(el).error).toBe(codeMessage("joined_table.part_invalid"));
+  expect(pick(el).error).toBe(codeMessage("merge.member_invalid"));
   expect(foot(el).error).toBe("Correct the highlighted fields to continue.");
   expect(action(el).disabled).toBe(false);
   await choose(el, ["c5"]);
   expect(pick(el).error).toBe("");
   expect(foot(el).error).toBe("");
 
-  el.refusal = { code: "joined_table.part_invalid", field: "partIds" };
+  el.refusal = { code: "merge.member_invalid", field: "partIds" };
   await el.updateComplete;
   await choose(el, ["c4", "c5"]);
-  el.refusal = { code: "joined_table.part_invalid", field: "partIds" };
+  el.refusal = { code: "merge.member_invalid", field: "partIds" };
   await el.updateComplete;
   await press(el);
   expect(pick(el).error).toBe("");
@@ -266,9 +271,9 @@ it("shows a refusal naming Seats under Seats until the number changes", async ()
   const el = await mount();
   await choose(el, ["c5"]);
   await typeSeats(el, "6");
-  el.refusal = { code: "joined_table.seats_required", field: "seats" };
+  el.refusal = { code: "merge.seats_required", field: "seats" };
   await el.updateComplete;
-  expect(seatsField(el)!.error).toBe(codeMessage("joined_table.seats_required"));
+  expect(seatsField(el)!.error).toBe(codeMessage("merge.seats_required"));
   expect(pick(el).error).toBe("");
   expect(foot(el).error).toBe("Correct the highlighted fields to continue.");
   await typeSeats(el, "7");
@@ -331,7 +336,7 @@ it("speaks Spanish", async () => {
   expect(pick(el).countLabel(2)).toBe("2 mesas");
   expect(pick(el).options[0]).toEqual({ value: "c3", label: "Counter 3", description: "2 plazas" });
   expect(action(el).textContent!.trim()).toBe("Separar");
-  expect(seatsField(el)!.label).toBe("Plazas para Long table");
+  expect(seatsField(el)!.label).toBe("Plazas para lo que queda");
   await choose(el, ["c3", "c4", "c5"]);
   await press(el);
   expect(pick(el).error).toBe("Deja al menos 1 mesa unida.");
@@ -378,14 +383,13 @@ for (const [width, height] of [
 describe("on a group", () => {
   const inGroup = (id: string, label: string, seats: number, over: Partial<TableToday> = {}) =>
     table(id, label, { today: today(seats, { joinId: "g", ...over }) });
-  const splitOff = { splitOffFrom: "long" };
+  const splitOff = {};
   const bar = inGroup("bar", "Bar", 4);
   const zone = [
     inGroup("c5", "Counter 5", 4, splitOff),
     table("long", "Long table", {
       today: today(10, {
         placement: null,
-        joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
       }),
     }),
     inGroup("c3", "Counter 3", 2, splitOff),
@@ -415,13 +419,13 @@ describe("on a group", () => {
     ]);
   });
 
-  it("asks no seats when Bar is ticked, and sends none", async () => {
+  it("asks seats when Bar is ticked, and sends the remaining seats", async () => {
     const el = await mountGroup();
     const seen = captured(el);
     await choose(el, ["bar"]);
-    expect(seatsField(el)).toBeNull();
+    expect(seatsField(el)!.value).toBe("12");
     await press(el);
-    expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: null }]);
+    expect(seen.confirmed).toEqual([{ partIds: ["bar"], seats: 12 }]);
   });
 
   it("asks the seats for what stays when Counter 5 is ticked, and sends them", async () => {
@@ -557,12 +561,11 @@ describe("on a group", () => {
       joined: longTable({
         today: today(10, {
           joinId: "g",
-          joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false },
         }),
       }),
     });
     await choose(el, ["c5"]);
-    expect(seatsField(el)!.label).toBe("Seats for Long table");
+    expect(seatsField(el)!.label).toBe("Seats for what stays");
   });
 
   it("speaks Spanish", async () => {
@@ -579,7 +582,7 @@ describe("on a group", () => {
 describe("today's names", () => {
   const renamed = (id: string, label: string, seats: number, name: string | null) =>
     table(id, label, {
-      today: today(seats, { inJoinedTable: "Long table", ...(name === null ? {} : { name }) }),
+      today: today(seats, { ...(name === null ? {} : { name }) }),
     });
 
   it("lists each table by its name for today, and says the guests move to it by that name", async () => {

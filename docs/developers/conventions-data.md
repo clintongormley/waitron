@@ -2214,14 +2214,14 @@ off today off, at its new place.
 
 A reset copies the layout into `floor_reset_tables`, one row per table with its place in that
 layout, and each joined table's parts into `floor_reset_table_parts`, then runs the catch-up
-(`catchUpZone`). New live tables are created from those rows, including rows that had to wait for
-a name. The copy keeps a later save from changing what a reset is still applying.
+(`catchUpZone`). New real tables are created from those rows, including rows that had to wait for
+a name. Joined design rows remain reset metadata; their members become the live group. The copy keeps a later save from changing what a reset is still applying.
 
 A table waits, its reset row left pending, while a party holds it, a module refuses to let it go,
 or it needs clearing. `waitingTogether` grows that set until it is closed: a merge with a waiting
-table waits whole, so does a split group (a joined table and the tables split off it today) with a
-waiting member or food on its way to one, and so does a joined group of the reset (a joined
-table's row and its parts' rows) with a waiting member.
+table waits whole, as does a saved group with a waiting member or food on its way to one.
+Outside a full reset, a group containing an outside member waits until that member leaves;
+a subgroup wholly inside the saved membership may reform. A full reset may dissolve free groups.
 
 Inside a reset a free table goes to its new place at once. Outside one, the catch-up never moves a
 table drawn on today's map: a pending row whose table would move (`movesTable`,
@@ -2239,9 +2239,7 @@ applied a placed row; ending it, rather than leaving it waiting, keeps a member 
 making every floor read run the catch-up (`catchUpDue`). A row that gives its table a new name or
 short name, as a dashboard rename does, stays waiting, marked placed and not ready to move, so the
 catch-up gives the table its names, as for any row waiting only for its names, and never marks it
-again; while another table holds either name it keeps waiting. A row with no table yet (a joined
-table still to be made) is ended, because the catch-up makes the table of a waiting row with no
-table without reading `placed`. The catch-up reads only waiting rows and skips placed ones, so none
+again; while another table holds either name it keeps waiting. A saved group's metadata row has no live table and is ended rather than marked placed. The catch-up reads only waiting rows and skips placed ones, so none
 of these is marked again until a reset rewrites the zone's rows; that reset treats them as any reset
 does: a free table goes to its new place, or is marked again when that place is still taken; a table
 with guests waits and, once free, is marked whatever stands in its new place. Once none of a marked
@@ -2255,10 +2253,10 @@ Automatic resets and catch-up keep a table in place while another staying on the
 its new place (`standsIn`, `apps/server/src/joined-split-layout.ts`): drawn, it is marked
 `ready_to_move`; off the map, it waits. Its current place then blocks in turn (`blockedMoves`,
 `apps/server/src/floor-reset-plan.ts`; in SQL, `placeTaken` in `catchUpDue`). Tables moving together,
-tables needing moving and parts out of service in a joined table block nothing. A table standing
+tables needing moving block nothing. A table standing
 exactly at its own place in the recorded layout also blocks nothing (`blocksPlace` and
 `blocksPlaceSql`): the layout was saved that way. Mark moved carries its reset rows past these
-place checks. Mark moved, Back to its saved place and Reset table accept occupied places.
+place checks. Mark moved and Back to its saved place accept occupied places.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
 (`closePartyTables`, `apps/server/src/parties.ts`). Permanent removal releases order delivery
@@ -2272,52 +2270,20 @@ orders (`apps/server/src/delivery-release.ts`). A table is in service through `t
 (`packages/db/src/table-in-service.ts`): it has a today's row in a live zone. That test does not
 exclude a table taken off today. There is no active column on `dining_tables`.
 
-Whether a joined table holds its tables is read from today's map (`stillJoinedPart`,
-`packages/db/src/joined-parts.ts`). A part is still joined while its joined table is drawn, or,
-when the joined table is not drawn, once the part's reset row has been applied and while none of
-the parts not split off today is drawn; in either case only while the part holds no open party, is
-in none of today's merges and was not split off today. Such a part is refused
-`table.in_joined_table` on the paths that seat a party at it, move guests or a bill to it, join it
-to a party, merge it on today's map, put it on the map as a spare, take it off for today, name it
-as an order's table or accept a department transfer to it. A joined table with fewer than two
-parts still joined, that no party holds and no merge takes in, has come apart and is refused on
-the same paths (`joinedTableApart`; both through `joinedOutOfService`).
+A saved joined table starts as one named ordinary group of its real members. Its design row is
+metadata only. Reset slots use each member's recorded placement size, then its kept size, then
+`NEW_TABLE_SIZE`, in table-number order (`resetZoneFor`, `floor-today-store.ts`). The reset copy
+keeps these slots as the members' before-places. Group formation waits for the members, and a
+later catch-up keeps an already formed group's identity.
 
-Whether a table is a saved part is read from what the zone's last reset copied (its
-`floor_reset_tables` rows and their copied parts), and only while the zone has a set recorded for
-the business day asked about (`savedPart`, `packages/db/src/joined-parts.ts`): a part is a saved
-part when that copy places its joined table, or none of its parts; a joined table is one when the
-copy leaves it off while placing one of its parts. A layout saved after the reset therefore
-changes nothing here until a reset applies it. With no such record, or one naming no set, every
-part of a joined table in any of the zone's layouts is a saved part and no joined table is. `GET /api/tables` leaves saved parts out
-(`apps/server/src/tables.ts`); bookings refuse one `table.in_joined_table`, judged on the booking's
-date (`requireActiveTable`, `packages/bookings/src/bookings.ts`).
-
-A part split off today (a `floor_today_split_parts` row) stands alone. The split ends when the
-reset puts the joined table back, or, for the tables it takes back, when Reset table does, or when
-Split tables… on a group puts it back over the tables that stay (`splitGroup`, which also clears
-their "needs clearing" marks).
-
-Pushing a joined table into a merge, or a table onto a joined table in none, never puts the joined
-table in one: it writes a split row for each of its tables still joined and puts those tables in the
-merge, writes a split row for a table of it in use since the reset without moving it, and passes the
-guests at the joined table to its tables (`writeMerge`, `apps/server/src/floor-today-merges.ts`;
-`passGuests`, `apps/server/src/floor-today-parts.ts`). The push is refused while food is on its way
-to the joined table (`table.delivery_pending`), and a free push also while one of its tables still
-joined needs clearing (`table.needs_clearing`). A merge the reset keeps waiting can still hold a
-table that reset makes a joined table. A table pushed onto it joins the merge with the joined table
-whole (`writeMerge`), and a split down to one is refused `tab.already_open` while a party holds a
-table of the merge, and otherwise ends the merge first, putting its tables back where they stood
-(`splitJoinedTable`, `apps/server/src/floor-today-split.ts`). Split tables… on a table in a group
-goes to `splitGroup` unless the table is a joined table with tables still joined, which keeps
-`splitJoinedTable` (`splitOff`, `apps/server/src/floor-today-split-group.ts`). A ticked table not in
-the group is refused `merge.member_invalid`, ticking every table `merge.split_all`, and ticking
-every table a party holds `merge.strands_party` (a moved bill can hold one table of a group, backlog
-A594). When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and
-tries again, and puts them back if that is refused too (`apps/server/src/table-removal.ts`).
+`GET /api/tables` and bookings offer real members under their own labels and ids. They have no
+saved-part exclusion. Today's table reads carry ordinary `joinId`, `joinSeats` and `joinName`;
+there is no synthetic joined-table row, joined-only action or Reset table route. Split tables…
+uses `splitGroup`; Join with… uses `writeMerge`. Fixed seats retain their party joins. The unused
+`floor_today_split_parts` schema and protections remain until the fk5 storage fold deletes them.
 
 Split tables… also requires the till's `expectedParties`, distinct party ids and revisions from
-its ticked tables and, for a joined-table split, the joined table itself. After validating the
+its ticked tables. After validating the
 selected members, `splitOff` compares the observed holders and revisions before the split's
 stranding, seats and placement checks or writes. A free read sends `[]`. Seating stays outside
 the room's revision.
@@ -2326,7 +2292,7 @@ Each room's plan for the day has a revision (`floor_today_zones.generation`, rea
 reset adds one to it (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). Any other request
 moves it by one for its own writes, however many rows they touch, when they change the room: the
 request compares the room's print before and after its writes (`roomPrints`,
-`apps/server/src/floor-revision.ts`: each table's name and short name, today's row, group, split and
+`apps/server/src/floor-revision.ts`: each table's name and short name, today's row, group and
 reset row's `ready_to_move`). So a read whose catch-up marks a table "Needs moving" moves the
 revision. The catch-up in `ensureToday`, which runs first, moves a room it did not reset by one when
 it changes it; a room it resets moves only by the reset's one. The table routes, the two zone routes
@@ -2339,17 +2305,15 @@ route, a zone route and a party join with a merge, and any of those that sends n
 (`management.request_invalid`, `requiredRevision` in `apps/server/src/floor-revision.ts`); a zone
 route alone may send `null`, for a read that held no table of the zone with a today's row.
 
-A table's or a joined table's name for today is `floor_today_tables.name`, a group's is
+A table's name for today is `floor_today_tables.name`, a group's is
 `floor_today_joins.name`; null means the saved name. `POST /api/tables/:id/today/name` writes it
 (`nameToday`, `apps/server/src/floor-today-name.ts`); a table in a group names the group. A name is
 refused `table.label_taken` when, compared after `normalize("NFC")` and `toLowerCase()` in
 JavaScript (`sameName`), it is the saved name of another table or the today's name
 of another group or of another table on the map, spare or taken off; a group's own tables count as
-other tables. A reset clears a table's name when it puts the table back (`todayColumns` and the
-parts it takes back in `catchUpPass`, Reset table, and Split tables… putting a joined table back). A
-group's name goes with its row, however the group ends. A joined table's name goes when it is split
-down to one table or pushed into a group, which takes that name if it has none, the table pushed
-onto first (`writeMerge`). The room's print reads both columns, so a rename moves the revision.
+other tables. Saved joined-group names remain reserved after a full split; a remaining group can restore its
+saved name. A reset clears a table's name when it puts the table back (`todayColumns`). A group's name goes
+with its row when the group ends; a remaining group keeps it after a split. The room's print reads both columns, so a rename moves the revision.
 Bills, receipts, kitchen tickets and MOVED slips, the expo board and pass screens, overdue orders
 and the floor's party name read a table's shown name — its group's today's name, else its own, else
 its saved name, a group's name once per party (`partyTableLabels` and `orderTableLabels`,
@@ -2359,27 +2323,9 @@ was issued with. The closing party's `table_names`, the orders list and its tabl
 names.
 
 Back to its saved place puts a table at its reset row's place; on a table that needs moving it is
-Mark moved (`backToSaved`, `apps/server/src/floor-today-store.ts`). Otherwise it, and Take off for
-today, refuse a table split off (`table.split_off`, `refuseSplitOff`). Back takes the table out of
+Mark moved (`backToSaved`, `apps/server/src/floor-today-store.ts`). Back takes the table out of
 its merge first: in a merge of three the partners stay where they stand, and in a merge of two the
 partner goes back to where it stood before the merge.
-
-Reset table (`POST /api/tables/:id/today/reset`, `resetTable`,
-`apps/server/src/floor-today-reset-table.ts`) takes back every table split off the joined table that
-no party holds, that is in no group a party holds a table of, and that no food is on its way to; a
-"needs clearing" mark or a group nobody sits at does not keep one apart. It ends each group a table
-it takes back is in, the group's other tables going back where they stood, then clears the "needs
-clearing" marks of the tables it takes back, deletes their split rows, gives them their reset row's
-seats and no place, and puts the joined table at its reset row's place, not where it stands: all of
-it with its saved seats when every table comes back, else over the slots of the tables joined from
-that place's left end, with the seats sent. A joined table whose reset row has no place is placed by
-`joinedPlaceAfter` (`apps/server/src/joined-split-layout.ts`) from its place on today's map, and
-when that leaves it off the map it stays off. When too few tables would
-come back and a table split off it is in a group a party holds a table of, itself or another, it
-refuses `joined_table.tables_in_group`, naming those tables; otherwise
-`joined_table.nothing_to_join`. It writes no reset row of its own and ends with the zone's catch-up
-(`catchUpZone`), so a table it takes back after a zone reset counts as a part still joined in the
-same transaction, and a later reset still holds the tables it left apart.
 
 Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to `node:sqlite`:
 `pragma_foreign_key_list` reports six incoming keys, all `ON DELETE NO ACTION`:

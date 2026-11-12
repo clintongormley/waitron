@@ -208,42 +208,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table is off today's plan. Put it back first",
     es: "Esa mesa está quitada hoy. Vuelve a ponerla primero",
   },
-  "table.in_joined_table": {
-    en: "That table is part of a joined table",
-    es: "Esa mesa forma parte de una mesa unida",
-  },
-  "joined_table.not_found": {
-    en: "That table is not a joined table",
-    es: "Esa mesa no es una mesa unida",
-  },
-  "joined_table.part_invalid": {
-    en: "That table is no longer part of this joined table",
-    es: "Esa mesa ya no forma parte de esta mesa unida",
-  },
-  "joined_table.split_all": {
-    en: "Leave at least one table joined",
-    es: "Deja al menos una mesa unida",
-  },
-  "joined_table.seats_required": {
-    en: "Enter the seats for the joined table",
-    es: "Indica las plazas de la mesa unida",
-  },
-  "joined_table.parts_split_off": {
-    en: "Some of its tables are split off. Reset the table first",
-    es: "Algunas de sus mesas están separadas. Restablece la mesa primero",
-  },
-  "joined_table.nothing_to_join": {
-    en: "Nothing to reset now",
-    es: "Ahora no hay nada que restablecer",
-  },
-  "joined_table.out_of_date": {
-    en: "Its tables have changed. Check and try again",
-    es: "Sus mesas han cambiado. Revísalo e inténtalo de nuevo",
-  },
-  "joined_table.tables_in_group": {
-    en: "Some of its tables are in a group with guests. Split them off first",
-    es: "Algunas de sus mesas están en un grupo con clientes. Sepáralas primero",
-  },
   "floor_today.out_of_date": {
     en: "The floor has changed. Check and try again",
     es: "La sala ha cambiado. Revísala y vuelve a intentarlo",
@@ -251,10 +215,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "floor_today.layout_changed": {
     en: "The layout has changed. Check the floor and try again",
     es: "El plano ha cambiado. Revisa la sala e inténtalo de nuevo",
-  },
-  "table.split_off": {
-    en: "That table was split off. Reset its table first",
-    es: "Esa mesa está separada. Restablece su mesa primero",
   },
 
   "merge.seats_required": {

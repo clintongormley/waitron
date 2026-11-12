@@ -172,11 +172,7 @@ import {
 } from "../state/draft-layout.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
-import {
-  outOfServiceJoined,
-  seatsGuests,
-  shownName as tableShownName,
-} from "../state/floor-today.js";
+import { seatsGuests, shownName as tableShownName } from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
@@ -5646,7 +5642,6 @@ export class TillTableOrderScreen extends LitElement {
       (this.actionVerb === "move-bill" &&
         (this.#shownBill === undefined || this.#shownBill.status === "open"));
     const tables = this.tables
-      .filter((table) => !outOfServiceJoined(table))
       .filter((table) => zoneId === null || table.zoneId === zoneId)
       .filter(
         (table) =>

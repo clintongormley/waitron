@@ -4,13 +4,13 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayTables, workingOrders } from "@waitron/db";
+import { workingOrders } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { writeMerge } from "./floor-today-merges.js";
-import { placeSpareToday, resetZone } from "./floor-today-store.js";
+import { resetZone } from "./floor-today-store.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { listTables } from "./tables.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
@@ -25,16 +25,11 @@ import {
   OPERATOR,
   partyAt,
   seat,
+  seatWithNoAllergies,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import {
-  mergeOf,
-  plannedZone,
-  setsDepartment,
-  splitOffRow,
-  todayRow,
-} from "./testing/floor-today-venue.js";
+import { mergeOf, plannedZone, setsDepartment } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -71,224 +66,86 @@ const LONG_AND_BAR = () =>
     NOW,
   );
 
-const inJoinedTable = (tableId: string) => ({
-  code: "table.in_joined_table",
-  params: { tableId },
-});
-
-describe("a part still in a joined table", () => {
-  it("refuses seating a party at Counter 4", async () => {
+describe("a saved joined table's real members", () => {
+  it("seats a party at Counter 4 across the whole group", async () => {
     const { table } = await LONG_AND_BAR();
-    await expect(seat(v, table.c4!)).rejects.toMatchObject(inJoinedTable(table.c4!));
-    expect(await partyAt(v, table.c4!)).toBeNull();
+    const { partyId } = await seat(v, table.c4!);
+    expect((await activeTablesOf(v, partyId)).sort()).toEqual(
+      [table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("refuses joining Counter 5 to a party at Bar", async () => {
+  it("joins Counter 5 to a party at Bar", async () => {
     const { table } = await LONG_AND_BAR();
     const { partyId } = await seat(v, table.bar!);
-    await expect(join(v, partyId, table.c5!)).rejects.toMatchObject(inJoinedTable(table.c5!));
-    expect(await activeTablesOf(v, partyId)).toEqual([table.bar!]);
+    await join(v, partyId, table.c5!);
+    expect((await activeTablesOf(v, partyId)).sort()).toEqual([table.bar!, table.c5!].sort());
   });
 
-  it("refuses moving guests to Counter 3", async () => {
+  it("moves guests to Counter 3", async () => {
     const { table } = await LONG_AND_BAR();
     const { partyId } = await seat(v, table.bar!);
     const sent = await commandFor(v, partyId);
-    await expect(
-      inTx(v, (tx) => moveGuests(tx, v.cfg, partyId, table.c3!, { ...sent, otherPartyId: null })),
-    ).rejects.toMatchObject(inJoinedTable(table.c3!));
-    expect(await activeTablesOf(v, partyId)).toEqual([table.bar!]);
-    expect(await partyAt(v, table.c3!)).toBeNull();
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, table.c3!, { ...sent, otherPartyId: null }),
+    );
+    expect((await activeTablesOf(v, partyId)).sort()).toEqual([table.c3!].sort());
+    expect(await partyAt(v, table.bar!)).toBeNull();
   });
 
-  it("refuses moving a bill to Counter 3", async () => {
+  it("moves a bill to a party at Counter 3", async () => {
     const { table } = await LONG_AND_BAR();
+    const { partyId } = await seatWithNoAllergies(v, table.c3!);
     const orderId = await counterOrder(v, "Flan");
-    await expect(
-      inTx(v, (tx) =>
-        moveBill(tx, v.cfg, orderId, { tableId: table.c3! }, { operatorId: OPERATOR }),
+    const command = await commandFor(v, partyId);
+    await inTx(v, (tx) =>
+      moveBill(
+        tx,
+        v.cfg,
+        orderId,
+        { tableId: table.c3! },
+        {
+          operatorId: OPERATOR,
+          otherPartyId: partyId,
+          expectedOtherPartyRevision: command.expectedPartyRevision,
+        },
       ),
-    ).rejects.toMatchObject(inJoinedTable(table.c3!));
-    expect((await billRow(v, orderId)).partyId).toBeNull();
-    expect(await partyAt(v, table.c3!)).toBeNull();
+    );
+    expect((await billRow(v, orderId)).partyId).toBe(partyId);
+    expect((await activeTablesOf(v, partyId)).sort()).toEqual(
+      [table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("refuses putting Counter 4 on today's map", async () => {
-    const { table } = await LONG_AND_BAR();
-    await expect(
-      inTx(v, (tx) => placeSpareToday(tx, table.c4!, { x: 1, y: 1 })),
-    ).rejects.toMatchObject(inJoinedTable(table.c4!));
-    expect((await todayRow(v, table.c4!))?.x).toBeNull();
-  });
-
-  it("refuses merging Bar with Counter 5 first as not on today's plan", async () => {
-    const { table } = await LONG_AND_BAR();
-    await expect(
-      inTx(v, (tx) =>
-        writeMerge(tx, v.cfg, {
-          movingId: table.bar!,
-          targetId: table.c5!,
-          side: "right",
-          seats: 8,
-          free: true,
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "table.not_on_today_plan",
-      params: { tableId: table.c5! },
-    });
-    expect(await mergeOf(v, table.bar!)).toBeNull();
-  });
-
-  it("refuses merging Bar with Counter 5 when Counter 5 has a place today", async () => {
+  it("merges Bar with Counter 5's ordinary group", async () => {
     const { table } = await LONG_AND_BAR();
     await inTx(v, (tx) =>
-      tx
-        .update(floorTodayTables)
-        .set({ x: 80, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 })
-        .where(eq(floorTodayTables.tableId, table.c5!)),
+      writeMerge(tx, v.cfg, {
+        movingId: table.bar!,
+        targetId: table.c5!,
+        side: "right",
+        seats: 8,
+        free: true,
+      }),
     );
-    await expect(
-      inTx(v, (tx) =>
-        writeMerge(tx, v.cfg, {
-          movingId: table.bar!,
-          targetId: table.c5!,
-          side: "right",
-          seats: 8,
-          free: true,
-        }),
-      ),
-    ).rejects.toMatchObject(inJoinedTable(table.c5!));
-    expect(await mergeOf(v, table.bar!)).toBeNull();
+    expect((await mergeOf(v, table.bar!))!.members.map((m) => m.tableId).sort()).toEqual(
+      [table.bar!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("refuses an order delivered to Counter 3", async () => {
+  it("delivers a counter order to Counter 3", async () => {
     const { table } = await LONG_AND_BAR();
     const id = randomUUID();
-    await expect(
-      inTx(v, (tx) =>
-        createOpenOrder(
-          tx,
-          v.cfg,
-          id,
-          [{ menuItemId: v.counterItem("Flan"), quantity: "1" }],
-          null,
-          {
-            deliveryTableId: table.c3!,
-            zoneId: v.counter.zoneId,
-          },
-        ),
-      ),
-    ).rejects.toMatchObject(inJoinedTable(table.c3!));
-    const written = await inTx(v, (tx) =>
+    await inTx(v, (tx) =>
+      createOpenOrder(tx, v.cfg, id, [{ menuItemId: v.counterItem("Flan"), quantity: "1" }], null, {
+        deliveryTableId: table.c3!,
+        zoneId: v.counter.zoneId,
+      }),
+    );
+    const [written] = await inTx(v, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
     );
-    expect(written).toEqual([]);
-  });
-
-  it("seats a party at Long table, and at Counter 3 once Long table is deleted and the zone reset", async () => {
-    const { zoneId, table, master } = await LONG_AND_BAR();
-    const atLong = await seat(v, table.long!);
-    expect(await partyAt(v, table.long!)).toBe(atLong.partyId);
-
-    const plan = await inTx(v, async (tx) =>
-      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-    );
-    const tables: ZonePlanSave["tables"] = plan.tables
-      .filter((entry) => entry.id !== master.long)
-      .map((entry) => ({
-        id: entry.id,
-        key: entry.id,
-        label: entry.label,
-        seats: entry.seats,
-        fixed: entry.fixed,
-        placement: entry.placement,
-        partKeys: [],
-      }));
-    await inTx(v, async (tx) =>
-      saveLayout(
-        tx,
-        REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
-        { revision: plan.revision, tables },
-        NOW,
-      ),
-    );
-    await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
-
-    const atCounter = await seat(v, table.c3!);
-    expect(await partyAt(v, table.c3!)).toBe(atCounter.partyId);
-  });
-});
-
-describe("a joined table come apart", () => {
-  it("seats a party at Counter 4 once it is split off", async () => {
-    const { table } = await LONG_AND_BAR();
-    await splitOffRow(v, table.long!, table.c4!);
-    const { partyId } = await seat(v, table.c4!);
-    expect(await partyAt(v, table.c4!)).toBe(partyId);
-  });
-
-  it("refuses seating a party at Long table once two of its three parts are split off", async () => {
-    const { table } = await LONG_AND_BAR();
-    await splitOffRow(v, table.long!, table.c4!);
-    await splitOffRow(v, table.long!, table.c5!);
-    await expect(seat(v, table.long!)).rejects.toMatchObject(inJoinedTable(table.long!));
-    expect(await partyAt(v, table.long!)).toBeNull();
-  });
-
-  it("refuses joining Long table to a party at Bar once it has come apart", async () => {
-    const { table } = await LONG_AND_BAR();
-    await splitOffRow(v, table.long!, table.c4!);
-    await splitOffRow(v, table.long!, table.c5!);
-    const { partyId } = await seat(v, table.bar!);
-    await expect(join(v, partyId, table.long!)).rejects.toMatchObject(inJoinedTable(table.long!));
-    expect(await activeTablesOf(v, partyId)).toEqual([table.bar!]);
-  });
-
-  it("refuses merging Bar with Long table once it has come apart", async () => {
-    const { table } = await LONG_AND_BAR();
-    await splitOffRow(v, table.long!, table.c4!);
-    await splitOffRow(v, table.long!, table.c5!);
-    await expect(
-      inTx(v, (tx) =>
-        writeMerge(tx, v.cfg, {
-          movingId: table.bar!,
-          targetId: table.long!,
-          side: "right",
-          seats: 14,
-          free: true,
-        }),
-      ),
-    ).rejects.toMatchObject(inJoinedTable(table.long!));
-    expect(await mergeOf(v, table.bar!)).toBeNull();
-    expect(await mergeOf(v, table.long!)).toBeNull();
-  });
-
-  it("refuses an order delivered to Long table once it has come apart", async () => {
-    const { table } = await LONG_AND_BAR();
-    await splitOffRow(v, table.long!, table.c4!);
-    await splitOffRow(v, table.long!, table.c5!);
-    const id = randomUUID();
-    await expect(
-      inTx(v, (tx) =>
-        createOpenOrder(
-          tx,
-          v.cfg,
-          id,
-          [{ menuItemId: v.counterItem("Flan"), quantity: "1" }],
-          null,
-          {
-            deliveryTableId: table.long!,
-            zoneId: v.counter.zoneId,
-          },
-        ),
-      ),
-    ).rejects.toMatchObject(inJoinedTable(table.long!));
-    const written = await inTx(v, (tx) =>
-      tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
-    );
-    expect(written).toEqual([]);
+    expect(written).toMatchObject({ deliveryTableId: table.c3! });
   });
 
   it("Long table waits, not yet made, while two of its parts still hold parties from before the reset", async () => {
@@ -410,20 +267,12 @@ describe("a layout that stands a joined table's tables", () => {
     expect(ids).not.toContain(table.t45);
   });
 
-  it("reads 4+5 as come apart, and 4 and 5 in no joined table", async () => {
+  it("reads only the real tables, with ordinary group fields", async () => {
     const table = await underStandard();
     const states = await inTx(v, (tx) => listTablesWithState(tx, [], NOW));
-    const of = (id: string) => states.find((s) => s.id === id)!.today;
-    expect(of(table.t45).joined?.apart).toBe(true);
-    expect(of(table.t4).inJoinedTable).toBeNull();
-    expect(of(table.t5).inJoinedTable).toBeNull();
-  });
-
-  it("refuses putting 4+5 on today's map", async () => {
-    const table = await underStandard();
-    await expect(
-      inTx(v, (tx) => placeSpareToday(tx, table.t45, { x: 60, y: 60 })),
-    ).rejects.toMatchObject(inJoinedTable(table.t45));
-    expect((await todayRow(v, table.t45))?.x).toBeNull();
+    for (const id of [table.t4, table.t5]) {
+      expect(states.find((s) => s.id === id)!.today).toMatchObject({ joinId: null });
+    }
+    expect(states.some((s) => s.id === table.t45)).toBe(false);
   });
 });

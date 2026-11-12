@@ -6,13 +6,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  diningTables,
-  floorResetTables,
-  floorTodaySplitParts,
-  floorTodayTables,
-  joinedTableApart,
-} from "@waitron/db";
+import { diningTables, floorResetTables, floorTodayTables } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
@@ -31,6 +25,7 @@ import {
 import {
   expectRevision,
   plannedZone,
+  mergeOf,
   standardAndDinner as standardAndDinnerIn,
   withFloorRevision,
   zoneRevisionOf,
@@ -110,7 +105,7 @@ async function refusal(answer: Promise<Response>): Promise<{ status: number; bod
 
 async function seatAt(tableId: string): Promise<string> {
   const answer = await send("POST", `/api/tables/${tableId}/seat`, {});
-  expect(answer.status).toBe(200);
+  expect(answer.status, await answer.clone().text()).toBe(200);
   return ((await answer.json()) as { partyId: string }).partyId;
 }
 
@@ -118,13 +113,13 @@ async function finish(partyId: string): Promise<void> {
   const answer = await send("POST", `/api/parties/${partyId}/finish`, {
     expectedPartyRevision: await revisionOf(v, partyId),
   });
-  expect(answer.status).toBe(200);
+  expect(answer.status, await answer.clone().text()).toBe(200);
 }
 
 /** The till's floor read, by table. */
 async function readStates() {
   const answer = await send("GET", "/api/tables/state");
-  expect(answer.status).toBe(200);
+  expect(answer.status, await answer.clone().text()).toBe(200);
   const tables = (await answer.json()) as {
     id: string;
     label: string;
@@ -180,18 +175,7 @@ async function everything() {
   return inTx(v, async (tx) => ({
     today: await tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
     reset: await tx.select().from(floorResetTables).orderBy(asc(floorResetTables.id)),
-    split: await tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
   }));
-}
-
-async function apart(tableId: string): Promise<boolean> {
-  const [row] = await inTx(v, (tx) =>
-    tx
-      .select({ apart: joinedTableApart(diningTables.id) })
-      .from(diningTables)
-      .where(eq(diningTables.id, tableId)),
-  );
-  return Boolean(row!.apart);
 }
 
 function fresh(label: string): string {
@@ -235,11 +219,11 @@ async function fourPlusFiveSeatedAcrossStandard(more: Placed[] = []) {
   ]);
   await s.onto(s.d.dinner);
   const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
-  const partyId = await seatAt(t45);
+  const partyId = await seatAt(t4);
   await s.onto(s.d.standard);
-  expect(await todayRow(t45)).toMatchObject({ x: 60 });
+  expect(await todayRow(t4)).toMatchObject({ x: 60 });
   await finish(partyId);
-  expect(await needsMoving(t45)).toBe(true);
+  expect(await needsMoving(t4)).toBe(true);
   return { ...s, t4, t5, t45 };
 }
 
@@ -269,14 +253,14 @@ describe("Mark moved", () => {
     const states = await readStates();
     expect(states.get(t4)!.today.needsMoving).toBe(true);
     expect(states.get(t5)!.today.needsMoving).toBe(true);
-    expect(await todayRow(t45)).toMatchObject({ x: null });
+    expect(await todayRow(t45)).toBeUndefined();
 
     await expectRevision(v, markMoved(t5), s.d.zoneId);
 
-    expect(await todayRow(t4)).toMatchObject({ x: null });
-    expect(await todayRow(t5)).toMatchObject({ x: null });
-    expect(await todayRow(t45)).toMatchObject({ x: 60, takenOff: false });
-    for (const id of [t4, t5, t45]) {
+    expect(await todayRow(t4)).toMatchObject({ x: 60, takenOff: false });
+    expect(await todayRow(t5)).toMatchObject({ x: 68, takenOff: false });
+    expect(await todayRow(t45)).toBeUndefined();
+    for (const id of [t4, t5]) {
       expect(await readyOf(id)).toEqual({ pending: false, readyToMove: false });
     }
   });
@@ -284,10 +268,8 @@ describe("Mark moved", () => {
   it("takes 4+5 apart", async () => {
     const z = await fourPlusFiveSeatedAcrossStandard();
 
-    await expectRevision(v, markMoved(z.t45), z.d.zoneId);
+    await expectRevision(v, markMoved(z.t4), z.d.zoneId);
 
-    expect(await todayRow(z.t45)).toMatchObject({ x: null });
-    expect(await apart(z.t45)).toBe(true);
     expect(await todayRow(z.t4)).toMatchObject({ x: 0, takenOff: false });
     expect(await todayRow(z.t5)).toMatchObject({ x: 20, takenOff: false });
     await seatAt(z.t4);
@@ -301,13 +283,11 @@ describe("Mark moved", () => {
     expect(await needsMoving(t8)).toBe(false);
     const blocker = await todayRow(t8);
 
-    await expectRevision(v, markMoved(z.t45), z.d.zoneId);
+    await expectRevision(v, markMoved(z.t4), z.d.zoneId);
 
-    expect(await todayRow(z.t45)).toMatchObject({ x: null });
-    expect(await apart(z.t45)).toBe(true);
     expect(await todayRow(z.t4)).toMatchObject({ x: 0, takenOff: false });
     expect(await todayRow(z.t5)).toMatchObject({ x: 20, takenOff: false });
-    for (const id of [z.t45, z.t4, z.t5])
+    for (const id of [z.t4, z.t4, z.t5])
       expect(await readyOf(id)).toEqual({ pending: false, readyToMove: false });
     expect(await todayRow(t8)).toEqual(blocker);
   });
@@ -323,21 +303,21 @@ describe("Mark moved", () => {
     const [t4, t5, t45, t8] = [s.live("t4"), s.live("t5"), s.live("t45"), s.live("t8")];
     await setToday(t4, { takenOff: true });
     await s.update(s.d.dinner);
-    const partyId = await seatAt(t45);
+    const partyId = await seatAt(t5);
     await s.update(s.d.standard);
     await finish(partyId);
-    expect(await needsMoving(t45)).toBe(true);
+    expect(await needsMoving(t5)).toBe(true);
     expect(await todayRow(t4)).toMatchObject({ takenOff: true });
     await setToday(t8, { x: 0 });
 
-    await expectRevision(v, markMoved(t45), s.d.zoneId);
+    await expectRevision(v, markMoved(t5), s.d.zoneId);
 
     expect(await todayRow(t4)).toMatchObject({ x: 0, takenOff: true });
     expect(await todayRow(t5)).toMatchObject({ x: 20, takenOff: false });
-    expect(await todayRow(t45)).toMatchObject({ x: null });
+    expect(await todayRow(t45)).toBeUndefined();
   });
 
-  it("creates the pending joined table even while another table stands in its place", async () => {
+  it("forms the pending ordinary group even while another table stands in its place", async () => {
     const z = await plannedZone(
       v,
       [
@@ -390,13 +370,11 @@ describe("Mark moved", () => {
     const blocker = await todayRow(t8);
     await expectRevision(v, markMoved(c4), z.zoneId);
 
-    const joined = [...(await readStates()).values()].find((table) => table.label === label)!;
-    expect(await todayRow(joined.id)).toMatchObject({ x: 0, y: 40, seats: 8, takenOff: false });
-    for (const id of [c3, c4, joined.id]) {
+    expect(await todayRow(c3)).toMatchObject({ x: 0, y: 40, takenOff: false });
+    expect(await todayRow(c4)).toMatchObject({ x: 8, y: 40, takenOff: false });
+    expect((await mergeOf(v, c3))!.members.map((m) => m.tableId).sort()).toEqual([c3, c4].sort());
+    for (const id of [c3, c4])
       expect(await readyOf(id)).toEqual({ pending: false, readyToMove: false });
-    }
-    expect(await todayRow(c3)).toMatchObject({ x: null });
-    expect(await todayRow(c4)).toMatchObject({ x: null });
     expect(await todayRow(t8)).toEqual(blocker);
   });
 
@@ -460,7 +438,7 @@ describe("Mark moved", () => {
     expect(await needsMoving(c4)).toBe(true);
   });
 
-  it("is refused while guests sit at a table of another waiting joined group tied to it by a merge", async () => {
+  it("waits for an outside group before offering Mark moved", async () => {
     const z = await plannedZone(
       v,
       [
@@ -527,14 +505,11 @@ describe("Mark moved", () => {
       await resetZone(tx, REMOVALS, z.zoneId, NOW, "due");
     });
     await finish(partyId);
-    expect(await needsMoving(c4)).toBe(true);
+    expect(await needsMoving(c4)).toBe(false);
     await seatAt(c9);
     const before = await everything();
 
-    expect(await refusal(markMoved(c4))).toEqual({
-      status: 409,
-      body: { error: { code: "tab.already_open", params: { tableId: c9 } } },
-    });
+    await expectRevision(v, markMoved(c4), z.zoneId);
 
     expect(await everything()).toEqual(before);
   });
@@ -817,8 +792,8 @@ describe("Leave it here", () => {
 
     expect(await todayRow(t4)).toMatchObject({ x: 0 });
     expect(await todayRow(t5)).toMatchObject({ x: 20 });
-    expect(await todayRow(t45)).toMatchObject({ x: null });
-    for (const id of [t4, t5, t45]) expect(await rowStateOf(id)).toEqual(ended);
+    expect(await todayRow(t45)).toBeUndefined();
+    for (const id of [t4, t5]) expect(await rowStateOf(id)).toEqual(ended);
     await seatAt(t4);
     await seatAt(t5);
   });
@@ -826,17 +801,15 @@ describe("Leave it here", () => {
   it("leaves 4+5 standing joined and seatable", async () => {
     const z = await fourPlusFiveSeatedAcrossStandard();
 
-    await expectRevision(v, leaveHere(z.t45), z.d.zoneId);
+    await expectRevision(v, leaveHere(z.t4), z.d.zoneId);
 
-    expect(await todayRow(z.t45)).toMatchObject({ x: 60 });
-    expect(await needsMoving(z.t45)).toBe(false);
-    expect(await todayRow(z.t4)).toMatchObject({ x: null });
-    expect(await todayRow(z.t5)).toMatchObject({ x: null });
-    await seatAt(z.t45);
+    expect(await todayRow(z.t4)).toMatchObject({ x: 60 });
+    expect(await needsMoving(z.t4)).toBe(false);
+    await seatAt(z.t4);
     const atFour = await send("POST", `/api/tables/${z.t4}/seat`, {});
     expect(atFour.status).toBe(409);
     expect(((await atFour.json()) as { error: { code: string } }).error.code).toBe(
-      "table.in_joined_table",
+      "tab.already_open",
     );
   });
 

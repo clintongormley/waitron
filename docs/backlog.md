@@ -785,7 +785,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Remove till code nothing reaches** (bundle of 3, size M). Holds A1007. [Detail](backlog/till.md#bundle-remove-till-code-nothing-reaches)
 
-- **Small till and floor wording fixes** (bundle of 9, size M). Holds A1259, A934, A920, A912, A470, A563, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
+- **Small till and floor wording fixes** (bundle of 8, size M). Holds A1259, A934, A920, A912, A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **A1052. A handheld's transfer accept list holds only counter zones.** Read, not run: a handheld
   fills it from `GET /api/default-service-zone/offers`, whose `zones` are the profile's counter
@@ -806,7 +806,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
   the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
 
-- **The owner's yes-or-no read: built defaults that wait only for a nod** (bundle, 2 important, size M, needs the owner). Holds A723, A762, A1059, A1060, A1063, A1067, A1068, A1080, A1081, A1250, A1253, A893, A936, A900, A923, A1011, A1020, A1031, A924, A925, A952, A953, A954, A956, A957, A958, A959, A292, A575, A856, A859, A841, A841, A841. [Detail](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
+- **The owner's yes-or-no read: built defaults that wait only for a nod** (bundle, 2 important, size M, needs the owner). Holds A723, A762, A1059, A1060, A1063, A1067, A1068, A1080, A1081, A1250, A1253, A893, A936, A900, A923, A1011, A1020, A1031, A924, A925, A952, A953, A954, A956, A957, A958, A959, A292, A856, A859, A841, A841, A841. [Detail](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
@@ -1003,19 +1003,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `wt-floor-plan-preview` has no product user. Retire it, or record why it is kept.
   [Detail](backlog/till.md#loose-ends-left-by-a718)
 
-- **One rule for a booking when the evening's layout changes** (bundle of 4, 1 important, size M, needs the owner). Holds A474, A550, A857, A879. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)
+- **One rule for a booking when the evening's layout changes** (bundle of 3, 1 important, size M, needs the owner). Holds A474, A550, A857. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)
 
 - **Floor map drag, hidden map, allergy mark** (bundle of 4, size S). [Detail](backlog/till.md#bundle-floor-map-drag-hidden-map-allergy-mark)
 
 - **Show a table's short name where the full name does not fit** (bundle of 4, 3 important, size S, needs the owner). Holds A561, A562, A1101. [Detail](backlog/till.md#bundle-show-a-tables-short-name-where-the-full-name-does-not-fit)
 
-- **Joined-table writers keep their rows right** (bundle of 4, 2 important, size M, waits for another entry). Holds A591, A592, A594, A598. [Detail](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
+- **Joined-table writers keep their rows right** (bundle of 2, size M, waits for another entry). Holds A592, A594. [Detail](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
 
-- **A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
-  (2026-10-13).** Narrower than its tables; a split lays them out from its left edge. Left open by #1626.
-  [Detail](backlog/till.md#a593-a-table-the-reset-turns-into-a-joined-table-inside-a-waiting-group-keeps-its-old-outline)
-
-- **One rule for what holds a table back at a reset** (bundle of 4, 1 important, size M, waits for another entry). Holds A603, A565, A566, A860. [Detail](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
+- **One rule for what holds a table back at a reset** (bundle of 3, 1 important, size M, waits for another entry). Holds A565, A566, A860. [Detail](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
 
 - **A turned floor plan table narrower than its unturned box stops short of the plan's left or top
   edge.** An 8 × 4 turned 90° stops 2 squares from the left edge, because its saved corner cannot
@@ -2466,7 +2462,7 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 
 - **Joining tables suggests their combined seats, still editable (A747, owner, 2026-10-16).**
-  Implemented for the till's joining and split/rejoin windows and the dashboard's Add joined table.
+  Implemented for the till's joining and split windows and the dashboard's Add joined table.
   [Decision and limits](backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747).
 
 

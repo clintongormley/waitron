@@ -103,7 +103,7 @@ describe("table CRUD", () => {
 });
 
 describe("a joined table's parts", () => {
-  it("lists Long table but none of its parts, unless asked for every table", async () => {
+  it("lists the real tables of a saved group with their own labels", async () => {
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Counter" }));
     const entry = (
@@ -135,12 +135,11 @@ describe("a joined table's parts", () => {
     );
     const labels = async (options?: { includeDisabled: boolean }) =>
       (await asApp(cfg, (tx) => listTables(tx, new Date(), options))).map((table) => table.label);
-    expect(await labels()).toEqual(["Long table"]);
+    expect(await labels()).toEqual(["Counter 3", "Counter 4", "Counter 5"]);
     expect(await labels({ includeDisabled: true })).toEqual([
       "Counter 3",
       "Counter 4",
       "Counter 5",
-      "Long table",
     ]);
   });
 });

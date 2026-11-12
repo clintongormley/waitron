@@ -23,11 +23,9 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
-  floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   floorZones,
-  joinedOutOfService,
   needsMoving,
   resetRowMoves,
   readVenueClock,
@@ -37,7 +35,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { venueMomentAt } from "@waitron/reporting";
-import { AppError, NEW_TABLE_SIZE, groupStep, shortNameKey } from "@waitron/shared";
+import { AppError, NEW_TABLE_SIZE, compareLabels, groupStep, shortNameKey } from "@waitron/shared";
 import {
   blockedMoves,
   movesTable,
@@ -50,18 +48,13 @@ import {
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
-import { blocksPlaceSql } from "./joined-split-layout.js";
+import { blocksPlaceSql, partPlaces } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
-import { leaveMerges } from "./floor-today-merges.js";
+import { leaveMerges, leaveMergesRestoring } from "./floor-today-merges.js";
 import { withMovedSlips } from "./moved-slips.js";
 import { holdersOf } from "./parties.js";
-import {
-  refuseInJoinedTable,
-  refuseUnfree,
-  refuseUnmovable,
-  todayOf,
-} from "./floor-today-table.js";
+import { refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
@@ -223,7 +216,26 @@ async function resetZoneFor(
     await tx.update(floorTodayZones).set(record).where(eq(floorTodayZones.id, today.id));
   }
 
-  const master = placedAsRead(await layoutTables(tx, zoneId, layout?.id ?? null));
+  const recorded = await layoutTables(tx, zoneId, layout?.id ?? null);
+  const master = placedAsRead(recorded);
+  const sizeOf = new Map(recorded.map((row) => [row.id, row.placement ?? row.keptSize]));
+  const joinedIds = new Set(master.flatMap((row) => (row.partOf === null ? [] : [row.partOf])));
+  const slots = new Map<string, Placement>();
+  for (const joined of master.filter((row) => joinedIds.has(row.id) && row.placement !== null)) {
+    const parts = master
+      .filter((row) => row.partOf === joined.id)
+      .sort((a, b) => compareLabels(a.label, b.label));
+    const places = partPlaces(
+      joined.placement!,
+      parts.map((row) => ({
+        tableId: row.id,
+        width: sizeOf.get(row.id)?.width ?? NEW_TABLE_SIZE,
+        height: sizeOf.get(row.id)?.height ?? NEW_TABLE_SIZE,
+      })),
+      0,
+    );
+    for (const [index, part] of parts.entries()) slots.set(part.id, places[index]!);
+  }
   const live = await zoneTables(tx, zoneId);
   const targets = targetsFromMaster(
     master.map((row) => ({
@@ -232,9 +244,10 @@ async function resetZoneFor(
       shortName: row.shortName,
       seats: row.seats,
       fixed: row.fixed,
-      placement: row.placement,
+      placement: slots.get(row.id) ?? row.placement,
     })),
     live,
+    joinedIds,
   );
   await tx
     .delete(floorResetTableParts)
@@ -317,8 +330,6 @@ async function copyParts(
   if (copied.length > 0) await tx.insert(floorResetTableParts).values(copied);
 }
 
-const joinedReset = alias(floorResetTables, "taken_back_joined");
-const partReset = alias(floorResetTables, "taken_back_part");
 const groupPart = alias(floorResetTables, "group_part");
 
 function zoneTables(tx: Transaction, zoneId: string) {
@@ -382,8 +393,6 @@ async function catchUpPass(
     .leftJoin(groupPart, eq(groupPart.id, floorResetTableParts.partResetTableId))
     .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
   if (zoneRows.length === 0) throw new AppError("zone.not_found", { zoneId });
-  // A pending joined row's group, by reset row, so a joined table still to create is in it too.
-  // Once the joined table's row is applied, the group no longer waits.
   const groupOf = new Map<string, ResetGroup>();
   const byId = new Map<string, NonNullable<(typeof zoneRows)[number]["row"]>>();
   for (const { row, partRowId, partTableId } of zoneRows) {
@@ -403,6 +412,7 @@ async function catchUpPass(
   }
   const rowOf = new Map<Target, (typeof rows)[number]>();
   for (const row of rows) {
+    if (groupOf.has(row.id)) continue;
     const target: Target = {
       tableId: row.tableId,
       planTableId: row.planTableId,
@@ -423,10 +433,8 @@ async function catchUpPass(
       shortName: diningTables.shortName,
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
-      splitOffFrom: floorTodaySplitParts.joinedTableId,
     })
-    .from(diningTables)
-    .leftJoin(floorTodaySplitParts, eq(floorTodaySplitParts.partTableId, diningTables.id));
+    .from(diningTables);
   const inZone = venueTables.filter((table) => table.zoneId === zoneId);
   const takenElsewhere = new Set(
     venueTables.filter((table) => table.zoneId !== zoneId).map((table) => table.label),
@@ -449,7 +457,6 @@ async function catchUpPass(
   );
   const merges = await mergesOf(tx, ids);
   const merged = new Set(merges.map((m) => m.tableId));
-  const splitOff = new Set(inZone.flatMap((t) => (t.splitOffFrom === null ? [] : [t.id])));
   const moves = (target: Pick<Target, "tableId" | "placement">) => {
     const today = target.tableId === null ? undefined : todayRows.get(target.tableId);
     return movesTable(
@@ -459,7 +466,6 @@ async function catchUpPass(
             placement: placementOf(today),
             takenOff: today.takenOff,
             inMerge: merged.has(today.tableId),
-            splitOff: splitOff.has(today.tableId),
           },
       target,
     );
@@ -493,10 +499,27 @@ async function catchUpPass(
       )
     ).keys(),
   );
-  const waiting = new Set([...held, ...refused, ...clearing]);
+  const resetIds = new Set(rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])));
+  // Full resets may dissolve free groups; catch-up waits for members outside the reset.
+  const otherGroup = groups.flatMap((group) => {
+    const ids = new Set(group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])));
+    const joins = new Set(merges.filter((m) => ids.has(m.tableId)).map((m) => m.joinId));
+    return [...joins].some((joinId) => {
+      const members = merges.filter((m) => m.joinId === joinId);
+      return (
+        members.some((m) => !ids.has(m.tableId)) &&
+        !(inReset && members.every((m) => resetIds.has(m.tableId)))
+      );
+    })
+      ? [...ids]
+      : [];
+  });
+  const waiting = new Set([...held, ...refused, ...clearing, ...otherGroup]);
   const foodComing = await foodComingTo(
     tx,
-    inZone.flatMap((table) => (table.splitOffFrom === null ? [] : [table.id, table.splitOffFrom])),
+    groups.flatMap((group) =>
+      group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])),
+    ),
   );
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
@@ -518,16 +541,15 @@ async function catchUpPass(
         : [],
     ),
   );
-  let outOfService: Set<string> | undefined;
   let layoutPlaces: Map<string, Placement | null> | undefined;
   // Tables whose own move is blocked, and reset rows of tables to create whose place is taken.
   const blocked = new Set<string>();
   const blockedCreates = new Set<string>();
   let plan: ResetPlan;
+  let waitingGroupRows: ReadonlySet<string>;
   for (;;) {
     const createGroups = groups.filter((group) => group.rows.some((r) => blockedCreates.has(r.id)));
-    const { mergedWithHeld, splitBusy, joinedBusy, waitingRows } = waitingTogether(
-      inZone,
+    const { mergedWithHeld, joinedBusy, waitingRows } = waitingTogether(
       merges,
       groups,
       new Set([
@@ -539,6 +561,7 @@ async function catchUpPass(
       ]),
       foodComing,
     );
+    waitingGroupRows = waitingRows;
     const live: LiveTable[] = inZone.map((table) => ({
       id: table.id,
       label: table.label,
@@ -548,7 +571,6 @@ async function catchUpPass(
       tied: held.has(table.id) || tied.has(table.id),
       hasToday: withToday.has(table.id),
       mergedWithHeld: mergedWithHeld.has(table.id),
-      splitWithBusy: splitBusy.has(table.id),
       clearing: clearing.has(table.id),
       joinedWithWaiting: joinedBusy.has(table.id),
       blocked: blocked.has(table.id),
@@ -589,7 +611,6 @@ async function catchUpPass(
       }
     }
     if (drawnMoving.length === 0 && offMoving.length === 0) break;
-    outOfService ??= await joinedOutOfServiceIn(tx, ids);
     layoutPlaces ??= await layoutPlacesIn(tx, zoneId);
     const own = (tableId: string) => layoutPlaces!.get(tableId) ?? null;
     const leaving = new Set([...drawnMoving.map((m) => m.tableId), ...plan.remove, ...plan.hide]);
@@ -598,8 +619,7 @@ async function catchUpPass(
       return place === null ||
         leaving.has(table.id) ||
         blocked.has(table.id) ||
-        needing.has(table.id) ||
-        outOfService!.has(table.id)
+        needing.has(table.id)
         ? []
         : [{ tableId: table.id, place, own: own(table.id) }];
     });
@@ -733,31 +753,6 @@ async function catchUpPass(
       .insert(floorTodayTables)
       .values({ tableId: target.tableId!, ...todayColumns(target, false) });
   }
-  const putBack = [...placedNow].map((target) => target.tableId!);
-  if (putBack.length > 0) {
-    // A part the copied plan no longer joins to it keeps its today's name.
-    const takenBack = tx
-      .select({ id: floorTodaySplitParts.partTableId })
-      .from(floorTodaySplitParts)
-      .innerJoin(joinedReset, eq(joinedReset.tableId, floorTodaySplitParts.joinedTableId))
-      .innerJoin(floorResetTableParts, eq(floorResetTableParts.joinedResetTableId, joinedReset.id))
-      .innerJoin(
-        partReset,
-        and(
-          eq(partReset.id, floorResetTableParts.partResetTableId),
-          eq(partReset.tableId, floorTodaySplitParts.partTableId),
-        ),
-      )
-      .where(inArray(floorTodaySplitParts.joinedTableId, putBack));
-    await tx
-      .update(floorTodayTables)
-      .set({ name: null })
-      .where(inArray(floorTodayTables.tableId, takenBack));
-    await tx
-      .delete(floorTodaySplitParts)
-      .where(inArray(floorTodaySplitParts.joinedTableId, putBack));
-  }
-
   const stillPending = new Set(plan.pending);
   let changed = false;
   for (const [target, row] of rowOf) {
@@ -774,19 +769,49 @@ async function catchUpPass(
       })
       .where(eq(floorResetTables.id, row.id));
   }
+  for (const [joinedId, group] of groupOf) {
+    const joined = byId.get(joinedId)!;
+    const parts = await tx
+      .select()
+      .from(floorResetTables)
+      .where(
+        inArray(
+          floorResetTables.id,
+          group.rows.filter((r) => r.id !== joinedId).map((r) => r.id),
+        ),
+      );
+    if (waitingGroupRows.has(joinedId) || parts.some((row) => row.pending || row.tableId === null))
+      continue;
+    const memberIds = parts.map((row) => row.tableId!);
+    const [takenOff] = await tx
+      .select({ id: floorTodayTables.id })
+      .from(floorTodayTables)
+      .where(and(inArray(floorTodayTables.tableId, memberIds), eq(floorTodayTables.takenOff, true)))
+      .limit(1);
+    if (takenOff !== undefined) continue;
+    if (joined.x !== null) {
+      await leaveMergesRestoring(tx, memberIds);
+      const [merge] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId, name: joined.label, seats: joined.seats! })
+        .returning({ id: floorTodayJoins.id });
+      await tx.insert(floorTodayJoinTables).values(
+        parts.map((row) => ({
+          joinId: merge!.id,
+          tableId: row.tableId!,
+          beforeX: row.x!,
+          beforeY: row.y!,
+          beforeRotation: row.rotation!,
+        })),
+      );
+    }
+    await tx
+      .update(floorResetTables)
+      .set({ pending: false, placed: true, readyToMove: false })
+      .where(eq(floorResetTables.id, joinedId));
+    changed = true;
+  }
   return changed;
-}
-
-/** The tables among `tableIds` out of service because of a joined table. */
-async function joinedOutOfServiceIn(
-  tx: Transaction,
-  tableIds: readonly string[],
-): Promise<Set<string>> {
-  const rows = await tx
-    .select({ id: diningTables.id })
-    .from(diningTables)
-    .where(and(inArray(diningTables.id, [...tableIds]), joinedOutOfService(diningTables.id)));
-  return new Set(rows.map((row) => row.id));
 }
 
 /**
@@ -830,7 +855,7 @@ function readyToMove(
     const together = groupsOfRow.get(row.id) ?? [];
     const members = new Set([row.id, ...together.flatMap((group) => group.rows.map((r) => r.id))]);
     if (![...members].some(moving)) continue;
-    for (const id of members) if (targetOf.has(id)) marked.add(id);
+    for (const id of members) marked.add(id);
   }
   return [...marked];
 }
@@ -885,19 +910,6 @@ async function setNames(
     .where(eq(diningTables.id, tableId));
 }
 
-/** Every member of each split group, a joined table and the parts split off it, of which some member is `busy`. */
-function busySplitGroups(
-  tables: readonly { id: string; splitOffFrom: string | null }[],
-  busy: (tableId: string) => boolean,
-): Set<string> {
-  const groups = new Map<string, string[]>();
-  for (const { id, splitOffFrom } of tables) {
-    if (splitOffFrom === null) continue;
-    groups.set(splitOffFrom, [...(groups.get(splitOffFrom) ?? [splitOffFrom]), id]);
-  }
-  return new Set([...groups.values()].filter((group) => group.some(busy)).flat());
-}
-
 /** A joined reset row and its parts' reset rows; `tableId` null for a table still to create. */
 interface ResetGroup {
   rows: { id: string; tableId: string | null }[];
@@ -914,21 +926,13 @@ function mergesOf(
     .where(inArray(floorTodayJoinTables.tableId, [...zoneTableIds]));
 }
 
-/**
- * Grows `waiting` until it is closed under every tie: a merge with a waiting table waits whole, so
- * does a split group with a waiting member or a member in `foodComing`, and so does a joined group
- * of the reset with a waiting member. Applying any table of one would move a waiting table or one
- * food is on its way to.
- */
 function waitingTogether(
-  tables: readonly { id: string; splitOffFrom: string | null }[],
   merges: readonly { joinId: string; tableId: string }[],
   joinedGroups: readonly ResetGroup[],
   waiting: ReadonlySet<string>,
   foodComing: ReadonlySet<string>,
 ): {
   mergedWithHeld: Set<string>;
-  splitBusy: Set<string>;
   joinedBusy: Set<string>;
   /** The reset rows of every joined group that waits, rows with no table yet included. */
   waitingRows: Set<string>;
@@ -938,17 +942,16 @@ function waitingTogether(
     const mergedWithHeld = mergedWith(merges, all);
     const busy = (id: string | null) =>
       id !== null && (all.has(id) || mergedWithHeld.has(id) || foodComing.has(id));
-    const splitBusy = busySplitGroups(tables, busy);
     const waitingGroups = joinedGroups.filter((group) => group.rows.some((r) => busy(r.tableId)));
     const joinedBusy = new Set(
       waitingGroups.flatMap((group) =>
         group.rows.flatMap((r) => (r.tableId === null ? [] : [r.tableId])),
       ),
     );
-    const grown = new Set([...all, ...mergedWithHeld, ...splitBusy, ...joinedBusy]);
+    const grown = new Set([...all, ...mergedWithHeld, ...joinedBusy]);
     if (grown.size === all.size) {
       const waitingRows = new Set(waitingGroups.flatMap((group) => group.rows.map((r) => r.id)));
-      return { mergedWithHeld, splitBusy, joinedBusy, waitingRows };
+      return { mergedWithHeld, joinedBusy, waitingRows };
     }
     all = grown;
   }
@@ -1147,7 +1150,6 @@ function placeTaken(r: ResetAlias): SQL {
         on ${col(blockerRow, "table_id")} = ${b("table_id")} and ${col(blockerRow, "zone_id")} = ${r.zoneId}
       where ${col(blockerTable, "zone_id")} = ${r.zoneId}
         and ${b("x")} is not null and ${b("taken_off")} = 0
-        and not ${joinedOutOfService(b("table_id"))}
         and not ${needsMoving(b("table_id"))}
         and not ${pendingGroupMember(r.id, "place", (member) => sql`${member.tableId} = ${b("table_id")}`)}
         and ${blocksPlaceSql(
@@ -1198,7 +1200,6 @@ export async function placeSpareToday(
   at: { x: number; y: number },
 ): Promise<void> {
   const { row } = await todayOf(tx, tableId);
-  await refuseInJoinedTable(tx, [tableId]);
   if (row.takenOff) throw new AppError("table.taken_off", { tableId });
   if (row.x !== null) return;
   if (row.fixed) throw new AppError("table.fixed", { tableId });
@@ -1237,22 +1238,11 @@ export async function refuseDeliveryPending(tx: Transaction, tableId: string): P
   if (delivery !== undefined) throw new AppError("table.delivery_pending", { tableId });
 }
 
-async function refuseSplitOff(tx: Transaction, tableId: string): Promise<void> {
-  const [splitOff] = await tx
-    .select({ id: floorTodaySplitParts.id })
-    .from(floorTodaySplitParts)
-    .where(eq(floorTodaySplitParts.partTableId, tableId))
-    .limit(1);
-  if (splitOff !== undefined) throw new AppError("table.split_off", { tableId });
-}
-
 /** Takes a free table off today's plan, keeping its place; one already taken off is left as it is. */
 export async function takeOffToday(tx: Transaction, tableId: string): Promise<void> {
   const today = await todayOf(tx, tableId);
   if (today.row.takenOff) return;
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
-  await refuseInJoinedTable(tx, [tableId]);
-  await refuseSplitOff(tx, tableId);
   await refuseUnfree(tx, [tableId]);
   await refuseDeliveryPending(tx, tableId);
   await tx
@@ -1295,13 +1285,6 @@ export async function backToSaved(
 ): Promise<void> {
   const { row, merge } = await todayOf(tx, tableId);
   if (await tableNeedsMoving(tx, tableId)) return markMoved(tx, removals, tableId, now);
-  await refuseSplitOff(tx, tableId);
-  const [splitOff] = await tx
-    .select({ id: floorTodaySplitParts.id })
-    .from(floorTodaySplitParts)
-    .where(eq(floorTodaySplitParts.joinedTableId, tableId))
-    .limit(1);
-  if (splitOff !== undefined) throw new AppError("joined_table.parts_split_off", { tableId });
   const [saved] = await tx
     .select()
     .from(floorResetTables)

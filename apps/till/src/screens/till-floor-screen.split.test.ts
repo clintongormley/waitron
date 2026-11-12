@@ -41,9 +41,6 @@ function table(id: string, label: string, x: number, over: Partial<TableToday> =
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable: null,
-      joined: null,
-      splitOffFrom: null,
       zoneRevision: 0,
       ...over,
     },
@@ -52,41 +49,26 @@ function table(id: string, label: string, x: number, over: Partial<TableToday> =
   };
 }
 
-const longTable = (parts = ["c3", "c4", "c5"], splitOff: string[] = []) =>
-  table("long", "Long table", 10, { seats: 10, joined: { parts, splitOff, apart: false } });
-const part = (id: string, label: string) =>
-  table(id, label, 10, { placement: null, inJoinedTable: "Long table" });
-const floor = () => [
-  longTable(),
-  part("c3", "Counter 3"),
-  part("c4", "Counter 4"),
-  part("c5", "Counter 5"),
-];
-
-/** Another till has split every table off Long table. */
-const splitDownToNone = () => [
-  longTable([], ["c3", "c4", "c5"]),
-  table("c3", "Counter 3", 10, { splitOffFrom: "long" }),
-  table("c4", "Counter 4", 20, { splitOffFrom: "long" }),
-  table("c5", "Counter 5", 30, { splitOffFrom: "long" }),
-];
-
-/** Another till has split Counter 5 off Long table. */
-const c5SplitOff = () => [
-  longTable(["c3", "c4"], ["c5"]),
-  part("c3", "Counter 3"),
-  part("c4", "Counter 4"),
-  table("c5", "Counter 5", 30, { splitOffFrom: "long" }),
-];
-
-const barTable = () =>
-  table("bar", "Bar table", 40, {
-    seats: 6,
-    joined: { parts: ["b1", "b2"], splitOff: [], apart: false },
+const longTable = (parts = ["c3", "c4", "c5"]) =>
+  table("c3", "Counter 3", 10, {
+    joinId: parts.length >= 2 ? "g" : null,
+    joinSeats: 10,
+    joinName: "Long table",
   });
-const barPart = (id: string, label: string) =>
-  table(id, label, 40, { placement: null, inJoinedTable: "Bar table" });
-const twoJoined = () => [...floor(), barTable(), barPart("b1", "Bar 1"), barPart("b2", "Bar 2")];
+const part = (id: string, label: string) =>
+  table(id, label, id === "c4" ? 12 : 14, { joinId: "g", joinSeats: 10, joinName: "Long table" });
+const floor = () => [longTable(), part("c4", "Counter 4"), part("c5", "Counter 5")];
+const splitDownToNone = () =>
+  floor().map((each) => ({ ...each, today: { ...each.today!, joinId: null, joinName: null } }));
+const c5SplitOff = () =>
+  floor().map((each) =>
+    each.id === "c5" ? { ...each, today: { ...each.today!, joinId: null, joinName: null } } : each,
+  );
+const twoJoined = () => [
+  ...floor(),
+  table("b1", "Bar 1", 40, { joinId: "h", joinName: "Bar table" }),
+  table("b2", "Bar 2", 42, { joinId: "h", joinName: "Bar table" }),
+];
 
 function stubApi() {
   return {
@@ -135,7 +117,7 @@ async function settle(el: TillFloorScreen): Promise<void> {
   await el.updateComplete;
 }
 
-async function openSplit(el: TillFloorScreen, tableId = "long") {
+async function openSplit(el: TillFloorScreen, tableId = "c3") {
   send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId });
   await el.updateComplete;
   const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
@@ -171,14 +153,14 @@ const floorRefusal = (el: TillFloorScreen) =>
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
 
-describe("till-floor-screen: splitting tables off a joined table", () => {
+describe("till-floor-screen: splitting a saved ordinary group", () => {
   it("Split tables… opens the window, and Split sends the parts and seats, closes it and re-reads the floor", async () => {
     const api = stubApi();
     const el = await mount(floor(), api);
     const refreshes = countRefreshes(el);
 
     const opened = await openSplit(el);
-    expect(opened.joined.id).toBe("long");
+    expect(opened.joined.id).toBe("c3");
     expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4", "c5"]);
     expect(opened.busy).toBe(false);
     expect(opened.refusal).toBeNull();
@@ -188,7 +170,7 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     await settle(el);
 
     expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
-      "long",
+      "c3",
       {
         partIds: ["c5"],
         expectedParties: [],
@@ -218,7 +200,7 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     await settle(el);
 
     expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
-      "long",
+      "c3",
       { partIds: ["c4", "c5"], expectedParties: [] },
       0,
     );
@@ -235,7 +217,7 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
   it("a part_invalid refusal shows under Tables to split off, the window stays open, and the floor is re-read", async () => {
     const api = stubApi();
     api.splitOffToday.mockRejectedValue({
-      code: "joined_table.part_invalid",
+      code: "merge.member_invalid",
       status: 400,
       tableId: "c5",
       field: "partIds",
@@ -250,18 +232,17 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     const open = windowOf(el)!;
     expect(open).toBe(opened);
     expect(open.busy).toBe(false);
-    expect(open.refusal).toEqual({ code: "joined_table.part_invalid", field: "partIds" });
+    expect(open.refusal).toEqual({ code: "merge.member_invalid", field: "partIds" });
     await open.updateComplete;
-    expect(pickError(el)).toBe(codeMessage("joined_table.part_invalid"));
+    expect(pickError(el)).toBe(codeMessage("merge.member_invalid"));
     expect(footError(el)).toBe("Correct the highlighted fields to continue.");
     expect(floorRefusal(el)).toBeNull();
     expect(refreshes.count).toBe(1);
 
     el.tables = [
-      longTable(["c3", "c4"], ["c5"]),
-      part("c3", "Counter 3"),
+      longTable(["c3", "c4"]),
       part("c4", "Counter 4"),
-      table("c5", "Counter 5", 30, { splitOffFrom: "long" }),
+      table("c5", "Counter 5", 30, {}),
     ];
     await settle(el);
     expect(windowOf(el)!.parts.map((each) => each.id)).toEqual(["c3", "c4"]);
@@ -270,9 +251,9 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
   it("a refusal naming no field shows at the window's foot", async () => {
     const api = stubApi();
     api.splitOffToday.mockRejectedValue({
-      code: "table.in_joined_table",
+      code: "table.taken_off",
       status: 409,
-      tableId: "long",
+      tableId: "c3",
     });
     const el = await mount(floor(), api);
 
@@ -280,9 +261,9 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     await settle(el);
 
     const open = windowOf(el)!;
-    expect(open.refusal).toEqual({ code: "table.in_joined_table" });
+    expect(open.refusal).toEqual({ code: "table.taken_off" });
     await open.updateComplete;
-    expect(footError(el)).toBe(codeMessage("table.in_joined_table"));
+    expect(footError(el)).toBe(codeMessage("table.taken_off"));
     expect(pickError(el)).toBe("");
     expect(floorRefusal(el)).toBeNull();
   });
@@ -291,7 +272,7 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     const el = await mount(floor(), stubApi());
     await openSplit(el);
 
-    el.tables = floor().filter((each) => each.id !== "long");
+    el.tables = floor().filter((each) => each.id !== "c3");
     await settle(el);
     expect(windowOf(el)).toBeNull();
 
@@ -305,13 +286,9 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     await openSplit(el);
 
     el.tables = [
-      table("long", "Long table", 10, {
-        seats: 10,
-        joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
-      }),
-      table("c3", "Counter 3", 10, { splitOffFrom: "long" }),
-      table("c4", "Counter 4", 20, { splitOffFrom: "long" }),
-      table("c5", "Counter 5", 30, { splitOffFrom: "long" }),
+      table("c3", "Counter 3", 10, {}),
+      table("c4", "Counter 4", 20, {}),
+      table("c5", "Counter 5", 30, {}),
     ];
     await settle(el);
     expect(windowOf(el)).toBeNull();
@@ -331,10 +308,10 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     expect(opened.busy).toBe(true);
     expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4", "c5"]);
 
-    answer.refuse({ code: "joined_table.part_invalid", field: "partIds" });
+    answer.refuse({ code: "merge.member_invalid", field: "partIds" });
     await settle(el);
     expect(windowOf(el)).toBeNull();
-    expect(floorRefusal(el)).toBe(codeMessage("joined_table.part_invalid"));
+    expect(floorRefusal(el)).toBe(codeMessage("merge.member_invalid"));
   });
 
   it("a floor read during the split that still offers Split tables… keeps the window, and a refusal shows in it over the new read", async () => {
@@ -350,30 +327,30 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     expect(windowOf(el)).toBe(opened);
     expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4", "c5"]);
 
-    answer.refuse({ code: "table.in_joined_table" });
+    answer.refuse({ code: "table.taken_off" });
     await settle(el);
     expect(windowOf(el)).toBe(opened);
     expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4"]);
     await opened.updateComplete;
-    expect(footError(el)).toBe(codeMessage("table.in_joined_table"));
+    expect(footError(el)).toBe(codeMessage("table.taken_off"));
     expect(floorRefusal(el)).toBeNull();
   });
 
   it("a refusal shown in the window moves to the floor when the next floor read closes the window", async () => {
     const api = stubApi();
-    api.splitOffToday.mockRejectedValueOnce({ code: "table.in_joined_table" });
+    api.splitOffToday.mockRejectedValueOnce({ code: "table.taken_off" });
     const el = await mount(floor(), api);
     const opened = await openSplit(el);
     send(opened, "split-joined-confirm", { partIds: ["c5"], seats: 6 });
     await settle(el);
     expect(windowOf(el)).toBe(opened);
-    expect(opened.refusal).toEqual({ code: "table.in_joined_table" });
+    expect(opened.refusal).toEqual({ code: "table.taken_off" });
     expect(floorRefusal(el)).toBeNull();
 
     el.tables = splitDownToNone();
     await settle(el);
     expect(windowOf(el)).toBeNull();
-    expect(floorRefusal(el)).toBe(codeMessage("table.in_joined_table"));
+    expect(floorRefusal(el)).toBe(codeMessage("table.taken_off"));
   });
 
   it("a done answer closes a window kept through a floor read that made it obsolete", async () => {
@@ -400,19 +377,19 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     const el = await mount(floor(), api);
     send(await openSplit(el), "split-joined-confirm", { partIds: ["c5"], seats: 6 });
     await settle(el);
-    el.tables = floor().filter((each) => each.id !== "long");
+    el.tables = floor().filter((each) => each.id !== "c3");
     await settle(el);
     expect(windowOf(el)).toBeNull();
 
-    answer.refuse({ code: "table.in_joined_table" });
+    answer.refuse({ code: "table.taken_off" });
     await settle(el);
-    expect(floorRefusal(el)).toBe(codeMessage("table.in_joined_table"));
+    expect(floorRefusal(el)).toBe(codeMessage("table.taken_off"));
   });
 
   it.each([
     [
       "refused",
-      (answer: Answer) => answer.refuse({ code: "joined_table.part_invalid", field: "partIds" }),
+      (answer: Answer) => answer.refuse({ code: "merge.member_invalid", field: "partIds" }),
     ],
     ["done", (answer: Answer) => answer.done()],
   ])(
@@ -424,11 +401,11 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
 
       send(await openSplit(el), "split-joined-confirm", { partIds: ["c5"], seats: 6 });
       await settle(el);
-      el.tables = twoJoined().filter((each) => each.id !== "long");
+      el.tables = twoJoined().filter((each) => each.id !== "c3");
       await settle(el);
       expect(windowOf(el)).toBeNull();
 
-      const bar = await openSplit(el, "bar");
+      const bar = await openSplit(el, "b1");
       const pick = bar.shadowRoot!.querySelector("wt-combobox")!;
       send(pick, "wt-change", { values: ["b1"] });
       await settle(el);
@@ -439,7 +416,7 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
       await bar.updateComplete;
 
       expect(windowOf(el)).toBe(bar);
-      expect(bar.joined.id).toBe("bar");
+      expect(bar.joined.id).toBe("b1");
       expect(bar.busy).toBe(false);
       expect(bar.refusal).toBeNull();
       expect(pick.values).toEqual(["b1"]);
@@ -474,7 +451,7 @@ describe("till-floor-screen: Split tables… and the room's revision", () => {
     await settle(el);
 
     expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
-      "long",
+      "c3",
       { partIds: ["c5"], expectedParties: [] },
       8,
     );
@@ -485,10 +462,6 @@ describe("till-floor-screen: Split tables… and the room's revision", () => {
 const groupFloor = (members = ["bar", "c3", "c4", "c5"]) =>
   atRevision(
     [
-      table("long", "Long table", 10, {
-        seats: 10,
-        joined: { parts: [], splitOff: ["c3", "c4", "c5"], apart: true },
-      }),
       table("bar", "Bar", 50, { joinId: members.includes("bar") ? "g" : null }),
       ...(
         [
@@ -498,7 +471,6 @@ const groupFloor = (members = ["bar", "c3", "c4", "c5"]) =>
         ] as const
       ).map(([id, label, x]) =>
         table(id, label, x, {
-          splitOffFrom: "long",
           joinId: members.includes(id) ? "g" : null,
         }),
       ),
@@ -566,22 +538,6 @@ describe("till-floor-screen: Split tables… on a group", () => {
     );
   });
 
-  it("includes the observed joined parent when its parts are free", async () => {
-    const api = stubApi();
-    const el = await mount(seatedAt(floor(), "long"), api);
-    send(await openSplit(el), "split-joined-confirm", { partIds: ["c5"], seats: 6 });
-    await settle(el);
-    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
-      "long",
-      {
-        partIds: ["c5"],
-        seats: 6,
-        expectedParties: [{ id: "p1", revision: 1 }],
-      },
-      0,
-    );
-  });
-
   it("opens the window on Bar listing the group's four tables under the group's name", async () => {
     const el = await mount(groupFloor(), stubApi());
     const opened = await openSplit(el, "bar");
@@ -589,19 +545,19 @@ describe("till-floor-screen: Split tables… on a group", () => {
     expect(opened.name).toBe("Bar+Counter 3+Counter 4+Counter 5");
     expect(opened.parts.map((each) => each.id)).toEqual(["bar", "c3", "c4", "c5"]);
     expect(opened.seatsRequired).toBe(false);
-    expect(opened.asksSeats(["c3", "c4", "c5"])).toBe(false);
+    expect(opened.asksSeats(["c3", "c4", "c5"])).toBe(true);
     expect(opened.asksSeats(["c3", "c4"])).toBe(true);
   });
 
-  it("Split with Bar ticked sends Bar off the group with no seats, closes the window and re-reads the floor", async () => {
+  it("Split with Bar ticked sends Bar off the group with seats for the remaining group, closes the window and re-reads the floor", async () => {
     const api = stubApi();
     const el = await mount(groupFloor(), api);
     const refreshes = countRefreshes(el);
-    send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["bar"], seats: null });
+    send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["bar"], seats: 12 });
     await settle(el);
     expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
       "bar",
-      { partIds: ["bar"], expectedParties: [] },
+      { partIds: ["bar"], expectedParties: [], seats: 12 },
       7,
     );
     expect(windowOf(el)).toBeNull();
@@ -632,7 +588,7 @@ describe("till-floor-screen: Split tables… on a group", () => {
     expect(floorRefusal(el)).toBeNull();
   });
 
-  for (const code of ["merge.seats_required", "joined_table.seats_required"]) {
+  for (const code of ["merge.seats_required", "merge.seats_required"]) {
     it(`a ${code} refusal asks for seats, required, and says why at the window's foot`, async () => {
       const api = stubApi();
       api.splitOffToday.mockRejectedValueOnce({ code });
@@ -719,37 +675,6 @@ describe("till-floor-screen: Split tables… on a group", () => {
     expect(pickError(el)).toBe("Leave one of the guests' tables");
     expect(footError(el)).toBe("Correct the highlighted fields to continue.");
     expect(floorRefusal(el)).toBeNull();
-  });
-
-  it("on a joined table in a group with tables still joined, opens the joined table's window", async () => {
-    const api = stubApi();
-    const tables = atRevision(
-      [
-        table("long", "Long table", 10, {
-          seats: 10,
-          joinId: "g",
-          joined: { parts: ["c3", "c4", "c5"], splitOff: [], apart: false },
-        }),
-        part("c3", "Counter 3"),
-        part("c4", "Counter 4"),
-        part("c5", "Counter 5"),
-        table("bar", "Bar", 50, { joinId: "g" }),
-      ],
-      7,
-    );
-    const el = await mount(tables, api);
-    const opened = await openSplit(el, "long");
-    expect(opened.name).toBe("Long table");
-    expect(opened.parts.map((each) => each.id)).toEqual(["c3", "c4", "c5"]);
-    expect(opened.asksSeats(["c4", "c5"])).toBe(true);
-    expect(opened.asksSeats(["c5"])).toBe(false);
-    send(opened, "split-joined-confirm", { partIds: ["c3"], seats: 6 });
-    await settle(el);
-    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
-      "long",
-      { partIds: ["c3"], expectedParties: [], seats: 6 },
-      7,
-    );
   });
 
   it("a change after the split, before any read, sends the room's revision the split answered", async () => {

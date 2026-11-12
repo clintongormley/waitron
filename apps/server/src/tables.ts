@@ -1,18 +1,10 @@
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { and, eq, not, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import {
-  savedPart,
-  tableInService,
-  diningTables,
-  floorZones,
-  refusalOn,
-  UNIQUE_VIOLATION,
-} from "@waitron/db";
+import { tableInService, diningTables, floorZones, refusalOn, UNIQUE_VIOLATION } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { todayBusinessDay } from "./floor-today-store.js";
 
 /** `createdAt` is an ISO string. */
 export interface DiningTable {
@@ -25,10 +17,9 @@ export interface DiningTable {
 
 export async function listTables(
   tx: Transaction,
-  now: Date,
+  _now: Date,
   options: { includeDisabled?: boolean } = {},
 ): Promise<DiningTable[]> {
-  const businessDay = options.includeDisabled ? null : await todayBusinessDay(tx, now);
   return tx
     .select({
       id: diningTables.id,
@@ -42,9 +33,7 @@ export async function listTables(
     .where(
       and(
         eq(floorZones.active, true),
-        options.includeDisabled
-          ? undefined
-          : and(tableInService(diningTables.id), not(savedPart(diningTables.id, businessDay))),
+        options.includeDisabled ? undefined : tableInService(diningTables.id),
       ),
     )
     .orderBy(diningTables.label);

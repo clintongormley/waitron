@@ -53,6 +53,7 @@ import {
 } from "./testing/party-venue.js";
 import {
   expectRevision,
+  mergeOf,
   giveKeptSize,
   needingMoving,
   plannedZone,
@@ -303,19 +304,7 @@ describe("the table routes' revision", () => {
       "split-off",
       async () => {
         const { zoneId, table } = await LONG();
-        return { zoneId, tableId: table.long!, body: { partIds: [table.c5!], seats: 6 } };
-      },
-    ],
-    [
-      "reset",
-      async () => {
-        const { zoneId, table } = await LONG();
-        await expectRevision(
-          v,
-          today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }),
-          zoneId,
-        );
-        return { zoneId, tableId: table.long!, body: { partIds: [table.c5!] } };
+        return { zoneId, tableId: table.c3!, body: { partIds: [table.c5!], seats: 6 } };
       },
     ],
     [
@@ -462,7 +451,7 @@ describe("the table routes' revision", () => {
     const read = (await zoneRevisionOf(v, zoneId))!;
     await expectRevision(
       v,
-      today(table.long!, "split-off", { partIds: [table.c5!], seats: 6, zoneRevision: read }),
+      today(table.c3!, "split-off", { partIds: [table.c5!], seats: 6, zoneRevision: read }),
       zoneId,
       read + 1,
     );
@@ -470,12 +459,12 @@ describe("the table routes' revision", () => {
 
     expect(
       await refusal(
-        today(table.long!, "split-off", { partIds: [table.c4!], seats: 8, zoneRevision: read }),
+        today(table.c3!, "split-off", { partIds: [table.c4!], seats: 8, zoneRevision: read }),
       ),
     ).toEqual(outOfDate(zoneId, read + 1));
 
     expect(await everything()).toEqual(before);
-    expect(await todayRow(v, table.c4!)).toMatchObject({ x: null });
+    expect((await mergeOf(v, table.c4!))!.members).toHaveLength(2);
   });
 
   it("refuses a revision that is not a whole number from 0", async () => {
@@ -660,7 +649,7 @@ describe("today's routes", () => {
     });
   });
 
-  it("answers 409 table.in_joined_table for placing a part", async () => {
+  it("placing an already placed group member keeps its current slot", async () => {
     const { table } = await plannedZone(
       v,
       [
@@ -672,11 +661,8 @@ describe("today's routes", () => {
       NOW,
     );
 
-    expect(await refusal(today(table.c4!, "place", { x: 40, y: 50 }))).toEqual({
-      status: 409,
-      body: { error: { code: "table.in_joined_table", params: { tableId: table.c4! } } },
-    });
-    expect((await floorToday(table.c4!))?.placement).toBeNull();
+    await expectRevision(v, today(table.c4!, "place", { x: 40, y: 50 }));
+    expect((await floorToday(table.c4!))?.placement).toMatchObject({ x: 8, y: 0 });
   });
 
   it("refuses a malformed id or body", async () => {
@@ -1038,18 +1024,19 @@ const LONG = async () => {
   );
   await giveKeptSize(v, zone.master.c3!, { width: 2, height: 2 });
   await giveKeptSize(v, zone.master.c4!, { width: 2, height: 2 });
+  await inTx(v, (tx) => resetZone(tx, enabledTableRemovals(ALL_MODULES), zone.zoneId, NOW, "due"));
   return zone;
 };
 
 describe("the split-off route", () => {
-  it("checks the joined parent's party before seats and accepts a fresh read once", async () => {
+  it("checks the selected members' party before seats and accepts a fresh read once", async () => {
     const { table } = await LONG();
-    const partyId = await seatAt(table.long!);
+    const partyId = await seatAt(table.c3!);
     const [party] = await inTx(v, (tx) => tx.select().from(parties).where(eq(parties.id, partyId)));
     const before = await everything();
     expect(
       await refusal(
-        today(table.long!, "split-off", {
+        today(table.c3!, "split-off", {
           partIds: [table.c5!],
           expectedParties: [],
         }),
@@ -1063,7 +1050,7 @@ describe("the split-off route", () => {
     expect(await everything()).toEqual(before);
     await expectRevision(
       v,
-      today(table.long!, "split-off", {
+      today(table.c3!, "split-off", {
         partIds: [table.c4!, table.c5!],
         expectedParties: [{ id: partyId, revision: party!.revision }],
       }),
@@ -1083,36 +1070,18 @@ describe("the split-off route", () => {
   it("splits parts off over HTTP and answers the room's revision", async () => {
     const { table } = await LONG();
 
-    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.c3!, "split-off", { partIds: [table.c5!], seats: 6 }));
 
     expect(await todayRow(v, table.c5!)).toMatchObject({ x: 14, y: 17, width: 8, height: 8 });
-    expect(await todayRow(v, table.long!)).toMatchObject({ width: 4, seats: 6 });
+    expect((await mergeOf(v, table.c3!))!.seats).toBe(6);
   });
 
-  it("answers 409 joined_table.parts_split_off to Back on Long table while a part is split off", async () => {
+  it("Back and Take off work for an ordinary member after splitting", async () => {
     const { table } = await LONG();
-    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
-    const longBefore = await todayRow(v, table.long!);
-
-    expect(await refusal(today(table.long!, "back"))).toEqual({
-      status: 409,
-      body: { error: { code: "joined_table.parts_split_off", params: { tableId: table.long! } } },
-    });
-    expect(await todayRow(v, table.long!)).toEqual(longBefore);
-  });
-
-  it("answers 409 table.split_off to Back and to Take off on a part split off", async () => {
-    const { table } = await LONG();
-    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
-    const before = await everything();
-
-    for (const change of ["back", "take-off"]) {
-      expect(await refusal(today(table.c5!, change))).toEqual({
-        status: 409,
-        body: { error: { code: "table.split_off", params: { tableId: table.c5! } } },
-      });
-    }
-    expect(await everything()).toEqual(before);
+    await expectRevision(v, today(table.c3!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    await expectRevision(v, today(table.c5!, "back"));
+    await expectRevision(v, today(table.c5!, "take-off"));
+    expect(await todayRow(v, table.c5!)).toMatchObject({ takenOff: true });
   });
 
   it.each<
@@ -1124,24 +1093,24 @@ describe("the split-off route", () => {
     ]
   >([
     [
-      404,
-      "joined_table.not_found",
+      400,
+      "merge.member_invalid",
       (t) => [t.bar!, { partIds: [t.c5!], seats: 6 }],
-      (t) => ({ tableId: t.bar! }),
+      (t) => ({ tableId: t.bar!, field: "partIds" }),
     ],
     [
       400,
-      "joined_table.part_invalid",
-      (t) => [t.long!, { partIds: [t.bar!], seats: 6 }],
+      "merge.member_invalid",
+      (t) => [t.c3!, { partIds: [t.bar!], seats: 6 }],
       (t) => ({ tableId: t.bar!, field: "partIds" }),
     ],
     [
       409,
-      "joined_table.split_all",
-      (t) => [t.long!, { partIds: [t.c3!, t.c4!, t.c5!] }],
-      (t) => ({ tableId: t.long!, field: "partIds" }),
+      "merge.split_all",
+      (t) => [t.c3!, { partIds: [t.c3!, t.c4!, t.c5!] }],
+      (t) => ({ tableId: t.c3!, field: "partIds" }),
     ],
-    [400, "joined_table.seats_required", (t) => [t.long!, { partIds: [t.c5!] }], () => ({})],
+    [400, "merge.seats_required", (t) => [t.c3!, { partIds: [t.c5!] }], () => ({})],
   ])("answers %i %s", async (status, code, request, params) => {
     const { table } = await LONG();
     const [tableId, body] = request(table);
@@ -1150,7 +1119,7 @@ describe("the split-off route", () => {
       status,
       body: { error: { code, params: params(table) } },
     });
-    expect(await todayRow(v, table.c5!)).toMatchObject({ x: null });
+    expect((await mergeOf(v, table.c5!))!.members).toHaveLength(3);
   });
 
   it.each<[string, (t: Record<string, string>) => unknown]>([
@@ -1162,7 +1131,7 @@ describe("the split-off route", () => {
     const { table } = await LONG();
 
     expect(
-      await refusal(today(table.long!, "split-off", { partIds: partIds(table), seats: 6 })),
+      await refusal(today(table.c3!, "split-off", { partIds: partIds(table), seats: 6 })),
     ).toEqual({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field: "partIds" } } },
@@ -1173,106 +1142,11 @@ describe("the split-off route", () => {
     const { table } = await LONG();
 
     expect(
-      await refusal(today(table.long!, "split-off", { partIds: [table.c5!], seats: 0 })),
+      await refusal(today(table.c3!, "split-off", { partIds: [table.c5!], seats: 0 })),
     ).toEqual({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field: "seats" } } },
     });
-  });
-});
-
-describe("the joined table's reset route", () => {
-  it("takes Counter 5 back over HTTP and answers the room's revision", async () => {
-    const { table } = await LONG();
-    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
-
-    await expectRevision(v, today(table.long!, "reset", { partIds: [table.c5!] }));
-
-    expect(await todayRow(v, table.long!)).toMatchObject({ width: 6, seats: 10 });
-    expect(await todayRow(v, table.c5!)).toMatchObject({ x: null });
-  });
-
-  it.each<
-    [
-      number,
-      string,
-      (t: Record<string, string>) => Promise<[string, unknown]>,
-      (t: Record<string, string>) => Record<string, unknown>,
-    ]
-  >([
-    [
-      404,
-      "joined_table.not_found",
-      async (t) => {
-        await expectRevision(v, today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
-        return [t.bar!, { partIds: [t.c5!] }];
-      },
-      (t) => ({ tableId: t.bar! }),
-    ],
-    [
-      409,
-      "joined_table.nothing_to_join",
-      async (t) => [t.long!, { partIds: [t.c5!] }],
-      (t) => ({ tableId: t.long! }),
-    ],
-    [
-      409,
-      "joined_table.out_of_date",
-      async (t) => {
-        await expectRevision(v, today(t.long!, "split-off", { partIds: [t.c5!], seats: 6 }));
-        return [t.long!, { partIds: [t.c4!] }];
-      },
-      (t) => ({ tableId: t.long! }),
-    ],
-    [
-      400,
-      "joined_table.seats_required",
-      async (t) => {
-        await seatAt(t.long!);
-        await expectRevision(v, today(t.long!, "split-off", { partIds: [t.c4!, t.c5!] }));
-        return [t.long!, { partIds: [t.c4!, t.c5!] }];
-      },
-      () => ({}),
-    ],
-  ])("answers %i %s, writing nothing", async (status, code, setup, params) => {
-    const { table } = await LONG();
-    const [tableId, body] = await setup(table);
-    const before = await everything();
-
-    expect(await refusal(today(tableId, "reset", body))).toEqual({
-      status,
-      body: { error: { code, params: params(table) } },
-    });
-    expect(await everything()).toEqual(before);
-  });
-
-  it.each<[string, (t: Record<string, string>) => unknown]>([
-    ["empty", () => []],
-    ["not a list", (t) => t.c5!],
-    ["not a table id", () => ["not-a-uuid"]],
-    ["a repeated table", (t) => [t.c5!, t.c5!]],
-  ])("refuses partIds that is %s", async (_name, partIds) => {
-    const { table } = await LONG();
-    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
-    const before = await everything();
-
-    expect(await refusal(today(table.long!, "reset", { partIds: partIds(table) }))).toEqual({
-      status: 400,
-      body: { error: { code: "management.request_invalid", params: { field: "partIds" } } },
-    });
-    expect(await everything()).toEqual(before);
-  });
-
-  it("refuses seats that are not a whole number from 1", async () => {
-    const { table } = await LONG();
-    await expectRevision(v, today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
-    const before = await everything();
-
-    expect(await refusal(today(table.long!, "reset", { partIds: [table.c5!], seats: 0 }))).toEqual({
-      status: 400,
-      body: { error: { code: "management.request_invalid", params: { field: "seats" } } },
-    });
-    expect(await everything()).toEqual(before);
   });
 });
 
@@ -1700,10 +1574,10 @@ describe("Update layout", () => {
     );
 
     expect(await todayRow(v, live("one"))).toMatchObject({ x: 100 });
-    expect(await todayRow(v, live("joined"))).toMatchObject({ x: 140, takenOff: false });
-    expect(await inService(live("joined"))).toBe(true);
-    expect(await todayRow(v, live("four"))).toMatchObject({ x: null });
-    expect(await todayRow(v, live("five"))).toMatchObject({ x: null });
+    expect(await todayRow(v, live("joined"))).toBeUndefined();
+    expect(await inService(live("four"))).toBe(true);
+    expect(await todayRow(v, live("four"))).toMatchObject({ x: 140, takenOff: false });
+    expect(await todayRow(v, live("five"))).toMatchObject({ x: 148, takenOff: false });
     expect(await todayRow(v, live("nine"))).toMatchObject({ x: 160, takenOff: true });
     expect(await todayRow(v, live("three"))).toMatchObject({ x: 20 });
     expect(await recordOf(d.zoneId)).toMatchObject({
