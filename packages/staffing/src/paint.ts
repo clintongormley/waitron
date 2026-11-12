@@ -1,3 +1,4 @@
+import { staffRoles } from "@waitron/db";
 import { and, asc, desc, eq, inArray, or, type SQL } from "drizzle-orm";
 import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, compareStationNames } from "@waitron/shared";
@@ -14,7 +15,7 @@ import {
   specialDays,
   weekdayOf,
 } from "@waitron/venue-service";
-import { staffingBlocks, staffingDays, staffRoles } from "@waitron/workforce";
+import { staffingBlocks, staffingDays } from "@waitron/workforce";
 import { areaKey, blockSpan, type AreaRef, type StaffingBlock } from "./slots.js";
 import type {
   SeasonStaffing,

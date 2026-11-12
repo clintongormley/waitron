@@ -1208,36 +1208,6 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("refuses a trading boot whose enabled set drops a dependency (workforce off, staffing on) BEFORE migrating (SP-1c)", async () => {
-    // Boot must refuse an enabled set that is not dependency-complete before `applyMigrations`, not
-    // fail mid-migration. `staffing` requires `workforce`, and both are toggleable. `...KEY_ENV` keeps
-    // this in trading mode; setup mode migrates the full set and never filters.
-    const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-depmissing-state-"));
-    try {
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { workforce: false } }),
-      );
-      await expect(
-        startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
-        }),
-      ).rejects.toMatchObject({
-        code: "module.dependency_missing",
-        params: { module: "staffing", requires: "workforce" },
-      });
-    } finally {
-      await rm(stateDir, { recursive: true, force: true });
-    }
-  }, 60_000);
-
   it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
     // The fiscal backend comes from whichever enabled module fills the `fiscal` seat; with neither
     // fiscal-slot member enabled, a trading boot must refuse rather than mount till routes that
@@ -1266,10 +1236,9 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it.each(["identity", "credentials"])(
+  it.each(["identity", "credentials", "workforce", "staffing"])(
     "refuses a trading boot whose modules.json switches %s off — module.mandatory_not_disableable",
     async (name) => {
-      // Their tables live in core's set, so the module cannot be switched off.
       const port = await freePort();
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-mandatory-state-"));
       let started: Promise<StartedServer> | undefined;
@@ -1303,13 +1272,12 @@ describe("startServer, against a migrated venue directory", () => {
     60_000,
   );
 
-  it("starts a trading boot whose modules.json switches staffing off", async () => {
-    // Staffing's tables live in workforce's set, so switching the module off leaves them in place.
+  it("starts a trading boot whose modules.json switches workforce-es off", async () => {
     const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staffing-off-state-"));
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-workforce-es-off-state-"));
     await writeFile(
       join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { staffing: false, "fiscal-none": false } }),
+      JSON.stringify({ modules: { "workforce-es": false, "fiscal-none": false } }),
     );
     let server: StartedServer | undefined;
     try {

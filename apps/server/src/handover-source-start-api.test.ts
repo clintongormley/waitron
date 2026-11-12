@@ -1340,8 +1340,8 @@ describe("the settings the offer carries", () => {
         "backup.env",
         "WAITRON_BACKUP_SCHEDULE=hourly\nWAITRON_BACKUP_RETAIN=5\n",
       );
-      await write(mainState, "modules.json", switchedOff("bookings", "workforce"));
-      await write(spareState, "modules.json", switchedOff("workforce", "bookings"));
+      await write(mainState, "modules.json", switchedOff("bookings", "workforce-es"));
+      await write(spareState, "modules.json", switchedOff("workforce-es", "bookings"));
 
       expect((await start()).status).toBe(200);
 

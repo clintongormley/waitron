@@ -11,10 +11,6 @@ const CLASSIFIED: Record<
   string,
   { readonly in: readonly string[]; readonly out: readonly string[] }
 > = {
-  person_staff_roles: {
-    in: ["staff_role_id"],
-    out: ["person_id"],
-  },
   shift_assignments: {
     in: ["department_id", "station_id", "staff_role_id", "shift_id"],
     out: [],

@@ -4,8 +4,8 @@
     {
       "name": "core",
       "tag": "0000_baseline",
-      "when": 1794500745092,
-      "sha256": "676efa2a4b120dac0aabcdb3480c6d961d8d1d5c91d9a1be7d573e3c00fdb6f6"
+      "when": 1794503264553,
+      "sha256": "48be7773ac27f553ca25323e3489035cd1feb06e01a2a7e050d19222e9e1f4a6"
     },
     {
       "name": "node",
@@ -16,8 +16,8 @@
     {
       "name": "workforce",
       "tag": "0000_baseline",
-      "when": 1794272450596,
-      "sha256": "324126f934112d15e5a264f73b3c2195ae461776eff022762268ba806586f346"
+      "when": 1794500616514,
+      "sha256": "71031ffc6e521107d86e88616c67dc88ad9ef68b2ffe09dc69d72fffad91f1bb"
     },
     {
       "name": "workforce-es",

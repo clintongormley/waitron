@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_CLASSIFICATION } from "@waitron/db";
-import { IDENTITY_TABLES } from "./classification.js";
+import { IDENTITY_CHANGE_SOURCES, IDENTITY_TABLES } from "./classification.js";
 
 /** This module's share of the classification of the set that holds its tables. */
 const IDENTITY_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
@@ -8,6 +8,16 @@ const IDENTITY_CLASSIFICATION = CORE_CLASSIFICATION.filter(({ table }) =>
 );
 
 describe("IDENTITY_CLASSIFICATION", () => {
+  it("owns job roles and refreshes a holder when their job roles change", () => {
+    expect(IDENTITY_TABLES).toContain("staff_roles");
+    expect(IDENTITY_TABLES).toContain("person_staff_roles");
+    expect(IDENTITY_CHANGE_SOURCES).toContainEqual({ table: "staff_roles", type: "staff_roles" });
+    expect(IDENTITY_CHANGE_SOURCES).toContainEqual({
+      table: "person_staff_roles",
+      type: "person_staff_roles",
+      related: [{ type: "persons", column: "person_id" }],
+    });
+  });
   it("has a valid class and a non-empty reason for every entry", () => {
     for (const c of IDENTITY_CLASSIFICATION) {
       expect(["ledger", "state", "local"]).toContain(c.class);

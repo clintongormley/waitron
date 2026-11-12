@@ -227,7 +227,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
   {
     name: "workforce",
     version: "0.0.0",
-    tier: "toggleable",
+    tier: "mandatory",
     requires: { core: "*", modules: { identity: "*" } },
     migrations: {
       name: "workforce",
@@ -371,7 +371,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
   {
     name: "staffing",
     version: "0.0.0",
-    tier: "toggleable",
+    tier: "mandatory",
     requires: { core: "*", modules: { identity: "*", "venue-service": "*", workforce: "*" } },
     tablesIn: "workforce",
     backup: { verification: STAFFING_BACKUP_VERIFICATION },

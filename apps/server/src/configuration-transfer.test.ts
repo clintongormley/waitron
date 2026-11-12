@@ -392,7 +392,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 22,
+  version: 23,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -2035,8 +2035,6 @@ it("transfers staff roles, who holds them and a painted season week under new id
     const [holder] = await seedPersons(tx, { displayName: "Holder", role: "staff" });
     const waiter = randomUUID();
     const runner = randomUUID();
-    // Raw: apps/server does not depend on @waitron/staffing, and these tables have no `$defaultFn`
-    // column beyond the ids supplied here.
     await tx.execute(sql`
       insert into staff_roles (id, name, colour, position)
       values (${waiter}, 'Waiter', 'blue', 0),
@@ -2072,7 +2070,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const roles = await targetSuite.db.execute(sql`
-    select r.name, r.colour, r.position, p.display_name as holder
+    select r.name, r.colour, r.position, r.hidden_at, p.display_name as holder
     from staff_roles r
     left join person_staff_roles h on h.staff_role_id = r.id
     left join persons p on p.id = h.person_id
@@ -2083,8 +2081,9 @@ it("transfers staff roles, who holds them and a painted season week under new id
       colour: "blue",
       position: 0,
       holder: "Holder",
+      hidden_at: null,
     },
-    { name: "Runner", colour: "green", position: 1, holder: null },
+    { name: "Runner", colour: "green", position: 1, holder: null, hidden_at: null },
   ]);
   const week = await targetSuite.db.execute(sql`
     select d.id as day_id, d.department_id, d.season_id, h.person_id, b.staff_role_id,
@@ -5498,7 +5497,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(22);
+  expect(exported.version).toBe(23);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

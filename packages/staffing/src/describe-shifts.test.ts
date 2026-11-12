@@ -1,8 +1,9 @@
+import { staffRoles } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { WORKFORCE_MIGRATIONS, shiftAssignments, shifts, staffRoles } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, shiftAssignments, shifts } from "@waitron/workforce";
 import { seedVenueWithStaff } from "../test/seed.js";
 import * as staffing from "./index.js";
 

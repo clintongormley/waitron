@@ -51,13 +51,7 @@ export { shiftTemplates } from "./schema/shift-templates.js";
 export { shiftSwaps, shiftSwapStatus } from "./schema/shift-swaps.js";
 export type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 // Staffing's tables, which live in workforce's set, listed by hand.
-export {
-  personStaffRoles,
-  shiftAssignments,
-  staffingBlocks,
-  staffingDays,
-  staffRoles,
-} from "./schema/index.js";
+export { shiftAssignments, staffingBlocks, staffingDays } from "./schema/index.js";
 export { createAbsence, setAbsenceStatus, listPendingAbsences } from "./absences.js";
 export type { CreateAbsenceInput, SetAbsenceStatusInput, PendingAbsenceRow } from "./absences.js";
 export { requestSwap, acceptSwap, decideSwap, listPendingSwaps } from "./shift-swaps.js";

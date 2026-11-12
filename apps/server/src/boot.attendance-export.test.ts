@@ -29,14 +29,9 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
-for (const state of ["provider", "workforce-only", "disabled"] as const) {
+for (const state of ["provider", "workforce-only"] as const) {
   describe(`actual export boot ${state}`, () => {
-    const disabled = new Set([
-      "fiscal-none",
-      "staffing",
-      ...(state === "provider" ? [] : ["workforce-es"]),
-      ...(state === "disabled" ? ["workforce"] : []),
-    ]);
+    const disabled = new Set(["fiscal-none", ...(state === "provider" ? [] : ["workforce-es"])]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -122,7 +117,7 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
           const manager = `/management-api/attendance/export?${selection}`;
           const optionsPath = "/management-api/me/attendance/export-options";
           const options = await get(optionsPath);
-          if (state !== "disabled" && mode === "primary") {
+          if (mode === "primary") {
             expect(options.status).toBe(200);
             expect(await options.json()).toEqual({
               available: state === "provider",
@@ -154,14 +149,6 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
             expect((await get(own)).status).toBe(404);
             expect((await get(manager)).status).toBe(404);
           }
-          if (state === "disabled")
-            expect(
-              statements.filter((q) =>
-                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|pay_period_\w*)\b/i.test(
-                  q,
-                ),
-              ),
-            ).toEqual([]);
         } finally {
           await server?.close();
           await tls?.close();

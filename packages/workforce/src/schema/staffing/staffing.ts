@@ -1,60 +1,21 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
   departments,
-  enumCheck,
-  enumType,
   id,
   kitchenStations,
-  label,
   newId,
-  persons,
+  staffRoles,
   seasons,
   specialDayDates,
   table,
   timeOfDay,
 } from "@waitron/db";
-import { CALENDAR_COLOURS } from "@waitron/shared";
 import { shifts } from "../shifts.js";
 
-const calendarColour = enumType(CALENDAR_COLOURS);
 const STEP = (column: unknown) => sql`substr(${column}, 4, 2) in ('00', '15', '30', '45')`;
 
-export const staffRoles = table(
-  "staff_roles",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    name: label("name").notNull(),
-    colour: calendarColour("colour").notNull().default("grey"),
-    position: count("position").notNull().default(0),
-  },
-  (t) => [
-    uniqueIndex("staff_roles_name_key").on(t.name),
-    check("staff_roles_name_ck", sql`trim(${t.name}) <> ''`),
-    check("staff_roles_colour_ck", enumCheck(t.colour)),
-  ],
-);
-
-export const personStaffRoles = table(
-  "person_staff_roles",
-  { personId: id("person_id").notNull(), staffRoleId: id("staff_role_id").notNull() },
-  (t) => [
-    primaryKey({ columns: [t.personId, t.staffRoleId], name: "person_staff_roles_pk" }),
-    foreignKey({
-      columns: [t.personId],
-      foreignColumns: [persons.id],
-      name: "person_staff_roles_person_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.staffRoleId],
-      foreignColumns: [staffRoles.id],
-      name: "person_staff_roles_role_fk",
-    }).onDelete("cascade"),
-  ],
-);
-
-// Generated in a second migration: scripts/migration-upgrade.test.ts applies every set's first migration together, before venue-service creates seasons and special_day_dates.
 /** One area's painted day: a department OR a prep station, on a season's weekday OR a special day's date. */
 export const staffingDays = table(
   "staffing_days",

@@ -40,14 +40,9 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
-for (const enabled of [true, false]) {
-  describe(`attendance response real boot workforce=${enabled}`, () => {
-    const disabled = new Set([
-      "fiscal-none",
-      "workforce-es",
-      "staffing",
-      ...(enabled ? [] : ["workforce"]),
-    ]);
+describe("attendance response boot with permanent workforce", () => {
+  describe("real listener", () => {
+    const disabled = new Set(["fiscal-none", "workforce-es"]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -55,11 +50,7 @@ for (const enabled of [true, false]) {
         null,
       ),
     });
-    it.each(
-      enabled
-        ? (["primary", "mirror", "fenced", "secondary", "setup"] as const)
-        : (["primary"] as const),
-    )(
+    it.each(["primary", "mirror", "fenced", "secondary", "setup"] as const)(
       "serves only the writable migrated attendance surface in %s mode",
       async (mode) => {
         beforeServerStarts();
@@ -78,7 +69,7 @@ for (const enabled of [true, false]) {
           .set({ lastSeenAt: oldSeenAt })
           .where(eq(managementSessions.tokenHash, hashSessionToken(management.token)));
         let targetId: string | undefined;
-        if (enabled) {
+        {
           await withTransaction(suite.db, async (tx) => {
             const backend = new WorkforceBackend();
             const common = {
@@ -167,7 +158,7 @@ for (const enabled of [true, false]) {
             `/management-api/attendance/day?personId=${venue.personId}&date=2026-01-05`,
             `/management-api/attendance/commands/${crypto.randomUUID()}`,
           ];
-          if (enabled && mode === "primary") {
+          if (mode === "primary") {
             const inboxResponse = await get(paths[0]!, venue.cookie);
             expect(inboxResponse.status).toBe(200);
             const inbox = (await inboxResponse.json()) as AttendanceInbox;
@@ -247,14 +238,6 @@ for (const enabled of [true, false]) {
                 expect(await response.json()).toMatchObject({ error: { code: "node.read_only" } });
             }
           }
-          if (!enabled)
-            expect(
-              statements.filter((q) =>
-                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|shifts|roster_versions)\b/i.test(
-                  q,
-                ),
-              ),
-            ).toEqual([]);
         } finally {
           await server?.close();
           await tls?.close();
@@ -262,7 +245,7 @@ for (const enabled of [true, false]) {
           await rm(scratch, { recursive: true, force: true });
         }
         beforeServerStarts();
-        if (enabled && mode === "primary")
+        if (mode === "primary")
           expect(
             (
               await suite.db
@@ -271,7 +254,7 @@ for (const enabled of [true, false]) {
                 .where(eq(managementSessions.tokenHash, hashSessionToken(management.token)))
             )[0]!.lastSeenAt,
           ).not.toBe(oldSeenAt);
-        if (enabled) {
+        {
           const rows = await suite.db.select().from(timeEntries);
           expect(rows).toHaveLength(mode === "primary" ? 3 : 2);
           if (resultIds.length)
@@ -286,4 +269,4 @@ for (const enabled of [true, false]) {
       60_000,
     );
   });
-}
+});

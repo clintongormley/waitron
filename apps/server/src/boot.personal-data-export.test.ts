@@ -24,7 +24,7 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
-const disabled = new Set(["fiscal-none", "staffing"]);
+const disabled = new Set(["fiscal-none"]);
 const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
 const suite = useVenueDb({
   migrations: migrationOptionsFor(

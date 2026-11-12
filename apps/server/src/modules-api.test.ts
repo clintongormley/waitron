@@ -36,11 +36,9 @@ it("lists optional modules even when disabled, plus every provider, without mand
   const response = await app().request("/management-api/modules", { headers: { cookie: manager } });
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual([
-    { id: "workforce", category: "module", enabled: false },
     { id: "workforce-es", category: "module", enabled: false },
     { id: "payments", category: "module", enabled: true },
     { id: "bookings", category: "module", enabled: false },
-    { id: "staffing", category: "module", enabled: false },
     { id: "sumup", category: "card-provider", enabled: true, revision: 0 },
     { id: "stripe", category: "card-provider", enabled: true, revision: 0 },
   ]);

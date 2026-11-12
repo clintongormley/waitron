@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { personStaffRoles, staffRoles } from "@waitron/db";
+import { and, asc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
@@ -8,7 +9,7 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
-import { personStaffRoles, shiftAssignments, staffingBlocks, staffRoles } from "@waitron/workforce";
+import { shiftAssignments, staffingBlocks } from "@waitron/workforce";
 import type { CalendarColour, ListedStaffRole, StaffRole } from "./staffing-types.js";
 import "./errors.js";
 
@@ -32,7 +33,13 @@ export function staffRolesNamed(tx: Transaction, name: string, except: string | 
   return tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(and(eq(staffRoles.name, name), except === null ? undefined : ne(staffRoles.id, except)));
+    .where(
+      and(
+        eq(staffRoles.name, name),
+        isNull(staffRoles.hiddenAt),
+        except === null ? undefined : ne(staffRoles.id, except),
+      ),
+    );
 }
 
 /** Names compare exactly after trimming, as the unique index does. */

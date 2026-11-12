@@ -15,8 +15,7 @@ does not leave a rejected subscription. Handhelds and kitchen displays retain
 timed reads under jr11's measured tills-only fallback, including handheld pending-payment reads.
 On tills, station and pass screens, clocking, receipt delivery and the open bill draft also refresh
 on their declared changes. Kitchen, clocking and delivery timers remain because their answers age
-with time. Clocking interests follow the available clocking controller, so workforce-disabled
-setups never request workforce resources. Bill drafts quiet their fifteen-second chain while
+with time. Clocking interests follow the available clocking controller. Bill drafts quiet their fifteen-second chain while
 connected and refresh on reconnect or loss; their draft, bill-family and balance reads use stored
 rows. Kitchen event bursts have one read in flight and one queued; their timed reads retain their
 independent bounded overlap for recovery.

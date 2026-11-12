@@ -521,3 +521,5 @@ export { VENUE_SETTINGS, BUSINESS_DAY_SETTINGS, FIRST_DAY_START } from "./venue-
 export type { VenueSettings, BusinessDaySettings } from "./venue-settings.js";
 
 export { dayCutoverChanges } from "./schema/day-cutover-changes.js";
+
+export { staffRoles, personStaffRoles } from "./schema/identity/staff-roles.js";

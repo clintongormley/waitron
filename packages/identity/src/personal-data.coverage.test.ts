@@ -7,6 +7,11 @@ import { describe, expect, it } from "vitest";
 import * as schema from "@waitron/db/schema/identity.js";
 
 const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[] }> = {
+  // Staffing exports these memberships as role names in staff-roles.json.
+  person_staff_roles: {
+    in: ["staff_role_id"],
+    out: ["person_id"],
+  },
   persons: {
     in: [
       "id",

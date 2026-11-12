@@ -1,3 +1,4 @@
+import { personStaffRoles, staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -10,12 +11,10 @@ import { validateBackupVerificationContribution } from "@waitron/module";
 import { departments, seasons, specialDays, specialDayDates } from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
-  personStaffRoles,
   shiftAssignments,
   shifts,
   staffingBlocks,
   staffingDays,
-  staffRoles,
   WORKFORCE_CLASSIFICATION,
 } from "@waitron/workforce";
 import { STAFFING_BACKUP_VERIFICATION as OWNER } from "./index.js";
@@ -176,8 +175,6 @@ describe("staffing backup evidence", () => {
     ]).toEqual([[], [], [], null, "absent_tables_and_entries", "empty_after_migration"]);
   });
   it.each([
-    "update staff_roles set name='Changed role'",
-    "delete from person_staff_roles",
     "update staffing_days set weekday=2",
     "update staffing_blocks set headcount=3",
     "delete from shift_assignments",
@@ -187,8 +184,6 @@ describe("staffing backup evidence", () => {
     expect((await run()).status).toBe("invalid");
   });
   it.each([
-    "update person_staff_roles set person_id='missing'",
-    "update person_staff_roles set staff_role_id='missing'",
     "update staffing_days set department_id='missing'",
     "update staffing_days set season_id='missing'",
     "update staffing_blocks set day_id='missing'",
@@ -201,8 +196,6 @@ describe("staffing backup evidence", () => {
     expect((await run()).status).toBe("invalid");
   });
   it.each([
-    "update staff_roles set name=''",
-    "update staff_roles set colour='unknown'",
     "update staffing_days set department_id=null",
     "update staffing_days set weekday=7",
     "update staffing_days set weekday=null",
@@ -222,7 +215,9 @@ describe("staffing backup evidence", () => {
     expect(
       (
         await run(
-          side === "before" ? { wrap: hideTable("persons") } : { wrapAfter: hideTable("persons") },
+          side === "before"
+            ? { wrap: hideTable("staff_roles") }
+            : { wrapAfter: hideTable("staff_roles") },
         )
       ).status,
     ).toBe("invalid");
@@ -230,9 +225,9 @@ describe("staffing backup evidence", () => {
   it("accepts empty and unassigned state with missing optional parents", async () => {
     for (const db of [original.db, restored.db]) {
       db.run(sql`delete from shift_assignments`);
-      db.run(sql`delete from person_staff_roles`);
+      db.run(sql`delete from staffing_blocks`);
     }
-    expect(await run({ wrap: hideTable("persons") })).toEqual(passed);
+    expect(await run({ wrap: hideTable("staff_roles") })).toEqual(passed);
   });
   it("preserves station and special-day staffing and overnight blocks", async () => {
     for (const suite of [original, restored]) {
@@ -255,16 +250,12 @@ describe("staffing backup evidence", () => {
     expect((await run({ sourceSchema: 0 })).status).toBe("invalid");
   });
   it("accepts honest zero and refuses invented target data", async () => {
-    for (const table of [
-      "shift_assignments",
-      "staffing_blocks",
-      "staffing_days",
-      "person_staff_roles",
-      "staff_roles",
-    ])
+    for (const table of ["shift_assignments", "staffing_blocks", "staffing_days"])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
-    await restored.db.insert(staffRoles).values({ id: "invented", name: "Invented role" });
+    await restored.db
+      .insert(staffingDays)
+      .values({ id: "invented", departmentId: "department", seasonId: "season", weekday: 2 });
     expect((await run({ absent: true, sourceSchema: 0 })).status).toBe("invalid");
   });
   it("keeps unexpected query errors unavailable", async () => {

@@ -23,9 +23,9 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
-for (const enabled of [true, false]) {
-  describe(`shift descriptions actual boot staffing=${enabled}`, () => {
-    const disabled = new Set(["fiscal-none", ...(enabled ? [] : ["staffing"])]);
+for (const assigned of [true, false]) {
+  describe(`shift descriptions actual boot assigned=${assigned}`, () => {
+    const disabled = new Set(["fiscal-none"]);
     const modules = ALL_MODULES.filter((module) => !disabled.has(module.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -33,7 +33,7 @@ for (const enabled of [true, false]) {
         null,
       ),
     });
-    it("uses enabled contributions on both own-shift routes and serves null descriptions without staffing tables", async () => {
+    it("describes assigned shifts on both own-shift routes and serves null for an unassigned shift", async () => {
       beforeServerStarts();
       const venue = await createClockVenue(suite.db, () => new Date(), modules);
       const session = await withTransaction(suite.db, (tx) =>
@@ -60,7 +60,7 @@ for (const enabled of [true, false]) {
             endsOffsetMinutes: 60,
           })
           .returning();
-        if (enabled) {
+        if (assigned) {
           const [department] = await tx
             .insert(departments)
             .values({
@@ -119,7 +119,7 @@ for (const enabled of [true, false]) {
             expect.objectContaining({
               id: shiftId,
 
-              description: enabled ? "Kitchen · Sous chef" : null,
+              description: assigned ? "Kitchen · Sous chef" : null,
             }),
           ]);
         }

@@ -1,15 +1,10 @@
+import { personStaffRoles, staffRoles } from "@waitron/db";
 import { asc, eq, sql } from "drizzle-orm";
 import { kitchenStations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { jsonFile, type ModulePersonalData } from "@waitron/module";
 import { departments } from "@waitron/venue-service";
-import {
-  localWallClock,
-  personStaffRoles,
-  shiftAssignments,
-  shifts,
-  staffRoles,
-} from "@waitron/workforce";
+import { localWallClock, shiftAssignments, shifts } from "@waitron/workforce";
 
 export const STAFFING_PERSONAL_DATA: ModulePersonalData = {
   files: ["staff-roles.json"],

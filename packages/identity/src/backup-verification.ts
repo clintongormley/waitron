@@ -1,3 +1,4 @@
+import { CALENDAR_COLOURS } from "@waitron/shared";
 import { createHmac, createPublicKey } from "node:crypto";
 import { decodeCredentialPublicKey } from "@simplewebauthn/server/helpers";
 import { compareBackupTables } from "@waitron/db";
@@ -184,6 +185,10 @@ async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
       secret = merge(secret, totp(row.totp_secret, ring));
     }
   }
+  const staffRoles = new Set<string>();
+  if (tables.has("staff_roles")) {
+    for await (const row of query.rows("select * from staff_roles")) staffRoles.add(String(row.id));
+  }
   for (const table of IDENTITY_TABLES) {
     if (table === "persons" || !tables.has(table)) continue;
     const identifier = '"' + table.replaceAll('"', '""') + '"';
@@ -195,6 +200,20 @@ async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
       )
         data = merge(data, "invalid");
       switch (table) {
+        case "staff_roles":
+          if (
+            typeof row.name !== "string" ||
+            row.name.trim().length === 0 ||
+            typeof row.colour !== "string" ||
+            !(CALENDAR_COLOURS as readonly string[]).includes(row.colour) ||
+            typeof row.position !== "bigint" ||
+            (row.hidden_at !== null && typeof row.hidden_at !== "string")
+          )
+            data = merge(data, "invalid");
+          break;
+        case "person_staff_roles":
+          if (!staffRoles.has(String(row.staff_role_id))) data = merge(data, "invalid");
+          break;
         case "totp_enrollments":
           secret = merge(secret, totp(row.encrypted_secret, ring));
           break;

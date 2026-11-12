@@ -619,8 +619,9 @@ called weaker than its name, the topic file lists what it does not see.
   `jsonReferences`. Guard: `scripts/id-columns-are-references.test.ts`, weaker than its name.
   [Detail](docs/developers/conventions-data.md#a-column-of-a-transferred-table-that-holds-another-rows-id-is-a-foreign-key-a-declared-references-entry-or-left-out-of-the-export).
 - **A module that can be switched off or swapped keeps a migration set of its own; any other adds
-  its tables to core's set, and the commit says which.** Stated exceptions: staffing, switchable
-  with its tables in workforce's set, and `node`, whose set is applied to `node.db`. Append-only
+  its tables to core's set, and the commit says which.** Stated exceptions: workforce and staffing, permanent
+  since A1002, with staffing's remaining tables in workforce's set, and `node`, whose set is applied
+  to `node.db`. Append-only
   classification travels with the set. Guard: the eight-sets cases in
   `packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and
   hosted modules.

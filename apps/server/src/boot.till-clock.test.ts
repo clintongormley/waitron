@@ -315,17 +315,9 @@ describe("read-only real boot clocking", () => {
   );
 });
 
-for (const [enabled, spain] of [
-  [true, false],
-  [false, false],
-  [true, true],
-] as const) {
-  describe(`real trading listener with workforce ${enabled ? "on" : "off"}, Spain ${spain ? "on" : "off"}`, () => {
-    const disabled = new Set([
-      "fiscal-none",
-      ...(spain ? [] : ["workforce-es"]),
-      ...(enabled ? [] : ["workforce", "staffing"]),
-    ]);
+for (const spain of [false, true]) {
+  describe("real trading listener with permanent workforce, Spain " + String(spain), () => {
+    const disabled = new Set(["fiscal-none", ...(spain ? [] : ["workforce-es"])]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -335,11 +327,9 @@ for (const [enabled, spain] of [
     });
 
     it(
-      enabled
-        ? spain
-          ? "carries the enabled paid-break policy through real boot"
-          : "clocks through the real login and all four writes without workforce-es"
-        : "signs in normally without workforce tables and serves no clock routes",
+      spain
+        ? "carries the enabled paid-break policy through real boot"
+        : "clocks through the real login and all four writes without workforce-es",
       async () => {
         beforeServerStarts();
         const venue = await createClockVenue(suite.db, () => new Date(), modules);
@@ -424,13 +414,13 @@ for (const [enabled, spain] of [
           const cookie = `${deviceCookie}; ${sessionCookie}`;
           const boot = await fetch(`${origin}/api/till`, { headers: { cookie } });
           expect(boot.status).toBe(200);
-          expect(await boot.json()).toMatchObject({ clockingAvailable: enabled });
+          expect(await boot.json()).toMatchObject({ clockingAvailable: true });
           const read = async () => {
             const response = await fetch(`${origin}/api/clock/state`, { headers: { cookie } });
             expect(response.status).toBe(200);
             return (await response.json()) as TillClockState;
           };
-          if (enabled) {
+          {
             let state = await read();
             expect(state).toMatchObject({
               personId: venue.personId,
@@ -480,14 +470,6 @@ for (const [enabled, spain] of [
                 expect.objectContaining({ personId: venue.personId, workedMinutes: 400 }),
               );
             }
-          } else {
-            for (const path of ["state", "in", "out", "break-start", "break-end"]) {
-              const response = await fetch(`${origin}/api/clock/${path}`, {
-                method: path === "state" ? "GET" : "POST",
-                headers: { cookie },
-              });
-              expect(response.status, path).toBe(404);
-            }
           }
         } finally {
           await server?.close();
@@ -498,7 +480,7 @@ for (const [enabled, spain] of [
           suite.db.all(
             sql`select name from sqlite_schema where type = 'table' and name = 'time_entries'`,
           ),
-        ).toHaveLength(enabled ? 1 : 0);
+        ).toHaveLength(1);
         expect(
           suite.db.all(
             sql`select name from sqlite_schema where type = 'table' and name = 'convenio_config'`,

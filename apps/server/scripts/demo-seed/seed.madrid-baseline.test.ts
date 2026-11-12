@@ -606,6 +606,11 @@ for (const locale of ["en", "es"] as const) {
           { name: "requested_amount", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
           null,
         ],
+        [
+          "staff_roles",
+          { name: "hidden_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
       ] as const) {
         const table = expected[phase].tables[name]!;
         table.columns.push(column);

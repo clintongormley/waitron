@@ -25,15 +25,13 @@ const OWNED = [
   "attendance_questions",
   "attendance_response_commands",
   // Staffing's tables, which live in this package's set.
-  "staff_roles",
-  "person_staff_roles",
   "staffing_days",
   "staffing_blocks",
   "shift_assignments",
 ];
 
 /** Core tables: none may appear in this package's generated SQL. */
-const CORE = ["tenants", "locations", "devices", "nodes"];
+const CORE = ["tenants", "locations", "devices", "nodes", "staff_roles", "person_staff_roles"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 

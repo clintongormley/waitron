@@ -5,7 +5,6 @@ import type { BackupModuleStatus, BackupVerificationContribution } from "@waitro
 import type { BackupQuery, BackupValue, BackupRow } from "@waitron/store";
 import { STAFFING_TABLES } from "./classification.js";
 import * as schema from "@waitron/workforce/schema/staffing.js";
-import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 
 const tables = [...STAFFING_TABLES];
 const immutableTables: readonly string[] = [];
@@ -93,14 +92,6 @@ function time(value: BackupValue | undefined): boolean {
   return typeof value === "string" && /^(?:[01]\d|2[0-3]):(?:00|15|30|45)(?::00)?$/.test(value);
 }
 function rowValid(table: string, row: BackupRow): boolean {
-  if (table === "staff_roles")
-    return (
-      typeof row.name === "string" &&
-      row.name.trim().length > 0 &&
-      typeof row.colour === "string" &&
-      (CALENDAR_COLOURS as readonly string[]).includes(row.colour) &&
-      typeof row.position === "bigint"
-    );
   if (table === "staffing_days")
     return (
       (row.department_id === null) !== (row.station_id === null) &&
