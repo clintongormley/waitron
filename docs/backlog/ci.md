@@ -538,8 +538,8 @@ A1424's live qualification was added on 7 November 2026.
   with `dbus_unreachable`. Guest diagnosis remains open.
   The health check chooses hosted while the server queue is stuck, and the independent
   watchdog dispatches trusted-main health recovery for untouched queued PR planners;
-  other stuck work is reported without moving runs. PR planner placement remains hosted
-  until guest tools and an owned unavailable-label drill qualify it.
+  other stuck work is reported without moving runs. First-attempt PR planners use published
+  spare capacity; non-PR planning remains hosted.
   Qualify the idle probe, browser guest
   requirements and current-head coverage/aggregate results.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and

@@ -27,6 +27,9 @@ function route(
     fork = false,
     health = "server",
     probe = false,
+    head = "",
+    capacity = '{"slots":12,"serverRunning":0,"serverWaiting":0}',
+    headRepoName,
   } = {},
 ) {
   const context = {
@@ -34,7 +37,8 @@ function route(
     vars: new Proxy(
       {
         DISPOSABLE_TESTS_MODE: mode,
-        DISPOSABLE_TESTS_HEAD: "",
+        DISPOSABLE_TESTS_HEAD: head,
+        DISPOSABLE_TESTS_CAPACITY: capacity,
         DISPOSABLE_TESTS_LABEL_PREFIX: "dt",
         DISPOSABLE_TESTS_HOSTED_ATTEMPTS: hosted,
       },
@@ -52,7 +56,10 @@ function route(
         pull_request: {
           head: {
             sha: "a".repeat(40),
-            repo: { id: fork ? 99 : 42, full_name: fork ? "foreign/repo" : "fixture/waitron" },
+            repo: {
+              id: fork ? 99 : 42,
+              full_name: headRepoName ?? (fork ? "foreign/repo" : "fixture/waitron"),
+            },
           },
         },
       },
@@ -69,6 +76,44 @@ function route(
     : expression;
 }
 describe("server-first workflow routing", () => {
+  it.each([
+    [{ mode: "hosted" }, "hosted"],
+    [{ headRepoName: "foreign/waitron" }, "hosted"],
+    [{ hosted: '{"1234":1}' }, "hosted"],
+    [{ head: "b".repeat(40) }, "hosted"],
+    [{ head: "a".repeat(40) }, "server"],
+    [{ capacity: "" }, "hosted"],
+    [{ capacity: '{"slots":0,"serverRunning":0,"serverWaiting":0}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":3,"serverWaiting":1}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":12,"serverWaiting":0}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":11,"serverWaiting":0}' }, "server"],
+  ])("places PR planning by existing gates and unused capacity: %j", (options, expected) => {
+    const selected = route(jobs.find((job) => job.id === "changes").route, {
+      event: "pull_request",
+      ...options,
+    });
+    expect(selected).toEqual(
+      expected === "server" ? ["self-hosted", "dt-42-1234-1-changes-1"] : "ubuntu-latest",
+    );
+  });
+  it("places a planner without its own output or workflow arithmetic", () => {
+    const expression = jobs.find((job) => job.id === "changes").route;
+    expect(expression).toContain("serverWaiting == 0");
+    expect(expression).toContain("serverRunning <");
+    expect(expression).not.toContain("needs.");
+    expect(expression).not.toContain("+");
+  });
+  it("sets up gh only in a server planning job", () => {
+    const body = jobs.find((job) => job.id === "changes").body;
+    const setup = body.match(/      - name: Set up gh on the server\n([\s\S]*?)(?=\n      - )/)[1];
+    const condition = setup.match(/^        if: (.+)$/m)[1];
+    for (const environment of ["self-hosted", "github-hosted"])
+      expect(runInNewContext(condition, { runner: { environment } })).toBe(
+        environment === "self-hosted",
+      );
+    for (const job of jobs.filter((job) => job.id !== "changes"))
+      expect(job.body ?? "").not.toContain("Set up gh on the server");
+  });
   it("keeps image smoke on GitHub until disposable guests are qualified", () => {
     expect(jobs.find((job) => job.id === "image-smoke").route).toBe("ubuntu-latest");
   });
@@ -133,9 +178,15 @@ describe("server-first workflow routing", () => {
       for (const attempt of [1, 2, 7])
         for (const job of jobs) {
           const selected = route(job.route, { event, attempt });
-          if (
-            ["changes", "server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id)
-          ) {
+          if (job.id === "changes") {
+            expect(selected).toEqual(
+              event === "pull_request" && attempt === 1
+                ? ["self-hosted", "dt-42-1234-1-changes-1"]
+                : "ubuntu-latest",
+            );
+            continue;
+          }
+          if (["server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id)) {
             expect(selected).toBe("ubuntu-latest");
             continue;
           }

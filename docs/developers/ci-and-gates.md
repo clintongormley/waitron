@@ -156,11 +156,23 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
-GitHub so routing, health checks and the required result can still run when server assignment
-stops (watcher, 2026-11-08 16:00). Image smoke always uses `ubuntu-latest` until a
+ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
+GitHub; the independent Server health workflow also stays hosted so rescue can run when server assignment stops. Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
 `server_route` into the reusable image workflow, but that input does not choose its runner.
+
+PR planning (`changes`) uses a server guest only on the first attempt of a same-repository
+PR, with server mode and the existing selected-head and hosted-attempt gates. The published
+snapshot must show no waiting server jobs and fewer occupied slots than usable slots.
+Absent or zero capacity selects GitHub. This placement reads no output from its own job;
+the downstream queue-pressure routing described below stays unchanged. Later planner
+attempts, forks, pushes, schedules and manual runs stay hosted. Concurrent placements
+reserve no slots, and the snapshot has no new expiry rule.
+
+A server planning job installs a missing `gh` with three bounded apt attempts; each update
+and install has a 20-second outer timeout and 10-second HTTP/HTTPS limits. The setup step
+has its own three-minute limit inside the unchanged five-minute job limit. Hosted planning
+uses the provided tool. Checkout still fetches full history.
 
 The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
 measured global pool limits simultaneous guests. Removing a workflow cap does not add
@@ -209,6 +221,7 @@ External provenance, read 2026-11-09:
 | --- | --- | --- |
 | The routing script uses its workflow commit | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context): “The commit SHA for the workflow file.” | Read the routing module at `GITHUB_WORKFLOW_SHA`, so an older candidate checkout cannot supply a different input contract. |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
+| Only the server planning step installs gh | [GitHub runner context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#runner-context): “self-hosted for self-hosted runners configured by the repository owner” | Test `runner.environment` so hosted jobs keep their existing tools. |
 
 The existing health check reads CI's queued and running workflows. A job's wait is dated from its own
 `started_at`, or its own `created_at` when no start is reported; neither available means its age is unknown.
@@ -236,7 +249,7 @@ watchdog; incomplete inventories and refused dispatches fail it. The shell retai
 1,260-second outer deadline inside a 22-minute job. Timeout selection prefers
 `gnutimeout`, then `gtimeout`, then `timeout`.
 
-Hosted-first routing can leave the server idle; the existing idle probe still checks
+Hosted non-PR planning can still leave the server idle; the existing idle probe checks
 server pickup when no recent server traffic is observed.
 
 The independent Server health workflow runs on GitHub every five minutes, or by manual
@@ -250,8 +263,8 @@ The pass attempts eligible planners in order; its five-minute step limit can end
 before every planner is reached. Later passes reconsider work that is still queued.
 After cancellation, an interrupted retry is reported for intervention; later passes do not
 resume cancelled runs from history alone. Age, nominal schedule and cancellation polling add
-about twelve minutes; GitHub's own queue can add more. PR planning still starts on GitHub
-until guest tools and the owned unavailable-label drill qualify server placement.
+about twelve minutes; GitHub's own queue can add more. Qualify server placement with an owned guest tool/history/API check and an
+owned unavailable-label PR drill; rerunning an unrelated failing job is not that proof.
 
 The following `check` command reads the queue without changing runs. A queue waiting five
 minutes without assigned or recent server progress raises `SERVER STUCK` unless a valid
