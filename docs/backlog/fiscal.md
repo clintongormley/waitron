@@ -936,6 +936,8 @@ asesor Q31 (2026-09-30), not decided.
   [build plan](../superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) identifies
   the protected-writer approval (granted 2026-10-22) and the exact-gross qualification
   required before the dependent money workflow.
+  **2026-11-12:** the [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md) replaces it
+  for the remaining work.
   The owner's 2026-10-18 scope follows:
   - A server route that issues a partial correction through `recordCorrection`
     (`packages/core/src/record-correction.ts`), filing by differences as today.

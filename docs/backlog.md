@@ -1872,9 +1872,9 @@ Not in any track until the standalone primary is done.
   is an internal API; sale lines, reprints, the returned-invoices reporting marker and real-box
   qualification remain open. A filing result held only by the old box is not applied to a record
   already on the new main; a late payment on an older box's chain is not included in this return.
-  An unfinished A802 correction does not travel (`invoice_corrections` and
-  `invoice_correction_refunds` are not in the return), so the new main holds no record of it and
-  files no corrective invoice for cash it gave back.
+  An A802 correction's row and refund links do not travel (`invoice_corrections` and
+  `invoice_correction_refunds` are not in the return), so cash an unfinished correction gave back
+  arrives as ordinary refunds, and no correction on the new main can cover it.
   [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
 
 - **A third box's chart can leave another box serving-secondary and filing.** The remaining
