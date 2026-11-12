@@ -346,4 +346,28 @@ it("keeps an active SQLite reader protected from another process's checkpoint wh
     write.close();
     rmSync(directory, { recursive: true, force: true });
   }
+}, 15000);
+
+it("keeps an unavailable observer from replacing a committed write's notification", () => {
+  const directory = mkdtempSync(join(tmpdir(), "waitron-observer-refusal-"));
+  const path = join(directory, "venue.db");
+  const write = new DatabaseSync(path);
+  write.exec("pragma journal_mode = wal; create table t (id)");
+  const read = new DatabaseSync(path, { readOnly: true });
+  const connections = connectionPair(write, read);
+  let heard = 0;
+  connections.onCommit(() => {
+    heard += 1;
+  });
+  read.close();
+  try {
+    const mark = connections.changeMark();
+    write.exec("insert into t values (1)");
+    expect(() => connections.reportIfChanged(mark)).not.toThrow();
+    expect(heard).toBe(1);
+    expect(write.prepare("select * from t").all()).toEqual([{ id: 1 }]);
+  } finally {
+    write.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

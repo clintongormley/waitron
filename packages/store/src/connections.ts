@@ -169,9 +169,11 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
   const version =
     write.location() === null || read === write ? undefined : read.prepare("pragma data_version");
   const dataVersion = (): number | undefined => {
-    // A held read transaction sees its snapshot's version, not later commits.
-    if (version === undefined || read.isTransaction) return undefined;
+    // Read statements must finish before observing commits. An explicit read transaction
+    // can still hold an older snapshot, so its version cannot rule out a later commit.
+    if (version === undefined) return undefined;
     try {
+      if (read.isTransaction) return undefined;
       return (version.get() as { data_version: number }).data_version;
     } catch {
       return undefined;

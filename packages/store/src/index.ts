@@ -94,13 +94,12 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    */
   checkpointTruncate: () => Promise<{ reclaimed: boolean }>;
   /**
-   * Registers `listener` for every commit on this file that changed at least one row and changed
-   * the write-ahead side file since the last commit reported, `checkpointTruncate`, or the first
-   * listener's registration; returns the unsubscribe. A write transaction that began while no
-   * listener was registered is not reported to anyone. A commit that only changed the schema is
-   * not reported, nor one made by issuing `begin` and `commit` as statements, as Drizzle's migrator
-   * does. One that set rows to the values they held is not reported either, except straight after
-   * a schema-only commit.
+   * Registers `listener` for a commit that changed rows, unless the read connection proves the
+   * database unchanged since the last report, checkpoint, or first subscription. An inconclusive
+   * observation reports the change. Returns the unsubscribe. A transaction that began while no
+   * listener was registered is not reported, nor a schema-only commit or a transaction issued as
+   * raw begin/commit statements. The schema-only commit leaves the baseline unchanged, so a
+   * same-value update immediately after it is reported.
    */
   onCommit: (listener: CommitListener) => () => void;
   /**

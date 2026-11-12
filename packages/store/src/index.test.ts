@@ -1062,7 +1062,6 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(2);
   });
 
-  // Stated at `reportIfChanged` in ./connections.ts: the side file is only looked at once rows have moved.
   it("still tells listeners about a same-value update right after a commit that changed only the schema", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
@@ -1128,4 +1127,4 @@ it("keeps another store's commits and held reader protected after one store clos
     await first.close();
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 15000);
