@@ -1206,9 +1206,9 @@ restore unable to read newer rows (`credentials.key_version_unknown`).
 
 ## A1274: a box that handed over and then loses its node.db can start as a second main box
 
-Left open by A947 3b-G, which refuses a start with `node.state_missing` when a box has no
-`node_mode` row and its held chart lists it as anything but the serving primary, or names another
-box serving primary (Task G.3 of the
+Left open by A947 3b-G, which refuses a start with `node.state_missing` when a box's `node.db`
+holds neither a `node_mode` row nor a signing key for it and its held chart lists it as anything
+but the serving primary, or names another box serving primary (Task G.3 of the
 [plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md); read, not run, found by the
 2026-11-10 Fable review). A box that handed over keeps its proof of that in `node.db` only, and
 stepping down mints no chart. So if it loses `node.db` before it hears the new chart, its chart

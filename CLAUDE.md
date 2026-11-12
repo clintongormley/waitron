@@ -921,8 +921,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   aside, [3b plan](docs/superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's
   decision, which the owner may overrule), until one answers or an administrator carries on over
   HTTPS for that start only. Carrying on is refused once this box's `node.db` records that it
-  handed over. Before asking, a box whose `node.db` holds no role for it, while its held chart
-  lists it and does not name it the serving primary, refuses to start (`node.state_missing`).**
+  handed over. Before asking, a box whose `node.db` holds neither a role nor a signing key for it,
+  while its held chart lists it and does not name it the serving primary, refuses to start
+  (`node.state_missing`).**
   Guards: `apps/server/src/boot-peer-check.test.ts`, `boot.start-check.test.ts`,
   `waiting-start.test.ts`, `boot.joining-spare-answers.test.ts` and
   `boot.node-state-missing.test.ts`, weaker than the rule: named cases only.

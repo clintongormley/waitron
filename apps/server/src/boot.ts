@@ -96,8 +96,10 @@ import {
 import {
   credentialProvisioned,
   loadKeyRing,
+  readNodeSigningKey,
   readPairSecret,
   tenantCredentials,
+  type KeyRing,
 } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { mountDeviceLiveApi } from "./device-live-api.js";
@@ -1101,13 +1103,14 @@ function closingAlso(
 }
 
 /**
- * Throws `node.state_missing` when node.db holds no mode row for this box and the held chart lists
- * it in any standing but `serving-primary`, or with another box as `serving-primary`. A first box
- * or a restored one, which the chart names the serving primary, passes.
+ * Throws `node.state_missing` when node.db holds neither a mode row nor a signing key for this box,
+ * and the held chart lists it in any standing but `serving-primary`, or with another box as
+ * `serving-primary`.
  */
 async function refuseLostNodeState(
   db: Database,
   node: NodeDatabase,
+  ring: KeyRing,
   nodeId: string,
 ): Promise<void> {
   if ((await readNodeModeRow(node, nodeId)) !== null) return;
@@ -1115,9 +1118,9 @@ async function refuseLostNodeState(
   if (held === null) return;
   const standing = standingOf(held, nodeId);
   if (standing === undefined) return;
-  if (standing !== "serving-primary" || servingPrimaryNodeId(held) !== nodeId) {
-    throw new AppError("node.state_missing", {});
-  }
+  if (standing === "serving-primary" && servingPrimaryNodeId(held) === nodeId) return;
+  if ((await readNodeSigningKey(node, ring, nodeId)) !== null) return;
+  throw new AppError("node.state_missing", {});
 }
 
 /**
@@ -1922,7 +1925,7 @@ async function bootServer(
   await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
   // Before the start check: a spare that lost its node.db cannot sign its question, so the main box
   // it counts reads as silent and the start would wait, answering the venue's name.
-  await refuseLostNodeState(db, store.node, config.node.nodeId);
+  await refuseLostNodeState(db, store.node, ring, config.node.nodeId);
   // Restricted starts run only the return sender, which reads this venue's data.
   const restrictedStart = () => {
     const returnRecords = startReturnRecordsDuty({

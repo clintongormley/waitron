@@ -239,6 +239,37 @@ describe("a box that lost its own node.db", () => {
     expect(venueAnswered(mdns)).toBe(true);
   }, 60_000);
 
+  it("a box holding its signing key but no mode row, fenced by its held chart, starts fenced rather than refusing", async () => {
+    // A first box never writes a mode row; a chart it holds that lists it sell-only fences it.
+    // The chart lists no other box, so the start check has nobody to wait for.
+    const venue = await setupVenue(suite.db);
+    const nodeId = venue.cfg.nodeId;
+    const ring = loadKeyRing(KEY_ENV);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
+    await stampDeployment(suite.db, "preproduction");
+    const body: MembershipDocumentBody = {
+      term: 2,
+      nodes: [{ nodeId, contactUrl: "https://box.example", standing: "sell-only" }],
+    };
+    await writeNodeMembership(suite.db, {
+      body,
+      signerNodeId: nodeId,
+      signature: signDocumentBody(body, await readNodeIdentityKey(suite.node, ring, nodeId)),
+      endorsements: [],
+    });
+    expect(await readNodeModeRow(suite.node, nodeId)).toBeNull();
+
+    const mdns = fakeMdnsSocket();
+    const { started } = await start(await startEnv(suite, nodeId), mdns);
+
+    await expect(started).resolves.toBeDefined();
+    expect(await acceptingSales()).toBe(false);
+    expect(await readNodeModeRow(suite.node, nodeId)).toEqual({
+      mode: "primary",
+      singletonRole: "secondary",
+    });
+  }, 60_000);
+
   it("a box with no row that the chart does not list starts", async () => {
     const venue = await setupVenue(suite.db);
     const nodeId = venue.cfg.nodeId;
