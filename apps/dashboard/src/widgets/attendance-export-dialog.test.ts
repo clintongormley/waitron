@@ -364,7 +364,7 @@ it("closing and reopening an identical scope rejects old A before any new downlo
   expect(created).toEqual([b]);
 });
 
-it("keeps invalid fields quiet until a new submission after reopening", async () => {
+it("keeps an invalid From field quiet after reopening", async () => {
   const { el } = await fixture();
   await change(el, "exportFrom", "");
   await send(el);
