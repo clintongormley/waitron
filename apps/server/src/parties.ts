@@ -5,6 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
+  deferredClosures,
   diningTables,
   invoiceSeries,
   nowIso,
@@ -101,6 +102,8 @@ export interface PartyBill {
   /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
    * sale is filed. */
   amountDue?: string;
+  /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
+  deferred?: true;
 }
 
 export type CommandScope =
@@ -588,6 +591,10 @@ export async function readPartyBills(
     tx,
     filedSales.flatMap((sale) => (sale.workingOrderId === null ? [] : [sale.workingOrderId])),
   );
+  const deferred = await readDeferredBillIds(
+    tx,
+    bills.map((bill) => bill.workingOrderId),
+  );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
@@ -630,8 +637,22 @@ export async function readPartyBills(
             creditNotes: notes.get(sale.id) ?? [],
             amountDue: issued.get(bill.workingOrderId)!.amountDue,
           }),
+      ...(deferred.has(bill.workingOrderId) ? { deferred: true as const } : {}),
     };
   });
+}
+
+/** Which of these bills were closed as a deferred payment. */
+export async function readDeferredBillIds(
+  tx: Transaction,
+  billIds: readonly string[],
+): Promise<Set<string>> {
+  if (billIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ id: deferredClosures.workingOrderId })
+    .from(deferredClosures)
+    .where(inArray(deferredClosures.workingOrderId, [...billIds]));
+  return new Set(rows.map((row) => row.id));
 }
 
 /** A bill as {@link readBillsOfParties} reads it, with how many lines it holds. */

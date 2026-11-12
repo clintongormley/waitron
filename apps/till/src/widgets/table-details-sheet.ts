@@ -34,6 +34,11 @@ export function partyPaid(table: TableState): boolean {
   );
 }
 
+/** "Paid", or "Deferred payment" when one of the party's bills was closed that way. */
+export function paidWords(table: TableState): string {
+  return table.hasDeferredBill === true ? t("find_page.deferred") : t("floor.paid");
+}
+
 /** A station's ready chip replaces the summary's ready count, so each dish appears once. */
 function kitchenProgress(table: TableState): string {
   const ready = signalOf(table.signals, "ready") === undefined ? table.readyToServe : 0;
@@ -190,7 +195,7 @@ export class TillTableDetailsSheet extends LitElement {
         lines.push(html`<li data-guests>${t("floor.guests")}: ${party.guestCount}</li>`);
       lines.push(
         partyPaid(table)
-          ? html`<li data-paid>${t("floor.paid")}</li>`
+          ? html`<li data-paid>${paidWords(table)}</li>`
           : html`<li data-owed>
               ${t("floor.details_owed").replace("{amount}", () =>
                 formatMoney(party.outstanding, currentLocale()),

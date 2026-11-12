@@ -211,6 +211,22 @@ describe("till-floor-screen: what a seated party owes", () => {
     expect(card(el, "t4").querySelector(".total")).toBeNull();
   });
 
+  it("reads as Deferred payment once nothing is left to pay and a bill was closed that way", async () => {
+    const el = await mountFloor([
+      seated(
+        {
+          hasOpenTab: false,
+          tabLineCount: undefined,
+          tabTotal: undefined,
+          hasDeferredBill: true,
+        },
+        { outstanding: "0.00" },
+      ),
+    ]);
+
+    expect(card(el, "t4").querySelector("[data-paid]")!.textContent).toBe("Deferred payment");
+  });
+
   it("shows no party line for a party with no guest count and one bill", async () => {
     const el = await mountFloor([seated({}, { guestCount: null, billCount: 1 })]);
 

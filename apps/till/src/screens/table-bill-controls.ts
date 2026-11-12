@@ -6,6 +6,7 @@ import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
 
 function owes(bill: PartyBill): string {
+  if (bill.deferred === true) return t("find_page.deferred");
   if (bill.leftUnpaid && bill.status !== "settled") return t("departure.left_unpaid");
   return bill.status === "settled"
     ? t("table.bill_paid")
@@ -14,7 +15,7 @@ function owes(bill: PartyBill): string {
 
 /** The ✓ drawn after "Paid"; the word alone is what is read out. */
 function paidMark(bill: PartyBill | undefined): TemplateResult | typeof nothing {
-  return bill?.status === "settled"
+  return bill?.status === "settled" && bill.deferred !== true
     ? html`<span data-paid-mark aria-hidden="true"> ✓</span>`
     : nothing;
 }

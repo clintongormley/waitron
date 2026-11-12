@@ -136,6 +136,7 @@ import {
   checkAndBumpParty,
   ensureFamilyBill,
   readBillsOfParties,
+  readDeferredBillIds,
   type FamilyBill,
   runServiceCommand,
   tableHeld,
@@ -8685,6 +8686,8 @@ export interface TableState {
   nextReservation: { time: string } | null;
   party: TableParty | null;
   hasAllergy?: true;
+  /** One of the party's bills was closed as a deferred payment. */
+  hasDeferredBill?: true;
   /** What wants attention at the table: its party's signals, then its own clearing. */
   signals: TableSignal[];
 }
@@ -8808,6 +8811,16 @@ export async function listTablesWithState(
   const allergicParties = await VENUE_SERVICE.partiesWithAllergicGuests(tx, [
     ...new Set([...seated.values()].map((party) => party.id)),
   ]);
+  const partyOfBill = new Map(
+    [...facts].flatMap(([partyId, { bills }]) =>
+      bills.map((bill) => [bill.workingOrderId, partyId] as const),
+    ),
+  );
+  const deferredParties = new Set(
+    [...(await readDeferredBillIds(tx, [...partyOfBill.keys()]))].map((billId) =>
+      partyOfBill.get(billId)!,
+    ),
+  );
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
   const seatedParties = [...new Set(seated.values())];
@@ -8857,6 +8870,9 @@ export async function listTablesWithState(
       party: party ?? null,
       ...(party !== undefined && allergicParties.has(party.id)
         ? { hasAllergy: true as const }
+        : {}),
+      ...(party !== undefined && deferredParties.has(party.id)
+        ? { hasDeferredBill: true as const }
         : {}),
       signals: tableSignals(
         party === undefined ? undefined : partySignals.get(party.id),

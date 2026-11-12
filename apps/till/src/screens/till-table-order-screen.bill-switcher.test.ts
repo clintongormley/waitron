@@ -96,6 +96,20 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(closedLabel(el)).toBe("Bill 2 · 3 bills · Clint · €54.00");
   });
 
+  it("says Deferred payment, with no ✓, for a bill closed as a deferred payment", async () => {
+    const bills = [
+      partyBill("wo-3", 3, "0.00", { status: "settled", total: "12.00", deferred: true }),
+      partyBill("wo-1", 1, "67.00"),
+    ];
+    const el = await mountScreen(bills, "wo-3");
+
+    const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
+    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      "Bill 3 · 2 bills · Deferred payment ▾",
+    );
+    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Deferred payment", "+ New bill"]);
+  });
+
   it("says Paid for a paid bill on screen", async () => {
     const el = await mountScreen(three, "wo-3");
 

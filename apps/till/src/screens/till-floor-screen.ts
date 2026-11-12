@@ -88,7 +88,7 @@ import {
   withoutTodaysNames,
   type CarriedRevision,
 } from "../state/floor-today.js";
-import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
+import { paidWords, partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import {
   drawnGroupKey,
@@ -3032,7 +3032,7 @@ export class TillFloorScreen extends LitElement {
         return html`<span class="occupancy tab-open">
           ${
             partyPaid(table)
-              ? html`<span class="paid" data-paid>${t("floor.paid")}</span>`
+              ? html`<span class="paid" data-paid>${paidWords(table)}</span>`
               : html`<span class="total"
                   >${formatMoney(table.party?.outstanding ?? table.tabTotal!, currentLocale())}</span
                 >`
