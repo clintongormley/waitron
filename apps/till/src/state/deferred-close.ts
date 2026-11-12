@@ -19,8 +19,10 @@ export interface DeferredOfferInput {
   bill: Pick<PartyBill, "workingOrderId" | "status" | "outstanding" | "hasPayments">;
   /** A bill payment held or out, a card answer still unknown, or an unanswered whole payment. */
   paymentUnconfirmed: boolean;
-  /** The party's Current orders; null while they have not been read. */
+  /** The party's Current orders; null while they are being read, or when they could not be. */
   currentOrders: { groups: { rows: DeferredDishRow[] }[]; ungrouped: DeferredDishRow[] } | null;
+  /** The last read of Current orders failed. */
+  currentOrdersUnread: boolean;
 }
 
 function servedOrCancelled(row: DeferredDishRow): boolean {
@@ -40,8 +42,12 @@ export function deferredOffered(input: DeferredOfferInput): DeferredOffer {
     return { state: "hidden" };
   if (input.paymentUnconfirmed)
     return { state: "off", reason: "deferred_close.payment_unconfirmed" };
+  if (currentOrders === null)
+    return {
+      state: "off",
+      reason: input.currentOrdersUnread ? "table.current_orders_unread" : "table.loading",
+    };
   if (
-    currentOrders === null ||
     [...currentOrders.groups.flatMap((group) => group.rows), ...currentOrders.ungrouped].some(
       (row) => row.workingOrderId === bill.workingOrderId && !servedOrCancelled(row),
     )

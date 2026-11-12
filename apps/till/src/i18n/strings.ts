@@ -1632,10 +1632,13 @@ export const en = {
   "deferred_close.issue_and_close": "Issue invoice and close",
   "deferred_close.close": "Close bill",
   "deferred_close.unserved": "Mark every dish served or cancel it first",
-  "deferred_close.payment_unconfirmed": "A payment on this bill could not be confirmed",
+  "deferred_close.payment_unconfirmed":
+    "A payment on this bill could not be confirmed and may have gone through. Look at the bill's payments, then take what is still owed here instead.",
   "deferred_close.unanswered": "The server did not answer. Confirm again to try once more.",
   "deferred_close.ticket_unread":
     "Bill closed as a deferred payment. The receipt could not be loaded. You can continue serving.",
+  "deferred_close.already_closed":
+    "This bill is already closed as a deferred payment. The bill on screen shows it.",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.unsent": "Send or remove the unsent dishes before paying.",
   "bill_pay.title": "Pay",
@@ -3591,11 +3594,14 @@ export const es: Record<StringKey, string> = {
   "deferred_close.issue_and_close": "Emitir factura y cerrar",
   "deferred_close.close": "Cerrar cuenta",
   "deferred_close.unserved": "Marca todos los platos como servidos o cancélalos primero",
-  "deferred_close.payment_unconfirmed": "Un pago de esta cuenta no se ha podido confirmar",
+  "deferred_close.payment_unconfirmed":
+    "Un pago de esta cuenta no se ha podido confirmar y puede que se haya cobrado. Mira los pagos de la cuenta y cobra aquí lo que quede pendiente.",
   "deferred_close.unanswered":
     "El servidor no ha respondido. Vuelve a confirmar para intentarlo de nuevo.",
   "deferred_close.ticket_unread":
     "Cuenta cerrada como pago aplazado. No se ha podido cargar el recibo. Puedes seguir atendiendo.",
+  "deferred_close.already_closed":
+    "Esta cuenta ya está cerrada como pago aplazado. La cuenta en pantalla lo muestra.",
   "bill_pay.unsent": "Envía o quita los platos sin enviar antes de cobrar.",
   "bill_pay.title": "Cobrar",
   "bill_pay.title_table": "Cobrar · {table}",

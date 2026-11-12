@@ -20,6 +20,7 @@ function input(over: Partial<DeferredOfferInput> = {}): DeferredOfferInput {
     capabilities: ["take-orders", "close-deferred"],
     bill: billOf({ outstanding: "120.00", total: "120.00" }),
     paymentUnconfirmed: false,
+    currentOrdersUnread: false,
     currentOrders: { groups: [{ rows: [dish()] }], ungrouped: [dish({ quantity: "1" })] },
     ...over,
   };
@@ -83,9 +84,14 @@ describe("deferredOffered", () => {
         { state: "off", reason: "deferred_close.unserved" },
       ],
       [
-        "Current orders were not read",
+        "Current orders are still being read",
         { currentOrders: null },
-        { state: "off", reason: "deferred_close.unserved" },
+        { state: "off", reason: "table.loading" },
+      ],
+      [
+        "Current orders could not be read",
+        { currentOrders: null, currentOrdersUnread: true },
+        { state: "off", reason: "table.current_orders_unread" },
       ],
     ];
     for (const [name, over, expected] of cases)

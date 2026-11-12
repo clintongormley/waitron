@@ -15,13 +15,18 @@ const bill = {
 
 describe.each(["light", "dark"] as const)("till-deferred-close-dialog a11y (%s theme)", (theme) => {
   it.each([
-    ["idle", ""],
-    ["refused", "El total de esta cuenta ha cambiado. Revisa los datos y confirma de nuevo."],
-  ])("has no violations when %s", async (_state, refusal) => {
+    ["idle", "", false],
+    ["busy", "", true],
+    [
+      "refused",
+      "El total de esta cuenta ha cambiado. Revisa los datos y confirma de nuevo.",
+      false,
+    ],
+  ])("has no violations when %s", async (_state, refusal, busy) => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillDeferredCloseDialog>(
       "till-deferred-close-dialog",
-      { open: true, bill, refusal },
+      { open: true, bill, refusal, busy },
       theme,
     );
     await expectNoA11yViolations(host);

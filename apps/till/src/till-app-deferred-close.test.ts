@@ -231,3 +231,221 @@ it("returns to the floor when the close finished the party; stays on the table w
   await confirm(other);
   expect(tableOrder(other)).not.toBeNull();
 });
+
+/** A close request held open until the test answers it. */
+function heldClose() {
+  const answer: { ok?: (result: CloseDeferredResult) => void; fail?: (error: unknown) => void } =
+    {};
+  const closeDeferred = vi.fn(
+    () =>
+      new Promise<CloseDeferredResult>((ok, fail) => {
+        answer.ok = ok;
+        answer.fail = fail;
+      }),
+  );
+  return { closeDeferred, answer };
+}
+
+const moveTo = (el: TillApp, billId: string) => {
+  (el as unknown as { activeTabId: string }).activeTabId = billId;
+};
+
+it.each([
+  ["no answer", new TypeError("Failed to fetch"), () => t("deferred_close.unanswered")],
+  [
+    "a refusal",
+    { code: "deferred_close.conflict", status: 409 },
+    () => codeMessage("deferred_close.conflict"),
+  ],
+])(
+  "%s after the till moved to another bill leaves the window open and not busy, saying so; confirming then closes it, sending nothing",
+  async (_case, failure, said) => {
+    const { closeDeferred, answer } = heldClose();
+    const api = deferredApi({ closeDeferred });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await openClosing(el);
+    await confirm(el);
+    expect(closing(el)!.busy).toBe(true);
+    moveTo(el, "wo-9");
+    answer.fail!(failure);
+    await flush(el, 8);
+    const window = closing(el)!;
+    expect(window.open).toBe(true);
+    expect(window.busy).toBe(false);
+    expect(window.refusal).toBe(said());
+    await confirm(el);
+    expect(closing(el)).toBeNull();
+    expect(api.closeDeferred).toHaveBeenCalledOnce();
+  },
+);
+
+it("a close answered after the till moved to another bill closes the window and opens the documents window", async () => {
+  const { closeDeferred, answer } = heldClose();
+  const api = deferredApi({ closeDeferred });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openClosing(el);
+  await confirm(el);
+  moveTo(el, "wo-9");
+  answer.ok!(closedAs("closed"));
+  await flush(el, 8);
+  expect(closing(el)).toBeNull();
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(api.getFiledTicket).toHaveBeenCalledExactlyOnceWith("wo-4");
+  expect(documents(el)).not.toBeNull();
+});
+
+const closedBill = (): PartyBill =>
+  billOf({
+    deferred: true,
+    status: "settled",
+    outstanding: "0.00",
+    invoiceNumber: "F-0007",
+    revision: 1,
+  });
+
+/** The window after a send that got no answer, with the bill re-read as `bill` from then on. */
+async function afterLostAnswer(over: Record<string, unknown>, bill: PartyBill) {
+  const api = deferredApi({
+    closeDeferred: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    ...over,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openClosing(el);
+  await confirm(el);
+  expect(closing(el)!.refusal).toBe(t("deferred_close.unanswered"));
+  vi.mocked(api.getPartyBills).mockResolvedValue([bill]);
+  return { api, el };
+}
+
+const firstSent = (api: ReturnType<typeof deferredApi>) =>
+  vi.mocked(api.closeDeferred).mock.calls[0]![1].submissionId;
+
+it("a lost answer whose close the server made opens the documents window without sending again", async () => {
+  const getDeferredClosure = vi.fn();
+  const { api, el } = await afterLostAnswer({ getDeferredClosure }, closedBill());
+  getDeferredClosure.mockResolvedValue({
+    closure: { ...closedAs("open"), submissionId: firstSent(api) },
+  });
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(getDeferredClosure).toHaveBeenCalledWith("wo-4");
+  expect(api.getFiledTicket).toHaveBeenCalledExactlyOnceWith("wo-4");
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).not.toBeNull();
+});
+
+it.each([
+  ["names another close", vi.fn().mockResolvedValue({ closure: closedAs("open") })],
+  ["cannot be read", vi.fn().mockRejectedValue(new TypeError("Failed to fetch"))],
+])(
+  "a lost answer on a bill re-read as closed this way, whose closure %s, says the bill is already closed and sends nothing",
+  async (_case, getDeferredClosure) => {
+    const { api, el } = await afterLostAnswer({ getDeferredClosure }, closedBill());
+    await confirm(el);
+    expect(api.closeDeferred).toHaveBeenCalledOnce();
+    expect(getDeferredClosure).toHaveBeenCalledWith("wo-4");
+    expect(closing(el)).toBeNull();
+    expect(documents(el)).toBeNull();
+    expect(text(el.shadowRoot!.querySelector(".error"))).toContain(
+      t("deferred_close.already_closed"),
+    );
+  },
+);
+
+it("a conflict on a bill another device closed this way says the bill is already closed", async () => {
+  const getDeferredClosure = vi.fn().mockResolvedValue({ closure: closedAs("open") });
+  const api = deferredApi({
+    closeDeferred: vi.fn().mockRejectedValue({ code: "deferred_close.conflict", status: 409 }),
+    getDeferredClosure,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openClosing(el);
+  vi.mocked(api.getPartyBills).mockResolvedValue([closedBill()]);
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(closing(el)).toBeNull();
+  const shown = text(el.shadowRoot!.querySelector(".error"));
+  expect(shown).toContain(t("deferred_close.already_closed"));
+  expect(shown).not.toContain(codeMessage("deferred_close.conflict"));
+});
+
+it("a lost answer on a bill whose total changed shows the new total and the conflict, sending nothing", async () => {
+  const { api, el } = await afterLostAnswer(
+    {},
+    billOf({ revision: 1, total: "130.00", outstanding: "130.00" }),
+  );
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  const window = closing(el)!;
+  expect(window.busy).toBe(false);
+  expect(window.refusal).toBe(codeMessage("deferred_close.conflict"));
+  expect(text(window.shadowRoot!.querySelector("[data-deferred-close-total]"))).toBe(
+    money("130.00"),
+  );
+});
+
+const payDialog = (el: TillApp) => el.shadowRoot!.querySelector("till-bill-pay-dialog");
+const deferredReason = (el: TillApp) =>
+  text(payDialog(el)?.shadowRoot!.querySelector("[data-pay-deferred-reason]"));
+
+it("Cancel closes the window and returns to Pay", async () => {
+  const api = deferredApi();
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openClosing(el);
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+  expect(closing(el)).toBeNull();
+  expect(payDialog(el)).not.toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+it("Cancel after a lost answer reads the bill again instead of returning to Pay", async () => {
+  const { api, el } = await afterLostAnswer({}, closedBill());
+  const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+  expect(closing(el)).toBeNull();
+  expect(payDialog(el)).toBeNull();
+  expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
+});
+
+it("switches the button off while a card payment's outcome is unknown, saying what to do", async () => {
+  const api = deferredApi({
+    previewBillPayment: vi.fn().mockResolvedValue({
+      kind: "allocated",
+      choice: null,
+      applied: "120.00",
+      tip: "0.00",
+      change: null,
+      charged: "120.00",
+    }),
+    takeBillPayment: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal", status: 502 })
+      .mockRejectedValueOnce({ code: "device.profile_changed", status: 409 }),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openTable(el);
+  await openDialog(el, "rest");
+  expect(deferredReason(el)).toBe("");
+  await press(el, 'input[name="method"][value="card"]');
+  await press(el, "[data-pay-continue]");
+  await press(el, "[data-pay-confirm]");
+  await press(el, "[data-pay-confirm]");
+  expect(api.takeBillPayment).toHaveBeenCalledTimes(2);
+  const button = payDialog(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    "[data-pay-deferred]",
+  )!;
+  expect(button.disabled).toBe(true);
+  expect(deferredReason(el)).toBe(t("deferred_close.payment_unconfirmed"));
+});
+
+it("switches the button off when Current orders could not be read, saying so", async () => {
+  const api = deferredApi({
+    readCurrentOrders: vi.fn().mockRejectedValue({ code: "server.internal" }),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openTable(el);
+  await openDialog(el, "rest");
+  expect(deferredReason(el)).toBe(t("table.current_orders_unread"));
+});
