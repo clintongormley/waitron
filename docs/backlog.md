@@ -489,8 +489,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
-  the recommendations; still to build: filter extras/options; design A670's guest menu; preserve
+  the recommendations; still to build: filter variants/extra products; design A670's guest menu; preserve
   sent-order declarations. Implementation remains open for the watcher to queue separately.
+  The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
 
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
