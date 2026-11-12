@@ -16,6 +16,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
+import type { RecipientIdentifierType } from "@waitron/country-packs";
 import {
   mergeBills,
   requireUntouched,
@@ -742,7 +743,10 @@ const BAR_SOL = {
 /** Sets the bill for a full invoice to `recipient`, as another till's invoice choice does. */
 async function fullInvoice(
   billId: string,
-  recipient: typeof ACME,
+  recipient: typeof ACME & {
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
+  },
   delivery?: { medium: "receipt" },
 ): Promise<void> {
   await setOrderInvoiceChoice(v.db, v.backend, v.cfg, billId, {
@@ -753,6 +757,35 @@ async function fullInvoice(
     operatorId: OPERATOR,
     expectedEdit: await inTx(v, (tx) => readBillEditState(tx, billId)),
   });
+}
+
+/** Sets the bill's simplified invoice to be handed over on the receipt, as another till does. */
+async function receiptDelivery(billId: string): Promise<void> {
+  await setOrderInvoiceChoice(v.db, v.backend, v.cfg, billId, {
+    revision: (await billRow(v, billId)).revision,
+    invoiceType: "F2",
+    recipient: null,
+    delivery: { medium: "receipt" },
+    operatorId: OPERATOR,
+    expectedEdit: await inTx(v, (tx) => readBillEditState(tx, billId)),
+  });
+}
+
+const EMAIL = {
+  medium: "email",
+  recipient: "accounts@barsol.example",
+  personId: OPERATOR,
+} as const;
+
+/** Stages an emailed invoice on the bill, as a till with email set up does. */
+async function emailDelivery(billId: string): Promise<void> {
+  const { revision } = await billRow(v, billId);
+  await inTx(v, (tx) =>
+    tx
+      .update(workingOrders)
+      .set({ invoiceDelivery: EMAIL, revision: revision + 1 })
+      .where(eq(workingOrders.id, billId)),
+  );
 }
 
 async function setReceiptLanguage(billId: string, language: string): Promise<void> {
@@ -1160,6 +1193,58 @@ describe("merge bills", () => {
 
     expect(await invoiceOf(main)).toEqual({ ...SIMPLIFIED, delivery: null, language: "es-ES" });
   });
+
+  it("drops the receiving bill's delivery when told to keep the merged-away bill's customer, who has none", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 keep from no delivery");
+    await fullInvoice(main, BAR_SOL);
+    await emailDelivery(main);
+    await fullInvoice(second, ACME);
+
+    await mergeChoosing(partyId, main, second, {
+      keep: "from",
+      into: { taxId: BAR_SOL.taxId },
+      from: { taxId: ACME.taxId },
+    });
+
+    expect(await invoiceOf(main)).toEqual({ ...invoiceTo(ACME), delivery: null, language: null });
+  });
+
+  it("asks when both bills name one tax number under different kinds of identifier", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 identifier type only");
+    const abroad = { ...ACME, taxId: "X1234567", countryCode: "FR", identifierCountryCode: "FR" };
+    await fullInvoice(main, { ...abroad, identifierType: "passport" });
+    await fullInvoice(second, { ...abroad, identifierType: "vat-number" });
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() => merge(partyId, main, second));
+
+    expect(error).toMatchObject({
+      code: "bill.merge_invoice_choice_required",
+      params: { workingOrderId: second, intoWorkingOrderId: main },
+    });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
+  });
+
+  it.each([
+    ["the same customer, the receiving bill's own", ACME, EMAIL],
+    ["two simplified bills, none", null, null],
+  ] as const)(
+    "keeps the receiving bill's delivery when the merged-away bill has one: %s",
+    async (_, customer, kept) => {
+      const { partyId, main, second } = await twoBills(`Table merge R4 delivery ${_}`);
+      if (customer === null) {
+        await receiptDelivery(second);
+      } else {
+        await fullInvoice(main, customer);
+        await emailDelivery(main);
+        await fullInvoice(second, customer, { medium: "receipt" });
+      }
+
+      await merge(partyId, main, second);
+
+      expect((await invoiceOf(main)).delivery).toEqual(kept);
+    },
+  );
 
   it.each([
     ["no from", { keep: "from", into: null }],

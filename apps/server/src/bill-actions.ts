@@ -15,7 +15,7 @@ import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireBillEditors } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { carryMergeInvoice, checkMergeInvoice, type MergeInvoices } from "./merge-invoice.js";
+import { carryMergeInvoice, checkMergeInvoice } from "./merge-invoice.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
@@ -106,8 +106,7 @@ export async function guardPathParty(
 
 /**
  * Move every line of `fromBillId` onto `intoBillId` and abandon it, which files nothing. Both must be
- * open bills of one party; the bill merged away must hold no payment. `command.invoiceChoice` is the
- * request's, unchecked: see {@link checkMergeInvoice}.
+ * open bills of one party; the bill merged away must hold no payment.
  */
 export async function mergeBills(
   tx: Transaction,
@@ -129,11 +128,10 @@ export async function mergeBills(
   await refuseBillWithPayments(tx, fromBillId);
   refuseClosedBill(intoBillId, path.status);
   await assertServiceModesMatch(tx, fromBillId, intoBillId);
-  const invoices = await checkMergeInvoice(tx, intoBillId, fromBillId, command.invoiceChoice);
   await mergeCheckedBills(tx, cfg, intoBillId, fromBillId, {
     operatorId: command.operatorId,
     expectedEdits: command.expectedEdits,
-    invoices,
+    invoiceChoice: command.invoiceChoice,
     ...(attendance === undefined
       ? {}
       : {
@@ -148,9 +146,9 @@ export async function mergeBills(
 /**
  * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
  * open bills of one party, in one service mode, with no payment on the bill merged away.
- * `known.kitchenTold` is set by a caller that
- * tells the kitchen of `fromBillId`'s sent dishes itself, from what it read before `fromBillId`
- * joined the party.
+ * `known.invoiceChoice` is the request's, checked here by {@link checkMergeInvoice}.
+ * `known.kitchenTold` is set by a caller that tells the kitchen of `fromBillId`'s sent dishes itself,
+ * from what it read before `fromBillId` joined the party.
  */
 export async function mergeCheckedBills(
   tx: Transaction,
@@ -162,12 +160,13 @@ export async function mergeCheckedBills(
     expectedEdits: BillEditExpected[];
     kitchenTold?: boolean;
     attendance?: { recorder: AttendanceRecorder; at: string };
-    invoices?: MergeInvoices;
+    invoiceChoice: unknown;
   },
 ): Promise<void> {
+  const invoices = await checkMergeInvoice(tx, intoBillId, fromBillId, known.invoiceChoice);
   await requireBillEditors(tx, [fromBillId, intoBillId], known.operatorId, known.expectedEdits);
   // Before the lines move: their check of the simplified-invoice limit reads the kept invoice type.
-  await carryMergeInvoice(tx, intoBillId, fromBillId, known.invoices);
+  await carryMergeInvoice(tx, intoBillId, invoices);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, {
     actorId: known.operatorId,

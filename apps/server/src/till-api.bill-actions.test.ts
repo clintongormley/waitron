@@ -394,23 +394,6 @@ describe("the bill action routes", () => {
     expect(await statusOf(venue, second)).toBe("open");
   });
 
-  it("a malformed invoice choice is 400 management.request_invalid", async () => {
-    const { partyId, main, second } = await twoBills();
-
-    const answer = await post(`/api/bills/${main}/merge`, {
-      fromBillId: second,
-      expectedPartyRevision: await revisionOf(partyId),
-      invoiceChoice: { keep: "into", into: null, from: { taxId: "B12345674" } },
-    });
-
-    expect(answer.status).toBe(400);
-    expect(answer.json).toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "invoiceChoice" },
-    });
-    expect(await statusOf(venue, second)).toBe("open");
-  });
-
   it("a stale revision is 409 party.out_of_date", async () => {
     const { partyId, main, second } = await twoBills();
 

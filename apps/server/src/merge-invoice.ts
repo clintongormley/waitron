@@ -143,13 +143,8 @@ export async function checkMergeInvoice(
 export async function carryMergeInvoice(
   tx: Transaction,
   intoBillId: string,
-  fromBillId: string,
-  known: MergeInvoices | undefined,
+  { into, from, keepFrom }: MergeInvoices,
 ): Promise<void> {
-  const { into, from, keepFrom } = known ?? {
-    ...(await readMergeInvoices(tx, intoBillId, fromBillId)),
-    keepFrom: false,
-  };
   const language = into.receiptLocale ?? from.receiptLocale;
   const set: Partial<typeof workingOrders.$inferInsert> = keepFrom
     ? {

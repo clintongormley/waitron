@@ -358,9 +358,9 @@ with, opens beside the order, and **Back** closes it.
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the
 other and choose **Merge bills**. The receiving bill can have taken a part payment; the bill you
-add must have no payments. If the bill you add is set for a full invoice, the till asks which
-customer the merged bill is invoiced to, or lets you stop. If you move the table's last bill away,
-the till stays at the table with a fresh empty bill.
+add must have no payments. If the bill you add is set for a full invoice to a customer the bill you
+keep does not name, the till asks which customer the merged bill is invoiced to, or lets you stop.
+If you move the table's last bill away, the till stays at the table with a fresh empty bill.
 
 If another till merges the bill on your screen into another bill, or moves it to another table,
 your screen switches to another of the table's bills and says so,
