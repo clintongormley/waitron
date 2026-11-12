@@ -100,10 +100,15 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "money returned after the invoice; request identity and terminal outcomes held by its transition triggers",
   ),
-  appendOnly(
+  classify(
     "invoice_corrections",
     "ledger",
-    "one cash leg of a till's invoice correction, so a repeated request returns its first answer; never corrected",
+    "a till's correction of a paid invoice; only its state moves, under a trigger",
+  ),
+  appendOnly(
+    "invoice_correction_refunds",
+    "ledger",
+    "which refund gave back money for which invoice correction; never corrected",
   ),
   appendOnly(
     "unpaid_departures",

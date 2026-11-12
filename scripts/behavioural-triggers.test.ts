@@ -124,6 +124,8 @@ const EXPECTED_TRIGGERS = [
   "sales_recipient_identity_insert",
   "tender_refunds_guard_update",
   "tender_refunds_no_delete",
+  "invoice_corrections_guard_update",
+  "invoice_corrections_no_delete",
 ];
 
 const scratch = [];

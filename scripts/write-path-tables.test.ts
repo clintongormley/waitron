@@ -5,7 +5,7 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `tenants`, `nodes` and
- * `deployment`, `settings`, `activity_log` and `invoice_corrections`, and node.db's `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`,
+ * `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and node.db's `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`,
  * `node_recovery_key`, `node_signing_key`, `node_handover_operations`, `node_handover_events` and
  * `node_handover_restriction`.
  *
@@ -15,8 +15,7 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
  * `packages/db/src/activity-log.ts` recordActivity is the one activity_log writer, so each row
  * passes through the kind registry (packages/db/src/activity-kinds.ts).
  *
- * `apps/server/src/invoice-corrections.ts` acceptInvoiceCorrection is the one invoice_corrections
- * writer, so each row is written in the transaction that files its corrective and its cash refund.
+ * An empty list in the JSON lets no file write that table.
  *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
  * as a convention over source text, and this guard is the whole of its enforcement.
@@ -201,6 +200,7 @@ describe("no source writes a listed table outside the files the JSON names", () 
     expect(TABLES.slice().sort()).toEqual([
       "activity_log",
       "deployment",
+      "invoice_correction_refunds",
       "invoice_corrections",
       "node_handover_events",
       "node_handover_operations",

@@ -837,18 +837,48 @@ CREATE INDEX `invoice_pdf_downloads_sale_idx` ON `invoice_pdf_downloads` (`sale_
 CREATE TABLE `invoice_corrections` (
 	`id` text PRIMARY KEY NOT NULL,
 	`original_sale_id` text NOT NULL,
-	`corrective_sale_id` text NOT NULL,
-	`tender_refund_id` text NOT NULL,
 	`submission_id` text NOT NULL,
 	`fingerprint` text NOT NULL,
+	`gross` integer NOT NULL,
+	`line_ids` text,
+	`reason` text NOT NULL,
+	`requested_by` text NOT NULL,
+	`authorized_by` text NOT NULL,
+	`via_override` integer NOT NULL,
+	`source` text NOT NULL,
+	`device_id` text,
+	`node_id` text NOT NULL,
+	`state` text NOT NULL,
+	`corrective_sale_id` text,
 	`created_at` text NOT NULL,
+	`ended_at` text,
+	`ended_by` text,
 	FOREIGN KEY (`original_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`corrective_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "invoice_corrections_source_ck" CHECK("invoice_corrections"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script')),
+	CONSTRAINT "invoice_corrections_source_device_ck" CHECK(("invoice_corrections"."source" = 'device') = ("invoice_corrections"."device_id" is not null)),
+	CONSTRAINT "invoice_corrections_state_ck" CHECK("invoice_corrections"."state" in ('open', 'filed', 'discarded', 'closed')),
+	CONSTRAINT "invoice_corrections_gross_ck" CHECK(typeof("invoice_corrections"."gross") = 'integer' and "invoice_corrections"."gross" > 0),
+	CONSTRAINT "invoice_corrections_filed_ck" CHECK(("invoice_corrections"."state" = 'filed') = ("invoice_corrections"."corrective_sale_id" is not null)),
+	CONSTRAINT "invoice_corrections_ended_ck" CHECK(("invoice_corrections"."state" = 'open') = ("invoice_corrections"."ended_at" is null))
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `invoice_corrections_open_key` ON `invoice_corrections` (`original_sale_id`) WHERE "invoice_corrections"."state" = 'open';--> statement-breakpoint
+CREATE UNIQUE INDEX `invoice_corrections_submission_key` ON `invoice_corrections` (`original_sale_id`,`submission_id`);--> statement-breakpoint
+CREATE TABLE `invoice_correction_refunds` (
+	`id` text PRIMARY KEY NOT NULL,
+	`invoice_correction_id` text NOT NULL,
+	`tender_refund_id` text NOT NULL,
+	`request_id` text NOT NULL,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`invoice_correction_id`) REFERENCES `invoice_corrections`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
-CREATE INDEX `invoice_corrections_submission_idx` ON `invoice_corrections` (`original_sale_id`,`submission_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `invoice_corrections_tender_refund_key` ON `invoice_corrections` (`tender_refund_id`);--> statement-breakpoint
+CREATE INDEX `invoice_correction_refunds_request_idx` ON `invoice_correction_refunds` (`invoice_correction_id`,`request_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `invoice_correction_refunds_tender_refund_key` ON `invoice_correction_refunds` (`tender_refund_id`);--> statement-breakpoint
 CREATE TABLE `kitchen_print_job_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`print_job_id` text NOT NULL,
@@ -3286,6 +3316,38 @@ BEFORE DELETE ON tender_refunds
 FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'a tender refund is never deleted');
+END;
+--> statement-breakpoint
+CREATE TRIGGER invoice_corrections_guard_update
+BEFORE UPDATE ON invoice_corrections
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'invoice correction cannot make that change')
+  WHERE NOT (
+    new.id IS old.id
+    AND new.original_sale_id IS old.original_sale_id
+    AND new.submission_id IS old.submission_id
+    AND new.fingerprint IS old.fingerprint
+    AND new.gross IS old.gross
+    AND new.line_ids IS old.line_ids
+    AND new.reason IS old.reason
+    AND new.requested_by IS old.requested_by
+    AND new.authorized_by IS old.authorized_by
+    AND new.via_override IS old.via_override
+    AND new.source IS old.source
+    AND new.device_id IS old.device_id
+    AND new.node_id IS old.node_id
+    AND new.created_at IS old.created_at
+    AND old.state = 'open'
+    AND new.state IN ('filed', 'discarded', 'closed')
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER invoice_corrections_no_delete
+BEFORE DELETE ON invoice_corrections
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'an invoice correction is never deleted');
 END;
 --> statement-breakpoint
 CREATE TRIGGER working_order_lines_require_open_parent_update

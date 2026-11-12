@@ -1340,7 +1340,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountFindBillApi(app, deps, log, run);
   mountTransactionReceiptApi(app, deps, log, run);
   mountTenderRefundApi(app, deps, log, pinThrottle);
-  mountInvoiceCorrectionApi(app, deps, log, pinThrottle);
+  mountInvoiceCorrectionApi(app, deps, log);
   mountTransferCloseApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot

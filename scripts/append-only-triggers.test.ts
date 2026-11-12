@@ -52,7 +52,7 @@ const EXPECTED = [
   "fiscal_reservations",
   "fiscal_series_conflicts",
   "handover_activations",
-  "invoice_corrections",
+  "invoice_correction_refunds",
   "invoice_pdf_downloads",
   "menu_version_images",
   "menu_versions",
