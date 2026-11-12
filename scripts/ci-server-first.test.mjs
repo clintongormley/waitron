@@ -201,7 +201,9 @@ describe("server-first workflow routing", () => {
             );
             continue;
           }
-          if (["server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id)) {
+          if (
+            ["server-queue-watchdog", "publish", "release", "ci", "image-smoke"].includes(job.id)
+          ) {
             expect(selected).toBe("ubuntu-latest");
             continue;
           }
@@ -215,7 +217,9 @@ describe("server-first workflow routing", () => {
   it("keeps an explicitly selected overflow attempt hosted while ordinary reruns remain server-first", () => {
     for (const job of jobs.filter(
       (job) =>
-        !["changes", "server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id),
+        !["changes", "server-queue-watchdog", "publish", "release", "ci", "image-smoke"].includes(
+          job.id,
+        ),
     )) {
       expect(route(job.route, { attempt: 2, hosted: '{"1234":2}' }), job.id).toBe("ubuntu-latest");
       expect(route(job.route, { attempt: 3, hosted: '{"1234":2}' }), job.id).toEqual([

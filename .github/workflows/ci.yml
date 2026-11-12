@@ -4321,6 +4321,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      release_version: ${{ steps.tags.outputs.release_version }}
+      release_image: ${{ steps.tags.outputs.release_image }}
     steps:
       - id: checkout
         name: Check out the code
@@ -4661,3 +4664,72 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
             org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
+  # The GitHub Release's two files are copied out of the image publish pushed, so they are the box's
+  # own, byte for byte. A re-run of this job alone replaces them; a re-run of the whole workflow
+  # stops at publish, which refuses a version the registry already holds.
+  release:
+    needs: [publish]
+    # As publish does, so an intended upstream skip cannot drop it.
+    if: always() && !cancelled() && needs.publish.result == 'success' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The only job given `contents: write`, which making a Release needs.
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the published release image
+        timeout-minutes: 6
+        env:
+          RELEASE_IMAGE: ${{ needs.publish.outputs.release_image }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 150 docker pull "$RELEASE_IMAGE"; then
+              exit 0
+            fi
+            echo "pulling $RELEASE_IMAGE failed (attempt $attempt)" >&2
+          done
+          exit 1
+
+      - name: Attach the declaration to the GitHub Release
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+          RELEASE_IMAGE: ${{ needs.publish.outputs.release_image }}
+        run: |
+          set -euo pipefail
+          timeout 150 scripts/release/github-release.sh "$RELEASE_VERSION" "$RELEASE_IMAGE"

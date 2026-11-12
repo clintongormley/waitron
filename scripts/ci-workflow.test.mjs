@@ -389,7 +389,9 @@ describe("disposable server routing", () => {
       const routing = entry.body.find((line) => /^ {4}runs-on:/.test(line));
       if (
         !routing ||
-        ["changes", "server-queue-watchdog", "publish", "ci", "server-probe"].includes(entry.id)
+        ["changes", "server-queue-watchdog", "publish", "release", "ci", "server-probe"].includes(
+          entry.id,
+        )
       )
         continue;
       for (const event of ["pull_request", "push", "workflow_dispatch", "schedule"]) {
@@ -1655,10 +1657,13 @@ describe("ci.yml's job graph", () => {
     expect(jobs.map((entry) => entry.id)).toContain("ci");
   });
 
-  // `publish` is the ONE deliberate exception: it runs AFTER `ci` (it `needs: ci`), so it cannot be
-  // in `ci`'s needs without a cycle. The next case pins its safety instead.
-  it("names every other job in `ci`'s needs, except the post-`ci` publish leaf", () => {
-    const others = jobs.map((entry) => entry.id).filter((id) => id !== "ci" && id !== "publish");
+  // `publish` and `release` are the deliberate exceptions: they run AFTER `ci` (`publish` needs
+  // `ci`, `release` needs `publish`), so neither can be in `ci`'s needs without a cycle. The next
+  // case pins publish's safety instead, and "the release job" pins release's.
+  it("names every other job in `ci`'s needs, except the post-`ci` publish and release", () => {
+    const others = jobs
+      .map((entry) => entry.id)
+      .filter((id) => !["ci", "publish", "release"].includes(id));
     expect(others.length).toBeGreaterThan(0);
     expect([...needsOf(job("ci").body)].sort()).toEqual([...others].sort());
   });
@@ -6536,9 +6541,14 @@ const PRODUCER_VALID_STEP =
  * dedented. Weaker than GitHub: expressions in `env:` and `with:` are read as text.
  */
 function publishSteps() {
-  const body = job("publish").body;
+  return jobSteps("publish");
+}
+
+/** One job's steps, read as `publishSteps` reads the publish job's. */
+function jobSteps(id) {
+  const body = job(id).body;
   const stepsAt = body.findIndex((line) => /^ {4}steps:\s*$/.test(line));
-  if (stepsAt === -1) throw new Error("the `publish` job has no `steps:`");
+  if (stepsAt === -1) throw new Error(`the \`${id}\` job has no \`steps:\``);
   const starts = [];
   for (let at = stepsAt + 1; at < body.length; at++) if (/^ {6}- /.test(body[at])) starts.push(at);
   return starts.map((start, index) => {
@@ -7366,6 +7376,162 @@ describe("the publish job on a release tag", () => {
       const result = run({ status: 1, stderr: 'Get "https://ghcr.io/v2/x": denied\n' });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("denied");
+    });
+  });
+});
+
+const RELEASE_PULL_STEP = "Pull the published release image";
+const RELEASE_ATTACH_STEP = "Attach the declaration to the GitHub Release";
+
+describe("the release job", () => {
+  const body = () => job("release").body;
+  const steps = () => jobSteps("release");
+  const named = (name) => {
+    const found = steps().filter((step) => step.name === name);
+    if (found.length !== 1)
+      throw new Error(`the \`release\` job has ${found.length} steps named "${name}", not one`);
+    return found[0];
+  };
+  const at = (name) => steps().findIndex((step) => step.name === name);
+
+  it("runs after publish, only when publish succeeded on a release tag", () => {
+    expect(body()).toContain("    needs: [publish]");
+    expect(body()).toContain(
+      "    if: always() && !cancelled() && needs.publish.result == 'success' && startsWith(github.ref, 'refs/tags/v')",
+    );
+  });
+
+  it.each([
+    ["a published release tag", "refs/tags/v1.2.3", "success", false, true],
+    ["a release tag publish refused", "refs/tags/v1.2.3", "failure", false, false],
+    ["a release tag publish skipped", "refs/tags/v1.2.3", "skipped", false, false],
+    ["main", "refs/heads/main", "success", false, false],
+    ["a cancelled run", "refs/tags/v1.2.3", "success", true, false],
+  ])("makes a Release for %s only when it should", (_name, ref, publish, cancelled, expected) => {
+    const condition = body()
+      .find((line) => /^ {4}if:/.test(line))
+      .replace(/^ {4}if:\s*/, "")
+      .replace(/needs\.publish\.result/g, JSON.stringify(publish))
+      .replace(/github\.ref/g, JSON.stringify(ref))
+      .replace(/always\(\)/g, "true")
+      .replace(/cancelled\(\)/g, JSON.stringify(cancelled))
+      .replace(/==/g, "===");
+    expect(
+      Boolean(new Function("startsWith", `return (${condition});`)((a, b) => a.startsWith(b))),
+    ).toBe(expected);
+  });
+
+  it("has a time limit of its own", () => {
+    expect(body().some((line) => /^ {4}timeout-minutes: [1-9]\d*\s*$/.test(line))).toBe(true);
+  });
+
+  it("may write the repository's contents and only read its packages", () => {
+    expect(jobPermissions(body())).toEqual(["contents: write", "packages: read"]);
+  });
+
+  it("is the only job in ci.yml that may write the repository's contents", () => {
+    const writers = jobs
+      .filter(({ body: lines }) => (jobPermissions(lines) ?? []).includes("contents: write"))
+      .map(({ id }) => id);
+    expect(writers).toEqual(["release"]);
+  });
+
+  it("checks out the code with the bounded two attempts", () => {
+    const text = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8");
+    expect(
+      checkoutAttempts(text)
+        .filter(({ job: id }) => id === "release")
+        .map(({ shape }) => shape),
+    ).toEqual(["bounded"]);
+  });
+
+  it("takes the version and the image from publish's own outputs", () => {
+    const publish = job("publish").body;
+    expect(publish).toContain("    outputs:");
+    expect(publish).toContain("      release_version: ${{ steps.tags.outputs.release_version }}");
+    expect(publish).toContain("      release_image: ${{ steps.tags.outputs.release_image }}");
+    expect(named(RELEASE_PULL_STEP).envOf("RELEASE_IMAGE")).toBe(
+      "${{ needs.publish.outputs.release_image }}",
+    );
+    expect(named(RELEASE_ATTACH_STEP).envOf("RELEASE_IMAGE")).toBe(
+      "${{ needs.publish.outputs.release_image }}",
+    );
+    expect(named(RELEASE_ATTACH_STEP).envOf("RELEASE_VERSION")).toBe(
+      "${{ needs.publish.outputs.release_version }}",
+    );
+  });
+
+  it("logs in to GHCR, pulls, then runs the release script with the token on that step alone", () => {
+    const login = steps().findIndex((step) => /uses: docker\/login-action@/.test(step.text));
+    expect(login).toBeGreaterThan(-1);
+    expect(steps()[login].text).toContain("registry: ghcr.io");
+    expect(at(RELEASE_PULL_STEP)).toBeGreaterThan(login);
+    expect(at(RELEASE_ATTACH_STEP)).toBeGreaterThan(at(RELEASE_PULL_STEP));
+    const attach = named(RELEASE_ATTACH_STEP);
+    expect(attach.text).toMatch(
+      /timeout \d+ scripts\/release\/github-release\.sh "\$RELEASE_VERSION" "\$RELEASE_IMAGE"/,
+    );
+    expect(attach.envOf("GH_TOKEN")).toBe("${{ secrets.GITHUB_TOKEN }}");
+    expect(
+      steps()
+        .filter((step) => /GH_TOKEN/.test(step.text))
+        .map((step) => step.name),
+    ).toEqual([RELEASE_ATTACH_STEP]);
+    expect(attach.text).toMatch(/^ {8}timeout-minutes: [1-9]\d*\s*$/m);
+  });
+
+  describe("the pull", () => {
+    const bin = mkdtempSync(join(tmpdir(), "release-pull-bin-"));
+    afterAll(() => rmSync(bin, { recursive: true, force: true }));
+    // The stand-in docker fails the first PULL_FAILURES pulls; `timeout` records its limit.
+    writeFileSync(
+      join(bin, "docker"),
+      '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$STUB_DIR/docker.args"\n' +
+        'n=$(wc -l < "$STUB_DIR/docker.args")\n[ "$n" -gt "$PULL_FAILURES" ]\n',
+    );
+    writeFileSync(
+      join(bin, "timeout"),
+      '#!/usr/bin/env bash\nprintf \'%s\\n\' "$1" >> "$STUB_DIR/timeout.args"\nshift\nexec "$@"\n',
+    );
+    chmodSync(join(bin, "docker"), 0o755);
+    chmodSync(join(bin, "timeout"), 0o755);
+    const run = (failures) => {
+      const dir = mkdtempSync(join(tmpdir(), "release-pull-"));
+      try {
+        const result = runPublishScript(
+          named(RELEASE_PULL_STEP).script,
+          {
+            RELEASE_IMAGE: "ghcr.io/example/waitron:1.2.3",
+            PULL_FAILURES: String(failures),
+            STUB_DIR: dir,
+          },
+          bin,
+        );
+        const read = (name) =>
+          existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
+        return { ...result, docker: read("docker.args"), timeouts: read("timeout.args") };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    it("pulls the published image once when the first pull works, under a time limit", () => {
+      const result = run(0);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.docker).toBe("pull ghcr.io/example/waitron:1.2.3\n");
+      expect(result.timeouts).toMatch(/^[1-9]\d*\n$/);
+    });
+
+    it("tries a second time after a failed pull", () => {
+      const result = run(1);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.docker.split("\n").filter(Boolean)).toHaveLength(2);
+    });
+
+    it("fails the step after two failed pulls", () => {
+      const result = run(2);
+      expect(result.status).not.toBe(0);
+      expect(result.docker.split("\n").filter(Boolean)).toHaveLength(2);
     });
   });
 });
