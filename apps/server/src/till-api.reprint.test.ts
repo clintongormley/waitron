@@ -58,7 +58,7 @@ const suite = useVenueDb({
     stationId = await seedKitchenStation(db, {});
     const nodeId = await seedNode(db);
     const [person] = await seedPersons(db, {
-      displayName: "Ana",
+      displayName: "Anna",
       pinHash: hashPin("5555"),
       role: "staff",
     });
