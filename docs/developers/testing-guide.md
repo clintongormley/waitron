@@ -1855,7 +1855,7 @@ node scripts/repeat-test.mjs 10 60 --load node -e 'const { Worker } = require("n
 ```
 
 Measure memory headroom and check other running tests before adding load. An early load exit
-makes the experiment invalid; the current attempt finishes and no further attempt starts. The
+makes the experiment invalid and fails it; the current attempt finishes and no further attempt starts. The
 first `--` separates the load arguments from the test command, so a load argument cannot itself
 be `--`. Ctrl-C stops the owned attempt and load through
 `run-with-deadline.mjs`, including its five-second cleanup grace. Arguments go directly to the

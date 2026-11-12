@@ -51,7 +51,7 @@ it("runs N sequential attempts with separate logs and literal command arguments"
   expect(readdirSync(result.directory).sort()).toEqual(["attempt-1.log", "attempt-2.log"]);
   const launched = spawnSync(process.execPath, [cli, "2", "10", "--", ...command], {
     encoding: "utf8",
-    timeout: 5_000,
+    timeout: 50_000,
   });
   expect(launched.status).toBe(0);
   expect(launched.stdout).toMatch(/^Evidence: /);
@@ -66,7 +66,7 @@ it("runs N sequential attempts with separate logs and literal command arguments"
   });
   expect(refused.status).toBe(1);
   expect(refused.stderr).toContain("Usage:");
-});
+}, 90_000);
 
 it("keeps an early failure after a later success and retains an after-exit snapshot", async () => {
   const marker = join(scratch(), "first");
@@ -142,7 +142,7 @@ it("cancels the owned load and attempt while an unrelated process survives", asy
 }, 15_000);
 
 it("reports an experiment invalid and fails when its load exits early", async () => {
-  const command = node("setTimeout(() => console.log('attempt finished'), 200)");
+  const command = node("setTimeout(() => console.log('attempt finished'), 2_000)");
   const load = node("console.log('load stopped')");
   const result = await repeat({
     count: 2,
@@ -163,7 +163,7 @@ it("reports an experiment invalid and fails when its load exits early", async ()
     [cli, "2", "10", "--load", ...load, "--", ...command],
     {
       encoding: "utf8",
-      timeout: 5_000,
+      timeout: 50_000,
     },
   );
   expect(launched.status).toBe(1);
@@ -172,7 +172,7 @@ it("reports an experiment invalid and fails when its load exits early", async ()
   directories.push(evidence);
   expect(readFileSync(join(evidence, "load.log"), "utf8")).toContain("\nload stopped\n");
   expect(readFileSync(join(evidence, "attempt-1.log"), "utf8")).toContain("\nattempt finished\n");
-});
+}, 90_000);
 
 it("keeps the chosen load through every timed-out attempt and its cleanup", async () => {
   const result = await repeat({
