@@ -27,6 +27,9 @@ function route(
     fork = false,
     health = "server",
     probe = false,
+    head = "",
+    capacity = '{"slots":12,"serverRunning":0,"serverWaiting":0}',
+    headRepoName,
   } = {},
 ) {
   const context = {
@@ -34,7 +37,8 @@ function route(
     vars: new Proxy(
       {
         DISPOSABLE_TESTS_MODE: mode,
-        DISPOSABLE_TESTS_HEAD: "",
+        DISPOSABLE_TESTS_HEAD: head,
+        DISPOSABLE_TESTS_CAPACITY: capacity,
         DISPOSABLE_TESTS_LABEL_PREFIX: "dt",
         DISPOSABLE_TESTS_HOSTED_ATTEMPTS: hosted,
       },
@@ -52,14 +56,23 @@ function route(
         pull_request: {
           head: {
             sha: "a".repeat(40),
-            repo: { id: fork ? 99 : 42, full_name: fork ? "foreign/repo" : "fixture/waitron" },
+            repo: {
+              id: fork ? 99 : 42,
+              full_name: headRepoName ?? (fork ? "foreign/repo" : "fixture/waitron"),
+            },
           },
         },
       },
     },
     matrix: { shard: 1 },
     needs: { changes: { outputs: { server_route: health } } },
-    fromJSON: JSON.parse,
+    fromJSON: (text) => {
+      const value = JSON.parse(text);
+      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+      // GitHub's missing JSON properties compare numerically as zero and serialize as null.
+      const missing = { valueOf: () => 0, toJSON: () => null };
+      return new Proxy(value, { get: (object, key) => (key in object ? object[key] : missing) });
+    },
     toJSON: JSON.stringify,
     format: (template, ...values) =>
       template.replace(/\{(\d+)\}/g, (_, index) => values[Number(index)]),
@@ -69,6 +82,53 @@ function route(
     : expression;
 }
 describe("server-first workflow routing", () => {
+  it("uses GitHub's missing JSON numeric comparison and serialization", () => {
+    expect(route("${{ fromJSON('{}').missing == 0 }}")).toBe(true);
+    expect(route("${{ toJSON(fromJSON('{}').missing) }}")).toBe("null");
+  });
+  it.each([
+    [{ mode: "hosted" }, "hosted"],
+    [{ headRepoName: "foreign/waitron" }, "hosted"],
+    [{ hosted: '{"1234":1}' }, "hosted"],
+    [{ head: "b".repeat(40) }, "hosted"],
+    [{ head: "a".repeat(40) }, "server"],
+    [{ capacity: "" }, "hosted"],
+    [{ capacity: '{"slots":12}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":3}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":null,"serverWaiting":0}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":0,"serverWaiting":false}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":-1,"serverWaiting":0}' }, "hosted"],
+    [{ capacity: '{"slots":0,"serverRunning":0,"serverWaiting":0}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":3,"serverWaiting":1}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":12,"serverWaiting":0}' }, "hosted"],
+    [{ capacity: '{"slots":12,"serverRunning":11,"serverWaiting":0}' }, "server"],
+  ])("places PR planning by existing gates and unused capacity: %j", (options, expected) => {
+    const selected = route(jobs.find((job) => job.id === "changes").route, {
+      event: "pull_request",
+      ...options,
+    });
+    expect(selected).toEqual(
+      expected === "server" ? ["self-hosted", "dt-42-1234-1-changes-1"] : "ubuntu-latest",
+    );
+  });
+  it("places a planner without its own output or workflow arithmetic", () => {
+    const expression = jobs.find((job) => job.id === "changes").route;
+    expect(expression).toContain(".serverWaiting) == '0'");
+    expect(expression).toContain("serverRunning <");
+    expect(expression).not.toContain("needs.");
+    expect(expression).not.toContain("+");
+  });
+  it("sets up gh only in a server planning job", () => {
+    const body = jobs.find((job) => job.id === "changes").body;
+    const setup = body.match(/ {6}- name: Set up gh on the server\n([\s\S]*?)(?=\n {6}- )/)[1];
+    const condition = setup.match(/^ {8}if: (.+)$/m)[1];
+    for (const environment of ["self-hosted", "github-hosted"])
+      expect(runInNewContext(condition, { runner: { environment } })).toBe(
+        environment === "self-hosted",
+      );
+    for (const job of jobs.filter((job) => job.id !== "changes"))
+      expect(job.body ?? "").not.toContain("Set up gh on the server");
+  });
   it("keeps image smoke on GitHub until disposable guests are qualified", () => {
     expect(jobs.find((job) => job.id === "image-smoke").route).toBe("ubuntu-latest");
   });
@@ -133,9 +193,15 @@ describe("server-first workflow routing", () => {
       for (const attempt of [1, 2, 7])
         for (const job of jobs) {
           const selected = route(job.route, { event, attempt });
-          if (
-            ["changes", "server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id)
-          ) {
+          if (job.id === "changes") {
+            expect(selected).toEqual(
+              event === "pull_request" && attempt === 1
+                ? ["self-hosted", "dt-42-1234-1-changes-1"]
+                : "ubuntu-latest",
+            );
+            continue;
+          }
+          if (["server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id)) {
             expect(selected).toBe("ubuntu-latest");
             continue;
           }
@@ -166,7 +232,7 @@ describe("server-first workflow routing", () => {
   });
 });
 
-it.each([false, true, "transient"])(
+it.each([false, true, "transient", "setup-refused"])(
   "keeps the workflow router beside an old checkout (fetch refused: %s)",
   (refused) => {
     const root = mkdtempSync(join(tmpdir(), "workflow-router-"));
@@ -199,7 +265,26 @@ cat "$FIXTURE_ROUTER"
       const body =
         step.match(/^ {8}run: \|\n([\s\S]*)$/m)?.[1].replace(/^ {10}/gm, "") ??
         step.match(/^ {8}run: (.+)$/m)[1];
-      const result = spawnSync("bash", ["-e", "-c", body], {
+      let script = body;
+      if (refused === "setup-refused") {
+        const setup = yaml.match(/ {6}- name: Set up gh on the server\n([\s\S]*?)(?=\n {6}- )/)[1];
+        const setupBody = setup.match(/^ {8}run: \|\n([\s\S]*)$/m)[1].replace(/^ {10}/gm, "");
+        for (const [name, contents] of Object.entries({
+          timeout: '#!/bin/sh\nshift\nexec "$@"\n',
+          sudo: '#!/bin/sh\necho refused >> "$SETUP_CALLS"\nexit 100\n',
+          sleep: "#!/bin/sh\nexit 0\n",
+        }))
+          writeFileSync(join(root, name), contents, { mode: 0o755 });
+        // Keep gh unavailable through setup and the routing fetch, without touching installed tools.
+        writeFileSync(join(root, "gh"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
+        const continueOnError = /^ {8}continue-on-error: true$/m.test(setup);
+        script =
+          `command() { if [ "$1" = -v ] && [ "$2" = gh ]; then return 1; else builtin command "$@"; fi; }\n` +
+          `set +e\n( set -e\n${setupBody}\n)\nsetup_status=$?\nset -e\n` +
+          (continueOnError ? "" : 'if [ "$setup_status" -ne 0 ]; then exit "$setup_status"; fi\n') +
+          body;
+      }
+      const result = spawnSync("bash", ["-e", "-c", script], {
         cwd: root,
         encoding: "utf8",
         timeout: 5000,
@@ -212,6 +297,7 @@ cat "$FIXTURE_ROUTER"
           GH_TOKEN: runInNewContext(token, { github: { token: "fixture" } }),
           FETCH_REFUSED: String(refused),
           FETCH_CALLS: join(root, "fetch-calls"),
+          SETUP_CALLS: join(root, "setup-calls"),
           GITHUB_RUN_ID: "1234",
           GITHUB_RUN_ATTEMPT: "1",
           GITHUB_REPOSITORY: "fixture/waitron",
@@ -222,14 +308,18 @@ cat "$FIXTURE_ROUTER"
       });
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout.trim()).toBe(
-        refused === true
+        refused === true || refused === "setup-refused"
           ? "CI_ROUTE_BLIND run=1234 attempt=1"
           : 'workflow router route {"slots":6}',
       );
-      expect(readFileSync(join(root, "fetch-calls"), "utf8").trim().split("\n")).toHaveLength(
-        refused === false ? 1 : 2,
-      );
-      if (refused === true) {
+      if (refused === "setup-refused") {
+        expect(readFileSync(join(root, "setup-calls"), "utf8").trim().split("\n")).toHaveLength(3);
+      } else {
+        expect(readFileSync(join(root, "fetch-calls"), "utf8").trim().split("\n")).toHaveLength(
+          refused === false ? 1 : 2,
+        );
+      }
+      if (refused === true || refused === "setup-refused") {
         expect(readFileSync(join(root, "outputs"), "utf8")).toBe("server_route=hosted\n");
         expect(readFileSync(join(root, "summary"), "utf8")).toContain(
           "CI routing script could not be read; using GitHub.",

@@ -368,8 +368,23 @@ describe("disposable server routing", () => {
     expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(admitted);
   });
 
-  it("keeps the independent routing job hosted and routes other jobs without old first-attempt limits", () => {
-    expect(job("changes").body).toContain("    runs-on: ubuntu-latest");
+  it("keeps non-PR planning hosted and routes other jobs without old first-attempt limits", () => {
+    const planner = job("changes").body.find((line) => /^ {4}runs-on:/.test(line));
+    for (const [event, attempt, fork, expected] of [
+      ["pull_request", 1, false, ["self-hosted", "dt-42-1234-1-changes-1"]],
+      ["push", 1, false, "ubuntu-latest"],
+      ["schedule", 1, false, "ubuntu-latest"],
+      ["workflow_dispatch", 1, false, "ubuntu-latest"],
+      ["pull_request", 2, false, "ubuntu-latest"],
+      ["pull_request", 1, true, "ubuntu-latest"],
+    ]) {
+      const context = routingContext();
+      context.vars.DISPOSABLE_TESTS_CAPACITY = '{"slots":12,"serverRunning":0,"serverWaiting":0}';
+      context.github.event_name = event;
+      context.github.run_attempt = attempt;
+      if (fork) context.github.event.pull_request.head.repo.id = 99;
+      expect(expressionValue(planner, context)).toEqual(expected);
+    }
     for (const entry of jobs) {
       const routing = entry.body.find((line) => /^ {4}runs-on:/.test(line));
       if (

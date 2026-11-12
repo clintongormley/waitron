@@ -532,21 +532,21 @@ A1424's live qualification was added on 7 November 2026.
   CI compares server and GitHub `(running + waiting) / slots`, with server ties
   and the owner’s stipulated 20 hosted slots;
   ordinary same-repository jobs are eligible for the measured global pool. Family caps
-  have been removed, and routing, recovery, image smoke, the final aggregate and publication stay hosted.
+  have been removed; recovery, image smoke, the final aggregate and publication stay hosted.
   Image smoke remains hosted until a disposable guest is qualified (watcher, 2026-11-09 08:20);
   both retained failures, runs 42550200310 and 42525659420, stop at the Bluetooth check
   with `dbus_unreachable`. Guest diagnosis remains open.
   The health check chooses hosted while the server queue is stuck, and the independent
   watchdog dispatches trusted-main health recovery for untouched queued PR planners;
-  other stuck work is reported without moving runs. PR planner placement remains hosted
-  until guest tools and an owned unavailable-label drill qualify it.
+  other stuck work is reported without moving runs. First-attempt PR planners use published
+  spare capacity; non-PR planning remains hosted.
   Qualify the idle probe, browser guest
   requirements and current-head coverage/aggregate results.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
-  drills. Keep the corrected v41 controller; the existing routing job uses the hosted
-  approximation above (watcher, 2026-11-09 10:01). A1454 keeps six slots per host (owner,
+  drills. Keep the corrected v41 controller; the existing routing job compares refreshed hosted counts
+  with the published server snapshot (watcher, 2026-11-09 10:01). A1454 keeps six slots per host (owner,
   2026-11-11; see Decisions and deliberate limits); A1461 reduces run sizes. Per-job
   overflow, the remaining workflows and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
