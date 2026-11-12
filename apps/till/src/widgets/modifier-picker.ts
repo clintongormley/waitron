@@ -783,7 +783,7 @@ export class TillModifierPicker extends LitElement {
       ${
         this.readOnly
           ? html`
-              <p>${this.quantity}</p>
+              <p>${formatDecimalInput(this.quantity, currentLocale())}</p>
               ${(this.initialSelections?.extras ?? []).map((extra) => html`<p>${extra.name} ×${extra.quantity}</p>`)}
               ${
                 this.initialSelections?.optionSnapshots !== undefined

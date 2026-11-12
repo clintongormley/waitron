@@ -41,6 +41,30 @@ it("A738 a retained Save cannot confirm after the picker becomes read-only", asy
   expect(sent).toEqual([]);
 });
 
+it.each([
+  ["en-GB", "0.350"],
+  ["es-ES", "0,350"],
+])(
+  "shows a sent weighed line's quantity with the %s till's decimal mark",
+  async (locale, shown) => {
+    const prior = currentLocale();
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product,
+        quantity: "0.350",
+        lineDetails: true,
+        readOnly: true,
+        initialSelections: {},
+      });
+      const paragraphs = [...el.shadowRoot!.querySelectorAll("p")].map((p) => p.textContent);
+      expect(paragraphs).toContain(shown);
+    } finally {
+      setLocale(prior);
+    }
+  },
+);
+
 it("A738 reconnecting keeps a quantity draft and its unsaved baseline", async () => {
   const { el, host } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
     product,

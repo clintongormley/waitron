@@ -5,6 +5,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  formatDecimalInput,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -692,11 +693,11 @@ export class TillPartyAllergyDialog extends LitElement {
     const codes = guest ? allergyClashes(served, guest.allergens) : [];
     return html`<section data-dish=${index} class=${codes.length ? "dish clash" : "dish"}>
       <p>
-        <strong>${dish.quantity} × ${dish.name}</strong>
+        <strong>${formatDecimalInput(dish.quantity, currentLocale())} × ${dish.name}</strong>
         ${nutritionIcons(dish.allergens, [])}${dish.allergens === null ? html`<span class="muted">${t("allergy.unknown")}</span>` : nothing}
       </p>
       ${dish.sentAt ? html`<p class="muted" data-sent>${t("allergy.sent").replace("{time}", () => new Date(dish.sentAt!).toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" }))}</p>` : nothing}
-      ${dish.extras.map((extra, i) => html`<p data-extra=${`${index}:${i}`}>+ ${extra.quantity} × ${extra.name} ${nutritionIcons(extra.allergens, [])}${extra.allergens === null ? html`<span class="muted">${t("allergy.unknown")}</span>` : nothing}</p>`)}
+      ${dish.extras.map((extra, i) => html`<p data-extra=${`${index}:${i}`}>+ ${formatDecimalInput(extra.quantity, currentLocale())} × ${extra.name} ${nutritionIcons(extra.allergens, [])}${extra.allergens === null ? html`<span class="muted">${t("allergy.unknown")}</span>` : nothing}</p>`)}
       ${this.draft.guests.map(
         (g, i) =>
           html`<label

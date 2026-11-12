@@ -125,7 +125,7 @@ for (const locale of ["en-GB", "es-ES"]) {
             ),
           );
           expect(el.shadowRoot!.querySelector("[data-current-lines]")?.textContent).toContain(
-            "Soup / Sopa (Half)",
+            `${locale === "es-ES" ? "0,500" : "0.500"} × Soup / Sopa (Half)`,
           );
           expect(el.shadowRoot!.querySelector("[data-current-work]")?.textContent).toContain(
             "Soup / Sopa (Half)",
