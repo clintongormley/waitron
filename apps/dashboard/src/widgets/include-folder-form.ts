@@ -5,6 +5,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -98,8 +99,7 @@ export class IncludeFolderForm extends LitElement {
   @state() private names: Record<string, string> = {};
   @state() private image: string | null = null;
   @state() private color: string | null = null;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
   @state() private pickerOpen = false;
   #scope?: DraftScope<IncludeFolderInput>;
   #baseline?: IncludeFolderInput;
@@ -144,9 +144,9 @@ export class IncludeFolderForm extends LitElement {
       this.#baseline = undefined;
       this.#loaded = structuredClone({ own: this.own, stored: this.value ?? FOLLOWING_FOLDER });
       this.#show(this.#loaded.stored.showAsFolder, this.#loaded.stored.overrides);
-      this.dismissed = new Set();
+      this.#feedback.newRefusal();
     }
-    if (changes.has("fieldErrors")) this.dismissed = new Set();
+    if (changes.has("fieldErrors")) this.#feedback.newRefusal();
     if (!this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
@@ -173,9 +173,6 @@ export class IncludeFolderForm extends LitElement {
     if (changes.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
       void focusFirstInvalid(this.shadowRoot!);
   }
-  #dismiss(...keys: string[]): void {
-    this.dismissed = new Set([...this.dismissed, ...keys]);
-  }
 
   /** The keys of `errors` that a field this form shows displays. */
   #fieldKeys(errors: Record<string, string>): string[] {
@@ -194,9 +191,7 @@ export class IncludeFolderForm extends LitElement {
       .map(([key]) => key);
   }
   #errors(): Record<string, string> {
-    return Object.fromEntries(
-      Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
-    );
+    return this.#feedback.remaining(this.fieldErrors);
   }
   #emit(
     event: Event,
@@ -210,7 +205,7 @@ export class IncludeFolderForm extends LitElement {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.#dismiss(...Object.keys(this.fieldErrors));
+    this.#feedback.dismiss(...Object.keys(this.fieldErrors));
     this.#emit(event, "wt-submit", this.#submissionValue());
   }
   #placeholderFor(): (locale: string) => string {
@@ -276,7 +271,7 @@ export class IncludeFolderForm extends LitElement {
             );
             this.names = names;
             this.#scope?.changed();
-            this.#dismiss("names", ...changed.map((language) => `names-${language}`));
+            this.#feedback.dismiss("names", ...changed.map((language) => `names-${language}`));
           },
           this.#placeholderFor(),
         )}
@@ -291,7 +286,7 @@ export class IncludeFolderForm extends LitElement {
         change: (color) => {
           this.color = color;
           this.#scope?.changed();
-          this.#dismiss("color");
+          this.#feedback.dismiss("color");
         },
       })}
       <dashboard-image-upload
@@ -309,7 +304,7 @@ export class IncludeFolderForm extends LitElement {
           event.stopPropagation();
           this.image = event.detail.image;
           this.#scope?.changed();
-          this.#dismiss("image");
+          this.#feedback.dismiss("image");
         }}
       ></dashboard-image-upload>
       <span class="field-error" id="include-image-error">${errors.image ?? nothing}</span>`;

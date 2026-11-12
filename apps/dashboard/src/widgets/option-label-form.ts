@@ -2,6 +2,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -85,9 +86,7 @@ export class OptionLabelForm extends LitElement {
   @state() private customerName: Record<string, string> = {};
   @state() private kitchenName = "";
   @state() private available = true;
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
 
   #scope?: DraftScope<Omit<DraftLabel, "id">>;
   #baseline?: Omit<DraftLabel, "id">;
@@ -148,7 +147,7 @@ export class OptionLabelForm extends LitElement {
       this.#scope = undefined;
       this.#reseed();
     }
-    if (changes.has("errors")) this.dismissed = new Set();
+    if (changes.has("errors")) this.#feedback.newRefusal();
     this.#registerDraft();
   }
 
@@ -167,15 +166,14 @@ export class OptionLabelForm extends LitElement {
     this.customerName = { ...value?.customerName };
     this.kitchenName = value?.kitchenName ?? "";
     this.available = value?.available ?? true;
-    this.attempted = false;
-    this.dismissed = new Set();
+    this.#feedback.reset();
     this.#refusedAtOpen = Object.values(this.errors).some(Boolean);
   }
 
   #edit(change: () => void, ...keys: string[]): void {
     change();
     this.#scope?.changed();
-    this.dismissed = new Set([...this.dismissed, ...keys]);
+    this.#feedback.dismiss(...keys);
   }
 
   #validate(): Record<string, string> {
@@ -205,10 +203,9 @@ export class OptionLabelForm extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     if (this.#saveAction().unchanged) return;
-    this.attempted = true;
-    this.dismissed = new Set(Object.keys(this.errors));
+    this.#feedback.press(...Object.keys(this.errors));
     if (Object.keys(this.#validate()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.#emit(event, "wt-submit", {
@@ -262,10 +259,8 @@ export class OptionLabelForm extends LitElement {
   }
 
   #errors(): Record<string, string> {
-    const refused = Object.fromEntries(
-      Object.entries(this.errors).filter(([key]) => !this.dismissed.has(key)),
-    );
-    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
+    const refused = this.#feedback.remaining(this.errors);
+    return { ...refused, ...(this.#feedback.attempted ? this.#validate() : {}) };
   }
 
   #fields(errors: Record<string, string>): FieldContext {
@@ -304,7 +299,7 @@ export class OptionLabelForm extends LitElement {
     const errors = this.#errors();
     const fields = this.#fields(errors);
     const fieldKeys = new Set(this.#fieldKeys(errors));
-    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const invalid = this.#feedback.attempted && Object.keys(this.#validate()).length > 0;
     const saveAction = this.#saveAction();
     const bottom = [
       ...Object.entries(errors)

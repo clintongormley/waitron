@@ -6,6 +6,7 @@ import {
   currentContentLanguages,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -88,9 +89,7 @@ export class UnitForm extends LitElement {
   @state() private staffAbbreviation = "";
   @state() private precision = "0";
   @state() private measure = false;
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
   @state() private precisionUsage: ExtraOfferUsage[] = [];
   @state() private precisionUsageUnavailable = false;
   #usageGeneration = 0;
@@ -129,12 +128,12 @@ export class UnitForm extends LitElement {
       this.staffAbbreviation = this.value?.staffAbbreviation ?? "";
       this.precision = String(this.value?.precision ?? 0);
       this.measure = this.value?.measure === true;
-      this.attempted = false;
+      this.#feedback.reset();
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#baseline = undefined;
     }
-    if (changed.has("fieldErrors") || (this.open && needsDraft)) this.dismissed = new Set();
+    if (changed.has("fieldErrors") || (this.open && needsDraft)) this.#feedback.newRefusal();
     if (!this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
@@ -165,10 +164,6 @@ export class UnitForm extends LitElement {
   protected override updated(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
       void focusFirstInvalid(this.shadowRoot!);
-  }
-
-  #dismiss(...keys: string[]): void {
-    this.dismissed = new Set([...this.dismissed, ...keys]);
   }
 
   #validate(): Partial<Record<UnitField, string>> {
@@ -207,17 +202,15 @@ export class UnitForm extends LitElement {
   }
 
   #errors(): UnitFormErrors {
-    const refused = Object.fromEntries(
-      Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
-    );
-    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
+    const refused = this.#feedback.remaining(this.fieldErrors);
+    return { ...refused, ...(this.#feedback.attempted ? this.#validate() : {}) };
   }
 
   #changeName(locale: string, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.names = { ...this.names, [locale]: event.detail.value };
     this.#scope?.changed();
-    this.#dismiss("name", `name-${locale}`);
+    this.#feedback.dismiss("name", `name-${locale}`);
   }
 
   #changeStaff(
@@ -227,21 +220,21 @@ export class UnitForm extends LitElement {
     event.stopPropagation();
     this[field] = event.detail.value;
     this.#scope?.changed();
-    this.#dismiss(field);
+    this.#feedback.dismiss(field);
   }
 
   #changeAbbreviation(locale: string, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.abbreviations = { ...this.abbreviations, [locale]: event.detail.value };
     this.#scope?.changed();
-    this.#dismiss("abbreviation", `abbreviation-${locale}`);
+    this.#feedback.dismiss("abbreviation", `abbreviation-${locale}`);
   }
 
   #changePrecision(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.precision = event.detail.value;
     this.#scope?.changed();
-    this.#dismiss("precision");
+    this.#feedback.dismiss("precision");
     void this.#readPrecisionUsage();
   }
 
@@ -271,10 +264,9 @@ export class UnitForm extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
-    this.#dismiss(...Object.keys(this.fieldErrors));
+    this.#feedback.press(...Object.keys(this.fieldErrors));
     if (Object.keys(this.#validate()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const value = this.#submissionValue();
@@ -346,7 +338,7 @@ export class UnitForm extends LitElement {
     const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
       " ",
     );
-    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const invalid = this.#feedback.attempted && Object.keys(this.#validate()).length > 0;
     const saveAction = saveActionState(this.#scope);
     return html`
       <wt-modal

@@ -1,7 +1,7 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, FormFeedback } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -35,12 +35,11 @@ export class CategoryColorForm extends LitElement {
   @property({ attribute: false }) errors: Record<string, string> = {};
   /** What the person last chose, shown while it saves and after a refusal. */
   @state() private chosen: string | null = null;
-  /** Refusal keys the person has since chosen past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (changes.has("open") && this.open) this.chosen = this.color;
-    if (changes.has("errors") || (changes.has("open") && this.open)) this.dismissed = new Set();
+    if (changes.has("errors") || (changes.has("open") && this.open)) this.#feedback.newRefusal();
   }
   protected override updated(changes: PropertyValues<this>): void {
     if (changes.has("errors") && this.errors.color) void focusFirstInvalid(this.shadowRoot!);
@@ -50,7 +49,7 @@ export class CategoryColorForm extends LitElement {
   }
   override render() {
     const errors = Object.fromEntries(
-      Object.entries(this.errors).filter(([key, message]) => message && !this.dismissed.has(key)),
+      Object.entries(this.#feedback.remaining(this.errors)).filter(([, message]) => message),
     );
     const bottom = [
       ...Object.entries(errors)
@@ -82,7 +81,7 @@ export class CategoryColorForm extends LitElement {
           change: (color) => {
             if (this.busy) return;
             this.chosen = color;
-            this.dismissed = new Set(Object.keys(this.errors));
+            this.#feedback.dismiss(...Object.keys(this.errors));
             this.#emit("wt-choose", { color });
           },
         })}

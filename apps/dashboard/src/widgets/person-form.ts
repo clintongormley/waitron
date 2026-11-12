@@ -5,6 +5,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -72,9 +73,7 @@ export class PersonForm extends LitElement {
   @state() private email = "";
   @state() private telephone = "";
   @state() private selectedRole: PersonRole = "staff";
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
 
   #scope?: DraftScope<PersonInput>;
   #leave?: LeaveCoordinator;
@@ -96,10 +95,9 @@ export class PersonForm extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("error")) this.dismissed = new Set();
+    if (changed.has("error")) this.#feedback.newRefusal();
     if (changed.has("open") && this.open) {
-      this.attempted = false;
-      this.dismissed = new Set();
+      this.#feedback.reset();
     }
     if (!this.open) {
       this.#scope?.dispose();
@@ -133,20 +131,16 @@ export class PersonForm extends LitElement {
       void focusFirstInvalid(this.shadowRoot!);
   }
 
-  #dismiss(...keys: string[]): void {
-    this.dismissed = new Set([...this.dismissed, ...keys]);
-  }
-
   #refused(): Record<string, string> {
     if (!this.error) return {};
     const refused = {
       [refusedField(this.error, this.errorField) ?? "_form"]: codeMessage(this.error),
     };
-    return Object.fromEntries(Object.entries(refused).filter(([key]) => !this.dismissed.has(key)));
+    return this.#feedback.remaining(refused);
   }
 
   #errors(): Record<string, string> {
-    return { ...this.#refused(), ...(this.attempted ? this.#validate() : {}) };
+    return { ...this.#refused(), ...(this.#feedback.attempted ? this.#validate() : {}) };
   }
 
   #change(field: Field, event: CustomEvent<{ value: string }>): void {
@@ -171,7 +165,7 @@ export class PersonForm extends LitElement {
     else if (field === "email") this.email = value;
     else this.telephone = value;
     this.#scope?.changed();
-    this.#dismiss(field, ...(this.displayName !== prevDisplayName ? ["displayName"] : []));
+    this.#feedback.dismiss(field, ...(this.displayName !== prevDisplayName ? ["displayName"] : []));
   }
 
   #validate(): Partial<Record<Field, string>> {
@@ -191,10 +185,9 @@ export class PersonForm extends LitElement {
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy || saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
-    this.#dismiss("_form");
+    this.#feedback.press("_form");
     if (Object.keys(this.#validate()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.dispatchEvent(
@@ -252,8 +245,7 @@ export class PersonForm extends LitElement {
     this.email = "";
     this.telephone = "";
     this.selectedRole = "staff";
-    this.attempted = false;
-    this.dismissed = new Set();
+    this.#feedback.reset();
   }
 
   override render() {
@@ -318,7 +310,7 @@ export class PersonForm extends LitElement {
             ?disabled=${
               s.unchanged ||
               this.busy ||
-              (this.attempted && Object.keys(this.#validate()).length > 0)
+              (this.#feedback.attempted && Object.keys(this.#validate()).length > 0)
             }
             @click=${(event: Event) => this.#confirm(event)}
             >${t("action.save")}</wt-button
