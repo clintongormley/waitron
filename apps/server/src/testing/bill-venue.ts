@@ -160,7 +160,7 @@ export async function provisionBillVenue(
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
           passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
@@ -203,7 +203,7 @@ export async function provisionBillVenue(
     await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [person] = await seedPersons(tx, {
-      displayName: "Ana",
+      displayName: "Anna",
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });

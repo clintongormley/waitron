@@ -36,7 +36,7 @@ export interface OrderVenue extends BillVenue {
   supervisorTill: string;
   /** The supervisor's dashboard session: holds `report.view`. */
   supervisorDashboard: string;
-  /** The staff operator Ana's dashboard session: sees unfinished bills and today's finished bills. */
+  /** The staff operator Anna's dashboard session: sees unfinished bills and today's finished bills. */
   staffDashboard: string;
   /** The administrator's dashboard session. */
   adminDashboard: string;
@@ -65,7 +65,7 @@ export async function provisionOrderVenue(
   ).zoneId;
   const made = await inTx(venue, async (tx) => {
     const [person] = await seedPersons(tx, {
-      displayName: "Sofía",
+      displayName: "Sophia",
       pinHash: fixturePinHash("7777"),
       role: "supervisor",
     });
@@ -131,7 +131,7 @@ export async function placedIssuedBill(venue: OrderVenue, ...names: string[]): P
   return id;
 }
 
-/** An open counter bill of the named dishes, never sent, its lines credited to Ana. */
+/** An open counter bill of the named dishes, never sent, its lines credited to Anna. */
 export function parked(venue: OrderVenue, ...names: string[]): Promise<string> {
   return parkedBy(venue, venue.operatorId, ...names);
 }

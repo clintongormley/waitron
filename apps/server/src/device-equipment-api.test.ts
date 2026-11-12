@@ -61,7 +61,7 @@ import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
 // Choosing equipment over HTTP: two tills A ("Barra") and B ("Terraza") on one profile, each with
-// a session for "Ana", reader R1 held by A and R2 by B, R3 free; a portable printer PP, a fixed one
+// a session for "Anna", reader R1 held by A and R2 by B, R3 free; a portable printer PP, a fixed one
 // FP and a drawer printer DR on the profile's lists.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -322,7 +322,7 @@ describe("choosing a portable printer, by scan or by a confirmed list choice", (
       holder: b,
       a: null,
       b: pp,
-      heldBy: { deviceId: b, deviceName: "Terraza", personName: "Ana" },
+      heldBy: { deviceId: b, deviceName: "Terraza", personName: "Anna" },
     };
     expect(afterScan).toEqual(expected);
     expect(afterList).toEqual(expected);
@@ -353,7 +353,7 @@ describe("choosing a portable printer, by scan or by a confirmed list choice", (
         field: "receiptPrinterId",
         holderDeviceId: b,
         holderDeviceName: "Terraza",
-        holderPersonName: "Ana",
+        holderPersonName: "Anna",
       },
     });
     expect({ a: await columns(a), b: await columns(b), holder: await printerHolder(pp) }).toEqual(

@@ -85,7 +85,7 @@ async function seated(): Promise<Seated> {
   return seat.json as unknown as Seated;
 }
 
-/** Ana, the venue's staff session. */
+/** Anna, the venue's staff session. */
 async function ana(method: string, path: string, body?: unknown) {
   return send(venue.app, venue.cookie, method, path, await draftBody(method, path, body));
 }
@@ -321,7 +321,7 @@ describe("GET /api/parties/:id/drafts", () => {
       {
         billId: party.tabId,
         editorId: venue.operatorId,
-        editorName: "Ana",
+        editorName: "Anna",
         editorVersion: 3,
         draftId: first.id,
         draftRevision: first.revision,
@@ -329,7 +329,7 @@ describe("GET /api/parties/:id/drafts", () => {
       {
         billId: secondId,
         editorId: venue.adminId,
-        editorName: "Administradora",
+        editorName: "Administrator",
         editorVersion: 8,
         draftId: second.id,
         draftRevision: second.revision,
@@ -396,8 +396,8 @@ describe("GET /api/parties/:id/drafts", () => {
       admins,
       anas,
     ]);
-    expect(anas).toMatchObject({ ownerId: venue.operatorId, ownerName: "Ana" });
-    expect(admins).toMatchObject({ ownerId: venue.adminId, ownerName: "Administradora" });
+    expect(anas).toMatchObject({ ownerId: venue.operatorId, ownerName: "Anna" });
+    expect(admins).toMatchObject({ ownerId: venue.adminId, ownerName: "Administrator" });
     expect(upper).toEqual(read);
   });
 
@@ -751,7 +751,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       edit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
       draftId: anas.id,
       ownerId: venue.operatorId,
-      ownerName: "Ana",
+      ownerName: "Anna",
     });
 
     const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {

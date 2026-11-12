@@ -155,7 +155,7 @@ describe("station movement checks bill editing authority", () => {
         billId: p.tabId,
         draftId: owned.edit.draftId,
         ownerId: venue.adminId,
-        ownerName: "Administradora",
+        ownerName: "Administrator",
         edit: owned.edit,
       },
     });

@@ -113,7 +113,7 @@ describe("each status, from the product's own write paths", () => {
       total: "3.00",
       stillOwed: "3.00",
       invoiceNumber: null,
-      staff: [{ id: venue.operatorId, name: "Ana" }],
+      staff: [{ id: venue.operatorId, name: "Anna" }],
       tables: [expect.stringMatching(/^Mesa /)],
       counter: false,
     });
@@ -229,7 +229,7 @@ describe("each status, from the product's own write paths", () => {
       saleId,
       status: "paid",
       total: "12.10",
-      staff: [{ id: venue.operatorId, name: "Ana" }],
+      staff: [{ id: venue.operatorId, name: "Anna" }],
     });
     const detail = await inTx(venue, (tx) => readOrderDetail(tx, saleId, "all", false));
     expect(detail.lines.map((line) => [line.sent, line.sentNutrition])).toEqual([[false, null]]);

@@ -583,7 +583,7 @@ describe("Find Bills SQL paging", () => {
     expect(row.zoneName).toBeTruthy();
     expect(row.tables).toHaveLength(1);
     expect(row.staff).toContainEqual({ id: missing, name: null });
-    expect(row.staff).toContainEqual({ id: venue.operatorId, name: "Ana" });
+    expect(row.staff).toContainEqual({ id: venue.operatorId, name: "Anna" });
     expect((await list({ staffId: missing })).total).toBe(1);
     expect((await list({ q: row.tables[0]! })).rows.map((r) => r.workingOrderId)).toContain(
       party.tabId,

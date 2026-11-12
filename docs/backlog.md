@@ -2278,6 +2278,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The shared clock venue uses Anna for its staff sample and matching attendance, approver and profile-export checks.
   The shared signed-in-till venue uses Anna and Administrator for its staff display samples.
   The shared adjustment venue uses Anna and Martha for its staff and manager samples.
+  The shared bill and order venues use Anna, Administrator and Sophia for staff samples.
   Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,

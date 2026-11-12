@@ -380,7 +380,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/hour-recovery-placement-1.test.ts",
   "apps/server/src/hour-restore-retired-inputs.test.ts",
   "apps/server/src/invoice-choice-delivery.test.ts",
-  "apps/server/src/invoice-customer-data-api.export.test.ts",
   "apps/server/src/invoice-customer-data.pdfs.test.ts",
   "apps/server/src/invoice-customer-tax-id.test.ts",
   "apps/server/src/invoice-delivery-status.test.ts",

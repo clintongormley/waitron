@@ -338,11 +338,11 @@ describe("Find a bill list routes", () => {
     expect(options.status).toBe(200);
     expect((options.json as Options).billStaff).toContainEqual({
       id: venue.supervisorId,
-      name: "Sofía",
+      name: "Sophia",
     });
     expect((options.json as Options).transactionStaff).toContainEqual({
       id: venue.operatorId,
-      name: "Ana",
+      name: "Anna",
     });
     const filtered = await get(`/api/bills?staffId=${venue.supervisorId}`);
     expect(filtered).toMatchObject({

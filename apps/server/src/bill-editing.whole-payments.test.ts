@@ -139,7 +139,7 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
         billId: p.id,
         draftId: owned.draft!.id,
         ownerId: venue.adminId,
-        ownerName: "Administradora",
+        ownerName: "Administrator",
         edit: owned.edit,
       },
     });

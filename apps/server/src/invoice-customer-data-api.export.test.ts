@@ -194,7 +194,7 @@ describe("the invoice customer download, end to end", () => {
       token,
       hashSessionToken(token),
     ];
-    const staffNames = [/\bAna\b/u, /\bAdministradora\b/u, /\bSofía\b/u, /\bOtto\b/u, /\bMia\b/u];
+    const staffNames = [/\bAnna\b/u, /\bAdministrator\b/u, /\bSophia\b/u, /\bOtto\b/u, /\bMia\b/u];
     for (const text of texts) {
       for (const value of forbidden) expect(text).not.toContain(value);
       for (const name of staffNames) expect(text).not.toMatch(name);
