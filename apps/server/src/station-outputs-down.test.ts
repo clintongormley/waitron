@@ -314,6 +314,66 @@ describe("station output status", () => {
     expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
   });
 
+  it("keeps a dark screen listed while its untapped dish is part-served, and drops it once the dish is fully served", async () => {
+    const f = await setup();
+    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await stationScreenDevice({
+      stationId: f.grill,
+      deviceProfileId: await profile(suite.db, "kds"),
+      label: "Dark",
+      tokenHash: "hash",
+      lastSeenAt: "2026-10-02T18:00:00.000Z",
+    });
+    await suite.db
+      .update(workingOrderLines)
+      .set({ servedQuantity: 500, servedAt: "2026-10-02T18:01:00.000Z" })
+      .where(eq(workingOrderLines.workingOrderId, orderId));
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([
+      { stationId: f.grill, stationName: "Cocina", lastSeenAt: "2026-10-02T18:00:00.000Z" },
+    ]);
+    await suite.db
+      .update(workingOrderLines)
+      .set({ servedQuantity: 1000 })
+      .where(eq(workingOrderLines.workingOrderId, orderId));
+    const [item] = await suite.db
+      .select({ state: ticketItems.state })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, orderId));
+    expect(item!.state).toBe("queued");
+    expect(
+      await withTransaction(suite.db, (tx) => stationsWithWaitingDishes(tx, at, [f.grill])),
+    ).toEqual(new Set());
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
+  });
+
+  it.each([
+    ["a voided", sql`status = 'abandoned'`],
+    ["a collected", sql`collected_at = '2026-10-02T18:01:00.000Z'`],
+  ])("does not keep a dark screen listed for the untapped dish of %s order", async (_, change) => {
+    const f = await setup();
+    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    await stationScreenDevice({
+      stationId: f.grill,
+      deviceProfileId: await profile(suite.db, "kds"),
+      label: "Dark",
+      tokenHash: "hash",
+      lastSeenAt: "2026-10-02T18:00:00.000Z",
+    });
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([
+      { stationId: f.grill, stationName: "Cocina", lastSeenAt: "2026-10-02T18:00:00.000Z" },
+    ]);
+    await suite.db.execute(sql`update working_orders set ${change} where id = ${orderId}`);
+    const [item] = await suite.db
+      .select({ state: ticketItems.state })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, orderId));
+    expect(item!.state).toBe("queued");
+    expect(
+      await withTransaction(suite.db, (tx) => stationsWithWaitingDishes(tx, at, [f.grill])),
+    ).toEqual(new Set());
+    expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
+  });
+
   it("alerts a closed station with waiting dishes about both its printer and dark screens", async () => {
     const f = await setup();
     const p = await f.printer(f.bar, "Bar printer");
