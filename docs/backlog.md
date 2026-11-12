@@ -2273,7 +2273,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local portion-sale projection, station-queue and station-move staff samples use Anna and Lewis.
   Local adjustment-report staff use Lucy, Paul and Rose; `till-session.person` and box-alert-email samples use Anna.
   The own personal-data download (`me-api`) and box-health samples use Martha and Rose; stream-route and cross-person profile administrators use Administrator.
-  Local personal-data export, staff-export, README and working-time record suites use Martha Lewis; their local administrator sample uses Anna Admin.
+  Local personal-data export, staff-export, README and working-time record suites use Martha Lewis; the staff-export suite's administrator sample uses Anna Admin.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
