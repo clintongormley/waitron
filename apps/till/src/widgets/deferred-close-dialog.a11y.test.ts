@@ -7,9 +7,9 @@ import type { TillDeferredCloseDialog } from "./deferred-close-dialog.js";
 afterEach(cleanupWidgets);
 
 const bill = {
-  label: "Mesa 4 · Cuenta 2",
+  label: "Table 4 · Bill 2",
   total: "62.40",
-  customer: { legalName: "Hostelería Levante SL", taxId: "B12345678" },
+  customer: { legalName: "Levante Catering SL", taxId: "B12345678" },
   issued: false,
 };
 

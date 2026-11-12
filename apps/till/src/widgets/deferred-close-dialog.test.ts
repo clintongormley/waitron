@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./deferred-close-dialog.js";
 import type { DeferredCloseBill, TillDeferredCloseDialog } from "./deferred-close-dialog.js";
@@ -10,7 +11,7 @@ afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es"));
 
 const SIMPLIFIED: DeferredCloseBill = {
-  label: "Mesa 4 · Cuenta 2",
+  label: "Table 4 · Bill 2",
   total: "62.40",
   customer: null,
   issued: false,
@@ -46,13 +47,13 @@ describe("till-deferred-close-dialog", () => {
   it("shows the total, a simplified invoice and the final-close sentence, with Issue invoice and close", async () => {
     const el = await mount();
     const body = text(root(el).querySelector("[data-deferred-close-summary]"));
-    expect(body).toContain("Mesa 4 · Cuenta 2");
+    expect(body).toContain("Table 4 · Bill 2");
     expect(body).toContain(t("deferred_close.simplified"));
     expect(text(root(el).querySelector("[data-deferred-close-total]"))).toBe(money("62.40"));
     expect(text(root(el).querySelector("[data-deferred-close-sentence]"))).toBe(
-      "El cliente pagará más tarde. Esto cierra la cuenta ahora y Waitron no registrará el pago cuando llegue.",
+      es["deferred_close.final"],
     );
-    expect(text(confirmButton(el))).toBe("Emitir factura y cerrar");
+    expect(text(confirmButton(el))).toBe(es["deferred_close.issue_and_close"]);
     expect(text(root(el).querySelector("[data-deferred-close-cancel]"))).toBe(t("action.cancel"));
 
     setLocale("en");
@@ -68,16 +69,16 @@ describe("till-deferred-close-dialog", () => {
     const el = await mount({
       bill: {
         ...SIMPLIFIED,
-        customer: { legalName: "Hostelería Levante SL", taxId: "B12345678" },
+        customer: { legalName: "Levante Catering SL", taxId: "B12345678" },
         issued: true,
       },
     });
     const body = text(root(el).querySelector("[data-deferred-close-summary]"));
     expect(body).toContain(t("invoice.full"));
-    expect(body).toContain("Hostelería Levante SL");
+    expect(body).toContain("Levante Catering SL");
     expect(body).toContain("B12345678");
     expect(body).not.toContain(t("deferred_close.simplified"));
-    expect(text(confirmButton(el))).toBe("Cerrar cuenta");
+    expect(text(confirmButton(el))).toBe(es["deferred_close.close"]);
   });
 
   it("sends one confirm however often it is tapped or Enter pressed while busy", async () => {
