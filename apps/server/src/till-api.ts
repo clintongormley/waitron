@@ -4178,6 +4178,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
           await checkZones(tx, session, [
             { orderId: fromBillId },
             ...(toBillId === null ? [] : [{ orderId: toBillId }]),

@@ -44,7 +44,7 @@ export interface BillCommand {
   operatorId: string;
 }
 
-type Transfers = { lineNo: number; quantity?: string }[];
+type Transfers = { lineNo: number }[];
 
 type BillStatus = (typeof workingOrders.$inferSelect)["status"];
 

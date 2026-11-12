@@ -1165,7 +1165,6 @@
   "src/till-api.tables.test.ts": 4.5,
   "src/till-api.test.ts": 12.5,
   "src/till-api.today-joins.test.ts": 5.3,
-  "src/till-api.transfer.test.ts": 3.4,
   "src/till-api.unroutable-dish.test.ts": 19,
   "src/till-api.zone-closed.test.ts": 12.1,
   "src/till-api.zone-required.test.ts": 4.5,

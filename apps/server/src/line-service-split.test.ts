@@ -182,6 +182,25 @@ describe("financial splits with charged service cancellations", () => {
     },
   );
 
+  it("cuts part of a line only within its order", async () => {
+    const order = await fixture();
+    const billId = await emptyBill(order.partyId);
+    await expect(
+      inTx(venue, (tx) =>
+        carveOffLines(
+          tx,
+          venue.cfg,
+          order.billId,
+          billId,
+          [{ lineNo: order.parent.lineNo, quantity: "2" }],
+          { refuseHeld: false, splitExtras: true },
+        ),
+      ),
+    ).rejects.toThrow("a part of a line is cut only within its order");
+    expect(await projection(billId)).toEqual([]);
+    expect((await projection(order.billId)).map(({ quantity }) => quantity)).toEqual([3000, 6000]);
+  });
+
   it("moves the cancelled financial portion to another bill without moving active kitchen work", async () => {
     const order = await fixture();
     const billId = await emptyBill(order.partyId);
@@ -190,9 +209,19 @@ describe("financial splits with charged service cancellations", () => {
         tx,
         venue.cfg,
         order.billId,
-        billId,
+        order.billId,
         [{ lineNo: order.parent.lineNo, quantity: "2" }],
         { splitExtras: true },
+      ),
+    );
+    await inTx(venue, (tx) =>
+      carveOffLines(
+        tx,
+        venue.cfg,
+        order.billId,
+        billId,
+        [{ lineNo: [...moved.splitLines.values()][0]!.lineNo }],
+        { refuseHeld: false },
       ),
     );
     expect(moved.splitFrom.size).toBe(0);

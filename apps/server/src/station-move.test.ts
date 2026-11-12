@@ -2496,7 +2496,15 @@ describe("moveDishesToStation", () => {
         existingService: true,
         copyServiceContextFrom: tabId,
       });
-      await carveOffLines(tx, venue.cfg, tabId, checkId, [{ lineNo: 1, quantity: "1" }], {});
+      const cut = await carveOffLines(
+        tx,
+        venue.cfg,
+        tabId,
+        tabId,
+        [{ lineNo: 1, quantity: "1" }],
+        {},
+      );
+      await carveOffLines(tx, venue.cfg, tabId, checkId, [...cut.splitLines.values()], {});
     });
     const [copied] = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, checkId)),
@@ -2540,11 +2548,13 @@ describe("moveDishesToStation", () => {
         copyServiceContextFrom: tabId,
       });
       await tx.run(sql`pragma reverse_unordered_selects = on`);
+      let cut: Awaited<ReturnType<typeof carveOffLines>>;
       try {
-        await carveOffLines(tx, venue.cfg, tabId, checkId, [{ lineNo: 1, quantity: "1" }], {});
+        cut = await carveOffLines(tx, venue.cfg, tabId, tabId, [{ lineNo: 1, quantity: "1" }], {});
       } finally {
         await tx.run(sql`pragma reverse_unordered_selects = off`);
       }
+      await carveOffLines(tx, venue.cfg, tabId, checkId, [...cut.splitLines.values()], {});
     });
     const copied = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, checkId)),
