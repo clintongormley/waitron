@@ -195,7 +195,7 @@ export function splitDiscreteLine(
 
 /** `percentBp` of `gross`, rounded to whole cents half up: the reduction a percentage asks for. */
 export function percentReduction(gross: Decimal, percentBp: number): Decimal {
-  if (!isPercentBp(percentBp)) {
+  if (!isPercentBp(percentBp) || percentBp === 0) {
     throw new RangeError("percentBp is not in 1..10000");
   }
   return percentOf(gross, basisPointsToDecimal(percentBp));

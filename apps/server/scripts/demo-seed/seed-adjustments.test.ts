@@ -134,8 +134,8 @@ describe("seedAdjustmentReasons", () => {
       if (reason.kind === "void") expect(reason.actions, reason.name).toEqual(["cancel"]);
       else {
         expect(reason.actions, reason.name).not.toContain("cancel");
-        expect(reason.applyRoles.length, reason.name).toBeGreaterThan(0);
-        expect(reason.approverRoles.length, reason.name).toBeGreaterThan(0);
+        expect(reason).not.toHaveProperty("applyRoles");
+        expect(reason).not.toHaveProperty("approverRoles");
       }
     }
     const byEnglish = (english: string) => reasons.find((reason) => reason.names.en === english);
@@ -146,8 +146,7 @@ describe("seedAdjustmentReasons", () => {
       actions: ["comp", "discount_percent"],
       maxPercentBp: null,
       maxAmount: "30.00",
-      applyRoles: ["supervisor", "manager", "admin"],
-      approverRoles: ["manager", "admin"],
+
       noteRequired: true,
     });
   });
@@ -189,7 +188,7 @@ describe("seedAdjustmentReasons", () => {
     expect(twice).toEqual(once);
   });
 
-  it("keeps every Void reason free of role lists and every Comp reason under a limit", async () => {
+  it("keeps Void reasons free of limits and Comp reasons under a limit", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
       await seedAdjustmentReasons(tx, {
         locale: "en",
@@ -200,7 +199,7 @@ describe("seedAdjustmentReasons", () => {
     });
     for (const reason of reasons) {
       if (reason.kind === "void") {
-        expect([reason.applyRoles, reason.approverRoles], reason.name).toEqual([[], []]);
+        expect([reason.maxAmount, reason.maxPercentBp], reason.name).toEqual([null, null]);
       } else {
         expect(reason.maxAmount, reason.name).not.toBeNull();
       }

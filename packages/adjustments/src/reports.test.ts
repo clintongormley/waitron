@@ -169,7 +169,7 @@ async function adjust(ask: Ask): Promise<string> {
         reason: {
           id: ask.reason.id,
           name: ask.reasonName,
-          policy: policySnapshotOf(ask.reason),
+          policy: policySnapshotOf(ask.reason, { maxBillComp: null }),
         },
         action: ask.action,
         percentBp: ask.percentBp ?? null,
@@ -1509,7 +1509,7 @@ describe("the drill-down, a page at a time", () => {
     const alex = await person("Alex");
     const reason = await seedReason(db);
     const visit = await bill();
-    const snapshot = policySnapshotOf(reason);
+    const snapshot = policySnapshotOf(reason, { maxBillComp: null });
     await withTransaction(db, async (tx) => {
       for (let i = 0; i < 201; i += 1) {
         await recordAdjustment(tx, {

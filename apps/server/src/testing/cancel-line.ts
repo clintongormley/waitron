@@ -31,8 +31,7 @@ export const CANCEL_REASON: AdjustmentReasonInput = {
   actions: ["cancel"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
+
   noteRequired: false,
 };
 
@@ -44,8 +43,7 @@ export const GIVE_AWAY_REASON: AdjustmentReasonInput = {
   actions: ["comp"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: ["staff", "supervisor", "manager", "admin"],
-  approverRoles: ["staff", "supervisor", "manager", "admin"],
+
   noteRequired: false,
 };
 
@@ -58,8 +56,7 @@ export const COMP_BILL_REASON: AdjustmentReasonInput = {
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: ["staff", "supervisor", "manager", "admin"],
-  approverRoles: ["staff", "supervisor", "manager", "admin"],
+
   noteRequired: false,
 };
 

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   refusalField,
@@ -23,8 +24,7 @@ function reason(id: string, over: Partial<AdjustmentReason> = {}): AdjustmentRea
     noteRequired: false,
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: ["staff", "supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     ...over,
   };
 }
@@ -34,8 +34,6 @@ const mistake = reason("Mistake", {
   kind: "void",
   actions: ["cancel"],
   noteRequired: true,
-  applyRoles: [],
-  approverRoles: [],
 });
 const regular = reason("Regular", { actions: ["discount_percent", "discount_amount"] });
 const staffMeal = reason("Staff meal", { actions: ["comp", "discount_amount"] });
@@ -532,11 +530,19 @@ describe("till-adjustment-dialog: before confirming", () => {
 
   it("names the reason's approvers for a comp, and asks for approval", async () => {
     const { el } = await atConfirm(
-      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      {
+        preview: preview({
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
+        }),
+      },
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      "Someone who can approve Complaint must enter their PIN.",
+      "To use Complaint, ask the approver to enter their PIN.",
     );
     expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
@@ -544,11 +550,19 @@ describe("till-adjustment-dialog: before confirming", () => {
   it("names the reason's approvers in Spanish", async () => {
     setLocale("es");
     const { el } = await atConfirm(
-      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      {
+        preview: preview({
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
+        }),
+      },
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      "Alguien que pueda autorizar «Complaint» debe introducir su PIN.",
+      es["adjust.approval_reason"].replace("{reason}", "Complaint"),
     );
   });
 
@@ -558,7 +572,11 @@ describe("till-adjustment-dialog: before confirming", () => {
         kind: "discount",
         reasons: [regular],
         preview: preview({
-          needsApproval: { by: "bill_limit", roles: ["manager", "admin"], limit: "50.00" },
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "bill", amount: "50.00", percentBp: null },
+          },
         }),
       },
       async (el) => {
@@ -567,7 +585,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       },
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `This takes the bill's comps past ${money("50.00")}. Someone who may go past the bill's limit and approve this reason must enter their PIN.`,
+      `The bill's comp limit is ${money("50.00")}. Ask the approver to enter their PIN.`,
     );
     expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
@@ -577,13 +595,17 @@ describe("till-adjustment-dialog: before confirming", () => {
     const { el } = await atConfirm(
       {
         preview: preview({
-          needsApproval: { by: "bill_limit", roles: ["manager", "admin"], limit: "50.00" },
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "bill", amount: "50.00", percentBp: null },
+          },
         }),
       },
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `Con esto, los descuentos de la cuenta pasan de ${money("50.00")}. Alguien que pueda superar el límite y autorizar este motivo debe introducir su PIN.`,
+      es["adjust.approval_bill_limit"].replace("{limit}", money("50.00")),
     );
   });
 
@@ -591,10 +613,8 @@ describe("till-adjustment-dialog: before confirming", () => {
     const { el } = await atConfirm(
       {
         kind: "cancel",
-        reasons: [
-          reason("Void", { kind: "void", actions: ["cancel"], applyRoles: [], approverRoles: [] }),
-        ],
-        preview: preview({ needsApproval: { by: "refund" } }),
+        reasons: [reason("Void", { kind: "void", actions: ["cancel"] })],
+        preview: preview({ needsApproval: { by: "refund", permission: "sale.refund" } }),
       },
       (el) => chooseReason(el, "Void"),
     );
@@ -609,10 +629,8 @@ describe("till-adjustment-dialog: before confirming", () => {
     const { el } = await atConfirm(
       {
         kind: "cancel",
-        reasons: [
-          reason("Void", { kind: "void", actions: ["cancel"], applyRoles: [], approverRoles: [] }),
-        ],
-        preview: preview({ needsApproval: { by: "refund" } }),
+        reasons: [reason("Void", { kind: "void", actions: ["cancel"] })],
+        preview: preview({ needsApproval: { by: "refund", permission: "sale.refund" } }),
       },
       (el) => chooseReason(el, "Void"),
     );
@@ -623,7 +641,15 @@ describe("till-adjustment-dialog: before confirming", () => {
 
   it("names no reason it no longer holds, still asking for a PIN", async () => {
     const { el } = await atConfirm(
-      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      {
+        preview: preview({
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
+        }),
+      },
       (el) => chooseReason(el, "Complaint"),
     );
     el.reasons = [staffMeal];
@@ -636,7 +662,15 @@ describe("till-adjustment-dialog: before confirming", () => {
   it("names no reason it no longer holds in Spanish", async () => {
     setLocale("es");
     const { el } = await atConfirm(
-      { preview: preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }) },
+      {
+        preview: preview({
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
+        }),
+      },
       (el) => chooseReason(el, "Complaint"),
     );
     el.reasons = [staffMeal];
@@ -715,7 +749,6 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "adjustment.note_required",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
-    "adjustment.no_common_approver",
     "adjustment.free_not_allowed",
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
@@ -731,14 +764,12 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(shownMessages(el).join(" ")).toContain(codeMessage(code));
   });
 
-  it("says nobody can approve a request past both lists, and leaves every choice in place", async () => {
+  it("keeps choices and Close usable when approval is required", async () => {
     const el = await mount({ kind: "discount", target: steaks });
     await chooseReason(el, "Regular");
-    el.refusal = "adjustment.no_common_approver";
+    el.refusal = "adjustment.approval_required";
     await el.updateComplete;
-    expect(actions(el).error).toBe(
-      "Nobody can approve this: whoever may go past this bill's limit may not approve this reason. Take less off, choose another reason, or Close to change nothing.",
-    );
+    expect(actions(el).error).toBe("Someone who can approve this must enter their PIN");
     expect(shownMessages(el).filter((message) => message !== "")).toHaveLength(1);
     expect(continueButton(el).disabled).toBe(false);
     expect(field(el, "percent").hasAttribute("disabled")).toBe(false);
@@ -748,7 +779,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
 
     // A refusal about no field stays until the next submission.
     await type(el, "percent", "5");
-    expect(actions(el).error).toContain(codeMessage("adjustment.no_common_approver"));
+    expect(actions(el).error).toContain(codeMessage("adjustment.approval_required"));
 
     const sent = [
       ...capture(el, "adjust-preview"),
@@ -785,16 +816,14 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(field(el, "percent").error).toBe("");
   });
 
-  it("says nobody can approve it in Spanish", async () => {
+  it("explains required approval in Spanish", async () => {
     setLocale("es");
     const el = await mount({
       kind: "discount",
       target: steaks,
-      refusal: "adjustment.no_common_approver",
+      refusal: "adjustment.approval_required",
     });
-    expect(actions(el).error).toBe(
-      "Nadie puede autorizarlo: quien puede superar el límite de esta cuenta no puede autorizar este motivo. Quita menos, elige otro motivo o pulsa Cerrar para no cambiar nada.",
-    );
+    expect(actions(el).error).toBe("Alguien que pueda autorizarlo debe introducir su PIN");
   });
 
   it("shows a refusal on the confirm step above the action", async () => {

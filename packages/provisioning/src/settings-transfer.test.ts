@@ -15,7 +15,7 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const adjustments = ALL_MODULES.find((m) => m.name === "adjustments")!;
 const definition = adjustments.settings![0]!;
-const doc = { maxBillComp: 4000, billApproverRoles: ["manager"] };
+const doc = { maxBillComp: 4000 };
 const entries = { adjustments: { version: 1, doc } };
 const save = (value: object = doc) =>
   withTransaction(suite.db, async (tx) =>
@@ -89,7 +89,7 @@ it("an export with no adjustments key resets the target to the defaults", async 
   await save();
   await withTransaction(suite.db, (tx) => importSettingsDocuments(tx, {}, ALL_MODULES));
   expect(await readSettings(suite.db, definition)).toEqual({
-    doc: { maxBillComp: null, billApproverRoles: ["manager", "admin"] },
+    doc: { maxBillComp: null },
     revision: 0,
   });
 });
@@ -97,7 +97,7 @@ it("an export with no adjustments key resets the target to the defaults", async 
 it("validates documents before the configuration is staged", () => {
   const bundle = {
     ...configurationBundle(),
-    settings: { adjustments: { version: 1, doc: { ...doc, maxBillComp: 0 } } },
+    settings: { adjustments: { version: 1, doc: { ...doc, maxBillComp: -1 } } },
   };
   expect(() => validateConfigurationBundle(bundle, [adjustments], {})).toThrow(
     expect.objectContaining({

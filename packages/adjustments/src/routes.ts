@@ -1,11 +1,6 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readVenueClock, withTransaction, type Transaction } from "@waitron/db";
-import {
-  authorizeManager,
-  personRole,
-  type Permission,
-  type PersonRoleValue,
-} from "@waitron/identity";
+import { authorizeManager, type Permission } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
@@ -21,7 +16,6 @@ import type { Logger } from "@waitron/server-kit";
 import { currentBusinessDay } from "@waitron/reporting";
 import {
   AppError,
-  compareDecimal,
   decimal,
   isUuid,
   ADJUSTMENT_ACTIONS,
@@ -118,22 +112,6 @@ function requireAmount(value: unknown, field: string) {
   return decimal(value);
 }
 
-/** Required: the limit is cleared by an explicit `null`. Zero is refused here, as the setting's
- * own check would refuse it with no field. */
-function requireMaxBillComp(value: unknown) {
-  const amount = requireAmount(value, "maxBillComp");
-  if (amount !== null && compareDecimal(amount, decimal("0")) <= 0) throw invalid("maxBillComp");
-  return amount;
-}
-
-/** A list of distinct roles, empty only where `allowEmpty`: a Void reason's lists are empty. */
-function requireRoles(value: unknown, field: string, allowEmpty: boolean): PersonRoleValue[] {
-  if (!Array.isArray(value) || (value.length === 0 && !allowEmpty)) throw invalid(field);
-  const roles = value.map((role) => requireEnum(role, field, personRole.enumValues));
-  if (new Set(roles).size !== roles.length) throw invalid(field);
-  return roles;
-}
-
 function requireFlag(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") throw invalid(field);
   return value;
@@ -151,8 +129,6 @@ function requireReasonInput(body: Record<string, unknown>): AdjustmentReasonInpu
     actions: requireActions(body.actions),
     maxPercentBp: requireMaxPercent(body.maxPercentBp),
     maxAmount: requireAmount(body.maxAmount, "maxAmount"),
-    applyRoles: requireRoles(body.applyRoles, "applyRoles", kind === "void"),
-    approverRoles: requireRoles(body.approverRoles, "approverRoles", kind === "void"),
     noteRequired: requireFlag(body.noteRequired, "noteRequired"),
   };
 }
@@ -343,8 +319,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
           saveAdjustmentSettings(
             tx,
             {
-              maxBillComp: requireMaxBillComp(body.maxBillComp),
-              billApproverRoles: requireRoles(body.billApproverRoles, "billApproverRoles", false),
+              maxBillComp: requireAmount(body.maxBillComp, "maxBillComp"),
             },
             { expectedRevision: requireRevision(body.revision), personId: authorizedBy },
           ),

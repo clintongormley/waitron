@@ -13,8 +13,7 @@ const reason: AdjustmentReason = {
   actions: ["discount_percent"],
   maxPercentBp: 5000,
   maxAmount: "30.00",
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
+
   noteRequired: true,
   position: 0,
 };
@@ -38,7 +37,7 @@ async function mount() {
     listReasons: vi.fn().mockResolvedValue([reason]),
     getSettings: vi.fn().mockResolvedValue({
       maxBillComp: "15.00",
-      billApproverRoles: ["manager", "admin"],
+
       revision: 4,
     }),
     saveSettings: vi.fn(async (value: unknown) => value),
@@ -127,7 +126,7 @@ it("limit opens quiet, compares numeric values and quiets after a successful sav
   await change("maxBillComp", "20");
   api.getSettings.mockResolvedValue({
     maxBillComp: "20.00",
-    billApproverRoles: ["manager", "admin"],
+
     revision: 4,
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-limit]")!.click();
@@ -137,31 +136,21 @@ it("limit opens quiet, compares numeric values and quiets after a successful sav
   await state("save-limit", true, "secondary");
   expect(api.saveSettings).toHaveBeenCalledWith({
     maxBillComp: "20.00",
-    billApproverRoles: ["manager", "admin"],
+
     revision: 4,
   });
 });
 
-it("limit's approvers enable Save when changed and quiet it when chosen back", async () => {
+it("a zero limit enables Save, quiets when restored, and saves zero", async () => {
   const api = await mount();
-  const approvers = async (values: string[]) => {
-    el.shadowRoot!.querySelector("[name=billApproverRoles]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { values } }),
-    );
-    await el.updateComplete;
-  };
-  await approvers(["admin"]);
+  await change("maxBillComp", "0");
   await state("save-limit", false, "primary");
-  await approvers(["admin", "manager"]);
+  await change("maxBillComp", "15.00");
   await state("save-limit", true, "secondary");
-  await approvers(["admin"]);
+  await change("maxBillComp", "0");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-limit]")!.click();
   await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
-  expect(api.saveSettings).toHaveBeenCalledWith({
-    maxBillComp: "15.00",
-    billApproverRoles: ["admin"],
-    revision: 4,
-  });
+  expect(api.saveSettings).toHaveBeenCalledWith({ maxBillComp: "0.00", revision: 4 });
 });
 
 it("a refused changed limit remains primary and retryable", async () => {
@@ -175,7 +164,7 @@ it("a refused changed limit remains primary and retryable", async () => {
   await state("save-limit", false, "primary");
   api.getSettings.mockResolvedValue({
     maxBillComp: "20.00",
-    billApproverRoles: ["manager", "admin"],
+
     revision: 4,
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-limit]")!.click();

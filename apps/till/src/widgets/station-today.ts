@@ -262,7 +262,6 @@ export class TillStationToday extends LitElement {
         this.authorizers !== null
           ? html`<till-supervisor-override-dialog
               .authorizers=${this.authorizers}
-              .approverRole=${"manager"}
               .error=${this.pinError}
               @override-cancel=${(e: Event) => {
                 e.stopPropagation();

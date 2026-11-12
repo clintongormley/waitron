@@ -49,8 +49,6 @@ describe.each(["en", "es"] as const)("combined Comp %s", (locale) => {
                 maxAmount: "20.00",
                 noteRequired: true,
                 kind: "comp",
-                applyRoles: ["supervisor", "manager", "admin"],
-                approverRoles: ["manager", "admin"],
               },
             ],
           },
@@ -121,7 +119,11 @@ describe.each(["en", "es"] as const)("combined Comp %s", (locale) => {
         el.preview = {
           reduction: "0.60",
           nominalValue: "0.60",
-          needsApproval: { by: "reason", roles: ["manager", "admin"] },
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
           lines: [],
         };
         await el.updateComplete;

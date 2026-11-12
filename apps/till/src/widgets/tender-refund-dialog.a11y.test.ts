@@ -24,8 +24,6 @@ const reason = (id: string, name: string, noteRequired = false) =>
     noteRequired,
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
   }) as AdjustmentReason;
 const reasons = [reason("not-served", "Not served"), reason("other", "Other", true)];
 const result: TenderRefundView = {

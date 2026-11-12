@@ -125,7 +125,7 @@ describe("configuration export API", () => {
 
   it("answers a damaged stored settings document as a server failure", async () => {
     suite.db.execute(
-      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":0,"billApproverRoles":["admin"]}', '2026-11-09T12:00:00.000Z')`,
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":-1}', '2026-11-09T12:00:00.000Z')`,
     );
     try {
       const response = await app().request("/management-api/configuration-export", {

@@ -15,8 +15,6 @@ const house: AdjustmentReason = {
   maxPercentBp: null,
   maxAmount: null,
   kind: "void",
-  applyRoles: [],
-  approverRoles: [],
 };
 const other: AdjustmentReason = { ...house, id: "other", name: "Other reason", noteRequired: true };
 const read = (): CancellationRead => ({

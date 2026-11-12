@@ -37,8 +37,6 @@ export function seedReason(db: Database): Promise<AdjustmentReason> {
     actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: null,
     maxAmount: decimal("30.00"),
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
     noteRequired: false,
   }));
 }
@@ -52,8 +50,6 @@ export function seedVoidReason(db: Database): Promise<AdjustmentReason> {
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
     noteRequired: false,
   }));
 }

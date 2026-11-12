@@ -7,6 +7,19 @@ un encargado elige **Consultar con el proveedor de pagos** para un pago del pedi
 o **Consultar al proveedor** para un pago parcial de una cuenta, y confirma. Así termina el intento
 de práctica sin registrar un cobro.
 
+## Invitar o aplicar un descuento {#comps-and-discounts}
+
+Elige un motivo al dejar un artículo gratis o aplicar un descuento. Con **Aplicar invitaciones**,
+puedes aplicarlo hasta los límites del motivo y de la cuenta. Si necesitas autorización, elige a
+alguien con **Autorizar invitaciones** y pídele que introduzca su PIN. Puede superar esos límites
+y aplicar sus propias invitaciones sin el PIN de otra persona. Por defecto, el personal puede aplicar
+invitaciones dentro de los límites; supervisores, encargados y administradores pueden autorizarlas.
+
+En **Cancelaciones y descuentos** del panel, indica **0** cuando cada invitación necesite
+autorización. Los motivos nuevos empiezan en 0; cambia el importe o bórralo para permitir invitaciones sin límite.
+**Queja**, **Invitación** y **Descuento** empiezan en 0; **Comida de
+personal** permite hasta un 50% de descuento por artículo antes de pedir autorización.
+
 ## Repartir una cuenta del mostrador {#counter-part-payments}
 
 Pulsa **Cobrar** para cobrar toda o parte de una cuenta del mostrador. Empiezas con **Toda la cuenta**

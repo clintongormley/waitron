@@ -49,7 +49,7 @@ async function mounted(first: DeviceEquipmentRead) {
     getDeviceEquipment,
     boxClockChallenge,
     boxClockConfirm,
-    listAdjustmentApprovers: vi.fn().mockResolvedValue([]),
+    listApprovers: vi.fn().mockResolvedValue([]),
   });
   await signIn(el);
   await vi.waitFor(() => expect(strip(el)?.notices).toEqual([BEHIND]));

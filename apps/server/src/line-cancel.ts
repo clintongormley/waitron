@@ -452,7 +452,7 @@ export async function cancelItem(
           reason: {
             id: reason.id,
             name: reasonNameIn(reason, actor.locale, policy.venueLocale),
-            policy: policySnapshotOf(reason),
+            policy: policySnapshotOf(reason, { maxBillComp: null }),
           },
           action: "cancel",
           percentBp: null,

@@ -835,7 +835,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/till/src/till-app.theme.test.ts",
   "apps/till/src/widgets/adjustment-dialog.a11y.test.ts",
   "apps/till/src/widgets/adjustment-dialog.combined.a11y.test.ts",
-  "apps/till/src/widgets/adjustment-dialog.combined.test.ts",
   "apps/till/src/widgets/adjustment-dialog.test.ts",
   "apps/till/src/widgets/basket-refresh-dialog.a11y.test.ts",
   "apps/till/src/widgets/basket-refresh-dialog.test.ts",

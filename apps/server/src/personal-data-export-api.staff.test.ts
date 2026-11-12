@@ -387,8 +387,8 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
             actions: ["comp"],
             maxPercentBp: null,
             maxAmount: null,
-            applyRoles: [],
-            approverRoles: [],
+            maxBillComp: null,
+
             noteRequired: false,
           },
         },

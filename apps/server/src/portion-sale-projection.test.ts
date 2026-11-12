@@ -1,3 +1,5 @@
+import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -40,6 +42,8 @@ import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { readLockedLines, splitLinesWithinOrder, type StoredOrderLine } from "./working-order.js";
+
+registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
 
 const DAY = "2026-10-27";
 
@@ -502,8 +506,7 @@ describe("A803 monetary comparison: operations on portions through the real path
           actions: ["comp", "discount_percent", "discount_amount"],
           maxPercentBp: null,
           maxAmount: null,
-          applyRoles: ["staff", "supervisor", "manager", "admin"],
-          approverRoles: ["staff", "supervisor", "manager", "admin"],
+
           noteRequired: false,
         })
       ).id;
@@ -922,8 +925,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
           actions: ["comp", "discount_percent", "discount_amount"],
           maxPercentBp: null,
           maxAmount: null,
-          applyRoles: ["staff", "supervisor", "manager", "admin"],
-          approverRoles: ["staff", "supervisor", "manager", "admin"],
+
           noteRequired: false,
         })
       ).id;

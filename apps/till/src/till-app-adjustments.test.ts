@@ -147,8 +147,6 @@ const complaint: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
 };
 const mistake: AdjustmentReason = {
   ...complaint,
@@ -157,8 +155,6 @@ const mistake: AdjustmentReason = {
   kind: "void",
   actions: ["cancel"],
   noteRequired: true,
-  applyRoles: [],
-  approverRoles: [],
 };
 
 const formFactor: FormFactor = "till";
@@ -207,8 +203,12 @@ const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
   lines: [],
   ...over,
 });
-const byReason: AdjustmentApproval = { by: "reason", roles: ["manager", "admin"] };
-const byRefund: AdjustmentApproval = { by: "refund" };
+const byReason: AdjustmentApproval = {
+  by: "limit",
+  permission: "adjustment.approve",
+  limit: { kind: "reason", amount: "30.00", percentBp: null },
+};
+const byRefund: AdjustmentApproval = { by: "refund", permission: "sale.refund" };
 
 let drafts: DraftServer;
 let api: TillApi;
@@ -252,7 +252,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     saveDraft: drafts.saveDraft,
     submitDraft: drafts.submitDraft,
     listAdjustmentReasons: vi.fn().mockResolvedValue([complaint, mistake]),
-    listAdjustmentApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+    listApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "r-1", displayName: "Rosa" }]),
     previewAdjustment: vi.fn().mockResolvedValue(preview()),
     applyAdjustment: vi
@@ -529,11 +529,11 @@ describe("till-app: an adjustment someone must approve", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
-      "Someone who can approve Complaint must enter their PIN.",
+      "To use Complaint, ask the approver to enter their PIN.",
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith(["manager", "admin"]);
+    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve");
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
 
@@ -615,32 +615,42 @@ describe("till-app: an adjustment someone must approve", () => {
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
 
-  it("asks the server for the reason's list, by its roles", async () => {
-    const { el } = await mountApp({
-      previewAdjustment: vi
-        .fn()
-        .mockResolvedValue(preview({ needsApproval: { by: "reason", roles: ["admin"] } })),
-    });
-    const order = await openTable4(el);
-    await previewComp(el, order);
-    await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledExactlyOnceWith(["admin"]);
-    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
-    expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
-  });
-
-  it("asks the server for the bill limit's list, by its roles", async () => {
+  it("asks the server for people holding comp approval", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(
         preview({
-          needsApproval: { by: "bill_limit", roles: ["supervisor", "admin"], limit: "50.00" },
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
         }),
       ),
     });
     const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledExactlyOnceWith(["supervisor", "admin"]);
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve");
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
+  });
+
+  it("asks for comp approvers when the bill limit is exceeded", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(
+        preview({
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "bill", amount: "50.00", percentBp: null },
+          },
+        }),
+      ),
+    });
+    const order = await openTable4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve");
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
   });
 });
@@ -829,7 +839,7 @@ describe("till-app: a refused adjustment", () => {
   it("says so above the action when the approvers cannot be read", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
-      listAdjustmentApprovers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      listApprovers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const order = await openTable4(el);
     await previewComp(el, order);
@@ -957,7 +967,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     const approvers = deferred<{ personId: string; displayName: string }[]>();
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
-      listAdjustmentApprovers: vi.fn(() => approvers.promise),
+      listApprovers: vi.fn(() => approvers.promise),
     });
     const order = await openTable4(el);
     await previewComp(el, order);
@@ -1143,8 +1153,8 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
     expect(
       approval(el)!.shadowRoot!.querySelector<HTMLElement & { heading: string }>("wt-dialog")!
         .heading,
-    ).toBe("Approve with PIN");
-    expect(approval(el)!.approverRole).toBeNull();
+    ).toBe("Approval needed");
+    expect(approval(el)!.shadowRoot!.textContent).toContain("Choose who approves");
   });
 });
 
@@ -1248,8 +1258,6 @@ describe("till-app: cancelling a dish", () => {
       noteRequired: false,
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
     };
     const { el } = await mountApp({
       listAdjustmentReasons: vi.fn().mockResolvedValue([defaultReason]),
@@ -1273,7 +1281,7 @@ describe("till-app: cancelling a dish", () => {
     expect(applied()).toEqual([
       { orderId: "wo-4", command: { ...defaultAsk, submissionId: expect.any(String) } },
     ]);
-    expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+    expect(api.listApprovers).not.toHaveBeenCalled();
     expect(approval(el)).toBeNull();
     expect(dialog(el)).toBeNull();
   });
@@ -1427,7 +1435,7 @@ describe("till-app: cancelling a dish", () => {
   it("asks for the refund authorizers for a cancel, and cancels under one's PIN", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
-      listRefundAuthorizers: vi
+      listApprovers: vi
         .fn()
         .mockResolvedValue([{ personId: "m-1", displayName: "Marta, who refunds" }]),
     });
@@ -1439,8 +1447,8 @@ describe("till-app: cancelling a dish", () => {
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
-    expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund");
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([
       { personId: "m-1", displayName: "Marta, who refunds" },
@@ -3196,7 +3204,7 @@ describe("till-app: service cancellation consent", () => {
       await chooseRefund(el);
       expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
       expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ refundHandoff: true });
-      expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+      expect(api.listApprovers).not.toHaveBeenCalled();
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       await pinPad(el, "7777");
       await expect.poll(() => refundForm(el)).not.toBeNull();
@@ -3415,7 +3423,7 @@ describe("till-app: service cancellation consent", () => {
         expect(methods.cancelItem).toHaveBeenCalledOnce();
         expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ outcome: "keep_charge" });
         expect(api.refundTransaction).not.toHaveBeenCalled();
-        expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+        expect(api.listApprovers).not.toHaveBeenCalled();
       },
     );
 
@@ -4383,7 +4391,7 @@ describe("till-app: service cancellation consent", () => {
         appliedAmount: "7.50",
       });
       expect(methods.cancelItem).toHaveBeenCalledOnce();
-      expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+      expect(api.listApprovers).not.toHaveBeenCalled();
       for (const key of Object.keys(localStorage))
         if (key.startsWith("waitron.tender-refund:"))
           expect(localStorage.getItem(key)).not.toContain("1234");

@@ -64,8 +64,6 @@ const chargedTooMuch: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
 };
 
 type Dialog = TillBillPayDialog | TillBillRefundDialog | TillTenderPay | TillFindBillDialog;

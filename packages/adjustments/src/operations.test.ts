@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { PersonRoleValue } from "@waitron/identity";
 import { decimal } from "@waitron/shared";
 import {
   createAdjustmentReason,
@@ -36,8 +35,6 @@ function complaint(overrides: Partial<AdjustmentReasonInput> = {}): AdjustmentRe
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,
     maxAmount: decimal("30.00"),
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
     noteRequired: true,
     ...overrides,
   };
@@ -51,8 +48,6 @@ function voidReason(overrides: Partial<AdjustmentReasonInput> = {}): AdjustmentR
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
     noteRequired: true,
     ...overrides,
   };
@@ -63,6 +58,19 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 describe("adjustment reason operations", () => {
+  it("saves zero amount and percentage limits on a comp reason", async () => {
+    const reason = await inTx((tx) =>
+      createAdjustmentReason(
+        tx,
+        complaint({ actions: ["discount_amount"], maxPercentBp: 0, maxAmount: decimal("0.00") }),
+      ),
+    );
+    expect(await inTx((tx) => findAdjustmentReason(tx, reason.id))).toEqual({
+      ...reason,
+      maxPercentBp: 0,
+      maxAmount: "0.00",
+    });
+  });
   it("creates, updates, reorders and deletes reasons, and lists what each step left", async () => {
     const created = await inTx((tx) => createAdjustmentReason(tx, complaint()));
     expect(created).toEqual({
@@ -73,8 +81,6 @@ describe("adjustment reason operations", () => {
       actions: ["comp", "discount_percent"],
       maxPercentBp: null,
       maxAmount: "30.00",
-      applyRoles: ["supervisor", "manager", "admin"],
-      approverRoles: ["manager", "admin"],
       noteRequired: true,
       position: 0,
     });
@@ -96,8 +102,6 @@ describe("adjustment reason operations", () => {
           actions: ["comp"],
           maxPercentBp: null,
           maxAmount: decimal("45.50"),
-          applyRoles: ["manager", "admin"],
-          approverRoles: ["admin"],
           noteRequired: false,
         }),
       ),
@@ -110,8 +114,6 @@ describe("adjustment reason operations", () => {
       actions: ["comp"],
       maxPercentBp: null,
       maxAmount: "45.50",
-      applyRoles: ["manager", "admin"],
-      approverRoles: ["admin"],
       noteRequired: false,
       position: 0,
     });
@@ -146,7 +148,11 @@ describe("adjustment reason operations", () => {
           stage: "served",
         },
         quantity: "1",
-        reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+        reason: {
+          id: reason.id,
+          name: reason.name,
+          policy: policySnapshotOf(reason, { maxBillComp: null }),
+        },
         action: "comp",
         percentBp: null,
         beforeAmount: decimal("12.00"),
@@ -232,20 +238,13 @@ describe("adjustment reason operations", () => {
     ["name", { name: "   " }],
     ["actions", { actions: [] }],
     ["actions", { actions: ["comp", "comp"] }],
-    ["maxPercentBp", { maxPercentBp: 0 }],
+    ["maxPercentBp", { maxPercentBp: -1 }],
     ["maxPercentBp", { maxPercentBp: 10001 }],
     ["maxPercentBp", { maxPercentBp: 12.5 }],
-    ["maxAmount", { maxAmount: decimal("0.00") }],
     ["maxAmount", { maxAmount: decimal("-1.00") }],
     ["maxAmount", { maxAmount: decimal("1.005") }],
     ["actions", { actions: ["cancel"] }],
     ["actions", { actions: ["discount_amount", "cancel"] }],
-    ["applyRoles", { applyRoles: [] }],
-    ["applyRoles", { applyRoles: ["staff", "staff"] }],
-    ["applyRoles", { applyRoles: ["chef" as PersonRoleValue] }],
-    ["approverRoles", { approverRoles: [] }],
-    ["approverRoles", { approverRoles: ["manager", "manager"] }],
-    ["approverRoles", { approverRoles: ["owner" as PersonRoleValue] }],
     ["maxPercentBp", { actions: ["comp"], maxPercentBp: 5000 }],
     ["maxPercentBp", { actions: ["discount_percent", "comp"], maxPercentBp: 9999 }],
   ])("refuses a Comp reason whose %s is out of bounds (%o)", async (field, overrides) => {
@@ -263,8 +262,6 @@ describe("adjustment reason operations", () => {
     ["actions", { actions: ["comp"] }],
     ["actions", { actions: ["cancel", "comp"] }],
     ["actions", { actions: ["cancel", "cancel"] }],
-    ["applyRoles", { applyRoles: ["staff"] }],
-    ["approverRoles", { approverRoles: ["manager"] }],
     ["maxPercentBp", { maxPercentBp: 5000 }],
     ["maxAmount", { maxAmount: decimal("10.00") }],
   ])("refuses a Void reason whose %s it cannot hold (%o)", async (field, overrides) => {
@@ -288,8 +285,6 @@ describe("adjustment reason operations", () => {
           actions: ["discount_percent"],
           maxPercentBp: 5000,
           maxAmount: null,
-          applyRoles: ["staff"],
-          approverRoles: ["supervisor", "manager"],
           noteRequired: false,
         }),
       ),
@@ -302,8 +297,6 @@ describe("adjustment reason operations", () => {
       actions: ["cancel"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
       noteRequired: true,
       position: 0,
     });
@@ -315,8 +308,6 @@ describe("adjustment reason operations", () => {
       actions: ["discount_percent"],
       maxPercentBp: 5000,
       maxAmount: null,
-      applyRoles: ["staff"],
-      approverRoles: ["supervisor", "manager"],
       noteRequired: false,
       position: 1,
     });

@@ -15,16 +15,10 @@ import {
   table,
   tsString,
 } from "../columns.js";
-import { REASON_KINDS, type AdjustmentAction, type PersonRoleValue } from "@waitron/shared";
+import { REASON_KINDS, type AdjustmentAction } from "@waitron/shared";
 
 const reasonKind = enumType(REASON_KINDS);
 
-/**
- * A reason staff give for cancelling (a Void reason) or for comping or discounting (a Comp reason),
- * and the policy it carries. A Void reason holds no role lists and no limits. `max_amount` is what a
- * Comp reason may take off one bill in total, and `max_percent` the percentage it may take off one
- * item in total, before someone on `approver_roles` must approve.
- */
 export const adjustmentReasons = table(
   "adjustment_reasons",
   {
@@ -36,8 +30,6 @@ export const adjustmentReasons = table(
     actions: json<AdjustmentAction[]>("actions").notNull(),
     maxPercent: rate("max_percent"),
     maxAmount: money("max_amount"),
-    applyRoles: json<PersonRoleValue[]>("apply_roles").notNull().default([]),
-    approverRoles: json<PersonRoleValue[]>("approver_roles").notNull().default([]),
     noteRequired: flag("note_required").notNull().default(false),
     position: count("position").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
@@ -48,13 +40,13 @@ export const adjustmentReasons = table(
     check("adjustment_reasons_actions_ck", sql`json_array_length(${t.actions}) > 0`),
     check(
       "adjustment_reasons_max_percent_ck",
-      sql`${t.maxPercent} is null or (${t.maxPercent} > 0 and ${t.maxPercent} <= 10000)`,
+      sql`${t.maxPercent} is null or ${t.maxPercent} between 0 and 10000`,
     ),
-    check("adjustment_reasons_max_amount_ck", sql`${t.maxAmount} is null or ${t.maxAmount} > 0`),
+    check("adjustment_reasons_max_amount_ck", sql`${t.maxAmount} is null or ${t.maxAmount} >= 0`),
     check("adjustment_reasons_kind_ck", enumCheck(t.kind)),
     check(
       "adjustment_reasons_kind_fields_ck",
-      sql`(${t.kind} = 'void' and json_array_length(${t.applyRoles}) = 0 and json_array_length(${t.approverRoles}) = 0 and ${t.maxPercent} is null and ${t.maxAmount} is null) or (${t.kind} = 'comp' and json_array_length(${t.applyRoles}) > 0 and json_array_length(${t.approverRoles}) > 0)`,
+      sql`(${t.kind} = 'void' and ${t.maxPercent} is null and ${t.maxAmount} is null) or ${t.kind} = 'comp'`,
     ),
     check("adjustment_reasons_position_ck", sql`${t.position} >= 0`),
   ],

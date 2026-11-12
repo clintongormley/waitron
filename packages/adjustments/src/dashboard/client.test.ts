@@ -22,8 +22,7 @@ const input: AdjustmentReasonInput = {
   actions: ["comp", "discount_percent"],
   maxPercentBp: null,
   maxAmount: "30.00",
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
+
   noteRequired: true,
 };
 const reason: AdjustmentReason = { ...input, id: "r1", position: 0 };
@@ -144,7 +143,7 @@ describe("AdjustmentsApi", () => {
   });
 
   it("reads the venue's bill comp limit, passively on the background client", async () => {
-    const settings = { maxBillComp: "40.00", billApproverRoles: ["manager", "admin"], revision: 4 };
+    const settings = { maxBillComp: "40.00", revision: 4 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
     expect(await api(fetchImpl).getSettings()).toEqual(settings);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
@@ -158,14 +157,14 @@ describe("AdjustmentsApi", () => {
   });
 
   it("replaces the venue's bill comp limit with a PUT, a null limit included", async () => {
-    const settings = { maxBillComp: null, billApproverRoles: ["admin" as const], revision: 4 };
+    const settings = { maxBillComp: null, revision: 4 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
     expect(await api(fetchImpl).saveSettings(settings)).toEqual(settings);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ maxBillComp: null, billApproverRoles: ["admin"], revision: 4 }),
+      body: JSON.stringify({ maxBillComp: null, revision: 4 }),
     });
   });
 

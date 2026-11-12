@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type QueryController } from "@waitron/dashboard-kit";
 import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { setContentLanguages } from "@waitron/ui";
-import { chooseOptions, cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
@@ -24,8 +24,7 @@ const reasons: AdjustmentReason[] = [
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
     position: 0,
   },
@@ -37,8 +36,7 @@ const reasons: AdjustmentReason[] = [
     actions: ["comp", "discount_percent"],
     maxPercentBp: null,
     maxAmount: "30.00",
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: true,
     position: 1,
   },
@@ -50,8 +48,7 @@ const reasons: AdjustmentReason[] = [
     actions: ["discount_amount"],
     maxPercentBp: null,
     maxAmount: "5.00",
-    applyRoles: ["staff", "supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: false,
     position: 2,
   },
@@ -77,9 +74,7 @@ async function screen(
   await mountThemed("<div></div>", theme);
   const api = {
     listReasons: vi.fn().mockResolvedValue(reasons),
-    getSettings: vi
-      .fn()
-      .mockResolvedValue({ maxBillComp: "15.00", billApproverRoles: ["manager", "admin"] }),
+    getSettings: vi.fn().mockResolvedValue({ maxBillComp: "15.00" }),
     saveSettings: vi.fn(async (settings: unknown) => settings),
     ...overrides,
   } as Record<string, unknown>;
@@ -190,7 +185,14 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
   });
 
   test("the list at phone width", async () => {
-    const el = await screen(theme);
+    const el = await screen(theme, {
+      listReasons: vi
+        .fn()
+        .mockResolvedValue([
+          { ...reasons[0], name: "LongUnbrokenReasonName".repeat(12) },
+          ...reasons.slice(1),
+        ]),
+    });
     host.style.width = "390px";
     await settle(el);
     const wrap = el.shadowRoot!.querySelector<HTMLElement>('[data-test="reasons"]')!;
@@ -224,29 +226,15 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await expectNoA11yViolations(host);
   });
 
-  test("the Comp form with a role list open", async () => {
+  test("the Comp form after refusing Free under an item limit", async () => {
     const el = await screen(theme);
     await press(el, "edit-c");
-    const list = deep(el, 'wt-combobox[name="approverRoles"]');
-    list.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
-    await settle(el);
-    await expectNoA11yViolations(host);
-  });
-
-  test("the Comp form after refusing an empty list and Free under an item limit", async () => {
-    const el = await screen(theme);
-    await press(el, "edit-c");
-    await chooseOptions(deep(el, 'wt-combobox[name="applyRoles"]'), []);
     deep(el, '[name="maxPercent"]').dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "50" } }),
     );
     await settle(el);
     await press(el, "save-editor");
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-        'wt-combobox[name="applyRoles"]',
-      )!.error,
-    ).not.toBe("");
+    expect((deep(el, '[name="maxPercent"]') as HTMLElement & { error: string }).error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 
@@ -306,11 +294,8 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     const input = field.shadowRoot!.querySelector("input")!;
     input.value = "abc";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    const approvers = deep(el, 'wt-combobox[name="billApproverRoles"]');
-    approvers.dispatchEvent(new CustomEvent("wt-change", { detail: { values: [] } }));
     await press(el, "save-limit");
     expect((field as HTMLElement & { error: string }).error).not.toBe("");
-    expect((approvers as HTMLElement & { error: string }).error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 

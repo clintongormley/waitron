@@ -187,7 +187,7 @@ it.each(["pin.invalid", "pin.throttled"])(
       .not.toBeNull();
     const override = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
     await override.updateComplete;
-    expect(override.approverRole).toBe("manager");
+    expect(override.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Approval needed");
     expect(override.authorizers).toEqual([{ personId: "manager", displayName: "Ana" }]);
     override.shadowRoot!.querySelector<HTMLElement>("[data-person=manager]")!.click();
     await override.updateComplete;

@@ -1,3 +1,5 @@
+import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -27,6 +29,8 @@ import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { createOpenOrder } from "./working-order.js";
 import "./errors.js";
+
+registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -74,8 +78,7 @@ async function compOne(venue: Venue) {
       actions: ["comp"],
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: ["staff", "supervisor", "manager", "admin"],
-      approverRoles: ["staff", "supervisor", "manager", "admin"],
+
       noteRequired: false,
     });
     const [dish] = await tx

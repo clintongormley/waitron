@@ -3,19 +3,9 @@ import { requireEconomicWrite } from "./trading-admission.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import {
-  ADJUSTMENT_ACTIONS,
-  isRoleList,
-  listAdjustmentReasons,
-  NOT_SERVED_REASON,
-} from "@waitron/adjustments";
+import { ADJUSTMENT_ACTIONS, listAdjustmentReasons, NOT_SERVED_REASON } from "@waitron/adjustments";
 import { workingOrderLines, withTransaction, type Database } from "@waitron/db";
-import {
-  listActivePersonsWithRoles,
-  persons,
-  type PersonRoleValue,
-  type PinThrottle,
-} from "@waitron/identity";
+import { listActivePersonsWithPermission, persons, type PinThrottle } from "@waitron/identity";
 import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
 import {
@@ -103,11 +93,12 @@ function lineIdsOf(value: unknown, lineId: string | null): string[] | undefined 
   return ids;
 }
 
-/** `?roles=` as a comma-separated list: each a role, at least one, none twice. */
-function requireRoles(value: string | undefined): PersonRoleValue[] {
-  const roles = value === undefined ? [] : value.split(",");
-  if (!isRoleList(roles)) throw invalid("roles");
-  return roles;
+function requireApproverPermission(
+  value: string | undefined,
+): "adjustment.approve" | "sale.refund" | "system.box_admin" {
+  if (value !== "adjustment.approve" && value !== "sale.refund" && value !== "system.box_admin")
+    throw invalid("permission");
+  return value;
 }
 
 /**
@@ -295,8 +286,6 @@ export function mountAdjustmentsApi(
           noteRequired: reason.noteRequired,
           maxPercentBp: reason.maxPercentBp,
           maxAmount: reason.maxAmount,
-          applyRoles: reason.applyRoles,
-          approverRoles: reason.approverRoles,
           startsFinishTable: reason === start,
         }));
       });
@@ -308,9 +297,9 @@ export function mountAdjustmentsApi(
   app.get("/api/adjustment-approvers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const roles = requireRoles(c.req.query("roles"));
+      const permission = requireApproverPermission(c.req.query("permission"));
       const approvers = await withTransaction(deps.db, (tx) =>
-        listActivePersonsWithRoles(tx, roles),
+        listActivePersonsWithPermission(tx, permission),
       );
       return c.json(approvers);
     }),

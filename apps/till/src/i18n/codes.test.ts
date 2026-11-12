@@ -401,7 +401,6 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "adjustment.note_required",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
-    "adjustment.no_common_approver",
     "adjustment.free_not_allowed",
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",

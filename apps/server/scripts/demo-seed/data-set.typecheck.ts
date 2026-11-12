@@ -32,12 +32,6 @@ const reasonAction = {
 } as const satisfies CountryDemoData;
 // @ts-expect-error The server owns adjustment actions.
 export const invalidAction: StrictCountryDemoData = reasonAction;
-const reasonRole = {
-  ...base,
-  adjustmentReasons: [{ ...base.adjustmentReasons[0], applyRoles: ["unregistered-role"] }],
-} as const satisfies CountryDemoData;
-// @ts-expect-error The server owns adjustment permission roles.
-export const invalidReasonRole: StrictCountryDemoData = reasonRole;
 const floor = {
   ...base,
   floor: { ...base.floor, tables: [{ ...base.floor.tables[0], shape: "triangle" }] },

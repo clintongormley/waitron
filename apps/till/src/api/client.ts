@@ -868,20 +868,16 @@ export interface AdjustmentReason {
   noteRequired: boolean;
   maxPercentBp: number | null;
   maxAmount: string | null;
-  /** Who may apply it alone. */
-  applyRoles: PersonRole[];
-  /** Who may approve it for someone else. */
-  approverRoles: PersonRole[];
   startsFinishTable?: boolean;
 }
 
-/** Whose PIN an adjustment needs: holders of the reason's approver roles, holders of the roles that
- * may both approve past the bill's comp limit (`limit`, a money string) and approve the reason, or
- * holders of the refund permission. */
 export type AdjustmentApproval =
-  | { by: "reason"; roles: PersonRole[] }
-  | { by: "bill_limit"; roles: PersonRole[]; limit: string }
-  | { by: "refund" };
+  | {
+      by: "limit";
+      permission: "adjustment.approve";
+      limit: { kind: "reason" | "bill"; amount: string | null; percentBp: number | null };
+    }
+  | { by: "refund"; permission: "sale.refund" };
 
 /** An adjustment of one bill, as a preview and an apply share it. `lineId` names the dish or the
  * extra; null is a discount on the whole bill. `quantity` absent covers the whole line; an extra is
@@ -4422,11 +4418,11 @@ export class TillApi {
     return this.#request<AdjustmentReason[]>("/api/adjustment-reasons", "GET");
   }
 
-  /** The active people holding any of `roles`, who can approve an adjustment with their PIN →
-   * `GET /api/adjustment-approvers?roles=`. */
-  listAdjustmentApprovers(roles: PersonRole[]): Promise<StaffMember[]> {
+  listApprovers(
+    permission: "adjustment.approve" | "sale.refund" | "system.box_admin",
+  ): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>(
-      `/api/adjustment-approvers?roles=${roles.map(encodeURIComponent).join(",")}`,
+      `/api/adjustment-approvers?permission=${encodeURIComponent(permission)}`,
       "GET",
     );
   }

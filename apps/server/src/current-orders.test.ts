@@ -1,3 +1,5 @@
+import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -82,6 +84,8 @@ import { insertPartyBill } from "./parties.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
+registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
+
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
 const MIA = "cccccccc-0000-4000-8000-00000000000b";
@@ -2082,8 +2086,7 @@ describe("a paid held dish fired on its own", () => {
         actions: ["discount_percent"],
         maxPercentBp: null,
         maxAmount: null,
-        applyRoles: ["staff", "supervisor", "manager", "admin"],
-        approverRoles: ["staff", "supervisor", "manager", "admin"],
+
         noteRequired: false,
       });
       const [dish] = await tx

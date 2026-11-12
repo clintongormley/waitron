@@ -19,8 +19,6 @@ const voidReason = (id: string, name: string, noteRequired = false) =>
     noteRequired,
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
   }) as AdjustmentReason;
 const REASONS = [
   voidReason("return", "Return"),

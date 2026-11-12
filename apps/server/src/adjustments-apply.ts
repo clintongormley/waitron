@@ -32,6 +32,7 @@ import { insertInChunks, orderGroups, ticketItems, workingOrderLines } from "@wa
 import type { Transaction } from "@waitron/db";
 import {
   persons,
+  permissionsForRole,
   verifyPersonCredential,
   verifyThrottledCredential,
   type PersonRoleValue,
@@ -137,9 +138,12 @@ export interface AdjustmentPreview {
 
 /** {@link Approval} on the wire: the limit as money is written. */
 export type WireApproval =
-  | { by: "reason"; roles: PersonRoleValue[] }
-  | { by: "bill_limit"; roles: PersonRoleValue[]; limit: string }
-  | { by: "refund" };
+  | {
+      by: "limit";
+      permission: "adjustment.approve";
+      limit: { kind: "reason" | "bill"; amount: string | null; percentBp: number | null };
+    }
+  | { by: "refund"; permission: "sale.refund" };
 
 /** A row of the bill as an adjustment reads it: quantities in thousandths, money in cents. */
 interface Row {
@@ -189,6 +193,7 @@ interface Carve {
 interface Plan {
   reason: AdjustmentReason;
   reasonName: string;
+  maxBillComp: Decimal | null;
   /** The dish or the extra the action names; null on a bill-level discount. */
   line: Row | null;
   /** The part of the line covered, in thousandths; null on a bill-level discount. */
@@ -356,7 +361,7 @@ function requestedDiscount(ask: AdjustmentAsk, base: Decimal): Decimal {
   if (ask.action === "discount_percent") {
     if (ask.amount !== undefined) throw invalid("amount");
     const bp = ask.percentBp;
-    if (!isPercentBp(bp)) throw invalid("percentBp");
+    if (!isPercentBp(bp) || bp === 0) throw invalid("percentBp");
     return percentReduction(base, bp);
   }
   if (ask.percentBp !== undefined) throw invalid("percentBp");
@@ -961,11 +966,13 @@ export async function planAdjustment(
     .from(persons)
     .where(eq(persons.id, ask.operatorId));
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
-  const actorRole = actor.role as PersonRoleValue;
+  const actorPermissions = new Set(permissionsForRole(actor.role as PersonRoleValue));
   const stage = line === null ? null : stageOf(dishOf(line, view));
+  const maxBillComp =
+    ask.action === "cancel" ? null : (await readAdjustmentSettings(tx)).maxBillComp;
   const verdict =
     ask.action === "cancel"
-      ? evaluateCancel(reason, { actorRole, note: ask.note, stage: stage! })
+      ? evaluateCancel(reason, { actorPermissions, note: ask.note, stage: stage! })
       : await judgeComp(tx, reason, {
           orderId,
           action: ask.action,
@@ -974,13 +981,15 @@ export async function planAdjustment(
           carve,
           reduction,
           before,
-          actorRole,
+          actorPermissions,
+          maxBillComp,
           note: ask.note,
         });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
   return {
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
+    maxBillComp,
     line,
     covered,
     removed,
@@ -1004,8 +1013,6 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
   return line.parentLineId === null ? line : rows.find((row) => row.id === line.parentLineId)!;
 }
 
-/** A comp action's verdict (design §3.2); a reason's per-dish limit is a price floor (plan D36), and
- * past the bill's limit the approver must be allowed both it and the reason (plan D37). */
 async function judgeComp(
   tx: Transaction,
   reason: AdjustmentReason,
@@ -1020,7 +1027,8 @@ async function judgeComp(
     reduction: Decimal;
     /** What the request's subject cost before it. */
     before: Decimal;
-    actorRole: PersonRoleValue;
+    actorPermissions: ReadonlySet<string>;
+    maxBillComp: Decimal | null;
     note: string | null;
   },
 ): Promise<AdjustmentVerdict> {
@@ -1034,17 +1042,16 @@ async function judgeComp(
       return compareDecimal(off, ZERO) > 0 ? off : ZERO;
     }),
   );
-  const { maxBillComp, billApproverRoles } = await readAdjustmentSettings(tx);
   return evaluateComp(reason, {
     action: ask.action,
     reduction: ask.reduction,
-    actorRole: ask.actorRole,
+    actorPermissions: ask.actorPermissions,
     note: ask.note,
     takesAll: compareDecimal(ask.reduction, ask.before) === 0,
     standingOnBill,
     dishes: dishPrices(ask.writes, rows, ask.carve),
     billComped,
-    billLimit: { maxAmount: maxBillComp, approverRoles: billApproverRoles },
+    billLimit: { maxAmount: ask.maxBillComp },
   });
 }
 
@@ -1155,7 +1162,15 @@ export async function previewAdjustment(
 }
 
 function wireApproval(approval: Approval): WireApproval {
-  return approval.by === "bill_limit" ? { ...approval, limit: money(approval.limit) } : approval;
+  return approval.by === "limit"
+    ? {
+        ...approval,
+        limit: {
+          ...approval.limit,
+          amount: approval.limit.amount === null ? null : money(approval.limit.amount),
+        },
+      }
+    : approval;
 }
 
 /** The approver, verified by PIN, when the plan needs one (plan D6). */
@@ -1172,7 +1187,7 @@ async function approvedBy(
   const { role } = await (attempts === undefined
     ? verifyPersonCredential(tx, personId, pin, checked)
     : verifyThrottledCredential(tx, personId, pin, attempts, checked));
-  if (!approves(approval, role)) throw refused();
+  if (!approves(approval, new Set(permissionsForRole(role)))) throw refused();
   return approver.personId;
 }
 
@@ -1372,7 +1387,7 @@ export async function applyAdjustment(
         reason: {
           id: plan.reason.id,
           name: plan.reasonName,
-          policy: policySnapshotOf(plan.reason),
+          policy: policySnapshotOf(plan.reason, { maxBillComp: plan.maxBillComp }),
         },
         action: args.action,
         percentBp: args.action === "discount_percent" ? args.percentBp! : null,

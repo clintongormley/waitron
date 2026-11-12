@@ -48,8 +48,6 @@ class FinishLeaveApp extends LitElement {
       maxPercentBp: null,
       maxAmount: null,
       kind: "void",
-      applyRoles: [],
-      approverRoles: [],
     },
   ];
   override render() {

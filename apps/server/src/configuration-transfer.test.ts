@@ -392,7 +392,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 20,
+  version: 21,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1917,8 +1917,7 @@ it("transfers the adjustment reasons with their limits and order", async () => {
       actions: ["comp", "discount_percent"] as ("comp" | "discount_percent")[],
       maxPercentBp: null,
       maxAmount: decimal("30.00"),
-      applyRoles: ["supervisor" as const, "manager" as const, "admin" as const],
-      approverRoles: ["manager" as const, "admin" as const],
+
       noteRequired: true,
     };
     await createAdjustmentReason(tx, { ...policy, name: "Guest complaint" });
@@ -2256,7 +2255,6 @@ it("transfers the venue's limit on a bill's comps and who approves past it", asy
   });
   const settings = {
     maxBillComp: decimal("40.00"),
-    billApproverRoles: ["supervisor" as const, "manager" as const, "admin" as const],
   };
   await withTransaction(suite.db, async (tx) =>
     saveAdjustmentSettings(tx, settings, {
@@ -5500,7 +5498,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(20);
+  expect(exported.version).toBe(21);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

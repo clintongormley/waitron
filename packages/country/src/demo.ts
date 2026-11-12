@@ -189,8 +189,6 @@ export interface CountryDemoReason<L extends string = string> {
   readonly actions: readonly string[];
   readonly maxPercentBp: number | null;
   readonly maxAmount: string | null;
-  readonly applyRoles: readonly string[];
-  readonly approverRoles: readonly string[];
   readonly noteRequired: boolean;
 }
 export interface CountryDemoDeveloperPreset {

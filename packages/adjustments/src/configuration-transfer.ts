@@ -6,8 +6,6 @@ import "./errors.js";
 
 const REASON_COLUMNS: Record<ReasonShapeField, string> = {
   actions: "actions",
-  applyRoles: "apply_roles",
-  approverRoles: "approver_roles",
   maxPercentBp: "max_percent",
   maxAmount: "max_amount",
 };
@@ -58,8 +56,6 @@ function validateAdjustmentsConfiguration(
     const fault = reasonShapeFault({
       kind: row.kind as ReasonKind,
       actions: textList(row.actions, "adjustment_reasons.actions"),
-      applyRoles: textList(row.apply_roles, "adjustment_reasons.apply_roles"),
-      approverRoles: textList(row.approver_roles, "adjustment_reasons.approver_roles"),
       maxPercentBp: (row.max_percent ?? null) as number | null,
       maxAmount: row.max_amount ?? null,
     });

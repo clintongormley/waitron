@@ -3,16 +3,12 @@ import {
   starterName,
   starterNames,
 } from "@waitron/country-packs";
+import { decimal } from "@waitron/shared";
 import { readTenant, readVenue } from "@waitron/db";
-import type { PersonRoleValue } from "@waitron/identity";
 import type { ModuleProvisioning } from "@waitron/module";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
 import type { AdjustmentReasonInput } from "./operations.js";
 import { STARTER_REASON_NAMES } from "./starter-content.js";
-
-const EVERY: PersonRoleValue[] = ["staff", "supervisor", "manager", "admin"];
-const SUPERVISOR_UP: PersonRoleValue[] = ["supervisor", "manager", "admin"];
-const MANAGER_UP: PersonRoleValue[] = ["manager", "admin"];
 
 type Starter = Omit<AdjustmentReasonInput, "name" | "names"> & {
   english: string;
@@ -25,19 +21,16 @@ function voidReason(en: string, noteRequired = false): Starter {
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
     noteRequired,
   };
 }
 
 function compReason(
   en: string,
-  applyRoles: PersonRoleValue[],
-  approverRoles: PersonRoleValue[],
-  { actions, maxPercentBp }: Pick<Starter, "actions" | "maxPercentBp"> = {
+  { actions, maxPercentBp, maxAmount }: Pick<Starter, "actions" | "maxPercentBp" | "maxAmount"> = {
     actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: null,
+    maxAmount: decimal("0.00"),
   },
 ): Starter {
   return {
@@ -45,9 +38,7 @@ function compReason(
     kind: "comp",
     actions,
     maxPercentBp,
-    maxAmount: null,
-    applyRoles: [...applyRoles],
-    approverRoles: [...approverRoles],
+    maxAmount,
     noteRequired: false,
   };
 }
@@ -63,13 +54,14 @@ const STARTERS: readonly Starter[] = [
   voidReason("Customer changed mind"),
   voidReason(NOT_SERVED_REASON),
   voidReason("Other", true),
-  compReason("Complaint", SUPERVISOR_UP, SUPERVISOR_UP),
-  compReason("On the house", MANAGER_UP, MANAGER_UP),
-  compReason("Staff meal", EVERY, MANAGER_UP, {
+  compReason("Complaint"),
+  compReason("On the house"),
+  compReason("Staff meal", {
     actions: ["discount_percent", "discount_amount"],
     maxPercentBp: 5000,
+    maxAmount: null,
   }),
-  compReason("Discount", MANAGER_UP, MANAGER_UP),
+  compReason("Discount"),
 ];
 
 export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {

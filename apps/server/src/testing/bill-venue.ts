@@ -1,3 +1,5 @@
+import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
+import { registerModulePermissions } from "@waitron/identity";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
@@ -128,6 +130,7 @@ export async function provisionBillVenue(
   // real selection later hands the first setup it means to run.
   options: { apply?: typeof applyVenue; identity?: SoftwareIdentity } = {},
 ): Promise<BillVenue> {
+  registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
   const clock = systemClock();
   const backend = new VerifactuBackend({
     identity: options.identity,

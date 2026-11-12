@@ -19,8 +19,6 @@ const cancelReason = {
   maxPercentBp: null,
   maxAmount: null,
   kind: "void" as const,
-  applyRoles: [],
-  approverRoles: [],
 };
 function consent(): CancellationRead {
   return {

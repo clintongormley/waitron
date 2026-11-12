@@ -1,5 +1,4 @@
 import type { Decimal } from "./money.js";
-import type { PersonRoleValue } from "./person-role.js";
 
 export const REASON_KINDS = ["void", "comp"] as const;
 export type ReasonKind = (typeof REASON_KINDS)[number];
@@ -20,7 +19,6 @@ export interface AdjustmentPolicySnapshot {
   actions: AdjustmentAction[];
   maxPercentBp: number | null;
   maxAmount: Decimal | null;
-  applyRoles: PersonRoleValue[];
-  approverRoles: PersonRoleValue[];
+  maxBillComp: Decimal | null;
   noteRequired: boolean;
 }

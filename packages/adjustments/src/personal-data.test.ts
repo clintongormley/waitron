@@ -99,8 +99,8 @@ async function insertRow(db: Database, row: Row): Promise<void> {
       actions: [row.action],
       maxPercentBp: null,
       maxAmount: null,
-      applyRoles: [],
-      approverRoles: [],
+      maxBillComp: null,
+
       noteRequired: false,
     },
     action: row.action,

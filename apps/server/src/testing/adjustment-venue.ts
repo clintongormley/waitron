@@ -15,7 +15,11 @@ import {
   setProductVariants,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { createAdjustmentReason, type AdjustmentReasonInput } from "@waitron/adjustments";
+import {
+  ADJUSTMENTS_PERMISSIONS,
+  createAdjustmentReason,
+  type AdjustmentReasonInput,
+} from "@waitron/adjustments";
 import {
   kitchenStations,
   orderPortionEvents,
@@ -30,7 +34,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { loginWithPin } from "@waitron/identity";
+import { loginWithPin, registerModulePermissions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
 import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -210,8 +214,6 @@ const MENU: {
 
 /** The reasons every suite shares; a case that edits a reason makes its own. */
 export const REASONS = {
-  /** Free and every discount; €30.00 a bill; supervisors and above apply, managers and admins
-   * approve. */
   complaint: {
     name: "Guest complaint",
     names: { en: "Guest complaint", es: "Queja" },
@@ -219,11 +221,9 @@ export const REASONS = {
     actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: null,
     maxAmount: decimal("30.00"),
-    applyRoles: ["supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: false,
   },
-  /** A percentage or an amount, 50% an item; anyone applies, managers and admins approve. */
   staffMeal: {
     name: "Crew meal",
     names: { en: "Crew meal", es: "Comida de personal" },
@@ -231,8 +231,7 @@ export const REASONS = {
     actions: ["discount_percent", "discount_amount"],
     maxPercentBp: 5000,
     maxAmount: null,
-    applyRoles: ["staff", "supervisor", "manager", "admin"],
-    approverRoles: ["manager", "admin"],
+
     noteRequired: false,
   },
   /** Free and every discount, no limits, anyone. */
@@ -243,8 +242,7 @@ export const REASONS = {
     actions: ["comp", "discount_percent", "discount_amount"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: ["staff", "supervisor", "manager", "admin"],
-    approverRoles: ["staff", "supervisor", "manager", "admin"],
+
     noteRequired: false,
   },
   /** A cancel, with no note. */
@@ -255,8 +253,7 @@ export const REASONS = {
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: false,
   },
   /** A cancel, with a note. */
@@ -267,8 +264,7 @@ export const REASONS = {
     actions: ["cancel"],
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     noteRequired: true,
   },
 } satisfies Record<string, AdjustmentReasonInput>;
@@ -311,6 +307,7 @@ export async function provisionAdjustmentVenue(
   db: Database,
   options: { clock?: TrustedClock } = {},
 ): Promise<AdjustmentVenue> {
+  registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
   const clock = options.clock ?? systemClock();
   const backend = new VerifactuBackend({
     clock,

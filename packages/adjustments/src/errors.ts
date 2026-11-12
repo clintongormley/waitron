@@ -14,7 +14,6 @@ declare module "@waitron/shared" {
     "adjustment.action_not_allowed": Record<string, never>;
     "adjustment.note_required": Record<string, never>;
     /** Past the bill's comp limit, no role on its approver list may also approve the reason. */
-    "adjustment.no_common_approver": Record<string, never>;
     /** A percentage or an amount that leaves its subject at €0.00, under a reason not offering Free. */
     "adjustment.free_not_allowed": Record<string, never>;
     /** A discount larger than the line or bill it is taken off; amounts are decimal strings. */

@@ -1,6 +1,5 @@
 import { and, asc, eq, max, ne } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { PersonRoleValue } from "@waitron/identity";
 import {
   AppError,
   centsToDecimal,
@@ -24,8 +23,6 @@ export interface AdjustmentReasonInput {
   actions: AdjustmentAction[];
   maxPercentBp: number | null;
   maxAmount: Decimal | null;
-  applyRoles: PersonRoleValue[];
-  approverRoles: PersonRoleValue[];
   noteRequired: boolean;
 }
 
@@ -47,8 +44,6 @@ function toReason(row: ReasonRow): AdjustmentReason {
     actions: row.actions,
     maxPercentBp: row.maxPercent,
     maxAmount: row.maxAmount === null ? null : centsToDecimal(row.maxAmount),
-    applyRoles: row.applyRoles,
-    approverRoles: row.approverRoles,
     noteRequired: row.noteRequired,
     position: row.position,
   };
@@ -84,7 +79,7 @@ function reasonValues(input: AdjustmentReasonInput) {
   const amount = input.maxAmount;
   if (
     amount !== null &&
-    (compareDecimal(amount, decimal("0")) <= 0 ||
+    (compareDecimal(amount, decimal("0")) < 0 ||
       compareDecimal(centsToDecimal(decimalToCents(amount)), amount) !== 0)
   ) {
     throw invalid("maxAmount");
@@ -96,8 +91,6 @@ function reasonValues(input: AdjustmentReasonInput) {
     actions: input.actions,
     maxPercent: input.maxPercentBp,
     maxAmount: amount === null ? null : decimalToCents(amount),
-    applyRoles: input.applyRoles,
-    approverRoles: input.approverRoles,
     noteRequired: input.noteRequired,
   };
 }

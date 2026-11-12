@@ -19,8 +19,6 @@ const cancelReason = {
   maxPercentBp: null,
   maxAmount: null,
   kind: "void" as const,
-  applyRoles: [],
-  approverRoles: [],
 };
 const consent = (
   status: "open" | "settled",

@@ -23,7 +23,7 @@ function api(
         ...(keepOffered ? { keepOffered: true as const } : {}),
       }),
     boxClockConfirm: confirm,
-    listAdjustmentApprovers: () => Promise.resolve([{ personId: "p1", displayName: "Alex Admin" }]),
+    listApprovers: () => Promise.resolve([{ personId: "p1", displayName: "Alex Admin" }]),
   };
 }
 

@@ -181,8 +181,6 @@ const complaint: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: ["supervisor", "manager", "admin"],
-  approverRoles: ["manager", "admin"],
 };
 const mistake: AdjustmentReason = {
   id: "r-mistake",
@@ -192,8 +190,6 @@ const mistake: AdjustmentReason = {
   noteRequired: false,
   maxPercentBp: null,
   maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
 };
 
 const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
@@ -245,7 +241,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .mockResolvedValue(heldOrder(5, "0.00")),
     getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(listing(5, "0.00")),
     listAdjustmentReasons: vi.fn().mockResolvedValue([complaint, mistake]),
-    listAdjustmentApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+    listApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
     previewAdjustment: vi.fn().mockResolvedValue(preview()),
     applyAdjustment: vi
       .fn()
@@ -2248,16 +2244,20 @@ describe("till-app: comping a stored counter order", () => {
 
   it("asks an approver for their PIN when the reason needs one", async () => {
     const el = await retrieved({
-      previewAdjustment: vi
-        .fn()
-        .mockResolvedValue(
-          preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }),
-        ),
+      previewAdjustment: vi.fn().mockResolvedValue(
+        preview({
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
+        }),
+      ),
     });
 
     await previewComp(el);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith(["manager", "admin"]);
+    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve");
     await pinPad(el, "7777");
 
     expect(applied()).toEqual([
@@ -3230,11 +3230,15 @@ describe("till-app: unsaved adjustment inputs", () => {
   });
   it("discarding nested approval leaves the adjustment reason intact and applies nothing", async () => {
     const el = await retrieved({
-      previewAdjustment: vi
-        .fn()
-        .mockResolvedValue(
-          preview({ needsApproval: { by: "reason", roles: ["manager", "admin"] } }),
-        ),
+      previewAdjustment: vi.fn().mockResolvedValue(
+        preview({
+          needsApproval: {
+            by: "limit",
+            permission: "adjustment.approve",
+            limit: { kind: "reason", amount: "30.00", percentBp: null },
+          },
+        }),
+      ),
     });
     await previewComp(el);
     await press(el, inDialog(el, "[data-adjust-confirm]"));

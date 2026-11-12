@@ -146,8 +146,7 @@ useVenueDb({
           actions: ["cancel"],
           maxPercentBp: null,
           maxAmount: null,
-          applyRoles: [],
-          approverRoles: [],
+
           noteRequired: false,
         })
       ).id;
@@ -1721,8 +1720,7 @@ describe("made-here route wiring", () => {
             actions: ["discount_amount"],
             maxPercentBp: null,
             maxAmount: decimal("3.00"),
-            applyRoles: ["staff", "supervisor", "manager", "admin"],
-            approverRoles: ["staff", "supervisor", "manager", "admin"],
+
             noteRequired: false,
           })
         ).id,

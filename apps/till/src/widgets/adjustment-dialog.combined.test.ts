@@ -24,11 +24,9 @@ const reason = (
   maxPercentBp: null,
   maxAmount: null,
   ...(actions.includes("cancel")
-    ? { kind: "void" as const, applyRoles: [], approverRoles: [] }
+    ? { kind: "void" as const }
     : {
         kind: "comp" as const,
-        applyRoles: ["staff", "supervisor", "manager", "admin"],
-        approverRoles: ["manager", "admin"],
       }),
   ...over,
 });
@@ -124,27 +122,13 @@ it.each([
     },
   ]);
 });
-it.each([
-  ["en", "Can apply: Everyone · If approval is needed: manager, administrator"],
-  ["es", "Puede aplicar: Todos · Si hace falta autorización: encargado, administrador"],
-] as const)("names each of a reason's role lists in %s", async (locale, policy) => {
+it.each(["en", "es"])("offers reasons without role lists in %s", async (locale) => {
   setLocale(locale);
-  const el = await mount({
-    reasons: [
-      reason("Free", ["comp"]),
-      reason("Staff meal", ["comp"], {
-        applyRoles: ["admin", "supervisor"],
-        approverRoles: ["staff", "supervisor", "manager", "admin"],
-      }),
-    ],
-  });
-  const text = q(el, "[data-reasons]").textContent!.replace(/\s+/g, " ");
-  expect(text).toContain(policy);
-  expect(text).toContain(
-    locale === "en"
-      ? "Can apply: supervisor, administrator · If approval is needed: Everyone"
-      : "Puede aplicar: supervisor, administrador · Si hace falta autorización: Todos",
-  );
+  const el = await mount({ reasons: [reason("Free", ["comp"]), reason("Staff meal", ["comp"])] });
+  const text = q(el, "[data-reasons]").textContent!;
+  expect(text).toContain("Free");
+  expect(text).toContain("Staff meal");
+  expect(q(el, "[data-reasons]").querySelector(".reason-policy")).toBeNull();
 });
 
 it("reason changes clear an invalid kind and its amount without losing the reason", async () => {
@@ -303,7 +287,11 @@ it("asks for approval when the server needs a PIN", async () => {
   el.preview = {
     reduction: "36.00",
     nominalValue: "36.00",
-    needsApproval: { by: "reason", roles: ["manager", "admin"] },
+    needsApproval: {
+      by: "limit",
+      permission: "adjustment.approve",
+      limit: { kind: "reason", amount: "30.00", percentBp: null },
+    },
     lines: [],
   };
   await el.updateComplete;

@@ -52,8 +52,7 @@ export async function seedAdjustmentReasons(
       actions: present.actions,
       maxPercentBp: present.maxPercentBp,
       maxAmount: present.maxAmount,
-      applyRoles: present.applyRoles,
-      approverRoles: present.approverRoles,
+
       noteRequired: present.noteRequired,
     });
   }

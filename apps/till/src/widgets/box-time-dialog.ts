@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { BoxClockConfirmed, PersonRole, StaffMember } from "../api/client.js";
+import type { BoxClockConfirmed, StaffMember } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { clockDateTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -24,7 +24,9 @@ export interface BoxTimeApi {
     keep?: true;
     override?: Override;
   }): Promise<BoxClockConfirmed>;
-  listAdjustmentApprovers(roles: PersonRole[]): Promise<StaffMember[]>;
+  listApprovers(
+    permission: "adjustment.approve" | "sale.refund" | "system.box_admin",
+  ): Promise<StaffMember[]>;
 }
 
 /** How far this till's clock may be from the box's and still agree with it. */
@@ -218,7 +220,7 @@ export class TillBoxTimeDialog extends LitElement {
 
   async #askAdmin(): Promise<void> {
     try {
-      this.admins = await this.api.listAdjustmentApprovers(["admin"]);
+      this.admins = await this.api.listApprovers("system.box_admin");
     } catch (error) {
       this.#refused(error);
     }
@@ -365,7 +367,6 @@ export class TillBoxTimeDialog extends LitElement {
           ? nothing
           : html`<till-supervisor-override-dialog
               .authorizers=${this.admins}
-              .approverRole=${"admin"}
               @override-cancel=${(event: Event) => {
                 event.stopPropagation();
                 this.admins = null;

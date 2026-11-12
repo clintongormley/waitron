@@ -65,7 +65,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
         text: async () =>
           JSON.stringify(
             url.endsWith("/settings")
-              ? { maxBillComp: null, billApproverRoles: ["manager", "admin"] }
+              ? { maxBillComp: null }
               : {
                   reasons: [
                     {
@@ -76,8 +76,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
                       actions: ["cancel"],
                       maxPercentBp: null,
                       maxAmount: null,
-                      applyRoles: [],
-                      approverRoles: [],
+
                       noteRequired: false,
                       position: 0,
                     },

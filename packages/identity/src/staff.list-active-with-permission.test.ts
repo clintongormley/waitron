@@ -19,7 +19,7 @@ async function seedPerson(
   db: Database,
   name: string,
   role: PersonRoleValue,
-  status: "active" | "suspended" = "active",
+  status: "active" | "suspended" | "pending" = "active",
 ): Promise<string> {
   const [row] = await seedPersons(db, { displayName: name, pinHash: PIN, role, status });
   return row!.id;
@@ -34,6 +34,7 @@ describe("listActivePersonsWithPermission", () => {
     const adm = await seedPerson(suite.db, "Ada", "admin");
     const staff = await seedPerson(suite.db, "Dora", "staff");
     const goneSup = await seedPerson(suite.db, "Eva", "supervisor", "suspended");
+    await seedPerson(suite.db, "Fina", "supervisor", "pending");
 
     const rows = await withTransaction(suite.db, (tx) =>
       listActivePersonsWithPermission(tx, "cash.drawer"),

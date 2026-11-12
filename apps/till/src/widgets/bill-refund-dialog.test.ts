@@ -51,8 +51,7 @@ const voidReason = (id: string, name: string, over: Partial<AdjustmentReason> = 
     noteRequired: false,
     maxPercentBp: null,
     maxAmount: null,
-    applyRoles: [],
-    approverRoles: [],
+
     ...over,
   }) as AdjustmentReason;
 const reasons = [
