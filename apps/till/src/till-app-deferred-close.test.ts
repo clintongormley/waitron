@@ -16,6 +16,7 @@ import {
   money,
   openDialog,
   openTable,
+  paymentOf,
   press,
   resetBillPayDrafts,
   stubApi,
@@ -728,6 +729,23 @@ it("closes a Counter bill as a deferred payment, sending a simplified invoice wi
   expect(closing(el)).toBeNull();
   expect(documents(el)).not.toBeNull();
 });
+
+it.each(["declined", "failed"] as const)(
+  "offers the Counter close on a bill whose only card payment %s",
+  async (state) => {
+    const { el } = await counterPay({
+      getBillBalance: vi.fn(async (billId: string) =>
+        balanceOf({
+          workingOrderId: billId,
+          total: "30.00",
+          outstanding: "30.00",
+          payments: [paymentOf({ method: "card", entry: "reader", applied: "30.00", state })],
+        }),
+      ),
+    });
+    expect(deferredButton(el)!.disabled).toBe(false);
+  },
+);
 
 /** The Counter Pay window on held order `wo-9`, retrieved from the held list with the invoice type
  * the server stored on it, which this till never chose. */

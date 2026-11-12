@@ -11229,7 +11229,10 @@ export class TillApp extends LitElement {
         workingOrderId: billId,
         status: balance.status,
         outstanding: balance.outstanding,
-        hasPayments: balance.payments.length > 0,
+        // As a table bill's `hasPayments`: a declined or failed card holds nothing.
+        hasPayments: balance.payments.some(
+          (payment) => payment.state === "pending" || payment.state === "received",
+        ),
       },
       paymentUnconfirmed:
         this.#billPaymentHeld(billId) ||
