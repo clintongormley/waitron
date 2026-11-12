@@ -40,6 +40,14 @@ const BREAKDOWN_AMOUNTS = [
   "CuotaRecargoEquivalencia",
 ] as const;
 
+// An absent `Impuesto` is IVA ("01"), as `@waitron/verifactu`'s validate reads it.
+const BREAKDOWN_CLASS = [
+  ["Impuesto", "taxType", "01"],
+  ["ClaveRegimen", "regime", undefined],
+  ["CalificacionOperacion", "operationClass", undefined],
+  ["OperacionExenta", "exemption", undefined],
+] as const;
+
 const CORRECTION_AMOUNTS = [
   "BaseRectificada",
   "CuotaRectificada",
@@ -50,7 +58,7 @@ function sameAmount(left: string | undefined, right: string | undefined) {
   return compareDecimal(decimal(left ?? "0"), decimal(right ?? "0")) === 0;
 }
 
-function refuseChangedAmounts(
+function refuseChangedAmountsOrClass(
   registroId: string,
   facts: CorrectedRecordFacts,
   original: Pick<AltaInput, "Desglose" | "CuotaTotal" | "ImporteTotal" | "ImporteRectificacion">,
@@ -78,6 +86,13 @@ function refuseChangedAmounts(
     })
   )
     refuse("breakdown");
+  lines.forEach((line, index) => {
+    const filed = original.Desglose[index]!;
+    for (const [key, field, absent] of BREAKDOWN_CLASS) {
+      if ((line[key] ?? absent) !== (filed[key] ?? absent))
+        throw new AppError("fiscal.remedy_class_changed", { registroId, field, line: index });
+    }
+  });
 }
 
 export async function applyCorrectedRecordFacts(
@@ -114,7 +129,7 @@ export async function applyCorrectedRecordFacts(
     throw new AppError("fiscal.remedy_invalid", { registroId });
   const original = fromRegistroRow(target);
   if (!("TipoFactura" in original)) throw new AppError("fiscal.remedy_invalid", { registroId });
-  refuseChangedAmounts(registroId, facts, original);
+  refuseChangedAmountsOrClass(registroId, facts, original);
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const reading = clock.now();
   const sif = await currentSif(tx, generation.nodeId);

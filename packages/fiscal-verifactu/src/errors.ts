@@ -116,6 +116,13 @@ declare module "@waitron/shared" {
       registroId: string;
       field: "breakdown" | "taxTotal" | "total" | "correctionAmounts";
     };
+    /** A fix re-files the same invoice, so each breakdown line keeps its filed tax, regime and
+     * taxed, not-subject or exempt class; changing what a line is takes a corrective invoice. */
+    "fiscal.remedy_class_changed": {
+      registroId: string;
+      field: "taxType" | "regime" | "operationClass" | "exemption";
+      line: number;
+    };
     "fiscal.fingerprint_mismatch": Record<string, never>;
 
     /**
