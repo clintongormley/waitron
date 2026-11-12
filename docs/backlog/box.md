@@ -1017,8 +1017,8 @@ client. No screen calls them yet.
 
 **For later slices, from PR 3's [re-map against main](../superpowers/plans/2026-11-03-b3-3-installer-policy.md#re-map-against-main-on-2026-11-03):**
 
-- The signed release list waits for two things not on main: A940's release version (its slices 2
-  and 4) and a chosen signature format (algorithm, key encoding, signed byte layout). It is shared
+- The signed release list waits for one thing not on main: a chosen signature format (algorithm,
+  key encoding, signed byte layout). It is shared
   with slice 5 and with A950's `verifyManifest`, carries the fields A950's `parseVerifiedRelease`
   reads, and must name the oldest installer a release accepts, which needs an installer version
   scheme nobody has defined yet. Who holds the signing keys gates publication (parent Task 5.1),
