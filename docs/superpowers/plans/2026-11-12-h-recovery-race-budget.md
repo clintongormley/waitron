@@ -8,8 +8,9 @@ cleared building once the trigger, history and Linux measurement below were adde
 no new plan read was required. No owner approval of this design is claimed.
 
 **Cause and finish line.** #2777 (`b1a93be193`, merged 10 November 23:26:08 UTC)
-changed `writeRecoveryState` to flush both file and folder; its diff confirms this
-trigger. A child can immediately retake the polling lock for 25 updates while a
+changed `writeRecoveryState` to flush both file and folder; the watcher named it
+as the trigger. The diff proves the writer change; its latency on the failed
+runner was not measured. A child can immediately retake the polling lock for 25 updates while a
 waiter sits behind the other children's 75 updates. At 175 ms each that exceeds
 the production 10-second wait. The same hundred-update assertions must pass with
 that controlled delay; the unlocked control must still demonstrate lost updates.

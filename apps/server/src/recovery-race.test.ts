@@ -256,6 +256,9 @@ describe("two starts racing on recovery.json", () => {
     async () => {
       const four = ["many", "many", "many", "many"];
       const locked = await race(FRESH, four, false);
+      expect(finishedCleanly(locked.outcomes)).toEqual(
+        four.map(() => ({ code: 0, stdout: "done" })),
+      );
       expect(locked.outcomes.map((outcome) => outcome.stderr)).toEqual(["", "", "", ""]);
       expect(locked.final.failures).toBe(100);
 
