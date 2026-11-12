@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 // A spare whose venue.db is a real placed copy of the old box's database. Stand-ins: M1's stepdown
 // and the transfer of the copy (both real elsewhere); the copy, its signed indicator, its
@@ -172,7 +173,7 @@ export function placedSpareFixture(boxes: {
       taxModule: "vat",
     });
     await stampDeployment(mainBox.db, "preproduction");
-    await mainBox.db.insert(persons).values({
+    await seedPersons(mainBox.db, {
       id: ADMIN,
       displayName: "Administrator",
       role: "admin",

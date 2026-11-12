@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { Hono } from "hono";
@@ -79,7 +80,7 @@ async function provisionTenant(): Promise<Record<string, never>> {
   // Through the table definitions: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(persons).values([
+    await seedPersons(tx, [
       {
         displayName: "The Manager",
         email: MANAGER_EMAIL,

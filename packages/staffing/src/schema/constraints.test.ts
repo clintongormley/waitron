@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
@@ -190,10 +191,7 @@ it("deleting a special day's date deletes its staffing days and their blocks", a
 
 async function assignedShift(v: Awaited<ReturnType<typeof venue>>) {
   return withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ada", role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, { displayName: "Ada", role: "staff" });
     const [shift] = await tx
       .insert(shifts)
       .values({

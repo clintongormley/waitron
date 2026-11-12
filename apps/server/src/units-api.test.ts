@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -30,10 +31,11 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     // Every fixture insert goes through the table definition so each column's `$defaultFn` runs.
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
     const session = await startManagementSession(tx, { personId: person!.id });
     cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
   });

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -21,7 +22,12 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedDeviceProfiles,
+  seedKitchenStation,
+  seedNode,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -81,10 +87,11 @@ const suite = useVenueDb({
     });
     // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
     const nodeId = await seedNode(db);
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(db, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     staffMember = { id: person!.id };
     cfg = makeCfg(nodeId);
     const product = await withTransaction(db, async (tx) => {
@@ -493,18 +500,16 @@ describe("a split-off check after the till that made it has forgotten it", () =>
         tableId: table.id,
         lines: offers.toOfferLines([{ productId: provisionedCoffeeId, quantity: "2" }]),
       });
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-        .returning({ id: persons.id });
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({
-          name: "Counter till",
-          formFactor: "till",
-          capabilities: [...BASIC_ACTIONS, "take-cash"],
-        })
-        .returning({ id: deviceProfiles.id });
+      const [person] = await seedPersons(tx, {
+        displayName: "Anna",
+        pinHash: hashPin("5555"),
+        role: "staff",
+      });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Counter till",
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "take-cash"],
+      });
       return { tabId: tab.tabId, personId: person!.id, profileId: profile!.id };
     });
     // The sale route takes its till from the device that sends it.

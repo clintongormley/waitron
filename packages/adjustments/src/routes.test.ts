@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -73,10 +74,11 @@ async function fixture(): Promise<Fixture> {
   const personIds = {} as Record<PersonRoleValue, string>;
   await db.transaction(async (tx) => {
     for (const role of ["staff", "supervisor", "manager", "admin"] as const) {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: `A ${role}`, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: `A ${role}`,
+        pinHash: hashPin("1234"),
+        role,
+      });
       personIds[role] = person!.id;
       const session = await startManagementSession(tx, { personId: person!.id });
       cookie[role] = `${MANAGEMENT_COOKIE}=${session.token}`;

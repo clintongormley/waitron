@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,13 +97,10 @@ beforeEach(async () => {
     tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
-  const people = await db
-    .insert(persons)
-    .values([
-      { displayName: "Requester", role: "supervisor", pinHash: HASH },
-      { displayName: "Approver", role: "manager", pinHash: HASH },
-    ])
-    .returning();
+  const people = await seedPersons(db, [
+    { displayName: "Requester", role: "supervisor", pinHash: HASH },
+    { displayName: "Approver", role: "manager", pinHash: HASH },
+  ]);
   personId = people[0]!.id;
   managerId = people[1]!.id;
   const [session] = await db
@@ -360,7 +358,7 @@ describe("settled-tender refund command local transaction", () => {
   });
   it("records the actual approving manager in the cash audit", async () => {
     const t = await target();
-    await store.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(store.db, personId, "staff");
     const result = await run(t, request(t, { override: override() }));
     expect(await store.db.select().from(drawerOpens)).toMatchObject([
       { tenderRefundId: result.id, personId, authorizedBy: managerId, viaOverride: true },
@@ -384,8 +382,7 @@ describe("settled-tender refund command local transaction", () => {
     "does not complete cash after %s is revoked",
     async (part) => {
       const t = await target();
-      if (part === "permission")
-        await store.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+      if (part === "permission") await setBuiltInRoleForTest(store.db, personId, "staff");
       if (part === "session")
         await store.db.update(sessions).set({ endedAt: AT }).where(eq(sessions.id, sessionId));
       if (part === "device")

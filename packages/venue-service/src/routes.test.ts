@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -90,30 +91,21 @@ async function fixture(
     await db.transaction(async (tx) => {
       const menu = await createCatalogue(tx, { name: `Drinks ${scopedLocationId}` });
       const category = await createCategory(tx, { name: `Cocktails ${scopedLocationId}` });
-      const [manager] = await tx
-        .insert(persons)
-        .values({
-          displayName: `Manager ${scopedLocationId}`,
-          pinHash: hashPin("1234"),
-          role: "manager",
-        })
-        .returning({ id: persons.id });
-      const [staff] = await tx
-        .insert(persons)
-        .values({
-          displayName: `Staff ${scopedLocationId}`,
-          pinHash: hashPin("1234"),
-          role: "staff",
-        })
-        .returning({ id: persons.id });
-      const [supervisor] = await tx
-        .insert(persons)
-        .values({
-          displayName: `Supervisor ${scopedLocationId}`,
-          pinHash: hashPin("1234"),
-          role: "supervisor",
-        })
-        .returning({ id: persons.id });
+      const [manager] = await seedPersons(tx, {
+        displayName: `Manager ${scopedLocationId}`,
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
+      const [staff] = await seedPersons(tx, {
+        displayName: `Staff ${scopedLocationId}`,
+        pinHash: hashPin("1234"),
+        role: "staff",
+      });
+      const [supervisor] = await seedPersons(tx, {
+        displayName: `Supervisor ${scopedLocationId}`,
+        pinHash: hashPin("1234"),
+        role: "supervisor",
+      });
       const managerSession = await startManagementSession(tx, {
         personId: manager!.id,
       });

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -119,7 +120,7 @@ async function setupTenant(): Promise<void> {
       ["The Manager", MANAGER_EMAIL, "manager"],
       ["The Clerk", STAFF_EMAIL, "staff"],
     ] as const) {
-      await tx.insert(persons).values({
+      await seedPersons(tx, {
         displayName,
         email,
         pinHash: hashPin("1234"),

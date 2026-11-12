@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { incidents, withTransaction } from "@waitron/db";
@@ -31,10 +32,11 @@ beforeEach(async () => {
   node = await seedNode(suite.db);
   const saleId = await seedSale(suite.db, node, 1);
   await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
     const original = await appendToChain(
@@ -151,7 +153,7 @@ it("refuses changed content under a committed action key without appending anoth
 it.each(["staff", "supervisor", "manager"] as const)(
   "refuses a %s even when the remedy is enabled",
   async (role) => {
-    await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, role);
     const before = await snapshot();
     await expect(apply()).rejects.toMatchObject({ code: "authorization.not_permitted" });
     expect(await snapshot()).toEqual(before);
@@ -343,7 +345,7 @@ it("requires live administrator authority and enabled policy even when replaying
   await apply();
   const before = await snapshot();
   await expect(apply(false)).rejects.toMatchObject({ code: "fiscal.remedy_disabled" });
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
   await expect(apply()).rejects.toMatchObject({ code: "authorization.not_permitted" });
   expect(await snapshot()).toEqual(before);
 });

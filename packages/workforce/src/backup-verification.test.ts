@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -39,7 +40,7 @@ let requestId: string;
 beforeEach(async () => {
   for (const suite of [original, restored]) {
     await seedTenant(suite.db);
-    await suite.db.insert(persons).values({ id: person, displayName: "Worker" });
+    await seedPersons(suite.db, { id: person, displayName: "Worker" });
     await suite.db.insert(locations).values([{ id: place }]);
     await seedVenueSettings(suite.db, {
       name: "Main",

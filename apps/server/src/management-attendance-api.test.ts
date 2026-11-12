@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { convenioConfig, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -128,7 +129,7 @@ it("provides minimal lookups, own viewer eligibility, an empty queue and a day f
       { personId: venue.personId, displayName: "Ana" },
     ]),
   });
-  await suite.db.update(persons).set({ role: "supervisor" }).where(eq(persons.id, managerId));
+  await setBuiltInRoleForTest(suite.db, managerId, "supervisor");
   expect(await (await request("lookups")).json()).toMatchObject({
     viewer: { personId: managerId, canSelfApprove: false },
   });
@@ -305,7 +306,7 @@ it("refuses a manager demoted after authentication but before the command write"
   const asked = app.request(raw);
   await read;
   try {
-    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, managerId));
+    await setBuiltInRoleForTest(suite.db, managerId, "staff");
   } finally {
     release();
   }
@@ -318,7 +319,7 @@ it("refuses a manager demoted after authentication but before the command write"
 it("a different permitted manager cannot recover another requester's command receipt", async () => {
   const body = await proposal();
   expect((await request("commands", body)).status).toBe(200);
-  await suite.db.update(persons).set({ role: "supervisor" }).where(eq(persons.id, venue.personId));
+  await setBuiltInRoleForTest(suite.db, venue.personId, "supervisor");
   const response = await request(`commands/${body.commandId}`, undefined, staffCookie);
   expect(response.status).toBe(200);
   expect(await response.json()).toBeNull();

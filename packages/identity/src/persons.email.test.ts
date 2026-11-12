@@ -3,6 +3,7 @@
  * index's own name and no columns, so the case below identifies it by that name. It does NOT check
  * identity's own translators; `person-constraints.db.test.ts` does.
  */
+import { seedPersons } from "../test/person-rows.js";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -24,9 +25,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 /** Through the table definition, not raw SQL: `id` and `created_at` are `$defaultFn` generators
  * that only the insert BUILDER runs. */
 function insertPerson(db: Database, displayName: string, email: string | null): Promise<unknown> {
-  return withTransaction(db, (tx) =>
-    tx.insert(persons).values({ displayName, pinHash: PIN, email }),
-  );
+  return withTransaction(db, (tx) => seedPersons(tx, { displayName, pinHash: PIN, email }));
 }
 
 /**

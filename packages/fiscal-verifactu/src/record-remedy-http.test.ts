@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { StatementSync } from "node:sqlite";
@@ -71,10 +72,11 @@ beforeEach(async () => {
   generationNode = node.nodeId;
   const saleId = await seedSale(suite.db, node, 1);
   await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
     await setFreshManagementSignIn(tx, token);
@@ -617,7 +619,7 @@ it.each(["aceptado_con_errores", "pendiente", "enviando", "detenido", "aceptado"
 
 it("rechecks administrator authority on HTTP replay", async () => {
   expect((await send()).status).toBe(200);
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
   const before = await snapshot();
   const res = await send();
   expect(res.status).toBe(403);

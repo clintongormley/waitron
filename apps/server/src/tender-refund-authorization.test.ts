@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -14,7 +15,13 @@ import {
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedNode,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createPinThrottle,
@@ -84,13 +91,10 @@ beforeEach(async () => {
     tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
-  const people = await db
-    .insert(persons)
-    .values([
-      { displayName: "Requester", role: "supervisor", pinHash: PIN_HASH },
-      { displayName: "Approver", role: "manager", pinHash: PIN_HASH },
-    ])
-    .returning();
+  const people = await seedPersons(db, [
+    { displayName: "Requester", role: "supervisor", pinHash: PIN_HASH },
+    { displayName: "Approver", role: "manager", pinHash: PIN_HASH },
+  ]);
   personId = people[0]!.id;
   managerId = people[1]!.id;
   const [session] = await db
@@ -231,8 +235,7 @@ async function refused(
   await expect(reserve(t, req, config, op)).rejects.toMatchObject({ code });
   expect(await rows()).toEqual([]);
 }
-const role = (value: "staff" | "supervisor") =>
-  store.db.update(persons).set({ role: value }).where(eq(persons.id, personId));
+const role = (value: "staff" | "supervisor") => setBuiltInRoleForTest(store.db, personId, value);
 const capabilities = (value: string[]) =>
   store.db
     .update(deviceProfiles)
@@ -392,14 +395,11 @@ describe("settled-tender refund authorization before reservation", () => {
   );
   it("does not turn a shared kitchen display into a refund terminal", async () => {
     const t = await target();
-    const [shared] = await store.db
-      .insert(deviceProfiles)
-      .values({
-        name: "Shared display",
-        formFactor: "kds",
-        capabilities: CAPS,
-      })
-      .returning();
+    const [shared] = await seedDeviceProfiles(store.db, {
+      name: "Shared display",
+      formFactor: "kds",
+      capabilities: CAPS,
+    });
     await store.db
       .update(devices)
       .set({ deviceProfileId: shared!.id })
@@ -583,13 +583,13 @@ describe("settled-tender refund authorization before reservation", () => {
             await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId));
           if (change === "approver")
             await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, managerId));
-          if (change === "permission")
-            await tx.update(persons).set({ role: "staff" }).where(eq(persons.id, managerId));
+          if (change === "permission") await setBuiltInRoleForTest(tx, managerId, "staff");
           if (change === "profile") {
-            const [replacement] = await tx
-              .insert(deviceProfiles)
-              .values({ name: "Cash refused", formFactor: "till", capabilities: [] })
-              .returning();
+            const [replacement] = await seedDeviceProfiles(tx, {
+              name: "Cash refused",
+              formFactor: "till",
+              capabilities: [],
+            });
             await tx
               .update(devices)
               .set({ deviceProfileId: replacement!.id })

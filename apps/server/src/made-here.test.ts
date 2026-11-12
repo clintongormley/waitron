@@ -16,7 +16,7 @@ import type { Transaction } from "@waitron/db";
 import { deviceOrigin } from "@waitron/shared";
 import { createPrinter } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { createCourse, createStation } from "./kitchen.js";
@@ -75,10 +75,11 @@ async function rawLine(
 }
 
 async function deviceAt(tx: Transaction, stationId: string): Promise<string> {
-  const [profile] = await tx
-    .insert(deviceProfiles)
-    .values({ name: "Till", formFactor: "till", capabilities: [] })
-    .returning();
+  const [profile] = await seedDeviceProfiles(tx, {
+    name: "Till",
+    formFactor: "till",
+    capabilities: [],
+  });
   const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
   await tx.insert(deviceMadeHereStations).values({ deviceId, stationId });
   return deviceId;
@@ -322,10 +323,11 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const printer = await stationPrinter(tx, venue.defaultStationId);
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Other till", formFactor: "till", capabilities: [] })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Other till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Other" })).deviceId,
       };
@@ -351,10 +353,11 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const printer = await stationPrinter(tx, venue.defaultStationId);
       const barDeviceId = await deviceAt(tx, venue.defaultStationId);
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Other till", formFactor: "till", capabilities: [] })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Other till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const other = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Other" })).deviceId,
       };
@@ -468,10 +471,11 @@ describe("device made-here stations", () => {
   it("records a held dish at its final made-here station as ready without a print job", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Till", formFactor: "till", capabilities: [] })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Bar till" })).deviceId,
       };
@@ -526,10 +530,11 @@ describe("device made-here stations", () => {
   it("replaces and deduplicates a device's list, ordered by station id", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Till", formFactor: "till", capabilities: [] })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Counter" })).deviceId,
       };
@@ -550,10 +555,11 @@ describe("device made-here stations", () => {
   it("refuses switched-off stations with station.not_found", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Till", formFactor: "till", capabilities: [] })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Counter" })).deviceId,
       };
@@ -570,10 +576,11 @@ describe("device made-here stations", () => {
   it("keeps two devices on the same profile independent", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Shared", formFactor: "till", capabilities: [] })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Shared",
+        formFactor: "till",
+        capabilities: [],
+      });
       const [a, b] = [
         { id: (await seedDevice(tx, { profileId: profile!.id, label: "A" })).deviceId },
         { id: (await seedDevice(tx, { profileId: profile!.id, label: "B" })).deviceId },

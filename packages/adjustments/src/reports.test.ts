@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -55,10 +56,10 @@ const EVENING = "2026-09-15T18:00:00.000Z";
 const range = (from = DAY, to = from) => ({ fromBusinessDay: from, toBusinessDay: to, ...CLOCK });
 
 async function person(name: string, status?: "suspended"): Promise<string> {
-  const [row] = await db
-    .insert(persons)
-    .values({ displayName: name, ...(status === undefined ? {} : { status }) })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(db, {
+    displayName: name,
+    ...(status === undefined ? {} : { status }),
+  });
   return row!.id;
 }
 

@@ -15,7 +15,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deviceProfileAdmissionPersons, persons, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
@@ -574,10 +574,11 @@ it.each(["", "{broken"])(
 
 it("does not expose a refund command or its reads on a shared kitchen display", async () => {
   const t = await pendingCard();
-  const [shared] = await store.db
-    .insert(deviceProfiles)
-    .values({ name: "Kitchen", formFactor: "kds", capabilities: ["integrated-card-payment"] })
-    .returning();
+  const [shared] = await seedDeviceProfiles(store.db, {
+    name: "Kitchen",
+    formFactor: "kds",
+    capabilities: ["integrated-card-payment"],
+  });
   await store.db
     .update(devices)
     .set({ deviceProfileId: shared!.id })

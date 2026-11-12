@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { billPayments, newId, withTransaction } from "@waitron/db";
@@ -198,10 +199,11 @@ describe("own clock reconciliation at the business-day boundary", () => {
     const start = await open();
     await fact("2026-01-05T10:00:00Z");
     await fact();
-    const [other] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Other", pinHash: "scrypt$00$00", role: "staff" })
-      .returning();
+    const [other] = await seedPersons(suite.db, {
+      displayName: "Other",
+      pinHash: "scrypt$00$00",
+      role: "staff",
+    });
     await fact("2026-01-05T18:00:00Z", other!.id);
     await withTransaction(suite.db, (tx) =>
       beginAttendanceDiscovery(tx, {

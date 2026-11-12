@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -967,7 +968,7 @@ it("keeps absent country translations absent, including a country without a cale
 
 it("saves the holiday choice in the venue document and names its saver", async () => {
   await venue({ province: "Isleshire" });
-  const [person] = await db.insert(persons).values({ displayName: "Owner" }).returning();
+  const [person] = await seedPersons(db, { displayName: "Owner" });
   await run((tx) => store.saveHolidayArea(tx, { areaKey: "isle-a" }, person!.id));
   expect((await readVenueSettings(db)).doc).toMatchObject({
     invoiceLocales: ["en-GB"],

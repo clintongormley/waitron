@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -157,10 +158,11 @@ describe("the category report reconciles with the till's sales", () => {
         olives: await product("Aceitunas", null, "3.33", "general"),
       };
       await assignCatalogueToVenue(tx, menu.id);
-      const [manager] = await tx
-        .insert(persons)
-        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
+      const [manager] = await seedPersons(tx, {
+        displayName: "The Manager",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
       const session = await startManagementSession(tx, { personId: manager!.id });
       return { products: ids, managerSid: session.token };
     });

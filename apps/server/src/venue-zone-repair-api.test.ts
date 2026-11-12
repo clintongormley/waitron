@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { chromium, type BrowserServer, type Browser } from "playwright";
 import { freePorts } from "./testing/free-ports.js";
@@ -44,10 +45,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant service",
   });
   scope = { locationId: await venueLocationId(suite.db), nodeId: await seedNode(suite.db) };
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Manager", role: "manager" })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: "Manager", role: "manager" });
   actor = person!.id;
   token = (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: actor })))
     .token;
@@ -110,7 +108,7 @@ describe("time-zone repair management boundary", () => {
   it.each(["manager", "admin"] as const)(
     "allows %s reads and confirmed writes, staying closed until restart",
     async (role) => {
-      await suite.db.update(persons).set({ role }).where(eq(persons.id, actor));
+      await setBuiltInRoleForTest(suite.db, actor, role);
       const read = await request("GET");
       expect(read.status).toBe(200);
       const view = await read.json();
@@ -165,7 +163,7 @@ describe("time-zone repair management boundary", () => {
   it.each(["staff", "supervisor"] as const)(
     "refuses live %s permission on both routes",
     async (role) => {
-      await suite.db.update(persons).set({ role }).where(eq(persons.id, actor));
+      await setBuiltInRoleForTest(suite.db, actor, role);
       const before = rows();
       for (const method of ["GET", "POST"])
         await refusal(await request(method), 403, "authorization.not_permitted");
@@ -269,8 +267,7 @@ describe("time-zone repair management boundary", () => {
           await suite.db.update(managementSessions).set({ lastSeenAt: "2000-01-01T00:00:00.000Z" });
         if (change === "suspend")
           await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, actor));
-        if (change === "demote")
-          await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, actor));
+        if (change === "demote") await setBuiltInRoleForTest(suite.db, actor, "staff");
         const before = rows();
         resume.resolve();
         await refusal(await pending, status, code);

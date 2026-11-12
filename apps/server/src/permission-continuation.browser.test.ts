@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -119,7 +120,7 @@ async function fixture() {
     { db: suite.db, modules: ALL_MODULES },
   );
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(persons).values({
+    await seedPersons(tx, {
       displayName: "Viewer",
       role: "supervisor",
       email: "viewer@example.test",

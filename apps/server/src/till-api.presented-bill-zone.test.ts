@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
@@ -88,14 +89,11 @@ async function departmentOf(zoneId: string): Promise<string> {
 async function zoneTill(zoneId: string): Promise<string> {
   const departmentId = await departmentOf(zoneId);
   const profileId = await inTx(venue, async (tx) => {
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: `Solo ${randomUUID()}`,
-        formFactor: "till",
-        capabilities: [...BASIC_ACTIONS, "take-cash"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: `Solo ${randomUUID()}`,
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
+    });
     await setProfileServiceAccess(tx, profile!.id, {
       departmentId,
       allowedZoneIds: [zoneId],

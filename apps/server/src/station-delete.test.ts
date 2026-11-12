@@ -22,7 +22,7 @@ import {
   orderDraftEvents,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   closeStationForToday,
@@ -118,10 +118,7 @@ async function food(
 }
 async function binding(v: PartyVenue, id: string) {
   return inTx(v, async (tx) => {
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Display profile", formFactor: "kds" })
-      .returning();
+    const [profile] = await seedDeviceProfiles(tx, { name: "Display profile", formFactor: "kds" });
     await setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });

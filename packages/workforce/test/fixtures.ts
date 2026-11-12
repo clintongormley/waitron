@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { and, asc, eq } from "drizzle-orm";
 import { attendanceMailKey, attendanceMailOutcome } from "../src/attendance-mail.js";
 import {
@@ -74,10 +75,7 @@ export async function seedLocation(db: Database): Promise<string> {
 
 /** A person, PIN '1234'. Through the table definition for the same reason as {@link seedLocation}. */
 export async function seedPerson(db: Database, name = "Ana"): Promise<string> {
-  const [row] = await db
-    .insert(persons)
-    .values({ displayName: name, pinHash: hashPin("1234") })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(db, { displayName: name, pinHash: hashPin("1234") });
   return row!.id;
 }
 

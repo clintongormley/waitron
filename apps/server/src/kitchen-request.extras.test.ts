@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   fireNewOrder,
@@ -113,10 +113,11 @@ async function jobsAt(tx: Transaction, printerId: string) {
 }
 
 async function madeHereDevice(tx: Transaction, stationId: string) {
-  const [profile] = await tx
-    .insert(deviceProfiles)
-    .values({ name: "Bar till", formFactor: "till", capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(tx, {
+    name: "Bar till",
+    formFactor: "till",
+    capabilities: [],
+  });
   const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Here" });
   await tx.insert(deviceMadeHereStations).values({ deviceId, stationId });
   return deviceId;

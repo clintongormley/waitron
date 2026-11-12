@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -41,13 +42,10 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   const nodeId = await seedNode(suite.db);
-  const [marta, colleague] = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Marta López", email: "marta@example.test", role: "staff" },
-      { displayName: COLLEAGUE_NAME, email: "colleague@example.test", role: "staff" },
-    ])
-    .returning();
+  const [marta, colleague] = await seedPersons(suite.db, [
+    { displayName: "Marta López", email: "marta@example.test", role: "staff" },
+    { displayName: COLLEAGUE_NAME, email: "colleague@example.test", role: "staff" },
+  ]);
   martaId = marta!.id;
   colleagueId = colleague!.id;
   const backend = new WorkforceBackend();

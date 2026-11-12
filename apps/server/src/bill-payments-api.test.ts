@@ -18,7 +18,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 import {
   billPaymentLines,
   billPaymentRefunds,
@@ -272,51 +272,31 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Counter till",
-        formFactor: "till",
-        capabilities: [
-          ...BASIC_ACTIONS,
-          "integrated-card-payment",
-          "open-cash-drawer",
-          "take-cash",
-        ],
-      })
-      .returning({ id: deviceProfiles.id });
-    const [handheldProfile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Handheld",
-        formFactor: "phone-portrait",
-        capabilities: [...BASIC_ACTIONS, "take-cash"],
-      })
-      .returning({ id: deviceProfiles.id });
-    const [noCashProfile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Handheld without cash",
-        formFactor: "phone-portrait",
-        capabilities: [...BASIC_ACTIONS],
-      })
-      .returning({ id: deviceProfiles.id });
-    const [seededHandheldProfile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Seeded handheld",
-        formFactor: "phone-portrait",
-        capabilities: [...DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]],
-      })
-      .returning({ id: deviceProfiles.id });
-    const [seededHandheldWithDrawerProfile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Seeded handheld with drawer",
-        formFactor: "phone-portrait",
-        capabilities: [...DEFAULT_PROFILE_CAPABILITIES["phone-portrait"], "open-cash-drawer"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: "Counter till",
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "open-cash-drawer", "take-cash"],
+    });
+    const [handheldProfile] = await seedDeviceProfiles(tx, {
+      name: "Handheld",
+      formFactor: "phone-portrait",
+      capabilities: [...BASIC_ACTIONS, "take-cash"],
+    });
+    const [noCashProfile] = await seedDeviceProfiles(tx, {
+      name: "Handheld without cash",
+      formFactor: "phone-portrait",
+      capabilities: [...BASIC_ACTIONS],
+    });
+    const [seededHandheldProfile] = await seedDeviceProfiles(tx, {
+      name: "Seeded handheld",
+      formFactor: "phone-portrait",
+      capabilities: [...DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]],
+    });
+    const [seededHandheldWithDrawerProfile] = await seedDeviceProfiles(tx, {
+      name: "Seeded handheld with drawer",
+      formFactor: "phone-portrait",
+      capabilities: [...DEFAULT_PROFILE_CAPABILITIES["phone-portrait"], "open-cash-drawer"],
+    });
     const printer = await createPrinter(tx, {
       name: "Receipts",
       transport: "cloud_poll",
@@ -844,14 +824,11 @@ describe("a contribution (design §8 test 2)", () => {
 
   it("opens the device's chosen drawer, not its receipt printer's, though both have a drawer", async () => {
     const till = await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({
-          name: "Drawer till",
-          formFactor: "till",
-          capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
-        })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Drawer till",
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+      });
       const printer = (name: string) =>
         createPrinter(tx, {
           name,
@@ -4937,14 +4914,11 @@ describe("a reader payment on a device that changes profile while it is starting
       loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
     );
     const [movedTo] = await inTx((tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({
-          name: `Moved to ${randomUUID()}`,
-          formFactor: "till",
-          capabilities: [...BASIC_ACTIONS, "integrated-card-payment"],
-        })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, {
+        name: `Moved to ${randomUUID()}`,
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "integrated-card-payment"],
+      }),
     );
     const [reader] = await inTx((tx) =>
       tx
@@ -5217,14 +5191,11 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
 
   it("opens no drawer for a hand-keyed card at another till whose drawer printer has none", async () => {
     const otherTill = await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({
-          name: "Second till",
-          formFactor: "till",
-          capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
-        })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Second till",
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
+      });
       const printer = await createPrinter(tx, {
         name: "Terrace receipts",
         transport: "cloud_poll",

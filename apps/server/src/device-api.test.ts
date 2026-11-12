@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -307,14 +308,11 @@ async function seedProfile(
   // Through the table definition: `device_profiles.id`, `created_at` and `updated_at` are
   // `$defaultFn` generators raw SQL never reaches, and the column's own write mapping is what
   // serialises `capabilities`.
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Test profile ${profileCounter}`,
-      formFactor,
-      capabilities: [...BASIC_ACTIONS, ...capabilities],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Test profile ${profileCounter}`,
+    formFactor,
+    capabilities: [...BASIC_ACTIONS, ...capabilities],
+  });
   return row!.id;
 }
 

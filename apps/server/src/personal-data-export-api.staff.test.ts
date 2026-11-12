@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
@@ -125,17 +126,14 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   await seedNode(suite.db);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Ana Admin", email: "ana@example.test", role: "admin" },
-      { displayName: "Otto Admin", email: "otto@example.test", role: "admin" },
-      { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
-      { displayName: "Sam Supervisor", email: "sam@example.test", role: "supervisor" },
-      { displayName: "Stella Staff", email: "stella@example.test", role: "staff" },
-      { ...MARTA, role: "staff" },
-    ])
-    .returning();
+  const rows = await seedPersons(suite.db, [
+    { displayName: "Ana Admin", email: "ana@example.test", role: "admin" },
+    { displayName: "Otto Admin", email: "otto@example.test", role: "admin" },
+    { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
+    { displayName: "Sam Supervisor", email: "sam@example.test", role: "supervisor" },
+    { displayName: "Stella Staff", email: "stella@example.test", role: "staff" },
+    { ...MARTA, role: "staff" },
+  ]);
   const [admin, otherAdmin, manager, supervisor, staff, marta] = rows.map((r) => r.id);
   ids = {
     admin: admin!,
@@ -303,7 +301,7 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
   it("checks the permission again after building, and sends nothing to a demoted admin", async () => {
     duringBuild = () =>
       withTransaction(suite.db, async (tx) => {
-        await tx.update(persons).set({ role: "manager" }).where(eq(persons.id, ids.admin));
+        await setBuiltInRoleForTest(tx, ids.admin, "manager");
       });
     await refused(await ask(staffPath(ids.marta), tokens.admin), 403, notPermitted);
     expect(subjects.map((s) => s.personId)).toEqual([ids.marta]);

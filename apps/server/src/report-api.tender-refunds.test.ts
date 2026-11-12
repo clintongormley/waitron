@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -108,10 +109,11 @@ beforeEach(async () => {
     .returning();
   paymentId = payment!.id;
   const session = await withTransaction(db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Manager", role: "manager", pinHash: PIN_HASH })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Manager",
+      role: "manager",
+      pinHash: PIN_HASH,
+    });
     return startManagementSession(tx, { personId: person!.id });
   });
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;

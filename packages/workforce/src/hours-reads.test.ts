@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -300,11 +301,11 @@ it("keeps old missing questions and unacknowledged automatic history outside a s
   expect(value.record.entries.map((e) => e.entry.entryId)).toEqual([start, end]);
 });
 it("keeps stored self-approval after the administrator becomes staff", async () => {
-  await f.suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, f.personId));
+  await setBuiltInRoleForTest(f.suite.db, f.personId, "admin");
   const { end } = await shift();
   const requested = await request(end);
   const approval = await send({ action: "approve", itemId: requested.entryIds[0]! });
-  await f.suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
+  await setBuiltInRoleForTest(f.suite.db, f.personId, "staff");
   const value = await read();
   expect(value.workedMinutes).toBe(540);
   expect(value.record.entries.find((e) => e.entry.entryId === approval.entryIds[0])).toMatchObject({

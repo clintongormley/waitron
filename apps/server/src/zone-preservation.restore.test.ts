@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   agreeInternet,
   archiveCommand,
@@ -59,10 +60,10 @@ it.each(["archive", "bucket"] as const)(
         saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: source }),
       ),
     );
-    const [manager] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Recovery manager", role: "manager" })
-      .returning();
+    const [manager] = await seedPersons(suite.db, {
+      displayName: "Recovery manager",
+      role: "manager",
+    });
     await withTransaction(suite.db, (tx) =>
       recordDailyClose(tx, {
         nodeId: node.nodeId,

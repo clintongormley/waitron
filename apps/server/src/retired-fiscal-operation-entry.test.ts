@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -205,9 +206,12 @@ it.each(["recovery key", "administrator"])(
   "the production promotion adapter refuses a signed paper input authenticated by %s before its activation callback",
   async (authentication) => {
     const recoveryKey = authentication === "recovery key";
-    await suite.db
-      .insert(persons)
-      .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash });
+    await seedPersons(suite.db, {
+      id: ADMIN,
+      displayName: "Administrator",
+      role: "admin",
+      passwordHash,
+    });
     const fixture = allocationFixture({
       node,
       bases,

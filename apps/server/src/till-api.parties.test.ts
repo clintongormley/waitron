@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
@@ -61,10 +62,11 @@ const suite = useVenueDb({
       operationDescription: "Restaurante",
     });
     const nodeId = await seedNode(db);
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(db, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     ana = { id: person!.id };
     cfg = {
       nodeId: brandNodeId(nodeId),

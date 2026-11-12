@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -247,14 +248,11 @@ describe("dashboard receipt reprint", () => {
   it("applies the till copy's print-receipt capability to a bound dashboard device", async () => {
     const billId = await placedIssuedBill(venue, "Caña");
     const [profile] = await inTx(venue, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({
-          name: `No receipt ${randomUUID()}`,
-          formFactor: "phone-portrait",
-          capabilities: [],
-        })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, {
+        name: `No receipt ${randomUUID()}`,
+        formFactor: "phone-portrait",
+        capabilities: [],
+      }),
     );
     const device = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "No receipt",
@@ -270,10 +268,11 @@ describe("dashboard receipt reprint", () => {
   it("checks a development device header through the same print-receipt gate", async () => {
     const billId = await placedIssuedBill(venue, "Caña");
     const [profile] = await inTx(venue, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({ name: `No copy ${randomUUID()}`, formFactor: "phone-portrait", capabilities: [] })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, {
+        name: `No copy ${randomUUID()}`,
+        formFactor: "phone-portrait",
+        capabilities: [],
+      }),
     );
     const device = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "No copy",

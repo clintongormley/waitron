@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
@@ -232,10 +233,7 @@ describe("Orders routes", () => {
 
   it("keeps a deactivated colleague in the Staff filter", async () => {
     const [person] = await withTransaction(venue.db, (tx) =>
-      tx
-        .insert(persons)
-        .values({ displayName: "Pablo", pinHash: hashPin("8888"), role: "staff" })
-        .returning({ id: persons.id }),
+      seedPersons(tx, { displayName: "Pablo", pinHash: hashPin("8888"), role: "staff" }),
     );
     await parkedBy(venue, person!.id, "Caña");
     await withTransaction(venue.db, (tx) =>

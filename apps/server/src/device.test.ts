@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { deviceProfiles, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
 import { nodeId as brandNodeId } from "@waitron/shared";
 
@@ -57,10 +57,7 @@ async function setupVenue(): Promise<SeededVenue> {
 /** `name` is unique among profiles that are not retired (`device_profiles_live_name_key`), so a
  * test seeding two profiles passes two distinct names. */
 async function seedProfile(formFactor: FormFactor, name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name, formFactor })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, { name, formFactor });
   return row!.id;
 }
 

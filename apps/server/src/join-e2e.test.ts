@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 /**
@@ -174,10 +175,11 @@ async function shownAsk(app: Hono, venue: Venue, id: string): Promise<string> {
 let profileCounter = 0;
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${profileCounter}`,
+    formFactor,
+    capabilities: [],
+  });
   return row!.id;
 }
 

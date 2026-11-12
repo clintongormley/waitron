@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -100,10 +101,10 @@ describe("durable attendance day work", () => {
     expect(await suite.db.select().from(attendanceDayWork)).toEqual([]);
   });
   it("never reuses a captured operation sequence after its highest row is removed", async () => {
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Worker", pinHash: "scrypt$00$00" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Worker",
+      pinHash: "scrypt$00$00",
+    });
     const fact = {
       source: "order" as const,
       key: "one",

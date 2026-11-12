@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
@@ -37,10 +38,11 @@ beforeEach(async () => {
       vatBreakdown: [],
       counterparty: null,
     });
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
   });
@@ -105,7 +107,7 @@ it("records the management authorizer without requiring a till session", async (
 it.each(["staff", "manager"] as const)(
   "checks sale.rectify for a live %s management session",
   async (role) => {
-    await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, role);
     const before = await snapshot();
     if (role === "staff") {
       await expect(apply()).rejects.toMatchObject({ code: "authorization.not_permitted" });

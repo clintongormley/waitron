@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { sql, eq } from "drizzle-orm";
 import { StatementSync } from "node:sqlite";
 import { expect, it, vi } from "vitest";
@@ -177,7 +178,7 @@ it("orders simultaneous live events by chain position and ignores the later ackn
 it("uses an approved missing start as live state while ignoring its pending request", async () => {
   const worker = await seedPerson(suite.db, "Missing start");
   const manager = await seedPerson(suite.db, "Approver");
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, manager));
+  await setBuiltInRoleForTest(suite.db, manager, "manager");
   const request = await withTransaction(suite.db, (tx) =>
     backend.requestCorrection(tx, {
       nodeId,

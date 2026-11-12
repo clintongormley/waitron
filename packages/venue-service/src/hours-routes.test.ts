@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -106,10 +107,11 @@ async function fixture(): Promise<Fixture> {
       .values([{ name: "Bar" }, { name: "Kitchen", isDefault: true }])
       .returning();
     const person = async (role: "manager" | "supervisor" | "staff") => {
-      const [row] = await tx
-        .insert(persons)
-        .values({ displayName: `${role} ${randomUUID()}`, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [row] = await seedPersons(tx, {
+        displayName: `${role} ${randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role,
+      });
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
     const [restaurantStation, deliStation] = await tx

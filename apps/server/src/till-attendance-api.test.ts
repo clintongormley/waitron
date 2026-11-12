@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { convenioConfig, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -69,14 +70,11 @@ beforeEach(async () => {
     },
     () => {},
   );
-  const [manager] = await suite.db
-    .insert(persons)
-    .values({
-      displayName: "Supervisor",
-      role: "supervisor",
-      pinHash: hashPin("4321"),
-    })
-    .returning({ id: persons.id });
+  const [manager] = await seedPersons(suite.db, {
+    displayName: "Supervisor",
+    role: "supervisor",
+    pinHash: hashPin("4321"),
+  });
   managerId = manager!.id;
   await withTransaction(suite.db, async (tx) => {
     const common = {
@@ -161,10 +159,11 @@ it("serves own history to clock-only staff without service zones and keeps reads
 });
 
 it("offers a first correction before any clock history", async () => {
-  const [worker] = await suite.db
-    .insert(persons)
-    .values({ displayName: "New worker", role: "staff", pinHash: hashPin("5678") })
-    .returning({ id: persons.id });
+  const [worker] = await seedPersons(suite.db, {
+    displayName: "New worker",
+    role: "staff",
+    pinHash: hashPin("5678"),
+  });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { personId: worker!.id, deviceId: venue.deviceId, pin: "5678" }),
   );
@@ -297,7 +296,7 @@ it("records trusted requester and device, then replays before the old revision a
 
 it("requires the selected approver PIN even when the operator is an admin", async () => {
   const itemId = await pending();
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, venue.personId));
+  await setBuiltInRoleForTest(suite.db, venue.personId, "admin");
   const body = {
     commandId: randomUUID(),
     expectedRevision: await revision(),
@@ -338,7 +337,7 @@ it.each(["", "x", "123"])("preserves identity's wrong-PIN refusal for %j", async
 it("lists eligible approvers without secrets and filters current self-approval and self-decline", async () => {
   const itemId = await pending();
   for (const role of ["staff", "supervisor", "admin"] as const) {
-    await suite.db.update(persons).set({ role }).where(eq(persons.id, venue.personId));
+    await setBuiltInRoleForTest(suite.db, venue.personId, role);
     for (const action of ["approve", "decline"] as const) {
       const response = await request(`items/${itemId}/approvers?action=${action}`);
       expect(response.status).toBe(200);
@@ -508,8 +507,7 @@ it.each(["active", "demoted", "suspended"] as const)(
     const before = await snapshot();
     watchDerivationsAndLock(suite.db, "4321", () =>
       withTransaction(suite.db, async (tx) => {
-        if (kind === "demoted")
-          await tx.update(persons).set({ role: "staff" }).where(eq(persons.id, managerId));
+        if (kind === "demoted") await setBuiltInRoleForTest(tx, managerId, "staff");
         else if (kind === "suspended")
           await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, managerId));
         else
@@ -656,10 +654,11 @@ it("commits an overdue automatic finish before returning a stale human-command c
 });
 
 it("hides foreign receipts and refuses another worker's question, item and target even for an admin operator", async () => {
-  const [other] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Other worker", role: "staff", pinHash: hashPin("5555") })
-    .returning();
+  const [other] = await seedPersons(suite.db, {
+    displayName: "Other worker",
+    role: "staff",
+    pinHash: hashPin("5555"),
+  });
   await withTransaction(suite.db, async (tx) => {
     const common = {
       ...venue.cfg,
@@ -704,7 +703,7 @@ it("hides foreign receipts and refuses another worker's question, item and targe
       createdAt: instant.toISOString(),
     })
     .returning();
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, venue.personId));
+  await setBuiltInRoleForTest(suite.db, venue.personId, "admin");
   const before = await snapshot();
   expect(await (await request(`commands/${foreign.commandId}`)).json()).toBeNull();
   const picker = await request(`items/${itemId}/approvers?action=approve`);

@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -322,12 +323,7 @@ describe("real module floor deletion", () => {
     const f = await target();
     const profileId = await run(
       async (tx) =>
-        (
-          await tx
-            .insert(deviceProfiles)
-            .values({ name: randomUUID(), formFactor: "till" })
-            .returning({ id: deviceProfiles.id })
-        )[0]!.id,
+        (await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" }))[0]!.id,
     );
     const layout = await run((tx) => defaultLayout(tx, venue.cfg, f.zoneId));
     const service = core().floorDeletion;
@@ -549,12 +545,8 @@ describe("mounted authenticated service deletion races", () => {
         kind === "profile"
           ? await run(
               async (tx) =>
-                (
-                  await tx
-                    .insert(deviceProfiles)
-                    .values({ name: "Queued profile", formFactor: "till" })
-                    .returning()
-                )[0]!.id,
+                (await seedDeviceProfiles(tx, { name: "Queued profile", formFactor: "till" }))[0]!
+                  .id,
             )
           : "";
       let tabId = "";
@@ -615,10 +607,10 @@ describe("mounted authenticated service deletion races", () => {
                     startingZoneId: zoneId,
                   });
                 if (kind === "transfer") {
-                  const [receiving] = await tx
-                    .insert(deviceProfiles)
-                    .values({ name: "Receiving desk", formFactor: "till" })
-                    .returning();
+                  const [receiving] = await seedDeviceProfiles(tx, {
+                    name: "Receiving desk",
+                    formFactor: "till",
+                  });
                   await setProfileServiceScope(tx, receiving!.id, {
                     departmentId: f.departmentId,
                     allowedZoneIds: [zoneId],
@@ -736,12 +728,7 @@ describe("mounted authenticated service deletion races", () => {
     const { request } = await mounted();
     const profileId = await run(
       async (tx) =>
-        (
-          await tx
-            .insert(deviceProfiles)
-            .values({ name: "Stale profile", formFactor: "till" })
-            .returning()
-        )[0]!.id,
+        (await seedDeviceProfiles(tx, { name: "Stale profile", formFactor: "till" }))[0]!.id,
     );
     const tabId = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {

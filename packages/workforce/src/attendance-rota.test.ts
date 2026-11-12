@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -55,13 +56,10 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
   nodeId = await seedNode(suite.db, locationId);
-  const workers = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Bea", pinHash: "scrypt$00$00", role: "staff" },
-    ])
-    .returning({ id: persons.id });
+  const workers = await seedPersons(suite.db, [
+    { displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Bea", pinHash: "scrypt$00$00", role: "staff" },
+  ]);
   [personId, other] = workers.map((worker) => worker.id) as [string, string];
   versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-01-05" }));
   shiftId = await run((tx) =>

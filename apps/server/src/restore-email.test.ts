@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -341,15 +342,12 @@ describe.each(paths)("invoice email after %s", (path) => {
             : { mode: "unconfigured" },
         );
         const session = await withTransaction(opened.venue, async (tx) => {
-          const [person] = await tx
-            .insert(persons)
-            .values({
-              displayName: "Restore administrator",
-              pinHash: hashPin("1234"),
-              role: "admin",
-              email: "owner@example.test",
-            })
-            .returning({ id: persons.id });
+          const [person] = await seedPersons(tx, {
+            displayName: "Restore administrator",
+            pinHash: hashPin("1234"),
+            role: "admin",
+            email: "owner@example.test",
+          });
           const session = await startManagementSession(tx, { personId: person!.id });
           await setFreshManagementSignIn(tx, session.token);
           return session;

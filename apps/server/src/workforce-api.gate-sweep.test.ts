@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -68,14 +69,16 @@ async function setupVenue(): Promise<Venue> {
     const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
     // Through the table definitions, not raw SQL: every `id` and `created_at` here is a JavaScript
     // `$defaultFn` generator on this engine, which a raw insert never reaches.
-    const [mgr] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [stf] = await tx
-      .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
+    const [stf] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     const mSes = await startManagementSession(tx, {
       personId: mgr!.id,
     });

@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, expect, it } from "vitest";
@@ -49,14 +50,11 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
   nodeId = await seedNode(suite.db, locationId);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
-      { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
-    ])
-    .returning({ id: persons.id });
+  const rows = await seedPersons(suite.db, [
+    { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Manager", pinHash: "scrypt$00$00", role: "manager" },
+    { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
+  ]);
   [personId, manager, other] = rows.map((r) => r.id) as [string, string, string];
 });
 async function revision(subject = personId) {
@@ -422,14 +420,14 @@ it("manager pair stays pending until the worker accepts the entire item", async 
 });
 
 it.each(["manager", "supervisor"] as const)("%s cannot approve their own request", async (role) => {
-  await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, role);
   const value = await command(pair());
   await send(value);
   const decision = await command({ action: "approve", itemId: value.commandId });
   await refused(() => send(decision), "correction.not_permitted");
 });
 it("current admin self-approval is stored and demotion refuses even exact replay", async () => {
-  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "admin");
   const value = await command(pair());
   await send(value);
   const decision = await command({ action: "approve", itemId: value.commandId });
@@ -442,7 +440,7 @@ it("current admin self-approval is stored and demotion refuses even exact replay
     [true, personId],
     [true, personId],
   ]);
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
   await refused(() => send(decision), "correction.not_permitted");
   await intact();
 });

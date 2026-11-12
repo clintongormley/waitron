@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -80,10 +81,11 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   await seedNode(suite.db);
-  const [marta] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Marta López", email: "marta@example.test", role: "staff" })
-    .returning();
+  const [marta] = await seedPersons(suite.db, {
+    displayName: "Marta López",
+    email: "marta@example.test",
+    role: "staff",
+  });
   martaId = marta!.id;
   martaToken = await withTransaction(
     suite.db,

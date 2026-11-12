@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
@@ -78,10 +79,11 @@ it.each([
         tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       };
-      const [profile] = await store.venue
-        .insert(deviceProfiles)
-        .values({ name: "Recovered till", formFactor: "till", capabilities: ["take-orders"] })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(store.venue, {
+        name: "Recovered till",
+        formFactor: "till",
+        capabilities: ["take-orders"],
+      });
       const [person] = await seedPersons(store.venue, {
         displayName: "Recovery administrator",
         role: "admin",

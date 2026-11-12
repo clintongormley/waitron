@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
@@ -538,10 +538,11 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         capabilities: string[],
       ) =>
         (
-          await db
-            .insert(deviceProfiles)
-            .values({ name: `${formFactor} ${randomUUID()}`, formFactor, capabilities })
-            .returning({ id: deviceProfiles.id })
+          await seedDeviceProfiles(db, {
+            name: `${formFactor} ${randomUUID()}`,
+            formFactor,
+            capabilities,
+          })
         )[0]!.id;
       const profiles = {
         till: await profile("till", ["take-orders", "take-cash"]),

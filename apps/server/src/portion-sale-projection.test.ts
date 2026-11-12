@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -492,7 +493,7 @@ describe("A803 monetary comparison: operations on portions through the real path
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      await tx.insert(persons).values({ id: OPERATOR, displayName: "Ana", role: "supervisor" });
+      await seedPersons(tx, { id: OPERATOR, displayName: "Ana", role: "supervisor" });
       const reasonId = (
         await createAdjustmentReason(tx, {
           name: "House",
@@ -912,7 +913,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      await tx.insert(persons).values({ id: OPERATOR, displayName: "Ana", role: "supervisor" });
+      await seedPersons(tx, { id: OPERATOR, displayName: "Ana", role: "supervisor" });
       const reasonId = (
         await createAdjustmentReason(tx, {
           name: "House",

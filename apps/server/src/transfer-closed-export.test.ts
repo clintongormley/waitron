@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -38,10 +39,11 @@ useVenueDb({
     t = await transferCloseVenue(db);
     const sessions = await withTransaction(db, async (tx) => {
       const sessionFor = async (role: "manager" | "supervisor") => {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: `The ${role}`, pinHash: hashPin("1234"), role })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(tx, {
+          displayName: `The ${role}`,
+          pinHash: hashPin("1234"),
+          role,
+        });
         const session = await startManagementSession(tx, { personId: person!.id });
         return { id: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
       };

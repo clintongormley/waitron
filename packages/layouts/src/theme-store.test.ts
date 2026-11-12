@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -45,10 +46,11 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 /** Through drizzle rather than raw SQL: `persons.id` takes its value from a `$defaultFn`. */
 async function seedSession(role: PersonRoleValue): Promise<string> {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: `Operator ${role}`, pinHash: "seed-pin-hash", role })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: `Operator ${role}`,
+    pinHash: "seed-pin-hash",
+    role,
+  });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );

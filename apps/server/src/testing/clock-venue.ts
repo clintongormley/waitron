@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
@@ -79,10 +80,11 @@ export async function createClockVenue(
       formFactor: "till",
       capabilities: ["clock-in"],
     });
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Ana",
+      pinHash: fixturePinHash("5555"),
+      role: "staff",
+    });
     return { profile, person: person! };
   });
   const device = await enrolDeviceForTest(db, cfg, { name: "Clock till", profileId: profile.id });

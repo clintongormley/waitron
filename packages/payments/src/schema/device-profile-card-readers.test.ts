@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -22,10 +23,10 @@ async function seed(db: Database) {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Test SL" })
     .onConflictDoNothing({ target: tenants.id });
-  const profiles = await db
-    .insert(deviceProfiles)
-    .values(["Profile A", "Profile B"].map((name) => ({ name, formFactor: "till" as const })))
-    .returning({ id: deviceProfiles.id });
+  const profiles = await seedDeviceProfiles(
+    db,
+    ["Profile A", "Profile B"].map((name) => ({ name, formFactor: "till" as const })),
+  );
   const readers = await db
     .insert(cardReaders)
     .values(

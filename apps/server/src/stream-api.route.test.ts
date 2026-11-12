@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { Hono } from "hono";
@@ -134,7 +135,7 @@ async function setupTenant(): Promise<void> {
     { db: suite.db, modules: ALL_MODULES },
   );
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(persons).values({
+    await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
       pinHash: hashPin("1234"),

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -50,10 +51,11 @@ beforeEach(async () => {
   node = await seedNode(suite.db);
   const saleId = await seedSale(suite.db, node, 1);
   await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     token = (await startManagementSession(tx, { personId: person!.id })).token;
     await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(

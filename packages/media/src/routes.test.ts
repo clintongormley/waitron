@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
@@ -34,14 +35,11 @@ async function fixture(
   //
   // A fresh display name per call: live display names are unique across the database, and this
   // fixture runs twice in one test (a staff caller, then a manager).
-  const [person] = await suite.db
-    .insert(persons)
-    .values({
-      displayName: `Manager ${crypto.randomUUID()}`,
-      pinHash: hashPin("1234"),
-      role: role as "manager" | "staff",
-    })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: `Manager ${crypto.randomUUID()}`,
+    pinHash: hashPin("1234"),
+    role: role as "manager" | "staff",
+  });
   const session = await suite.db.transaction((tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );

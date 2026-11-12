@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -26,14 +27,16 @@ const suite = useVenueDb({
     // with a live management session. Through the table definition, not raw SQL: `persons.id` is a
     // `$defaultFn` generator, which a raw insert never reaches.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      const [mgr] = await tx
-        .insert(persons)
-        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
-      const [stf] = await tx
-        .insert(persons)
-        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-        .returning({ id: persons.id });
+      const [mgr] = await seedPersons(tx, {
+        displayName: "The Manager",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
+      const [stf] = await seedPersons(tx, {
+        displayName: "The Clerk",
+        pinHash: hashPin("1234"),
+        role: "staff",
+      });
       const managerSession = await startManagementSession(tx, { personId: mgr!.id });
       const staffSession = await startManagementSession(tx, { personId: stf!.id });
       return { managerSid: managerSession.token, staffSid: staffSession.token };

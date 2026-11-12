@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readBillEditState } from "./bill-editing.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { firstOpenBillOf } from "./testing/party-bill-of.js";
@@ -132,7 +133,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  await db.insert(persons).values([
+  await seedPersons(db, [
     { id: ALEX, displayName: "Alex" },
     { id: SAM, displayName: "Sam" },
   ]);
@@ -2328,7 +2329,7 @@ describe("who a draft was taken over from", () => {
     const nobody = randomUUID();
     const nobodys = await saveOnSeparateBill(v, partyId, nobody, null, 0, [item(v, "fish")]);
     const mia = randomUUID();
-    await db.insert(persons).values({ id: mia, displayName: "Mia" });
+    await seedPersons(db, { id: mia, displayName: "Mia" });
     await saveOnSeparateBill(v, partyId, mia, null, 0, [item(v, "wine", { variantId: v.glass })]);
     await takeOver(v, partyId, alex.id, SAM, 0);
     await takeOver(v, partyId, nobodys.id, ALEX, 0);

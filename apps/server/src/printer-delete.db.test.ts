@@ -24,7 +24,13 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedNode,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED, createPrinter } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -227,12 +233,7 @@ async function seedVenueWithPrinters() {
   const D = await printer({ name: "Old printer", active: false });
 
   const profile = async (name: string) =>
-    (
-      await suite.db
-        .insert(deviceProfiles)
-        .values({ name, formFactor: "till" })
-        .returning({ id: deviceProfiles.id })
-    )[0]!.id;
+    (await seedDeviceProfiles(suite.db, { name, formFactor: "till" }))[0]!.id;
   const waiters = await profile("Waiters");
   const bar = await profile("Bar");
   await suite.db.insert(deviceProfilePrinters).values([
@@ -612,10 +613,7 @@ describe("the printer delete impact", () => {
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };
-    const [deli] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Deli", formFactor: "till" })
-      .returning({ id: deviceProfiles.id });
+    const [deli] = await seedDeviceProfiles(suite.db, { name: "Deli", formFactor: "till" });
     await suite.db.insert(deviceProfilePrinters).values({
       deviceProfileId: deli!.id,
       printerId: v.Z,

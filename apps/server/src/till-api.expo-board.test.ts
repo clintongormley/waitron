@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
@@ -55,10 +56,7 @@ async function fixture() {
     return { grill, bar, terraceWine: { zoneId: terrace.id, offers } };
   });
   const [profile] = await inTx(v, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({ name: "Plain till", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, { name: "Plain till", formFactor: "till", capabilities: [] }),
   );
   const joined = await enrolDeviceForTest(suite.db, v.cfg, {
     name: "Till",

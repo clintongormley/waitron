@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -46,7 +47,7 @@ beforeEach(async () => {
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(db, {});
-    await db.insert(persons).values({
+    await seedPersons(db, {
       id: "person",
       displayName: "Suspended person",
       status: "suspended",

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
@@ -219,10 +220,11 @@ describe("the till's station route carries the short names", () => {
     );
     const deviceId = await seedSessionDevice(v.db);
     const session = await inTx(v, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Cook", pinHash: hashPin("4321"), role: "staff" })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: "Cook",
+        pinHash: hashPin("4321"),
+        role: "staff",
+      });
       return loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" });
     });
     cookie = `${SESSION_COOKIE}=${session.token}`;

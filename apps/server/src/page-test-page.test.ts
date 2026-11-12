@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { renderInvoicePdf } from "./invoice-pdf.js";
@@ -94,14 +95,16 @@ async function venue(opts: { render?: Render } = {}) {
   const agentOne = await agent("Back office agent");
   const agentTwo = await agent("Other agent");
   const cookies = await withTransaction(suite.db, async (tx) => {
-    const [manager] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [manager] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
+    const [staff] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     return {
       manager: `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: manager!.id })).token}`,
       staff: `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: staff!.id })).token}`,

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { sql } from "drizzle-orm";
 import { withTransaction, type Database, venueLocationId } from "@waitron/db";
@@ -120,14 +121,16 @@ export async function setupVenue(db: Database): Promise<Venue> {
     });
     await assignCatalogueToVenue(tx, cat.id);
 
-    const [mgr] = await tx
-      .insert(persons)
-      .values({ displayName: "The Manager", pinHash: fixturePinHash("1234"), role: "manager" })
-      .returning({ id: persons.id });
-    const [stf] = await tx
-      .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: fixturePinHash("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(tx, {
+      displayName: "The Manager",
+      pinHash: fixturePinHash("1234"),
+      role: "manager",
+    });
+    const [stf] = await seedPersons(tx, {
+      displayName: "The Clerk",
+      pinHash: fixturePinHash("1234"),
+      role: "staff",
+    });
     const managerSession = await startManagementSession(tx, { personId: mgr!.id });
     const staffSession = await startManagementSession(tx, { personId: stf!.id });
     return {

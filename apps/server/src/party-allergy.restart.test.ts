@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { spawn } from "node:child_process";
@@ -40,7 +41,7 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    await db.insert(persons).values({ id: OPERATOR, displayName: "Test operator", role: "staff" });
+    await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   },
 });
 

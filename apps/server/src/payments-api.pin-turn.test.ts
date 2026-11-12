@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -31,10 +32,11 @@ const targets = [
 ] as const;
 
 async function setup(role: "manager" | "staff" = "manager") {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Operator", role, pinHash: hashPin("4321") })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Operator",
+    role,
+    pinHash: hashPin("4321"),
+  });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );

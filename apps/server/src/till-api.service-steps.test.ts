@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -40,10 +41,7 @@ beforeEach(async () => {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Anna", role: "staff" })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: "Anna", role: "staff" });
   personId = person!.id;
   const { deviceId } = await seedDevice(suite.db, { capabilities: ["take-orders"] });
   token = randomUUID();

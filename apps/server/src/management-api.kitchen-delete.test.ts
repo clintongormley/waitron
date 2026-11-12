@@ -5,7 +5,7 @@ import { beforeEach, expect, it } from "vitest";
 import { deviceProfiles, kitchenStations, products, printers, stationPrinters } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setDeviceKitchenScreens, setProfileKitchenScreens } from "@waitron/venue-service";
 import { createCourse, createStation } from "./kitchen.js";
@@ -241,10 +241,7 @@ it("default station refuses deletion with its exact conflict params", async () =
   });
 });
 it("station bound to an active KDS refuses deletion with distinct device count", async () => {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: "KDS", formFactor: "kds" })
-    .returning();
+  const [profile] = await seedDeviceProfiles(suite.db, { name: "KDS", formFactor: "kds" });
   await inTx(v, (tx) =>
     setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },

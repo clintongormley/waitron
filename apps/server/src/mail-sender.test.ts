@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +36,7 @@ describe("one mail sender", () => {
     time = new Date("2026-11-09T12:00:00.000Z");
     controller = new AbortController();
     primary = true;
-    await suite.db.insert(persons).values({ id: personId, displayName: "Mail recipient" });
+    await seedPersons(suite.db, { id: personId, displayName: "Mail recipient" });
     owner = {
       kind: "box_alert",
       deliveryRule: "notice",

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -27,7 +28,7 @@ const passwordHash = hashPassword(PASSWORD);
 let root: string | undefined;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "promote-throttle-"));
-  await suite.db.insert(persons).values([
+  await seedPersons(suite.db, [
     { id: ADMIN, displayName: "Administrator", role: "admin", passwordHash },
     { id: OTHER, displayName: "Other administrator", role: "admin", passwordHash },
   ]);

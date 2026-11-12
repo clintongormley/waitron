@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -128,14 +130,11 @@ async function device(
   choice: { kitchenScreen?: DeviceKitchenScreen; stationId?: string },
 ): Promise<PassActor> {
   const [profile] = await withTransaction(db, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({
-        name: `${name} profile`,
-        formFactor: "kds",
-        capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
-      })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, {
+      name: `${name} profile`,
+      formFactor: "kds",
+      capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
+    }),
   );
   const joined = await enrolDeviceForTest(db, venue.cfg, {
     name,
@@ -556,10 +555,7 @@ async function profiledPass(
   capabilities: CapabilityFlag[],
 ): Promise<{ deviceId: string; profileId: string }> {
   const [profile] = await withTransaction(db, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({ name: `${name} profile`, formFactor, capabilities })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, { name: `${name} profile`, formFactor, capabilities }),
   );
   const joined = await enrolDeviceForTest(db, venue.cfg, {
     name,
@@ -573,10 +569,11 @@ async function profiledPass(
 async function signedInTillPass(venue: Venue, name: string) {
   const made = await profiledPass(venue, name, "till", ALL_PASS);
   const [person] = await withTransaction(db, (tx) =>
-    tx
-      .insert(persons)
-      .values({ displayName: `${name} cook`, pinHash: fixturePinHash("2468"), role: "staff" })
-      .returning({ id: persons.id }),
+    seedPersons(tx, {
+      displayName: `${name} cook`,
+      pinHash: fixturePinHash("2468"),
+      role: "staff",
+    }),
   );
   const personId = person!.id;
   const sessionId = await openTillSession(db, { deviceId: made.deviceId, personId });
@@ -1502,10 +1499,7 @@ const fulfilled = { status: "fulfilled" };
 /** A kitchen display whose pass shows `stationIds`, and its profile. */
 async function passWithProfile(venue: AnyVenue, name: string, stationIds: string[]) {
   const [profile] = await withTransaction(db, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({ name: `${name} profile`, formFactor: "kds", capabilities: ALL_PASS })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, { name: `${name} profile`, formFactor: "kds", capabilities: ALL_PASS }),
   );
   const joined = await enrolDeviceForTest(db, venue.cfg, {
     name,

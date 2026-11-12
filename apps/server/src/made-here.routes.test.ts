@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -150,10 +151,11 @@ useVenueDb({
           noteRequired: false,
         })
       ).id;
-      const [supervisor] = await tx
-        .insert(persons)
-        .values({ displayName: "Sara", pinHash: hashPin("6666"), role: "supervisor" })
-        .returning({ id: persons.id });
+      const [supervisor] = await seedPersons(tx, {
+        displayName: "Sara",
+        pinHash: hashPin("6666"),
+        role: "supervisor",
+      });
       const session = await loginWithPin(tx, {
         deviceId: venue.deviceId,
         personId: supervisor!.id,

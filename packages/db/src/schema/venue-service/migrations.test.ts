@@ -21,7 +21,7 @@ import {
 import { randomUUID } from "node:crypto";
 import type { Database } from "../../index.js";
 import { useVenueDb } from "../../testing/venue-db.js";
-import { seedDevice, seedTenant, seedVenue } from "../../testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedTenant, seedVenue } from "../../testing/seed.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -1182,10 +1182,7 @@ describe("the kitchen screen tables refuse what their rules forbid", () => {
       .insert(floorZones)
       .values({ name: "Terrace" })
       .returning({ id: floorZones.id });
-    const [profile] = await db
-      .insert(deviceProfiles)
-      .values({ name: "Front till", formFactor: "till" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(db, { name: "Front till", formFactor: "till" });
     const device = await seedDevice(db, { profileId: profile!.id, label: "Till 1" });
     return {
       stationId: station!.id,

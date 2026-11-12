@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -231,10 +233,11 @@ async function setupVenue(): Promise<{
     ]);
     // A staff person with a KNOWN PIN ("5555"), so the login route can verify their credential and
     // the sale is attributed to them.
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Cajera",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     const menuItems = new Map([
       [ham.id, hamMenuItem.id],
       [water.id, waterMenuItem.id],
@@ -414,14 +417,11 @@ async function loginSession(
 async function createTillProfile(): Promise<string> {
   // Through the table definition, not raw SQL: `device_profiles.id` is a `$defaultFn` generator,
   // which a raw insert never runs.
-  const [prof] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: "Counter till",
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "open-cash-drawer", "take-cash"],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [prof] = await seedDeviceProfiles(suite.db, {
+    name: "Counter till",
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "open-cash-drawer", "take-cash"],
+  });
   return prof!.id;
 }
 
@@ -432,14 +432,11 @@ async function seedProfileFF(
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
-  const [prof] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Profile ${formFactor} ${profileCounter}`,
-      formFactor,
-      capabilities: [...BASIC_ACTIONS, ...capabilities],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [prof] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${formFactor} ${profileCounter}`,
+    formFactor,
+    capabilities: [...BASIC_ACTIONS, ...capabilities],
+  });
   return prof!.id;
 }
 
@@ -2301,14 +2298,11 @@ describe("handheld sales and device capability gates", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     // Author a capability-less handheld device profile and enrol a device bound to it.
-    const [prof] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Waiter phone ${randomUUID()}`,
-        formFactor: "phone-portrait",
-        capabilities: [],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [prof] = await seedDeviceProfiles(suite.db, {
+      name: `Waiter phone ${randomUUID()}`,
+      formFactor: "phone-portrait",
+      capabilities: [],
+    });
     const deviceProfileId = prof!.id;
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: `Waiter phone ${randomUUID()}`,
@@ -3315,10 +3309,11 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     "a handheld whose profile allows the drawer explicitly prints a %s sale's receipt on its own printer and opens the drawer, for the sale and by hand",
     async (method) => {
       const { cfg, each, app } = await venueWithTill();
-      const [supervisor] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
-        .returning({ id: persons.id });
+      const [supervisor] = await seedPersons(suite.db, {
+        displayName: "Responsable",
+        pinHash: hashPin("5555"),
+        role: "supervisor",
+      });
       expect(permissionsForRole("supervisor")).toContain("cash.drawer");
       const profileId = await seedProfileFF("phone-portrait", [
         "open-cash-drawer",

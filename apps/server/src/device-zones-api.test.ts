@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -40,10 +41,11 @@ function gate() {
 
 async function fixture(formFactor: "till" | "phone-portrait" | "tablet-landscape" = "till") {
   const venue = await setupVenue(suite.db);
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: "Display preferences only", formFactor, capabilities: [] })
-    .returning();
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: "Display preferences only",
+    formFactor,
+    capabilities: [],
+  });
   const device = await enrolDeviceForTest(suite.db, venue.cfg, {
     name: "Zone till",
     profileId: profile!.id,
@@ -260,10 +262,10 @@ describe("the device's zone preferences", () => {
         if (change === "device")
           await suite.db.update(devices).set({ active: false }).where(eq(devices.id, f.deviceId));
         if (change === "profile" || change === "profile-admission") {
-          const [profile] = await suite.db
-            .insert(deviceProfiles)
-            .values({ name: "Replacement", formFactor: "till" })
-            .returning();
+          const [profile] = await seedDeviceProfiles(suite.db, {
+            name: "Replacement",
+            formFactor: "till",
+          });
           await suite.db
             .update(devices)
             .set({ deviceProfileId: profile!.id })

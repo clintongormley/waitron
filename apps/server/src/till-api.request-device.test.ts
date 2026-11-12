@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -48,10 +49,11 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     venue = await setupPartyVenue(db);
-    const [profile] = await db
-      .insert(deviceProfiles)
-      .values({ name: "Preferences only", formFactor: "till", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(db, {
+      name: "Preferences only",
+      formFactor: "till",
+      capabilities: [],
+    });
     const device = await enrolDeviceForTest(db, venue.cfg, {
       name: "Signed-in device",
       profileId: profile!.id,

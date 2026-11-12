@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
@@ -20,10 +21,11 @@ let personId: string;
 beforeEach(async () => {
   registerModulePermissions(FISCAL_PERMISSIONS);
   await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
   });
@@ -51,7 +53,7 @@ it.each(["", "management_session=not-a-session"])(
 it.each(["staff", "supervisor", "manager"] as const)(
   "refuses a direct %s request",
   async (role) => {
-    await suite.db.update(persons).set({ role }).where(eq(persons.id, personId));
+    await setBuiltInRoleForTest(suite.db, personId, role);
     const res = await send({ kind: "record-correction" });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });

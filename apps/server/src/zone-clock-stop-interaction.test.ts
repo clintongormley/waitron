@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -39,10 +40,7 @@ beforeEach(async () => {
   const paid = await takeBillPayment(v.deps, v.cfg, id, await v.request(id, "cash"), v.operator);
   expect(paid.invoice).toMatchObject({ issuedAt: RECORDED, issuedOffsetMinutes: 120 });
   v.set(BEHIND);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Zone manager", role: "manager" })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: "Zone manager", role: "manager" });
   manager = person!.id;
   token = (await inTx((tx) => startManagementSession(tx, { personId: manager }))).token;
   await suite.db.run(

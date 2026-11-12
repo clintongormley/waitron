@@ -1,3 +1,4 @@
+import { seedPersons } from "../test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { hashSessionToken } from "./session-token.js";
 /**
@@ -197,7 +198,7 @@ describe("the index itself folds, not only the check in front of it", () => {
   it("refuses a second live row whose folded name matches, written through the table", async () => {
     const write = (displayName: string): Promise<unknown> =>
       run((tx) =>
-        tx.insert(persons).values({
+        seedPersons(tx, {
           displayName,
           displayNameFolded: foldForUniqueness(displayName),
         }),

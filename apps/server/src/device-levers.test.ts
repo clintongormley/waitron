@@ -16,7 +16,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin } from "@waitron/identity";
 import { PERSON_HEADER } from "@waitron/shared";
@@ -60,10 +60,11 @@ async function fixture() {
     return course.id;
   });
   const profile = async (formFactor: "kds" | "till", capabilities: readonly string[]) => {
-    const [row] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: `Profile ${randomUUID()}`, formFactor, capabilities: [...capabilities] })
-      .returning({ id: deviceProfiles.id });
+    const [row] = await seedDeviceProfiles(suite.db, {
+      name: `Profile ${randomUUID()}`,
+      formFactor,
+      capabilities: [...capabilities],
+    });
     return row!.id;
   };
   const device = async (

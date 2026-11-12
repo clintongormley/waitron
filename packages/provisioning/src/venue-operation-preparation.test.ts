@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expect, it } from "vitest";
 import { withTransaction, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -140,7 +141,7 @@ it("does not create the initial account or venue after the outside source refuse
 });
 
 it("does not attribute initial collection to an already-existing administrator", async () => {
-  await suite.db.insert(persons).values({ id: ADMIN, displayName: "Existing", role: "admin" });
+  await seedPersons(suite.db, { id: ADMIN, displayName: "Existing", role: "admin" });
   let consulted = false;
   const owner = regime(async (operation, run) => {
     consulted = true;
@@ -185,7 +186,7 @@ it("rolls back the initial account and node when the last host write refuses", a
 it("refuses a competing administrator created during outside collection", async () => {
   const owner = regime(async (operation, run) => {
     await withTransaction(suite.db, (tx) =>
-      tx.insert(persons).values({ id: ADMIN, displayName: "Concurrent owner", role: "admin" }),
+      seedPersons(tx, { id: ADMIN, displayName: "Concurrent owner", role: "admin" }),
     );
     return run({ ...operation, input: "current-outside-input" });
   });

@@ -1,4 +1,8 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedBusinessDay,
+  seedDeviceProfiles,
+  seedVenueSettings,
+} from "@waitron/db/testing/seed.js";
 import crypto, { createHmac, generateKeyPairSync } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { isoCBOR } from "@simplewebauthn/server/helpers";
@@ -78,9 +82,12 @@ beforeEach(async () => {
       operationDescription: "Sale",
     });
     await seedBusinessDay(suite.db, {});
-    await suite.db
-      .insert(deviceProfiles)
-      .values({ id: profile, name: "Till", formFactor: "till", capabilities: [] });
+    await seedDeviceProfiles(suite.db, {
+      id: profile,
+      name: "Till",
+      formFactor: "till",
+      capabilities: [],
+    });
     await suite.db.insert(devices).values({
       id: device,
       deviceProfileId: profile,

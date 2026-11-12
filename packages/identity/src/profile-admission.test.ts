@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import {
   CORE_MIGRATIONS,
   deviceProfiles,
@@ -33,10 +34,11 @@ function run<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
 }
 
 async function seedProfile(): Promise<string> {
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: `Profile ${crypto.randomUUID()}`, formFactor: "till", capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${crypto.randomUUID()}`,
+    formFactor: "till",
+    capabilities: [],
+  });
   return row!.id;
 }
 

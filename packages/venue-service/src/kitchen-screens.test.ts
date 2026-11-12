@@ -19,7 +19,11 @@ import {
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice as seedSharedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice as seedSharedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import type { DeviceKitchenScreen, ProfileKitchenScreens } from "@waitron/module";
 import { createDepartment, createServiceZone } from "./operations.js";
@@ -79,10 +83,7 @@ async function seedLocation(): Promise<string> {
 }
 
 async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promise<string> {
-  const [row] = await db
-    .insert(deviceProfiles)
-    .values({ name: `Profile ${randomUUID()}`, formFactor })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(db, { name: `Profile ${randomUUID()}`, formFactor });
   return row!.id;
 }
 

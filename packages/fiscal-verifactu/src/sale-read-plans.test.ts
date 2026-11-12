@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { Query } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { newId, withTransaction, type Transaction } from "@waitron/db";
@@ -120,10 +121,11 @@ describe("reads of a sale's filed alta", () => {
     const now = new Date("2026-07-20T17:20:35Z");
     const saleId = await seedSale(suite.db, node, 1);
     const { token, request } = await withTransaction(suite.db, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-        .returning();
+      const [person] = await seedPersons(tx, {
+        displayName: "Administrator",
+        role: "admin",
+        pinHash: hashPin("2468"),
+      });
       const original = await appendToChain(
         tx,
         node.nodeId,

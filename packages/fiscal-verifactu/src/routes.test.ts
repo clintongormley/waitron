@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,10 +34,7 @@ let supervisor: Person;
 
 async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
-    const [p] = await tx
-      .insert(persons)
-      .values({ displayName: name, pinHash: hashPin("1234"), role })
-      .returning({ id: persons.id });
+    const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: p!.id });
     return { id: p!.id, token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });

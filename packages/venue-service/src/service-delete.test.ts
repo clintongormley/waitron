@@ -19,7 +19,12 @@ import {
   zoneServicePolicies,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import type { FloorDeletion } from "@waitron/module";
 import { AppError, type DeleteImpactRefusal } from "@waitron/shared";
 import * as serviceDelete from "./index.js";
@@ -270,15 +275,12 @@ describe("service deletion", () => {
   it("Every and explicit profiles refuse removal of their last permitted zone", async () => {
     const f = await fixture();
     const profiles = await run(async (tx) => {
-      const rows = await tx
-        .insert(deviceProfiles)
-        .values([
-          { name: randomUUID(), formFactor: "till" },
-          { name: randomUUID(), formFactor: "phone-portrait" },
-          { name: randomUUID(), formFactor: "kds" },
-          { name: randomUUID(), formFactor: "till", retiredAt: NOW.toISOString() },
-        ])
-        .returning();
+      const rows = await seedDeviceProfiles(tx, [
+        { name: randomUUID(), formFactor: "till" },
+        { name: randomUUID(), formFactor: "phone-portrait" },
+        { name: randomUUID(), formFactor: "kds" },
+        { name: randomUUID(), formFactor: "till", retiredAt: NOW.toISOString() },
+      ]);
       await tx.insert(deviceProfileServiceAccess).values(
         rows.map((row, index) => ({
           deviceProfileId: row.id,
@@ -318,10 +320,7 @@ describe("service deletion", () => {
   it("a selected zone protects an explicit profile even when its starting zone is elsewhere", async () => {
     const f = await fixture();
     const profile = await run(async (tx) => {
-      const [row] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Selected Alpha", formFactor: "till" })
-        .returning();
+      const [row] = await seedDeviceProfiles(tx, { name: "Selected Alpha", formFactor: "till" });
       await tx.insert(deviceProfileServiceAccess).values({
         deviceProfileId: row!.id,
         departmentId: f.dining,
@@ -362,10 +361,7 @@ describe("service deletion", () => {
   it("an Every profile refuses deletion of its last live zone", async () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: randomUUID(), formFactor: "till" })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
       await tx.insert(deviceProfileServiceAccess).values({
         deviceProfileId: profile!.id,
         departmentId: f.dining,
@@ -389,10 +385,7 @@ describe("service deletion", () => {
   it("an already-empty explicit bound refuses its department deletion", async () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: randomUUID(), formFactor: "till" })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
       await tx.insert(deviceProfileServiceAccess).values({
         deviceProfileId: profile!.id,
         departmentId: f.dining,
@@ -435,10 +428,7 @@ describe("service deletion", () => {
   it("an already-empty explicit bound refuses deletion of its starting zone", async () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: randomUUID(), formFactor: "till" })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
       await tx.insert(deviceProfileServiceAccess).values({
         deviceProfileId: profile!.id,
         departmentId: f.dining,
@@ -589,10 +579,7 @@ describe("service deletion", () => {
       (await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW))).refusals,
     ).toEqual([]);
     const profileId = await run(async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: randomUUID(), formFactor: "till" })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
       await tx.insert(deviceProfileServiceAccess).values({
         deviceProfileId: profile!.id,
         departmentId: f.dining,

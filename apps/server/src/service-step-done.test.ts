@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -76,14 +77,11 @@ async function liveStepsAt(v: PartyVenue, partyId: string, tableId: string, nowM
 }
 
 async function profile(v: PartyVenue): Promise<string> {
-  const [row] = await v.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...CAPABILITY_FLAGS],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(v.db, {
+    name: `Till ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   return row!.id;
 }
 

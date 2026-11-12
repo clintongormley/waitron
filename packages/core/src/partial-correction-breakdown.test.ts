@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, expect, it, vi } from "vitest";
 import { decimal, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
@@ -69,10 +70,11 @@ beforeEach(async () => {
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   const till = (await seedDevice(suite.db, {})).deviceId;
   const openSession = async (role: "staff" | "supervisor") => {
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: `P ${role}`, pinHash: hashPin("1234"), role })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: `P ${role}`,
+      pinHash: hashPin("1234"),
+      role,
+    });
     return (
       await withTransaction(suite.db, (tx) =>
         loginWithPin(tx, { deviceId: till, personId: person!.id, pin: "1234" }),

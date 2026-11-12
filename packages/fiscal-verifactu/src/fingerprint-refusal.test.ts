@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { incidents, invoiceSeries, tenants, withTransaction, type Transaction } from "@waitron/db";
@@ -71,10 +72,11 @@ beforeEach(async () => {
     .returning();
   fullSeries = brandSeriesId(full!.id);
   correctionSeries = brandSeriesId(correction!.id);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Manager", role: "admin", pinHash: hashPin("1234") })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Manager",
+    role: "admin",
+    pinHash: hashPin("1234"),
+  });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { personId: person!.id, deviceId: node.deviceId, pin: "1234" }),
   );

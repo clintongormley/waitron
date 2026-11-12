@@ -3,6 +3,7 @@
  * inserted through the table definition, bypassing the write paths' pre-checks, so the refusal is
  * the index's.
  */
+import { seedPersons } from "../test/person-rows.js";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, withTransaction, persons } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -27,7 +28,7 @@ function insertPerson(
     googleSubject?: string | null;
   },
 ): Promise<unknown> {
-  return withTransaction(db, (tx) => tx.insert(persons).values({ ...values, pinHash: PIN }));
+  return withTransaction(db, (tx) => seedPersons(tx, { ...values, pinHash: PIN }));
 }
 
 /** `captureError` fails the test if the second insert is ACCEPTED. */

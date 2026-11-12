@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -67,14 +69,11 @@ let session: string;
 let catalogueId: string;
 
 async function enrolTill(): Promise<string> {
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "take-cash"],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Till ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS, "take-cash"],
+  });
   const dev = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Counter till ${randomUUID()}`,
     profileId: profile!.id,
@@ -100,10 +99,11 @@ beforeEach(async () => {
     noopLog,
   );
   const operatorId = await inTx(v, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Cashier", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Cashier",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     return person!.id;
   });
   const deviceCookie = await enrolTill();

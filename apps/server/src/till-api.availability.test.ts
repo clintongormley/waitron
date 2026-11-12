@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -76,10 +77,11 @@ beforeEach(async () => {
       { kind: "options", id: listId },
     ]);
     await publishWorkingMenu(tx, v.counter.menuId);
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "Waiter", role: "staff", pinHash: hashPin("5555") })
-      .returning();
+    const [staff] = await seedPersons(tx, {
+      displayName: "Waiter",
+      role: "staff",
+      pinHash: hashPin("5555"),
+    });
     const session = await loginWithPin(tx, {
       deviceId: v.cfg.origin.deviceId,
       personId: staff!.id,

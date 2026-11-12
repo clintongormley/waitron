@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -26,13 +27,10 @@ describe("queued account mail after a real backup and restore", () => {
       { nodeId, code: "FA" },
       { nodeId, code: "FF", purpose: "full" },
     ]);
-    const [admin, invited] = await suite.db
-      .insert(persons)
-      .values([
-        { displayName: "Inviter", email: "reset@example.test", role: "admin", status: "active" },
-        { displayName: "Invited", email: "invite@example.test", status: "pending" },
-      ])
-      .returning({ id: persons.id });
+    const [admin, invited] = await seedPersons(suite.db, [
+      { displayName: "Inviter", email: "reset@example.test", role: "admin", status: "active" },
+      { displayName: "Invited", email: "invite@example.test", status: "pending" },
+    ]);
     const time = new Date("2026-11-09T12:00:00Z");
     await withTransaction(suite.db, async (tx) => {
       await queueAccountMail(tx, {

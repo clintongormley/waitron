@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { describe, expect, it } from "vitest";
 import { locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -118,9 +119,11 @@ describe("fresh setup authority carried into a module seed", () => {
   });
 
   it("refuses to attribute setup to an administrator retained in a restored database", async () => {
-    await suite.db
-      .insert(persons)
-      .values({ displayName: "Archived owner", role: "admin", passwordHash: "hash" });
+    await seedPersons(suite.db, {
+      displayName: "Archived owner",
+      role: "admin",
+      passwordHash: "hash",
+    });
     let entered = false;
     const module = regime(async () => {
       entered = true;

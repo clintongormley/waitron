@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import {
@@ -76,7 +77,7 @@ it.each(["archive", "bucket"] as const)(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
     );
     const password = "SyntheticRestorePassword123";
-    await suite.db.insert(persons).values({
+    await seedPersons(suite.db, {
       displayName: "Restore manager",
       role: "manager",
       email: "restore@example.test",

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
@@ -28,16 +29,13 @@ const suite = useVenueDb({
 
 async function seedAdmin(status: "active" | "suspended" = "active"): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Administrator",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(ADMIN_PASSWORD),
-        role: "admin",
-        status,
-      })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(ADMIN_PASSWORD),
+      role: "admin",
+      status,
+    });
     return person!.id;
   });
 }

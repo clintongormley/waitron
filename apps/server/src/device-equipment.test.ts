@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -97,14 +98,11 @@ const inTx = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.d
 let profileCounter = 0;
 async function seedProfile(): Promise<string> {
   profileCounter += 1;
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Equipment ${profileCounter}`,
-      formFactor: "till",
-      capabilities: [...CAPABILITY_FLAGS],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Equipment ${profileCounter}`,
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   return row!.id;
 }
 

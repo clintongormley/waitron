@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { Transaction } from "@waitron/db";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -43,15 +44,17 @@ const suite = useVenueDb({
     });
     deviceId = await seedSessionDevice(db);
     deviceCookie = await deviceCookieForTest(db, deviceId);
-    const [meRow] = await db
-      .insert(persons)
-      .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })
-      .returning({ id: persons.id });
+    const [meRow] = await seedPersons(db, {
+      displayName: "Me",
+      pinHash: hashPin("1111"),
+      role: "staff",
+    });
     me = meRow!.id;
-    const [colRow] = await db
-      .insert(persons)
-      .values({ displayName: "Colleague", pinHash: hashPin("2222"), role: "staff" })
-      .returning({ id: persons.id });
+    const [colRow] = await seedPersons(db, {
+      displayName: "Colleague",
+      pinHash: hashPin("2222"),
+      role: "staff",
+    });
     colleague = colRow!.id;
   },
 });

@@ -10,7 +10,12 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import {
@@ -148,12 +153,7 @@ async function seedVenueWithReaders(options: ReaderOptions = {}) {
   const q = qRow!.id;
 
   const profile = async (name: string) => ({
-    id: (
-      await suite.db
-        .insert(deviceProfiles)
-        .values({ name, formFactor: "till" })
-        .returning({ id: deviceProfiles.id })
-    )[0]!.id,
+    id: (await seedDeviceProfiles(suite.db, { name, formFactor: "till" }))[0]!.id,
     name,
   });
   const diningProfile = await profile("Dining room");

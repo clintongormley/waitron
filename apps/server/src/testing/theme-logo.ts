@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -51,10 +52,10 @@ export async function saveThemeThroughRoute(
   theme: ThemeChoices,
 ): Promise<Response> {
   const cookie = await withTransaction(db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: `manager ${randomUUID()}`, role: "manager" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: `manager ${randomUUID()}`,
+      role: "manager",
+    });
     const session = await startManagementSession(tx, { personId: person!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   });

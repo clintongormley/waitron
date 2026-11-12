@@ -15,7 +15,13 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedNode,
+  seedTenant,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -399,10 +405,7 @@ describe("deleting a page printer", () => {
     const v = await venue();
     const office = await register(entry(v.agentOne));
     const other = await register(entry(v.agentOne, { host: "192.0.2.41" }));
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Counter", formFactor: "till" })
-      .returning();
+    const [profile] = await seedDeviceProfiles(suite.db, { name: "Counter", formFactor: "till" });
     const { deviceId } = await seedDevice(suite.db, {
       label: "Counter till",
       profileId: profile!.id,

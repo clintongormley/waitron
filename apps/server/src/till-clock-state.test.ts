@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
@@ -38,13 +39,10 @@ beforeEach(async () => {
   });
   locationId = await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
-  const people = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Anna", pinHash: "seed", role: "staff" },
-      { displayName: "Lewis", pinHash: "seed", role: "manager" },
-    ])
-    .returning({ id: persons.id });
+  const people = await seedPersons(suite.db, [
+    { displayName: "Anna", pinHash: "seed", role: "staff" },
+    { displayName: "Lewis", pinHash: "seed", role: "manager" },
+  ]);
   personId = people[0]!.id;
   otherPersonId = people[1]!.id;
 });

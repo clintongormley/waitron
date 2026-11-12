@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sendSmtpMessage } from "./smtp-send.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -177,23 +178,20 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
   };
   return withTransaction(suite.db, async (tx) => {
     const [admin] = await tx.select({ id: persons.id }).from(persons).limit(1);
-    await tx.insert(persons).values({
+    await seedPersons(tx, {
       displayName: MARTA_NAME,
       email: MARTA_EMAIL,
       pinHash: hashPin("1111"),
       passwordHash: hashPassword("martaPass123"),
       role: "staff",
     });
-    const [clerk] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Clerk",
-        email: "clerk@example.test",
-        pinHash: hashPin("2222"),
-        passwordHash: hashPassword("clerkPass123"),
-        role: "staff",
-      })
-      .returning({ id: persons.id });
+    const [clerk] = await seedPersons(tx, {
+      displayName: "Clerk",
+      email: "clerk@example.test",
+      pinHash: hashPin("2222"),
+      passwordHash: hashPassword("clerkPass123"),
+      role: "staff",
+    });
     return { adminId: admin!.id, clerkId: clerk!.id };
   });
 }
@@ -667,10 +665,11 @@ describe("the recovery page, the log file and stdout carry no person's details",
     );
     const deviceId = await seedSessionDevice(v.db);
     const session = await inTx(v, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: "Ana",
+        pinHash: hashPin("5555"),
+        role: "staff",
+      });
       return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
     });
     const cookie = await sessionCookieForTest(v.db, session.token);

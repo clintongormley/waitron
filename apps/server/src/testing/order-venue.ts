@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -63,10 +64,11 @@ export async function provisionOrderVenue(
     )
   ).zoneId;
   const made = await inTx(venue, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Sofía", pinHash: fixturePinHash("7777"), role: "supervisor" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Sofía",
+      pinHash: fixturePinHash("7777"),
+      role: "supervisor",
+    });
     const till = await loginWithPin(tx, {
       deviceId: venue.deviceId,
       personId: person!.id,

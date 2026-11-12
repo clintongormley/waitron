@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
@@ -1275,10 +1276,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
   it("keeping the charge on a burger made here tells a waiting Fryer of its Requested chips in a held group whose HOLD printed elsewhere", async () => {
     const venue = await fresh();
     const [profile] = await withTransaction(db, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({ name: "Grill till", formFactor: "till", capabilities: [] })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, { name: "Grill till", formFactor: "till", capabilities: [] }),
     );
     const here = await enrolDeviceForTest(db, venue.cfg, {
       name: "Grill till",
@@ -1418,14 +1416,11 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
 /** A device whose own kitchen profile may run the pass, showing every station. */
 async function passOn(db: Database, venue: Venue): Promise<PassActor> {
   const [profile] = await withTransaction(db, (tx) =>
-    tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Every pass profile",
-        formFactor: "kds",
-        capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
-      })
-      .returning({ id: deviceProfiles.id }),
+    seedDeviceProfiles(tx, {
+      name: "Every pass profile",
+      formFactor: "kds",
+      capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
+    }),
   );
   const joined = await enrolDeviceForTest(db, venue.cfg, {
     name: "Every pass",

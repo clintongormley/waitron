@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -187,7 +188,7 @@ async function snapshot() {
 beforeEach(async () => {
   await seedTenants(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await suite.db.insert(persons).values([
+  await seedPersons(suite.db, [
     { id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH },
     { id: OTHER, displayName: "Another administrator", role: "admin", passwordHash: HASH },
   ]);

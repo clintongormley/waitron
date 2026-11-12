@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -61,10 +63,11 @@ async function till(
   personId = t.venue.operatorId,
 ): Promise<Till> {
   const db = suite.db;
-  const [profile] = await db
-    .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID().slice(0, 8)}`, formFactor: "till", capabilities })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(db, {
+    name: `Till ${randomUUID().slice(0, 8)}`,
+    formFactor: "till",
+    capabilities,
+  });
   const device = await enrolDeviceForTest(db, t.venue.cfg, {
     name: `Till ${randomUUID().slice(0, 8)}`,
     profileId: profile!.id,
@@ -224,10 +227,11 @@ describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
 
 describe("POST /api/working-orders/:id/close-by-transfer, refusals", () => {
   it("refuses a suspended person whose session is still open, then closes for an active one", async () => {
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Luis", pinHash: hashPin("4444"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Luis",
+      pinHash: hashPin("4444"),
+      role: "staff",
+    });
     const allowed = await till(ALLOWED, person!.id);
     const { billId, body } = await counterBill();
     await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, person!.id));

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { probeNetwork } from "@waitron/print-agent-app/tcp-probe.js";
 import { createLinuxDevices } from "@waitron/print-agent-app/linux-devices.js";
 import net from "node:net";
@@ -76,10 +77,11 @@ const suite = useVenueDb({
       simplifiedInvoiceLimit: null,
     };
     const managerSid = await withTransaction(db, async (tx) => {
-      const [mgr] = await tx
-        .insert(persons)
-        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
+      const [mgr] = await seedPersons(tx, {
+        displayName: "The Manager",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
       const session = await startManagementSession(tx, { personId: mgr!.id });
       return session.token;
     });

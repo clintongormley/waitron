@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -154,10 +155,11 @@ async function setupVenue(): Promise<VenueResult> {
 /** Through the table definition: `$defaultFn` generators are never reached by a raw insert. */
 async function seedPerson(name: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const [row] = await tx
-      .insert(persons)
-      .values({ displayName: name, pinHash: hashPin("0000"), role: "staff" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(tx, {
+      displayName: name,
+      pinHash: hashPin("0000"),
+      role: "staff",
+    });
     return row!.id;
   });
 }

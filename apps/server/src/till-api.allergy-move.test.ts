@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -45,7 +46,7 @@ useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    await db.insert(persons).values({ id: OPERATOR, displayName: "Test operator", role: "staff" });
+    await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   },
 });
 afterEach(() => vi.restoreAllMocks());
@@ -233,10 +234,7 @@ it("transports answer and ticks through the move route and replays the original 
     409,
     "submission.id_reused",
   );
-  const [other] = await v.db
-    .insert(persons)
-    .values({ displayName: "Other operator", role: "staff" })
-    .returning();
+  const [other] = await seedPersons(v.db, { displayName: "Other operator", role: "staff" });
   await v.db.update(sessions).set({ personId: other!.id }).where(eq(sessions.id, f.sessionId));
   noteSessionPerson(f.token, other!.id);
   const changedActor = frozen();

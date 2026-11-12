@@ -9,7 +9,7 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FORM_FACTOR_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedVenue } from "../testing/seed.js";
+import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
@@ -32,10 +32,10 @@ describe("device_profiles form-factor drift guard (locked while an active device
 
   async function freshKdsProfile(): Promise<string> {
     profileSeq += 1;
-    const [row] = await db
-      .insert(deviceProfiles)
-      .values({ name: `KDS profile ${profileSeq}`, formFactor: "kds" })
-      .returning({ id: deviceProfiles.id });
+    const [row] = await seedDeviceProfiles(db, {
+      name: `KDS profile ${profileSeq}`,
+      formFactor: "kds",
+    });
     return row!.id;
   }
 

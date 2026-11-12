@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { Socket } from "node:net";
@@ -512,7 +513,7 @@ describe("the waiting start", () => {
     });
 
     it("a person without `node.promote` is refused with the role sentence", async () => {
-      await suite.db.insert(persons).values({
+      await seedPersons(suite.db, {
         displayName: "Signed-in Manager",
         role: "manager",
         email: "manager@example.test",

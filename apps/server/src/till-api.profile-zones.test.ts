@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -317,14 +319,11 @@ async function signIn(profileId: string): Promise<string> {
 }
 
 async function profile(): Promise<string> {
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...CAPABILITY_FLAGS],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Till ${randomUUID()}`,
+    formFactor: "till",
+    capabilities: [...CAPABILITY_FLAGS],
+  });
   return row!.id;
 }
 
@@ -454,10 +453,11 @@ beforeAll(async () => {
     deliItem: zones.deliItem,
     deliTablesItem: zones.deliTablesItem,
   };
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "admin" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Anna",
+    pinHash: hashPin("5555"),
+    role: "admin",
+  });
   personId = person!.id;
   restaurantProfile = await profile();
   await inTx(v, async (tx) =>
@@ -1371,14 +1371,11 @@ describe("a kitchen display", () => {
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
       .where(eq(kitchenStations.isDefault, true));
-    const [kitchen] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Kitchen ${randomUUID()}`,
-        formFactor: "kds",
-        capabilities: ["act-as-kds", "prepare-orders"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [kitchen] = await seedDeviceProfiles(suite.db, {
+      name: `Kitchen ${randomUUID()}`,
+      formFactor: "kds",
+      capabilities: ["act-as-kds", "prepare-orders"],
+    });
     const device = await enrolDeviceForTest(suite.db, v.cfg, {
       name: `Kitchen ${randomUUID()}`,
       profileId: kitchen!.id,
@@ -1469,14 +1466,11 @@ describe("a kitchen display", () => {
 
 describe("a kitchen display's pass levers", () => {
   async function restaurantPass(): Promise<string> {
-    const [row] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Pass ${randomUUID()}`,
-        formFactor: "kds",
-        capabilities: ["take-orders", "prepare-orders", "hand-over-orders"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [row] = await seedDeviceProfiles(suite.db, {
+      name: `Pass ${randomUUID()}`,
+      formFactor: "kds",
+      capabilities: ["take-orders", "prepare-orders", "hand-over-orders"],
+    });
     const device = await enrolDeviceForTest(suite.db, v.cfg, {
       name: `Pass ${randomUUID()}`,
       profileId: row!.id,
@@ -1554,10 +1548,11 @@ describe("A773 pass board", () => {
       ["pass", "/api/device/pass-board"],
       ["pass_monitor", "/api/device/pass-monitor-board"],
     ] as const) {
-      const [kds] = await suite.db
-        .insert(deviceProfiles)
-        .values({ name: `Pass ${randomUUID()}`, formFactor: "kds", capabilities: [] })
-        .returning({ id: deviceProfiles.id });
+      const [kds] = await seedDeviceProfiles(suite.db, {
+        name: `Pass ${randomUUID()}`,
+        formFactor: "kds",
+        capabilities: [],
+      });
       const device = await enrolDeviceForTest(suite.db, v.cfg, {
         name: `Pass ${randomUUID()}`,
         profileId: kds!.id,

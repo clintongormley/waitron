@@ -17,7 +17,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { createCategory, createProduct, getExtraList, readCategory } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
@@ -975,10 +975,11 @@ describe("sending split-off extras", () => {
           categoryId: sides.id,
         },
       ]);
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Bar till", formFactor: "till", capabilities: [] })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Bar till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
       await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: bar.id });
       const sink = new Set<string>();
@@ -1017,10 +1018,11 @@ describe("sending split-off extras", () => {
   it("keeps a made-here extra ready through a held group's release, while another device holds it", async () => {
     const venue = await splitVenue.setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Bar till", formFactor: "till", capabilities: [] })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Bar till",
+        formFactor: "till",
+        capabilities: [],
+      });
       const { deviceId: here } = await seedDevice(tx, { profileId: profile!.id, label: "Here" });
       const { deviceId: elsewhere } = await seedDevice(tx, {
         profileId: profile!.id,

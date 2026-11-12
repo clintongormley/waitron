@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -110,10 +112,11 @@ useVenueDb({
       ).zoneId;
     });
     const session = await inTx(venue, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Sophia", pinHash: hashPin(SUPERVISOR_PIN), role: "supervisor" })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: "Sophia",
+        pinHash: hashPin(SUPERVISOR_PIN),
+        role: "supervisor",
+      });
       supervisorId = person!.id;
       return loginWithPin(tx, {
         deviceId: venue.deviceId,
@@ -516,14 +519,11 @@ describe("who may record it", () => {
 
   it("records it from a handheld for a person holding the permission, filing under the handheld", async () => {
     const [profile] = await inTx(venue, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({
-          name: "Handheld",
-          formFactor: "phone-portrait",
-          capabilities: [...BASIC_ACTIONS, "take-cash"],
-        })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, {
+        name: "Handheld",
+        formFactor: "phone-portrait",
+        capabilities: [...BASIC_ACTIONS, "take-cash"],
+      }),
     );
     const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "Comandera",
@@ -560,14 +560,11 @@ describe("who may record it", () => {
 
   it("records the departure under the device it was recorded on", async () => {
     const [profile] = await inTx(venue, (tx) =>
-      tx
-        .insert(deviceProfiles)
-        .values({
-          name: "Handheld origin",
-          formFactor: "phone-portrait",
-          capabilities: [...BASIC_ACTIONS, "take-cash"],
-        })
-        .returning({ id: deviceProfiles.id }),
+      seedDeviceProfiles(tx, {
+        name: "Handheld origin",
+        formFactor: "phone-portrait",
+        capabilities: [...BASIC_ACTIONS, "take-cash"],
+      }),
     );
     const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "Comandera origin",

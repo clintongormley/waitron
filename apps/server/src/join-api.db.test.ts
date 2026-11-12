@@ -2,6 +2,7 @@
  * The management-side join routes — the window's holds, the queue, the challenge, deny and accept —
  * driven over HTTP. The role-map fact they rely on is pinned in `join-api.test.ts`.
  */
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -92,10 +93,11 @@ async function knock(
 let profileCounter = 0;
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
-    .returning({ id: deviceProfiles.id });
+  const [row] = await seedDeviceProfiles(suite.db, {
+    name: `Profile ${profileCounter}`,
+    formFactor,
+    capabilities: [],
+  });
   return row!.id;
 }
 

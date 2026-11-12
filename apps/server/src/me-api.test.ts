@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -61,30 +62,30 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    const [meRow] = await db
-      .insert(persons)
-      .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })
-      .returning({ id: persons.id });
+    const [meRow] = await seedPersons(db, {
+      displayName: "Me",
+      pinHash: hashPin("1111"),
+      role: "staff",
+    });
     me = meRow!.id;
-    const [colRow] = await db
-      .insert(persons)
-      .values({ displayName: "Colleague", pinHash: hashPin("2222"), role: "staff" })
-      .returning({ id: persons.id });
+    const [colRow] = await seedPersons(db, {
+      displayName: "Colleague",
+      pinHash: hashPin("2222"),
+      role: "staff",
+    });
     colleague = colRow!.id;
-    const [mgrRow] = await db
-      .insert(persons)
-      .values({ displayName: "Manager", pinHash: hashPin("3333"), role: "manager" })
-      .returning({ id: persons.id });
+    const [mgrRow] = await seedPersons(db, {
+      displayName: "Manager",
+      pinHash: hashPin("3333"),
+      role: "manager",
+    });
     manager = mgrRow!.id;
-    const [localedRow] = await db
-      .insert(persons)
-      .values({
-        displayName: "Localed",
-        pinHash: hashPin("4444"),
-        role: "staff",
-        locale: "es-ES",
-      })
-      .returning({ id: persons.id });
+    const [localedRow] = await seedPersons(db, {
+      displayName: "Localed",
+      pinHash: hashPin("4444"),
+      role: "staff",
+      locale: "es-ES",
+    });
     localed = localedRow!.id;
   },
 });
@@ -967,10 +968,11 @@ describe("mountMeApi — set your own locale", () => {
   // A fresh person per mutating test, so no sibling whoami assertion (which pins `me`'s locale to
   // null) is disturbed.
   async function freshPerson(pin: string): Promise<string> {
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Locale User", pinHash: hashPin(pin), role: "staff" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: "Locale User",
+      pinHash: hashPin(pin),
+      role: "staff",
+    });
     return row!.id;
   }
   async function cleanup(personId: string): Promise<void> {
@@ -1079,16 +1081,13 @@ describe("mountMeApi — own credentials and second factor", () => {
     extra: Partial<typeof persons.$inferInsert> = {},
   ): Promise<string> {
     personCount += 1;
-    const [row] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: `Credential User ${personCount}`,
-        pinHash: hashPin("5555"),
-        role: "staff",
-        passwordHash: hashPassword(PASSWORD),
-        ...extra,
-      })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: `Credential User ${personCount}`,
+      pinHash: hashPin("5555"),
+      role: "staff",
+      passwordHash: hashPassword(PASSWORD),
+      ...extra,
+    });
     return row!.id;
   }
 
@@ -1403,17 +1402,14 @@ describe("mountMeApi — account request refusal ordering", () => {
 
   async function personWithPassword(): Promise<string> {
     count += 1;
-    const [row] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: `Lock User ${count}`,
-        email: `lock-user-${count}@example.com`,
-        pinHash: hashPin("5555"),
-        role: "staff",
-        passwordHash: hashPassword(PASSWORD),
-        googleSubject: `google-lock-user-${count}`,
-      })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: `Lock User ${count}`,
+      email: `lock-user-${count}@example.com`,
+      pinHash: hashPin("5555"),
+      role: "staff",
+      passwordHash: hashPassword(PASSWORD),
+      googleSubject: `google-lock-user-${count}`,
+    });
     return row!.id;
   }
 
@@ -1565,10 +1561,11 @@ describe("session proof routes", () => {
     }
   });
   it("answers 409 when the signed-in person asks for passkey options with none registered", async () => {
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName: "No Passkey", pinHash: hashPin("6666"), role: "staff" })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, {
+      displayName: "No Passkey",
+      pinHash: hashPin("6666"),
+      role: "staff",
+    });
     const response = await send(
       mountApp(),
       "POST",

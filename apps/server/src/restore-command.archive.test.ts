@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -146,10 +147,7 @@ beforeAll(async () => {
       idSistemaInformatico: "W1",
       numeroInstalacion: "1",
     });
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("1234") })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, { displayName: "Ana", pinHash: hashPin("1234") });
     personId = person!.id;
   });
   await stampDeployment(suite.db, "preproduction");

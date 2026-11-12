@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -48,13 +49,10 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   locationId = await seedLocation(suite.db);
   nodeId = await seedNode(suite.db, locationId);
-  const rows = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
-      { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
-    ])
-    .returning({ id: persons.id });
+  const rows = await seedPersons(suite.db, [
+    { displayName: "Worker", pinHash: "scrypt$00$00", role: "staff" },
+    { displayName: "Other", pinHash: "scrypt$00$00", role: "staff" },
+  ]);
   [personId, other] = rows.map((r) => r.id) as [string, string];
 });
 const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));

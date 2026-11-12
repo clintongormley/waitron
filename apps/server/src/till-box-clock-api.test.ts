@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -81,10 +83,11 @@ async function signIn(
 }
 
 async function seedPerson(role: PersonRoleValue, name: string): Promise<string> {
-  const [person] = await venue.db
-    .insert(persons)
-    .values({ displayName: name, pinHash: hashPin("1234"), role })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(venue.db, {
+    displayName: name,
+    pinHash: hashPin("1234"),
+    role,
+  });
   return person!.id;
 }
 
@@ -120,10 +123,11 @@ useVenueDb({
     const adminTill = await enrolDeviceForTest(db, venue.cfg, { name: "Caja admin", profileId });
     adminTillId = adminTill.deviceId;
     adminTillCookie = await signIn(adminTill, venue.adminId, "1234");
-    const [clockOnly] = await db
-      .insert(deviceProfiles)
-      .values({ name: "Fichaje", formFactor: "till", capabilities: ["clock-in"] })
-      .returning({ id: deviceProfiles.id });
+    const [clockOnly] = await seedDeviceProfiles(db, {
+      name: "Fichaje",
+      formFactor: "till",
+      capabilities: ["clock-in"],
+    });
     const clockOnlyTill = await enrolDeviceForTest(db, venue.cfg, {
       name: "Fichador",
       profileId: clockOnly!.id,

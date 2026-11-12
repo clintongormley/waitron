@@ -1,6 +1,6 @@
 import { seedPersons, builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
@@ -771,10 +771,7 @@ describe("configuration transfer database path", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
       });
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Office till", formFactor: "till" })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, { name: "Office till", formFactor: "till" });
       await setProfilePrinterLists(tx, profile!.id, {
         ...emptyPrinterLists(),
         invoicePrinterIds: [sourcePagePrinterId],
@@ -3410,10 +3407,10 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
         })),
       )
       .returning({ id: printers.id });
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Counter till", formFactor: "tablet-landscape" })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: "Counter till",
+      formFactor: "tablet-landscape",
+    });
     await setProfilePrinterLists(tx, profile!.id, {
       ...emptyPrinterLists(),
       receiptPrinterIds: [added[1]!.id, added[0]!.id],
@@ -4441,10 +4438,7 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
     modules: ALL_MODULES,
   });
 
-  const [retired] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: "Old till", formFactor: "till" })
-    .returning({ id: deviceProfiles.id });
+  const [retired] = await seedDeviceProfiles(suite.db, { name: "Old till", formFactor: "till" });
   await retireProfile(retired!.id);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -4479,13 +4473,10 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
         host: "10.0.2.1",
       })
       .returning({ id: printers.id });
-    const [live, retired] = await tx
-      .insert(deviceProfiles)
-      .values([
-        { name: "Handheld", formFactor: "phone-portrait" },
-        { name: "Old till", formFactor: "till" },
-      ])
-      .returning({ id: deviceProfiles.id });
+    const [live, retired] = await seedDeviceProfiles(tx, [
+      { name: "Handheld", formFactor: "phone-portrait" },
+      { name: "Old till", formFactor: "till" },
+    ]);
     for (const profile of [live!, retired!]) {
       await setProfilePrinterLists(tx, profile.id, {
         ...emptyPrinterLists(),
@@ -4542,13 +4533,10 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    const [live, retired] = await tx
-      .insert(deviceProfiles)
-      .values([
-        { name: "Terrace handheld", formFactor: "phone-portrait" },
-        { name: "Old till", formFactor: "till" },
-      ])
-      .returning({ id: deviceProfiles.id });
+    const [live, retired] = await seedDeviceProfiles(tx, [
+      { name: "Terrace handheld", formFactor: "phone-portrait" },
+      { name: "Old till", formFactor: "till" },
+    ]);
     for (const profile of [live!, retired!]) {
       await setProfileServiceAccess(tx, profile.id, {
         departmentId: restaurant.id,
@@ -4639,14 +4627,11 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       .insert(kitchenStations)
       .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
-    const [till, wall, retired] = await tx
-      .insert(deviceProfiles)
-      .values([
-        { name: "Pass till", formFactor: "till" },
-        { name: "Pass wall", formFactor: "kds" },
-        { name: "Old till", formFactor: "till" },
-      ])
-      .returning({ id: deviceProfiles.id });
+    const [till, wall, retired] = await seedDeviceProfiles(tx, [
+      { name: "Pass till", formFactor: "till" },
+      { name: "Pass wall", formFactor: "kds" },
+      { name: "Old till", formFactor: "till" },
+    ]);
     await VENUE_SERVICE.setProfileKitchenScreens(tx, till!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
       pass: { stationIds: [grill!.id], zoneIds: [terrace.id] },
@@ -4775,13 +4760,10 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    const [live, retired] = await tx
-      .insert(deviceProfiles)
-      .values([
-        { name: "Bar till", formFactor: "till" },
-        { name: "Old till", formFactor: "till" },
-      ])
-      .returning({ id: deviceProfiles.id });
+    const [live, retired] = await seedDeviceProfiles(tx, [
+      { name: "Bar till", formFactor: "till" },
+      { name: "Old till", formFactor: "till" },
+    ]);
     for (const profile of [live!, retired!]) {
       await tx
         .insert(deviceProfileAdmissionRoles)
@@ -6422,14 +6404,11 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
       name: "Transfer receiving zone",
       departmentId: b.id,
     });
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Transfer receiving desk",
-        formFactor: "till",
-        capabilities: ["take-orders"],
-      })
-      .returning();
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: "Transfer receiving desk",
+      formFactor: "till",
+      capabilities: ["take-orders"],
+    });
     await setProfileServiceScope(tx, profile!.id, {
       departmentId: b.id,
       allowedZoneIds: null,
@@ -6846,10 +6825,7 @@ describe("a deleted printer in a configuration transfer", () => {
         .insert(kitchenStations)
         .values({ name: "Grill" })
         .returning({ id: kitchenStations.id });
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Counter till", formFactor: "till" })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, { name: "Counter till", formFactor: "till" });
       await tx.insert(stationPrinters).values([
         { stationId: station!.id, printerId: live!.id },
         { stationId: station!.id, printerId: old!.id },
@@ -7096,10 +7072,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     });
     await setProductCourse(tx, product.id, course.id);
     await updateProduct(tx, product.id, { active: false });
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Bound till", formFactor: "till" })
-      .returning();
+    const [profile] = await seedDeviceProfiles(tx, { name: "Bound till", formFactor: "till" });
     await VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: [station.id], zoneIds: null },
     });
@@ -8018,10 +7991,7 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Selected till", formFactor: "till" })
-      .returning();
+    const [profile] = await seedDeviceProfiles(tx, { name: "Selected till", formFactor: "till" });
     const device = {
       id: (await seedDevice(tx, { profileId: profile!.id, label: "Selected till" })).deviceId,
     };
@@ -8099,10 +8069,7 @@ describe("A773 pass display policy", () => {
       modules: ALL_MODULES,
     });
     const deviceId = await withTransaction(suite.db, async (tx) => {
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({ name: "Hidden pass", formFactor: "till" })
-        .returning();
+      const [profile] = await seedDeviceProfiles(tx, { name: "Hidden pass", formFactor: "till" });
       await VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
         pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
         pass_monitor: { stationIds: null, zoneIds: null },

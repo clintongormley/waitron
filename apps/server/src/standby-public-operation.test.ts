@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -87,9 +88,12 @@ beforeEach(async () => {
     { id: PRIMARY, locationId: LOCATION, name: "Primary" },
     { id: TARGET, locationId: LOCATION, name: "Spare" },
   ]);
-  await suite.db
-    .insert(persons)
-    .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: HASH });
+  await seedPersons(suite.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: HASH,
+  });
   await stampDeployment(suite.db, "preproduction");
   modules.splice(
     0,

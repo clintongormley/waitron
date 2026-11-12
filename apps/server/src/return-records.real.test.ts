@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
@@ -173,10 +174,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   expect(await withTransaction(current.db, listFilingCases)).toEqual([]);
   registerModulePermissions(FISCAL_PERMISSIONS);
   const token = await withTransaction(current.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin" })
-      .returning();
+    const [person] = await seedPersons(tx, { displayName: "Administrator", role: "admin" });
     const session = await startManagementSession(tx, { personId: person!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;

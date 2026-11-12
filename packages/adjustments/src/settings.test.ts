@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -204,7 +205,7 @@ describe("the adjustments document", () => {
     expect(await inTx(readAdjustmentSettings)).toEqual({ ...first, revision: 1 });
   });
   it("names the person who saved", async () => {
-    const [person] = await db.insert(persons).values({ displayName: "Manager" }).returning();
+    const [person] = await seedPersons(db, { displayName: "Manager" });
     await inTx((tx) =>
       saveAdjustmentSettings(
         tx,

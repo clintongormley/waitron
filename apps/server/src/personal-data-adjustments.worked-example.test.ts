@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -220,10 +221,7 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
       .update(persons)
       .set({ displayName: "Pablo Gil" })
       .where(eq(persons.id, venue.managerId));
-    const [added] = await tx
-      .insert(persons)
-      .values({ displayName: "Ana Soler", role: "staff" })
-      .returning({ id: persons.id });
+    const [added] = await seedPersons(tx, { displayName: "Ana Soler", role: "staff" });
     const [olives] = await tx
       .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
       .from(products)

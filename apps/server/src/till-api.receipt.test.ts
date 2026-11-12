@@ -1,4 +1,5 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedDeviceProfiles, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -236,14 +237,16 @@ async function setupVenue(): Promise<{
       stationId: null,
       noPreparation: true,
     });
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "Cajera", pinHash: fixturePinHash("5555"), role: "staff" })
-      .returning({ id: persons.id });
-    const [supervisor] = await tx
-      .insert(persons)
-      .values({ displayName: "Responsable", pinHash: fixturePinHash("5555"), role: "supervisor" })
-      .returning({ id: persons.id });
+    const [staff] = await seedPersons(tx, {
+      displayName: "Cajera",
+      pinHash: fixturePinHash("5555"),
+      role: "staff",
+    });
+    const [supervisor] = await seedPersons(tx, {
+      displayName: "Responsable",
+      pinHash: fixturePinHash("5555"),
+      role: "supervisor",
+    });
     const { products: available } = await listAvailableProducts(tx);
     for (const department of await tx.select({ id: departments.id }).from(departments))
       await tx
@@ -401,14 +404,11 @@ async function enrolTillCookie(
 ): Promise<string> {
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Counter till profile ${n}`,
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, ...capabilities],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Counter till profile ${n}`,
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS, ...capabilities],
+  });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${n}`,
     profileId: profile!.id,
@@ -421,14 +421,11 @@ async function enrolTillCookie(
 async function enrolConfiguredTillCookie(cfg: TradingContext): Promise<string> {
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Configured till profile ${n}`,
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
-    })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Configured till profile ${n}`,
+    formFactor: "till",
+    capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+  });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Configured till ${n}`,
     profileId: profile!.id,
@@ -1220,10 +1217,10 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       descriptions: { "es-ES": "Agua para clientes" },
     });
     const managerCookie = await withTransaction(suite.db, async (tx) => {
-      const [manager] = await tx
-        .insert(persons)
-        .values({ displayName: "Translation manager", role: "manager" })
-        .returning();
+      const [manager] = await seedPersons(tx, {
+        displayName: "Translation manager",
+        role: "manager",
+      });
       const session = await startManagementSession(tx, { personId: manager!.id });
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
@@ -1588,14 +1585,11 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
   ): Promise<{ cookie: string; deviceId: string }> {
     tillDeviceCounter += 1;
     const n = tillDeviceCounter;
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Drawer till profile ${n}`,
-        formFactor: "till",
-        capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: `Drawer till profile ${n}`,
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
+    });
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: `Drawer till ${n}`,
       profileId: profile!.id,
@@ -2012,15 +2006,12 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
   it("an override that cannot sign in gets one answer, whether the person is unknown, suspended, malformed or gave a wrong PIN", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt({ printerId: await makePrinter() });
-    const [suspended] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: "Responsable suspendida",
-        pinHash: hashPin("5555"),
-        role: "supervisor",
-        status: "suspended",
-      })
-      .returning({ id: persons.id });
+    const [suspended] = await seedPersons(suite.db, {
+      displayName: "Responsable suspendida",
+      pinHash: hashPin("5555"),
+      role: "supervisor",
+      status: "suspended",
+    });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2832,14 +2823,11 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     tillDeviceCounter += 1;
     const n = tillDeviceCounter;
     const formFactor = opts.formFactor ?? "till";
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({
-        name: `Printing profile ${n}`,
-        formFactor,
-        capabilities: [...BASIC_ACTIONS, ...opts.capabilities],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: `Printing profile ${n}`,
+      formFactor,
+      capabilities: [...BASIC_ACTIONS, ...opts.capabilities],
+    });
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profile!.id, {
         ...emptyPrinterLists(),

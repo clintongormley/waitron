@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -93,15 +94,12 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
  * raw SQL insert never reaches. */
 async function seedStaff(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Cashier",
-        pinHash: hashPin("4321"),
-        passwordHash: hashPassword(STAFF_PASSWORD),
-        role: "staff",
-      })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Cashier",
+      pinHash: hashPin("4321"),
+      passwordHash: hashPassword(STAFF_PASSWORD),
+      role: "staff",
+    });
     return person!.id;
   });
 }

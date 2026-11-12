@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
@@ -54,22 +55,16 @@ async function setupVenue(): Promise<Venue> {
   const nodeId = await seedNode(db);
 
   const { managerSid, staffSid } = await withTransaction(db, async (tx: Transaction) => {
-    const [mgr] = await tx
-      .insert(persons)
-      .values({
-        displayName: `The Manager ${crypto.randomUUID()}`,
-        pinHash: hashPin("1234"),
-        role: "manager",
-      })
-      .returning({ id: persons.id });
-    const [stf] = await tx
-      .insert(persons)
-      .values({
-        displayName: `The Clerk ${crypto.randomUUID()}`,
-        pinHash: hashPin("1234"),
-        role: "staff",
-      })
-      .returning({ id: persons.id });
+    const [mgr] = await seedPersons(tx, {
+      displayName: `The Manager ${crypto.randomUUID()}`,
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
+    const [stf] = await seedPersons(tx, {
+      displayName: `The Clerk ${crypto.randomUUID()}`,
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     const managerSession = await startManagementSession(tx, { personId: mgr!.id });
     const staffSession = await startManagementSession(tx, { personId: stf!.id });
     return { managerSid: managerSession.token, staffSid: staffSession.token };

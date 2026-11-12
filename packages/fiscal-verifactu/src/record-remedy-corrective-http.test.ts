@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -93,14 +94,11 @@ beforeEach(async () => {
     },
   });
   await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Administrator",
-        role: "admin",
-        pinHash: hashPin("2468"),
-      })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Administrator",
+      role: "admin",
+      pinHash: hashPin("2468"),
+    });
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
     await setFreshManagementSignIn(tx, token);
@@ -412,7 +410,7 @@ it.each([false, true])("rechecks live authority and policy on replay=%s", async 
   trading = false;
   await refuses(body, "venue.time_zone_not_ready", 409);
   trading = true;
-  await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, personId));
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
   await refuses(body, "authorization.not_permitted", 403);
   expect(await snapshot()).toEqual(before);
 });

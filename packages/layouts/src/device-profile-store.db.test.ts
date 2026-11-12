@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
@@ -13,10 +14,11 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  seedBusinessDay,
+  seedDeviceProfiles,
   seedTenant,
   seedVenue,
   seedVenueSettings,
-  seedBusinessDay,
 } from "@waitron/db/testing/seed.js";
 import { persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
@@ -43,10 +45,11 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
  * table's `$defaultFn`, which is not a SQL DEFAULT, so a raw insert naming neither is refused
  * `NOT NULL constraint failed: persons.id`. */
 async function seedSession(role: PersonRoleValue): Promise<string> {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: `Operator ${randomUUID()}`, pinHash: "seed-pin-hash", role })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: `Operator ${randomUUID()}`,
+    pinHash: "seed-pin-hash",
+    role,
+  });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
@@ -920,19 +923,17 @@ describe("a profile's starting screen and shared-display actions", () => {
 
   it("reads null for a stored starting screen that is not a navigation screen", async () => {
     try {
-      const [row] = await suite.db
-        .insert(deviceProfiles)
-        .values({
-          name: "Written directly",
-          formFactor: "till",
-          capabilities: ["show-expo", "act-as-kds"],
-          startingScreen: "act-as-kds",
-        })
-        .returning({ id: deviceProfiles.id });
-      const [other] = await suite.db
-        .insert(deviceProfiles)
-        .values({ name: "Unknown screen", formFactor: "till", startingScreen: "counter" })
-        .returning({ id: deviceProfiles.id });
+      const [row] = await seedDeviceProfiles(suite.db, {
+        name: "Written directly",
+        formFactor: "till",
+        capabilities: ["show-expo", "act-as-kds"],
+        startingScreen: "act-as-kds",
+      });
+      const [other] = await seedDeviceProfiles(suite.db, {
+        name: "Unknown screen",
+        formFactor: "till",
+        startingScreen: "counter",
+      });
       expect(await inTx((tx) => readProfileStartingScreen(tx, row!.id))).toBeNull();
       expect(await inTx((tx) => readProfileStartingScreen(tx, other!.id))).toBeNull();
     } finally {

@@ -1,3 +1,5 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -182,10 +184,11 @@ async function venue(): Promise<Venue> {
     await assignCatalogueToVenue(tx, catalogue.id);
     const available = (await listAvailableProducts(tx)).products;
     const offers = await offerProducts(tx, scriptCfg, { orderStart: "counter" });
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "Cashier", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [staff] = await seedPersons(tx, {
+      displayName: "Cashier",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     const [agent] = await tx
       .insert(printAgents)
       .values({ name: "Back office agent", tokenHash: "scrypt$x" })
@@ -265,10 +268,11 @@ async function till(
   receiptPrinterId: string | null = v.receiptPrinterId,
 ): Promise<string> {
   tillCounter += 1;
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: `Till profile ${tillCounter}`, formFactor: "till", capabilities })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: `Till profile ${tillCounter}`,
+    formFactor: "till",
+    capabilities,
+  });
   const device = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Till ${tillCounter}`,
     profileId: profile!.id,

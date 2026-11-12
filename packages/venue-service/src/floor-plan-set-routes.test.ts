@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
@@ -159,10 +160,11 @@ async function casaMarina() {
     const lunch = await period("Lunch", "grey");
     const dinner = await period("Dinner", "blue");
     const person = async (role: "manager" | "supervisor") => {
-      const [row] = await tx
-        .insert(persons)
-        .values({ displayName: `${role} ${randomUUID()}`, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [row] = await seedPersons(tx, {
+        displayName: `${role} ${randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role,
+      });
       return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: row!.id })).token}`;
     };
     return {

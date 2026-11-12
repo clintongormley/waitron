@@ -1,6 +1,7 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { readVenueLocale } from "./venue-locale.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -192,24 +193,22 @@ async function venueWith(
       vatClass: "general",
     });
     const offers = await offerProducts(tx, cfg, { productIds: [product.id] });
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [staff] = await seedPersons(tx, {
+      displayName: "Cajera",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     const { id: printerId } = await createPrinter(tx, {
       name: "Recibos",
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
       hasCashDrawer: false,
     });
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Barra",
-        formFactor: "till",
-        capabilities: [...BASIC_ACTIONS, "print-receipt", "open-cash-drawer", "take-cash"],
-      })
-      .returning({ id: deviceProfiles.id });
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: "Barra",
+      formFactor: "till",
+      capabilities: [...BASIC_ACTIONS, "print-receipt", "open-cash-drawer", "take-cash"],
+    });
     return {
       menuItemId: offers.offerFor(product.id),
       staffId: staff!.id,

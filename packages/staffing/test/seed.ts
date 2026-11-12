@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { kitchenStations, venueLocationId, withTransaction, type Database } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -15,10 +16,7 @@ export async function seedVenueWithStaff(db: Database) {
     await seedVenue(tx, venue);
     const locationId = await venueLocationId(tx);
     const person = async (displayName: string) => {
-      const [row] = await tx
-        .insert(persons)
-        .values({ displayName, role: "staff" })
-        .returning({ id: persons.id });
+      const [row] = await seedPersons(tx, { displayName, role: "staff" });
       return row!.id;
     };
     const suffix = randomUUID().slice(0, 8);

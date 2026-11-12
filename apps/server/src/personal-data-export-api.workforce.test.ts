@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { insertAttendanceMail } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
@@ -207,25 +208,22 @@ beforeEach(async () => {
   });
   locationId = await venueLocationId(suite.db);
   await suite.db.insert(nodes).values({ id: NODE_ID, locationId, name: "Box" });
-  const [marta, colleague, manager, admin] = await suite.db
-    .insert(persons)
-    .values([
-      {
-        displayName: MARTA.name,
-        email: MARTA.email,
-        pinHash: hashPin("4821"),
-        passkeyOfferedAt: MARTA.passkeyOfferedAt,
-      },
-      {
-        displayName: COLLEAGUE.name,
-        email: COLLEAGUE.email,
-        pinHash: hashPin("9137"),
-        passkeyOfferedAt: COLLEAGUE.passkeyOfferedAt,
-      },
-      { displayName: MANAGER.name, email: MANAGER.email, role: "manager" },
-      { displayName: ADMIN.name, email: ADMIN.email, role: "admin" },
-    ])
-    .returning({ id: persons.id });
+  const [marta, colleague, manager, admin] = await seedPersons(suite.db, [
+    {
+      displayName: MARTA.name,
+      email: MARTA.email,
+      pinHash: hashPin("4821"),
+      passkeyOfferedAt: MARTA.passkeyOfferedAt,
+    },
+    {
+      displayName: COLLEAGUE.name,
+      email: COLLEAGUE.email,
+      pinHash: hashPin("9137"),
+      passkeyOfferedAt: COLLEAGUE.passkeyOfferedAt,
+    },
+    { displayName: MANAGER.name, email: MANAGER.email, role: "manager" },
+    { displayName: ADMIN.name, email: ADMIN.email, role: "admin" },
+  ]);
   martaId = marta!.id;
   colleagueId = colleague!.id;
   managerId = manager!.id;

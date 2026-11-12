@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -140,10 +141,11 @@ async function routed() {
       stationId: station!.id,
     });
     const person = async (role: "manager" | "supervisor" | "staff") => {
-      const [row] = await tx
-        .insert(persons)
-        .values({ displayName: `${role} ${randomUUID()}`, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [row] = await seedPersons(tx, {
+        displayName: `${role} ${randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role,
+      });
       return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: row!.id })).token}`;
     };
     return {

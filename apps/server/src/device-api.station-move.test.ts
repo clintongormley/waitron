@@ -1,3 +1,4 @@
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
@@ -66,10 +67,11 @@ async function display(
   capabilities: readonly string[] = ["take-orders", "prepare-orders"],
   formFactor: "kds" | "till" = "kds",
 ): Promise<{ id: string; cookie: string }> {
-  const [profile] = await venue.db
-    .insert(deviceProfiles)
-    .values({ name: `Display ${randomUUID()}`, formFactor, capabilities: [...capabilities] })
-    .returning({ id: deviceProfiles.id });
+  const [profile] = await seedDeviceProfiles(venue.db, {
+    name: `Display ${randomUUID()}`,
+    formFactor,
+    capabilities: [...capabilities],
+  });
   const joined = await enrolDeviceForTest(venue.db, venue.cfg, {
     name: `Display ${randomUUID()}`,
     profileId: profile!.id,

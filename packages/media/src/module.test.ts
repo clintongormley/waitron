@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -115,10 +116,11 @@ describe("the media module descriptor", () => {
       () => {},
     );
     const statusFor = async (role: "staff" | "supervisor" | "manager") => {
-      const [person] = await suite.db
-        .insert(persons)
-        .values({ displayName: role, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(suite.db, {
+        displayName: role,
+        pinHash: hashPin("1234"),
+        role,
+      });
       const session = await suite.db.transaction((tx) =>
         startManagementSession(tx, { personId: person!.id }),
       );
