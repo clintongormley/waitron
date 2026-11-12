@@ -1724,6 +1724,8 @@ modal, red in-row reasons and settings saves separate from Enable/Disable. Disab
 protects every active administrator: the applying administrator gives fresh non-Google proof;
 every other active administrator needs supported recorded password/passkey enrollment. Planning is authorised by the watcher's 2026-11-01 note; build waits for A739 and starts with retained disabled-module protection.
 
+2026-11-11 scope update: the [current A646 entry](#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up) supersedes these Google and build-order parts.
+
 **Practice-sales operation descriptions (owner, 2026-10-23).** Under the owner's approval,
 the demo-test provisioner's practice-sales golden now uses the English operation description
 (`apps/server/scripts/demo-seed/testing/provision-venue.ts`).

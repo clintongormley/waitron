@@ -219,6 +219,13 @@ it("refreshes a stale provider revision so the open confirmation can be retried"
   await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
   await vi.waitFor(() => expect(api.listModules).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() =>
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-test=confirm-provider-state]")!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled,
+    ).toBe(false),
+  );
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
   await vi.waitFor(() =>
     expect(api.setPaymentProviderState).toHaveBeenLastCalledWith("sumup", false, 1),
