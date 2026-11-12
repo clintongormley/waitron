@@ -1,7 +1,7 @@
 # A275 Task 7: staff close a whole bill as a deferred payment from the till's Pay window
 
 **Status: proposed 2026-11-11; revised 2026-11-12 after one fresh-context review (no critical, four
-important findings, all folded in).** Builds after the code-name rename PR and after #2797 (Task 4)
+important findings, all folded in). PR A and B1 built as one pull request (2026-11-12); B2 open.** Builds after the code-name rename PR and after #2797 (Task 4)
 lands. Every `file:line` was read at main `8c530d8a65`; the files cited are unchanged at main
 `4261c97fd4` (`git diff --stat`). Task 4 was read at `origin/feat/a275-transfer-labels` `85fe91b29e`.
 Only files and git history were read; no test, app or screen was run for this plan.
@@ -38,6 +38,10 @@ CLEARED with three changes"), and the owner's two answers. These win over the te
 - **Watcher change 3:** PR B splits in two. B1: the window, the button in the open bill's Pay
   window, sending and refusals (7.2, 7.3, 7.4a), the served check, the sentence and the guide
   section. B2: the presented bill's Pay window, Counter bills and the screenshot check.
+- **Watcher 2026-11-12 07:02 (option A):** PR A and B1 ship as ONE pull request, and B1 keeps its
+  lost-reply recovery: after a send that got no answer, the till reads `getDeferredClosure` and
+  matches this window's submission ids, so it never resends a close the server already made. This
+  replaces decision 5's "the till never calls `getDeferredClosure`" and the two-PR order below.
 - **#2907 (A275-declined, waiting for the owner):** a declined card no longer refuses the close on
   the server; whether `hasPayments` counts a declined card decides whether PR B hides the button for
   such a bill. Check it when building B1.

@@ -627,9 +627,9 @@ separate action after payment.
 
 ## Close a bill as a deferred payment {#deferred-payment}
 
-Use this when the customer will pay the whole bill later, outside Waitron. Open **Pay**, choose
-**Whole bill**, then **Close as deferred payment**. Check the bill, the invoice and the total, then
-confirm. Waitron issues the invoice if it has not been issued yet and closes the bill for good. It
+Use this when the customer will pay the whole bill later, outside Waitron. On an open bill (not yet
+presented), open **Pay**, choose **Whole bill**, then **Close as deferred payment**. Check the bill,
+the invoice and the total, then confirm. Waitron issues the invoice if it has not been issued yet and closes the bill for good. It
 records no payment for the bill, now or later, and the bill shows **Deferred payment** from then on.
 
 The button is there only on a bill with nothing paid yet. Every dish on the bill must be served or

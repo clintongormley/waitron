@@ -11219,8 +11219,8 @@ export class TillApp extends LitElement {
     ></till-deferred-close-dialog>`;
   }
 
-  /** Cancel goes back to Pay on the bill, as closing the refund window opened from Pay does;
-   * after a send that got no answer, it reads the bills instead, as the bill may be closed. */
+  /** Cancel goes back to Pay on the bill; after a send that got no answer, it reads the bills
+   * instead, as the bill may be closed. */
   #onDeferredCancel(): void {
     const open = this.deferredClosing;
     if (open === null || open.busy) return;

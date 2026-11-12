@@ -774,7 +774,7 @@ declare module "@waitron/shared" {
     "bill.payments_received": { workingOrderId: string };
     /** The bill has been presented (placed), so it takes no new order. */
     "bill.presented": { workingOrderId: string };
-    /** The bill is paid, so it takes no new order. */
+    /** The bill is closed (paid, or closed as a deferred payment), so it takes no new order. */
     "bill.paid": { workingOrderId: string };
     /** An order named a bill that is not the party's: a bill of another party, or of none. */
     "bill.other_party": { workingOrderId: string };

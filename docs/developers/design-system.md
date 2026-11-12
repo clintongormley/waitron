@@ -1098,11 +1098,12 @@ Tab button and no side drawer.
   Its trigger part has a 1px `--wt-color-border` edge, `--wt-radius-md` corners and
   `--wt-color-surface`. The closed label is "Bill 1 · €38.50" for one bill and "Bill 2 · 3 bills ·
   Clint · €54.00" for several, where the count is the bills listed, not the highest number; a paid bill's
-  amount is "Paid" with an `aria-hidden` ✓; an unnumbered bill reads "Bill"; with no bill on screen
+  amount is "Paid" with an `aria-hidden` ✓ ("Deferred payment", with no ✓, for a bill closed as a
+  deferred payment); an unnumbered bill reads "Bill"; with no bill on screen
   it reads "Bills". Its `label` is "Bills: " and the closed label. The list is a `role="menu"` of
   `menuitemradio` rows in number order, `aria-checked` on the bill on screen, whose background
   differs from the open list's and an unchecked row's in both themes. Each row holds the bill's
-  short label, what it owes or "Paid ✓", and one line per person with unsent dishes on it ("Ana has
+  short label, what it owes or "Paid ✓" ("Deferred payment" for a bill closed that way), and one line per person with unsent dishes on it ("Ana has
   an unsent order: 3 items"). When another shown bill than the one on screen holds the signed-in
   person's unsent dishes (A797 slice 11), the closed trigger adds, after its ▾, the `floor-unsent`
   icon (`aria-hidden`) and "Bill 2 unsent", or "2 bills unsent" for two or more, which may wrap
@@ -6551,7 +6552,8 @@ On an open table bill, Whole bill also offers Close as deferred payment as a sec
 hidden when the device profile lacks the action, the bill has payments or owes nothing, and
 disabled with its reason shown until it can be used. It opens a confirmation window
 (`till-deferred-close-dialog`) listing the bill, the invoice and the total above the final-close
-sentence, with Cancel, which returns to Pay, and a primary Issue invoice and close (Close bill
+sentence, with Cancel, which returns to Pay (after a send that got no answer, it reads the bill again
+instead), and a primary Issue invoice and close (Close bill
 when the invoice is already issued).
 
 ### Final payment documents

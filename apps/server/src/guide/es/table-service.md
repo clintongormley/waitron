@@ -666,9 +666,9 @@ una acción aparte, después del cobro.
 
 ## Cerrar una cuenta como pago aplazado {#deferred-payment}
 
-Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. Abre **Cobrar**,
-elige **Toda la cuenta** y luego **Cerrar como pago aplazado**. Comprueba la cuenta, la factura y el
-total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
+Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. En una cuenta
+abierta (aún no presentada), abre **Cobrar**, elige **Toda la cuenta** y luego **Cerrar como pago
+aplazado**. Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
 definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y la cuenta muestra
 **Pago aplazado** desde entonces.
 
