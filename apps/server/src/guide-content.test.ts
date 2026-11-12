@@ -105,6 +105,7 @@ describe("the user guides", () => {
       "hand-over",
       "after-hand-over",
       "handed-over",
+      "reconciliation",
       "waiting",
       "carry-on",
       "remote-access",

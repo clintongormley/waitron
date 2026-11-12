@@ -54,6 +54,7 @@ import { toLanguage } from "./personal-data-export-api.js";
 import { listTransferClosedInvoices, renderTransferClosedCsv } from "./transfer-closed-export.js";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { resolveSessionLocale } from "./session-locale.js";
+import { readHandoverIntervals } from "./handover-intervals.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -217,6 +218,18 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   };
 
   const activePrinters = () => eq(printers.active, true);
+
+  app.get("/management-api/reports/handover-intervals", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => ({
+        intervals: await readHandoverIntervals(tx),
+        timeZone: (await resolveVenueClock(tx, deps.cfg.nodeId)).timeZone,
+      }));
+      c.header("Cache-Control", "no-store");
+      return c.json(result);
+    }),
+  );
 
   app.get("/management-api/reports/modelo-303", (c) =>
     run(c, log, async () => {

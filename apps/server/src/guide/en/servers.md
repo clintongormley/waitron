@@ -94,6 +94,18 @@ while the return retries. Do not reset the old box.
 
 The page is in Spanish when your browser prefers Spanish, and in English otherwise.
 
+## Check handover intervals {#reconciliation}
+
+After an emergency handover, open **Reporting**, then **Handover intervals**, to check the period
+whose activity may be missing. You need permission to view reports. The list shows the previous
+and new main boxes, the latest sale or order time in the copy, the declaration and activation times, and
+the reason entered at takeover. All times use the venue's time zone. **Unknown** means the copy
+held no dated sale or order; it does not mean that no money is missing.
+
+Open this list yourself: cash-up and the other reports show no warning beside their figures.
+Completeness and amounts stay unconfirmed in this list even after a complete return. If the old
+box returns, check the return status on its page before deciding whether to reset it.
+
 ## When a box is waiting for another box {#waiting}
 
 When a box starts and cannot reach the other box the venue runs on, it waits instead of selling,

@@ -2941,7 +2941,13 @@ describe("dashboard-app", () => {
     const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
     expect(
       [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test),
-    ).toEqual(["nav-sales", "nav-vat-return", "nav-adjustment-report", "nav-orders"]);
+    ).toEqual([
+      "nav-sales",
+      "nav-vat-return",
+      "nav-handover-intervals",
+      "nav-adjustment-report",
+      "nav-orders",
+    ]);
   });
 
   it("opens Orders from its URL inside an expanded Reporting section", async () => {

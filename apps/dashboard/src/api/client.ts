@@ -14,6 +14,20 @@ import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@wait
 
 import type { FreshSignInGate } from "./fresh-sign-in.js";
 
+export interface HandoverInterval {
+  operationId: string;
+  sourceName: string;
+  destinationName: string;
+  lastChangeAtMs: number | null;
+  declaredAtMs: number;
+  activatedAt: string;
+  reason: string;
+}
+export interface HandoverIntervals {
+  intervals: HandoverInterval[];
+  timeZone: string;
+}
+
 export interface NodeRecoveryPack {
   readonly version: 1;
   readonly kind: "node-recovery-pack";
@@ -4472,6 +4486,15 @@ export class DashboardApi {
     return this.#request<Blob>(`/management-api/reports/modelo-303?${params}`, "GET", undefined, {
       as: "blob",
     });
+  }
+
+  listHandoverIntervals(): Promise<HandoverIntervals> {
+    return this.#request<HandoverIntervals>(
+      "/management-api/reports/handover-intervals",
+      "GET",
+      undefined,
+      { passive: true },
+    );
   }
 
   getOverdueOrders(): Promise<{ orders: OverdueOrder[] }> {

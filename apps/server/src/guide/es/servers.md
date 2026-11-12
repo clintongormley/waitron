@@ -105,6 +105,20 @@ encendidos mientras se vuelve a intentar la devolución. No restablezcas el equi
 La página aparece en español cuando tu navegador prefiere el español, y en inglés en los demás
 casos.
 
+## Comprobar los intervalos del traspaso {#reconciliation}
+
+Después de un traspaso de emergencia, abre **Informes** y después **Intervalos del traspaso** para
+comprobar el período cuya actividad podría faltar. Necesitas permiso para ver informes. La lista
+muestra los equipos principal anterior y nuevo, la última hora de venta o pedido en la copia, las horas
+de declaración y activación, y el motivo indicado al tomar el relevo. Todas las horas usan la zona
+horaria del local. **Desconocida** significa que la copia no tenía ventas ni pedidos fechados; no significa
+que no falte dinero.
+
+Abre esta lista por tu cuenta: el arqueo y los demás informes no muestran ningún aviso junto a sus
+cifras. Aquí, la integridad y los importes siguen sin confirmar incluso tras una devolución
+completa. Si vuelve el equipo anterior, comprueba el estado de la devolución en su página antes
+de decidir si lo restableces.
+
 ## Cuando un equipo espera a otro equipo {#waiting}
 
 Cuando un equipo se inicia y no consigue contactar con el otro equipo del local, espera en lugar de
