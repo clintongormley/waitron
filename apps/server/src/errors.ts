@@ -324,14 +324,14 @@ declare module "@waitron/shared" {
      */
     "handover.accepted_copy_missing": Record<string, never>;
     /**
-     * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
+     * A node booting as primary found, by reconciling with the box its mirror link names, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary
      * (two nodes filing under one NIF — CLAUDE.md §5). Logged, never thrown: a fenced boot is a
      * state, not a crash.
      */
     "node.membership_superseded_on_boot": Record<string, never>;
     /**
-     * A booting box refused the chart its cloud peer returned because the chart failed its check
+     * A booting box refused the chart the box its mirror link names returned because the chart failed its check
      * (`failure` says which), so the chart was not adopted. Logged, never thrown, and no alert is
      * raised.
      */

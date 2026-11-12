@@ -18,7 +18,7 @@ import {
 } from "./testing/box-authority.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-// A box that died before it was fenced must not boot and sell beside the promoted cloud (two nodes
+// A box that died before it was fenced must not boot and sell beside the box that took over (two nodes
 // filing under one NIF — CLAUDE.md §5). The accept dep wraps the REAL `acceptMembershipDocument` over
 // real signed fixtures; the database persist is covered in `boot.reconcile.test.ts`.
 

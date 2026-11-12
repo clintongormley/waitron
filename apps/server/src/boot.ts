@@ -2143,8 +2143,9 @@ async function bootServer(
   }
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the box that took over is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
-  // non-mirror node holding a mirror link best-effort fetches the signed chart of the box that link
-  // names, and persists it if it verifies and is strictly newer. It runs BEFORE the held-membership read below,
+  // non-mirror node holding a mirror link best-effort asks the box that link names for its signed
+  // chart, and persists it if it verifies and is strictly newer. It sends no credential, so a real
+  // box refuses it today (docs/backlog/replication-cloud.md, "Still open after A63" (ii)). It runs BEFORE the held-membership read below,
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
   if (initialAxes.mode !== "mirror") {

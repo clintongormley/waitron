@@ -201,7 +201,7 @@ controls remain open; no provider work is authorised.
   held chart and the chart carries the endorsement its signature verifies under, so a standby is
   not covered, nor a primary the receiver holds no chart signed by (after the former primary's own
   retirement chart, for one) (stated at `resolveSignerKey`); (ii) boot reconciliation's peer fetch
-  sends no credential (`boot.ts` gives `fetchPeerMembershipDocument` only the URL) and
+  sends no credential (`boot.ts` gives `fetchPeerMembershipDocument` the URL, the venue's authority and a time limit, but no credential) and
   `GET /management-api/membership` refuses a request without one, so in production that path
   accepts no chart today and the receiver checks above never run there (read, not run); (iii) a
   cleared machine is refused its own promotion only if its own held chart contains the clearing,

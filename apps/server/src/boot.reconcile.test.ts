@@ -195,7 +195,7 @@ afterAll(async () => {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
-/** Stands in for the promoted cloud's membership endpoint, ignoring the credential header. */
+/** Stands in for the membership endpoint of the box that took over, ignoring the credential header. */
 async function startPeer(document: unknown): Promise<{ url: string; stop: () => Promise<void> }> {
   const server: Server = createHttpServer((req, res) => {
     if (req.url === "/management-api/membership") {
@@ -256,7 +256,7 @@ describe("returned-box membership reconciliation at boot", () => {
     }
   }, 60_000);
 
-  // A box restored from an old archive while the cloud serves in its place: its first start after
+  // A box restored from an old archive while another box serves in its place: its first start after
   // the restore must not move the term before the peer's chart is read, or the fencing chart reads
   // as not newer and two nodes sell.
   it("a restored box that the peer fences adopts the fence and leaves its first start for later", async () => {
