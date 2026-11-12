@@ -243,8 +243,11 @@ function serverFull(options) {
 }
 
 export async function recoverServer(options) {
-  const { request, repository, wait = delay, plannersOnly = false, hostedAttempts = {} } = options;
-  if (plannersOnly && serverFull(options)) return { retried: [] };
+  const { request, repository, wait = delay, plannersOnly = false } = options;
+  if (plannersOnly && serverFull(options)) {
+    options.report?.("Planner rescue skipped: server is full in a fresh capacity snapshot.");
+    return { retried: [] };
+  }
   const retried = [],
     preserved = [],
     state = await serverHealth(options);
@@ -255,8 +258,6 @@ export async function recoverServer(options) {
       Date.parse(a.run_started_at || a.created_at) - Date.parse(b.run_started_at || b.created_at),
   );
   for (const run of oldest) {
-    if (plannersOnly && (run.event !== "pull_request" || Object.hasOwn(hostedAttempts, run.id)))
-      continue;
     if (run.run_attempt > 1) {
       preserved.push(run.id);
       continue;
@@ -328,6 +329,7 @@ export async function recoverServer(options) {
     };
     if (!(await eligible())) continue;
     if (
+      !plannersOnly &&
       !(await serverHealth(options)).stuck.some(
         (current) => current.id === run.id && current.run_attempt === run.run_attempt,
       )
@@ -335,6 +337,10 @@ export async function recoverServer(options) {
       continue;
     let current = await eligible();
     if (!current) continue;
+    if (plannersOnly)
+      options.report?.(
+        `Recovering PR run ${run.id}; cancellation/retry pending. If this pass stops, intervention is needed.`,
+      );
     try {
       await request(path + "/force-cancel", { method: "POST" });
     } catch (error) {
@@ -358,13 +364,16 @@ export async function recoverServer(options) {
     if (current.conclusion === "cancelled") {
       try {
         if (plannersOnly) {
-          options.report?.(
-            `Cancelled PR run ${run.id}; retry pending. If this pass stops, intervention is needed.`,
-          );
-          assert.ok(await eligible(true), "PR identity or work changed after cancellation");
+          if (!(await eligible(true))) {
+            options.report?.(
+              `Cancelled PR run ${run.id} is no longer eligible; not retried. Inspect it if its current head still needs a run.`,
+            );
+            continue;
+          }
         }
         await request(path + "/rerun", { method: "POST" });
         retried.push(run.id);
+        if (plannersOnly) options.report?.(`Retried PR run ${run.id} on GitHub.`);
       } catch (error) {
         if (!plannersOnly) throw error;
         throw new Error(`Cancelled PR run ${run.id}; intervention needed: ${error.message}`, {
@@ -437,7 +446,7 @@ export async function healthCommand(command, options, { report, output }) {
       if (retried.length || !preserved.length)
         report(
           retried.length
-            ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned work.`
+            ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned${command === "recover" ? " or recently progressing server" : ""} work.`
             : "No stalled server run needed recovery.",
         );
     } else {
@@ -452,7 +461,11 @@ export async function healthCommand(command, options, { report, output }) {
     }
   } catch (error) {
     if (!(error instanceof InventoryUnavailable)) throw error;
-    report(`Server inventory unavailable; ${command} made no change: ${error.message}`);
+    report(
+      command === "recover-planners"
+        ? `Server inventory unavailable; planner recovery stopped: ${error.message}`
+        : `Server inventory unavailable; ${command} made no change: ${error.message}`,
+    );
   }
 }
 
@@ -493,7 +506,10 @@ export async function main(command, env = process.env, request = githubRequest) 
       runId: Number(env.GITHUB_RUN_ID),
       attempt: Number(env.GITHUB_RUN_ATTEMPT),
       capacity: () => JSON.parse(env.CAPACITY),
-      hostedAttempts: env.HOSTED_ATTEMPTS ? JSON.parse(env.HOSTED_ATTEMPTS) : {},
+      hostedAttempts:
+        command === "recover-planners" && env.HOSTED_ATTEMPTS
+          ? JSON.parse(env.HOSTED_ATTEMPTS)
+          : {},
       prefix: env.LABEL_PREFIX || "dt",
       ref: "main",
     },

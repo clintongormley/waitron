@@ -246,7 +246,8 @@ minutes without assignment. It skips runs already marked for hosted recovery and
 whose capacity snapshot under five minutes old shows every positive slot occupied.
 Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
 It checks complete job inventories and the PR head again before cancellation and retry.
-Each eligible planner can be recovered in the same pass, within the five-minute step limit.
+The pass attempts eligible planners in order; its five-minute step limit can end a busy pass
+before every planner is reached. Later passes reconsider work that is still queued.
 After cancellation, an interrupted retry is reported for intervention; later passes do not
 resume cancelled runs from history alone. Age, nominal schedule and cancellation polling add
 about twelve minutes; GitHub's own queue can add more. PR planning still starts on GitHub

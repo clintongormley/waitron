@@ -93,6 +93,9 @@ describe("server-first workflow routing", () => {
     expect(workflow).toContain("pull-requests: read");
     expect(workflow.indexOf("mjs recover-planners")).toBeLessThan(workflow.indexOf("mjs check"));
     expect(workflow).not.toContain("needs:");
+    expect(workflow).not.toMatch(/mjs recover\s*$/m);
+    expect(workflow).toMatch(/name: Check for a stalled server queue\n\s+if: always\(\)/);
+    expect(workflow).toMatch(/name: Probe an idle server\n\s+if: always\(\) &&/);
     expect(workflow).toContain("CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}");
     expect(workflow).toContain("node scripts/ci-server-health.mjs probe");
     const expression = workflow.match(/^ {4}if: \$\{\{ (.+) \}\}$/m)[1];
