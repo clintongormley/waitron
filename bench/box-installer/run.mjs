@@ -25,11 +25,14 @@ import {
 } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
+const upgradeCase = ["upgrade-manual", "upgrade-power-cut"].includes(caseName);
+if (upgradeCase && !process.env.B3_UPGRADE_STATE) throw new Error("B3_UPGRADE_STATE must be set");
 const started = Date.now();
 if (
   caseName === "installed-setup" ||
   caseName === "installed-refusals" ||
-  caseName === "existing-stick"
+  caseName === "existing-stick" ||
+  upgradeCase
 ) {
   await installedRun();
   process.exit(0);
@@ -461,10 +464,24 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
   await writeFile(proof, "", { mode: 0o600 });
   await truncate(proof, 32 * 1024 ** 2);
   execFileSync("mkfs.ext4", ["-q", "-F", proof]);
+  if (upgradeCase) {
+    execFileSync("debugfs", [
+      "-w",
+      "-R",
+      `write ${process.env.B3_UPGRADE_STATE} source-state.tar`,
+      proof,
+    ]);
+    execFileSync("debugfs", [
+      "-w",
+      "-R",
+      `write ${process.env.B3_UPGRADE_STATE}.json fixture-env.json`,
+      proof,
+    ]);
+  }
   const pcrRead = "echo B3_PCRS:$(tpm2_pcrread sha256:5,7,8,9,15 | base64 -w0)";
   const bootRead =
     'echo B3_MEASURED:$(sha256sum /boot/vmlinuz-* /boot/initrd.img-* /boot/efi/EFI/BOOT/BOOTX64.EFI | sha256sum | cut -d" " -f1)';
-  async function boot(name, source, marker, deadline, returnHash) {
+  async function boot(name, source, marker, deadline, returnHash, upgrade) {
     const returning = returnHash !== undefined;
     const tpmSocket = await startTpm();
     const phaseStarted = Date.now();
@@ -501,7 +518,9 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       "-device",
       `virtio-blk-pci,drive=target,serial=waitron-dev-target,bootindex=${source ? 2 : 1}`,
       "-nic",
-      source && !returning ? "none" : "user,restrict=on,hostfwd=tcp:127.0.0.1:443-:443",
+      source && !returning
+        ? "none"
+        : `user,restrict=${upgradeCase ? "off" : "on"},hostfwd=tcp:127.0.0.1:443-:443`,
     );
     const unitName = source ? "waitron-dev-install" : "waitron-disk-start";
     let observedUnit = await readFile(
@@ -523,7 +542,19 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-disk-start.service=${Buffer.from(diskUnit + `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}; ${bootRead}; echo B3_RETURN_FIRMWARE:$(efibootmgr -v | base64 -w0); echo B3_RETURN_ROOT:$(findmnt -n -o UUID /)'\n`).toString("base64")}`,
       );
     }
-    if (!source || returning) {
+    if (upgrade) {
+      const { upgradeUnit } = await import("./upgrade.mjs");
+      args.push("-drive", `file=${proof},format=raw,if=virtio`);
+      args.push(
+        "-smbios",
+        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(upgradeUnit(upgrade.payload)).toString("base64")}`,
+      );
+      if (upgrade.stage)
+        args.push(
+          "-smbios",
+          `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-app.service=${Buffer.from("[Service]\nType=oneshot\nExecStart=/usr/bin/true\nRemainAfterExit=yes\n").toString("base64")}`,
+        );
+    } else if (!source || returning) {
       if (!returning) args.push("-drive", `file=${proof},format=raw,if=virtio`);
       const unit = await readFile(
         new URL("../../deploy/box/waitron-dev.service", import.meta.url),
@@ -709,6 +740,11 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         get returnEvidence() {
           return returnEvidence;
         },
+        cut: async () => {
+          clearTimeout(timer);
+          child.kill("SIGKILL");
+          await stopped;
+        },
         finish: async () => {
           const result = await stopped;
           clearTimeout(timer);
@@ -760,6 +796,35 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
     await bootstrap.finish();
     if (!bootstrapSucceeded(bootstrap.serial))
       throw new Error("bootstrap did not restart without Docker");
+    if (upgradeCase) {
+      const { upgradeStage, upgradePayload } = await import("./upgrade.mjs");
+      const stage = await boot("upgrade-stage", false, "A950_STAGED", 900000, undefined, {
+        stage: true,
+        payload: upgradeStage(),
+      });
+      await stage.finish();
+      const modes =
+        caseName === "upgrade-manual"
+          ? [["manual", "A950_MANUAL_OK"]]
+          : [
+              ["copy", "A950_CUT"],
+              ["held", "A950_HELD_OK"],
+              ["restore", "A950_CUT"],
+              ["restored", "A950_RESTORED_OK"],
+            ];
+      for (const [mode, marker] of modes) {
+        const guest = await boot(`upgrade-${mode}`, false, marker, 900000, undefined, {
+          payload: upgradePayload(mode),
+        });
+        if (["copy", "restore"].includes(mode)) await guest.cut();
+        else await guest.stop();
+      }
+      await writeFile(
+        join(runDir, "upgrade-result.json"),
+        JSON.stringify({ caseName, modes: modes.map(([mode]) => mode), ok: true }),
+      );
+      return;
+    }
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
     const { chromium, request } = require("playwright");
     async function inspect(name) {

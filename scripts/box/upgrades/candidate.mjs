@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
 import { copyStoppedTree } from "./copy.mjs";
 import { clockStatusRelay } from "./host.mjs";
 import { upgradeStatus, writeFileDurable } from "./transaction.mjs";
@@ -133,6 +134,21 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       marker.images.candidate.app,
       "infinity",
     ]);
+    const health = config.services["print-agent"].healthcheck;
+    const [kind, ...test] = health.test;
+    const shellWord = (word) => "'" + String(word).replaceAll("'", "'\\''") + "'";
+    const healthArgs = [
+      "--health-cmd",
+      kind === "CMD-SHELL" ? test.join(" ") : test.map(shellWord).join(" "),
+    ];
+    for (const [key, option] of Object.entries({
+      interval: "--health-interval",
+      timeout: "--health-timeout",
+      start_period: "--health-start-period",
+      retries: "--health-retries",
+    })) {
+      if (health[key] !== undefined) healthArgs.push(option, String(health[key]));
+    }
     started.push(agent);
     await run("docker", [
       "run",
@@ -141,6 +157,7 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       agent,
       "--network",
       `container:${app}`,
+      ...healthArgs,
       "--label",
       `waitron.upgrade.directory=${directory}`,
       "--env",
@@ -149,7 +166,14 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       `type=bind,src=${join(work, "agent")},dst=/var/lib/waitron-print-agent`,
       marker.images.candidate["print-agent"],
     ]);
-    const status = `for(let i=0;i<90;i++){try{const r=await fetch("http://127.0.0.1:9110/status.json");if(r.ok){await r.json();process.exit(0)}}catch{}await new Promise(r=>setTimeout(r,1000))}throw Error("upgrade agent status unavailable")`;
+    while (true) {
+      const state = JSON.parse((await run("docker", ["inspect", agent])).stdout)[0].State;
+      if (!state.Running) throw new Error("upgrade agent stopped");
+      if (state.Health.Status === "unhealthy") throw new Error("upgrade agent unhealthy");
+      if (state.Health.Status === "healthy") break;
+      await delay(1000);
+    }
+    const status = `const r=await fetch("http://127.0.0.1:9110/status.json");if(!r.ok)throw Error("upgrade agent status unavailable");await r.json()`;
     await run("docker", ["exec", app, "node", "--input-type=module", "-e", status]);
     await run("docker", ["stop", "--time", "10", agent]);
     reports.push(

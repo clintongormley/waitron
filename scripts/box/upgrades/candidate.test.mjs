@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { checkUpgradeCandidate, removeUpgradeCheckContainers } from "./candidate.mjs";
 
-async function fixture(failed = false) {
+async function fixture(
+  failed = false,
+  agentState = { Running: true, Health: { Status: "healthy" } },
+) {
   const root = await fs.mkdtemp(join(tmpdir(), "upgrade-candidate-"));
   onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
   if (process.platform === "darwin") {
@@ -40,6 +43,15 @@ async function fixture(failed = false) {
       return {
         stdout: JSON.stringify({
           services: {
+            "print-agent": {
+              healthcheck: {
+                test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9110/status.json')"],
+                interval: "10s",
+                timeout: "5s",
+                start_period: "20s",
+                retries: 3,
+              },
+            },
             app: {
               environment: {
                 WAITRON_BACKUP_DIR: "/var/lib/waitron/backups",
@@ -49,6 +61,7 @@ async function fixture(failed = false) {
           },
         }),
       };
+    if (args[0] === "inspect") return { stdout: JSON.stringify([{ State: agentState }]) };
     if (args.includes("sale")) {
       if (failed) throw new Error("sale refused");
       return { stdout: 'boot log\n[{"name":"sale","ok":true}]\n' };
@@ -67,7 +80,9 @@ it("checks data, observes the contained agent, stops it and then sells without l
     { name: "sale", ok: true },
   ]);
   const readiness = f.calls.findIndex((args) => args.includes("readiness"));
-  const status = f.calls.findIndex((args) => args.some((arg) => arg.includes("/status.json")));
+  const status = f.calls.findIndex(
+    (args) => args[1] === "exec" && args.some((arg) => arg.includes("/status.json")),
+  );
   const stop = f.calls.findIndex((args) => args[1] === "stop");
   const sale = f.calls.findIndex((args) => args.includes("sale"));
   expect(readiness).toBeGreaterThan(-1);
@@ -121,4 +136,15 @@ it("cleans only containers labelled for this interrupted attempt and refuses som
       throw Object.assign(new Error("missing"), { code: 1, stderr: "No such object" });
     }),
   ).resolves.toBeUndefined();
+});
+
+it.each([
+  [{ Running: true, Health: { Status: "unhealthy" } }, "unhealthy"],
+  [{ Running: false, Health: { Status: "starting" } }, "stopped"],
+])("refuses the existing agent healthcheck's %s outcome before the sale", async (state, reason) => {
+  const f = await fixture(false, state);
+  await expect(
+    checkUpgradeCandidate({ boxDirectory: f.root, directory: f.directory, run: f.run }),
+  ).rejects.toThrow(`upgrade agent ${reason}`);
+  expect(f.calls.some((args) => args.includes("sale"))).toBe(false);
 });

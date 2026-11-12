@@ -34,6 +34,7 @@ install -d -m 0755 "$root/opt/waitron" "$root/etc/dracut.conf.d"
 install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron-dev-start"
 install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"
 systemctl --root="$root" enable waitron-dev.service
+install -D -m 0755 "$repo/deploy/waitron.sh" "$root/opt/waitron-host/waitron.sh"
 install -D -m 0755 "$repo/deploy/box/upgrade-restart.sh" "$root/usr/local/lib/waitron/upgrade-restart.sh"
 for unit in waitron-app waitron-upgrade-recovery; do
   install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"

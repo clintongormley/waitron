@@ -59,6 +59,27 @@ it.each([
   expect(bootHasOrderingCycle(serial)).toBe(expected);
 });
 
+it.each(["upgrade-manual", "upgrade-power-cut"])(
+  "requires a source-state fixture before %s",
+  (caseName) => {
+    const env = { ...process.env };
+    delete env.B3_UPGRADE_STATE;
+    const result = spawnSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL("../../bench/box-installer/run.mjs", import.meta.url)),
+        "--case",
+        caseName,
+        "--run-dir",
+        "/tmp/upgrade-missing-fixture",
+      ],
+      { env, encoding: "utf8", timeout: 5000 },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("B3_UPGRADE_STATE must be set");
+  },
+);
+
 describe("recipe boot evidence", () => {
   it.each(["", undefined])(
     "names a missing image setting before using a path (%s)",
