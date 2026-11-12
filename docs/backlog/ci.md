@@ -453,10 +453,9 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 - **What the per-push CI concurrency groups (#384) left open:** two states stop publishing until a
   person intervenes; the repair is to delete or retag `:main` by hand. Nothing alerts on it. [Detail](ci.md#what-the-per-push-ci-concurrency-groups-384-left-open)
 
-## Bundle: One repeated-run rig, then each named test
+## Bundle: Investigate the named test failures under load
 
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
-except the last, added on 2026-11-07.
+6 entries, size M. Use the [repeated-run rig](../developers/testing-guide.md#repeat-a-named-test-while-keeping-each-attempts-evidence) to retain each attempt and its failure diagnostics.
 
 - **A local four-file till browser run ended without a completed-file report.**
   Capture per-case and file progress plus a process snapshot on recurrence; a serial pass does
@@ -473,11 +472,7 @@ except the last, added on 2026-11-07.
   [Detail](ci.md#the-relocated-independent-department-preview-needs-a-load-investigation).
 - **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**
   [Detail](ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes).
-- **`apps/server/src/fiscal-certificate-diagnosis-process.test.ts`, "resolves only after its exact
-  child exits…", failed once in 15 runs on a busy machine** (2026-11-07). The test's
-  `cleanupMs = 200` gives a child 150 ms to exit after its result. Fix in the test (a larger budget,
-  or a child that exits once its result is flushed), to be proved by a reproduction that delays the
-  child's exit.
+
 
 
 ## Bundle: Replace 14 "if it happens again" entries with one table in `docs/backlog/ci
