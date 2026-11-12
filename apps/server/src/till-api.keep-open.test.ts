@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  activityLog,
   departments,
   deviceProfiles,
   withTransaction,
@@ -347,6 +348,16 @@ describe("the till keeps a zone open today", () => {
       ).status,
     ).toBe(204);
     expect(await zoneRows()).toHaveLength(1);
+    expect(
+      await suite.db.select().from(activityLog).where(eq(activityLog.kind, "zone.kept_open")),
+    ).toEqual([
+      expect.objectContaining({
+        subjectId: zone,
+        personId: staff,
+        deviceId: staffCookie.split(`${DEVICE_COOKIE}=`)[1]!.split(".")[0],
+        data: expect.objectContaining({ authorizedBy: manager }),
+      }),
+    ]);
   });
   it("refuses a correct staff PIN", async () => {
     const answer = await call(

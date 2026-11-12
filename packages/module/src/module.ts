@@ -40,16 +40,16 @@ import type { ModuleAlerts } from "./alerts.js";
 import type { StaffNoticeSource } from "./staff-notices.js";
 import "./errors.js";
 
-/**
- * The core verbs a module's routes need but cannot import — a module never depends on `apps/server`.
- * Boot implements it with the venue's config bound in, so a verb never takes the config.
- */
 export type ActivityActor = {
   personId: string | null;
   deviceId: string | null;
   authorizedBy: string;
 };
 
+/**
+ * The core verbs a module's routes need but cannot import — a module never depends on `apps/server`.
+ * Boot implements it with the venue's config bound in, so a verb never takes the config.
+ */
 export interface CoreServices {
   /** Seats a party at a free table: opens its party record, its first table and its tab. */
   seatTable(

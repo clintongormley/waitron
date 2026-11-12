@@ -118,6 +118,10 @@ describe("today's choices history", () => {
     expect(
       (await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, "grill")))[0],
     ).toMatchObject({ closedOnDay: "2026-11-12", closedSendsToStationId: "bar" });
+    await suite.db.insert(kitchenStations).values({ id: "fry", name: "Fry" });
+    await withTransaction(suite.db, (tx) =>
+      setStationToday(tx, "grill", "closed", at, f.actor, "fry"),
+    );
     await withTransaction(suite.db, (tx) => setStationToday(tx, "grill", null, at, f.actor));
     expect(
       (await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, "grill")))[0],
@@ -133,14 +137,26 @@ describe("today's choices history", () => {
         data: { businessDay: "2026-11-12", sendsTo: "bar", authorizedBy: "manager" },
       }),
       expect.objectContaining({
+        kind: "station.closed_for_day",
+        data: { businessDay: "2026-11-12", sendsTo: "fry", authorizedBy: "manager" },
+      }),
+      expect.objectContaining({
         kind: "station.reopened",
-        data: { businessDay: "2026-11-12", sendsTo: "bar", authorizedBy: "manager" },
+        data: { businessDay: "2026-11-12", sendsTo: "fry", authorizedBy: "manager" },
       }),
     ]);
   });
   it("adds no history when the current choice does not change", async () => {
     const f = await fixture();
     await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(floorZones)
+        .set({ keptOpenDay: "2026-11-11", keptOpenFrom: "23:00:00", keptOpenUntil: "01:30:00" })
+        .where(eq(floorZones.id, f.zoneId));
+      await tx
+        .update(kitchenStations)
+        .set({ closedOnDay: "2026-11-11", closedSendsToStationId: "bar" })
+        .where(eq(kitchenStations.id, "grill"));
       await keepZoneOpen(tx, f.zoneId, { until: null }, at, f.actor);
       await setStationToday(tx, "grill", null, at, f.actor);
     });

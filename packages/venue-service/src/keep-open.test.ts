@@ -370,7 +370,7 @@ describe("keeping a zone open today", () => {
         });
         expect(offers.service.zoneKeepOpen).toBeNull();
         const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
-        expect(sql.some((q) => q.includes('"zone_extensions"'))).toBe(false);
+        expect(sql.some((q) => /kept_open_(?:day|from|until)/.test(q))).toBe(false);
       } finally {
         spy.mockRestore();
       }

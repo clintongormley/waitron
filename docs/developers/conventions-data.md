@@ -2076,9 +2076,10 @@ today's service choices.
 
 Focused receipts: `packages/venue-service/src/station-times.test.ts`, `routing.test.ts`,
 `routing-store.test.ts`, `keep-open.test.ts`,
-and `configuration-transfer.floor-kitchen.test.ts`. Each change and its authorising person are
-written to `activity_log` as `zone.kept_open`, `zone.keep_open_ended`, `station.closed_for_day`
-or `station.reopened`; the acting person and device are recorded separately from the authoriser.
+and `configuration-transfer.floor-kitchen.test.ts`. Changes made through the keep-open and
+station-today controls are written to `activity_log` as `zone.kept_open`, `zone.keep_open_ended`,
+`station.closed_for_day` or `station.reopened`; the acting person and device are recorded separately
+from the authoriser.
 
 To keep a zone open through its next closed range, choose **Keep Terrace open later** beside
 the till's service line, in its closed-zone notice or on the floor's selected-zone bar. Choose
