@@ -546,7 +546,7 @@ describe("backup-screen", () => {
           bucket: "owner-bucket",
           prefix: "waitron",
           accessKeyId: "AKIAOWNER",
-          namespace: "waitron/archives/c0000000-0000-4000-8000-000000000002/",
+          namespace: "waitron/",
           credentialPresent: true,
         },
       ],
@@ -556,7 +556,7 @@ describe("backup-screen", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.textContent).toContain(
-      "owner-bucket/waitron/archives/c0000000-0000-4000-8000-000000000002/",
+      "owner-bucket/waitron/",
     );
     expect((q(el, "[data-test=destination]") as { value?: string } | null)?.value ?? "").toBe("");
   });
