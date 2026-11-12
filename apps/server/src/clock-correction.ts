@@ -231,7 +231,8 @@ export function clockCorrection(deps: {
   }
 
   async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
-    // A later step's row written before an earlier one's would be judged against the wrong check.
+    // The latest step is read by the order rows were written, so a later step's row written
+    // before an earlier one's would leave the earlier step read as the latest.
     if (pending.length > 0) return { set: false, reason: "pending_disproofs" };
     if (stale(input)) return { set: false, reason: "stale" };
     const planned = wall() + input.offsetMs;

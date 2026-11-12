@@ -1669,8 +1669,8 @@ declare module "@waitron/shared" {
      * service did not answer, the time service says the clock is synchronised, AEAT has spoken
      * during the stop, the person's device is within a minute of the box (`agrees`),
      * the device's time was measured before a step of the box's clock, the time would be before
-     * 28-10-2024 or from 2100 on (`target_invalid`), the readings taken before an earlier step are
-     * not yet recorded (`pending_disproofs`), a till asked the box to keep its time while a stop
+     * 28-10-2024 or from 2100 on (`target_invalid`), an earlier step's record could not yet be
+     * written (`pending_disproofs`), a till asked the box to keep its time while a stop
      * holds (`stopped`), or, for a staff member on a till, the box's start-up is over
      * (`not_start_up`) or AEAT has not yet been asked (`authority_pending`). */
     "clock.set_refused": {

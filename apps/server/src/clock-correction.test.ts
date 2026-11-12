@@ -501,6 +501,58 @@ describe("rows kept pending", () => {
     expect(h.seatCalls.map((request) => request.source)).toEqual(["admin", "admin"]);
   });
 
+  /** A watch over the harness's correction with no start check, its looks run by hand. */
+  function watchOver(h: Harness, noStop: () => void = () => {}) {
+    const log = vi.fn();
+    const watch = createClockWatch({
+      backend: { assertRecordableAt: () => {} },
+      store: createClockWitnessStore({ wall: () => START_MS, monotonic: () => 0 }),
+      clock: {
+        now: () =>
+          ({
+            instant: new Date(h.measured().wallMs),
+            offsetMinutes: 60,
+          }) as unknown as TrustedReading,
+      },
+      read: (fn) => fn(TX),
+      correction: h.correction,
+      startUp: { noStop },
+      log,
+    });
+    return { look: () => watch.check(), log };
+  }
+
+  it("is written by the clock watch's next look, after which a set is no longer refused", async () => {
+    const h = harness({ seatFails: 1 });
+    await h.correction.set(byAdmin(h));
+    expect(h.seatCalls).toHaveLength(0);
+    expect(h.correction.unwrittenStep()).not.toBeNull();
+
+    await watchOver(h).look();
+    expect(h.seatCalls).toHaveLength(1);
+    expect(h.correction.unwrittenStep()).toBeNull();
+    expect(
+      await h.correction.set(byAdmin(h, { stepsSeen: 1, measuredAt: h.measured() })),
+    ).toMatchObject({ set: true });
+  });
+
+  it("is kept when the watch's write fails again, the rest of the look still runs, and the next look writes it", async () => {
+    const h = harness({ seatFails: 2 });
+    await h.correction.set(byAdmin(h));
+    const noStop = vi.fn();
+    const w = watchOver(h, noStop);
+
+    await w.look();
+    expect(h.seatCalls).toHaveLength(0);
+    expect(w.log).toHaveBeenCalledWith("warn", "clock_watch.check_failed", {
+      errorCode: "storage.disk_full",
+    });
+    expect(noStop).toHaveBeenCalledTimes(1);
+
+    await w.look();
+    expect(h.seatCalls).toHaveLength(1);
+  });
+
   it("writes a pending row once when two writePending calls overlap", async () => {
     const { anchor } = failingFirstReanchor();
     const h = harness({ anchors: [anchor] });

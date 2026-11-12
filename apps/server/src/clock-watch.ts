@@ -16,8 +16,9 @@ export function createClockWatch(deps: {
   store: Pick<ClockWitnessStore, "witnesses">;
   clock: Pick<TrustedClock, "now">;
   read: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
-  /** The correction's one-at-a-time turn, taken around the devices' confirmation. */
-  correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn">;
+  /** The correction's one-at-a-time turn, taken around the devices' confirmation; each look also
+   * writes the rows of steps whose rows could not be written when they happened. */
+  correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "writePending">;
   /** Closed by a look at a reading a record could carry. */
   startUp?: Pick<ClockStartUp, "noStop">;
   /** The start check: until the internet confirms it, each look reads the time service through
@@ -79,6 +80,12 @@ export function createClockWatch(deps: {
     }
     if (stopped) return;
     if (recordable()) deps.startUp?.noStop();
+    // Last, because it waits for the correction's turn, which a set in flight holds.
+    try {
+      await deps.correction?.writePending();
+    } catch (error) {
+      deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+    }
   }
 
   return {
