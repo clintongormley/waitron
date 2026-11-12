@@ -1199,3 +1199,118 @@ describe("server health recovery", () => {
     }
   });
 });
+
+describe("scheduled PR planner recovery", () => {
+  function planner() {
+    const f = fixture();
+    Object.assign(f.run, { event: "pull_request", workflow_id: 9, pull_requests: [{ number: 7 }] });
+    Object.assign(f.job, { name: "changes", labels: ["self-hosted", "dt-42-12-1-changes-1"] });
+    Object.assign(f.options, { plannersOnly: true, capacity: undefined, hostedAttempts: {} });
+    f.pull = {
+      number: 7,
+      state: "open",
+      head: { sha: f.run.head_sha, repo: { id: 42 } },
+      base: { repo: { id: 42 } },
+    };
+    f.options.request = async (path, options) =>
+      path.endsWith("/pulls/7") ? f.pull : f.request(path, options);
+    return f;
+  }
+  it("recovers an untouched PR planner despite unrelated server progress", async () => {
+    const f = planner();
+    const request = f.options.request;
+    f.options.request = async (path, options) => {
+      if (path.includes("/runs/13/attempts/1/jobs?"))
+        return {
+          total_count: 1,
+          jobs: [
+            {
+              ...f.job,
+              id: 124,
+              run_id: 13,
+              name: "lint",
+              status: "in_progress",
+              runner_id: 8,
+              labels: ["self-hosted", "dt-42-13-1-lint-1"],
+            },
+          ],
+        };
+      const reply = await request(path, options);
+      if (path.includes("/workflows/ci.yml/runs?status=in_progress"))
+        return { total_count: 2, workflow_runs: [...reply.workflow_runs, { ...f.run, id: 13 }] };
+      return reply;
+    };
+    expect((await health.recoverServer(f.options)).retried).toEqual([12]);
+    expect(f.calls.filter(([, options]) => options.method).map(([path]) => path)).toEqual([
+      "/repos/fixture/waitron/actions/runs/12/force-cancel",
+      "/repos/fixture/waitron/actions/runs/12/rerun",
+    ]);
+  });
+  it.each(["push", "schedule", "workflow_dispatch"])("leaves %s planners alone", async (event) => {
+    const f = planner();
+    f.run.event = event;
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
+  it.each(["assigned", "obsolete", "fork", "marked", "full", "retry", "non-planner"])(
+    "preserves %s work",
+    async (kind) => {
+      const f = planner();
+      if (kind === "assigned") f.job.runner_id = 8;
+      if (kind === "obsolete") f.pull.head.sha = "b".repeat(40);
+      if (kind === "fork") f.run.head_repository.id = 99;
+      if (kind === "marked") f.options.hostedAttempts = { 12: 2 };
+      if (kind === "full") f.options.capacity = { observedAt: now, slots: 6, serverRunning: 6 };
+      if (kind === "retry") {
+        f.run.run_attempt = 2;
+        f.job.run_attempt = 2;
+        f.job.labels = ["self-hosted", "dt-42-12-2-changes-1"];
+      }
+      if (kind === "non-planner") f.job.name = "lint";
+      expect((await health.recoverServer(f.options)).retried).toEqual([]);
+      expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+    },
+  );
+  it("preserves a planner assigned during the final inventory read", async () => {
+    const f = planner();
+    replyJobs(f, () => ({ total_count: 1, jobs: [{ ...f.job, runner_id: 8 }] }), 3);
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
+  it("allows rescue with a stale full snapshot", async () => {
+    const f = planner();
+    f.options.capacity = { observedAt: now - 300_000, slots: 6, serverRunning: 6 };
+    expect((await health.recoverServer(f.options)).retried).toEqual([12]);
+  });
+  it("recovers every eligible PR in a pass", async () => {
+    const f = planner(),
+      g = planner();
+    Object.assign(g.run, { id: 13 });
+    Object.assign(g.job, { id: 124, run_id: 13, labels: ["self-hosted", "dt-42-13-1-changes-1"] });
+    const request = async (path, options) => {
+      if (path.includes("/runs?")) {
+        const runs = [f.run, g.run].filter((run) => path.includes("status=" + run.status));
+        return { total_count: runs.length, workflow_runs: runs.map((run) => ({ ...run })) };
+      }
+      const target = path.includes("/runs/13") ? g : f;
+      if (path.includes("/runs/13")) path = path.replace("/runs/13", "/runs/12");
+      if (path.includes("/jobs?")) return { total_count: 1, jobs: [{ ...target.job }] };
+      return target.options.request(path, options);
+    };
+    expect((await health.recoverServer({ ...f.options, request })).retried).toEqual([12, 13]);
+  });
+  it("reports an interrupted cancelled PR for a person without resuming it from history", async () => {
+    const f = planner(),
+      request = f.options.request;
+    f.options.request = async (path, options) => {
+      if (path.endsWith("/rerun")) throw new Error("connection lost");
+      return request(path, options);
+    };
+    await expect(health.recoverServer(f.options)).rejects.toThrow(
+      /Cancelled PR run 12.*intervention.*connection lost/,
+    );
+    expect(f.run.status).toBe("completed");
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.run.run_attempt).toBe(1);
+  });
+});
