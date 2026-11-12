@@ -335,8 +335,7 @@ export async function fileCorrectionIn(
 
 /**
  * Files the R5 of the open correction `correctionId` for the money its refunds have given back so
- * far. Refuses nothing back (`invoice_correction.nothing_back`) and a split other than the one the
- * till showed (`invoice_correction.split_changed`, with the fresh one).
+ * far.
  */
 export async function fileInvoiceCorrectionNow(
   tx: Transaction,

@@ -4306,7 +4306,9 @@ transaction); the retry route
 (`settlePendingBillRefunds`, `apps/server/src/bill-payments-loop.ts`) ask
 `clockBehindLatestRecord` once at their top and, during the stop, touch no refund row and raise no
 unresolved alert, because a completed refund's time places it in a cash-up window
-(`clock-behind-stop.refunds.test.ts`). A pass that began before the stop still looks refunds up
+(`clock-behind-stop.refunds.test.ts`). While paused, `recoverTenderRefunds` still runs
+`sweepInvoiceCorrections` (`apps/server/src/invoice-correction-alerts.ts`), which raises
+`invoice_correction.unfinished` and touches no refund row. A pass that began before the stop still looks refunds up
 and can raise an unresolved alert while the stop is on; the next paragraph's check holds only the
 outcomes it would record. The pass, `settlePendingBillPayments`, runs its payment half
 first and then its refund half; the payment half has no check of its own and keeps running. A

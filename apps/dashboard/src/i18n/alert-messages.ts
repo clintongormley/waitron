@@ -359,10 +359,6 @@ export const ALERT_MESSAGES: Readonly<
     en: `A card refund of {amount:money} has been waiting for over an hour for the card provider to show what happened. Check the refund in the provider's own dashboard, and record the outcome it confirms. The original invoice is unchanged.${MORE_EN}`,
     es: `Una devolución de {amount:money} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme. La factura original no cambia.${MORE_ES}`,
   },
-  "invoice_correction.unfinished": {
-    en: `{moneyBack:money} went back to a customer over an hour ago for an invoice correction that is not finished, so no corrective invoice has been filed for it. On a till, open the receipt in Find bill: give back the rest, or press Record correction or Finish now to file it for what has gone back.${MORE_EN}`,
-    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente por una rectificación de factura que no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre el recibo en Buscar cuenta: devuelve el resto, o pulsa Registrar rectificación o Terminar ahora para emitirla por lo devuelto.${MORE_ES}`,
-  },
   "payment.tender_refund_outcome_conflict": {
     en: `The card provider's evidence for a refund of {amount:money} conflicts with a refund already recorded here. Check the payment and refund in the provider's own dashboard before resolving it.${MORE_EN}`,
     es: `La información del proveedor sobre una devolución de {amount:money} contradice una devolución ya registrada aquí. Comprueba el pago y la devolución en el panel del proveedor antes de resolverla.${MORE_ES}`,
@@ -402,6 +398,10 @@ export const ALERT_MESSAGES: Readonly<
   "payment.reconcile_remediation_failed": {
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
+  },
+  "invoice_correction.unfinished": {
+    en: `{moneyBack:money} went back to a customer over an hour ago for an invoice correction that is not finished, so no corrective invoice has been filed for it. On a till, open the receipt in Find bill: give back the rest, or press Record correction or Finish now to file it for what has gone back.${MORE_EN}`,
+    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente por una rectificación de factura que no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre el recibo en Buscar cuenta: devuelve el resto, o pulsa Registrar rectificación o Terminar ahora para emitirla por lo devuelto.${MORE_ES}`,
   },
   "route.dish_not_sent": {
     en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
