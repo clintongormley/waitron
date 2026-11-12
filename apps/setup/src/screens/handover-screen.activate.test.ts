@@ -456,7 +456,7 @@ it.each([false, true])(
   },
 );
 
-it("Change these details goes back to the sign-in step and sends nothing", async () => {
+it("Edit these details goes back to the sign-in step and sends nothing", async () => {
   const { el, requests } = await mount();
   const clockEntry = q<LitElement>(el, "vf-recovery-hour");
   await clockEntry.updateComplete;

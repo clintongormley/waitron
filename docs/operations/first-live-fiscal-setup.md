@@ -12,11 +12,10 @@ If you imported a prepared configuration, review whether it belongs to this same
 continuing. Complete the applicable certificate, email and separate preproduction readiness steps.
 The readiness sample uses its own database and grants no production identity.
 
-Review the country, location, time zone and displayed date and time together. The box compares
-its clock with the clock of the device showing the page, and with the internet's when it reaches
-it, by itself; nobody types a time
-(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "automatically compares clocks
-and shows combined country, place, zone and local time before selection"). A page shown on the
+Review the country, location and time zone together. The box compares its clock with the clock
+of the device showing the page, and with the internet's when it reaches it, by itself; nobody types
+a time (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "automatically compares
+clocks and shows combined country, place and zone, with no clock time, before selection"). A page shown on the
 box's own screen runs on the box's clock, so it does not count as the second clock
 (`apps/server/src/request-from-box.test.ts` sorts a request from the box's own address as the box;
 `packages/fiscal-verifactu/src/hour-setup-clock.test.ts`, "a browser on the box itself is never
@@ -35,20 +34,23 @@ series until Proceed"), and **Proceed** stays disabled until the tick is given (
 "Proceed is quiet and disabled until the details are ticked"). While the button reads **Proceed**,
 the page shows "When you press Proceed, Waitron creates this box's invoice series." with an example of what
 an invoice series is (the same file's "without the tick nothing asks for the series, and the page
-says Proceed starts it"). A missing second clock or clocks that differ, found when the page opens,
-are explained at once, as in the list below (the same file's "%s found on load is explained, with no
-failure"). Beside **Change these details** the page has one main button; what it reads in each
+says Proceed starts it"). A missing second clock found when the page opens is explained at once, as
+in the list below (the same file's "%s found on load is explained, with no failure"); clocks that
+differ are explained only after **Proceed** (the same file's "%s found on load show no clock step
+until Proceed, then explain it with no failure"). Beside **Edit these details** the page has one main button; what it reads in each
 state is the same file's "while %s the page's one button reads %s".
 
-Each detail sits on its own row. When the clocks agree, one "Box time" row gives the box's time to
-the minute and names the clock that agreed (`first-hour.browser.test.ts`, "when only the %s agrees,
-the one Box time row names it"). When they differ, each clock gets a row with one time to the
-minute (with seconds on every row when another clock reads the box's minute), and the page asks "Which is correct:" with **The server** and **Both times are wrong**;
+Each detail sits on its own row, its value beside its label, and the list shows no clock time
+(`first-hour.browser.test.ts`, "when only the %s agrees, Check this venue shows no clock rows").
+When the clocks differ, after **Proceed** the page says "It is very important that the server time
+is set correctly. Which time is correct:", then shows a "Server time" row and a "This device" row (and
+an "Internet" row when the internet was read), each one time to the minute (with seconds on every
+row when another clock reads the server's minute), then **The server** and **Both times are wrong**;
 either answer sends nothing and says to correct this device's time and reconnect (the same file's
 "%s: clocks that differ show one time per clock, ask which is correct, and neither answer sends
-anything"). **Change these details** sends nothing and asks the setup app for the venue step; while
+anything"). **Edit these details** sends nothing and asks the setup app for the venue step; while
 the attempt is claimed the app shows its page saying the details are frozen, with **Start again**
-(`apps/setup/src/setup-app-first-fiscal.test.ts`, "Change these details on the series page asks for
+(`apps/setup/src/setup-app-first-fiscal.test.ts`, "Edit these details on the series page asks for
 the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are
 made the page shows "We've created these series", explains the recovery pack and offers
 **Download recovery pack**, which makes the pack and starts the download.
@@ -87,8 +89,8 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
   (`first-hour.browser.test.ts`, "with no second clock it explains itself and carries on when the
   internet arrives" and "with no second clock on load it explains itself before the tick, and makes
   the series once Proceed is pressed and a clock answers").
-- **The clocks differ by more than 30 seconds**: the page shows each clock's time and asks which is
-  correct; either answer says to correct this device's time and reconnect to the box.
+- **The clocks differ by more than 30 seconds**: after **Proceed** the page shows the server's time
+  and this device's and asks which is correct; either answer says to correct this device's time and reconnect to the box.
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
   to the series once the clocks agree (`first-hour.browser.test.ts`, "a clock refusal shows each
   clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again

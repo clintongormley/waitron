@@ -223,7 +223,7 @@ it.each(["en", "es"] as const)(
       await click("setup-email-screen [data-test=test]");
       await click("setup-email-screen [data-test=next]");
       const vf = "vf-first-setup-hour";
-      await page.locator(`${vf} [data-test=clock-readings]`).waitFor();
+      await page.locator(`${vf} [data-clock=read]`).waitFor();
       const waitingPromise = page.waitForResponse(
         (response) => new URL(response.url()).pathname === "/setup-api/first-setup/candidates",
       );

@@ -131,7 +131,7 @@ async function fill(entry: LitElement) {
   await vi.waitFor(() => expect(proceed().disabled).toBe(false));
   await userEvent.click(proceed());
   await vi.waitFor(() =>
-    expect(entry.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
+    expect(entry.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
   );
 }
 it.each(["archive", "bucket", "cloud"] as const)(

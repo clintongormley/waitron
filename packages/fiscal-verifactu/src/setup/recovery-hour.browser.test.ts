@@ -159,9 +159,8 @@ const RESTORE_DO =
   "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.";
 const RESTORE_ENDS =
   "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.";
-const WHY_REFUSED =
-  "No invoice series is created without a confirmed time, so none is ever repeated.";
-const DIFFER = "Which is correct:";
+const WHY_REFUSED = "No invoice series is created without a confirmed time";
+const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
 const noSecondClock = {
   ...clock,
   usable: clock.usable.filter((r) => r.source === "box"),
@@ -489,7 +488,7 @@ it.each(["key", "isolation", "clear", "disconnect"])(
     if (fault === "disconnect") el.remove();
     expect(el.readCredentials()).toBeNull();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-clock=read]")).toBeNull();
   },
 );
 it("keeps a refused named key beside its native field and leaves Proceed enabled to send it again", async () => {
@@ -870,7 +869,7 @@ it("clocks that differ explain the refusal, not a failure", async () => {
   try {
     await ready(el);
     await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
-    expect(text(el)).toContain(WHY_REFUSED);
+    expect(text(el)).not.toContain(WHY_REFUSED);
     expect(text(el)).not.toMatch(/ask for help/);
     expect(
       (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
@@ -939,12 +938,11 @@ it("a clock refusal shows each clock's reading and no countdown, and waits for C
   try {
     await ready(el);
     await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
-    expect(text(el)).toContain(WHY_REFUSED);
+    expect(text(el)).not.toContain(WHY_REFUSED);
     expect(text(el)).not.toMatch(/ask for help/);
-    expect(detailRows(el, "clock-readings")).toEqual([
-      ["Box time", "18 October 2026 at 14:30:00"],
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:45"],
-      ["Internet", "Unavailable"],
     ]);
     expect(text(el)).not.toContain(new Date(instant).toISOString());
     expect(text(el)).not.toContain(new Date(instant + 45_000).toISOString());
@@ -1322,11 +1320,13 @@ it("explains each wait in Spanish with the restore page's words", async () => {
       disagreement: true,
     };
     vi.advanceTimersByTime(15_000);
-    await vi.waitFor(() => expect(text(el)).toContain("¿Cuál es la correcta?"));
-    expect(text(el)).not.toMatch(/pide ayuda/);
-    expect(text(el)).toContain(
-      "Sin una hora confirmada no se crea ninguna serie de facturas, para que ninguna se repita.",
+    await vi.waitFor(() =>
+      expect(text(el)).toContain(
+        "Es muy importante que la hora del servidor sea correcta. ¿Cuál es la correcta?",
+      ),
     );
+    expect(text(el)).not.toMatch(/pide ayuda/);
+    expect(text(el)).not.toContain("Sin una hora confirmada");
     expect(button(el, "compare").textContent?.trim()).toBe("Volver a comparar los relojes");
     state.decision = clock;
     await userEvent.click(button(el, "compare"));
@@ -1501,7 +1501,7 @@ it.each([
     const { el } = await mount(prepare);
     await ready(el);
     await vi.waitFor(() => expect(formError(el)).not.toBe(""));
-    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-clock=read]")).toBeNull();
     expect(actionsOf(prepare)).toEqual(sent);
     expect(el.readCredentials()).toBeNull();
   },
@@ -1530,14 +1530,16 @@ it("a fiscal refusal that is not about the clock fails without explaining a wait
   expect(el.readCredentials()).toBeNull();
 });
 it("names the box's own clock reading «Servidor» in Spanish, apart from a till", async () => {
-  const { el } = await mount();
+  const { el } = await pressed(undefined, { ...clock, disagreement: true });
   el.locale = "es";
   await el.updateComplete;
-  await ready(el);
-  const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-readings] dt")].map((dt) =>
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=clock-times]")).not.toBeNull(),
+  );
+  const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-times] dt")].map((dt) =>
     dt.textContent!.trim(),
   );
-  expect(labels).toEqual(["Hora del servidor"]);
+  expect(labels).toEqual(["Hora del servidor", "Este dispositivo", "Internet"]);
 });
 
 const observationKey = 'waitron.invoiceEvidence.v1:["B12345674","production","A-0CNNY"]';
@@ -1551,14 +1553,15 @@ const observation = {
 };
 afterEach(() => localStorage.removeItem(observationKey));
 
-it("the invoices seen on this device keep their plain list; only Check this venue's rows put the value at the end", async () => {
+it("the invoices seen on this device keep their plain list; only Check this venue's rows sit in a label and value grid", async () => {
   localStorage.setItem(observationKey, JSON.stringify(observation));
   const { el } = await mount();
   const style = (selector: string) => getComputedStyle(el.shadowRoot!.querySelector(selector)!);
   expect(style("[data-test=device-invoices] dl > dd").textAlign).toBe("start");
   expect(style("[data-test=device-invoices] dl > dd").minWidth).toBe("auto");
-  expect(style("[data-test=venue-review] > div").display).toBe("flex");
-  expect(style("[data-test=venue-review] dd").textAlign).toBe("end");
+  expect(style("[data-test=venue-review]").display).toBe("grid");
+  expect(style("[data-test=venue-review] > div").display).toBe("contents");
+  expect(style("[data-test=venue-review] dd").textAlign).toBe("start");
   const space = getComputedStyle(el).getPropertyValue("--wt-space-3").trim();
   expect(space).toMatch(/px$/);
   for (const list of ["[data-test=device-invoices] dl", "[data-test=venue-review]"]) {
@@ -1576,6 +1579,8 @@ it("shows the returning device's old-series observation without sending it as re
   expect(report!.textContent).toContain("A".repeat(64));
   expect(report!.textContent).toContain("Invoices seen on this device");
   expect(report!.textContent).toContain("The list may be incomplete");
+  expect(report!.textContent).not.toContain("Recovery still uses new invoice series");
+  expect(report!.textContent).not.toContain("invoice series");
   expect(report!.querySelectorAll("input, wt-input, wt-select, button, wt-button")).toHaveLength(0);
   await ready(el);
   await vi.waitFor(() => expect(text(el)).toContain("0CSQW"));
@@ -2190,7 +2195,7 @@ const detailRows = (el: LitElement, list: string) =>
     row.querySelector("dt")?.textContent?.trim(),
     row.querySelector("dd")?.textContent?.replace(/\s+/g, " ").trim(),
   ]);
-it("Check this venue lists the backup's details one to a row, then Box time naming the clocks that agreed", async () => {
+it("Check this venue lists the backup's details one to a row, and no clock rows", async () => {
   const { el } = await pressed();
   expect(el.shadowRoot!.querySelector("h4")?.textContent?.trim()).toBe("Check this venue");
   expect(detailRows(el, "venue-review")).toEqual([
@@ -2199,11 +2204,10 @@ it("Check this venue lists the backup's details one to a row, then Box time nami
     ["Taxpayer NIF", "B12345674"],
     ["Time zone", "Europe/Madrid"],
   ]);
-  await vi.waitFor(() =>
-    expect(detailRows(el, "clock-readings")).toEqual([
-      ["Box time", "18 October 2026 at 14:30 — matches this device and the internet time"],
-    ]),
-  );
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull());
+  expect(el.shadowRoot!.querySelectorAll("[data-test=check-venue] dl.details")).toHaveLength(1);
+  for (const gone of ["Box time", "Server time", "matches", "14:30"])
+    expect(text(el)).not.toContain(gone);
   expect(text(el)).not.toContain(new Date(instant).toISOString());
 });
 it.each(["", "E1"])(
@@ -2238,9 +2242,9 @@ it("clocks that differ show one time per clock and ask which is correct; neither
   };
   for (const choice of ["server-correct", "both-wrong"]) {
     const { el, prepare } = await pressed(undefined, decision);
-    await vi.waitFor(() => expect(text(el)).toContain("Which is correct:"));
-    expect(detailRows(el, "clock-readings")).toEqual([
-      ["Box time", "18 October 2026 at 14:30"],
+    await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30"],
       ["This device", "Unavailable"],
       ["Internet", "18 October 2026 at 14:33"],
     ]);
@@ -2252,17 +2256,17 @@ it("clocks that differ show one time per clock and ask which is correct; neither
     expect(text(el)).toContain(
       "Please correct the time on this device and then reconnect to the server.",
     );
-    expect(text(el)).not.toContain("Which is correct:");
+    expect(text(el)).not.toContain(DIFFER);
     expect(action(el)).toBe("Compare the clocks again");
   }
 });
-it("Change these details sends nothing and asks to go back to choosing the backup", async () => {
+it("Edit these details sends nothing and asks to go back to choosing the backup", async () => {
   const { el, prepare, host } = await mount();
   await fill(el);
   const asked: Event[] = [];
   host.addEventListener("recovery-change-details", (event) => asked.push(event));
   const change = button(el, "change-details");
-  expect(change.textContent?.trim()).toBe("Change these details");
+  expect(change.textContent?.trim()).toBe("Edit these details");
   expect(change.getAttribute("variant")).toBe("secondary");
   await userEvent.click(change);
   expect(asked).toHaveLength(1);
@@ -2285,7 +2289,7 @@ it("after Proceed the second screen says which series were created, and the rest
   expect(el.shadowRoot!.querySelector("[data-test=change-details]")).toBeNull();
   expect(el.readCredentials()).not.toBeNull();
 });
-it("in Spanish the restore page asks which clock is correct and offers Cambiar estos datos, never pide ayuda", async () => {
+it("in Spanish the restore page asks which clock is correct and offers Editar estos datos, never pide ayuda", async () => {
   const { state, prepare } = scripted();
   state.decision = { ...clock, disagreement: true };
   const host = document.createElement("main");
@@ -2301,9 +2305,14 @@ it("in Spanish the restore page asks which clock is correct and offers Cambiar e
   host.append(el);
   await el.updateComplete;
   await fill(el);
-  expect(button(el, "change-details").textContent?.trim()).toBe("Cambiar estos datos");
+  expect(button(el, "change-details").textContent?.trim()).toBe("Editar estos datos");
   await proceed(el);
-  await vi.waitFor(() => expect(text(el)).toContain("¿Cuál es la correcta?"));
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "Es muy importante que la hora del servidor sea correcta. ¿Cuál es la correcta?",
+    ),
+  );
+  expect(text(el)).toContain("Hora del servidor");
   expect(text(el)).not.toMatch(/pide ayuda/);
   await userEvent.click(button(el, "server-correct"));
   await el.updateComplete;
@@ -2311,7 +2320,7 @@ it("in Spanish the restore page asks which clock is correct and offers Cambiar e
     "Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
   );
 });
-it("a handover start offers Change these details, which sends nothing", async () => {
+it("a handover start offers Edit these details, which sends nothing", async () => {
   const prepare = vi.fn(async () => {
     throw new Error("nothing is sent before Proceed");
   });
@@ -2320,6 +2329,7 @@ it("a handover start offers Change these details, which sends nothing", async ()
   await el.updateComplete;
   const asked: Event[] = [];
   el.addEventListener("recovery-change-details", (event) => asked.push(event));
+  expect(button(el, "change-details").textContent?.trim()).toBe("Edit these details");
   await userEvent.click(button(el, "change-details"));
   expect(asked).toHaveLength(1);
   expect(prepare).not.toHaveBeenCalled();

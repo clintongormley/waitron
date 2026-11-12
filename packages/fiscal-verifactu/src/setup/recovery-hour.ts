@@ -60,7 +60,7 @@ const strings = {
     promotionClock: "The clock check is too old. Check the clocks again before starting the venue.",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
-      "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete. Recovery still uses new invoice series.",
+      "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete.",
     stopped: "The old box is stopped and will stay offline.",
     sole: "I am the only person recovering this taxpayer, across all venues.",
     seriesLine:
@@ -88,7 +88,7 @@ const strings = {
       "La comprobación del reloj ha caducado. Vuelve a comprobar los relojes antes de iniciar el local.",
     deviceInvoices: "Facturas vistas en este dispositivo",
     deviceInvoicesHint:
-      "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta. La recuperación sigue usando series de facturas nuevas.",
+      "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta.",
     stopped: "El servidor anterior está apagado y seguirá desconectado.",
     sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
     seriesLine:
@@ -514,7 +514,7 @@ export class RecoveryHourEntry extends LitElement {
                 </p>`
         }
         <h4>${words.checkHeading}</h4>
-        <dl class="details" data-test="venue-review">
+        <dl class="details" data-test="venue-review" data-clock=${clock ? "read" : "reading"}>
           ${
             promote
               ? nothing
@@ -526,10 +526,7 @@ export class RecoveryHourEntry extends LitElement {
         </dl>
         ${
           clock
-            ? html`<dl class="details" data-test="clock-readings">
-                  ${this.#wait.renderClockRows(clock, words, this.locale, displayZone)}
-                </dl>
-                ${clock.releaseBlocked || clock.rangeBlocked ? html`<p role="status">${clock.rangeBlocked ? words.rangeBlocked : words.blocked}</p>` : nothing}`
+            ? html`${clock.releaseBlocked || clock.rangeBlocked ? html`<p role="status">${clock.rangeBlocked ? words.rangeBlocked : words.blocked}</p>` : nothing}`
             : nothing
         }
         <label
@@ -546,7 +543,7 @@ export class RecoveryHourEntry extends LitElement {
         <p id="details-error" class="error">
           ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
         </p>
-        ${this.#wait.renderProblem(words, clock)}
+        ${this.#wait.renderProblem(words, clock, this.locale, displayZone)}
         ${this.#wait.counting ? this.#wait.renderWait(words) : nothing}
         ${action === "proceed" && !sending ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}
       </div>

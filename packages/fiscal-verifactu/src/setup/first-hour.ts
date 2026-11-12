@@ -12,6 +12,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   ClockWait,
+  clockProblem,
   clockWaitStrings,
   readClocks,
   record,
@@ -281,14 +282,14 @@ export class FirstSetupHour extends LitElement {
       if (clock.releaseBlocked || clock.rangeBlocked) return this.#wait.show();
       const claimed = context.status === "claimed";
       if (claimed && !clock.secondClock) return this.#wait.waitForSecondClock();
-      if (claimed && clock.disagreement) return this.#wait.show({ kind: "disagreement" });
       if (!this.#confirmed && !recorded) {
         this.#wait.show();
-        if (!claimed) return;
+        if (!claimed || clock.disagreement) return;
         this.#wait.showPreview(await send({ action: "selection" }));
         this.#recordedWait = !this.#askedOrEdited && this.#wait.counting;
         return;
       }
+      if (claimed && clock.disagreement) return this.#wait.show({ kind: "disagreement" });
       let result: unknown;
       this.#askedOrEdited = true;
       if (claimed) result = await api.candidates({ comparisonId: comparison.id });
@@ -315,7 +316,15 @@ export class FirstSetupHour extends LitElement {
       } else throw new Error("invalid selection");
       this.#wait.show(undefined, result as unknown as Selected);
     } catch (error) {
-      if (current())
+      // Before Proceed the clock step stays hidden; Proceed asks the box again.
+      if (
+        current() &&
+        !this.#confirmed &&
+        !recorded &&
+        clockProblem(error)?.kind === "disagreement"
+      )
+        this.#wait.show();
+      else if (current())
         this.#wait.settle(error, automatic, () => {
           this.error = true;
         });
@@ -559,7 +568,7 @@ export class FirstSetupHour extends LitElement {
         </section>
         ${failure}`;
     return html`<h2>${t.checkHeading}</h2>
-      <dl class="details" data-test="venue-review">
+      <dl class="details" data-test="venue-review" data-clock=${clock ? "read" : "reading"}>
         ${detailRow(t.environment, t[this.context.environment])}
         ${detailRow(t.country, regionName(this.locale, venue.country))}
         ${detailRow(t.place, `${venue.name} · ${venue.city}`)} ${detailRow(t.taxId, venue.taxId)}
@@ -567,10 +576,7 @@ export class FirstSetupHour extends LitElement {
       </dl>
       ${
         clock
-          ? html`<dl class="details" data-test="clock-readings">
-                ${this.#wait.renderClockRows(clock, t, this.locale, venue.timeZone)}
-              </dl>
-              ${clock.releaseBlocked ? html`<p role="status">${t.blocked}</p>` : nothing}${clock.rangeBlocked ? html`<p role="status">${t.rangeBlocked}</p>` : nothing}`
+          ? html`${clock.releaseBlocked ? html`<p role="status">${t.blocked}</p>` : nothing}${clock.rangeBlocked ? html`<p role="status">${t.rangeBlocked}</p>` : nothing}`
           : nothing
       }
       <label
@@ -584,7 +590,12 @@ export class FirstSetupHour extends LitElement {
         />${t.detailsCorrect} *</label
       >
       ${action === "proceed" && !sending ? html`<p data-test="series-line">${t.seriesLine}</p>` : nothing}
-      ${this.#wait.renderProblem(carrying ? t : { ...t, secondClockEnds: "" }, clock)}
+      ${this.#wait.renderProblem(
+        carrying ? t : { ...t, secondClockEnds: "" },
+        clock,
+        this.locale,
+        venue.timeZone,
+      )}
       ${this.#wait.counting ? this.#wait.renderWait(t) : nothing} ${failure}`;
   }
 }

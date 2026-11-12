@@ -189,7 +189,7 @@ for (const theme of ["light", "dark"] as const)
                 );
               else
                 await vi.waitFor(() =>
-                  expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
+                  expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
                 );
               if (state !== "refusal") {
                 const shown: string = {

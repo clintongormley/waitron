@@ -148,8 +148,7 @@ replaced this one, switch this box off: two boxes must never sell for one venue.
 If this browser kept invoice observations for the selected taxpayer and environment, the recovery
 form shows **Invoices seen on this device**. Each entry gives the last invoice number the browser
 kept for that series, its issue date and its fingerprint. Compare these with the history you have:
-the list may be incomplete, and clearing browser data removes it. An older series in this list
-stays an observation; recovery still uses new invoice series. You can recover with a fresh device or when
+the list may be incomplete, and clearing browser data removes it. You can recover with a fresh device or when
 browser storage is unavailable. The observations stay in this browser and are not sent with the
 recovery request. The report reads the storage available at this Waitron address; it does not
 fetch observations from other devices.
@@ -162,7 +161,7 @@ the code at the start of every invoice number; recovery creates new ones so the 
 the old box's numbers. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. It then shows
 **We've created these series** with the new invoice series. If you change the key or untick a box,
-the page stops until you choose **Proceed** again. Before **Proceed**, **Change these details** goes
+the page stops until you choose **Proceed** again. Before **Proceed**, **Edit these details** goes
 back to choosing the backup.
 
 Tick the confirmation the page shows — "I confirm no other running server has newer restaurant
@@ -176,8 +175,8 @@ payments once the recovery finishes, until its clock catches up or is confirmed:
 [When payments stop because of the clock](box-status.md#clock-behind).
 
 A key that opens the backup does not bypass the history and clock checks. If the clock check
-refuses, resolve its cause and choose **Compare the clocks again**. If the clocks differ, the page
-shows each clock's time and asks which is correct; correct this device's time, reconnect to the box,
+refuses, resolve its cause and choose **Compare the clocks again**. If the clocks differ, after
+**Proceed** the page shows the server's time and this device's and asks which is correct; correct this device's time, reconnect to the box,
 then choose **Compare the clocks again**. If the box then shows a page saying it could not make
 its new invoice series, connect it to the internet and press **Retry a normal boot**.
 

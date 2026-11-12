@@ -103,12 +103,13 @@ If the backup has no usable time zone, the clock times and a reissued recovery p
 show UTC. Recovery keeps the saved zone unchanged.
 
 The page lists the backup's environment, country, taxpayer NIF and time zone one to a row, and after
-**Proceed** the clock rows the first-setup runbook describes (`recovery-hour.browser.test.ts`, "Check
-this venue lists the backup's details one to a row, then Box time naming the clocks that agreed" and
+**Proceed**, when the clocks differ, the clock step the first-setup runbook describes
+(`recovery-hour.browser.test.ts`, "Check this venue lists the backup's details one to a row, and no
+clock rows" and
 "clocks that differ show one time per clock and ask which is correct; neither answer sends
-anything"). Before **Proceed**, **Change these details** sends nothing and goes back to choosing the
-backup (the same file's "Change these details sends nothing and asks to go back to choosing the
-backup", and `apps/setup/src/screens/recovery-copy.test.ts`, "Change these details from the restore
+anything"). Before **Proceed**, **Edit these details** sends nothing and goes back to choosing the
+backup (the same file's "Edit these details sends nothing and asks to go back to choosing the
+backup", and `apps/setup/src/screens/recovery-copy.test.ts`, "Edit these details from the restore
 page goes back to choosing the backup and sends nothing"). Once the series are made the page shows
 "We've created these series"; the key and statements stay on the page, hidden, for the restore to
 read.
@@ -134,7 +135,7 @@ sends the key again. Unticking a statement or the details tick disables it until
 (the same file's "after the box refuses the key, Proceed stays enabled, and pressing it sends the
 key again and makes the series" and "after the box refuses the key, unticking %s disables Proceed
 and ticking it again enables it, and the key's error stays under the key until the key changes").
-Besides **Clear** and **Change these details** the page has one main button; what it reads in each
+Besides **Clear** and **Edit these details** the page has one main button; what it reads in each
 state is the same file's "while %s the restore page's one button reads %s". A
 page shown on the box's own screen runs on the box's clock, so it does not count as the second
 clock (`apps/server/src/request-from-box.test.ts`;
@@ -185,8 +186,8 @@ button is gone"). What the page shows when it cannot go ahead, and what it asks 
   internet, or open the page on a phone or laptop on the venue's network that has the backup. It
   checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
   "with no second clock it explains itself and carries on when the internet arrives").
-- **The clocks differ by more than 30 seconds**: the page shows each clock's time and asks which is
-  correct; either answer says to correct this device's time and reconnect to the box. It does not
+- **The clocks differ by more than 30 seconds**: the page shows the server's time and this device's
+  and asks which is correct; either answer says to correct this device's time and reconnect to the box. It does not
   retry by itself; press **Compare the clocks again**, which
   carries on to the invoice series once the clocks agree (`recovery-hour.browser.test.ts`, "a clock
   refusal shows each clock's reading and no countdown, and waits for Compare the clocks again" and

@@ -55,7 +55,7 @@ copy is ready, enter the same administrator account and choose **Continue to clo
 new invoice series by itself, including after any wait, and then starts the venue on the spare.
 An authenticator code lasts under a minute. If yours runs out before the page uses it, the page asks
 you to check your password and code: enter a fresh code and choose **Try again** to carry on.
-Before **Proceed**, **Change these details** goes back to the sign-in.
+Before **Proceed**, **Edit these details** goes back to the sign-in.
 If the page says this box is restarting, keep it open until **Continue to this box** appears.
 Payments already recorded remain in the transferred copy.
 

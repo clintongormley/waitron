@@ -518,9 +518,7 @@ it("reads back a completed activation after a lost response and offers no second
     "vf-first-setup-hour",
   )!;
   await hour.updateComplete;
-  await expect
-    .poll(() => hour.shadowRoot!.querySelector("[data-test=clock-readings]"))
-    .not.toBeNull();
+  await expect.poll(() => hour.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull();
   await userEvent.click(
     hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!,
   );
@@ -906,7 +904,7 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
   expect(claim.venue.dayCutover).toBe("05:00:00");
 });
 
-it("Change these details on the series page asks for the venue step, which a claimed attempt answers with its frozen-details page", async () => {
+it("Edit these details on the series page asks for the venue step, which a claimed attempt answers with its frozen-details page", async () => {
   const { app, requests } = await mount();
   await liveVenue(app);
   await screen(app, "cert");

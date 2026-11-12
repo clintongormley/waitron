@@ -12,7 +12,7 @@ export const checkVenueStrings = {
     zone: "Time zone",
     detailsCorrect: "These details are correct.",
     proceed: "Proceed",
-    changeDetails: "Change these details",
+    changeDetails: "Edit these details",
     compareAgain: "Compare the clocks again",
     tryAgain: "Try again",
     failed: "Could not complete this step.",
@@ -31,7 +31,7 @@ export const checkVenueStrings = {
     zone: "Zona horaria",
     detailsCorrect: "Estos datos son correctos.",
     proceed: "Continuar",
-    changeDetails: "Cambiar estos datos",
+    changeDetails: "Editar estos datos",
     compareAgain: "Volver a comparar los relojes",
     tryAgain: "Volver a intentarlo",
     failed: "No se pudo completar este paso.",
@@ -46,24 +46,20 @@ export const checkVenueStrings = {
 export const checkVenueStyles = css`
   dl.details {
     display: grid;
-    gap: var(--wt-space-2);
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: var(--wt-space-4);
+    row-gap: var(--wt-space-2);
     margin-block: var(--wt-space-3);
   }
   dl.details > div {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    column-gap: var(--wt-space-4);
-    row-gap: var(--wt-space-1);
+    display: contents;
   }
   dl.details dt {
     color: var(--wt-color-text-muted);
   }
   dl.details dd {
     margin: 0;
-    flex: 1 1 0;
-    min-width: 50%;
-    text-align: end;
+    overflow-wrap: anywhere;
   }
   .choices {
     display: flex;

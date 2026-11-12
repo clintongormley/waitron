@@ -331,7 +331,7 @@ it("drops a bucket copy's clock answer that arrives after the kit changed", asyn
   expect(sent).not.toContain("/setup-api/recovery/stage");
 });
 
-it("Change these details from the restore page goes back to choosing the backup and sends nothing", async () => {
+it("Edit these details from the restore page goes back to choosing the backup and sends nothing", async () => {
   const { el, calls } = await mounted();
   const sent = calls.length;
   el.shadowRoot!.querySelector("setup-recovery-allocation")!.dispatchEvent(

@@ -63,9 +63,12 @@ it.each([undefined, Date.parse("2026-10-18T20:04:00Z"), LAST_DATE_MS + 60_000])(
   },
 );
 
-it.each(["second-clock", "disagreement"] as const)(
+it.each([
+  ["second-clock", 2],
+  ["disagreement", 1],
+] as const)(
   "a %s explanation draws no paragraph for a sentence the page leaves empty",
-  (kind) => {
+  (kind, drawn) => {
     const target = document.createElement("div");
     render(
       renderClockProblem({ kind }, { ...words, secondClockDo: "Do this." }, undefined, unanswered),
@@ -73,7 +76,7 @@ it.each(["second-clock", "disagreement"] as const)(
     );
     const paragraphs = [...target.querySelectorAll("p")].map((p) => text(p));
     expect(paragraphs).not.toContain("");
-    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs).toHaveLength(drawn);
   },
 );
 
@@ -389,22 +392,19 @@ it("builds each language, zone and style's formatter once", () => {
   expect(dateTimeFormat("es", "Atlantic/Canary", { dateStyle: "medium" })).not.toBe(first);
 });
 
-describe("the clock rows on Check this venue", () => {
+describe("the two times the clock step shows", () => {
   const at = Date.parse("2026-10-18T12:30:20Z");
   const reading = (source: string, ms: number) => ({
     source,
     lowerMs: ms - 400,
     upperMs: ms + 400,
   });
-  const decision = (
-    usable: { source: string; lowerMs: number; upperMs: number }[],
-    disagreement = false,
-  ) =>
+  const decision = (usable: { source: string; lowerMs: number; upperMs: number }[]) =>
     ({
       usable,
       unavailable: [],
       secondClock: usable.length > 1,
-      disagreement,
+      disagreement: true,
       releaseBlocked: false,
       rangeBlocked: false,
     }) as unknown as Parameters<typeof renderClockRows>[0];
@@ -413,92 +413,43 @@ describe("the clock rows on Check this venue", () => {
       text(row.querySelector("dt")),
       text(row.querySelector("dd")),
     ]);
-  const draw = (clock: Parameters<typeof renderClockRows>[0], locale: "en" | "es" = "en") => {
-    const target = document.createElement("div");
-    render(
-      renderClockRows(clock, false, clockWaitStrings[locale], locale, "Europe/Madrid"),
-      target,
-    );
-    return target;
-  };
-
-  it.each([
-    [["browser"], "18 October 2026 at 14:30 — matches this device"],
-    [["internet"], "18 October 2026 at 14:30 — matches the internet time"],
-    [
-      ["browser", "internet"],
-      "18 October 2026 at 14:30 — matches this device and the internet time",
-    ],
-  ])("clocks that agree show one Box time row naming %j", (others, shown) => {
-    const target = draw(
-      decision([reading("box", at), ...others.map((s) => reading(s, at + 9_000))]),
-    );
-    expect(rows(target)).toEqual([["Box time", shown]]);
-    expect(text(target)).not.toContain("12:30");
-    expect(text(target)).not.toContain(":20");
-  });
-
-  it("names the clock that agreed in Spanish", () => {
-    const target = draw(decision([reading("box", at), reading("internet", at)]), "es");
-    expect(rows(target)).toEqual([
-      ["Hora del servidor", "18 de octubre de 2026 a las 14:30 — coincide con la hora de internet"],
-    ]);
-  });
-
-  it("clocks that differ show one row per clock, each one time to the minute", () => {
-    const target = document.createElement("div");
-    render(
-      renderClockRows(
-        decision([reading("box", at), reading("browser", at + 5 * 60_000)], true),
-        true,
-        clockWaitStrings.en,
-        "en",
-        "Europe/Madrid",
-      ),
-      target,
-    );
-    expect(rows(target)).toEqual([
-      ["Box time", "18 October 2026 at 14:30"],
-      ["This device", "18 October 2026 at 14:35"],
-      ["Internet", "Unavailable"],
-    ]);
-    expect(text(target)).not.toContain(" – ");
-    expect(text(target)).not.toContain("Z");
-  });
-
-  const drawDiffering = (
+  const draw = (
     readings: { source: string; lowerMs: number; upperMs: number }[],
     locale: "en" | "es" = "en",
   ) => {
     const target = document.createElement("div");
     render(
-      renderClockRows(
-        decision(readings, true),
-        true,
-        clockWaitStrings[locale],
-        locale,
-        "Europe/Madrid",
-      ),
+      renderClockRows(decision(readings), clockWaitStrings[locale], locale, "Europe/Madrid"),
       target,
     );
     return target;
   };
   const minuteStart = Date.parse("2026-10-18T12:30:00Z");
 
+  it("names the server's time and this device's, each one time to the minute, and no internet row without an internet reading", () => {
+    const target = draw([reading("box", at), reading("browser", at + 5 * 60_000)]);
+    expect(rows(target)).toEqual([
+      ["Server time", "18 October 2026 at 14:30"],
+      ["This device", "18 October 2026 at 14:35"],
+    ]);
+    expect(text(target)).not.toContain(" – ");
+    expect(text(target)).not.toContain("Z");
+    expect(text(target)).not.toContain("Internet");
+  });
+
   it("clocks that differ within one minute show their seconds, so the difference is visible", () => {
-    const target = drawDiffering([
+    const target = draw([
       reading("box", minuteStart + 400),
       reading("browser", minuteStart + 45_000),
     ]);
     expect(rows(target)).toEqual([
-      ["Box time", "18 October 2026 at 14:30:00"],
+      ["Server time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:45"],
-      ["Internet", "Unavailable"],
     ]);
   });
 
-  it("shows the seconds in Spanish too", () => {
-    const target = drawDiffering(
+  it("shows the seconds in Spanish too, with the internet's row when it has a reading", () => {
+    const target = draw(
       [reading("box", minuteStart + 400), reading("internet", minuteStart + 45_000)],
       "es",
     );
@@ -510,21 +461,22 @@ describe("the clock rows on Check this venue", () => {
   });
 
   it("clocks that differ by two minutes show minutes only", () => {
-    const target = drawDiffering([
+    const target = draw([
       reading("box", minuteStart + 400),
       reading("browser", minuteStart + 120_000),
       reading("internet", minuteStart + 125_000),
     ]);
     expect(rows(target)).toEqual([
-      ["Box time", "18 October 2026 at 14:30"],
+      ["Server time", "18 October 2026 at 14:30"],
       ["This device", "18 October 2026 at 14:32"],
       ["Internet", "18 October 2026 at 14:32"],
     ]);
   });
 
-  it("a box with no second clock shows its time alone", () => {
-    expect(rows(draw(decision([reading("box", at)])))).toEqual([
-      ["Box time", "18 October 2026 at 14:30"],
+  it("a server with no reading of its own says so", () => {
+    expect(rows(draw([reading("browser", at)]))).toEqual([
+      ["Server time", "Unavailable"],
+      ["This device", "18 October 2026 at 14:30"],
     ]);
   });
 });
@@ -541,6 +493,50 @@ describe("the question when the clocks differ", () => {
     secondClockDo: "",
     secondClockEnds: "",
   };
+  const QUESTION =
+    "It is very important that the server time is set correctly. Which time is correct:";
+  const differing = {
+    usable: [
+      {
+        source: "box",
+        lowerMs: Date.parse("2026-10-18T12:30:00Z"),
+        upperMs: Date.parse("2026-10-18T12:30:00Z"),
+      },
+      {
+        source: "browser",
+        lowerMs: Date.parse("2026-10-18T12:35:00Z"),
+        upperMs: Date.parse("2026-10-18T12:35:00Z"),
+      },
+    ],
+    unavailable: [],
+    secondClock: true,
+    disagreement: true,
+    releaseBlocked: false,
+    rangeBlocked: false,
+  } as unknown as Parameters<typeof renderClockRows>[0];
+
+  it("asks first, then shows the two times, then the two choices", () => {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.show({ kind: "disagreement" });
+    const target = document.createElement("div");
+    render(wait.renderProblem(choiceWords, differing, "en", "Europe/Madrid"), target);
+    const section = target.querySelector("[data-test=clock-refused]")!;
+    expect(
+      [...section.children].map((child) => child.getAttribute("data-test") ?? child.tagName),
+    ).toEqual(["P", "clock-times", "DIV"]);
+    expect(text(section.children[0]!)).toBe(QUESTION);
+    expect(
+      [...target.querySelectorAll("[data-test=clock-times] > div")].map((row) => [
+        text(row.querySelector("dt")),
+        text(row.querySelector("dd")),
+      ]),
+    ).toEqual([
+      ["Server time", "18 October 2026 at 14:30"],
+      ["This device", "18 October 2026 at 14:35"],
+    ]);
+    expect(text(target)).not.toContain("No invoice series is created");
+    expect(target.querySelectorAll("wt-button")).toHaveLength(2);
+  });
 
   it.each(["server-correct", "both-wrong"])(
     "%s replaces the question with the instruction, and a new problem asks again",
@@ -548,8 +544,8 @@ describe("the question when the clocks differ", () => {
       const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
       wait.show({ kind: "disagreement" });
       const target = document.createElement("div");
-      render(wait.renderProblem(choiceWords, undefined), target);
-      expect(text(target)).toContain("Which is correct:");
+      render(wait.renderProblem(choiceWords, undefined, "en", "Europe/Madrid"), target);
+      expect(text(target)).toContain(QUESTION);
       expect(
         [...target.querySelectorAll("wt-button")].map((b) => [
           b.getAttribute("data-test"),
@@ -560,15 +556,15 @@ describe("the question when the clocks differ", () => {
         ["both-wrong", "Both times are wrong"],
       ]);
       target.querySelector<HTMLElement>(`[data-test=${choice}]`)!.click();
-      render(wait.renderProblem(choiceWords, undefined), target);
-      expect(text(target)).not.toContain("Which is correct:");
+      render(wait.renderProblem(choiceWords, undefined, "en", "Europe/Madrid"), target);
+      expect(text(target)).not.toContain(QUESTION);
       expect(target.querySelector("wt-button")).toBeNull();
       expect(text(target.querySelector("[data-test=correct-device]"))).toBe(
         "Please correct the time on this device and then reconnect to the server.",
       );
       wait.show({ kind: "disagreement" });
-      render(wait.renderProblem(choiceWords, undefined), target);
-      expect(text(target)).toContain("Which is correct:");
+      render(wait.renderProblem(choiceWords, undefined, "en", "Europe/Madrid"), target);
+      expect(text(target)).toContain(QUESTION);
     },
   );
 
@@ -577,14 +573,17 @@ describe("the question when the clocks differ", () => {
     wait.show({ kind: "disagreement" });
     const target = document.createElement("div");
     const es = { ...clockWaitStrings.es, secondClockDo: "", secondClockEnds: "" };
-    render(wait.renderProblem(es, undefined), target);
-    expect(text(target)).toContain("¿Cuál es la correcta?");
+    render(wait.renderProblem(es, differing, "es", "Europe/Madrid"), target);
+    expect(text(target)).toContain(
+      "Es muy importante que la hora del servidor sea correcta. ¿Cuál es la correcta?",
+    );
+    expect(text(target)).toContain("Hora del servidor");
     expect([...target.querySelectorAll("wt-button")].map((b) => text(b))).toEqual([
       "El servidor",
       "Las dos horas están mal",
     ]);
     target.querySelector<HTMLElement>("[data-test=both-wrong]")!.click();
-    render(wait.renderProblem(es, undefined), target);
+    render(wait.renderProblem(es, differing, "es", "Europe/Madrid"), target);
     expect(text(target.querySelector("[data-test=correct-device]"))).toBe(
       "Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
     );

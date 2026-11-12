@@ -166,20 +166,18 @@ for (const theme of ["light", "dark"] as const)
               pdf: "prepare-pdf",
             } as const;
             await vi.waitFor(() =>
-              expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
+              expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
             );
             if (state !== "review") {
               await checked();
-              if (state !== "refused" && state !== "answered") {
-                await vi.waitFor(() =>
-                  expect(
-                    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-                      "[data-test=compare]",
-                    )?.disabled,
-                  ).toBe(false),
-                );
-                await click("compare");
-              }
+              await vi.waitFor(() =>
+                expect(
+                  el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+                    "[data-test=compare]",
+                  )?.disabled,
+                ).toBe(false),
+              );
+              await click("compare");
               await vi.waitFor(() =>
                 expect(el.shadowRoot!.querySelector(`[data-test=${marker[state]}]`)).not.toBeNull(),
               );

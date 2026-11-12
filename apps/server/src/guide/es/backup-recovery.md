@@ -163,8 +163,7 @@ Si este navegador guardó observaciones de facturas del contribuyente y entorno 
 formulario muestra **Facturas vistas en este dispositivo**. Cada entrada indica el último número
 que el navegador guardó de esa serie, su fecha de expedición y su huella. Compáralas con el
 historial que conservas: la lista puede estar incompleta y desaparece si borras los datos del
-navegador. Una serie anterior sigue siendo una observación; la recuperación usa series de facturas nuevas.
-Puedes recuperar desde un dispositivo nuevo o aunque el almacenamiento del navegador no esté
+navegador. Puedes recuperar desde un dispositivo nuevo o aunque el almacenamiento del navegador no esté
 disponible. Las observaciones permanecen en este navegador y no se envían con la solicitud de
 recuperación. El informe lee el almacenamiento disponible en esta dirección de Waitron; no busca
 observaciones en otros dispositivos.
@@ -177,7 +176,7 @@ nuevas para que el servidor nunca repita los números del servidor anterior. Des
 página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
 muestre; no hay ningún código de instalación que escribir. Después muestra **Hemos creado estas
 series** con las nuevas series de facturas. Si cambias la clave o desmarcas una casilla, la página se
-detiene hasta que vuelvas a elegir **Continuar**. Antes de **Continuar**, **Cambiar estos datos**
+detiene hasta que vuelvas a elegir **Continuar**. Antes de **Continuar**, **Editar estos datos**
 vuelve a la elección de la copia.
 
 Marca la confirmación que muestra la página —«Confirmo que ningún otro servidor en funcionamiento
@@ -193,7 +192,7 @@ deja de cobrar al terminar la recuperación hasta que su reloj las alcance o se 
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
 del reloj lo impide, resuelve la causa y elige **Volver a comparar los relojes**. Si los relojes no
-coinciden, la página muestra la hora de cada uno y pregunta cuál es la correcta; corrige la hora de
+coinciden, después de **Continuar** la página muestra la hora del servidor y la de este dispositivo y pregunta cuál es la correcta; corrige la hora de
 este dispositivo, vuelve a conectarte al servidor y elige **Volver a comparar los relojes**. Si después el servidor muestra una
 página que dice que no pudo crear sus nuevas series de facturas, conéctalo a internet y pulsa
 **Reintentar un arranque normal**.

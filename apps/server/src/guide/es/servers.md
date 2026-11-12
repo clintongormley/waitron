@@ -61,7 +61,7 @@ transferencia. Cuando la copia esté lista, introduce la misma cuenta de adminis
 cualquier espera, y después inicia el local en el equipo de reserva. Un código del autenticador dura
 menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página te pide revisar la contraseña y el código: introduce un código nuevo y elige
 **Volver a intentarlo** para seguir. Antes de **Continuar**,
-**Cambiar estos datos** vuelve a la identificación. Si la página indica que el
+**Editar estos datos** vuelve a la identificación. Si la página indica que el
 servidor se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este servidor**.
 Los pagos ya registrados se conservan en la copia transferida.
 
