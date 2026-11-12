@@ -6,7 +6,7 @@ import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
 
 function owes(bill: PartyBill): string {
-  if (bill.deferred === true) return t("find_page.deferred");
+  if (bill.deferred === true) return t("table.bill_deferred");
   if (bill.leftUnpaid && bill.status !== "settled") return t("departure.left_unpaid");
   return bill.status === "settled"
     ? t("table.bill_paid")

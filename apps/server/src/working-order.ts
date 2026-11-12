@@ -189,7 +189,6 @@ import {
   parties,
   ticketItemMoves,
   partyTableLabels,
-  deferredClosures,
   withTransaction,
   workingLinePortions,
   workingOrderLines,
@@ -7474,16 +7473,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
               ),
             )
             .orderBy(workingOrderLines.lineNo);
-    const deferredIds = new Set(
-      settledIds.length === 0
-        ? []
-        : (
-            await tx
-              .select({ id: deferredClosures.workingOrderId })
-              .from(deferredClosures)
-              .where(inArray(deferredClosures.workingOrderId, settledIds))
-          ).map((row) => row.id),
-    );
+    const deferredIds = await readDeferredBillIds(tx, settledIds);
     const former = await readFormerNumbers(
       tx,
       rows.map((row) => row.id),
@@ -8811,16 +8801,6 @@ export async function listTablesWithState(
   const allergicParties = await VENUE_SERVICE.partiesWithAllergicGuests(tx, [
     ...new Set([...seated.values()].map((party) => party.id)),
   ]);
-  const partyOfBill = new Map(
-    [...facts].flatMap(([partyId, { bills }]) =>
-      bills.map((bill) => [bill.workingOrderId, partyId] as const),
-    ),
-  );
-  const deferredParties = new Set(
-    [...(await readDeferredBillIds(tx, [...partyOfBill.keys()]))].map((billId) =>
-      partyOfBill.get(billId)!,
-    ),
-  );
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
   const seatedParties = [...new Set(seated.values())];
@@ -8871,7 +8851,7 @@ export async function listTablesWithState(
       ...(party !== undefined && allergicParties.has(party.id)
         ? { hasAllergy: true as const }
         : {}),
-      ...(party !== undefined && deferredParties.has(party.id)
+      ...(party !== undefined && facts.get(party.id)!.bills.some((bill) => bill.deferred)
         ? { hasDeferredBill: true as const }
         : {}),
       signals: tableSignals(

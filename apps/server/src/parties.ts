@@ -591,10 +591,6 @@ export async function readPartyBills(
     tx,
     filedSales.flatMap((sale) => (sale.workingOrderId === null ? [] : [sale.workingOrderId])),
   );
-  const deferred = await readDeferredBillIds(
-    tx,
-    bills.map((bill) => bill.workingOrderId),
-  );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
@@ -637,12 +633,11 @@ export async function readPartyBills(
             creditNotes: notes.get(sale.id) ?? [],
             amountDue: issued.get(bill.workingOrderId)!.amountDue,
           }),
-      ...(deferred.has(bill.workingOrderId) ? { deferred: true as const } : {}),
+      ...(bill.deferred === undefined ? {} : { deferred: bill.deferred }),
     };
   });
 }
 
-/** Which of these bills were closed as a deferred payment. */
 export async function readDeferredBillIds(
   tx: Transaction,
   billIds: readonly string[],
@@ -706,6 +701,10 @@ export async function readBillsOfParties(
     tx,
     rows.map((row) => row.workingOrderId),
   );
+  const deferred = await readDeferredBillIds(
+    tx,
+    rows.map((row) => row.workingOrderId),
+  );
   const bills = rows.map((row): FamilyBill => {
     const total = rawCentsToDecimal(row.total);
     const owing = row.status === "open" || row.status === "placed";
@@ -733,6 +732,7 @@ export async function readBillsOfParties(
         ? outstandingOf(total, received.get(row.workingOrderId))
         : centsToDecimal(0),
       hasPayments: holding.has(row.workingOrderId),
+      ...(deferred.has(row.workingOrderId) ? { deferred: true as const } : {}),
       lines: row.lines,
     };
   });

@@ -34,9 +34,8 @@ export function partyPaid(table: TableState): boolean {
   );
 }
 
-/** "Paid", or "Deferred payment" when one of the party's bills was closed that way. */
 export function paidWords(table: TableState): string {
-  return table.hasDeferredBill === true ? t("find_page.deferred") : t("floor.paid");
+  return table.hasDeferredBill === true ? t("floor.deferred") : t("floor.paid");
 }
 
 /** A station's ready chip replaces the summary's ready count, so each dish appears once. */

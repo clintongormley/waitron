@@ -72,6 +72,8 @@ describe("the till's Spanish Clear snooze label, and no aplazar for snooze in th
   // "Pago aplazado" is the owner's word for a deferred payment (2026-11-11), not snooze.
   const DEFERRED_PAYMENT_KEYS = new Set<StringKey>([
     "find_page.deferred",
+    "floor.deferred",
+    "table.bill_deferred",
     "waiting.deferred_not_handed_over",
   ]);
 
