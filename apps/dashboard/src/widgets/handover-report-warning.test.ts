@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { DashboardApi, HandoverInterval } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -11,26 +11,20 @@ afterEach(() => {
   cleanupWidgets();
   setLocale(locale);
 });
-const interval: HandoverInterval = {
-  operationId: "takeover",
-  sourceName: "Old box",
-  destinationName: "New box",
-  lastChangeAtMs: null,
-  declaredAtMs: 1794304800000,
-  activatedAt: "2026-11-10T10:01:00Z",
-  reason: "Power failure",
-};
 
 it.each([
   ["en-GB", en],
   ["es-ES", es],
 ] as const)(
-  "warns about the venue's unconfirmed return without dating the displayed report (%s)",
+  "shows the general warning from the existence read and links to intervals (%s)",
   async (language, words) => {
     setLocale(language);
     const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
       api: {
-        listHandoverIntervals: async () => ({ intervals: [interval], timeZone: "Europe/Madrid" }),
+        getHandoverWarning: async () => ({ hasEmergencyHandover: true }),
+        listHandoverIntervals: async () => {
+          throw new Error("A report load must not run the full read");
+        },
       } as unknown as DashboardApi,
     });
     expect(el.shadowRoot).not.toBeNull();
@@ -43,7 +37,6 @@ it.each([
     expect(el.shadowRoot!.querySelector("a")!.textContent).toContain(
       words["handover_warning.check"],
     );
-    expect(el.shadowRoot!.textContent).not.toContain(interval.reason);
   },
 );
 
@@ -59,14 +52,14 @@ it("hides the first check and retains warning or failure while Refresh runs", as
       }),
   );
   const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
-    api: { listHandoverIntervals: list } as unknown as DashboardApi,
+    api: { getHandoverWarning: list } as unknown as DashboardApi,
   });
   expect(el.shadowRoot).not.toBeNull();
   const region = el.shadowRoot!.querySelector("[role=status]");
   expect(region).not.toBeNull();
   expect(region!.textContent!.trim()).toBe("");
   expect(el.shadowRoot!.querySelector(".notice")).toBeNull();
-  answer({ intervals: [interval], timeZone: "Europe/Madrid" });
+  answer({ hasEmergencyHandover: true });
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector("a")).toBeTruthy());
   expect(el.shadowRoot!.querySelector("[role=status]")).toBe(region);
   await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
@@ -81,7 +74,7 @@ it("hides the first check and retains warning or failure while Refresh runs", as
   await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
   expect(el.shadowRoot!.textContent).toContain(en["handover_warning.unavailable"]);
   expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
-  answer({ intervals: [], timeZone: "Europe/Madrid" });
+  answer({ hasEmergencyHandover: false });
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector(".notice")).toBeNull());
   expect(el.shadowRoot!.querySelector("[role=status]")).toBe(region);
   expect(el.shadowRoot!.textContent!.trim()).toBe("");

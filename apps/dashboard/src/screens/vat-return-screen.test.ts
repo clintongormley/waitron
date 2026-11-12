@@ -11,7 +11,10 @@ import type { VatReturnScreen } from "./vat-return-screen.js";
 const FILE = new Blob([new Uint8Array([0x4e, 0xd1, 0x0a])]);
 
 function stubApi(download: () => Promise<Blob> = () => Promise.resolve(FILE)): DashboardApi {
-  return { downloadVatReturnFile: vi.fn(download) } as unknown as DashboardApi;
+  return {
+    downloadVatReturnFile: vi.fn(download),
+    getHandoverWarning: vi.fn().mockResolvedValue({ hasEmergencyHandover: false }),
+  } as unknown as DashboardApi;
 }
 
 const field = (el: VatReturnScreen, name: string) =>

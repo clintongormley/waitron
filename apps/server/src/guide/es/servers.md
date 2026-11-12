@@ -125,9 +125,15 @@ que no falte dinero.
 
 Ventas, el arqueo, los informes por categorías y el IVA muestran un aviso de traspaso con un enlace
 a esta lista. Comprueba las fechas del traspaso antes de decidir si las cifras cubren el período que
-necesitas. Pulsa **Actualizar el estado del traspaso** para comprobarlo de nuevo. Aquí, la integridad
-y los importes siguen sin confirmar incluso tras una devolución completa. Si vuelve el equipo anterior, comprueba el estado de la devolución en su página antes
-de decidir si lo restableces.
+necesitas. Pulsa **Actualizar el estado del traspaso** para comprobarlo de nuevo. El aviso se mantiene
+tras recibir un inventario.
+
+Pulsa **Actualizar intervalos** para comprobar la recepción del inventario. **Recepción del inventario
+confirmada** significa que el nuevo equipo ha contabilizado todos los lotes de un inventario anunciado
+por el anterior. No confirma la actividad que falte ni los importes, ni reconstruye los arqueos. Una
+recepción sin confirmar necesita una devolución completa; si el equipo anterior ya dejó de enviar,
+reinícialo mientras sigue restringido para que reenvíe los datos. Si vuelve el equipo anterior,
+comprueba el estado de la devolución en su página antes de decidir si lo restableces.
 
 ## Cuando un equipo espera a otro equipo {#waiting}
 

@@ -1,6 +1,6 @@
 export const en = {
   "handover_warning.unconfirmed":
-    "An emergency handover is recorded. Its return remains unconfirmed. Check the handover dates.",
+    "An emergency handover is recorded. Check the handover dates before using these figures.",
   "handover_warning.unavailable":
     "Handover status could not be checked. Try Refresh handover status.",
   "handover_warning.check": "Check handover intervals",
@@ -8,7 +8,7 @@ export const en = {
   "nav.handover_intervals": "Handover intervals",
   "handover_intervals.title": "Handover intervals",
   "handover_intervals.unconfirmed":
-    "Completeness and amounts remain unconfirmed here, even after a complete return.",
+    "Inventory receipt confirms the batches advertised by the old box. Missing activity, amounts and cash-ups remain unconfirmed.",
   "handover_intervals.zone": "Times in {zone}",
   "handover_intervals.guide": "Read the handover guide",
   "handover_intervals.empty": "No emergency handover intervals.",
@@ -21,6 +21,9 @@ export const en = {
   "handover_intervals.activated": "Activated on the new box",
   "handover_intervals.reason": "Reason",
   "handover_intervals.unknown": "Unknown",
+  "handover_intervals.receipt": "Inventory receipt",
+  "handover_intervals.received": "Inventory receipt confirmed",
+  "handover_intervals.not_received": "Inventory receipt unconfirmed",
 
   "problem_report.title": "Report a problem",
   "problem_report.description": "What happened?",
@@ -3909,7 +3912,7 @@ export type StringKey = keyof typeof en;
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
   "handover_warning.unconfirmed":
-    "Hay un traspaso de emergencia registrado. Su devolución sigue sin confirmar. Comprueba las fechas del traspaso.",
+    "Hay un traspaso de emergencia registrado. Comprueba las fechas del traspaso antes de usar estas cifras.",
   "handover_warning.unavailable":
     "No se pudo comprobar el estado del traspaso. Pulsa Actualizar el estado del traspaso.",
   "handover_warning.check": "Comprobar los intervalos del traspaso",
@@ -3917,7 +3920,7 @@ export const es: Record<StringKey, string> = {
   "nav.handover_intervals": "Intervalos del traspaso",
   "handover_intervals.title": "Intervalos del traspaso",
   "handover_intervals.unconfirmed":
-    "Aquí, la integridad y los importes siguen sin confirmar, incluso tras una devolución completa.",
+    "La recepción del inventario confirma los lotes anunciados por el equipo anterior. La actividad que falta, los importes y los arqueos siguen sin confirmar.",
   "handover_intervals.zone": "Horas en {zone}",
   "handover_intervals.guide": "Lee la guía del traspaso",
   "handover_intervals.empty": "No hay intervalos de traspasos de emergencia.",
@@ -3930,6 +3933,9 @@ export const es: Record<StringKey, string> = {
   "handover_intervals.activated": "Activado en el nuevo equipo",
   "handover_intervals.reason": "Motivo",
   "handover_intervals.unknown": "Desconocida",
+  "handover_intervals.receipt": "Recepción del inventario",
+  "handover_intervals.received": "Recepción del inventario confirmada",
+  "handover_intervals.not_received": "Recepción del inventario sin confirmar",
 
   "problem_report.title": "Informar de un problema",
   "problem_report.description": "¿Qué ha pasado?",

@@ -1,6 +1,14 @@
+import { and, eq } from "drizzle-orm";
+import { readOpenHandoverOperation } from "@waitron/node-db";
+import { recordReturnBatchTx } from "./return-completion.js";
 import { AppError } from "@waitron/shared";
 import type { Hono } from "hono";
-import { readNodeMembership, withNodeTransaction, withTransaction } from "@waitron/db";
+import {
+  handoverActivations,
+  readNodeMembership,
+  withNodeTransaction,
+  withTransaction,
+} from "@waitron/db";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { createErrorBoundary, readJsonBody, type Logger } from "@waitron/server-kit";
 import { signAsThisBox } from "./handover-signing.js";
@@ -38,6 +46,7 @@ export function mountReturnRecordsApi(
       const raw = await readJsonBody<unknown>(c);
       const { body, seat, chart, source } = await checkedReturn(deps, raw);
       const outcome = await withNodeTransaction(deps.node, async (node) => {
+        const operation = await readOpenHandoverOperation(node, deps.nodeId);
         const result = await withTransaction(deps.db, async (tx) => {
           deps.requireWritable();
           const held = await readNodeMembership(tx);
@@ -55,6 +64,27 @@ export function mountReturnRecordsApi(
             accepted,
           );
           if (typeof complete !== "boolean") return complete;
+          if (complete && operation) {
+            const [activation] = await tx
+              .select({ operationId: handoverActivations.operationId })
+              .from(handoverActivations)
+              .where(
+                and(
+                  eq(handoverActivations.operationId, operation.operationId),
+                  eq(handoverActivations.scenario, "emergency"),
+                  eq(handoverActivations.sourceNodeId, source),
+                  eq(handoverActivations.destinationNodeId, deps.nodeId),
+                ),
+              );
+            if (activation)
+              await recordReturnBatchTx(tx, {
+                operationId: activation.operationId,
+                inventory: body.inventory as string,
+                index: body.index as number,
+                count: body.count as number,
+                digest: returnDigest({ module: body.module!, payload: body.payload! }),
+              });
+          }
           return {
             complete,
             clashes: complete ? [] : ((await seat.inspect?.(tx, source, body.payload!)) ?? []),

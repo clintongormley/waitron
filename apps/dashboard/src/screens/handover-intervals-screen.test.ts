@@ -13,6 +13,7 @@ afterEach(() => {
 });
 const row = {
   operationId: "op",
+  inventoryReceived: true,
   sourceName: "Kitchen box",
   destinationName: "Counter box",
   lastChangeAtMs: Date.parse("2026-11-10T09:50:00Z"),
@@ -68,7 +69,10 @@ it.each([
       {
         api: {
           listHandoverIntervals: async () => ({
-            intervals: [row, { ...row, operationId: "unknown", lastChangeAtMs: null }],
+            intervals: [
+              row,
+              { ...row, operationId: "unknown", inventoryReceived: false, lastChangeAtMs: null },
+            ],
             timeZone: "Europe/Madrid",
           }),
         } as unknown as DashboardApi,
@@ -90,6 +94,8 @@ it.each([
       "11:00",
       "10:59",
       words["handover_intervals.unknown"],
+      words["handover_intervals.received"],
+      words["handover_intervals.not_received"],
     ])
       expect(text).toContain(value);
     expect(el.shadowRoot!.textContent).toContain("Europe/Madrid");

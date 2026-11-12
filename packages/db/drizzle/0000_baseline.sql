@@ -1669,6 +1669,17 @@ CREATE TABLE `handover_activations` (
 );
 --> statement-breakpoint
 CREATE INDEX `handover_activations_destination_idx` ON `handover_activations` (`destination_node_id`);--> statement-breakpoint
+CREATE TABLE `handover_return_batches` (
+	`operation_id` text NOT NULL,
+	`inventory` text NOT NULL,
+	`batch_index` integer NOT NULL,
+	`batch_count` integer NOT NULL,
+	`batch_digest` text NOT NULL,
+	PRIMARY KEY(`operation_id`, `inventory`, `batch_index`),
+	FOREIGN KEY (`operation_id`) REFERENCES `handover_activations`(`operation_id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "handover_return_batches_bounds_ck" CHECK(typeof("handover_return_batches"."batch_index") = 'integer' and typeof("handover_return_batches"."batch_count") = 'integer' and "handover_return_batches"."batch_index" >= 0 and "handover_return_batches"."batch_index" < "handover_return_batches"."batch_count" and "handover_return_batches"."batch_count" <= 9007199254740991)
+);
+--> statement-breakpoint
 CREATE TABLE `device_profile_admission_persons` (
 	`device_profile_id` text NOT NULL,
 	`person_id` text NOT NULL,

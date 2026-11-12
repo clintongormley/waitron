@@ -870,3 +870,132 @@ it("commits received venue facts before answering a record-clash refusal", async
     inspect.mockRestore();
   }
 });
+
+async function completionBinding(
+  options: {
+    operation?: boolean;
+    activation?: boolean;
+    scenario?: "controlled" | "emergency";
+    source?: string;
+  } = {},
+) {
+  const operationId = "receiver-emergency";
+  if (options.operation !== false)
+    await database.withNodeTransaction(suite.node, (tx) =>
+      nodeDatabase.beginHandoverOperationTx(tx, {
+        nodeId: receiver,
+        operationId,
+        role: "destination",
+        scenario: options.scenario ?? "emergency",
+        sourceNodeId: source,
+        destinationNodeId: receiver,
+        binding: {},
+        fingerprint: "receiver",
+        state: "activated",
+        waitingReason: null,
+      }),
+    );
+  if (options.activation !== false)
+    await suite.db.insert(database.handoverActivations).values({
+      operationId,
+      scenario: options.scenario ?? "emergency",
+      sourceNodeId: options.source ?? source,
+      destinationNodeId: receiver,
+      evidence: {
+        purpose: "waitron.handover.declaration.v1",
+        body: {},
+        signerNodeId: receiver,
+        signature: "signature",
+      },
+      personId: "person",
+      activatedAt: "2026-11-12T10:00:00.000Z",
+    });
+}
+
+it("records accounted batches against its open emergency takeover and keeps replay rows unchanged", async () => {
+  await completionBinding();
+  const app = destination();
+  accounted = false;
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
+  accounted = true;
+  for (let attempt = 0; attempt < 2; attempt++)
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+    [0, 1].map((index) => ({
+      operationId: "receiver-emergency",
+      inventory: returnDigest(
+        ["first", "second"].map((payload) => returnDigest({ module: "sample", payload })),
+      ),
+      batchIndex: index,
+      batchCount: 2,
+      batchDigest: returnDigest({ module: "sample", payload: ["first", "second"][index]! }),
+    })),
+  );
+});
+
+it.each(["no operation", "no activation", "controlled", "other source"])(
+  "accepts without completion when binding is %s",
+  async (kind) => {
+    await completionBinding({
+      operation: kind !== "no operation",
+      activation: kind !== "no activation",
+      scenario: kind === "controlled" ? "controlled" : "emergency",
+      source: kind === "other source" ? receiver : source,
+    });
+    const app = destination();
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+    expect(received).toEqual(["first", "second"]);
+    expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
+  },
+);
+
+it.each(["false", "refused"])("records no completion fact for a %s batch", async (outcome) => {
+  await completionBinding();
+  const receive = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "receive")
+    .mockResolvedValue(outcome === "false" ? false : { refusal: "fiscal.return_record_clash" });
+  try {
+    const app = destination();
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe(
+      outcome === "false" ? "clash" : "record-clash",
+    );
+    expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
+  } finally {
+    receive.mockRestore();
+  }
+});
+
+it("rolls back the received facts when recording the batch fails", async () => {
+  await completionBinding();
+  const before = await suite.db
+    .select({ name: database.nodes.name })
+    .from(database.nodes)
+    .where(eq(database.nodes.id, receiver));
+  const receive = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "receive")
+    .mockImplementation(async (tx) => {
+      await tx
+        .update(database.nodes)
+        .set({ name: "Uncommitted receipt" })
+        .where(eq(database.nodes.id, receiver));
+      return true;
+    });
+  await suite.db.execute(
+    sql`create trigger fail_return_fact before insert on handover_return_batches begin select raise(abort, 'test receipt write failed'); end`,
+  );
+  try {
+    const app = destination();
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("needs-attention");
+    expect(
+      await suite.db
+        .select({ name: database.nodes.name })
+        .from(database.nodes)
+        .where(eq(database.nodes.id, receiver)),
+    ).toEqual(before);
+    expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
+  } finally {
+    await suite.db.execute(sql`drop trigger fail_return_fact`);
+    receive.mockRestore();
+  }
+});

@@ -104,8 +104,12 @@ describe("the handover_activations declaration", () => {
   const config = getTableConfig(handoverActivations);
   const dialect = new SQLiteSyncDialect();
 
-  it("exports only this table", () => {
-    expect(Object.keys(barrel).sort()).toEqual(["handoverActivations", "handoverScenario"]);
+  it("exports the handover tables", () => {
+    expect(Object.keys(barrel).sort()).toEqual([
+      "handoverActivations",
+      "handoverReturnBatches",
+      "handoverScenario",
+    ]);
     expect(barrel.handoverScenario.enumValues).toEqual(["controlled", "emergency"]);
   });
 
@@ -176,5 +180,50 @@ describe("the handover_activations declaration", () => {
         sql: `"handover_activations"."scenario" in ('controlled', 'emergency')`,
       },
     ]);
+  });
+});
+
+describe("return batch facts in the venue", () => {
+  it("creates mutable state beside the activation ledger", async () => {
+    expect(migratedTableNames(suite.db)).toContain("handover_return_batches");
+    expect(migratedTableNames(suite.node)).not.toContain("handover_return_batches");
+    const { source, destination } = await twoNodes();
+    await insertRaw({ source, destination });
+    await suite.db.execute(sql`insert into handover_return_batches
+      (operation_id, inventory, batch_index, batch_count, batch_digest)
+      values (${OPERATION}, ${"a".repeat(64)}, 0, 1, ${"b".repeat(64)})`);
+    await suite.db.execute(sql`update handover_return_batches set batch_count = 2`);
+    expect(suite.db.all(sql`select batch_count from handover_return_batches`)).toEqual([
+      { batch_count: 2 },
+    ]);
+    await suite.db.execute(sql`delete from handover_return_batches`);
+    expect(suite.db.all(sql`select * from handover_return_batches`)).toEqual([]);
+  });
+
+  it.each([
+    [0, 0],
+    [2, 2],
+    [-1, 2],
+    [0.5, 2],
+    [0, 1.5],
+    [0, 9007199254740992],
+  ])("refuses an invalid index/count %s/%s", async (index, count) => {
+    const { source, destination } = await twoNodes();
+    await insertRaw({ source, destination });
+    const error = await captureError(() =>
+      suite.db.execute(sql`insert into handover_return_batches
+      (operation_id, inventory, batch_index, batch_count, batch_digest)
+      values (${OPERATION}, ${"a".repeat(64)}, ${index}, ${count}, ${"b".repeat(64)})`),
+    );
+    expect(checkFailed(error, "handover_return_batches_bounds_ck")).toBe(true);
+  });
+
+  it("refuses a fact without its activation", async () => {
+    const error = await captureError(() =>
+      suite.db.execute(sql`insert into handover_return_batches
+      (operation_id, inventory, batch_index, batch_count, batch_digest)
+      values (${OPERATION}, ${"a".repeat(64)}, 0, 1, ${"b".repeat(64)})`),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

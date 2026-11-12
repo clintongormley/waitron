@@ -313,6 +313,12 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "which box took over from which, when, who asked and on what signed evidence; nothing may change or remove it",
   ),
 
+  classify(
+    "handover_return_batches",
+    "state",
+    "accounted batch digests for an emergency takeover; copied with the venue",
+  ),
+
   // catalogue
   classify("category_details", "state", MENU_STATE),
   classify("catalogue_settings", "state", MENU_STATE),

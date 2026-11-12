@@ -3416,3 +3416,17 @@ it("automatic interval GET is passive and returns its rows and venue zone", asyn
   expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   expect(active).not.toHaveBeenCalled();
 });
+
+it("reads the warning through a passive existence GET", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ hasEmergencyHandover: true }));
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  expect(await api.getHandoverWarning()).toEqual({ hasEmergencyHandover: true });
+  const [path, init] = fetchImpl.mock.calls[0]!;
+  expect(new URL(path, "http://localhost").pathname).toBe(
+    "/management-api/reports/handover-warning",
+  );
+  expect(init.method).toBe("GET");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+  expect(active).not.toHaveBeenCalled();
+});
