@@ -3,22 +3,22 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { sha256Hex } from "@waitron/handover";
 import { canonicalize } from "@waitron/membership";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { isUnset } from "./env-value.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
- * Refuses a record that would not survive the env-file round trip: a value carrying a newline would
- * plant the rest of its line as a setting the operator never chose.
+ * Why a record would not survive the env-file round trip, or `null` when it would: a value carrying
+ * a newline would plant the rest of its line as a setting the operator never chose.
  */
-export function assertStorableRecord(record: Record<string, string>): void {
+export function storableRecordProblem(
+  record: Record<string, string>,
+): `control_char:${string}` | "round_trip" | null {
   for (const [key, value] of Object.entries(record)) {
     // eslint-disable-next-line no-control-regex
-    if (/[\x00-\x1f]/.test(value)) {
-      throw new AppError("backup.destinations_invalid", { reason: `control_char:${key}` });
-    }
+    if (/[\x00-\x1f]/.test(value)) return `control_char:${key}`;
   }
   const roundTrip = parseEnvFile(formatEnvFile(record));
   const keys = Object.keys(record);
@@ -26,8 +26,15 @@ export function assertStorableRecord(record: Record<string, string>): void {
     Object.keys(roundTrip).length !== keys.length ||
     keys.some((k) => roundTrip[k] !== record[k])
   ) {
-    throw new AppError("backup.destinations_invalid", { reason: "round_trip" });
+    return "round_trip";
   }
+  return null;
+}
+
+/** Refuses a record {@link storableRecordProblem} finds a problem with. */
+export function assertStorableRecord(record: Record<string, string>): void {
+  const reason = storableRecordProblem(record);
+  if (reason !== null) throw new AppError("backup.destinations_invalid", { reason });
 }
 
 /** Sets the recovery key (and its rotation time when one is given), keeping every other setting the
@@ -77,12 +84,9 @@ export function checkBackupSettings(value: unknown): BackupSettingsCheck {
     return { ok: false, reason: "value" };
   }
   const settings = value as Record<string, string>;
-  try {
-    assertStorableRecord(settings);
-  } catch (error) {
-    if (!isAppError(error) || error.code !== "backup.destinations_invalid") throw error;
-    const reason = (error.params as { reason: string }).reason;
-    return { ok: false, reason: reason === "round_trip" ? "round_trip" : "control_char" };
+  const problem = storableRecordProblem(settings);
+  if (problem !== null) {
+    return { ok: false, reason: problem === "round_trip" ? "round_trip" : "control_char" };
   }
   return { ok: true, settings };
 }
