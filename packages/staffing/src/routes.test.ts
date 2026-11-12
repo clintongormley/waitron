@@ -1013,6 +1013,30 @@ describe("the rota routes", () => {
       refusal("shift.not_found", { shiftId }),
     );
   });
+  it("refuses a missing, malformed or null shift body as the body", async () => {
+    const r = await routed();
+    for (const [method, path] of [
+      ["POST", `${root}/shifts`],
+      ["PATCH", `${root}/shifts/${randomUUID()}`],
+    ] as const) {
+      await answers(
+        await r.call(method, path, r.manager, null),
+        400,
+        refusal("management.request_invalid", { field: "body" }),
+      );
+      for (const body of [undefined, "", "{"]) {
+        await answers(
+          await r.app.request(path, {
+            method,
+            headers: { cookie: r.manager, "content-type": "application/json" },
+            body,
+          }),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+      }
+    }
+  });
 });
 
 describe("Rota body references", () => {

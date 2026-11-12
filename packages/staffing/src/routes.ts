@@ -4,7 +4,6 @@ import { authorizeManager, type Permission } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
-  readJsonBody,
   readRawJsonBody,
   requireBodyUuid,
   requireManagementSession,
@@ -205,7 +204,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.post(`${ROOT}/rota/shifts`, (c) =>
       runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<unknown>(c);
+        const body = await readRawJsonBody<unknown>(c);
         const shiftId = await gatedBy("schedule.manage", sessionId, (tx) =>
           addRotaShift(tx, rotaBody(body, false) as unknown as RotaShiftInput),
         );
@@ -216,7 +215,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       runPaintSave(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const shiftId = normaliseUuid(c.req.param("shiftId"), "shiftId");
-        const body = await readJsonBody<unknown>(c);
+        const body = await readRawJsonBody<unknown>(c);
         await gatedBy("schedule.manage", sessionId, (tx) =>
           updateRotaShift(tx, shiftId, rotaBody(body, true) as RotaShiftPatch),
         );

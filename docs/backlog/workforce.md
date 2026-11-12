@@ -297,12 +297,6 @@ The box lists each area's number; the
 mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
 block. Decision 13 of the [A720 plan](../superpowers/plans/2026-10-15-a720-calendar-year-month.md).
 
-## The Rota shift routes read a null or malformed JSON body as an empty object.
-
-For no body, `{` and `null`, `POST …/rota/shifts` answered 400 with `field: "week"` and
-`PATCH …/rota/shifts/:shiftId` 404 `shift.not_found` for an unknown id, neither naming `body`
-(A750's probe, 2026-10-16). Next: swap `readJsonBody` for `readRawJsonBody`, as change-week did.
-
 ## A587. Availability and personal preferences
 
 "can't work Wednesdays"; "Anna only works

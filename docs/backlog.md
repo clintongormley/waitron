@@ -1573,9 +1573,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Colour chooser placement** (bundle of 2, size S). [Detail](backlog/workforce.md#bundle-colour-chooser-placement)
 
-- **The Rota shift routes read a null or malformed JSON body as an empty object.**
-  [Detail](backlog/workforce.md#the-rota-shift-routes-read-a-null-or-malformed-json-body-as-an-empty-object)
-
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   [Detail](backlog/workforce.md#a707-on-a-phone-a-paint-grids-block-menu-or-copy-to-chooser-can-cover-the-block-it-belongs-to).
 
