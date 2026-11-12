@@ -151,7 +151,6 @@ export function deferredCloseKit(venue: BillVenue, counterZone: string) {
     return tableSnapshot(venue.db);
   }
 
-  /** The latest fiscal record's time: the clock-behind stop measures from it. */
   function latestRecordMs(): number {
     const [row] = venue.db.all<{ at: string }>(sql`
       select fecha_hora_huso_gen_registro as at from registros_facturacion

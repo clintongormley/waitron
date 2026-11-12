@@ -2074,7 +2074,7 @@ A798-B slice 9b, Task 14a.
 `closePayPeriod` (`packages/workforce/src/pay-period-close.ts`) refuses `pay_period.not_due` until
 the clock passes the period's end. A clock wrongly days ahead could close a period that has not
 ended, and the closure is append-only. No production code calls it yet; the caller that is added
-needs a clock check (the fiscal clock-behind stop's shape, or a confirmed reading). Left open by
+needs a clock check. Left open by
 A798-B slice 9b, Task 15 (its audit table, `docs/developers/conventions-data.md`).
 
 ## A1268 part 2: pair a person's entries by write order after a backward clock step.
