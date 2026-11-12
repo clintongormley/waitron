@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createAdjustmentReason } from "@waitron/adjustments";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   billPaymentRefunds,
@@ -35,13 +36,18 @@ import {
   saleId as brandSaleId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
+import { readBillEditState } from "./bill-editing.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { attestCardRefund } from "./bill-refunds.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { startClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { attestTenderRefund } from "./tender-refund-sends.js";
+import { REASONS } from "./testing/adjustment-venue.js";
 import {
   fiscalRecordCount,
+  groupedTabWith,
   inTx,
   provisionBillVenue,
   seatedWith,
@@ -50,7 +56,8 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { giveAway } from "./testing/cancel-line.js";
+import { cancelBody, cancelItemRequest, cancelReasonId, giveAway } from "./testing/cancel-line.js";
+import { heldRow } from "./testing/held-row.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -61,7 +68,7 @@ import {
   verifyingStripe,
 } from "./testing/fake-stripe-webhook.js";
 import { mountWebhook } from "./webhook.js";
-import { parkOrder } from "./working-order.js";
+import { advanceTicketItem, parkOrder } from "./working-order.js";
 import "./errors.js";
 
 const RING = loadKeyRing({
@@ -258,6 +265,7 @@ function moneyState() {
     billRefunds: rowCount("bill_payment_refunds"),
     tenderRefunds: rowCount("tender_refunds"),
     providerRefunds: rowCount("payment_refunds"),
+    adjustments: rowCount("adjustments"),
     departures: rowCount("unpaid_departures"),
     transferClosures: rowCount("transfer_closures"),
     holdOutcomes: rowCount("payment_hold_outcomes"),
@@ -276,12 +284,13 @@ function moneyState() {
     parties: venue.db.all(sql`select id, state, revision from parties order by id`),
     billPaymentStates: venue.db.all(sql`select id, state from bill_payments order by id`),
     providerPayments: venue.db.all(sql`select id, state from payments order by id`),
+    lines: venue.db.all(sql`select * from working_order_lines order by id`),
   };
 }
 
 type Counted = Exclude<
   keyof ReturnType<typeof moneyState>,
-  "orders" | "parties" | "billPaymentStates" | "providerPayments"
+  "orders" | "parties" | "billPaymentStates" | "providerPayments" | "lines"
 >;
 
 interface MoneyRoute {
@@ -381,6 +390,54 @@ async function counterOrder(issued: boolean): Promise<string> {
 }
 
 const LOST = { kind: "uncertain", reason: "timeout" } as const;
+
+const revisionOf = (billId: string) =>
+  venue.db.all<{ revision: number }>(
+    sql`select revision from working_orders where id = ${billId}`,
+  )[0]!.revision;
+
+/** A party of two 3.00 dishes sent to the kitchen, 3.00 of it paid: taking line 1 off settles it. */
+async function halfPaidParty(started: boolean) {
+  const [dish] = venue.db.all<{ name: string }>(
+    sql`select name from products where unit_price = 300 order by id limit 1`,
+  );
+  const { tabId } = await seatedWith(venue, dish!.name, dish!.name);
+  expect(
+    (await as(venue.app, "POST", `/api/working-orders/${tabId}/payments`, cashPart("3.00"))).status,
+  ).toBe(200);
+  if (started) {
+    const [item] = venue.db.all<{ id: string }>(sql`
+      select t.id from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+      where l.working_order_id = ${tabId} and l.line_no = 1`);
+    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+  }
+  return tabId;
+}
+
+/** Line 1 of `billId`, one Caña, raised to two with 3.00 paid: cutting it back to one settles it. */
+async function halfPaidBeers(billId: string) {
+  const raised = await as(venue.app, "PUT", `/api/working-orders/${billId}/lines/1`, {
+    portionLineNos: [],
+    revision: revisionOf(billId),
+    expectedEdit: await readBillEditState(venue.db, billId),
+    quantity: "2",
+  });
+  expect(raised.status).toBe(200);
+  expect(
+    (await as(venue.app, "POST", `/api/working-orders/${billId}/payments`, cashPart("3.00")))
+      .status,
+  ).toBe(200);
+  return billId;
+}
+
+async function settlingCancelItem(billId: string, approver = false): Promise<MoneyRoute> {
+  const reasonId = await inTx(venue, cancelReasonId);
+  const { path, body } = await cancelItemRequest(venue.db, billId, 1, "1", {
+    reasonId,
+    ...(approver ? { approver: OVERRIDE() } : {}),
+  });
+  return { send: (app) => as(app, "POST", path, body), grows: ["sales", "records"] };
+}
 
 // Each row builds its own order, bill or sale, so rows never share one.
 const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
@@ -538,6 +595,49 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     const body = { reason: "Wrong order", override: OVERRIDE() };
     return {
       send: (app) => as(app, "POST", `/api/working-orders/${id}/cancel`, body),
+      grows: ["sales", "records"],
+    };
+  },
+  "an adjustment that settles a part-paid bill": async () => {
+    const billId = await halfPaidParty(false);
+    const reasonId = await inTx(
+      venue,
+      async (tx) => (await createAdjustmentReason(tx, REASONS.house)).id,
+    );
+    const body = {
+      ...(await cancelBody(venue.db, billId, 1)),
+      reasonId,
+      approver: OVERRIDE(),
+      action: "discount_amount",
+      amount: "3.00",
+    };
+    return {
+      send: (app) => as(app, "POST", `/api/working-orders/${billId}/adjustments`, body),
+      grows: ["adjustments", "sales", "records"],
+    };
+  },
+  "a Cancel item that settles a part-paid bill": async () =>
+    settlingCancelItem(await halfPaidParty(false)),
+  "a Cancel item of a dish the kitchen started that settles a part-paid bill": async () =>
+    settlingCancelItem(await halfPaidParty(true), true),
+  "a partial Cancel item that settles a part-paid bill": async () =>
+    settlingCancelItem(await halfPaidBeers(await groupedTabWith(venue, "Caña"))),
+  "a held-order Save that settles a part-paid bill": async () => {
+    const billId = await halfPaidBeers(await tabWith(venue, "Caña"));
+    const dishes = venue.db.all<{ id: string }>(sql`
+      select id from working_order_lines
+      where working_order_id = ${billId} and parent_line_id is null order by line_no`);
+    const body = {
+      revision: revisionOf(billId),
+      expectedEdit: await readBillEditState(venue.db, billId),
+      lines: heldRow(
+        dishes.map((line) => line.id),
+        "1",
+        { menuItemId: venue.offerFor("Caña") },
+      ),
+    };
+    return {
+      send: (app) => as(app, "PUT", `/api/working-orders/${billId}`, body),
       grows: ["sales", "records"],
     };
   },
@@ -846,6 +946,70 @@ describe("a manager's confirmed refund outcome behind the start clock gate", () 
 
       expect(settled.state).toBe("completed");
       expect(moneyState().settledRefunds).toBe(before.settledRefunds + 1);
+    },
+  );
+});
+
+/** Refund loop deps on the gate's seat, given the gate as boot gives it, `minutesOn` ahead so each
+ * pending refund is due for a lookup. */
+function loopOn(holds: () => boolean, minutesOn: number) {
+  const base = venue.clock.now();
+  const later = { ...base, instant: new Date(base.instant.getTime() + minutesOn * 60_000) };
+  return {
+    db: venue.db,
+    backend: gateSeatOnStartClock(venue.backend, holds),
+    admission: testTradingAdmission(),
+    clock: { ...venue.clock, now: () => later },
+    cfg: venue.cfg,
+    refundProviderFor: (provider: string) => venue.pool.get(provider),
+    clockUnconfirmed: holds,
+  };
+}
+
+const refundLoops = {
+  "the tender-refund loop": { kind: "tender", pass: recoverTenderRefunds },
+  "the bill-refund half of the pass": { kind: "bill", pass: settlePendingBillPayments },
+} as const;
+
+describe("a refund loop whose wait for the time begins during the provider's lookup", () => {
+  it.each(Object.keys(refundLoops) as (keyof typeof refundLoops)[])(
+    "%s leaves the refund pending, and settles it once confirmed",
+    async (name) => {
+      const { kind, pass } = refundLoops[name];
+      await pendingRefund(kind);
+      const state = startClockState();
+      let filing = false;
+      const holds = startClockGateHolds(
+        state,
+        () => filing,
+        () => false,
+      );
+      const card = venue.card as unknown as { lookupRefund: (query: unknown) => Promise<unknown> };
+      const lookup = card.lookupRefund.bind(venue.card);
+      const spy = vi.spyOn(card, "lookupRefund").mockImplementation(async (query) => {
+        const answer = await lookup(query);
+        filing = true;
+        return answer;
+      });
+      const before = moneyState();
+
+      try {
+        await pass(loopOn(holds, 1));
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(filing).toBe(true);
+      expect(moneyState()).toMatchObject({
+        refundSends: before.refundSends,
+        settledRefunds: before.settledRefunds,
+        providerRefunds: before.providerRefunds,
+      });
+
+      state.confirm("by_person", {});
+      await pass(loopOn(holds, 10));
+
+      expect(moneyState().settledRefunds).toBeGreaterThan(before.settledRefunds);
     },
   );
 });
