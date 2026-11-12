@@ -250,7 +250,7 @@ go1.27.1, and the Litestream ones, whose notice it regenerated unchanged.
 
 The dormant `scripts/box/upgrades/bootstrap.sh` downloads pinned Node.js 26.7.0 for a Linux host, verifies its archive checksum, and retains the complete archive tree at `<host-dir>/node-v26.7.0`, including its `LICENSE` and bundled notices. The app/recovery services are wired in A950's activation slice.
 
-| Source | Source wording | What the bootstrap retains |
-| --- | --- | --- |
+| Source                                                                 | Source wording                                                     | What the bootstrap retains                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | [26.7.0 checksum list](https://nodejs.org/dist/v26.7.0/SHASUMS256.txt) | `node-v26.7.0-linux-arm64.tar.xz`, `node-v26.7.0-linux-x64.tar.xz` | The matching ARM64 or x64 archive, checked against the checksum pinned in the script. |
-| The verified archive's `LICENSE` | “Node.js is licensed for use as follows:” | The upstream licence file beside the installed binary. |
+| The verified archive's `LICENSE`                                       | “Node.js is licensed for use as follows:”                          | The upstream licence file beside the installed binary.                                |
