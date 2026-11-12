@@ -200,6 +200,7 @@ export function parseProductEditorInput(
     name,
     customerName,
     ordering: orderingValue,
+    ...(body.setLunch === undefined ? {} : { setLunch: boolean(body.setLunch, "setLunch") }),
     description: nonBlankTranslations(description),
     kitchenName: nullableText(body.kitchenName, "kitchenName"),
     image: nullableText(body.image, "image"),

@@ -30,6 +30,14 @@ const input: ProductEditorInput = {
 const parse = (value: unknown) => parseProductEditorInput(value, { isVariant: false });
 const parseVariant = (value: unknown) => parseProductEditorInput(value, { isVariant: true });
 
+it("preserves the set-lunch setting and rejects an explicit null", () => {
+  for (const setLunch of [true, false])
+    expect(parse({ ...input, setLunch })).toHaveProperty("setLunch", setLunch);
+  expect(() => parse({ ...input, setLunch: null })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "setLunch" } }),
+  );
+});
+
 // A variant's inherited fields, each left blank so it reads its parent's.
 const inheriting = {
   ...input,

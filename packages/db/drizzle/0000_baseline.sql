@@ -998,6 +998,7 @@ CREATE TABLE `products` (
 	`catalogue_id` text NOT NULL,
 	`parent_id` text,
 	`variant_order` integer DEFAULT 0 NOT NULL,
+	`set_lunch` integer DEFAULT false NOT NULL,
 	`category_id` text,
 	`course_id` text,
 	`name` text NOT NULL,

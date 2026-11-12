@@ -175,6 +175,7 @@ const PRODUCT_KEYS = {
   diet: ["diet", "dietOverride", "dietaryDeclarations"],
   vat: ["vatClass"],
   ordering: ["ordering"],
+  set_lunch: ["setLunch"],
 } as const;
 
 function productFields(

@@ -28,4 +28,6 @@ Each slice is a dependent PR. Watcher22:04: three hours is a point for a look, n
 
 New test support: 0; docs about 120 lines. TDD and focused files throughout; schema rebuild via `migration-baseline rebuild --set core` plus CLAUDE.md’s five schema checks, never manual/new migrations.
 
-**Scope:** watcher21:37 relays the owner’s table-service 10% decision: no adviser wait or price split across VAT rates. Takeaway/delivery stay with S10/Lane L. Proposed boundary: guide says table service only; no invented takeaway mode or blanket counter refusal. Guide-only boundary remains a watcher question before the priced-service slice; it does not block configuring/publishing in slice1. No fiscal H2 function changes, allocation engine, ledger, schedule or compatibility layer.
+**Scope:** watcher21:37 relays the owner’s table-service 10% decision: no adviser wait or price split across VAT rates. Takeaway/delivery stay with S10/Lane L. Watcher22:05 clears the guide-only boundary: table service only, with no takeaway detector or counter refusal. No fiscal H2 function changes, allocation engine, ledger, schedule or compatibility layer.
+
+**Slice 1 cut, watcher22:54 (12 November):** land storage and publication without the visible switch or guide text. Both arrive in slice2 when the marker first changes service behavior. Keep storage/publication tests; no further read for this cut. This supersedes slice1’s checkbox instruction above; the full-feature outcome stays the same.

@@ -31,6 +31,7 @@ export interface MenuOffer extends MenuItem {
   kitchenName: string | null;
   /** The dish's own setting; a variant has none, and is ordered under its dish. */
   ordering: ProductOrdering;
+  setLunch?: true;
   unit: SellableUnit;
   vatClass: VatClass;
   category: string | null;

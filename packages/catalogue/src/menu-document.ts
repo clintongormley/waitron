@@ -786,6 +786,7 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "diet",
   "vat",
   "ordering",
+  "set_lunch",
   "variants",
   "extras",
   "options",
@@ -794,6 +795,7 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
 /** The facts a dish and each of its variants carry, by the field a change to them is named as. */
 const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["names", ["name", "customerName", "kitchenName"]],
+  ["set_lunch", ["setLunch"]],
   ["image", ["image"]],
   ["unit", ["unit", "pricingUnit"]],
   ["allergens", ["allergens"]],

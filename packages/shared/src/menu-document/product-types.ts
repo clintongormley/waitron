@@ -110,6 +110,7 @@ export interface Product {
   customerName: Record<string, string> | null;
   /** Who may order the product on its own (`product-ordering.ts`). */
   ordering: ProductOrdering;
+  setLunch?: boolean;
   unitId: string;
   unit: Unit;
   description: Record<string, string> | null;
@@ -158,6 +159,7 @@ export interface ProductEditorInput {
   /** Who may order the product on its own. Required in the editor body — the
    * parser refuses a body that omits it rather than defaulting. */
   ordering: ProductOrdering;
+  setLunch?: boolean;
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
