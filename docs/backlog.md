@@ -135,9 +135,8 @@ stays in one area.
 them only when a lane has nothing better.
 
 **Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, A646 the
-Modules page, A664 archiving or deleting old data, and A802 correcting part of a paid invoice, whose
-[build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) has had its
-protected-writer approval since 2026-10-22.
+Modules page, A664 archiving or deleting old data, and A802 correcting part of a paid invoice
+([reshape plan](superpowers/plans/2026-11-12-a802-reshape.md)).
 
 **Remote access unblocks the customer-facing features, so it comes first among them (owner,
 2026-10-22).** Online booking (A1013), the table's QR code (A508), online ordering for collection
@@ -1873,6 +1872,9 @@ Not in any track until the standalone primary is done.
   is an internal API; sale lines, reprints, the returned-invoices reporting marker and real-box
   qualification remain open. A filing result held only by the old box is not applied to a record
   already on the new main; a late payment on an older box's chain is not included in this return.
+  An unfinished A802 correction does not travel (`invoice_corrections` and
+  `invoice_correction_refunds` are not in the return), so the new main holds no record of it and
+  files no corrective invoice for cash it gave back.
   [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
 
 - **A third box's chart can leave another box serving-secondary and filing.** The remaining

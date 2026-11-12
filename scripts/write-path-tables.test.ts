@@ -15,8 +15,6 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
  * `packages/db/src/activity-log.ts` recordActivity is the one activity_log writer, so each row
  * passes through the kind registry (packages/db/src/activity-kinds.ts).
  *
- * An empty list in the JSON lets no file write that table.
- *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
  * as a convention over source text, and this guard is the whole of its enforcement.
  * Read the four hedges below before trusting it.
