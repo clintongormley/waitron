@@ -4059,6 +4059,7 @@ export interface TabLine {
   portion: boolean;
 }
 
+/** Counter collection still needs the dish details after placing, while edits retain their open-order guard. */
 export async function readTabLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
   const [order] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })

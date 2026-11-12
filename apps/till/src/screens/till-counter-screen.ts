@@ -213,6 +213,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+  /** Collection withholds the adjustment listing; declaration display still needs these rows. */
   @property({ attribute: false }) nutritionLines: StoredLines | null = null;
   @property({ attribute: false }) stationMoveLines: StoredLines | null = null;
   @property({ attribute: false }) makeAtStations: Station[] = [];

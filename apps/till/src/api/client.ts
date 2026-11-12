@@ -4336,6 +4336,7 @@ export class TillApi {
     });
   }
 
+  /** The revision identifies this listing for a later adjustment to an open order. */
   getTabLines(orderId: string, options: ReadOptions = {}): Promise<TabLines> {
     return this.#request<TabLines>(
       `/api/working-orders/${orderId}/lines`,

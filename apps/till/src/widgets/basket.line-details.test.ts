@@ -384,6 +384,10 @@ it.each([
       },
     });
     expect(el.shadowRoot!.querySelector(".extra-allergens")?.textContent?.trim()).toBe("Eggs");
+    el.nutritionLines = el.storedLines;
+    el.storedLines = null;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".extra-allergens")?.textContent?.trim()).toBe("Eggs");
     el.openLineDetails(store.lines[0]!);
     await el.updateComplete;
     const picker = pickerOf(el)!;
