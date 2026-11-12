@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { BoxStatusScreen } from "./box-status-screen.js";
 import "./box-status-screen.js";
@@ -56,11 +57,15 @@ it.each(["en", "es"])(
     );
     await vi.waitFor(() =>
       expect(card(el)?.textContent).toContain(
-        locale === "en" ? "Address not reported" : "Dirección no indicada",
+        locale === "en" ? "Address not reported" : es["box_status.network.no_address"],
       ),
     );
-    expect(card(el)!.textContent).toContain(locale === "en" ? "Not connected" : "Sin conexión");
-    expect(card(el)!.textContent).toContain(locale === "en" ? "Not reported" : "No indicado");
+    expect(card(el)!.textContent).toContain(
+      locale === "en" ? "Not connected" : es["box_status.network.disconnected"],
+    );
+    expect(card(el)!.textContent).toContain(
+      locale === "en" ? "Not reported" : es["box_status.network.not_reported"],
+    );
   },
 );
 
