@@ -39,8 +39,8 @@ export class FormFeedback {
     return Object.fromEntries(Object.entries(errors).filter(([key]) => !this.#dismissed.has(key)));
   }
 
-  async focus(root: () => ParentNode): Promise<HTMLElement | null> {
+  async focus(root: ParentNode): Promise<HTMLElement | null> {
     await this.#host.updateComplete;
-    return focusFirstInvalid(root());
+    return focusFirstInvalid(root);
   }
 }

@@ -205,7 +205,7 @@ export class OptionLabelForm extends LitElement {
     if (this.#saveAction().unchanged) return;
     this.#feedback.press(...Object.keys(this.errors));
     if (Object.keys(this.#validate()).length > 0) {
-      void this.#feedback.focus(() => this.shadowRoot!);
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.#emit(event, "wt-submit", {

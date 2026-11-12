@@ -78,10 +78,10 @@ it("revives an identical refusal only when the caller receives a new object", as
   expect(host.shadowRoot!.querySelector("p")!.textContent).toBe("Taken name");
 });
 
-it("waits for the host render before resolving the focus root and returns the focused field", async () => {
+it("waits for the host render before focusing a newly drawn field and returns it", async () => {
   const host = await mountFeedback();
   host.showInvalid = true;
-  const focused = await host.feedback.focus(() => host.shadowRoot!);
+  const focused = await host.feedback.focus(host.shadowRoot!);
   const input = host.shadowRoot!.querySelector("input")!;
   expect(input).not.toBeNull();
   expect(focused).toBe(input);

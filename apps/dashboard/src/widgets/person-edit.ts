@@ -195,7 +195,7 @@ export class PersonEdit extends LitElement {
     if (this.busy || saveActionState(this.#scope).unchanged) return;
     this.#feedback.press("_form");
     if (Object.keys(this.#validate()).length > 0) {
-      void this.#feedback.focus(() => this.shadowRoot!);
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.#emit("save-person", { ...this.#submissionValue() });

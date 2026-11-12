@@ -266,7 +266,7 @@ export class UnitForm extends LitElement {
     if (saveActionState(this.#scope).unchanged) return;
     this.#feedback.press(...Object.keys(this.fieldErrors));
     if (Object.keys(this.#validate()).length > 0) {
-      void this.#feedback.focus(() => this.shadowRoot!);
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const value = this.#submissionValue();
