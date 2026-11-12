@@ -4,13 +4,12 @@ import {
   diningTables,
   floorPlanPlacements,
   floorPlans,
-  floorPlanTableParts,
   floorPlanTables,
-  floorPlanTableSizes,
   floorResetTables,
   floorTodayZones,
   floorZones,
   newId,
+  statementChunks,
   type Transaction,
 } from "@waitron/db";
 import type { FloorPlanSetSummary, TableRemoval } from "@waitron/module";
@@ -117,30 +116,22 @@ export async function layoutTables(
   const rows = await tx
     .select({
       ...getTableColumns(floorPlanTables),
-      partOf: floorPlanTableParts.joinedTableId,
+      partOf: floorPlanTables.partOfTableId,
       placedX: floorPlanPlacements.x,
       placedY: floorPlanPlacements.y,
       placedWidth: floorPlanPlacements.width,
       placedHeight: floorPlanPlacements.height,
       placedShape: floorPlanPlacements.shape,
       placedRotation: floorPlanPlacements.rotation,
-      keptWidth: floorPlanTableSizes.width,
-      keptHeight: floorPlanTableSizes.height,
+      keptWidth: floorPlanPlacements.width,
+      keptHeight: floorPlanPlacements.height,
     })
     .from(floorPlanTables)
-    .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
     .leftJoin(
       floorPlanPlacements,
       and(
         inLayout(floorPlanPlacements.planId),
         eq(floorPlanPlacements.planTableId, floorPlanTables.id),
-      ),
-    )
-    .leftJoin(
-      floorPlanTableSizes,
-      and(
-        inLayout(floorPlanTableSizes.planId),
-        eq(floorPlanTableSizes.planTableId, floorPlanTables.id),
       ),
     )
     .where(eq(floorPlanTables.zoneId, zoneId))
@@ -167,7 +158,9 @@ export async function layoutTables(
         rotation: placedRotation,
       }),
       keptSize:
-        keptWidth === null || keptHeight === null ? null : { width: keptWidth, height: keptHeight },
+        placedX !== null || keptWidth === null || keptHeight === null
+          ? null
+          : { width: keptWidth, height: keptHeight },
     }),
   );
 }
@@ -513,17 +506,6 @@ async function writeSave(
   }
   const planId = plan!.id;
 
-  await tx
-    .delete(floorPlanTableParts)
-    .where(
-      inArray(
-        floorPlanTableParts.joinedTableId,
-        tx
-          .select({ id: floorPlanTables.id })
-          .from(floorPlanTables)
-          .where(eq(floorPlanTables.zoneId, zoneId)),
-      ),
-    );
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
   // A deleted table may stand in another set's layout of the zone too.
@@ -533,27 +515,11 @@ async function writeSave(
       or(eq(floorPlanPlacements.planId, planId), inArray(floorPlanPlacements.planTableId, deleted)),
     );
   const masterOf = new Map(masters.map((m) => [m.id, m]));
-  const leaving = tables.flatMap((t) =>
-    t.id !== undefined && t.placement === null && masterOf.get(t.id)!.placement !== null
-      ? [t.id]
-      : [],
-  );
-  const placed = tables.flatMap((t) => (t.id !== undefined && t.placement !== null ? [t.id] : []));
-  const sizesGone = [...leaving, ...placed];
-  if (sizesGone.length > 0 || deleted.length > 0) {
-    await tx
-      .delete(floorPlanTableSizes)
-      .where(
-        or(
-          inArray(floorPlanTableSizes.planTableId, deleted),
-          and(
-            eq(floorPlanTableSizes.planId, planId),
-            inArray(floorPlanTableSizes.planTableId, sizesGone),
-          ),
-        ),
-      );
-  }
   if (deleted.length > 0) {
+    await tx
+      .update(floorPlanTables)
+      .set({ partOfTableId: null })
+      .where(inArray(floorPlanTables.partOfTableId, deleted));
     await tx
       .update(diningTables)
       .set({ planTableId: null })
@@ -594,38 +560,47 @@ async function writeSave(
     if ((Object.keys(next) as (keyof typeof next)[]).every((k) => current[k] === next[k])) continue;
     await tx.update(floorPlanTables).set(next).where(eq(floorPlanTables.id, table.id));
   }
-  if (leaving.length > 0) {
-    await tx.insert(floorPlanTableSizes).values(
-      leaving.map((id) => {
-        const { width, height } = masterOf.get(id)!.placement!;
-        return { planId, planTableId: id, width, height };
-      }),
-    );
-  }
-  const placements = tables.flatMap((table) =>
-    table.placement === null
-      ? []
-      : [
-          {
-            planId,
-            planTableId: ids.get(table.key)!,
-            x: table.placement.x,
-            y: table.placement.y,
-            width: table.placement.width,
-            height: table.placement.height,
-            shape: table.placement.shape,
-            rotation: table.placement.rotation,
-          },
-        ],
-  );
+  const placements = tables.flatMap((table) => {
+    const previous = table.id === undefined ? undefined : masterOf.get(table.id);
+    const size = table.placement ?? previous?.placement ?? previous?.keptSize;
+    if (size === undefined || size === null) return [];
+    return [
+      {
+        planId,
+        planTableId: ids.get(table.key)!,
+        width: size.width,
+        height: size.height,
+        x: table.placement?.x ?? null,
+        y: table.placement?.y ?? null,
+        shape: table.placement?.shape ?? null,
+        rotation: table.placement?.rotation ?? null,
+      },
+    ];
+  });
   if (placements.length > 0) await tx.insert(floorPlanPlacements).values(placements);
-  const parts = tables.flatMap((table) =>
-    table.partKeys.map((key) => ({
-      joinedTableId: ids.get(table.key)!,
-      partTableId: ids.get(key)!,
-    })),
+  const partOf = new Map(
+    tables.flatMap((table) => table.partKeys.map((key) => [ids.get(key)!, ids.get(table.key)!])),
   );
-  if (parts.length > 0) await tx.insert(floorPlanTableParts).values(parts);
+  const membership = tables.map((table) => {
+    const id = ids.get(table.key)!;
+    return { id, parent: partOf.get(id) ?? null };
+  });
+  for (const rows of statementChunks(floorPlanTables, membership)) {
+    await tx
+      .update(floorPlanTables)
+      .set({
+        partOfTableId: sql`case ${floorPlanTables.id} ${sql.join(
+          rows.map((row) => sql`when ${row.id} then ${row.parent}`),
+          sql` `,
+        )} end`,
+      })
+      .where(
+        inArray(
+          floorPlanTables.id,
+          rows.map((row) => row.id),
+        ),
+      );
+  }
 
   const revision = plan!.revision + 1;
   await tx.update(floorPlans).set({ revision, savedAt }).where(eq(floorPlans.id, planId));

@@ -56,8 +56,6 @@ export interface CoreServices {
 
 /** Core's floor plan sets: the layout rows a set holds, made and read for the module that names it. */
 export interface FloorPlanSets {
-  /** A new empty set (no layout rows); answers its id. */
-  create(tx: Transaction): Promise<string>;
   /** Copies every layout row, placement and kept size of `fromSetId` into `toSetId`, each layout at revision 1. */
   copyLayouts(tx: Transaction, fromSetId: string, toSetId: string): Promise<void>;
   /** Each of `zoneIds`' table count, and each asked pair's layout revision and counts in the pairs' order, a missing row as 0/0/all spare. */

@@ -12,6 +12,5 @@ export * from "./order-kitchen-notes.js";
 export * from "./party-allergy.js";
 export * from "./kitchen-allergy.js";
 export * from "./device-zone-selection.js";
-export * from "./floor-plan-sets.js";
 export * from "./service-steps.js";
 export * from "./bill-identities.js";

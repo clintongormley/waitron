@@ -92,6 +92,9 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];
 const REMOVED_TABLES = [
+  "floor_plan_table_parts",
+  "floor_plan_table_sizes",
+  "floor_reset_table_parts",
   "order_draft_recalled_lines",
   "payment_policy",
   "tenant_receipts",
@@ -618,6 +621,28 @@ for (const locale of ["en", "es"] as const) {
         table.columns.push({ name, type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 });
         for (const row of Object.values(table.rows)) row[name] = null;
       }
+      for (const [name, column] of [
+        ["floor_plan_tables", "part_of_table_id"],
+        ["floor_reset_tables", "part_of_reset_table_id"],
+      ]) {
+        const table = expected[phase].tables[name!]!;
+        table.columns.push({ name: column!, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(table.rows)) row[column!] = null;
+        const position = name === "floor_reset_tables" ? 2 : table.foreignKeys.length;
+        table.foreignKeys.splice(position, 0, {
+          id: position,
+          seq: 0,
+          table: name!,
+          from: column!,
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        });
+        table.foreignKeys = table.foreignKeys.map((key, id) => ({ ...key, id }));
+      }
+      for (const column of expected[phase].tables.floor_plan_placements!.columns)
+        if (["x", "y", "shape", "rotation"].includes(column.name)) column.notnull = 0;
       for (const [name, moves] of Object.entries(REBUILT_COLUMN_ORDER)) {
         const columns = expected[phase].tables[name]!.columns;
         for (const [anchor, ...names] of moves) {
@@ -643,6 +668,12 @@ for (const locale of ["en", "es"] as const) {
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
       expected[phase] = madridWithFoldedTables(expected[phase], [
         {
+          from: "department_floor_plan_sets",
+          into: "floor_plan_sets",
+          match: { from: "set_id", into: "id" },
+          columns: { department_id: "department_id", name: "name", is_default: "is_default" },
+        },
+        {
           from: "zone_service_policies",
           into: "floor_zones",
           match: { from: "zone_id", into: "id" },
@@ -659,6 +690,7 @@ for (const locale of ["en", "es"] as const) {
           },
         },
       ]);
+      delete phases[phase]!.department_floor_plan_sets;
       delete phases[phase]!.zone_service_policies;
       delete phases[phase]!.zone_sale_policies;
       expected[phase].tables.convenio_config!.columns.find((column) => column.name === "id")!.type =

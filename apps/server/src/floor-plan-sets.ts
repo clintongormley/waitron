@@ -1,11 +1,9 @@
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
   floorPlanPlacements,
   floorPlans,
   floorPlanSets,
-  floorPlanTableParts,
   floorPlanTables,
-  floorPlanTableSizes,
   floorTodayZones,
   floorZones,
   type Transaction,
@@ -117,19 +115,6 @@ async function copyLayouts(tx: Transaction, fromSetId: string, toSetId: string):
     await tx
       .insert(floorPlanPlacements)
       .values(rows.map((place) => ({ ...place, planId: copyOf.get(place.planId)! })));
-  const sizes = await tx
-    .select({
-      planId: floorPlanTableSizes.planId,
-      planTableId: floorPlanTableSizes.planTableId,
-      width: floorPlanTableSizes.width,
-      height: floorPlanTableSizes.height,
-    })
-    .from(floorPlanTableSizes)
-    .where(inArray(floorPlanTableSizes.planId, planIds));
-  for (const rows of inBatches(sizes))
-    await tx
-      .insert(floorPlanTableSizes)
-      .values(rows.map((size) => ({ ...size, planId: copyOf.get(size.planId)! })));
 }
 
 /** Rows per statement, bounded as `packages/catalogue/src/batches.ts` bounds them. */
@@ -159,8 +144,6 @@ async function readLayouts(
     if (zones === undefined) zonesOfSet.set(setId, [zoneId]);
     else zones.push(zoneId);
   }
-  // Counting a zone's tables needs no parts, so a caller asking for no layout reads none and its
-  // live watch need not follow floor_plan_table_parts, which every layout save rewrites.
   const tables =
     pairs.length === 0
       ? (
@@ -173,10 +156,9 @@ async function readLayouts(
           .select({
             id: floorPlanTables.id,
             zoneId: floorPlanTables.zoneId,
-            partOf: floorPlanTableParts.joinedTableId,
+            partOf: floorPlanTables.partOfTableId,
           })
           .from(floorPlanTables)
-          .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
           .where(inArray(floorPlanTables.zoneId, zoneIds));
   const plans =
     pairs.length === 0
@@ -203,9 +185,12 @@ async function readLayouts(
           .select({ planId: floorPlanPlacements.planId, tableId: floorPlanPlacements.planTableId })
           .from(floorPlanPlacements)
           .where(
-            inArray(
-              floorPlanPlacements.planId,
-              plans.map((plan) => plan.id),
+            and(
+              isNotNull(floorPlanPlacements.x),
+              inArray(
+                floorPlanPlacements.planId,
+                plans.map((plan) => plan.id),
+              ),
             ),
           );
   const tablesOf = new Map<string, { id: string; partOf: string | null }[]>(
@@ -248,10 +233,6 @@ async function zonesShowing(tx: Transaction, setId: string): Promise<string[]> {
 
 export function floorPlanSetsFor(): FloorPlanSets {
   return {
-    async create(tx) {
-      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      return row!.id;
-    },
     copyLayouts,
     readLayouts,
     zonesShowing,
@@ -279,6 +260,5 @@ export async function removeSets(tx: Transaction, requested: readonly string[]):
 /** Deletes layouts `planIds` with the placements and kept sizes that name them. */
 export async function deletePlans(tx: Transaction, planIds: readonly string[]): Promise<void> {
   await tx.delete(floorPlanPlacements).where(inArray(floorPlanPlacements.planId, [...planIds]));
-  await tx.delete(floorPlanTableSizes).where(inArray(floorPlanTableSizes.planId, [...planIds]));
   await tx.delete(floorPlans).where(inArray(floorPlans.id, [...planIds]));
 }

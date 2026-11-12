@@ -1,6 +1,6 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import {
-  departmentFloorPlanSets,
+  floorPlanSets,
   departments,
   menuPeriods,
   readVenueClock,
@@ -134,19 +134,19 @@ export async function dueFloorLayouts(
       ? []
       : await tx
           .select({
-            setId: departmentFloorPlanSets.setId,
-            departmentId: departmentFloorPlanSets.departmentId,
-            name: departmentFloorPlanSets.name,
-            isDefault: departmentFloorPlanSets.isDefault,
+            setId: floorPlanSets.id,
+            departmentId: floorPlanSets.departmentId,
+            name: floorPlanSets.name,
+            isDefault: floorPlanSets.isDefault,
           })
-          .from(departmentFloorPlanSets)
-          .innerJoin(departments, eq(departments.id, departmentFloorPlanSets.departmentId))
+          .from(floorPlanSets)
+          .innerJoin(departments, eq(departments.id, floorPlanSets.departmentId))
           .where(
             and(
               eq(departments.active, true),
               or(
-                inArray(departmentFloorPlanSets.departmentId, departmentIds),
-                inArray(departmentFloorPlanSets.setId, recordedSetIds),
+                inArray(floorPlanSets.departmentId, departmentIds),
+                inArray(floorPlanSets.id, recordedSetIds),
               ),
             ),
           );

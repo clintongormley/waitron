@@ -1,9 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  departmentFloorPlanSets,
   floorPlanSets,
   menuPeriods,
   withTransaction,
@@ -13,7 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import type { ZoneFloorLayout } from "@waitron/module";
-import { linkFloorPlanSet } from "./floor-plan-set-store.js";
+import { addFloorPlanSet } from "./floor-plan-set-store.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -36,8 +36,7 @@ async function newZone(tx: Transaction, _cfg: { locationId: string }, name: stri
 }
 
 async function newSet(tx: Transaction, departmentId: string, name: string) {
-  const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-  await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
+  const row = { id: await addFloorPlanSet(tx, { departmentId, name }) };
   return row!.id;
 }
 
@@ -202,13 +201,13 @@ describe("which floor layout is due", () => {
     const f = await fixture();
     await run(async (tx) => {
       await tx
-        .update(departmentFloorPlanSets)
+        .update(floorPlanSets)
         .set({ isDefault: false })
-        .where(eq(departmentFloorPlanSets.setId, f.standard));
+        .where(eq(floorPlanSets.id, f.standard));
       await tx
-        .update(departmentFloorPlanSets)
+        .update(floorPlanSets)
         .set({ isDefault: true })
-        .where(eq(departmentFloorPlanSets.setId, f.dinnerSet));
+        .where(eq(floorPlanSets.id, f.dinnerSet));
     });
     const layouts = await due([f.zones.dining], at("14:00"));
     expect(layouts.get(f.zones.dining)).toEqual({
@@ -272,8 +271,7 @@ describe("which floor layout is due", () => {
     const f = await fixture();
     const [barSet, gone] = await run(async (tx) => {
       const barSet = await newSet(tx, f.bar, "Bar standard");
-      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      return [barSet, row!.id];
+      return [barSet, randomUUID()];
     });
     const layouts = await run((tx) =>
       VENUE_SERVICE.dueFloorLayouts(
@@ -318,7 +316,7 @@ describe("which floor layout is due", () => {
           recordedSetName: null,
         });
         const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
-        expect(sql.filter((q) => q.includes("department_floor_plan_sets"))).toEqual([]);
+        expect(sql.filter((q) => q.includes("floor_plan_sets"))).toEqual([]);
         expect(spy).toHaveBeenCalledTimes(1);
         spy.mockClear();
         expect((await VENUE_SERVICE.dueFloorLayouts(tx, [], at("14:00"))).size).toBe(0);

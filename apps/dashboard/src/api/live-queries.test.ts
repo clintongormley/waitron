@@ -234,9 +234,8 @@ it.each([
   ["getGoogleConfig", [], "tenants"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_tables"],
-  ["getFloorPlan", ["s1", "z1"], "floor_plan_table_parts"],
   ["getFloorPlan", ["s1", "z1"], "dining_tables"],
-  ["getFloorPlan", ["s1", "z1"], "floor_plan_table_sizes"],
+  ["getFloorPlan", ["s1", "z1"], "floor_plan_placements"],
   ["getSalesOverview", [], "party_tables"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
@@ -1160,7 +1159,7 @@ it.each(["Zone", "Department"] as const)(
       "department_transfer_desks",
       "department_transfer_destinations",
       "department_transfer_requests",
-      "department_floor_plan_sets",
+      "floor_plan_sets",
     ];
     let revision = 0;
     const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(

@@ -2,14 +2,14 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorPlanSets, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId } from "@waitron/shared";
-import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
+import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -94,8 +94,8 @@ async function setAndZone(): Promise<{ setId: string; zoneId: string }> {
       name: `Inside-${randomUUID().slice(0, 6)}`,
       departmentId: dept.id,
     });
-    const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-    await linkFloorPlanSet(tx, { setId: set!.id, departmentId: dept.id, name: "Dinner" });
+
+    const set = { id: await addFloorPlanSet(tx, { departmentId: dept.id, name: "Dinner" }) };
     return { setId: set!.id, zoneId: zone.id };
   });
 }

@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import type { Transaction } from "../client.js";
@@ -16,10 +16,7 @@ import {
   floorPlanPlacements,
   floorPlans,
   floorPlanSets,
-  floorPlanTableParts,
-  floorPlanTableSizes,
   floorPlanTables,
-  floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -28,9 +25,11 @@ import {
   floorTodayZones,
   rangeCheck,
 } from "./floor-plans.js";
+import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
 
 let LOCATION: string;
+let DEPARTMENT: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
 const PLAN = "cccccccc-0000-4000-8000-000000000001";
@@ -58,9 +57,11 @@ describe("floor plan tables", () => {
       operationDescription: "Hostelería",
     });
     LOCATION = await venueLocationId(db);
-    await seedZone(db, { id: ZONE, name: "Dining room" });
+    DEPARTMENT = (await seedZone(db, { id: ZONE, name: "Dining room" })).departmentId;
     await seedZone(db, { id: OTHER_ZONE, name: "Terrace" });
-    await db.insert(floorPlanSets).values({ id: SET });
+    await db
+      .insert(floorPlanSets)
+      .values({ id: SET, departmentId: DEPARTMENT, name: "Standard", isDefault: true });
     await db
       .insert(floorPlans)
       .values({ id: PLAN, zoneId: ZONE, setId: SET, savedAt: "2026-10-08T10:00:00Z" });
@@ -79,7 +80,10 @@ describe("floor plan tables", () => {
 
   async function insertSet(): Promise<string> {
     return inTx(async (tx) => {
-      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
+      const [row] = await tx
+        .insert(floorPlanSets)
+        .values({ departmentId: DEPARTMENT, name: crypto.randomUUID() })
+        .returning({ id: floorPlanSets.id });
       return row!.id;
     });
   }
@@ -93,6 +97,119 @@ describe("floor plan tables", () => {
       return row!.id;
     });
   }
+
+  it("keeps every incoming design-table key at NO ACTION", () => {
+    const rows = suite.db.all<{ source: string; deletion: string }>(sql`
+      select m.name || '.' || f."from" as source, f.on_delete as deletion
+      from sqlite_master m join pragma_foreign_key_list(m.name) f
+      where m.type = 'table' and f."table" = 'floor_plan_tables' order by source`);
+    expect(rows).toEqual([
+      { source: "dining_tables.plan_table_id", deletion: "NO ACTION" },
+      { source: "floor_plan_placements.plan_table_id", deletion: "NO ACTION" },
+      { source: "floor_plan_tables.part_of_table_id", deletion: "NO ACTION" },
+      { source: "floor_reset_tables.plan_table_id", deletion: "NO ACTION" },
+    ]);
+  });
+
+  it("refuses a blank name on the owning floor set row", async () => {
+    const [zone] = await inTx((tx) =>
+      tx
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, ZONE)),
+    );
+    const error = await captureError(() =>
+      inTx(async (tx) =>
+        tx.execute(
+          sql`insert into floor_plan_sets (id, department_id, name, is_default) values (${PERSON}, ${zone!.departmentId}, '  ', 0)`,
+        ),
+      ),
+    );
+    expect(checkFailed(error, "floor_plan_sets_name_ck")).toBe(true);
+  });
+
+  it("stores saved membership on each design and reset row, refusing self membership", async () => {
+    const plan = await insertCounterTables();
+    const reset = await insertCounterResetRows();
+    for (const [table, column, parent, member, constraint] of [
+      [
+        "floor_plan_tables",
+        "part_of_table_id",
+        plan.long,
+        plan.counter3,
+        "floor_plan_tables_part_of_not_self_ck",
+      ],
+      [
+        "floor_reset_tables",
+        "part_of_reset_table_id",
+        reset.long,
+        reset.counter3,
+        "floor_reset_tables_part_of_not_self_ck",
+      ],
+    ]) {
+      const refused = await captureError(() =>
+        inTx(async (tx) =>
+          tx.execute(
+            sql`update ${sql.identifier(table!)} set ${sql.identifier(column!)} = ${parent!} where id = ${parent!}`,
+          ),
+        ),
+      );
+      expect(checkFailed(refused, constraint!)).toBe(true);
+      await inTx(async (tx) =>
+        tx.execute(
+          sql`update ${sql.identifier(table!)} set ${sql.identifier(column!)} = ${parent!} where id = ${member!}`,
+        ),
+      );
+      const missing = await captureError(() =>
+        inTx(async (tx) =>
+          tx.execute(
+            sql`update ${sql.identifier(table!)} set ${sql.identifier(column!)} = ${PERSON} where id = ${member!}`,
+          ),
+        ),
+      );
+      expect(isRefusal(missing, FOREIGN_KEY_VIOLATION)).toBe(true);
+      const deletion = await captureError(() =>
+        inTx(async (tx) =>
+          tx.execute(sql`delete from ${sql.identifier(table!)} where id = ${parent!}`),
+        ),
+      );
+      expect(isRefusal(deletion, FOREIGN_KEY_VIOLATION)).toBe(true);
+    }
+  });
+
+  it("keeps mandatory sizes while a placement is off, refusing partially placed rows", async () => {
+    const tableId = await insertPlanTable("Kept");
+    await inTx((tx) =>
+      tx.insert(floorPlanPlacements).values({
+        planId: PLAN,
+        planTableId: tableId,
+        x: null,
+        y: null,
+        width: 2,
+        height: 3,
+        shape: null,
+        rotation: null,
+      } as unknown as typeof floorPlanPlacements.$inferInsert),
+    );
+    const partial = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(floorPlanPlacements)
+          .set({ x: 0 })
+          .where(eq(floorPlanPlacements.planTableId, tableId)),
+      ),
+    );
+    expect(checkFailed(partial, "floor_plan_placements_placement_ck")).toBe(true);
+    const [kept] = await inTx((tx) => tx.select().from(floorPlanPlacements));
+    expect(kept).toMatchObject({
+      x: null,
+      y: null,
+      width: 2,
+      height: 3,
+      shape: null,
+      rotation: null,
+    });
+  });
 
   it.each([
     ["seats 1000", { seats: 1000 }, "floor_plan_tables_seats_ck"],
@@ -337,6 +454,7 @@ describe("floor plan tables", () => {
       tx.select().from(floorPlanTables).where(eq(floorPlanTables.id, masterId)),
     );
     expect(master).toEqual({
+      partOfTableId: null,
       id: masterId,
       zoneId: ZONE,
       label: "T1",
@@ -456,11 +574,10 @@ describe("floor plan tables", () => {
   it("keeps a master table in one joined table only", async () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
-      tx.insert(floorPlanTableParts).values([
-        { joinedTableId: t.long, partTableId: t.counter3 },
-        { joinedTableId: t.long, partTableId: t.counter4 },
-        { joinedTableId: t.long, partTableId: t.counter5 },
-      ]),
+      tx
+        .update(floorPlanTables)
+        .set({ partOfTableId: t.long })
+        .where(inArray(floorPlanTables.id, [t.counter3, t.counter4, t.counter5])),
     );
     const bar = await inTx(async (tx) => {
       const [row] = await tx
@@ -469,39 +586,43 @@ describe("floor plan tables", () => {
         .returning({ id: floorPlanTables.id });
       return row!.id;
     });
-    const error = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(floorPlanTableParts).values({ joinedTableId: bar, partTableId: t.counter4 }),
-      ),
+    await inTx((tx) =>
+      tx
+        .update(floorPlanTables)
+        .set({ partOfTableId: bar })
+        .where(eq(floorPlanTables.id, t.counter4)),
     );
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, {
-        table: "floor_plan_table_parts",
-        columns: ["part_table_id"],
-      }),
-    ).toBe(true);
+    const [member] = await inTx((tx) =>
+      tx
+        .select({ parent: floorPlanTables.partOfTableId })
+        .from(floorPlanTables)
+        .where(eq(floorPlanTables.id, t.counter4)),
+    );
+    expect(member).toEqual({ parent: bar });
   });
 
   it("refuses a master table joined to itself", async () => {
     const t = await insertCounterTables();
     const error = await captureError(() =>
       inTx((tx) =>
-        tx.insert(floorPlanTableParts).values({ joinedTableId: t.long, partTableId: t.long }),
+        tx
+          .update(floorPlanTables)
+          .set({ partOfTableId: t.long })
+          .where(eq(floorPlanTables.id, t.long)),
       ),
     );
-    expect(checkFailed(error, "floor_plan_table_parts_not_self_ck")).toBe(true);
+    expect(checkFailed(error, "floor_plan_tables_part_of_not_self_ck")).toBe(true);
   });
 
-  it("refuses deleting a master table a joined table names, either way round", async () => {
+  it("refuses deleting a master table other members name", async () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
-      tx.insert(floorPlanTableParts).values([
-        { joinedTableId: t.long, partTableId: t.counter3 },
-        { joinedTableId: t.long, partTableId: t.counter4 },
-        { joinedTableId: t.long, partTableId: t.counter5 },
-      ]),
+      tx
+        .update(floorPlanTables)
+        .set({ partOfTableId: t.long })
+        .where(inArray(floorPlanTables.id, [t.counter3, t.counter4, t.counter5])),
     );
-    for (const doomed of [t.counter4, t.long]) {
+    for (const doomed of [t.long]) {
       const error = await captureError(() =>
         inTx((tx) => tx.delete(floorPlanTables).where(eq(floorPlanTables.id, doomed))),
       );
@@ -514,10 +635,11 @@ describe("floor plan tables", () => {
     const parts = await inTx((tx) =>
       tx
         .select({
-          joinedTableId: floorPlanTableParts.joinedTableId,
-          partTableId: floorPlanTableParts.partTableId,
+          joinedTableId: floorPlanTables.partOfTableId,
+          partTableId: floorPlanTables.id,
         })
-        .from(floorPlanTableParts),
+        .from(floorPlanTables)
+        .where(isNotNull(floorPlanTables.partOfTableId)),
     );
     expect(parts).toHaveLength(3);
   });
@@ -525,11 +647,10 @@ describe("floor plan tables", () => {
   it("keeps a reset row in one copied joined table only", async () => {
     const t = await insertCounterResetRows();
     await inTx((tx) =>
-      tx.insert(floorResetTableParts).values([
-        { joinedResetTableId: t.long, partResetTableId: t.counter3 },
-        { joinedResetTableId: t.long, partResetTableId: t.counter4 },
-        { joinedResetTableId: t.long, partResetTableId: t.counter5 },
-      ]),
+      tx
+        .update(floorResetTables)
+        .set({ partOfResetTableId: t.long })
+        .where(inArray(floorResetTables.id, [t.counter3, t.counter4, t.counter5])),
     );
     const bar = await inTx(async (tx) => {
       const [row] = await tx
@@ -538,19 +659,19 @@ describe("floor plan tables", () => {
         .returning({ id: floorResetTables.id });
       return row!.id;
     });
-    const error = await captureError(() =>
-      inTx((tx) =>
-        tx
-          .insert(floorResetTableParts)
-          .values({ joinedResetTableId: bar, partResetTableId: t.counter4 }),
-      ),
+    await inTx((tx) =>
+      tx
+        .update(floorResetTables)
+        .set({ partOfResetTableId: bar })
+        .where(eq(floorResetTables.id, t.counter4)),
     );
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, {
-        table: "floor_reset_table_parts",
-        columns: ["part_reset_table_id"],
-      }),
-    ).toBe(true);
+    const [member] = await inTx((tx) =>
+      tx
+        .select({ parent: floorResetTables.partOfResetTableId })
+        .from(floorResetTables)
+        .where(eq(floorResetTables.id, t.counter4)),
+    );
+    expect(member).toEqual({ parent: bar });
   });
 
   it("refuses a reset row joined to itself", async () => {
@@ -558,23 +679,23 @@ describe("floor plan tables", () => {
     const error = await captureError(() =>
       inTx((tx) =>
         tx
-          .insert(floorResetTableParts)
-          .values({ joinedResetTableId: t.long, partResetTableId: t.long }),
+          .update(floorResetTables)
+          .set({ partOfResetTableId: t.long })
+          .where(eq(floorResetTables.id, t.long)),
       ),
     );
-    expect(checkFailed(error, "floor_reset_table_parts_not_self_ck")).toBe(true);
+    expect(checkFailed(error, "floor_reset_tables_part_of_not_self_ck")).toBe(true);
   });
 
-  it("refuses deleting a reset row a copied joined table names, either way round", async () => {
+  it("refuses deleting a reset row other members name", async () => {
     const t = await insertCounterResetRows();
     await inTx((tx) =>
-      tx.insert(floorResetTableParts).values([
-        { joinedResetTableId: t.long, partResetTableId: t.counter3 },
-        { joinedResetTableId: t.long, partResetTableId: t.counter4 },
-        { joinedResetTableId: t.long, partResetTableId: t.counter5 },
-      ]),
+      tx
+        .update(floorResetTables)
+        .set({ partOfResetTableId: t.long })
+        .where(inArray(floorResetTables.id, [t.counter3, t.counter4, t.counter5])),
     );
-    for (const doomed of [t.counter4, t.long]) {
+    for (const doomed of [t.long]) {
       const error = await captureError(() =>
         inTx((tx) => tx.delete(floorResetTables).where(eq(floorResetTables.id, doomed))),
       );
@@ -584,7 +705,9 @@ describe("floor plan tables", () => {
     expect(rows.map((row) => row.id).sort()).toEqual(
       [t.long, t.counter3, t.counter4, t.counter5].sort(),
     );
-    const parts = await inTx((tx) => tx.select().from(floorResetTableParts));
+    const parts = await inTx((tx) =>
+      tx.select().from(floorResetTables).where(isNotNull(floorResetTables.partOfResetTableId)),
+    );
     expect(parts).toHaveLength(3);
   });
 
@@ -592,26 +715,24 @@ describe("floor plan tables", () => {
     const plan = await insertCounterTables();
     const reset = await insertCounterResetRows();
     await inTx(async (tx) => {
-      await tx.insert(floorPlanTableParts).values([
-        { joinedTableId: plan.long, partTableId: plan.counter3 },
-        { joinedTableId: plan.long, partTableId: plan.counter4 },
-        { joinedTableId: plan.long, partTableId: plan.counter5 },
-      ]);
-      await tx.insert(floorResetTableParts).values([
-        { joinedResetTableId: reset.long, partResetTableId: reset.counter3 },
-        { joinedResetTableId: reset.long, partResetTableId: reset.counter4 },
-        { joinedResetTableId: reset.long, partResetTableId: reset.counter5 },
-      ]);
+      await tx
+        .update(floorPlanTables)
+        .set({ partOfTableId: plan.long })
+        .where(inArray(floorPlanTables.id, [plan.counter3, plan.counter4, plan.counter5]));
+      await tx
+        .update(floorResetTables)
+        .set({ partOfResetTableId: reset.long })
+        .where(inArray(floorResetTables.id, [reset.counter3, reset.counter4, reset.counter5]));
     });
     const planParts = await inTx((tx) =>
       tx
         .select({
-          joinedTableId: floorPlanTableParts.joinedTableId,
-          partTableId: floorPlanTableParts.partTableId,
+          joinedTableId: floorPlanTables.partOfTableId,
+          partTableId: floorPlanTables.id,
           label: floorPlanTables.label,
         })
-        .from(floorPlanTableParts)
-        .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.partTableId))
+        .from(floorPlanTables)
+        .where(isNotNull(floorPlanTables.partOfTableId))
         .orderBy(floorPlanTables.label),
     );
     expect(planParts).toEqual([
@@ -622,12 +743,12 @@ describe("floor plan tables", () => {
     const resetParts = await inTx((tx) =>
       tx
         .select({
-          joinedResetTableId: floorResetTableParts.joinedResetTableId,
-          partResetTableId: floorResetTableParts.partResetTableId,
+          joinedResetTableId: floorResetTables.partOfResetTableId,
+          partResetTableId: floorResetTables.id,
           label: floorResetTables.label,
         })
-        .from(floorResetTableParts)
-        .innerJoin(floorResetTables, eq(floorResetTables.id, floorResetTableParts.partResetTableId))
+        .from(floorResetTables)
+        .where(isNotNull(floorResetTables.partOfResetTableId))
         .orderBy(floorResetTables.label),
     );
     expect(resetParts).toEqual([
@@ -641,39 +762,39 @@ describe("floor plan tables", () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
       tx
-        .insert(floorPlanTableSizes)
+        .insert(floorPlanPlacements)
         .values({ planId: PLAN, planTableId: t.counter3, width: 2, height: 2 }),
     );
     const duplicate = await captureError(() =>
       inTx((tx) =>
         tx
-          .insert(floorPlanTableSizes)
+          .insert(floorPlanPlacements)
           .values({ planId: PLAN, planTableId: t.counter3, width: 3, height: 3 }),
       ),
     );
     expect(
       refusalOn(duplicate, UNIQUE_VIOLATION, {
-        table: "floor_plan_table_sizes",
+        table: "floor_plan_placements",
         columns: ["plan_id", "plan_table_id"],
       }),
     ).toBe(true);
     const narrow = await captureError(() =>
       inTx((tx) =>
         tx
-          .insert(floorPlanTableSizes)
+          .insert(floorPlanPlacements)
           .values({ planId: PLAN, planTableId: t.counter4, width: 0, height: 2 }),
       ),
     );
-    expect(checkFailed(narrow, "floor_plan_table_sizes_width_ck")).toBe(true);
+    expect(checkFailed(narrow, "floor_plan_placements_width_ck")).toBe(true);
     const deep = await captureError(() =>
       inTx((tx) =>
         tx
-          .insert(floorPlanTableSizes)
+          .insert(floorPlanPlacements)
           .values({ planId: PLAN, planTableId: t.counter4, width: 2, height: 100 }),
       ),
     );
-    expect(checkFailed(deep, "floor_plan_table_sizes_height_ck")).toBe(true);
-    const sizes = await inTx((tx) => tx.select().from(floorPlanTableSizes));
+    expect(checkFailed(deep, "floor_plan_placements_height_ck")).toBe(true);
+    const sizes = await inTx((tx) => tx.select().from(floorPlanPlacements));
     expect(sizes).toHaveLength(1);
   });
 
@@ -681,7 +802,7 @@ describe("floor plan tables", () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
       tx
-        .insert(floorPlanTableSizes)
+        .insert(floorPlanPlacements)
         .values({ planId: PLAN, planTableId: t.counter3, width: 2, height: 2 }),
     );
     const error = await captureError(() =>
@@ -692,7 +813,7 @@ describe("floor plan tables", () => {
     expect(tables.map((row) => row.id).sort()).toEqual(
       [t.long, t.counter3, t.counter4, t.counter5].sort(),
     );
-    const sizes = await inTx((tx) => tx.select().from(floorPlanTableSizes));
+    const sizes = await inTx((tx) => tx.select().from(floorPlanPlacements));
     expect(sizes).toHaveLength(1);
   });
 
@@ -775,7 +896,7 @@ describe("floor plan tables", () => {
     const live = await insertLiveCounterTables();
     await inTx(async (tx) => {
       await tx
-        .insert(floorPlanTableSizes)
+        .insert(floorPlanPlacements)
         .values({ planId: PLAN, planTableId: plan.counter3, width: 2, height: 3 });
       await tx
         .insert(floorTodaySplitParts)
@@ -784,11 +905,11 @@ describe("floor plan tables", () => {
     const sizes = await inTx((tx) =>
       tx
         .select({
-          planTableId: floorPlanTableSizes.planTableId,
-          width: floorPlanTableSizes.width,
-          height: floorPlanTableSizes.height,
+          planTableId: floorPlanPlacements.planTableId,
+          width: floorPlanPlacements.width,
+          height: floorPlanPlacements.height,
         })
-        .from(floorPlanTableSizes),
+        .from(floorPlanPlacements),
     );
     expect(sizes).toEqual([{ planTableId: plan.counter3, width: 2, height: 3 }]);
     const splits = await inTx((tx) =>
@@ -885,7 +1006,7 @@ describe("floor plan tables", () => {
     });
     const tableId = await insertPlanTable("S1");
     await inTx((tx) =>
-      tx.insert(floorPlanTableSizes).values([
+      tx.insert(floorPlanPlacements).values([
         { planId: lunchPlan, planTableId: tableId, width: 2, height: 2 },
         { planId: dinnerPlan, planTableId: tableId, width: 3, height: 3 },
       ]),
@@ -893,13 +1014,13 @@ describe("floor plan tables", () => {
     const error = await captureError(() =>
       inTx((tx) =>
         tx
-          .insert(floorPlanTableSizes)
+          .insert(floorPlanPlacements)
           .values({ planId: lunchPlan, planTableId: tableId, width: 4, height: 4 }),
       ),
     );
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
-        table: "floor_plan_table_sizes",
+        table: "floor_plan_placements",
         columns: ["plan_id", "plan_table_id"],
       }),
     ).toBe(true);

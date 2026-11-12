@@ -21,7 +21,7 @@ export const menuPeriods = table(
      * A set of this period's own department. The key names core's floor_plan_sets, so the
      * database takes any department's set; the period routes refuse another department's with
      * menu_period.invalid (floorPlanSetId) and the configuration import with
-     * menu_periods.floor_plan_set_id. A composite key to department_floor_plan_sets would rebuild
+     * menu_periods.floor_plan_set_id. A composite key to floor_plan_sets would rebuild
      * menu_periods, whose rebuild empties menu_period_staff_menus (its key cascades).
      */
     floorPlanSetId: id("floor_plan_set_id").references(() => floorPlanSets.id),

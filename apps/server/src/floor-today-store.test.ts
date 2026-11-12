@@ -1,8 +1,9 @@
 import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { sql, and, eq, inArray, isNotNull } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -12,7 +13,6 @@ import {
   diningTables,
   floorPlanPlacements,
   floorPlans,
-  floorPlanSets,
   floorPlanTables,
   floorResetTables,
   floorTodayJoins,
@@ -27,7 +27,7 @@ import {
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
+import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { createTable } from "./testing/live-table.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -1308,9 +1308,8 @@ describe("the parts of joined tables in the till's copy", () => {
     const rows = await inTx(v, async (tx) =>
       tx.all<{ joined: string; part: string }>(sql`
         select joined_row.plan_table_id as joined, part_row.plan_table_id as part
-        from floor_reset_table_parts copied
-        join floor_reset_tables joined_row on joined_row.id = copied.joined_reset_table_id
-        join floor_reset_tables part_row on part_row.id = copied.part_reset_table_id
+        from floor_reset_tables part_row
+        join floor_reset_tables joined_row on joined_row.id = part_row.part_of_reset_table_id
         where joined_row.zone_id = ${zoneId}`),
     );
     return rows.sort((a, b) => a.part.localeCompare(b.part));
@@ -1334,6 +1333,16 @@ describe("the parts of joined tables in the till's copy", () => {
 
   it("copies Long table's three parts into the till's copy at the reset", async () => {
     const { zoneId, master, table } = await plannedZone(v, LONG_AND_COUNTERS, NOW);
+    const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+    try {
+      await reset(zoneId);
+      const membershipWrites = prepare.mock.calls.filter(([query]) =>
+        query.startsWith('update "floor_reset_tables" set "part_of_reset_table_id"'),
+      );
+      expect(membershipWrites).toHaveLength(1);
+    } finally {
+      prepare.mockRestore();
+    }
     expect(await copiedParts(zoneId)).toEqual(partsOf(master, "long", ["c3", "c4", "c5"]));
     expect(await stillJoined([table.c3!, table.c4!, table.c5!, table.long!])).toEqual({
       [table.c3!]: 1,
@@ -1849,10 +1858,10 @@ describe("resets onto a set's layout", () => {
         name: `Setless ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      const [unlinked] = await tx
-        .insert(floorPlanSets)
-        .values({})
-        .returning({ id: floorPlanSets.id });
+      const other = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+      const unlinked = {
+        id: await addFloorPlanSet(tx, { departmentId: other.id, name: "Other department" }),
+      };
       await tx.insert(floorPlans).values({
         zoneId: zone.id,
         setId: unlinked!.id,
@@ -1894,10 +1903,10 @@ describe("resets onto a set's layout", () => {
         orderStart: "table",
       });
       await tx.update(floorZones).set({ departmentId: moved.id }).where(eq(floorZones.id, zone.id));
-      const [unlinked] = await tx
-        .insert(floorPlanSets)
-        .values({})
-        .returning({ id: floorPlanSets.id });
+      const other = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+      const unlinked = {
+        id: await addFloorPlanSet(tx, { departmentId: other.id, name: "Other department" }),
+      };
       await tx.insert(floorPlans).values({
         zoneId: zone.id,
         setId: unlinked!.id,
@@ -1916,12 +1925,7 @@ describe("resets onto a set's layout", () => {
     expect(await todayRow(live!.id)).toEqual(rowBefore);
 
     const setId = await inTx(v, async (tx) => {
-      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, {
-        setId: set!.id,
-        departmentId: gaining,
-        name: "Standard",
-      });
+      const set = { id: await addFloorPlanSet(tx, { departmentId: gaining, name: "Standard" }) };
       return set!.id;
     });
     await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
@@ -1997,12 +2001,8 @@ describe("resets onto a set's layout", () => {
         .update(floorZones)
         .set({ departmentId: gaining.id })
         .where(eq(floorZones.id, zone.id));
-      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, {
-        setId: set!.id,
-        departmentId: gaining.id,
-        name: "Standard",
-      });
+
+      await addFloorPlanSet(tx, { departmentId: gaining.id, name: "Standard" });
       return { zoneId: zone.id, fromSet: from.setId };
     });
     const recordBefore = await todayZone(zoneId);
@@ -2078,7 +2078,7 @@ it("a saved joined table resets to one named group of its real tables", async ()
   expect(await todayRow(table.t2!)).toMatchObject({ x: 20, y: 31, rotation: 0 });
 });
 
-it("reset slots prefer recorded placement size to kept size for a saved member", async () => {
+it("reset slots use recorded placement size before fallback for a saved member", async () => {
   const { zoneId, table, master } = await plannedZone(
     v,
     [
@@ -2094,7 +2094,6 @@ it("reset slots prefer recorded placement size to kept size for a saved member",
     ],
     NOW,
   );
-  await giveKeptSize(v, master.a!, { width: 2, height: 2 });
   await inTx(v, async (tx) => {
     const [plan] = await tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId));
     await tx.insert(floorPlanPlacements).values({

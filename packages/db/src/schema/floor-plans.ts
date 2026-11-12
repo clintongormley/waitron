@@ -1,5 +1,13 @@
 import { sql, type SQL } from "drizzle-orm";
-import { check, foreignKey, index, unique, type SQLiteColumn } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  foreignKey,
+  index,
+  unique,
+  uniqueIndex,
+  type AnySQLiteColumn,
+  type SQLiteColumn,
+} from "drizzle-orm/sqlite-core";
 import {
   count,
   day,
@@ -14,6 +22,7 @@ import {
   tsString,
 } from "./columns.js";
 import { diningTables } from "./dining-tables.js";
+import { departments } from "./venue-service/service.js";
 import { floorZones } from "./floor-zones.js";
 
 export const floorPlanShape = enumType(["rect", "round"]);
@@ -75,10 +84,24 @@ const placeChecks = (name: string, t: Placed) => {
   ];
 };
 
-/** A named set of layouts, one per zone; its name and default live with the department. */
-export const floorPlanSets = table("floor_plan_sets", {
-  id: id("id").primaryKey().$defaultFn(newId),
-});
+export const floorPlanSets = table(
+  "floor_plan_sets",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    departmentId: id("department_id")
+      .notNull()
+      .references(() => departments.id),
+    name: label("name").notNull(),
+    isDefault: flag("is_default").notNull().default(false),
+  },
+  (t) => [
+    uniqueIndex("floor_plan_sets_name_key").on(t.departmentId, t.name),
+    uniqueIndex("floor_plan_sets_one_default_key")
+      .on(t.departmentId)
+      .where(sql`${t.isDefault}`),
+    check("floor_plan_sets_name_ck", sql`trim(${t.name}) <> ''`),
+  ],
+);
 
 /** One set's layout of one zone, edited by the dashboard only. */
 export const floorPlans = table(
@@ -115,6 +138,7 @@ export const floorPlanTables = table(
     shortName: label("short_name"),
     seats: count("seats"),
     fixed: flag("fixed").notNull().default(false),
+    partOfTableId: id("part_of_table_id").references((): AnySQLiteColumn => floorPlanTables.id),
   },
   (t) => [
     unique("floor_plan_tables_zone_label_key").on(t.zoneId, t.label),
@@ -124,22 +148,24 @@ export const floorPlanTables = table(
       name: "floor_plan_tables_zone_fk",
     }),
     seatsCheck("floor_plan_tables", t.seats),
+    index("floor_plan_tables_part_of_idx").on(t.partOfTableId),
+    check("floor_plan_tables_part_of_not_self_ck", sql`${t.partOfTableId} <> ${t.id}`),
   ],
 );
 
-/** Where one layout puts one of its zone's tables; a table the layout leaves off has no row. */
+/** Null coordinates keep an off-layout table's size without placing it. */
 export const floorPlanPlacements = table(
   "floor_plan_placements",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     planId: id("plan_id").notNull(),
     planTableId: id("plan_table_id").notNull(),
-    x: smallCount("x").notNull(),
-    y: smallCount("y").notNull(),
+    x: smallCount("x"),
+    y: smallCount("y"),
     width: smallCount("width").notNull(),
     height: smallCount("height").notNull(),
-    shape: floorPlanShape("shape").notNull(),
-    rotation: smallCount("rotation").notNull(),
+    shape: floorPlanShape("shape"),
+    rotation: smallCount("rotation"),
   },
   (t) => [
     unique("floor_plan_placements_table_key").on(t.planId, t.planTableId),
@@ -153,59 +179,13 @@ export const floorPlanPlacements = table(
       foreignColumns: [floorPlanTables.id],
       name: "floor_plan_placements_table_fk",
     }),
-    ...placeChecks("floor_plan_placements", t),
-  ],
-);
-
-/** What a zone's joined table is made of, in every layout: one row per part. */
-export const floorPlanTableParts = table(
-  "floor_plan_table_parts",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    joinedTableId: id("joined_table_id").notNull(),
-    partTableId: id("part_table_id").notNull(),
-  },
-  (t) => [
-    unique("floor_plan_table_parts_part_key").on(t.partTableId),
-    index("floor_plan_table_parts_joined_idx").on(t.joinedTableId),
-    check("floor_plan_table_parts_not_self_ck", sql`${t.joinedTableId} <> ${t.partTableId}`),
-    foreignKey({
-      columns: [t.joinedTableId],
-      foreignColumns: [floorPlanTables.id],
-      name: "floor_plan_table_parts_joined_fk",
-    }),
-    foreignKey({
-      columns: [t.partTableId],
-      foreignColumns: [floorPlanTables.id],
-      name: "floor_plan_table_parts_part_fk",
-    }),
-  ],
-);
-
-/** The width and height a table off the plan keeps from when it was last placed. */
-export const floorPlanTableSizes = table(
-  "floor_plan_table_sizes",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    planId: id("plan_id").notNull(),
-    planTableId: id("plan_table_id").notNull(),
-    width: smallCount("width").notNull(),
-    height: smallCount("height").notNull(),
-  },
-  (t) => [
-    unique("floor_plan_table_sizes_plan_table_key").on(t.planId, t.planTableId),
-    check("floor_plan_table_sizes_width_ck", rangeCheck(t.width, 1, 99)),
-    check("floor_plan_table_sizes_height_ck", rangeCheck(t.height, 1, 99)),
-    foreignKey({
-      columns: [t.planTableId],
-      foreignColumns: [floorPlanTables.id],
-      name: "floor_plan_table_sizes_table_fk",
-    }),
-    foreignKey({
-      columns: [t.planId],
-      foreignColumns: [floorPlans.id],
-      name: "floor_plan_table_sizes_plan_fk",
-    }),
+    ...placeChecks("floor_plan_placements", t).filter(
+      (c) => c.name !== "floor_plan_placements_placement_ck",
+    ),
+    check(
+      "floor_plan_placements_placement_ck",
+      sql`(${t.x} is null and ${t.y} is null and ${t.shape} is null and ${t.rotation} is null) or (${t.x} is not null and ${t.y} is not null and ${t.shape} is not null and ${t.rotation} is not null)`,
+    ),
   ],
 );
 
@@ -233,6 +213,9 @@ export const floorResetTables = table(
     readyToMove: flag("ready_to_move").notNull().default(false),
     // Applying the row leaves today's table taken off when it still is (Update layout copies it).
     takenOff: flag("taken_off").notNull().default(false),
+    partOfResetTableId: id("part_of_reset_table_id").references(
+      (): AnySQLiteColumn => floorResetTables.id,
+    ),
   },
   (t) => [
     unique("floor_reset_tables_table_key").on(t.tableId),
@@ -248,35 +231,9 @@ export const floorResetTables = table(
       name: "floor_reset_tables_table_fk",
     }),
     seatsCheck("floor_reset_tables", t.seats),
+    index("floor_reset_tables_part_of_idx").on(t.partOfResetTableId),
+    check("floor_reset_tables_part_of_not_self_ck", sql`${t.partOfResetTableId} <> ${t.id}`),
     ...placeChecks("floor_reset_tables", t),
-  ],
-);
-
-/** The parts of each joined table as the zone's last reset copied them. */
-export const floorResetTableParts = table(
-  "floor_reset_table_parts",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    joinedResetTableId: id("joined_reset_table_id").notNull(),
-    partResetTableId: id("part_reset_table_id").notNull(),
-  },
-  (t) => [
-    unique("floor_reset_table_parts_part_key").on(t.partResetTableId),
-    index("floor_reset_table_parts_joined_idx").on(t.joinedResetTableId),
-    check(
-      "floor_reset_table_parts_not_self_ck",
-      sql`${t.joinedResetTableId} <> ${t.partResetTableId}`,
-    ),
-    foreignKey({
-      columns: [t.joinedResetTableId],
-      foreignColumns: [floorResetTables.id],
-      name: "floor_reset_table_parts_joined_fk",
-    }),
-    foreignKey({
-      columns: [t.partResetTableId],
-      foreignColumns: [floorResetTables.id],
-      name: "floor_reset_table_parts_part_fk",
-    }),
   ],
 );
 

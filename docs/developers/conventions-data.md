@@ -2159,11 +2159,12 @@ Edit a set's layouts on the dashboard; work from today's plan on the till. Savin
 not rearrange tables during service: only a reset does.
 
 A zone's tables are shared by every layout of the zone (`floor_plan_tables`, keyed by `zone_id`,
-with a joined table's parts in `floor_plan_table_parts`). A set (`floor_plan_sets`: an id) holds at most one layout per zone (`floor_plans`, unique on set and zone); where a layout
-puts a table is a `floor_plan_placements` row, and a table it leaves off has none. Venue-service
-owns the rest: a set's department, name and default (`department_floor_plan_sets`, a unique name per
-department and one default each), and the set a period picks (`menu_periods.floor_plan_set_id`, null
-for the default). That key names core's table, so the database takes another department's set; the
+with a joined table's parts pointing at it through `part_of_table_id`). A set (`floor_plan_sets`)
+holds its department, name and default, with a unique name per department and one default each.
+It holds at most one layout per zone (`floor_plans`, unique on set and zone). A placement row holds
+a table's size; null coordinates, shape and rotation retain that size while the table is off the
+layout. A never-sized table off the layout has no placement row. Venue-service owns the set a
+period picks (`menu_periods.floor_plan_set_id`, null for the default). That key names core's table, so the database takes another department's set; the
 period routes refuse it `menu_period.invalid`. A set with no `floor_plans` row for a zone reads as
 the zone's tables all off, at revision 0 (`readLayout`, `apps/server/src/floor-plan.ts`). A save
 that changes the zone's shared tables (adds, deletes or renames one, or changes its short name,
@@ -2223,7 +2224,7 @@ set and revision the till sent, else refuses `floor_today.layout_changed`, and k
 off today off, at its new place.
 
 A reset copies the layout into `floor_reset_tables`, one row per table with its place in that
-layout, and each joined table's parts into `floor_reset_table_parts`, then runs the catch-up
+layout, with each member's `part_of_reset_table_id` naming its group row, then runs the catch-up
 (`catchUpZone`). New real tables are created from those rows, including rows that had to wait for
 a name. Joined design rows remain reset metadata; their members become the live group. The copy keeps a later save from changing what a reset is still applying.
 
@@ -2360,6 +2361,10 @@ v26.11.1, after applying every manifest migration through `useVenueDb`, by readi
 `floor_plan_placements.plan_id` and `floor_plan_table_sizes.plan_id`; at `floor_plan_table_sizes`,
 none. All are `ON DELETE NO ACTION`. In that database no trigger's SQL names any of the three
 tables; it holds no change feed, which `bootServer` installs.
+
+**2026-11-12:** fk3 supersedes the saved-design side tables in that measurement.
+Membership is stored on the design and reset rows, and kept sizes share placement rows.
+The rebuilt protections are compared with fk3's base by `protection-list`.
 
 Slice 5's rebuild uses `0137_floor_retire_drop_table_triggers.sql`,
 `0138_floor_retire_old_table_columns.sql` and `0139_floor_retire_recreate_table_triggers.sql` in

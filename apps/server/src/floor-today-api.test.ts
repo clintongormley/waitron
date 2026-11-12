@@ -14,7 +14,6 @@ import {
   tableInService,
   diningTables,
   floorPlans,
-  floorPlanSets,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodaySplitParts,
@@ -30,8 +29,7 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   createDepartment,
   createServiceZone,
-  departmentFloorPlanSets,
-  linkFloorPlanSet,
+  addFloorPlanSet,
   menuPeriods,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout } from "./floor-plan.js";
@@ -1216,16 +1214,14 @@ describe("resetting a zone onto a layout", () => {
         name: `Inside ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, {
-        setId: set!.id,
-        departmentId: department.id,
-        name: "Standard",
-      });
-      const [unlinked] = await tx
-        .insert(floorPlanSets)
-        .values({})
-        .returning({ id: floorPlanSets.id });
+
+      const set = {
+        id: await addFloorPlanSet(tx, { departmentId: department.id, name: "Standard" }),
+      };
+      const other = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+      const unlinked = {
+        id: await addFloorPlanSet(tx, { departmentId: other.id, name: "Other department" }),
+      };
       await tx
         .insert(floorPlans)
         .values({ zoneId, setId: unlinked!.id, savedAt: "2026-01-01T00:00:00.000Z" });
@@ -1250,10 +1246,10 @@ describe("resetting a zone onto a layout", () => {
         name: `Setless ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      const [unlinked] = await tx
-        .insert(floorPlanSets)
-        .values({})
-        .returning({ id: floorPlanSets.id });
+      const other = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+      const unlinked = {
+        id: await addFloorPlanSet(tx, { departmentId: other.id, name: "Other department" }),
+      };
       await tx
         .insert(floorPlans)
         .values({ zoneId: id, setId: unlinked!.id, savedAt: "2026-01-01T00:00:00.000Z" });
@@ -1347,12 +1343,7 @@ describe("Reset to … plan", () => {
         orderStart: "table",
       });
       if (withSet) {
-        const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, {
-          setId: set!.id,
-          departmentId: department.id,
-          name: "Standard",
-        });
+        await addFloorPlanSet(tx, { departmentId: department.id, name: "Standard" });
       }
       return department.id;
     });
@@ -1408,7 +1399,6 @@ describe("Reset to … plan", () => {
         .update(menuPeriods)
         .set({ floorPlanSetId: null })
         .where(eq(menuPeriods.floorPlanSetId, d.dinner));
-      await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
       await floorDeletionFor(REMOVALS).removeSets(tx, [d.dinner]);
     });
     const from = (await zoneRevisionOf(v, d.zoneId))!;

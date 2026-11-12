@@ -1,7 +1,7 @@
 import { floorZones } from "@waitron/db";
 import { eq } from "drizzle-orm";
-import { floorPlanSets, type Transaction } from "@waitron/db";
-import { linkFloorPlanSet, readFloorPlanSets } from "@waitron/venue-service";
+import { type Transaction } from "@waitron/db";
+import { addFloorPlanSet, readFloorPlanSets } from "@waitron/venue-service";
 import type { LayoutRef } from "../floor-plan.js";
 
 /** The default set of the zone's department, made under `name` when the department has none. */
@@ -19,7 +19,7 @@ export async function defaultLayout(
   const sets = await readFloorPlanSets(tx, { departmentId: policy.departmentId });
   const held = sets.find((set) => set.isDefault);
   if (held !== undefined) return { setId: held.setId, zoneId };
-  const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-  await linkFloorPlanSet(tx, { setId: row!.id, departmentId: policy.departmentId, name });
+
+  const row = { id: await addFloorPlanSet(tx, { departmentId: policy.departmentId, name }) };
   return { setId: row!.id, zoneId };
 }

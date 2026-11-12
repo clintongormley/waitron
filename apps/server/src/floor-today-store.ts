@@ -17,9 +17,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import {
   diningTables,
   floorPlans,
-  floorPlanTableParts,
   floorPlanTables,
-  floorResetTableParts,
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -30,6 +28,7 @@ import {
   resetRowMoves,
   readVenueClock,
   shortNameColumns,
+  statementChunks,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -249,17 +248,6 @@ async function resetZoneFor(
     live,
     joinedIds,
   );
-  await tx
-    .delete(floorResetTableParts)
-    .where(
-      inArray(
-        floorResetTableParts.joinedResetTableId,
-        tx
-          .select({ id: floorResetTables.id })
-          .from(floorResetTables)
-          .where(eq(floorResetTables.zoneId, zoneId)),
-      ),
-    );
   await tx.delete(floorResetTables).where(eq(floorResetTables.zoneId, zoneId));
   const takenOff = keepTakenOff ? await takenOffIn(tx, live) : new Set<string>();
   if (targets.length > 0) {
@@ -310,24 +298,37 @@ async function copyParts(
   written: readonly { id: string; planTableId: string | null }[],
 ): Promise<void> {
   const master = await tx
-    .select({ joined: floorPlanTableParts.joinedTableId, part: floorPlanTableParts.partTableId })
-    .from(floorPlanTableParts)
-    .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.joinedTableId))
-    .where(eq(floorPlanTables.zoneId, zoneId));
+    .select({ joined: floorPlanTables.partOfTableId, part: floorPlanTables.id })
+    .from(floorPlanTables)
+    .where(and(eq(floorPlanTables.zoneId, zoneId), isNotNull(floorPlanTables.partOfTableId)));
   const rowsOf = new Map<string, string[]>();
   for (const row of written) {
     if (row.planTableId === null) continue;
     rowsOf.set(row.planTableId, [...(rowsOf.get(row.planTableId) ?? []), row.id]);
   }
   const copied = master.flatMap(({ joined, part }) => {
-    const joinedRows = rowsOf.get(joined) ?? [];
+    const joinedRows = rowsOf.get(joined!) ?? [];
     if (joinedRows.length !== 1) return [];
     return (rowsOf.get(part) ?? []).map((partRow) => ({
       joinedResetTableId: joinedRows[0]!,
       partResetTableId: partRow,
     }));
   });
-  if (copied.length > 0) await tx.insert(floorResetTableParts).values(copied);
+  for (const rows of statementChunks(floorResetTables, copied))
+    await tx
+      .update(floorResetTables)
+      .set({
+        partOfResetTableId: sql`case ${floorResetTables.id} ${sql.join(
+          rows.map((row) => sql`when ${row.partResetTableId} then ${row.joinedResetTableId}`),
+          sql` `,
+        )} end`,
+      })
+      .where(
+        inArray(
+          floorResetTables.id,
+          rows.map((row) => row.partResetTableId),
+        ),
+      );
 }
 
 const groupPart = alias(floorResetTables, "group_part");
@@ -386,11 +387,7 @@ async function catchUpPass(
       floorResetTables,
       and(eq(floorResetTables.zoneId, floorZones.id), eq(floorResetTables.pending, true)),
     )
-    .leftJoin(
-      floorResetTableParts,
-      eq(floorResetTableParts.joinedResetTableId, floorResetTables.id),
-    )
-    .leftJoin(groupPart, eq(groupPart.id, floorResetTableParts.partResetTableId))
+    .leftJoin(groupPart, eq(groupPart.partOfResetTableId, floorResetTables.id))
     .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
   if (zoneRows.length === 0) throw new AppError("zone.not_found", { zoneId });
   const groupOf = new Map<string, ResetGroup>();
@@ -1071,20 +1068,20 @@ function pendingGroupMember(
 ): SQL {
   const names = ["link", "joined", "sibling", "member"].map((name) => `${prefix}_${name}`);
   const [linkName, joinedName, siblingName, memberName] = names as [string, string, string, string];
-  const link = alias(floorResetTableParts, linkName);
+  const link = resetAlias(linkName);
   const joined = resetAlias(joinedName);
-  const sibling = alias(floorResetTableParts, siblingName);
+  const sibling = resetAlias(siblingName);
   const member = resetAlias(memberName);
   const as = (name: string) => sql.identifier(name);
   return sql`exists (
-    select 1 from ${floorResetTableParts} ${as(linkName)}
+    select 1 from ${floorResetTables} ${as(linkName)}
     inner join ${floorResetTables} ${as(joinedName)}
-      on ${joined.id} = ${link.joinedResetTableId} and ${joined.pending} = 1
-    inner join ${floorResetTableParts} ${as(siblingName)}
-      on ${sibling.joinedResetTableId} = ${link.joinedResetTableId}
+      on ${joined.id} = ${link.partOfResetTableId} and ${joined.pending} = 1
+    inner join ${floorResetTables} ${as(siblingName)}
+      on ${sibling.partOfResetTableId} = ${link.partOfResetTableId}
     inner join ${floorResetTables} ${as(memberName)}
-      on ${member.id} in (${sibling.joinedResetTableId}, ${sibling.partResetTableId})
-    where ${rowId} in (${link.joinedResetTableId}, ${link.partResetTableId})
+      on ${member.id} in (${sibling.partOfResetTableId}, ${sibling.id})
+    where ${rowId} in (${link.partOfResetTableId}, ${link.id})
       and ${member.pending} = 1 and ${where(member)}
   )`;
 }

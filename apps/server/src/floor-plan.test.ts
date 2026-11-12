@@ -2,7 +2,7 @@ import { seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, isNotNull, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,19 +10,18 @@ import {
   diningTables,
   floorPlanPlacements,
   floorPlans,
-  floorPlanTableParts,
   floorPlanTables,
-  floorPlanTableSizes,
   floorResetTables,
   floorTodayTables,
   floorTodayZones,
-  floorPlanSets,
   shortNameColumns,
   floorZones,
+  installChangeFeed,
+  removeChangeFeed,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
+import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
 import {
   checkLayoutSave,
   readLayout,
@@ -674,8 +673,10 @@ describe("saveLayout", () => {
       const rows = await inTx(v, (tx) =>
         tx
           .select()
-          .from(floorPlanTableParts)
-          .where(inArray(floorPlanTableParts.partTableId, partIds)),
+          .from(floorPlanTables)
+          .where(
+            and(inArray(floorPlanTables.id, partIds), isNotNull(floorPlanTables.partOfTableId)),
+          ),
       );
       expect(rows).toEqual([]);
     });
@@ -699,16 +700,19 @@ describe("saveLayout", () => {
     });
 
     it("saves the parts in the same statements, however many there are", async () => {
-      async function statementsFor(parts: number): Promise<number> {
+      async function statementsFor(parts: number, groups = 1): Promise<number> {
         const z = await zone();
         await save(z, { revision: 0, tables: [] });
         const keys = Array.from({ length: parts }, (_, i) => `p${i}`);
         const input: ZonePlanSave = {
           revision: 1,
-          tables: [
-            ...keys.map((key) => entry(key, fresh(key), { placement: null })),
-            entry("long", fresh("Long table"), { seats: 10, partKeys: keys }),
-          ],
+          tables: Array.from({ length: groups }, (_, group) => {
+            const members = keys.map((key) => `${group}-${key}`);
+            return [
+              ...members.map((key) => entry(key, fresh(key), { placement: null })),
+              entry(`long${group}`, fresh("Long table"), { seats: 10, partKeys: members }),
+            ];
+          }).flat(),
         };
         const at = await layoutOf(z);
         const counted = await inTx(v, async (tx) => {
@@ -720,11 +724,14 @@ describe("saveLayout", () => {
             prepare.mockRestore();
           }
         });
-        expect((await partsOf(z))[counted.saved.ids.long!]).toHaveLength(parts);
+        const written = await partsOf(z);
+        for (let group = 0; group < groups; group++)
+          expect(written[counted.saved.ids[`long${group}`]!]).toHaveLength(parts);
         return counted.statements;
       }
 
       expect(await statementsFor(4)).toBe(await statementsFor(2));
+      expect(await statementsFor(2, 3)).toBe(await statementsFor(2));
     });
   });
 
@@ -753,6 +760,46 @@ describe("saveLayout", () => {
     }
 
     expect(await statementsFor(5)).toBe(await statementsFor(2));
+  });
+
+  it("publishes no table metadata change when a saved group's placement alone changes", async () => {
+    const z = await zone();
+    await save(z, { revision: 0, tables: longTableEntries() });
+    const at = await layoutOf(z);
+    const read = await readDefault(z);
+    const input: ZonePlanSave = {
+      revision: read.revision,
+      tables: read.tables.map((table) => ({
+        id: table.id,
+        key: table.id,
+        label: table.label,
+        shortName: table.shortName ?? undefined,
+        seats: table.seats,
+        fixed: table.fixed,
+        placement: table.placement === null ? null : { ...table.placement, x: 30 },
+        partKeys: table.partIds,
+      })),
+    };
+    await installChangeFeed(v.db, [{ table: "floor_plan_tables", type: "floor_plan_tables" }]);
+    try {
+      await inTx(v, async (tx) => {
+        await saveLayout(tx, NONE, at, input, NOW);
+        expect(tx.all(sql`select payload from change_log`)).toEqual([]);
+      });
+      expect(await partsOf(z)).toEqual(
+        Object.fromEntries(read.tables.map((table) => [table.id, table.partIds])),
+      );
+      const moved = await readDefault(z);
+      expect(moved.tables.find((table) => table.partIds.length > 0)!.placement!.x).toBe(30);
+      await inTx(v, async (tx) => {
+        input.revision = moved.revision;
+        input.tables[0]!.label = fresh("Renamed member");
+        await saveLayout(tx, NONE, at, input, NOW);
+        expect(tx.all(sql`select payload from change_log`).length).toBeGreaterThan(0);
+      });
+    } finally {
+      removeChangeFeed(v.db);
+    }
   });
 
   it("accepts the plan it read sent back unchanged, each table with its own live table", async () => {
@@ -1148,7 +1195,7 @@ describe("saveLayout", () => {
         ids: {},
       });
       const sizes = await inTx(v, (tx) =>
-        tx.select().from(floorPlanTableSizes).where(eq(floorPlanTableSizes.planTableId, c3)),
+        tx.select().from(floorPlanPlacements).where(eq(floorPlanPlacements.planTableId, c3)),
       );
       expect(sizes).toEqual([]);
     });
@@ -1159,7 +1206,7 @@ describe("saveLayout", () => {
         tx.select({ id: floorPlans.id }).from(floorPlans).where(eq(floorPlans.zoneId, z)),
       );
       const sizes = await inTx(v, (tx) =>
-        tx.select().from(floorPlanTableSizes).where(eq(floorPlanTableSizes.planTableId, c3)),
+        tx.select().from(floorPlanPlacements).where(eq(floorPlanPlacements.planTableId, c3)),
       );
       expect(sizes).toMatchObject([{ planId: plan!.id, width: 2, height: 3 }]);
     });
@@ -1182,7 +1229,7 @@ describe("saveLayout", () => {
           const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
           try {
             await saveLayout(tx, NONE, at, input, NOW);
-            return prepare.mock.calls.filter(([sql]) => sql.includes("floor_plan_table_sizes"))
+            return prepare.mock.calls.filter(([sql]) => sql.includes("floor_plan_placements"))
               .length;
           } finally {
             prepare.mockRestore();
@@ -1461,8 +1508,7 @@ describe("short names", () => {
       });
       const setIds: string[] = [];
       for (const name of ["Standard", "Dinner"]) {
-        const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, { setId: row!.id, departmentId: dept.id, name });
+        const row = { id: await addFloorPlanSet(tx, { departmentId: dept.id, name }) };
         setIds.push(row!.id);
       }
       return { zoneId: inside.id, standard: setIds[0]!, dinner: setIds[1]! };

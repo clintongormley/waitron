@@ -11,7 +11,6 @@ import {
   departments,
   diningTables,
   floorPlanSets,
-  departmentFloorPlanSets,
   floorZones,
   readVenueClock,
   withTransaction,
@@ -58,10 +57,10 @@ it("deleted zones leave active zone reads while their department is retained", a
     const { document } = await buildMenuDocument(tx, menu.id);
     await publishMenu(tx, menu.id, menuDocumentHash(document), "person-1");
     await offerMenuThroughZone(tx, kept.id, menu.id);
-    const [set] = await tx.insert(floorPlanSets).values({}).returning();
-    await tx
-      .insert(departmentFloorPlanSets)
-      .values({ setId: set!.id, departmentId: department.id, name: "Dinner", isDefault: true });
+    const [set] = await tx
+      .insert(floorPlanSets)
+      .values({ departmentId: department.id, name: "Dinner", isDefault: true })
+      .returning();
     const tables = await tx
       .insert(diningTables)
       .values([

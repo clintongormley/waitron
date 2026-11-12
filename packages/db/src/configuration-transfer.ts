@@ -80,8 +80,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "floor_plans" },
     { name: "floor_plan_tables" },
     { name: "floor_plan_placements" },
-    { name: "floor_plan_table_parts" },
-    { name: "floor_plan_table_sizes" },
     {
       name: "print_agents",
       // `node_id` names a node of the exporting venue; the importing venue makes its own. The setup

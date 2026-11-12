@@ -1,6 +1,6 @@
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, isNotNull, isNull, eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -8,19 +8,13 @@ import {
   floorPlanPlacements,
   floorPlans,
   floorPlanSets,
-  floorPlanTableSizes,
   floorResetTables,
   floorTodayTables,
   floorTodayZones,
   type Transaction,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
-import {
-  createDepartment,
-  createServiceZone,
-  departmentFloorPlanSets,
-  linkFloorPlanSet,
-} from "@waitron/venue-service";
+import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { floorPlanSetsFor, layoutCounts } from "./floor-plan-sets.js";
 import { floorDeletionFor } from "./floor-delete.js";
@@ -70,8 +64,7 @@ async function department() {
 }
 
 async function addSet(tx: Transaction, departmentId: string, name: string): Promise<string> {
-  const setId = await sets().create(tx);
-  await linkFloorPlanSet(tx, { setId, departmentId, name });
+  const setId = await addFloorPlanSet(tx, { departmentId, name });
   return setId;
 }
 
@@ -130,11 +123,16 @@ describe("layoutCounts", () => {
 
 describe("the floor plan sets port", () => {
   it("creates an empty set", async () => {
-    const setId = await inTx(v, (tx) => sets().create(tx));
+    const d = await department();
+    const setId = await inTx(v, (tx) =>
+      addFloorPlanSet(tx, { departmentId: d.departmentId, name: "Empty" }),
+    );
     const rows = await inTx(v, (tx) =>
       tx.select().from(floorPlanSets).where(eq(floorPlanSets.id, setId)),
     );
-    expect(rows).toEqual([{ id: setId }]);
+    expect(rows).toEqual([
+      { id: setId, departmentId: d.departmentId, name: "Empty", isDefault: false },
+    ]);
     const layouts = await inTx(v, (tx) =>
       tx.select().from(floorPlans).where(eq(floorPlans.setId, setId)),
     );
@@ -260,7 +258,7 @@ describe("the floor plan sets port", () => {
 
   it("reads each zone's table count and each layout's revision and counts", async () => {
     const d = await department();
-    await save(d.dinner, d.zoneId, {
+    const { ids } = await save(d.dinner, d.zoneId, {
       revision: 0,
       tables: [
         entry("a", fresh("1")),
@@ -268,7 +266,21 @@ describe("the floor plan sets port", () => {
         entry("c", fresh("3"), { placement: null }),
       ],
     });
-    const empty = await inTx(v, (tx) => sets().create(tx));
+    await inTx(v, async (tx) => {
+      const [plan] = await tx
+        .select()
+        .from(floorPlans)
+        .where(and(eq(floorPlans.zoneId, d.zoneId), eq(floorPlans.setId, d.dinner)));
+      await tx.insert(floorPlanPlacements).values({
+        planId: plan!.id,
+        planTableId: ids.c!,
+        width: 4,
+        height: 6,
+      });
+    });
+    const empty = await inTx(v, (tx) =>
+      addFloorPlanSet(tx, { departmentId: d.departmentId, name: "Empty" }),
+    );
     const other = await inTx(v, (tx) =>
       createServiceZone(tx, { name: fresh("Bar"), departmentId: d.departmentId }),
     );
@@ -332,7 +344,7 @@ describe("the floor plan sets port", () => {
       }
     });
     expect(read.counts).toEqual({ tableCounts: new Map([[d.zoneId, 3]]), layouts: [] });
-    expect(read.sql.filter((q) => q.includes("floor_plan_table_parts"))).toEqual([]);
+    expect(read.sql.filter((q) => q.includes("part_of_table_id"))).toEqual([]);
   });
 
   it("reads only the layouts of the pairs asked for", async () => {
@@ -341,7 +353,9 @@ describe("the floor plan sets port", () => {
       revision: 0,
       tables: [entry("a", fresh("1")), entry("b", fresh("2"), { placement: null })],
     });
-    const empty = await inTx(v, (tx) => sets().create(tx));
+    const empty = await inTx(v, (tx) =>
+      addFloorPlanSet(tx, { departmentId: d.departmentId, name: "Empty" }),
+    );
     const other = await inTx(v, (tx) =>
       createServiceZone(tx, { name: fresh("Bar"), departmentId: d.departmentId }),
     );
@@ -415,12 +429,16 @@ describe("the floor plan sets port", () => {
     const planIds = plans.map((p) => p.id);
     expect(
       await inTx(v, (tx) =>
-        tx.select().from(floorPlanTableSizes).where(inArray(floorPlanTableSizes.planId, planIds)),
+        tx
+          .select()
+          .from(floorPlanPlacements)
+          .where(
+            and(inArray(floorPlanPlacements.planId, planIds), isNotNull(floorPlanPlacements.x)),
+          ),
       ),
     ).toHaveLength(1);
 
     await inTx(v, async (tx) => {
-      await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
       await floorDeletionFor(NONE).removeSets(tx, [d.dinner]);
     });
 
@@ -430,11 +448,11 @@ describe("the floor plan sets port", () => {
       placements: await tx
         .select()
         .from(floorPlanPlacements)
-        .where(inArray(floorPlanPlacements.planId, planIds)),
+        .where(and(inArray(floorPlanPlacements.planId, planIds), isNotNull(floorPlanPlacements.x))),
       sizes: await tx
         .select()
-        .from(floorPlanTableSizes)
-        .where(inArray(floorPlanTableSizes.planId, planIds)),
+        .from(floorPlanPlacements)
+        .where(and(inArray(floorPlanPlacements.planId, planIds), isNull(floorPlanPlacements.x))),
       today: await tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, d.zoneId)),
       reset: await tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, d.zoneId)),
       live: await tx.select().from(floorTodayTables),

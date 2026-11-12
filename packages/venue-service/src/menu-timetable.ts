@@ -9,7 +9,7 @@ import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import {
   catalogues,
   categories,
-  departmentFloorPlanSets,
+  floorPlanSets,
   departments,
   floorZones,
   menuPeriods,
@@ -391,13 +391,10 @@ async function writeMenuPeriod(
   const floorPlanSetId = period.floorPlanSetId ?? null;
   if (floorPlanSetId !== null) {
     const [own] = await tx
-      .select({ setId: departmentFloorPlanSets.setId })
-      .from(departmentFloorPlanSets)
+      .select({ setId: floorPlanSets.id })
+      .from(floorPlanSets)
       .where(
-        and(
-          eq(departmentFloorPlanSets.setId, floorPlanSetId),
-          eq(departmentFloorPlanSets.departmentId, departmentId),
-        ),
+        and(eq(floorPlanSets.id, floorPlanSetId), eq(floorPlanSets.departmentId, departmentId)),
       );
     if (own === undefined) throw new AppError("menu_period.invalid", { field: "floorPlanSetId" });
   }

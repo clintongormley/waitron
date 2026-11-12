@@ -14,7 +14,6 @@ export const VENUE_SERVICE_TABLES = [
   "sale_receipt_headers",
   "menu_periods",
   "menu_period_staff_menus",
-  "department_floor_plan_sets",
   "device_profile_service_access",
   "device_profile_zones",
   "device_zone_selections",
