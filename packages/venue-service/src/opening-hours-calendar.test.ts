@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { listVenueReadiness } from "./operations.js";
 import { randomUUID } from "node:crypto";
@@ -11,7 +11,6 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  floorZones,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
   locations,
@@ -319,10 +318,7 @@ async function monthVenue() {
         slots: [{ periodId, startsAt, endsAt }],
       }));
     const zone = async (name: string, displayOrder: number, departmentId: string) => {
-      const [row] = await tx
-        .insert(floorZones)
-        .values({ name, displayOrder })
-        .returning({ id: floorZones.id });
+      const row = await seedZone(tx, { name, displayOrder });
       await configureZone(tx, { zoneId: row!.id, departmentId });
       return row!.id;
     };
@@ -923,10 +919,7 @@ describe("a past day's range around a start change", () => {
         AFTER_RETURN,
         2,
       );
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Terrace", displayOrder: 1 })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: "Terrace", displayOrder: 1 });
       await configureZone(tx, { zoneId: zone!.id, departmentId: diningDepartment });
       await replaceZoneClosedWeek(
         tx,

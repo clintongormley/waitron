@@ -26,7 +26,12 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedTenant,
+  seedVenueSettings,
+  seedBusinessDay,
+  seedZone,
+} from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -73,10 +78,7 @@ async function fixture(
   });
   await seedBusinessDay(db, {});
   const scopedLocationId = location!.id;
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Terrace" })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: "Terrace" });
   const [station] = await db
     .insert(kitchenStations)
     .values({ name: "Terrace bar", isDefault: true })
@@ -1451,12 +1453,9 @@ describe("venue service management routes", () => {
         name: "Restaurant",
       })
     ).json()) as { id: string };
-    const [secondZone] = await db
-      .insert(floorZones)
-      .values({
-        name: "Dining room",
-      })
-      .returning({ id: floorZones.id });
+    const secondZone = await seedZone(db, {
+      name: "Dining room",
+    });
     await withTransaction(db, async (tx) => {
       await configureZone(tx, {
         zoneId: fx.zoneId,
@@ -3562,7 +3561,7 @@ describe("atomic zone editor save", () => {
 
   it("a duplicate name refuses without changing name or policy", async () => {
     const fx = await settingsFixture();
-    await db.insert(floorZones).values({ name: "Garden" });
+    await seedZone(db, { name: "Garden" });
     const before = await rawSettingsSnapshot();
     const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
     expect(response.status).toBe(409);
@@ -3602,10 +3601,7 @@ describe("atomic zone editor save", () => {
       if (kind === "deleted")
         await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
       if (kind === "unassigned") {
-        const [zone] = await db
-          .insert(floorZones)
-          .values({ name: "Unassigned" })
-          .returning({ id: floorZones.id });
+        const zone = await seedZone(db, { name: "Unassigned" });
         id = zone!.id;
       }
       if (kind === "unknown") id = randomUUID();

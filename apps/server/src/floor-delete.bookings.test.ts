@@ -5,14 +5,13 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   diningTables,
-  floorZones,
   floorTodayTables,
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { bookings } from "@waitron/bookings";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -51,10 +50,7 @@ for (const enabled of [true, false]) {
         operationDescription: "test",
       });
 
-      const [zone] = await suite.db
-        .insert(floorZones)
-        .values({ name: "Stream hierarchy" })
-        .returning();
+      const zone = await seedZone(suite.db, { name: "Stream hierarchy" });
       const [table] = await suite.db
         .insert(diningTables)
         .values({ zoneId: zone!.id, label: "T1" })
@@ -164,7 +160,7 @@ for (const enabled of [true, false]) {
           operationDescription: "test",
         });
 
-        const [zone] = await suite.db.insert(floorZones).values({ name: "Hierarchy" }).returning();
+        const zone = await seedZone(suite.db, { name: "Hierarchy" });
         const [table] = await suite.db
           .insert(diningTables)
           .values({ zoneId: zone!.id, label: "T1" })

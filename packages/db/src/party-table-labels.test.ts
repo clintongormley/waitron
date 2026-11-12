@@ -15,9 +15,8 @@ import {
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
 import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
-import { floorZones } from "./schema/floor-zones.js";
 import { parties, partyTables } from "./schema/parties.js";
-import { seedVenue } from "./testing/seed.js";
+import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 
@@ -58,10 +57,7 @@ describe("party table labels", () => {
         .values({ openedBy: OPERATOR })
         .returning({ id: parties.id });
       for (const table of tables) {
-        const [zone] = await tx
-          .insert(floorZones)
-          .values({ name: table.label })
-          .returning({ id: floorZones.id });
+        const zone = await seedZone(tx, { name: table.label });
         const [created] = await tx
           .insert(diningTables)
           .values({ id: table.id, label: table.label, zoneId: zone!.id })
@@ -589,10 +585,7 @@ describe("party table labels", () => {
 
   async function table(label: string): Promise<string> {
     const [row] = await inTx(async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: label })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: label });
       return tx
         .insert(diningTables)
         .values({ label, zoneId: zone!.id })

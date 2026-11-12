@@ -4,7 +4,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_TIME_ZONE,
   floorTodayTables,
-  floorZones,
   newId,
   nowIso,
   venueLocationId,
@@ -12,7 +11,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import "./errors.js";
@@ -41,10 +40,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
 }
 
 async function makeTable(label: string): Promise<string> {
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: label })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: label });
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (id, created_at, zone_id, label)
     values (${newId()}, ${nowIso()}, ${zone!.id}, ${label})

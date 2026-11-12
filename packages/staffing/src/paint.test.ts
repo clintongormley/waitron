@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -877,7 +877,7 @@ it("A724 keeps the sending department identity of every station range", async ()
       .insert(departments)
       .values({ name: "Takeaway", tradingName: "Takeaway" })
       .returning();
-    const [zone] = await tx.insert(floorZones).values({ name: "Counter" }).returning();
+    const zone = await seedZone(tx, { name: "Counter" });
     await configureZone(tx, { zoneId: zone!.id, departmentId: department!.id });
     const [period] = await tx
       .insert(menuPeriods)

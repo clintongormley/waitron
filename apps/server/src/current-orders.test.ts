@@ -22,7 +22,6 @@ import {
 } from "@waitron/catalogue";
 import {
   diningTables,
-  floorZones,
   orderGroups,
   partyTables,
   kitchenCourses,
@@ -36,7 +35,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 
@@ -772,10 +771,7 @@ describe("the reminder follows the party's department", () => {
     const s = await servedUpToGroupTwo(v);
     await inTx(async (tx) => {
       await setReleaseReminderInEveryDepartment(tx, 10);
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: `Bare ${randomUUID()}` })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: `Bare ${randomUUID()}` });
       await tx.update(diningTables).set({ zoneId: zone!.id }).where(eq(diningTables.id, s.tableId));
     });
 

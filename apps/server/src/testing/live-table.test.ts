@@ -1,6 +1,7 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { diningTables, floorZones, withTransaction } from "@waitron/db";
+import { diningTables, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createTable } from "./live-table.js";
@@ -12,12 +13,9 @@ describe("test live tables", () => {
   it("makes a table for a zone whose service policy the fixture has not installed yet", async () => {
     const v = await setupPartyVenue(suite.db);
     const result = await withTransaction(suite.db, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({
-          name: "Fixture zone",
-        })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, {
+        name: "Fixture zone",
+      });
       const { id } = await createTable(tx, v.cfg, {
         label: "Fixture table",
         zoneId: zone!.id,

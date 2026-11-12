@@ -241,15 +241,13 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       await tx.execute(sql`
       insert into floor_zones (id, name, created_at)
       values (${zoneId}, 'Counter', ${createdAt})`);
-      await tx.execute(sql`
-      insert into zone_service_policies
-        (zone_id, department_id, is_counter_default)
-      values (${zoneId}, ${departmentId}, true)`);
+      await tx.execute(
+        sql`update floor_zones set department_id = ${departmentId}, is_counter_default = true where id = ${zoneId}`,
+      );
       await tx.execute(sql`
       insert into department_sale_policies (department_id, order_start, paid_when)
       values (${departmentId}, 'counter', ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
-      await tx.execute(sql`
-      insert into zone_sale_policies (zone_id) values (${zoneId})`);
+
       await offerMenuThroughZone(tx, zoneId, cat.id, {
         makeDefault: true,
       });
@@ -1166,11 +1164,11 @@ describe("openTab service context", () => {
       const downstairsZone = await tx.execute<{ id: string }>(sql`
         insert into floor_zones (id, name, created_at)
         values (${randomUUID()}, 'Downstairs', ${nowIso()}) returning id`);
-      await tx.execute(sql`
-        insert into zone_service_policies (zone_id, department_id)
-        values (${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id})`);
       await tx.execute(
-        sql`insert into zone_sale_policies (zone_id, order_start) values (${downstairsZone.rows[0]!.id}, 'table')`,
+        sql`update floor_zones set department_id = ${department.rows[0]!.id} where id = ${downstairsZone.rows[0]!.id}`,
+      );
+      await tx.execute(
+        sql`update floor_zones set order_start = 'table' where id = ${downstairsZone.rows[0]!.id}`,
       );
       const upstairsBar = await createStation(tx, { name: "Upstairs bar" });
       const downstairsBar = await createStation(tx, { name: "Downstairs bar" });

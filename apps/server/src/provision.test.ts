@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -10,7 +10,6 @@ import {
   readDeploymentEnvironment,
   stampDeployment,
   kitchenStations,
-  floorZones,
   dayCutoverChanges,
   settings as businessDaySettingsTable,
   withTransaction,
@@ -437,7 +436,7 @@ describe("clearProvisionFixture", () => {
     );
     const zoneId = randomUUID();
     await withTransaction(db, async (tx) => {
-      await tx.insert(floorZones).values({ id: zoneId, name: "Terrace" });
+      await seedZone(tx, { id: zoneId, name: "Terrace" });
       await tx.execute(sql`insert into zone_service_policies (zone_id, department_id)
         select ${zoneId}, id from departments
          limit 1`);

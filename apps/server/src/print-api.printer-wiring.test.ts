@@ -7,7 +7,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfilePrinters,
   devices,
-  floorZones,
   kitchenStations,
   nowIso,
   pagePrinters,
@@ -26,7 +25,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
-import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -779,10 +778,7 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       .insert(departments)
       .values({ name: "Terrace", tradingName: "Terrace" })
       .returning({ id: departments.id });
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ name: `Terrace zone ${randomUUID()}` })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(suite.db, { name: `Terrace zone ${randomUUID()}` });
     const [till, display] = await seedDeviceProfiles(suite.db, [
       { name: `Terrace till ${randomUUID()}`, formFactor: "till" },
       { name: `Pass display ${randomUUID()}`, formFactor: "kds" },

@@ -1,16 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, sales, floorZones, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import {
   departments,
   orderServiceContexts,
   saleReceiptHeaders,
   departmentReceipts,
   departmentSalePolicies,
-  zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
@@ -44,15 +43,15 @@ async function fixture(nullHeader = false) {
     source: "readiness_test",
     orderNumber: 1,
   });
-  const [zone] = await suite.db.insert(floorZones).values({ name: "Dining zone" }).returning();
+  const zone = await seedZone(suite.db, { name: "Dining zone" });
   await suite.db
     .insert(departmentSalePolicies)
     .values([{ departmentId: primary!.id }, { departmentId: fallback!.id }]);
-  await suite.db.insert(zoneServicePolicies).values({
-    zoneId: zone!.id,
-    departmentId: primary!.id,
-  });
-  await suite.db.insert(zoneSalePolicies).values({ zoneId: zone!.id });
+  await suite.db
+    .update(floorZones)
+    .set({ departmentId: primary!.id })
+    .where(eq(floorZones.id, zone!.id));
+
   await suite.db.insert(orderServiceContexts).values({
     workingOrderId: order.id,
     zoneId: zone!.id,

@@ -24,7 +24,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { type BusinessDayClock } from "@waitron/shared";
 import {
   readDayPlan,
@@ -706,10 +706,7 @@ describe("special-day paint over the season", () => {
   it("reads special-day dates and their paint once, however many zones and days a call covers", async () => {
     const v = await venue();
     const third = await scoped(async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Bar", displayOrder: 2 })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: "Bar", displayOrder: 2 });
       await configureZone(tx, { zoneId: zone!.id, departmentId: v.departmentId });
       return zone!.id;
     });

@@ -5,14 +5,13 @@ import {
   CORE_MIGRATIONS,
   departments,
   diningTables,
-  floorZones,
   kitchenStations,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { listNeedsClearingDepartmentIds, readTablesNeedingClearing } from "./table-clearing.js";
 
@@ -68,10 +67,7 @@ describe("readTablesNeedingClearing", () => {
   it("leaves out a table whose zone has no department", async () => {
     await seedLocation("Clearing without department");
     const a = await departmentWithTable("A");
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: "No department" })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(db, { name: "No department" });
     const [table] = await db
       .insert(diningTables)
       .values({ zoneId: zone!.id, label: randomUUID() })

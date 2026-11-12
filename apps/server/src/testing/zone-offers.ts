@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogues, floorZones, products, readVenue } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -125,7 +126,7 @@ async function floorZone(tx: Transaction, name: string): Promise<string> {
   const where = and(eq(floorZones.name, name));
   const [existing] = await tx.select({ id: floorZones.id }).from(floorZones).where(where);
   if (existing !== undefined) return existing.id;
-  const [created] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
+  const created = await seedZone(tx, { name });
   return created!.id;
 }
 

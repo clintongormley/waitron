@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -12,7 +12,6 @@ import {
 import {
   CORE_MIGRATIONS,
   departmentDays,
-  floorZones,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
   locations,
@@ -219,10 +218,7 @@ async function autumnVenue() {
   });
   const venueId = await venueLocationId(db);
   const cfg: { locationId: string } = { locationId: venueId };
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Terrace", displayOrder: 0 })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: "Terrace", displayOrder: 0 });
   const stored = await db
     .insert(seasons)
     .values([

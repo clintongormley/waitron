@@ -4,14 +4,13 @@ import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   departments,
-  floorZones,
   kitchenStations,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { createDepartment, createServiceZone, updateDepartment } from "./operations.js";
 import {
   listDepartmentReminderMinutes,
@@ -83,10 +82,7 @@ describe("readReleaseReminderMinutesByZone", () => {
   it("leaves out a zone with no department, and an id that is no zone", async () => {
     await seedLocation("Reminder without department");
     const a = await departmentWithZone("A");
-    const [bare] = await db
-      .insert(floorZones)
-      .values({ name: "No department" })
-      .returning({ id: floorZones.id });
+    const bare = await seedZone(db, { name: "No department" });
     const unknown = randomUUID();
     const found = await scoped((tx) =>
       readReleaseReminderMinutesByZone(tx, [a.zoneId, bare!.id, unknown]),

@@ -21,7 +21,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
@@ -110,10 +110,7 @@ async function seedTodaySale(db: Database): Promise<void> {
  * while a party holds it, and an inactive table counts in neither.
  */
 async function seedDiningTables(db: Database): Promise<void> {
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Tables" })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: "Tables" });
   const [held, left, inactive] = await db
     .insert(diningTables)
     .values([
@@ -217,10 +214,7 @@ interface OverviewBody {
 
 describe("mountReportApi — /reports/overview", () => {
   it("counts only tables on today's plan in enabled zones", async () => {
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ name: "Closed", active: false })
-      .returning();
+    const zone = await seedZone(suite.db, { name: "Closed", active: false });
     const [absent, closed] = await suite.db
       .insert(diningTables)
       .values([
@@ -241,7 +235,7 @@ describe("mountReportApi — /reports/overview", () => {
   });
 
   it("counts a group's real tables under their own ids", async () => {
-    const [zone] = await suite.db.insert(floorZones).values({ name: "Counter" }).returning();
+    const zone = await seedZone(suite.db, { name: "Counter" });
     const tables = await suite.db
       .insert(diningTables)
       .values(

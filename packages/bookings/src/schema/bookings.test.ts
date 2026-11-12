@@ -5,7 +5,6 @@ import {
   captureError,
   CHECK_VIOLATION,
   diningTables,
-  floorZones,
   engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   locations,
@@ -13,7 +12,12 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedTenant,
+  seedVenueSettings,
+  seedBusinessDay,
+  seedZone,
+} from "@waitron/db/testing/seed.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "../testing/migrations.js";
 import { bookings } from "./bookings.js";
 
@@ -69,10 +73,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db, {});
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ name: "Booking zone" })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(suite.db, { name: "Booking zone" });
     await suite.db.insert(diningTables).values({ id: TABLE, label: "A1", zoneId: zone!.id });
   }
 

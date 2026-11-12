@@ -1188,8 +1188,7 @@ describe("a keep-open for tonight past the new changeover", () => {
             values (${zoneId}, 'Terrace', ${at.toISOString()})`,
       );
       await tx.execute(
-        sql`insert into zone_service_policies (zone_id, department_id)
-            values (${zoneId}, ${department.id})`,
+        sql`update floor_zones set department_id = ${department.id} where id = ${zoneId}`,
       );
       await tx.execute(
         sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)

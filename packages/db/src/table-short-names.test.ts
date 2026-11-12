@@ -2,14 +2,13 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorZones } from "./schema/floor-zones.js";
 import {
   SHORT_NAME_KEY_BATCH,
   shortNameColumns,
   storeTableShortNameKeys,
 } from "./table-short-names.js";
 import { withTransaction } from "./tenancy.js";
-import { seedVenue } from "./testing/seed.js";
+import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 describe("shortNameColumns", () => {
@@ -29,10 +28,7 @@ describe("storeTableShortNameKeys", () => {
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       });
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Zone" })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: "Zone" });
       const ids: string[] = [];
       for (const { label, shortName } of rows) {
         const [row] = await tx

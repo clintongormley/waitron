@@ -4,14 +4,13 @@ import { describe, expect, it } from "vitest";
 import {
   floorTodayTables,
   diningTables,
-  floorZones,
   withTransaction,
   type Database,
   venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -79,10 +78,7 @@ function mountApp(ctx: ModuleRouteContext): Hono {
 }
 
 async function seedTable(label = "12"): Promise<string> {
-  const [zone] = await suite.db
-    .insert(floorZones)
-    .values({ name: label })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(suite.db, { name: label });
   const [row] = await suite.db
     .insert(diningTables)
     .values({ label, zoneId: zone!.id })

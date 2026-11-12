@@ -7,7 +7,6 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   diningTables,
-  floorZones,
   kitchenStations,
   products,
   ticketItems,
@@ -17,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -93,10 +92,7 @@ async function seedFiredOrder(
     firedAt: firedAt.toISOString(),
   });
   if (opts.tableLabel !== undefined) {
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: `Tables ${orderId}` })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(db, { name: `Tables ${orderId}` });
     const [table] = await db
       .insert(diningTables)
       .values({ zoneId: zone!.id, label: opts.tableLabel })

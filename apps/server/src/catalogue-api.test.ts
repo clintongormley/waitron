@@ -10,7 +10,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import {
   categoryDetails,
@@ -30,7 +30,7 @@ import { ALL_MODULES } from "./modules.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { createCourse } from "./kitchen.js";
 import { setRoutingCell, createDepartment, configureZone } from "@waitron/venue-service";
-import { floorZones, kitchenStations } from "@waitron/db";
+import { kitchenStations } from "@waitron/db";
 
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -1725,7 +1725,7 @@ describe("mountCatalogueApi — products", () => {
         { row: { kind: "category", categoryId: drinks }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
-      const [terrace] = await tx.insert(floorZones).values({ name: "Terrace" }).returning();
+      const terrace = await seedZone(tx, { name: "Terrace" });
       const department = await createDepartment(tx, {
         name: "Dining",
         orderStart: "table",

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
   diningTables,
-  floorZones,
   kitchenStations,
   parties,
   withTransaction,
@@ -11,7 +10,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { saveServiceSteps } from "./service-steps.js";
 import {
@@ -117,10 +116,7 @@ describe("readTableStepRules", () => {
   it("leaves out a table whose zone has no department", async () => {
     const cfg = { locationId: await seedLocation("Steps without department") };
     const a = await departmentWithTables(cfg, "A");
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: "No department" })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(db, { name: "No department" });
     const [table] = await db
       .insert(diningTables)
       .values({ zoneId: zone!.id, label: randomUUID() })

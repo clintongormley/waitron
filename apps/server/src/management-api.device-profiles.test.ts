@@ -15,7 +15,7 @@ import {
 import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -1717,10 +1717,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     it("a stale previously stored deleted zone id is refused on profile save", async () => {
       const app = mountApp();
       const { grill } = await kitchenChoices();
-      const [zone] = await suite.db
-        .insert(floorZones)
-        .values({ name: uniqueName("Deleted profile zone") })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(suite.db, { name: uniqueName("Deleted profile zone") });
       const name = uniqueName("Stale pass");
       const kitchenScreens = { pass: { stationIds: [grill], zoneIds: [zone!.id] } };
       const created = await app.request("/management-api/device-profiles", {
@@ -1761,10 +1758,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     it("retained empty zone bound survives unrelated save and profile copy without widening", async () => {
       const app = mountApp();
       const { grill } = await kitchenChoices();
-      const [zone] = await suite.db
-        .insert(floorZones)
-        .values({ name: uniqueName("Emptied zone") })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(suite.db, { name: uniqueName("Emptied zone") });
       const name = uniqueName("Empty pass");
       const created = await app.request("/management-api/device-profiles", {
         method: "POST",

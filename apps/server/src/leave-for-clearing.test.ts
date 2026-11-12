@@ -1,9 +1,10 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { captureError, diningTables, floorTodayTables, floorZones } from "@waitron/db";
+import { captureError, diningTables, floorTodayTables } from "@waitron/db";
 import { createDepartment, createServiceZone, departments } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { leaveForClearing, markTableCleared } from "./parties.js";
@@ -49,7 +50,7 @@ describe("leaveForClearing", () => {
     const zoneId = randomUUID();
     const tableId = randomUUID();
     await inTx(v, async (tx) => {
-      await tx.insert(floorZones).values({ id: zoneId, name: `No department ${zoneId}` });
+      await seedZone(tx, { id: zoneId, name: `No department ${zoneId}` });
       await tx.insert(diningTables).values({
         id: tableId,
         label: "Table without department",
