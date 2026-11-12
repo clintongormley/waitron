@@ -46,6 +46,8 @@ import {
   type InvoiceDeliveryStatus,
   type PrinterOffer,
 } from "./invoice-delivery-status.js";
+import { VENUE_SERVICE } from "./modules.js";
+import type { LineNutrition } from "./line-nutrition.js";
 import "./errors.js";
 
 export const ORDER_STATUSES = [
@@ -571,6 +573,7 @@ export async function listOrderStaff(tx: Transaction): Promise<Person[]> {
 }
 
 export interface OrderLine {
+  sentNutrition: LineNutrition | null;
   lineNo: number;
   name: string;
   variantName: string | null;
@@ -786,7 +789,13 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
     .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(workingOrderLines.lineNo);
-  return foldIdenticalPortions(stored).map((line) => ({
+  const saved = await VENUE_SERVICE.readSentLineNutrition(
+    tx,
+    stored.map((line) => line.id),
+  );
+  const lines = stored.map((line) => ({ ...line, sentNutrition: saved.get(line.id) ?? null }));
+  return foldIdenticalPortions(lines).map((line) => ({
+    sentNutrition: line.sentNutrition,
     lineNo: line.lineNo,
     name: line.name,
     variantName: line.variantName,
@@ -798,6 +807,7 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
 }
 
 interface StoredBillLine {
+  sentNutrition: LineNutrition | null;
   id: string;
   parentLineId: string | null;
   name: string;
@@ -842,6 +852,19 @@ function foldIdenticalPortions<L extends StoredBillLine>(lines: readonly L[]): L
       line.sentAt !== null,
       line.servedAt !== null,
       line.servedQuantity,
+      line.sentNutrition === null
+        ? null
+        : [
+            line.sentNutrition.allergens === null
+              ? null
+              : Object.keys(line.sentNutrition.allergens)
+                  .sort()
+                  .map((code) => [
+                    code,
+                    [...new Set(line.sentNutrition!.allergens![code]!.kinds ?? [])].sort(),
+                  ]),
+            [...new Set(line.sentNutrition.dietaryDeclarations)].sort(),
+          ],
     ]);
   const byKey = new Map<string, { dish: L; extras: L[] }>();
   const folded = new Set<string>();
@@ -883,6 +906,7 @@ async function readSaleLines(tx: Transaction, saleId: string): Promise<OrderLine
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
   return rows.map((line) => ({
+    sentNutrition: null,
     lineNo: line.lineNo,
     name: line.name,
     variantName: line.variantName,

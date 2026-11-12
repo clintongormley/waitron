@@ -23,6 +23,7 @@ import type {
   OrderDetailDto,
   OrderRowDto,
 } from "../api/client.js";
+import { allergenLabel } from "../i18n/domain.js";
 import { holdReason } from "../i18n/a4-holds.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -153,6 +154,10 @@ export class OrderDetailDialog extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      .nutrition {
+        font-size: var(--wt-font-size-sm);
+        margin-block: var(--wt-space-1) var(--wt-space-3);
+      }
       section {
         margin-block: var(--wt-space-4);
       }
@@ -359,6 +364,26 @@ export class OrderDetailDialog extends LitElement {
       : html`<wt-form-actions slot="footer">${buttons}</wt-form-actions>`;
   }
 
+  #nutrition(nutrition: OrderDetailDto["lines"][number]["sentNutrition"]) {
+    if (nutrition === null)
+      return html`<div class="nutrition" data-sent-nutrition>
+        ${t("orders.detail.sent_not_recorded")}
+      </div>`;
+    const allergens =
+      nutrition.allergens === null
+        ? t("editor.allergens_unreviewed")
+        : Object.keys(nutrition.allergens).length === 0
+          ? t("editor.nutrition.contains_none")
+          : Object.entries(nutrition.allergens)
+              .map(([code, entry]) => allergenLabel(code, entry))
+              .join(", ");
+    return html`<div class="nutrition" data-sent-nutrition>
+      <div>${t("orders.detail.recorded_when_sent")}</div>
+      <div>${t("product.allergens")}: ${allergens}</div>
+      ${nutrition.dietaryDeclarations.length === 0 ? nothing : html`<div>${t("product.dietary_info")}: ${nutrition.dietaryDeclarations.map((label) => t(`editor.diet.${label}` as StringKey)).join(", ")}</div>`}
+    </div>`;
+  }
+
   override render() {
     const detail = this.detail;
     return html`<wt-dialog .open=${this.orderId !== null} heading=${t("orders.view")}>
@@ -369,7 +394,7 @@ export class OrderDetailDialog extends LitElement {
                 <section>
                   <h3>${t("orders.detail.lines")}</h3>
                   <ul>
-                    ${detail.lines.map((line) => html`<li>${staffPresentationName(line)} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill("orders.detail.was", { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill("orders.detail.served_by", { name: line.creditedTo })}`}</li>`)}
+                    ${detail.lines.map((line) => html`<li>${staffPresentationName(line)} × ${quantity(line.quantity)} — ${money(line.total)}${differsFromListPrice(line) ? html` (${fill("orders.detail.was", { price: money(line.listUnitPrice!) })})` : nothing}${line.creditedTo === null ? nothing : html` · ${fill("orders.detail.served_by", { name: line.creditedTo })}`}${this.#nutrition(line.sentNutrition)}</li>`)}
                   </ul>
                 </section>
                 <section>

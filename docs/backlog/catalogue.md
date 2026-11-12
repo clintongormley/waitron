@@ -1143,19 +1143,20 @@ What the design has to settle:
 not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
 11 November runtime checks and their limits. The owner accepted its recommendations at 22:01;
 the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-split the implementation into six follow-ups. The guest menu and Orders history detail remain open.
-The till's sent dishes retain declarations captured at first sending, while held dishes remain
-live until released. The [cleared sent-order/history plan](../superpowers/plans/2026-11-12-a1517-6-sent-allergen-history.md)
-leaves the Orders detail slice open.
+split the implementation into six follow-ups. The guest menu remains open.
 The proposal distinguishes the narrower measured cases from these original observations.
 
 1. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
    retired), no printed menu (A670) and no online menu yet (A509). The data-protection guide tells
    venues to put a notice "on the menu or allergen sheet".
-2. **Allergen icons on a sent order read the product as it is now**, not as it was when sold, so
-   a later edit changes what staff see on an earlier order.
 
 ## Decisions and deliberate limits
+
+- **Sent declarations (A1517 decision 6, owner 2026-11-11, “As recommended”).** Sent till dishes and
+  Orders history detail use declarations captured at the first send, including each extra's own
+  declaration. Held dishes stay live until released. Kitchen screens, paper and guest-clash checks
+  retain their live source. This is the sent-order/history exception to A1150; see the
+  [recorded owner decision](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11).
 
 - **Till sold-out choices (A1516, owner 2026-11-11, “All four as recommended”).** Anyone signed in
   on a take-orders device can stop and restore availability, with no new permission. Restoration

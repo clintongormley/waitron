@@ -485,10 +485,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/catalogue.md#a1515-set-lunch-menus-the-menú-del-día)
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
-  the recommendations; still to build: design A670's guest menu and show recorded declarations in
-  Orders history detail. The till's sent dishes now retain their first-send declarations; held
-  dishes remain live until released. The [sent-order/history plan](superpowers/plans/2026-11-12-a1517-6-sent-allergen-history.md)
-  leaves the Orders history slice open.
+  the recommendations; still to build: design A670's guest menu.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
 
@@ -628,8 +625,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
   read them from the published menu version, while the kitchen screen, the table's allergy check
   and unsent table lines read the live product (`apps/server/src/line-nutrition.ts`). Sent till
-  lines capture the live product at first sending under the owner’s 11-November A1517 decision 6,
-  even while the counter still displays an earlier published declaration. So the live readers disagree
+  lines and Orders history detail use the live product captured at first sending under the owner’s
+  11-November A1517 decision 6, even while the counter still displays an earlier published declaration. So the live readers disagree
   until the menu is published again, and nothing says which is which. The owner chose one source,
   the live product, the way availability already works. The design covers every reader of a
   version's `allergens`, `dietaryDeclarations` and `diet`, the publish warnings and change list

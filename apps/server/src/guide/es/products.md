@@ -431,6 +431,8 @@ Abre los detalles de un plato enviado para consultar **Registrado al enviar**. E
 describen el plato cuando lo enviaste, aunque después edites el producto. Los platos en espera
 mantienen sus declaraciones actuales hasta que los liberas. Usa la información actual de
 la cocina para preparar la comida.
+Para revisar una cuenta anterior, abre sus detalles en **Pedidos**. Las declaraciones guardadas
+aparecen debajo de cada plato y extra.
 
 Al añadir un plato con un filtro de alérgenos activo, solo puedes elegir tamaños y extras
 compatibles cuya declaración esté revisada. Los extras opcionales no ocultan el plato. Si un
