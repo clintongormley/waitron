@@ -57,9 +57,6 @@ export async function readCompletedReturns(tx: Transaction): Promise<Set<string>
     if (
       first &&
       group.length === first.batchCount &&
-      group.every(
-        (row, index) => row.batchIndex === index && row.batchCount === first.batchCount,
-      ) &&
       returnDigest(group.map((row) => row.batchDigest)) === first.inventory
     )
       completed.add(first.operationId);

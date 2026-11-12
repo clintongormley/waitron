@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -80,6 +81,7 @@ it("keeps separate inventories and requires the advertised digest to match", asy
 it("keeps the first count and digest, ignores identical retries, and cannot be completed with conflicting facts", async () => {
   await record(0);
   await record(0);
+  await record(0, { digest: "c".repeat(64) });
   await record(0, { digest: "c".repeat(64), count: 1 });
   await record(1, { count: 2 });
   expect(await suite.db.select().from(handoverReturnBatches)).toEqual([
@@ -91,15 +93,26 @@ it("keeps the first count and digest, ignores identical retries, and cannot be c
   expect(await completed()).toEqual(new Set([operationId]));
 });
 
-it("retains completion across reopened handles and a later venue copy", async () => {
+it("retains completion in a fresh process and a later venue copy", async () => {
   for (const index of [0, 1, 2]) await record(index);
   const directory = dirname(suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file);
-  const reopened = await openVenueDatabase(directory, { exclusive: false });
-  try {
-    expect(await readCompletedReturns(reopened.venue)).toEqual(new Set([operationId]));
-  } finally {
-    await reopened.close();
-  }
+  const child = spawnSync(
+    process.execPath,
+    [
+      "--import",
+      import.meta.resolve("tsx"),
+      "--input-type=module",
+      "-e",
+      `import {openVenueDatabase} from "@waitron/db";
+     import {readCompletedReturns} from ${JSON.stringify(new URL("./return-completion.ts", import.meta.url).href)};
+     const venue = await openVenueDatabase(${JSON.stringify(directory)}, {exclusive: false});
+     try { console.log(JSON.stringify([...await readCompletedReturns(venue.venue)])); }
+     finally { await venue.close(); }`,
+    ],
+    { encoding: "utf8", timeout: 30_000 },
+  );
+  expect(child.status, child.stderr).toBe(0);
+  expect(JSON.parse(child.stdout)).toEqual([operationId]);
   const copy = await mkdtemp(join(tmpdir(), "return-completion-copy-"));
   try {
     await suite.db.archiveTo(join(copy, "venue.db"));
@@ -112,4 +125,11 @@ it("retains completion across reopened handles and a later venue copy", async ()
   } finally {
     await rm(copy, { recursive: true, force: true });
   }
+});
+
+it("does not confirm a digest-matching prefix when more batches were advertised", async () => {
+  const prefixInventory = returnDigest(digests.slice(0, 2));
+  await record(0, { inventory: prefixInventory });
+  await record(1, { inventory: prefixInventory });
+  expect(await completed()).toEqual(new Set());
 });

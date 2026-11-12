@@ -64,13 +64,7 @@ export function mountReturnRecordsApi(
             accepted,
           );
           if (typeof complete !== "boolean") return complete;
-          if (
-            complete &&
-            operation?.role === "destination" &&
-            operation.scenario === "emergency" &&
-            operation.sourceNodeId === source &&
-            operation.destinationNodeId === deps.nodeId
-          ) {
+          if (complete && operation) {
             const [activation] = await tx
               .select({ operationId: handoverActivations.operationId })
               .from(handoverActivations)
