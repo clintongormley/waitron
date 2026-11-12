@@ -505,83 +505,96 @@ it.each(["save", "line", "move-dishes", "merge", "adjustment"] as const)(
   },
 );
 
-it("the move-dishes route refuses before admission ahead of a zone the till may not serve", async () => {
-  const { partyId, tabId } = await tableBill();
-  const cashTill = /=([0-9a-f-]{36})\./.exec(venue.cookieNoCard)![1]!;
-  const [{ profileId }] = venue.db.all<{ profileId: string }>(
-    sql`select device_profile_id as profileId from devices where id = ${cashTill}`,
-  );
-  const [previous] = await withTransaction(venue.db, (tx) =>
-    readProfileServiceScopes(tx, [profileId]),
-  );
-  try {
-    await withTransaction(venue.db, async (tx) => {
-      const [policy] = await tx
-        .select({ departmentId: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
-      const other = await createServiceZone(tx, {
-        name: `Other ${randomUUID()}`,
-        departmentId: policy!.departmentId,
-      });
-      await setProfileServiceAccess(tx, profileId, {
-        departmentId: policy!.departmentId,
-        allowedZoneIds: [other.id],
-        startingZoneId: other.id,
-      });
-    });
-    const answer = async (admission: TradingAdmission) => {
-      const app = new Hono();
-      mountTillApi(
-        app,
-        {
-          ...fiscal(admission),
-          cfg: venue.cfg,
-          secureCookies: false,
-          venueLocale: "en-GB",
-          pool: venue.pool,
-        },
-        quiet,
-      );
-      const expectedEdit = await withTransaction(venue.db, (tx) => readBillEditState(tx, tabId));
-      const lines = await venue.db
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, tabId));
-      const response = await app.request(`/api/bills/${tabId}/move-dishes`, {
-        method: "POST",
-        headers: { cookie: venue.cookieNoCard, "content-type": "application/json" },
-        body: JSON.stringify({
-          expectedEdits: [expectedEdit],
-          partyId,
-          expectedPartyRevision: venue.db.all<{ revision: number }>(
-            sql`select revision from parties where id = ${partyId}`,
-          )[0]!.revision,
-          lineIds: [lines[0]!.id],
-          toBillId: null,
-        }),
-      });
-      return { status: response.status, body: await response.json() };
-    };
-    const before = snapshot();
-    expect((await answer(ready)).body).toMatchObject({
-      error: { code: "service_zone.not_allowed" },
-    });
-    expect(await answer(closed("invalid"))).toEqual({
-      status: 409,
-      body: { error: { code: "venue.time_zone_not_ready", params: { reason: "invalid" } } },
-    });
-    expect(snapshot()).toEqual(before);
-  } finally {
-    await withTransaction(venue.db, (tx) =>
-      setProfileServiceAccess(tx, profileId, {
-        departmentId: previous!.departmentId,
-        allowedZoneIds: previous!.allowedZoneIds,
-        startingZoneId: previous!.startingZoneId,
-      }),
+it.each(["move-dishes", "merge"] as const)(
+  "the %s route refuses before admission ahead of a zone the till may not serve",
+  async (operation) => {
+    const { partyId, tabId } = await tableBill();
+    const fromBillId =
+      operation === "merge"
+        ? (
+            await withTransaction(venue.db, (tx) =>
+              splitPartyBill(tx, venue.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+            )
+          ).billId
+        : null;
+    const cashTill = /=([0-9a-f-]{36})\./.exec(venue.cookieNoCard)![1]!;
+    const [{ profileId }] = venue.db.all<{ profileId: string }>(
+      sql`select device_profile_id as profileId from devices where id = ${cashTill}`,
     );
-  }
-});
+    const [previous] = await withTransaction(venue.db, (tx) =>
+      readProfileServiceScopes(tx, [profileId]),
+    );
+    try {
+      await withTransaction(venue.db, async (tx) => {
+        const [policy] = await tx
+          .select({ departmentId: zoneServicePolicies.departmentId })
+          .from(zoneServicePolicies)
+          .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
+        const other = await createServiceZone(tx, {
+          name: `Other ${randomUUID()}`,
+          departmentId: policy!.departmentId,
+        });
+        await setProfileServiceAccess(tx, profileId, {
+          departmentId: policy!.departmentId,
+          allowedZoneIds: [other.id],
+          startingZoneId: other.id,
+        });
+      });
+      const answer = async (admission: TradingAdmission) => {
+        const app = new Hono();
+        mountTillApi(
+          app,
+          {
+            ...fiscal(admission),
+            cfg: venue.cfg,
+            secureCookies: false,
+            venueLocale: "en-GB",
+            pool: venue.pool,
+          },
+          quiet,
+        );
+        const expectedEdits = await withTransaction(venue.db, async (tx) => {
+          const edits = [];
+          for (const billId of [tabId, ...(fromBillId === null ? [] : [fromBillId])].sort())
+            edits.push(await readBillEditState(tx, billId));
+          return edits;
+        });
+        const lines = await venue.db
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, tabId));
+        const party = { partyId, expectedPartyRevision: partyRevision(partyId) };
+        const response = await app.request(`/api/bills/${tabId}/${operation}`, {
+          method: "POST",
+          headers: { cookie: venue.cookieNoCard, "content-type": "application/json" },
+          body: JSON.stringify(
+            fromBillId === null
+              ? { expectedEdits, ...party, lineIds: [lines[0]!.id], toBillId: null }
+              : { expectedEdits, ...party, fromBillId },
+          ),
+        });
+        return { status: response.status, body: await response.json() };
+      };
+      const before = snapshot();
+      expect((await answer(ready)).body).toMatchObject({
+        error: { code: "service_zone.not_allowed" },
+      });
+      expect(await answer(closed("invalid"))).toEqual({
+        status: 409,
+        body: { error: { code: "venue.time_zone_not_ready", params: { reason: "invalid" } } },
+      });
+      expect(snapshot()).toEqual(before);
+    } finally {
+      await withTransaction(venue.db, (tx) =>
+        setProfileServiceAccess(tx, profileId, {
+          departmentId: previous!.departmentId,
+          allowedZoneIds: previous!.allowedZoneIds,
+          startingZoneId: previous!.startingZoneId,
+        }),
+      );
+    }
+  },
+);
 
 it.each([
   "save",
