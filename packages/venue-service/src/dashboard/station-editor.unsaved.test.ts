@@ -23,6 +23,8 @@ class StationEditorLeaveApp extends LitElement {
           waitsForPass: false,
           bumpMode: "line",
           changesAfterSending: "held-or-waiting",
+          isDefault: false,
+          whenClosedSendsTo: null,
           printerIds: ["epson"],
           warmAfterMinutes: 3,
           overdueAfterMinutes: 5,

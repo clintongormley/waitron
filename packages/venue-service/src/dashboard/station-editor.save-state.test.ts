@@ -24,6 +24,8 @@ async function mount(printerIds = ["epson"], waitsForPass = false) {
     waitsForPass,
     bumpMode: "line",
     changesAfterSending: "held-or-waiting",
+    isDefault: false,
+    whenClosedSendsTo: null,
     printerIds,
     warmAfterMinutes: 3,
     overdueAfterMinutes: 5,

@@ -53,6 +53,7 @@ export interface PrepStation {
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
   colour: StationColour;
+  whenClosedSendsTo: string | null;
 }
 export interface PrepStationsView {
   routing: RoutingView;
@@ -147,6 +148,7 @@ export class PrepStationsApi {
           | "waitsForPass"
           | "bumpMode"
           | "changesAfterSending"
+          | "whenClosedSendsTo"
         > &
         StationTiming & {
           /** Needs `hardware.manage` as well, and an active station. */

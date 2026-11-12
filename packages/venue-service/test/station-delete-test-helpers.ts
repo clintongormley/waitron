@@ -55,6 +55,7 @@ export const stationView: PrepStationsView = {
       waitsForPass: false,
       bumpMode: "line",
       changesAfterSending: "held-or-waiting",
+      whenClosedSendsTo: null,
     },
   ],
   categories: [

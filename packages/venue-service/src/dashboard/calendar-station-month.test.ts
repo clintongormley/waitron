@@ -46,6 +46,7 @@ const STATIONS: PrepStation[] = [
   waitsForPass: false,
   bumpMode: "line",
   changesAfterSending: "held-or-waiting",
+  whenClosedSendsTo: null,
   showsRestOfOrder: false,
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,

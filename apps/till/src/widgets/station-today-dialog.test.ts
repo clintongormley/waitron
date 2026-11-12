@@ -6,8 +6,8 @@ import "./station-today-dialog.js";
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 const destinations = [
-  { id: "pass", name: "Pass", isDefault: true },
-  { id: "bar", name: "Bar", isDefault: false },
+  { id: "pass", name: "Pass", isDefault: true, preferred: false },
+  { id: "bar", name: "Bar", isDefault: false, preferred: false },
 ];
 async function mount(props: Partial<TillStationTodayDialog> = {}) {
   const { el } = await mountWidget<TillStationTodayDialog>("till-station-today-dialog", {
@@ -38,6 +38,35 @@ it("offers the default first, shows retained-dishes guidance and sends the chose
   await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
   expect(heard).toEqual([{ sendsToStationId: "bar" }]);
+});
+it("opens on the station's preferred destination, and still sends another the person picks", async () => {
+  const el = await mount({
+    destinations: [
+      { id: "pass", name: "Pass", isDefault: true, preferred: false },
+      { id: "bar", name: "Bar", isDefault: false, preferred: true },
+      { id: "pizza", name: "Pizza", isDefault: false, preferred: false },
+    ],
+  });
+  const field = el.shadowRoot!.querySelector("wt-combobox")!;
+  expect(field.value).toBe("bar");
+  const heard: unknown[] = [];
+  el.addEventListener("station-today-confirm", (e) => heard.push((e as CustomEvent).detail));
+  field.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "pizza" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(field.value).toBe("pizza");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+  expect(heard).toEqual([{ sendsToStationId: "pizza" }]);
+});
+it("opens on the default when no destination is preferred", async () => {
+  const el = await mount({
+    destinations: [
+      { id: "bar", name: "Bar", isDefault: false, preferred: false },
+      { id: "pass", name: "Pass", isDefault: true, preferred: false },
+    ],
+  });
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.value).toBe("pass");
 });
 it("replaces a vanished selection with the default and keeps the field refusal with a correction above the buttons", async () => {
   const el = await mount({ selected: "bar", refusal: "station.destination_invalid" });

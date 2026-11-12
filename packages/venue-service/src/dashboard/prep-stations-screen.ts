@@ -868,6 +868,8 @@ export class PrepStationsScreen extends LitElement {
           bumpMode: station.bumpMode,
           changesAfterSending: station.changesAfterSending,
           printerIds: this.#printersOf(station.id),
+          isDefault: station.isDefault,
+          whenClosedSendsTo: station.whenClosedSendsTo,
           warmAfterMinutes: station.warmAfterMinutes,
           overdueAfterMinutes: station.overdueAfterMinutes,
           forgottenAfterMinutes: station.forgottenAfterMinutes,
@@ -993,7 +995,9 @@ export class PrepStationsScreen extends LitElement {
     } catch (e) {
       if (!this.isConnected || identity !== this.#stationIdentity) return;
       const refusal = refusalOf(e);
-      const field = stationRefusalField(refusal);
+      const placed = stationRefusalField(refusal);
+      // The add form has no when-closed field, so a refusal naming it stays above the buttons.
+      const field = placed === "whenClosedSendsTo" ? undefined : placed;
       if (field === "name") this.#stationRefusal = { field, message: t("prep.name_taken") };
       else if (field === "colour")
         this.#stationRefusal = { field, message: t("prep.colour_invalid") };

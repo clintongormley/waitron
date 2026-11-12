@@ -170,6 +170,8 @@ adelantado los grupos en espera y si un plato ya enviado a ella se puede cambiar
 **Cambios tras el envío**: **No permitidos**, **Solo en
 espera** o **En espera o sin empezar**. También fija si sus platos esperan a que el pase los marche,
 en **Espera al pase**: consulta [Haz que una estación espere al pase](kitchen-service.md#station-waits).
+En **Al cerrar, enviar a** indica adónde van sus platos cuando cierra, y así **Cerrar por hoy**
+empieza con esa estación elegida.
 Un plato que la cocina ha empezado no se puede cambiar. Un plato que no fue a ninguna estación,
 sin ningún extra que fuera a una estación propia, se puede cambiar sea cual sea el ajuste de las estaciones.
 
