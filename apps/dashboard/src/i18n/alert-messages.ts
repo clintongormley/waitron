@@ -414,8 +414,8 @@ export const ALERT_MESSAGES: Readonly<
     es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente por una rectificación de factura que no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre el recibo en Buscar cuenta: devuelve el resto, o pulsa Registrar rectificación o Terminar ahora para emitirla por lo devuelto.${MORE_ES}`,
   },
   "invoice_correction.filing_refused": {
-    en: "A refund of {amount:money} for an invoice correction went through, but its corrective invoice could not be filed ({refusal}). Do not give the money back again. On a till, open the receipt in Find bill and press Record correction; if it says the invoice can no longer be corrected, press Close keeping the refunds.",
-    es: "Una devolución de {amount:money} por una rectificación de factura se hizo, pero no se ha podido emitir su factura rectificativa ({refusal}). No vuelvas a devolver el dinero. En una caja, abre el recibo en Buscar cuenta y pulsa Registrar rectificación; si indica que la factura ya no se puede rectificar, pulsa Cerrar conservando las devoluciones.",
+    en: `{moneyBack:money} went back to a customer for an invoice correction, but its corrective invoice could not be filed. Do not give the money back again. On a till, open the receipt in Find bill and press Record correction; if it says the invoice can no longer be corrected, press Close keeping the refunds.${MORE_EN}`,
+    es: `Se devolvieron {moneyBack:money} a un cliente por una rectificación de factura, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre el recibo en Buscar cuenta y pulsa Registrar rectificación; si indica que la factura ya no se puede rectificar, pulsa Cerrar conservando las devoluciones.${MORE_ES}`,
   },
   "route.dish_not_sent": {
     en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",

@@ -376,7 +376,7 @@ describe("automatic filing of a correction whose money is all back", () => {
         params: {
           correctionId,
           saleId: t.saleId,
-          amount: "10.00",
+          moneyBack: "10.00",
           refusal: "invoice_correction.chain_unsound",
         },
         severity: "error",
@@ -426,7 +426,7 @@ describe("automatic filing of a correction whose money is all back", () => {
         params: {
           correctionId,
           saleId: t.saleId,
-          amount: "10.00",
+          moneyBack: "10.00",
           refusal: "authorization.not_permitted",
         },
         severity: "error",
@@ -467,6 +467,40 @@ describe("automatic filing of a correction whose money is all back", () => {
       authorizedBy: v.adminId,
     });
   });
+
+  it("takes no write lock for a correction whose approver's refusal is already alerted, and files once the approver is active again", async () => {
+    const [approver] = await v.db
+      .insert(persons)
+      .values({ displayName: "Marta", pinHash: hashPin("6666"), role: "manager" })
+      .returning({ id: persons.id });
+    const t = await paidOnTheReader();
+    const correctionId = await open(t.saleId, "10.00", approver!.id);
+    await v.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, approver!.id));
+    expect(await cardLeg(t, correctionId, "10.00")).toMatchObject({ state: "completed" });
+    expect(await alertsFor(t.saleId, FILING_REFUSED)).toHaveLength(1);
+    // An hour before any case's first refund, so no correction is due the unfinished alert.
+    const nothingDue = new Date("2026-10-14T08:00:00.000Z");
+
+    let lock = vi.spyOn(v.db, "withWriteLock");
+    try {
+      at(1);
+      await sweepInvoiceCorrections(v.deps, nothingDue);
+      expect(lock).not.toHaveBeenCalled();
+      expect(await correctionOf(correctionId)).toMatchObject({ state: "open" });
+
+      lock.mockRestore();
+      await v.db.update(persons).set({ status: "active" }).where(eq(persons.id, approver!.id));
+      lock = vi.spyOn(v.db, "withWriteLock");
+      at(2);
+      await sweepInvoiceCorrections(v.deps, nothingDue);
+      expect(lock).toHaveBeenCalledOnce();
+      expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
+      expect(await alertsFor(t.saleId, FILING_REFUSED)).toHaveLength(1);
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
   it("answers a saved card leg as completed when its automatic filing throws, and the next pass files it", async () => {
     const t = await paidOnTheReader();
     const correctionId = await open(t.saleId, "10.00");

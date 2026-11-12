@@ -1,4 +1,4 @@
-import { and, eq, isNull, notExists, sql } from "drizzle-orm";
+import { and, eq, isNull, notExists, sql, type SQLWrapper } from "drizzle-orm";
 import { recordIncidentOnce } from "@waitron/core";
 import {
   incidents,
@@ -27,6 +27,23 @@ import "./errors.js";
 const UNFINISHED_MS = 3_600_000;
 const ORIGIN = jobOrigin("payment_check");
 
+/** The payment check's open, unhandled alert of `code` on the ticket `saleId`: the rows
+ * `recordIncidentOnce` finds already open, by `incidents_open_dedup`'s own key. */
+function openAlert(db: Transaction, code: string, saleId: string | SQLWrapper) {
+  return db
+    .select({ id: incidents.id })
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.source, ORIGIN.source),
+        sql`case when ${incidents.deviceId} is null then '' else ${incidents.deviceId} end = ''`,
+        eq(incidents.code, code),
+        eq(incidents.saleId, saleId),
+        isNull(incidents.acknowledgedAt),
+      ),
+    );
+}
+
 /** Open corrections whose earliest completed refund is before `cutoff` and whose ticket has no
  * unhandled unfinished alert yet, each with the money its completed refunds gave back, as raw
  * cents text, and that earliest completion. */
@@ -54,19 +71,7 @@ function dueCorrections(db: Transaction, cutoff: string) {
       and(
         eq(invoiceCorrections.state, "open"),
         notExists(
-          db
-            .select({ id: incidents.id })
-            .from(incidents)
-            .where(
-              and(
-                eq(incidents.source, ORIGIN.source),
-                // `incidents_open_dedup`'s own key, which `recordIncidentOnce` dedupes on.
-                sql`case when ${incidents.deviceId} is null then '' else ${incidents.deviceId} end = ''`,
-                eq(incidents.code, "invoice_correction.unfinished"),
-                eq(incidents.saleId, invoiceCorrections.originalSaleId),
-                isNull(incidents.acknowledgedAt),
-              ),
-            ),
+          openAlert(db, "invoice_correction.unfinished", invoiceCorrections.originalSaleId),
         ),
       ),
     )
@@ -91,10 +96,10 @@ async function settledCorrections(db: Transaction): Promise<string[]> {
  * Files, when `fileSettled`, every open correction whose money is all back
  * (`fileCorrectionAutomatically`), then raises `invoice_correction.unfinished` for every open
  * correction whose earliest completed refund is over an hour old and whose ticket's alert is not
- * already open. The first reads run outside the write lock, so a pass with nothing to do holds up
- * no sale; the write transaction reads again, so a correction filed in between raises nothing. A
- * correction whose filing throws something other than a refusal leaves the others to be filed and
- * alerted, and is thrown after them.
+ * already open. The first reads run outside the write lock, so a pass with no correction to file
+ * or retry and no alert to raise holds up no sale; the write transaction reads again, so a
+ * correction filed in between raises nothing. A correction whose filing throws something other than
+ * a refusal leaves the others to be filed and alerted, and is thrown after them.
  */
 export async function sweepInvoiceCorrections(
   deps: TenderRefundDeps,
@@ -152,10 +157,11 @@ export function raiseCorrectionUnfinished(
 /**
  * Files the open correction `correctionId` on its opening approval
  * (`{ invoiceCorrectionId }`), under the device that opened it, once its refunds have given all
- * its money back with none pending; does nothing otherwise. Before trying, it checks what no later
- * attempt can get past: the approver still active and holding `sale.rectify`, and a filing Close
- * could end the correction over. A refusal, there or from the filing, files nothing, raises
- * `invoice_correction.filing_refused` once per ticket while it is open, and is not thrown.
+ * its money back with none pending; does nothing otherwise. Before trying, it checks that the
+ * approver is still active and holds `sale.rectify`, and that the filing is not refused for a reason
+ * Close could end the correction over; while either fails it attempts no filing. A refusal, there
+ * or from the filing, files nothing, raises `invoice_correction.filing_refused` once per ticket
+ * while it is open, and is not thrown.
  */
 export async function fileCorrectionAutomatically(
   deps: TenderRefundDeps,
@@ -191,6 +197,10 @@ export async function fileCorrectionAutomatically(
     refusal = error;
   }
   if (refusal === null) return;
+  if (
+    (await openAlert(deps.db, "invoice_correction.filing_refused", row.originalSaleId)).length > 0
+  )
+    return;
   const refused = refusal;
   await withTransaction(deps.db, (tx) =>
     recordIncidentOnce(tx, {
@@ -199,7 +209,7 @@ export async function fileCorrectionAutomatically(
       error: new AppError("invoice_correction.filing_refused", {
         correctionId,
         saleId: row.originalSaleId,
-        amount: centsToDecimal(completed),
+        moneyBack: centsToDecimal(completed),
         refusal: refused.code,
       }),
       severity: "error",

@@ -697,7 +697,7 @@ declare module "@waitron/shared" {
     "invoice_correction.filing_refused": {
       correctionId: string;
       saleId: string;
-      amount: string;
+      moneyBack: string;
       refusal: string;
     };
     /** The bill cannot be closed as a deferred payment: it is not one whole, positive bill. */

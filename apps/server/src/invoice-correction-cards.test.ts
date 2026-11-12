@@ -202,46 +202,49 @@ describe("a correction's connected card legs", () => {
     expect(leg.state).toBe("pending");
     expect(await read(correction.id)).toMatchObject({ pending: "10.00", fileNow: null });
     expect(await inTx(v, (tx) => endSession(tx, session.token))).toBe(true);
-    await inTx(v, (tx) => endDeviceSessions(tx, v.deviceId));
-    expect(
-      await v.db
-        .select({ id: sessions.id })
-        .from(sessions)
-        .where(and(eq(sessions.personId, v.adminId), isNull(sessions.endedAt))),
-    ).toEqual([]);
-    const before = salesCount();
+    try {
+      await inTx(v, (tx) => endDeviceSessions(tx, v.deviceId));
+      expect(
+        await v.db
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(and(eq(sessions.personId, v.adminId), isNull(sessions.endedAt))),
+      ).toEqual([]);
+      const before = salesCount();
 
-    // Control: a pass while the card company still answers pending files nothing.
-    await recoverTenderRefunds(v.deps);
-    expect(await read(correction.id)).toMatchObject({ state: "open", pending: "10.00" });
-    expect(salesCount()).toBe(before);
+      // Control: a pass while the card company still answers pending files nothing.
+      await recoverTenderRefunds(v.deps);
+      expect(await read(correction.id)).toMatchObject({ state: "open", pending: "10.00" });
+      expect(salesCount()).toBe(before);
 
-    expect(await confirmedByThePass(leg.id)).toMatchObject({ state: "completed" });
+      expect(await confirmedByThePass(leg.id)).toMatchObject({ state: "completed" });
 
-    expect(salesCount()).toBe(before + 1);
-    const filed = await read(correction.id);
-    expect(filed).toMatchObject({
-      state: "filed",
-      moneyBack: "24.20",
-      pending: "0.00",
-      left: "0.00",
-      fileNow: null,
-    });
-    const [corrective] = await v.db
-      .select()
-      .from(sales)
-      .where(eq(sales.id, filed.correctiveSaleId!));
-    expect(corrective).toMatchObject({
-      correctsSaleId: t.saleId,
-      total: -2420,
-      authorizedBy: v.adminId,
-    });
-    // Later cases sign in through the venue's operator session.
-    v.operator.sessionId = (
-      await inTx(v, (tx) =>
-        loginWithPin(tx, { deviceId: v.deviceId, personId: v.adminId, pin: "1234" }),
-      )
-    ).id;
+      expect(salesCount()).toBe(before + 1);
+      const filed = await read(correction.id);
+      expect(filed).toMatchObject({
+        state: "filed",
+        moneyBack: "24.20",
+        pending: "0.00",
+        left: "0.00",
+        fileNow: null,
+      });
+      const [corrective] = await v.db
+        .select()
+        .from(sales)
+        .where(eq(sales.id, filed.correctiveSaleId!));
+      expect(corrective).toMatchObject({
+        correctsSaleId: t.saleId,
+        total: -2420,
+        authorizedBy: v.adminId,
+      });
+    } finally {
+      // Later cases sign in through the venue's operator session.
+      v.operator.sessionId = (
+        await inTx(v, (tx) =>
+          loginWithPin(tx, { deviceId: v.deviceId, personId: v.adminId, pin: "1234" }),
+        )
+      ).id;
+    }
   });
 
   it("files for the money back when a card leg failed", async () => {
