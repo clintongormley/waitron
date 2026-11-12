@@ -50,7 +50,7 @@ jobs:
   # Package scope is shared with the push hook. Full verification also enables coverage.
   changes:
     if: ${{ !inputs.server_probe }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && fromJSON(format('["self-hosted",{0},"waitron-drill-20261112-i"]', toJSON(format('{0}-{1}-{2}-{3}-changes-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       contents: read
