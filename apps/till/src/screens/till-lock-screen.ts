@@ -351,6 +351,13 @@ export class TillLockScreen extends LitElement {
       <div class="screen">
         ${this.#renderLogo()} ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
         ${
+          this.clockNotice === undefined
+            ? nothing
+            : html`<p class="clock status" role="status" data-clock-notice>
+                ${staffNoticeText(this.clockNotice).main}
+              </p>`
+        }
+        ${
           this.devMode
             ? html`<wt-button
                 class="switch-device"
@@ -365,13 +372,6 @@ export class TillLockScreen extends LitElement {
         ${this.#renderPoweredBy()}
       </div>
       ${this.#renderServers()}
-      ${
-        this.clockNotice === undefined
-          ? nothing
-          : html`<p class="clock status" role="status" data-clock-notice>
-              ${staffNoticeText(this.clockNotice).main}
-            </p>`
-      }
     `;
   }
 
