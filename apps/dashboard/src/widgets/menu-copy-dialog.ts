@@ -3,8 +3,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
+  bottomMessage,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -37,7 +38,7 @@ export class MenuCopyDialog extends LitElement {
   @property({ attribute: false }) api!: Pick<DashboardApi, "duplicateCatalogue">;
   @state() private name = "";
   @state() private busy = false;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   @state() private requestError: { message: string; field: boolean } | null = null;
   private scope?: DraftScope<string>;
   private leave?: LeaveCoordinator;
@@ -73,7 +74,7 @@ export class MenuCopyDialog extends LitElement {
       this.reset();
       this.opening = this.menu.id;
       this.name = "";
-      this.attempted = false;
+      this.feedback.attempted = false;
       this.requestError = null;
     }
     if (!this.scope && this.isConnected) {
@@ -113,11 +114,10 @@ export class MenuCopyDialog extends LitElement {
       saveActionState(this.scope).unchanged
     )
       return;
-    this.attempted = true;
+    this.feedback.press();
     this.requestError = null;
     if (this.ownError) {
-      await this.updateComplete;
-      void focusFirstInvalid(this.shadowRoot!);
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const generation = this.generation;
@@ -148,15 +148,13 @@ export class MenuCopyDialog extends LitElement {
     const save = saveActionState(this.scope);
     const error = this.requestError?.field
       ? this.requestError.message
-      : this.attempted
+      : this.feedback.attempted
         ? this.ownError
         : "";
-    const bottom = [
+    const bottom = bottomMessage(
       this.requestError && !this.requestError.field ? this.requestError.message : "",
       error ? t("form.fix_fields") : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    );
     const generation = this.generation;
     return keyed(
       generation,
@@ -203,7 +201,7 @@ export class MenuCopyDialog extends LitElement {
           <wt-button
             data-test="copy"
             variant=${save.variant}
-            ?disabled=${save.unchanged || this.busy || (this.attempted && !!this.ownError)}
+            ?disabled=${save.unchanged || this.busy || (this.feedback.attempted && !!this.ownError)}
             ?loading=${this.busy}
             @click=${() => void this.copy()}
             >${t("menus.copy_action")}</wt-button
