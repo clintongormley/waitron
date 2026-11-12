@@ -2293,6 +2293,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
   The backup-api.route and mirror-bundle-api suites use English staff display-name samples.
   The cancel-invoiced-order and unpaid-departure suites use Sophia for their local supervisor samples.
+  The device-equipment and device-levers suites use English staff display-name samples.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,

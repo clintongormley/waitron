@@ -96,7 +96,7 @@ async function fixture() {
   );
   const [ana] = await suite.db
     .insert(persons)
-    .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "admin" })
+    .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "admin" })
     .returning({ id: persons.id });
   /** A seated party with one Burger held in a group of its own. */
   const heldBurger = async () => {
@@ -637,7 +637,7 @@ describe("a till's session Fire", () => {
     });
     expect(current.status).toBe(200);
     const read = (await current.json()) as { groups: { id: string; sentBy: string | null }[] };
-    expect(read.groups.find((group) => group.id === held.groupId)?.sentBy).toBe("Ana");
+    expect(read.groups.find((group) => group.id === held.groupId)?.sentBy).toBe("Anna");
   });
 });
 
