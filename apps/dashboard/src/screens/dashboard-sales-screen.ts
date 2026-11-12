@@ -377,7 +377,7 @@ export class SalesScreen extends LitElement {
     }
   }
 
-  async #exportTransfer(): Promise<void> {
+  async #exportDeferred(): Promise<void> {
     if (this.exporting || this.#exportBlocked()) return;
     // The fields stay editable while the file is asked for.
     const sent = { from: this.from, to: this.to };
@@ -385,7 +385,7 @@ export class SalesScreen extends LitElement {
     this.exportErrorKey = null;
     const generation = this.#exportGeneration;
     try {
-      const file = await this.api.downloadClosedByTransfer(sent);
+      const file = await this.api.downloadDeferredPayments(sent);
       const url = URL.createObjectURL(file);
       const link = document.createElement("a");
       link.href = url;
@@ -518,11 +518,11 @@ export class SalesScreen extends LitElement {
       <div class="export">
         <wt-button
           variant="secondary"
-          data-test="export-transfer"
+          data-test="export-deferred"
           ?disabled=${this.#exportBlocked()}
           ?loading=${this.exporting}
-          @click=${() => void this.#exportTransfer()}
-          >${t("sales.export_transfer")}</wt-button
+          @click=${() => void this.#exportDeferred()}
+          >${t("sales.export_deferred")}</wt-button
         >
         ${
           this.exportErrorKey
@@ -800,7 +800,7 @@ export class SalesScreen extends LitElement {
         <tbody>
           ${cash.byOrigin.map((origin) =>
             origin.byMethod
-              .filter((line) => line.method !== "transfer")
+              .filter((line) => line.method !== "deferred")
               .map(
                 (line) =>
                   html`<tr
@@ -823,9 +823,9 @@ export class SalesScreen extends LitElement {
         </tfoot>
       </table>
       ${renderMetric(
-        t("sales.to_be_paid_by_transfer"),
-        money(summary.toBePaidByTransfer),
-        "transfer-total",
+        t("sales.deferred_payments"),
+        money(summary.deferredPayments),
+        "deferred-total",
       )}
     `;
   }

@@ -308,33 +308,27 @@ describe("DEFAULT_DEVICE_PROFILES", () => {
   });
 });
 
-describe("close-by-transfer profile action", () => {
+describe("close-deferred profile action", () => {
   it("is in no default profile", () => {
     for (const ff of FORM_FACTORS)
-      expect(DEFAULT_PROFILE_CAPABILITIES[ff], ff).not.toContain("close-by-transfer");
+      expect(DEFAULT_PROFILE_CAPABILITIES[ff], ff).not.toContain("close-deferred");
     for (const profile of DEFAULT_DEVICE_PROFILES)
-      expect(profile.capabilities, profile.name).not.toContain("close-by-transfer");
+      expect(profile.capabilities, profile.name).not.toContain("close-deferred");
   });
 
   it("is accepted on a till and refused on a shared display", () => {
-    expect(validateCapabilities(["close-by-transfer"], "till")).toEqual(["close-by-transfer"]);
-    expect(() => validateCapabilities(["close-by-transfer"], "kds")).toThrow(
+    expect(validateCapabilities(["close-deferred"], "till")).toEqual(["close-deferred"]);
+    expect(() => validateCapabilities(["close-deferred"], "kds")).toThrow(
       expect.objectContaining({
         code: "device_profile.invalid",
         params: { reason: "shared_display_action" },
       }),
     );
     expect(
-      profileAllows(
-        { formFactor: "till", capabilities: ["close-by-transfer"] },
-        "close-by-transfer",
-      ),
+      profileAllows({ formFactor: "till", capabilities: ["close-deferred"] }, "close-deferred"),
     ).toBe(true);
     expect(
-      profileAllows(
-        { formFactor: "kds", capabilities: ["close-by-transfer"] },
-        "close-by-transfer",
-      ),
+      profileAllows({ formFactor: "kds", capabilities: ["close-deferred"] }, "close-deferred"),
     ).toBe(false);
   });
 });

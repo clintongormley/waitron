@@ -124,7 +124,7 @@
   "src/schema/tender-refunds.ts": 212.2,
   "src/schema/ticket-item-moves.ts": 42.7,
   "src/schema/ticket-items.ts": 71.3,
-  "src/schema/transfer-closures.ts": 82.4,
+  "src/schema/deferred-closures.ts": 82.4,
   "src/schema/unpaid-departures.ts": 67.3,
   "src/schema/venue-service/bill-identities.ts": 64.9,
   "src/schema/venue-service/department-receipts.ts": 25.7,

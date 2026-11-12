@@ -443,8 +443,8 @@ export function buildReceiptDocument({
   } else if (t.method === "cash") {
     row(label.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
     row(label.change, formatMoney(t.change, locale));
-  } else if (t.method === "transfer") {
-    text(label.toBePaidByTransfer);
+  } else if (t.method === "deferred") {
+    text(label.deferredPayment);
   } else if (t.method === "card") {
     text(label.card);
     if (t.reference !== null) text(`${label.reference} ${t.reference}`);

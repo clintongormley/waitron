@@ -88,8 +88,8 @@ function typeCases(tx: Transaction) {
     data: { term: "3" },
   });
   void recordActivity(tx, {
-    kind: "transfer_export.downloaded",
-    subjectId: "closed-by-transfer",
+    kind: "deferred_payment_export.downloaded",
+    subjectId: "deferred-payment-export",
     personId: null,
     // @ts-expect-error the download names no customer from the file
     data: { from: "2026-11-01", to: "2026-11-02", rows: 1, customerTaxId: "x" },

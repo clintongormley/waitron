@@ -208,7 +208,7 @@ describe("settled-tender refundable balances", () => {
     expect(await read(completed.saleId)).toEqual([]);
   });
 
-  it.each(["voucher", "transfer", "other"] as const)(
+  it.each(["voucher", "deferred", "other"] as const)(
     "does not offer the unsupported %s tender",
     async (method) => {
       const target = await paid(method);

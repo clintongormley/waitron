@@ -14,8 +14,8 @@ import { AppError } from "@waitron/shared";
 import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
 import { partyFamily } from "../parties.js";
 import { systemClock } from "../till-backend.js";
-import { closeBillByTransferTx, type TransferCloseDeps } from "../transfer-close.js";
-import type { CloseByTransferRequest } from "../transfer-close-types.js";
+import { closeBillDeferredTx, type DeferredCloseDeps } from "../deferred-close.js";
+import type { CloseDeferredRequest } from "../deferred-close-types.js";
 import { parkOrder } from "../working-order.js";
 import { inTx, provisionBillVenue, type BillVenue } from "./bill-venue.js";
 import { issueOrderInvoice } from "./issue-order.js";
@@ -42,7 +42,7 @@ export const RECIPIENT = {
 };
 
 /** A Veri*Factu bill venue with a Counter zone and a taxpayer domicile, for full invoices. */
-export async function transferCloseVenue(db: Database) {
+export async function deferredCloseVenue(db: Database) {
   const venue = await provisionBillVenue(db);
   const counterZone = (
     await inTx(venue, (tx) =>
@@ -50,13 +50,13 @@ export async function transferCloseVenue(db: Database) {
     )
   ).zoneId;
   await inTx(venue, (tx) => tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }));
-  return transferCloseKit(venue, counterZone);
+  return deferredCloseKit(venue, counterZone);
 }
 
-export type TransferCloseKit = ReturnType<typeof transferCloseKit>;
+export type DeferredCloseKit = ReturnType<typeof deferredCloseKit>;
 
-export function transferCloseKit(venue: BillVenue, counterZone: string) {
-  function depsWith(over: Partial<TransferCloseDeps> = {}): TransferCloseDeps {
+export function deferredCloseKit(venue: BillVenue, counterZone: string) {
+  function depsWith(over: Partial<DeferredCloseDeps> = {}): DeferredCloseDeps {
     return {
       db: venue.db,
       backend: venue.backend,
@@ -68,12 +68,12 @@ export function transferCloseKit(venue: BillVenue, counterZone: string) {
   }
 
   function close(
-    request: CloseByTransferRequest,
+    request: CloseDeferredRequest,
     deps = depsWith(),
     as: { actorId?: string; cfg?: BillVenue["cfg"] } = {},
   ) {
     return withTransaction(venue.db, (tx) =>
-      closeBillByTransferTx(tx, deps, as.cfg ?? venue.cfg, request, as.actorId ?? venue.operatorId),
+      closeBillDeferredTx(tx, deps, as.cfg ?? venue.cfg, request, as.actorId ?? venue.operatorId),
     );
   }
 
@@ -89,8 +89,8 @@ export function transferCloseKit(venue: BillVenue, counterZone: string) {
     billId: string,
     expectedTotal: string,
     partyId: string | null,
-    over: Partial<CloseByTransferRequest> = {},
-  ): Promise<CloseByTransferRequest> {
+    over: Partial<CloseDeferredRequest> = {},
+  ): Promise<CloseDeferredRequest> {
     return inTx(venue, async (tx) => {
       const [order] = await tx
         .select({ revision: workingOrders.revision, invoiceType: workingOrders.invoiceType })

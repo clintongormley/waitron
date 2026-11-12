@@ -220,9 +220,9 @@ export class OverviewScreen extends LitElement {
           )}
           ${renderMetric(t("overview.tender_total"), money(closureSummary.received), "tender-total")}
           ${renderMetric(
-            t("overview.to_be_paid_by_transfer"),
-            money(closureSummary.toBePaidByTransfer),
-            "transfer-total",
+            t("overview.deferred_payments"),
+            money(closureSummary.deferredPayments),
+            "deferred-total",
           )}
           ${renderMetric(t("overview.tips"), money(takings.tipTotal), "tip-total")}
           ${renderMetric(t("overview.gross_total"), money(takings.grossTotal), "gross-total")}

@@ -29,7 +29,7 @@ import type {
   TenderRefundView,
   TenderRefundAcknowledgment,
 } from "./tender-refund-types.js";
-import type { CloseByTransferRequest, CloseByTransferResult } from "./transfer-close-types.js";
+import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
   ProductAllergens,
   BumpMode,
@@ -980,14 +980,14 @@ export interface ReceiptAdjustment {
 
 /**
  * How a filed sale was paid, read back from the committed rows: `unpaid` is an invoice issued before
- * collection, `transfer` a bill closed as a deferred payment, `cash` carries the change, and
+ * collection, `deferred` a bill closed as a deferred payment, `cash` carries the change, and
  * `card` the whole charge (`charged` = total + tip), the `tip` ("0.00" when none) and the operator
  * `reference` (null for an integrated capture). Card-present identity belongs only to the separate
  * payment slip.
  */
 export type TenderBlock =
   | { method: "unpaid" }
-  | { method: "transfer" }
+  | { method: "deferred" }
   | { method: "cash"; change: string }
   | {
       method: "card";
@@ -1256,7 +1256,7 @@ export interface OrderPreviewItem {
 
 /** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
  * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid,
- * or closed as a deferred payment (`closedByTransfer`), and not handed over. `canHandOver` says
+ * or closed as a deferred payment (`closedDeferred`), and not handed over. `canHandOver` says
  * whether {@link TillApi.markCollected} would accept it now. */
 export interface CounterWaitingOrder {
   items: OrderPreviewItem[];
@@ -1284,7 +1284,7 @@ export interface CounterWaitingOrder {
    *  absent when there are none. */
   formerNumbers?: number[];
   /** Only on a settled order closed as a deferred payment. */
-  closedByTransfer?: true;
+  closedDeferred?: true;
 }
 
 /**
@@ -3834,21 +3834,21 @@ export class TillApi {
     return this.#request<StaffMember[]>("/api/unpaid-departure-authorizers", "GET");
   }
 
-  closeByTransfer(billId: string, request: CloseByTransferRequest): Promise<CloseByTransferResult> {
+  closeDeferred(billId: string, request: CloseDeferredRequest): Promise<CloseDeferredResult> {
     return this.#request(
-      `/api/working-orders/${encodeURIComponent(billId)}/close-by-transfer`,
+      `/api/working-orders/${encodeURIComponent(billId)}/close-deferred`,
       "POST",
       request,
     );
   }
 
-  /** The answer the bill's close by transfer gave; `null` while the bill is not closed that way. */
-  getTransferClosure(
+  /** The answer the bill's deferred close gave; `null` while the bill is not closed that way. */
+  getDeferredClosure(
     billId: string,
     options: ReadOptions = {},
-  ): Promise<{ closure: CloseByTransferResult | null }> {
+  ): Promise<{ closure: CloseDeferredResult | null }> {
     return this.#request(
-      `/api/working-orders/${encodeURIComponent(billId)}/transfer-closure`,
+      `/api/working-orders/${encodeURIComponent(billId)}/deferred-closure`,
       "GET",
       undefined,
       options.signal,

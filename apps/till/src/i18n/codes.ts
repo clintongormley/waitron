@@ -305,15 +305,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This item is on hold and cannot be sent or served yet",
     es: "Este artículo está en espera y todavía no se puede enviar ni servir",
   },
-  "transfer_close.ineligible": {
+  "deferred_close.ineligible": {
     en: "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
     es: "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   },
-  "transfer_close.conflict": {
+  "deferred_close.conflict": {
     en: "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",
     es: "El total o los datos de factura de esta cuenta han cambiado desde que la abriste. Vuelve a cargarla, revísalos e inténtalo de nuevo",
   },
-  "transfer_close.day_frozen": {
+  "deferred_close.day_frozen": {
     en: "This business day already has its daily close. Close the bill as a deferred payment once the next business day starts",
     es: "Este día de trabajo ya tiene su cierre diario. Cierra la cuenta como pago aplazado cuando empiece el siguiente día de trabajo",
   },

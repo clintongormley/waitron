@@ -15,7 +15,7 @@ const overview: SalesOverview = {
   departmentTakings: [],
   closureSummary: {
     billsClosed: { count: 42, total: "1279.50" },
-    toBePaidByTransfer: "0.00",
+    deferredPayments: "0.00",
     received: "1234.50",
   },
   counts: { sales: 42, corrections: 2, voids: 1 },
@@ -94,7 +94,7 @@ describe("dashboard-overview-screen", () => {
               byMethod: [
                 { method: "cash", amount: "10.00", tip: "0.00" },
                 { method: "card", amount: "20.00", tip: "0.00" },
-                { method: "transfer", amount: "30.00", tip: "0.00" },
+                { method: "deferred", amount: "30.00", tip: "0.00" },
               ],
               billsClosed: { count: 2, total: "60.00" },
             },
@@ -180,7 +180,7 @@ describe("dashboard-overview-screen", () => {
         departmentTakings: [],
         closureSummary: {
           billsClosed: { count: 2, total: "320.00" },
-          toBePaidByTransfer: "220.00",
+          deferredPayments: "220.00",
           received: "110.00",
         },
       }),
@@ -189,10 +189,10 @@ describe("dashboard-overview-screen", () => {
     await flush(el);
     const root = el.shadowRoot!;
     expect(root.querySelector("[data-test=bills-closed]")!.textContent).toBe("2 · €320.00");
-    expect(root.querySelector("[data-test=transfer-total]")!.textContent).toBe("€220.00");
+    expect(root.querySelector("[data-test=deferred-total]")!.textContent).toBe("€220.00");
     expect(root.querySelector("[data-test=tender-total]")!.textContent).toBe("€110.00");
     expect(
-      root.querySelector("[data-test=transfer-total]")!.parentElement!.querySelector(".label")!
+      root.querySelector("[data-test=deferred-total]")!.parentElement!.querySelector(".label")!
         .textContent,
     ).toBe("Deferred payment");
   });

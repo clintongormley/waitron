@@ -80,7 +80,7 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
     where (${inZones?.(sql`wo.id`) ?? sql`1`})
       and (wo.status in ('open','placed') or (wo.status = 'settled' and wo.party_id is null
         and wo.collected_at is null and exists(select 1 from ticket_items ti where ti.working_order_id = wo.id)
-        and not exists(select 1 from transfer_closures tc where tc.working_order_id = wo.id)))
+        and not exists(select 1 from deferred_closures tc where tc.working_order_id = wo.id)))
   ), bills as (
     select f.*, z.name as zone_name,
       case when f.total_cents + f.corrections > 0

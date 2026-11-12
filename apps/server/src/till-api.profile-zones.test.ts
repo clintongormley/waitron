@@ -210,8 +210,8 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/working-orders/:id/payments/preview           | order                  | refuses POST .../payments/preview                    |
  * | POST /api/working-orders/:id/payments                   | order                  | refuses POST /api/working-orders/:id/payments        |
  * | POST /api/working-orders/:id/payments/:paymentId/refunds| order                  | refuses POST .../payments/:paymentId/refunds         |
- * | POST /api/working-orders/:id/close-by-transfer          | order, inside the write | refuses POST .../close-by-transfer                  |
- * | GET  /api/working-orders/:id/transfer-closure           | order                  | refuses GET .../transfer-closure                     |
+ * | POST /api/working-orders/:id/close-deferred          | order, inside the write | refuses POST .../close-deferred                  |
+ * | GET  /api/working-orders/:id/deferred-closure           | order                  | refuses GET .../deferred-closure                     |
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
  * | GET  /api/bills/lookup                                  | list, by order zone    | "shows a Deli bill to the Deli ...", "fills ... twenty Deli bills ..." |
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
@@ -1329,9 +1329,9 @@ const ROUTES: readonly Row[] = [
     deliOrderZone,
   ],
   [
-    "POST /api/working-orders/:id/close-by-transfer",
+    "POST /api/working-orders/:id/close-deferred",
     "POST",
-    (x) => `/api/working-orders/${x.deliOrder}/close-by-transfer`,
+    (x) => `/api/working-orders/${x.deliOrder}/close-deferred`,
     () => ({
       submissionId: randomUUID(),
       expectedRevision: 0,
@@ -1346,9 +1346,9 @@ const ROUTES: readonly Row[] = [
     deliOrderZone,
   ],
   [
-    "GET /api/working-orders/:id/transfer-closure",
+    "GET /api/working-orders/:id/deferred-closure",
     "GET",
-    (x) => `/api/working-orders/${x.deliOrder}/transfer-closure`,
+    (x) => `/api/working-orders/${x.deliOrder}/deferred-closure`,
     undefined,
     deliOrderZone,
   ],

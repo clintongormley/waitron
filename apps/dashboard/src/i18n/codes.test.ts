@@ -902,24 +902,24 @@ it("words a test email no longer in the inbox in both languages", () => {
   );
 });
 
-// A close by transfer's refusals (apps/server/src/transfer-close.ts).
+// A deferred close's refusals (apps/server/src/deferred-close.ts).
 it.each([
   [
-    "transfer_close.ineligible",
+    "deferred_close.ineligible",
     "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
     "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   ],
   [
-    "transfer_close.conflict",
+    "deferred_close.conflict",
     "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",
     "El total o los datos de factura de esta cuenta han cambiado desde que la abriste. Vuelve a cargarla, revísalos e inténtalo de nuevo",
   ],
   [
-    "transfer_close.day_frozen",
+    "deferred_close.day_frozen",
     "This business day already has its daily close. Close the bill as a deferred payment once the next business day starts",
     "Este día de trabajo ya tiene su cierre diario. Cierra la cuenta como pago aplazado cuando empiece el siguiente día de trabajo",
   ],
-])("explains close-by-transfer refusal %s in English and Spanish", (code, english, spanish) => {
+])("explains close-deferred refusal %s in English and Spanish", (code, english, spanish) => {
   expect(codeMessage(code, "en")).toBe(english);
   expect(codeMessage(code, "es")).toBe(spanish);
 });

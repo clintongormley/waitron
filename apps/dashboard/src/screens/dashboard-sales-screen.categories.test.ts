@@ -25,7 +25,7 @@ const close: DailyCloseDto = {
   departmentTakings: [],
   closureSummary: {
     billsClosed: { count: 0, total: "0.00" },
-    toBePaidByTransfer: "0.00",
+    deferredPayments: "0.00",
     received: "0.00",
   },
   counts: { sales: 0, corrections: 0, voids: 0 },
@@ -180,7 +180,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 0, total: "0.00" },
-        toBePaidByTransfer: "0.00",
+        deferredPayments: "0.00",
         received: "0.00",
       },
       counts: { sales: 0, corrections: 0, voids: 0 },

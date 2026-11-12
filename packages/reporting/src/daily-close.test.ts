@@ -116,7 +116,7 @@ describe("computeDailyClose", () => {
     await seedTender(
       suite.db,
       { saleId: sale },
-      { method: "transfer", amount: "65.00", settledAt: at },
+      { method: "deferred", amount: "65.00", settledAt: at },
     );
     const otherDevice = await seedVenueDevice(suite.db);
     const direct = await seedRefundableSale(
@@ -163,7 +163,7 @@ describe("computeDailyClose", () => {
           active: true,
           byMethod: [
             { method: "cash", amount: "37.00", tip: "2.00" },
-            { method: "transfer", amount: "65.00", tip: "0.00" },
+            { method: "deferred", amount: "65.00", tip: "0.00" },
           ],
           billsClosed: { count: 1, total: "100.00" },
         },

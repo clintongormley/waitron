@@ -699,7 +699,7 @@ describe("recordTillSale", () => {
     });
 
     // Every tender but cash and card is refused; the cast is how an untrusted till sends one.
-    for (const method of ["voucher", "transfer", "other"] as const) {
+    for (const method of ["voucher", "deferred", "other"] as const) {
       await expect(
         recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
           zoneId,

@@ -51,7 +51,10 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { requirePeriod, requireRange } from "@waitron/server-kit";
 import { formatCategorySalesPage } from "./category-sales-page.js";
 import { toLanguage } from "./personal-data-export-api.js";
-import { listTransferClosedInvoices, renderTransferClosedCsv } from "./transfer-closed-export.js";
+import {
+  listDeferredPaymentInvoices,
+  renderDeferredPaymentCsv,
+} from "./deferred-payment-export.js";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { readHandoverIntervals } from "./handover-intervals.js";
@@ -381,7 +384,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
 
   // The accountant's file of invoices whose bills were closed as deferred payments on a business
   // day in an inclusive range, venue-wide. A POST because each download writes its activity entry.
-  app.post("/management-api/reports/closed-by-transfer", (c) =>
+  app.post("/management-api/reports/deferred-payment-export", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
@@ -390,16 +393,16 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           managementSessionId: sessionId,
           permission: REPORT_EXPORT_PERMISSION,
         });
-        const invoices = await listTransferClosedInvoices(tx, { from, to });
+        const invoices = await listDeferredPaymentInvoices(tx, { from, to });
         await recordActivity(tx, {
-          kind: "transfer_export.downloaded",
-          subjectId: "closed-by-transfer",
+          kind: "deferred_payment_export.downloaded",
+          subjectId: "deferred-payment-export",
           personId: authorizedBy,
           data: { from, to, rows: invoices.length },
         });
         return invoices;
       });
-      return c.body(renderTransferClosedCsv(rows, toLanguage(deps.venueLocale)), 200, {
+      return c.body(renderDeferredPaymentCsv(rows, toLanguage(deps.venueLocale)), 200, {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="deferred-payments-${from}-${to}.csv"`,
         "Cache-Control": "no-store",
@@ -513,7 +516,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   );
 }
 
-/** A transfer line is a final classification, never money received, so it stays out of `received`. */
+/** A deferred line is a final classification, never money received, so it stays out of `received`. */
 function summariseClosures(close: DailyClose) {
   const cash = close.cash;
   const billsClosed = close.departmentTakings.reduce(
@@ -523,14 +526,13 @@ function summariseClosures(close: DailyClose) {
     }),
     { count: 0, total: decimal("0.00") },
   );
-  let toBePaidByTransfer = decimal("0.00");
+  let deferredPayments = decimal("0.00");
   let received = decimal("0.00");
   for (const line of cash.byOrigin.flatMap((row) => row.byMethod)) {
-    if (line.method === "transfer")
-      toBePaidByTransfer = addDecimal(toBePaidByTransfer, line.amount);
+    if (line.method === "deferred") deferredPayments = addDecimal(deferredPayments, line.amount);
     else received = addDecimal(received, line.amount);
   }
-  return { billsClosed, toBePaidByTransfer, received };
+  return { billsClosed, deferredPayments, received };
 }
 
 /**

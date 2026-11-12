@@ -6,7 +6,7 @@ import {
   workingOrderLines,
   workingOrders,
   type Transaction,
-  type TransferClosurePartyBlocker,
+  type DeferredClosurePartyBlocker,
 } from "@waitron/db";
 import { staffPresentationName } from "@waitron/catalogue";
 import { AppError, thousandthsToDecimal, type ErrorCode } from "@waitron/shared";
@@ -296,7 +296,7 @@ async function readFinishState(tx: Transaction, args: FinishStateArgs) {
   return { bills, remaining };
 }
 
-export type PartyFinishBlocker = TransferClosurePartyBlocker;
+export type PartyFinishBlocker = DeferredClosurePartyBlocker;
 
 const BLOCKERS: Partial<Record<ErrorCode, PartyFinishBlocker>> = {
   "party.out_of_date": "revision",

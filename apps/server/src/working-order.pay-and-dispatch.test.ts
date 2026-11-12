@@ -967,7 +967,7 @@ describe("payWorkingOrder", () => {
     expect(await fiscalRecordCount(id)).toBe(1);
   });
 
-  it("refuses an empty basket and any tender that is neither cash nor card (voucher/transfer/other)", async () => {
+  it("refuses an empty basket and any tender that is neither cash nor card (voucher/deferred/other)", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
 
@@ -982,7 +982,7 @@ describe("payWorkingOrder", () => {
     // cash and card are the supported tenders; every other
     // `tender_method` enum value is still refused with `sale.unsupported_tender`. The `as unknown` cast
     // is how an untrusted till can send one past the widened `"cash" | "card"` type at runtime.
-    for (const method of ["voucher", "transfer", "other"] as const) {
+    for (const method of ["voucher", "deferred", "other"] as const) {
       await expect(
         payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
           id: randomUUID(),

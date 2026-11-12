@@ -8,23 +8,23 @@ import { originChecks, sourceColumn } from "./origin.js";
 import { persons } from "./identity/persons.js";
 import { sales } from "./sales.js";
 
-export type TransferClosurePartyBlocker =
+export type DeferredClosurePartyBlocker =
   "other_bills" | "service" | "revision" | "editor" | "scope" | "authority";
 
-/** The answer a bill's close by transfer gave, kept so a replay returns the same answer. */
-export interface TransferClosureResult {
+/** The answer a bill's deferred close gave, kept so a replay returns the same answer. */
+export interface DeferredClosureResult {
   submissionId: string;
   workingOrderId: string;
   saleId: string;
   invoiceNumber: string;
-  classification: "to_be_paid_by_transfer";
+  classification: "deferred_payment";
   closedAt: string;
   businessDay: string;
   total: string;
   currency: "EUR";
   party: {
     state: "not_applicable" | "closed" | "open";
-    blockers: TransferClosurePartyBlocker[];
+    blockers: DeferredClosurePartyBlocker[];
   };
 }
 
@@ -34,8 +34,8 @@ export interface TransferClosureResult {
  * `fingerprint` is a digest of the request, not the request: the delivery email and invoice
  * recipient stay out of this append-only row.
  */
-export const transferClosures = table(
-  "transfer_closures",
+export const deferredClosures = table(
+  "deferred_closures",
   {
     id: id("id").primaryKey(),
     workingOrderId: id("working_order_id").notNull(),
@@ -51,31 +51,31 @@ export const transferClosures = table(
     nodeId: id("node_id").notNull(),
     closedAt: tsString("closed_at").notNull(),
     businessDay: day("business_day").notNull(),
-    result: json<TransferClosureResult>("result").notNull(),
+    result: json<DeferredClosureResult>("result").notNull(),
   },
   (t) => [
     foreignKey({
       columns: [t.workingOrderId],
       foreignColumns: [workingOrders.id],
-      name: "transfer_closures_working_order_fk",
+      name: "deferred_closures_working_order_fk",
     }).onDelete("restrict"),
     foreignKey({
       columns: [t.saleId],
       foreignColumns: [sales.id],
-      name: "transfer_closures_sale_fk",
+      name: "deferred_closures_sale_fk",
     }).onDelete("restrict"),
     foreignKey({
       columns: [t.nodeId],
       foreignColumns: [nodes.id],
-      name: "transfer_closures_node_fk",
+      name: "deferred_closures_node_fk",
     }).onDelete("restrict"),
-    unique("transfer_closures_working_order_key").on(t.workingOrderId),
-    unique("transfer_closures_sale_key").on(t.saleId),
-    index("transfer_closures_node_day_idx").on(t.nodeId, t.businessDay, t.closedAt, t.id),
+    unique("deferred_closures_working_order_key").on(t.workingOrderId),
+    unique("deferred_closures_sale_key").on(t.saleId),
+    index("deferred_closures_node_day_idx").on(t.nodeId, t.businessDay, t.closedAt, t.id),
     check(
-      "transfer_closures_business_day_ck",
+      "deferred_closures_business_day_ck",
       sql`length(${t.businessDay}) = 10 and ${t.businessDay} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`,
     ),
-    ...originChecks("transfer_closures", t.source, t.deviceId),
+    ...originChecks("deferred_closures", t.source, t.deviceId),
   ],
 );

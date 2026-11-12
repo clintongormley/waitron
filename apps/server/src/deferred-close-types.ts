@@ -1,10 +1,10 @@
-import type { TransferClosureResult } from "@waitron/db";
+import type { DeferredClosureResult } from "@waitron/db";
 import type { InvoiceRecipient } from "./invoice-selection.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import type { BillInvoiceDelivery } from "./parties.js";
 
 /** Close one bill, final in Waitron, as a deferred payment. */
-export interface CloseByTransferRequest {
+export interface CloseDeferredRequest {
   /** The bill. */
   id: string;
   submissionId: string;
@@ -22,4 +22,4 @@ export interface CloseByTransferRequest {
   };
 }
 
-export type CloseByTransferResult = TransferClosureResult;
+export type CloseDeferredResult = DeferredClosureResult;

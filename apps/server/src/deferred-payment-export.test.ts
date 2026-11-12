@@ -15,19 +15,19 @@ import { credit } from "./testing/order-venue.js";
 import {
   RECIPIENT,
   clockAt,
-  transferCloseVenue,
-  type TransferCloseKit,
-} from "./testing/transfer-close-fixture.js";
-import { TRANSFER_EXPORT_WORDS } from "./i18n/transfer-export.js";
+  deferredCloseVenue,
+  type DeferredCloseKit,
+} from "./testing/deferred-close-fixture.js";
+import { DEFERRED_PAYMENT_EXPORT_WORDS } from "./i18n/deferred-payment-export.js";
 import { mountReportApi } from "./report-api.js";
 import {
-  listTransferClosedInvoices,
-  renderTransferClosedCsv,
-  type TransferClosedInvoice,
-} from "./transfer-closed-export.js";
+  listDeferredPaymentInvoices,
+  renderDeferredPaymentCsv,
+  type DeferredPaymentInvoice,
+} from "./deferred-payment-export.js";
 import "./errors.js";
 
-let t: TransferCloseKit;
+let t: DeferredCloseKit;
 let manager = { id: "", cookie: "" };
 let supervisorCookie = "";
 
@@ -36,7 +36,7 @@ useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    t = await transferCloseVenue(db);
+    t = await deferredCloseVenue(db);
     const sessions = await withTransaction(db, async (tx) => {
       const sessionFor = async (role: "manager" | "supervisor") => {
         const [person] = await seedPersons(tx, {
@@ -59,17 +59,17 @@ const days: { issued?: string; closedLater?: string; closedNow?: string } = {};
 let laterBill = "";
 
 function list(from: string, to: string) {
-  return inTx(t.venue, (tx) => listTransferClosedInvoices(tx, { from, to }));
+  return inTx(t.venue, (tx) => listDeferredPaymentInvoices(tx, { from, to }));
 }
 
 function closedDay(billId: string): string {
   const [row] = t.venue.db.all<{ day: string }>(
-    sql`select business_day as day from transfer_closures where working_order_id = ${billId}`,
+    sql`select business_day as day from deferred_closures where working_order_id = ${billId}`,
   );
   return row!.day;
 }
 
-describe("listTransferClosedInvoices", () => {
+describe("listDeferredPaymentInvoices", () => {
   it("filters by the day the bill was closed, not the day it was issued", async () => {
     laterBill = await t.counterOrder("placed", true);
     // 30 hours ahead, so the close lands on a later business day even before the 05:00 cutover.
@@ -170,7 +170,7 @@ describe("listTransferClosedInvoices", () => {
   });
 });
 
-const F2_ROW: TransferClosedInvoice = {
+const F2_ROW: DeferredPaymentInvoice = {
   invoiceNumber: "A/41",
   invoiceType: "F2",
   issueDate: "2026-11-03",
@@ -183,7 +183,7 @@ const F2_ROW: TransferClosedInvoice = {
   correctedBy: ["R/1", "R/2"],
   correctionsTotal: decimal("-1.21"),
 };
-const F1_ROW: TransferClosedInvoice = {
+const F1_ROW: DeferredPaymentInvoice = {
   invoiceNumber: "F/7",
   invoiceType: "F1",
   issueDate: "2026-11-05",
@@ -211,31 +211,31 @@ const HEADER_KEYS = [
 ] as const;
 const EN_HEADER =
   '"Invoice number","Type","Issue date","Closed on","Customer","Customer tax number","Base (EUR)","VAT (EUR)","Total (EUR)","Corrected by","Corrections total (EUR)"';
-const ES_HEADER = HEADER_KEYS.map((key) => `"${TRANSFER_EXPORT_WORDS.es[key]}"`).join(",");
+const ES_HEADER = HEADER_KEYS.map((key) => `"${DEFERRED_PAYMENT_EXPORT_WORDS.es[key]}"`).join(",");
 
 function text(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
 }
 
-describe("renderTransferClosedCsv", () => {
+describe("renderDeferredPaymentCsv", () => {
   it("writes a header and one quoted line per invoice, guarded against formulas", () => {
-    expect(text(renderTransferClosedCsv([F2_ROW, F1_ROW], "en"))).toBe(
+    expect(text(renderDeferredPaymentCsv([F2_ROW, F1_ROW], "en"))).toBe(
       `\uFEFF${EN_HEADER}\r\n` +
         '"A/41","F2","03/11/2026","04/11/2026","","","14.88","3.12","18.00","R/1 R/2","-1.21"\r\n' +
         '"F/7","F1","05/11/2026","05/11/2026","\'=HYPERLINK(""x"")","B12345674","80.00","16.80","96.80","","0.00"\r\n',
     );
-    expect(text(renderTransferClosedCsv([], "en"))).toBe(`\uFEFF${EN_HEADER}\r\n`);
+    expect(text(renderDeferredPaymentCsv([], "en"))).toBe(`\uFEFF${EN_HEADER}\r\n`);
   });
 
   it("writes Spanish words and decimal commas for a Spanish venue", () => {
-    expect(text(renderTransferClosedCsv([F2_ROW], "es"))).toBe(
+    expect(text(renderDeferredPaymentCsv([F2_ROW], "es"))).toBe(
       `\uFEFF${ES_HEADER}\r\n` +
         '"A/41","F2","03/11/2026","04/11/2026","","","14,88","3,12","18,00","R/1 R/2","-1,21"\r\n',
     );
   });
 });
 
-describe("POST /management-api/reports/closed-by-transfer", () => {
+describe("POST /management-api/reports/deferred-payment-export", () => {
   const app = new Hono();
   const mounted = () => {
     if (app.routes.length === 0)
@@ -247,7 +247,7 @@ describe("POST /management-api/reports/closed-by-transfer", () => {
     return app;
   };
   const send = (cookie: string, day: string, method = "POST") =>
-    mounted().request(`/management-api/reports/closed-by-transfer?from=${day}&to=${day}`, {
+    mounted().request(`/management-api/reports/deferred-payment-export?from=${day}&to=${day}`, {
       method,
       headers: { cookie },
     });
@@ -259,7 +259,7 @@ describe("POST /management-api/reports/closed-by-transfer", () => {
         data: activityLog.data,
       })
       .from(activityLog)
-      .where(eq(activityLog.kind, "transfer_export.downloaded"));
+      .where(eq(activityLog.kind, "deferred_payment_export.downloaded"));
 
   it("answers a manager with the venue-language file and records the download", async () => {
     const day = days.closedLater!;
@@ -273,7 +273,7 @@ describe("POST /management-api/reports/closed-by-transfer", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     const body = new Uint8Array(await res.arrayBuffer());
-    expect(body).toEqual(renderTransferClosedCsv(await list(day, day), "es"));
+    expect(body).toEqual(renderDeferredPaymentCsv(await list(day, day), "es"));
     const lines = text(body).split("\r\n");
     expect(lines).toHaveLength(3);
     expect(lines[1]).toMatch(/^"A\/1",.*"R\/1","-1,21"$/);
@@ -307,7 +307,7 @@ describe("POST /management-api/reports/closed-by-transfer", () => {
   it("gives no file when the download cannot be recorded", async () => {
     await t.venue.db.execute(
       sql.raw(
-        `create trigger test_download_refused before insert on activity_log when new.kind = 'transfer_export.downloaded'
+        `create trigger test_download_refused before insert on activity_log when new.kind = 'deferred_payment_export.downloaded'
          begin select raise(abort, 'test: download record refused'); end`,
       ),
     );

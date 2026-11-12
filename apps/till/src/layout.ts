@@ -53,7 +53,7 @@ export type CapabilityFlag =
   | "hand-over-orders"
   | "run-the-pass"
   | "clock-in"
-  | "close-by-transfer";
+  | "close-deferred";
 
 /** A screen a profile may start on (`NAVIGATION_SCREENS` in `packages/layouts/src/device-types.ts`). */
 export type NavigationScreen = "show-station" | "show-expo" | "show-schedule";

@@ -6,7 +6,7 @@ export type FindBillSort = { key: string; direction: "ascending" | "descending" 
 export type FindBillQuery = { q: string; page: number; sort: FindBillSort; staffId?: string };
 export type BillState = "unpaid" | "held" | "part-paid" | "paid-not-handed-over";
 export type TransactionType = "sale" | "full-invoice" | "correction" | "refund";
-export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
+export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
 export type BillsQuery = FindBillQuery & { zoneId?: string; state?: BillState };
 export type TransactionsQuery = FindBillQuery & {
   dates: FindBillDates;

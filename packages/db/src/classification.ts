@@ -41,7 +41,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("sale_voids", "ledger", LEDGER),
   appendOnly("sale_substitutions", "ledger", LEDGER),
   appendOnly(
-    "transfer_closures",
+    "deferred_closures",
     "ledger",
     "a bill closed as a deferred payment, and the answer that close gave",
   ),

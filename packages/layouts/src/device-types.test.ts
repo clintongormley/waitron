@@ -49,7 +49,7 @@ describe("profile actions and screens", () => {
         "print-receipt",
         "open-cash-drawer",
         "clock-in",
-        "close-by-transfer",
+        "close-deferred",
       ].sort(),
     );
   });

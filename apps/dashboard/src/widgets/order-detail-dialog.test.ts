@@ -211,12 +211,12 @@ it("keeps the historical declaration block off an unsent line", async () => {
   expect(el.shadowRoot!.querySelector("[data-sent-nutrition]")).toBeNull();
 });
 
-it("names a transfer closure as still to be paid, with no card and no tip", async () => {
+it("names a deferred closure as still to be paid, with no card and no tip", async () => {
   setLocale("en-GB");
   const closed = {
     ...detail,
-    row: { ...detail.row, status: "to_be_paid_by_transfer" as const, stillOwed: null },
-    tenders: [{ method: "transfer", amount: "30.00", tip: "0.00" }],
+    row: { ...detail.row, status: "deferred_payment" as const, stillOwed: null },
+    tenders: [{ method: "deferred", amount: "30.00", tip: "0.00" }],
     payments: [],
   };
   const api = {

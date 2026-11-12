@@ -46,7 +46,7 @@ const close: DailyCloseDto = {
   ],
   closureSummary: {
     billsClosed: { count: 8, total: "121.00" },
-    toBePaidByTransfer: "0.00",
+    deferredPayments: "0.00",
     received: "121.00",
   },
   counts: { sales: 8, corrections: 0, voids: 1 },
@@ -156,7 +156,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       departmentTakings: [],
       closureSummary: {
         billsClosed: { count: 0, total: "0.00" },
-        toBePaidByTransfer: "0.00",
+        deferredPayments: "0.00",
         received: "0.00",
       },
       counts: { sales: 0, corrections: 0, voids: 0 },
@@ -248,7 +248,7 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
 
   it("renders the deferred-payments file action and its refusal accessibly", async () => {
     const api = stubApi({
-      downloadClosedByTransfer: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+      downloadDeferredPayments: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
     const { el, host } = await mountWidget<SalesScreen>(
       "dashboard-sales-screen",
@@ -256,7 +256,7 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=export-transfer]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=export-deferred]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=export-error]")).not.toBeNull();
     await expectNoA11yViolations(host);

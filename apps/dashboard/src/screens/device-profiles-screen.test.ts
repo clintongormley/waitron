@@ -2073,7 +2073,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       "cap-print-receipt",
       "cap-open-cash-drawer",
       "cap-clock-in",
-      "cap-close-by-transfer",
+      "cap-close-deferred",
     ]);
     expect(flags("profile-screens")).toEqual([
       "cap-act-as-kds",
@@ -2105,19 +2105,19 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
 
   it("offers Closes bills as deferred payments as an action, off until switched on, and saves it", async () => {
     const { api, el } = await openEdit({ ...profiles[0]!, capabilities: ["take-orders"] });
-    const sw = q(el, "cap-close-by-transfer") as Field;
+    const sw = q(el, "cap-close-deferred") as Field;
     expect(q(el, "profile-actions")!.contains(sw)).toBe(true);
-    expect(sw.getAttribute("label")).toBe(t("device_profiles.capability.close-by-transfer"));
-    expect(t("device_profiles.capability.close-by-transfer")).not.toBe(
-      "device_profiles.capability.close-by-transfer",
+    expect(sw.getAttribute("label")).toBe(t("device_profiles.capability.close-deferred"));
+    expect(t("device_profiles.capability.close-deferred")).not.toBe(
+      "device_profiles.capability.close-deferred",
     );
     expect(sw.checked).toBe(false);
-    toggle(el, "cap-close-by-transfer", true);
+    toggle(el, "cap-close-deferred", true);
     await flush(el);
     await save(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![2]).toEqual([
       "take-orders",
-      "close-by-transfer",
+      "close-deferred",
     ]);
   });
 

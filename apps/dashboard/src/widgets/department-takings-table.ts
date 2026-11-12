@@ -27,7 +27,7 @@ export function renderDepartmentTakings(rows: DepartmentTakingsDto[]) {
             <th scope="col">${t("reports.department")}</th>
             <th scope="col" class="num">${t("reports.cash")}</th>
             <th scope="col" class="num">${t("reports.card")}</th>
-            <th scope="col" class="num">${t("sales.to_be_paid_by_transfer")}</th>
+            <th scope="col" class="num">${t("sales.deferred_payments")}</th>
             <th scope="col" class="num">${t("sales.bills_closed")}</th>
           </tr>
         </thead>
@@ -41,7 +41,7 @@ export function renderDepartmentTakings(rows: DepartmentTakingsDto[]) {
               </th>
               <td class="num">${amount("cash")}</td>
               <td class="num">${amount("card")}</td>
-              <td class="num">${amount("transfer")}</td>
+              <td class="num">${amount("deferred")}</td>
               <td class="num">${row.billsClosed.count} · ${money(row.billsClosed.total)}</td>
             </tr>`;
           })}

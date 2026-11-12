@@ -28,26 +28,26 @@ import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { noteSessionPerson } from "./testing/tab-person.js";
 import {
   fiscalWrites,
-  transferCloseVenue,
-  type TransferCloseKit,
-} from "./testing/transfer-close-fixture.js";
-import type { CloseByTransferRequest } from "./transfer-close-types.js";
+  deferredCloseVenue,
+  type DeferredCloseKit,
+} from "./testing/deferred-close-fixture.js";
+import type { CloseDeferredRequest } from "./deferred-close-types.js";
 import "./errors.js";
 
-// The till's route to close a bill by transfer: who may call it, checked before the write queue
+// The till's route to close a bill as a deferred payment: who may call it, checked before the write queue
 // and again inside the write, and what it answers. What the close itself does is Task 2's suites'.
-let t: TransferCloseKit;
+let t: DeferredCloseKit;
 
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    t = await transferCloseVenue(db);
+    t = await deferredCloseVenue(db);
   },
 });
 
-const ALLOWED: ProfileAction[] = [...BASIC_ACTIONS, "close-by-transfer"];
+const ALLOWED: ProfileAction[] = [...BASIC_ACTIONS, "close-deferred"];
 
 interface Till {
   profileId: string;
@@ -87,14 +87,14 @@ async function till(
   };
 }
 
-function bodyOf(request: CloseByTransferRequest): Record<string, unknown> {
+function bodyOf(request: CloseDeferredRequest): Record<string, unknown> {
   const body: Record<string, unknown> = { ...request };
   delete body.id;
   return body;
 }
 
 function close(cookie: string, billId: string, body: unknown) {
-  return send(t.venue.app, cookie, "POST", `/api/working-orders/${billId}/close-by-transfer`, body);
+  return send(t.venue.app, cookie, "POST", `/api/working-orders/${billId}/close-deferred`, body);
 }
 
 /** What a close writes: the sale and its record, the series' next number, the closure, the outbox. */
@@ -104,7 +104,7 @@ function written(billId: string) {
     sales: db.all(sql`select id from sales where working_order_id = ${billId}`),
     series: db.all(sql`select id, next_number from invoice_series order by id`),
     ...fiscalWrites(db),
-    closures: db.all(sql`select id from transfer_closures where working_order_id = ${billId}`),
+    closures: db.all(sql`select id from deferred_closures where working_order_id = ${billId}`),
     tenders: db.all(
       sql`select t.id from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${billId}`,
     ),
@@ -163,7 +163,7 @@ async function serveParty(partyId: string): Promise<void> {
   );
 }
 
-describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
+describe("POST /api/working-orders/:id/close-deferred, allowed", () => {
   it("closes a seated bill and a Counter bill, answering the closure", async () => {
     const allowed = await till();
     const party = await seatedWith(t.venue, "House salad");
@@ -176,7 +176,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
     const shape = {
       saleId: expect.any(String),
       invoiceNumber: expect.any(String),
-      classification: "to_be_paid_by_transfer",
+      classification: "deferred_payment",
       closedAt: expect.any(String),
       businessDay: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       currency: "EUR",
@@ -197,7 +197,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
     });
     expect(
       t.venue.db.all(
-        sql`select actor_id, device_id from transfer_closures where working_order_id in (${party.tabId}, ${counter.billId})`,
+        sql`select actor_id, device_id from deferred_closures where working_order_id in (${party.tabId}, ${counter.billId})`,
       ),
     ).toEqual([
       { actor_id: allowed.personId, device_id: allowed.deviceId },
@@ -225,7 +225,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
   });
 });
 
-describe("POST /api/working-orders/:id/close-by-transfer, refusals", () => {
+describe("POST /api/working-orders/:id/close-deferred, refusals", () => {
   it("refuses a suspended person whose session is still open, then closes for an active one", async () => {
     const [person] = await seedPersons(suite.db, {
       displayName: "Lewis",
@@ -330,7 +330,7 @@ async function pausedClose(cookie: string, billId: string, body: unknown) {
     { highWaterMark: 0 },
   );
   const response = t.venue.app.request(
-    new Request(`http://localhost/api/working-orders/${billId}/close-by-transfer`, {
+    new Request(`http://localhost/api/working-orders/${billId}/close-deferred`, {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: stream,
@@ -349,7 +349,7 @@ const revocations = {
       .where(eq(sessions.id, till.sessionId)),
   "the device is switched off": (tx: Transaction, till: Till) =>
     tx.update(devices).set({ active: false }).where(eq(devices.id, till.deviceId)),
-  "Close by transfer is taken off the profile": (tx: Transaction, till: Till) =>
+  "Deferred close is taken off the profile": (tx: Transaction, till: Till) =>
     tx
       .update(deviceProfiles)
       .set({ capabilities: BASIC_ACTIONS })
@@ -358,10 +358,10 @@ const revocations = {
 const refusalOf = {
   "the person signs out": "session.required",
   "the device is switched off": "device.unauthorized",
-  "Close by transfer is taken off the profile": "device.forbidden_action",
+  "Deferred close is taken off the profile": "device.forbidden_action",
 } as const;
 
-describe("POST /api/working-orders/:id/close-by-transfer, revoked while queued", () => {
+describe("POST /api/working-orders/:id/close-deferred, revoked while queued", () => {
   it.each(Object.keys(revocations) as (keyof typeof revocations)[])(
     "refuses a close waiting behind the write in which %s, writing nothing",
     async (change) => {
@@ -403,7 +403,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, revoked while queued",
   );
 });
 
-describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
+describe("POST /api/working-orders/:id/close-deferred, the party", () => {
   it("leaves the party open after its first bill and releases it with the second", async () => {
     const allowed = await till();
     const party = await seatedWith(t.venue, "House salad");
@@ -429,7 +429,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
   });
 
   it("closes the bill but keeps the party open for a device that does not take orders", async () => {
-    const closesOnly = await till(["close-by-transfer"]);
+    const closesOnly = await till(["close-deferred"]);
     const party = await seatedWith(t.venue, "House salad");
     await serveParty(party.partyId);
 
@@ -504,10 +504,10 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
 });
 
 function closure(cookie: string, billId: string) {
-  return send(t.venue.app, cookie, "GET", `/api/working-orders/${billId}/transfer-closure`);
+  return send(t.venue.app, cookie, "GET", `/api/working-orders/${billId}/deferred-closure`);
 }
 
-describe("GET /api/working-orders/:id/transfer-closure", () => {
+describe("GET /api/working-orders/:id/deferred-closure", () => {
   it("answers what the close answered, to another device without the action, null while open and not found for no bill", async () => {
     const closer = await till();
     const reader = await till(BASIC_ACTIONS, t.venue.adminId);

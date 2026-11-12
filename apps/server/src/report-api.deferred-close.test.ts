@@ -8,7 +8,7 @@ import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountReportApi } from "./report-api.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { transferCloseVenue, type TransferCloseKit } from "./testing/transfer-close-fixture.js";
+import { deferredCloseVenue, type DeferredCloseKit } from "./testing/deferred-close-fixture.js";
 import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration,
@@ -16,13 +16,13 @@ import {
 import "./errors.js";
 
 // Its own database: the case closes bills in today's business day, which the overview reads.
-let t: TransferCloseKit;
+let t: DeferredCloseKit;
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    t = await transferCloseVenue(db);
+    t = await deferredCloseVenue(db);
   },
 });
 
@@ -47,11 +47,11 @@ function dayBefore(day: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-describe("reports, a bill closed by transfer", () => {
+describe("reports, a bill closed as a deferred payment", () => {
   it("counts it once among the bills closed, apart from the money received", async () => {
     const deps = { db: t.venue.db, backend: t.venue.backend, clock: t.venue.clock };
-    const transferred = await t.counterOrder("placed");
-    await t.close(await t.requestFor(transferred, "18.00", null));
+    const deferredBill = await t.counterOrder("placed");
+    await t.close(await t.requestFor(deferredBill, "18.00", null));
     const cash = await t.counterOrder("open");
     await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, t.venue.cfg, {
       id: cash,
@@ -69,7 +69,7 @@ describe("reports, a bill closed by transfer", () => {
 
     const summary = {
       billsClosed: { count: 3, total: "54.00" },
-      toBePaidByTransfer: "18.00",
+      deferredPayments: "18.00",
       received: "38.00",
     };
     const overview = await get("/management-api/reports/overview");
@@ -89,7 +89,7 @@ describe("reports, a bill closed by transfer", () => {
         byMethod: [
           { method: "card", amount: "20.00", tip: "2.00" },
           { method: "cash", amount: "18.00", tip: "0.00" },
-          { method: "transfer", amount: "18.00", tip: "0.00" },
+          { method: "deferred", amount: "18.00", tip: "0.00" },
         ],
         billsClosed: { count: 3, total: "54.00" },
       }),
@@ -97,14 +97,14 @@ describe("reports, a bill closed by transfer", () => {
     const methods = (
       close.cash as { byOrigin: { byMethod: { method: string }[] }[] }
     ).byOrigin.flatMap((row) => row.byMethod.map((line) => line.method));
-    expect(methods.sort()).toEqual(["card", "cash", "transfer"]);
+    expect(methods.sort()).toEqual(["card", "cash", "deferred"]);
 
     const before = await get(
       `/management-api/reports/daily-close?businessDay=${dayBefore(overview.businessDay)}`,
     );
     expect(before.closureSummary).toEqual({
       billsClosed: { count: 0, total: "0.00" },
-      toBePaidByTransfer: "0.00",
+      deferredPayments: "0.00",
       received: "0.00",
     });
   });

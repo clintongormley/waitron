@@ -308,9 +308,9 @@ The [approved design](../superpowers/specs/2026-10-22-a275-final-transfer-close-
 [implementation plan](../superpowers/plans/2026-10-22-a275-final-transfer-close.md) retain the
 owner's 2026-10-21 02:40 policy: invoice at the meal, then close the whole eligible bill finally
 as “to be paid by transfer”. Preserve split bills and release the party/table only through the
-normal all-bills/service/editor checks and clearing requirement. The transfer tender is final
+normal all-bills/service/editor checks and clearing requirement. The deferred tender is final
 classification, not bank receipt. No awaiting-transfer balance, later receipt, reversal, debt list
-or receivables module. A separate daily-close transfer line and dashboard invoice CSV under
+or receivables module. A separate daily-close deferred-payment line and dashboard invoice CSV under
 `report.export` let the accountant reconcile outside Waitron.
 
 The plan's source observations are **READ ONLY / runtime UNVERIFIED** at
@@ -326,7 +326,7 @@ huella/inmutabilidad unedited. Design approval does not waive that gate.
 The [partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md),
 historical research/source receipts and pictures remain unchanged. Old question 1 is retired;
 questions 2–5 are withdrawn. The revised Spanish adviser confirmation remains attached, not sent.
-Tasks 0–4 and 6 are built: the `transfer_closures` table, the party readiness read, the close command
+Tasks 0–4 and 6 are built: the `deferred_closures` table, the party readiness read, the close command
 ([2026-11-09 plans](../superpowers/plans/2026-11-09-a275-transfer-close-command.md)), its till
 route, recovery read and device-profile action, off by default
 ([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)); the wording:

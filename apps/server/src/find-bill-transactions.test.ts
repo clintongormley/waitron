@@ -80,7 +80,7 @@ async function settle(id: string) {
 }
 async function tender(
   id: string,
-  method: "cash" | "card" | "voucher" | "transfer" | "other",
+  method: "cash" | "card" | "voucher" | "deferred" | "other",
   values: Partial<typeof tenders.$inferInsert> = {},
 ) {
   await inTx(venue, (tx) =>
