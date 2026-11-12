@@ -24,10 +24,10 @@ está en un pedido conserva la clase con la que se añadió.
 
 ## Decide cómo se vende un producto {#selling}
 
-Abre **Venta** para cambiar Disponible o **Pedir por separado**: Cualquiera, Solo el personal o Nadie.
+Abre **Venta** para cambiar Disponible, **Menú por precio fijo** o **Pedir por separado**: Cualquiera, Solo el personal o Nadie.
 La explicación bajo la opción elegida te dice qué permite. Una variante solo tiene aquí Disponible.
 Venta empieza cerrada, con los ajustes actuales en su línea de resumen. La lista de Productos
-muestra este ajuste en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
+muestra el ajuste de pedido por separado en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
 elige por él.
 
 En **Venta**, activa **Menú por precio fijo** para marcar un menú de precio fijo. Añade sus

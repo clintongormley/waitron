@@ -938,7 +938,6 @@ export class ProductEditor extends LitElement {
 
   private comparisonValue(draft: ProductEditorDraft): ProductEditorDraft {
     const value = this.submissionValue(draft);
-    value.setLunch = value.setLunch === true;
     value.allergens = nutritionAllergensForComparison(value.allergens);
     value.unitPrice = comparablePrice(value.unitPrice);
     value.variants = value.variants.map((variant) => ({
@@ -1411,7 +1410,7 @@ export class ProductEditor extends LitElement {
       <span slot="summary" class="selling-summary"
         ><strong class=${this.draft.available ? "" : "unavailable"}
           >${t(this.draft.available ? "editor.available" : "product.unavailable_badge")}</strong
-        >${this.inherited ? nothing : html` · <strong>${t("editor.ordered_on_own")}:</strong> ${t(`product.ordering_${this.draft.ordering}`)}`}</span
+        >${this.inherited ? nothing : html` · <strong>${t("editor.ordered_on_own")}:</strong> ${t(`product.ordering_${this.draft.ordering}`)}`}${!this.inherited && this.draft.setLunch === true ? html` · ${t("editor.set_lunch")}` : nothing}</span
       >
       <div class="group">
         ${switchField(this.fields(), "available", t("editor.available"), this.draft.available, (value) => this.change("available", value))}

@@ -289,10 +289,16 @@ it("saves the set-lunch setting from Selling and reads it when reopened", async 
   expect(setting, "Selling exposes the lunch setting").not.toBeNull();
   await setting!.updateComplete;
   expect(setting!.checked).toBe(false);
+  expect(el.shadowRoot!.querySelector(".selling-summary")!.textContent).not.toContain(
+    t("editor.set_lunch"),
+  );
   await userEvent.click(setting!.shadowRoot!.querySelector<HTMLLabelElement>("label")!);
   await el.updateComplete;
   const submitted = submittedValue(el);
   expect(submitted.setLunch).toBe(true);
+  expect(el.shadowRoot!.querySelector(".selling-summary")!.textContent).toContain(
+    t("editor.set_lunch"),
+  );
   el.value = { ...submitted, id: saved.id };
   el.open = false;
   await el.updateComplete;
@@ -307,6 +313,9 @@ it("saves the set-lunch setting from Selling and reads it when reopened", async 
   await userEvent.click(reopened.shadowRoot!.querySelector<HTMLLabelElement>("label")!);
   await el.updateComplete;
   expect(submittedValue(el).setLunch).toBe(false);
+  expect(el.shadowRoot!.querySelector(".selling-summary")!.textContent).not.toContain(
+    t("editor.set_lunch"),
+  );
 });
 
 it("A647 paints the closed unavailable summary with the warning token", async () => {

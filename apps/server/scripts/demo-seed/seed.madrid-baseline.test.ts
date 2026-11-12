@@ -476,6 +476,12 @@ for (const locale of ["en", "es"] as const) {
         match: "NONE",
       });
       const products = expected[phase].tables.products!;
+      products.columns.splice(
+        products.columns.findIndex((column) => column.name === "variant_order") + 1,
+        0,
+        { name: "set_lunch", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+      );
+      for (const row of Object.values(products.rows)) row.set_lunch = 0;
       products.columns = products.columns.filter(
         (column) => !["recipe_derivation", "diet_derivation"].includes(column.name),
       );
