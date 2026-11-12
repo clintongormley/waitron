@@ -2904,6 +2904,7 @@ export class TillTableOrderScreen extends LitElement {
       class="round-control"
       ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}
+      .filters=${this.selectedFilters}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedFilters)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", EMPTY_MENU_FILTERS)}
       .menus=${this.menus}

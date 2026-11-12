@@ -3373,3 +3373,56 @@ it("keeps the published menu and chosen order unchanged while mounted thumbnails
   expect(products[0]!.image).toBe(reference);
   expect(store.lines).toHaveLength(0);
 });
+
+it("uses the filtered offer for information Add and forwards exclusions to new and weighed choices", async () => {
+  const filters = { diets: [], exclude: { milk: "all" as const } };
+  const original: TillProduct = {
+    ...wine,
+    allergens: {},
+    variants: [
+      { ...wine.variants![0]!, id: "milk", allergens: { milk: {} } },
+      { ...wine.variants![0]!, id: "clear", allergens: {} },
+    ],
+  };
+  const filtered = { ...original, variants: [original.variants![1]!] };
+  const { el } = await mount({
+    menu: lunch({ structure: { members: [member("wine")] }, ...withShortcuts([]) }),
+    products: [filtered],
+    unfilteredProducts: [original],
+    filters,
+    weighs: true,
+  });
+  entry(el, "structure", "Vino").dispatchEvent(
+    new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }),
+  );
+  await el.updateComplete;
+  const info = root(el).querySelector("till-product-info")!;
+  info.dispatchEvent(new CustomEvent("add-product", { detail: original, bubbles: true }));
+  await el.updateComplete;
+  const picker = root(el).querySelector(
+    "till-modifier-picker",
+  )! as import("./modifier-picker.js").TillModifierPicker;
+  await picker.updateComplete;
+  expect(picker.product.variants!.map((variant) => variant.id)).toEqual(["clear"]);
+  expect(picker.filters).toBe(filters);
+  expect(
+    (root(el).querySelector("till-tender-pay.weigh")! as import("./tender-pay.js").TillTenderPay)
+      .filters,
+  ).toBe(filters);
+});
+
+it("closes dish information when the filtered offer disappears", async () => {
+  const { el } = await mount({
+    menu: lunch({ structure: { members: [member("wine")] }, ...withShortcuts([]) }),
+    products: [wine],
+    unfilteredProducts: [wine],
+  });
+  entry(el, "structure", "Vino").dispatchEvent(
+    new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }),
+  );
+  await el.updateComplete;
+  expect(root(el).querySelector("till-product-info")).not.toBeNull();
+  el.products = [];
+  await el.updateComplete;
+  expect(root(el).querySelector("till-product-info")).toBeNull();
+});

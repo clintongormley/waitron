@@ -1149,14 +1149,13 @@ change must not put that choice back on sale when saved.
 not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
 11 November runtime checks and their limits. The owner accepted its recommendations at 22:01;
 the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-split the remaining implementation into six follow-ups; three remain for the watcher to queue. No product change
-is built by the proposal. It distinguishes the narrower measured cases from these original observations.
+split the implementation into six follow-ups. The guest menu and sent-order declarations remain open.
+The proposal distinguishes the narrower measured cases from these original observations.
 
-1. **The till's allergen filter ignores the allergens of extras**, and the allergens of variants of a dish that has its own declaration; a dish shown because one variant passes still offers its other variants (found in A1517-1's review, 2026-11-11; A1517-2).
-2. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
+1. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
    retired), no printed menu (A670) and no online menu yet (A509). The data-protection guide tells
    venues to put a notice "on the menu or allergen sheet".
-3. **Allergen icons on a sent order read the product as it is now**, not as it was when sold, so
+2. **Allergen icons on a sent order read the product as it is now**, not as it was when sold, so
    a later edit changes what staff see on an earlier order.
 
 ## Decisions and deliberate limits
@@ -1174,6 +1173,8 @@ is built by the proposal. It distinguishes the narrower measured cases from thes
   excluding allergens, then extend filtering to extras/options; print live declarations on every
   kitchen ticket; bring forward A670's basic guest-menu design; label extras before selection; keep
   sent-order/history declarations as sent while kitchen and guest-clash checks stay current.
+  Option-list labels carry no allergen declarations and remain unfiltered; new-dish filtering covers
+  sizes and extra products, while saved dishes keep their choices.
   [Decision record](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11).
 
 - **Menu copies (A1172, owner 2026-10-28).** Copy… asks for an empty, required new name before

@@ -341,6 +341,7 @@ export class TillCounterScreen extends LitElement {
       .changeAvailability=${this.changeAvailability}
       .changeOptionAvailability=${this.changeOptionAvailability}
       .menu=${menu}
+      .filters=${this.selectedFilters}
       .products=${this.#browserProducts(this.products, menu.id, this.selectedFilters)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, EMPTY_MENU_FILTERS)}
       .menus=${this.menus}
@@ -417,6 +418,7 @@ export class TillCounterScreen extends LitElement {
         <div class="total-cell"><till-total .store=${this.store}></till-total></div>
         <div class="payment-cell">
           ${this.payRest === null ? nothing : this.#takeRest(this.payRest)}<till-tender-pay
+            .filters=${this.selectedFilters}
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}
             .sendingTender=${this.sendingTender}

@@ -5,7 +5,12 @@ import { t } from "../i18n/t.js";
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import type { DietProfile, TillProduct, TillZoneMenu } from "../api/client.js";
+import {
+  sellingValuesOf,
+  type DietProfile,
+  type TillProduct,
+  type TillZoneMenu,
+} from "../api/client.js";
 afterEach(cleanupWidgets);
 
 function dish(key: string, name: string, menuId: string, extra: Partial<TillProduct> = {}) {
@@ -275,4 +280,78 @@ describe("the Pay entry while the basket's pay controls are held", () => {
   it("keeps Pay blue while a payment is being sent", async () => {
     expect(await mountHeld(true)).toBe("primary");
   });
+});
+
+it("forwards active exclusions to the menu browser and counter weighing panel", async () => {
+  const filters = { diets: [], exclude: { nuts: "all" as const } };
+  const { el, browser } = await mountBrowser({ selectedFilters: filters });
+  expect(browser().filters).toBe(filters);
+  expect(
+    (
+      el.shadowRoot!.querySelector(
+        "till-tender-pay",
+      )! as import("../widgets/tender-pay.js").TillTenderPay
+    ).filters,
+  ).toBe(filters);
+});
+
+it("keeps Add disabled if a filter chosen during weighing excludes every size", async () => {
+  const unit = {
+    id: "kg",
+    staffName: "Kilograms",
+    staffAbbreviation: "kg",
+    name: { en: "Kilograms" },
+    abbreviation: { en: "kg" },
+    precision: 3,
+    hardwareUnit: "kg" as const,
+  };
+  const parent = { ...salad, unit, allergens: {} };
+  const product = {
+    ...parent,
+    variants: [
+      {
+        ...sellingValuesOf(parent),
+        id: "nutty",
+        name: "Nutty",
+        customerName: { en: "Guest nutty" },
+        kitchenName: "Cold nutty",
+        allergens: { nuts: {} },
+        unitPrice: "2.00",
+        unitPriceDifference: null,
+        available: true,
+      },
+    ],
+  };
+  const { el, browser } = await mountBrowser({ products: [product, steak] });
+  browser().shadowRoot!.querySelector<HTMLElement>('[data-kind="product"]')!.click();
+  const panel = el.shadowRoot!.querySelector(
+    "till-tender-pay",
+  )! as import("../widgets/tender-pay.js").TillTenderPay;
+  await panel.updateComplete;
+  panel
+    .shadowRoot!.querySelector("till-numeric-pad")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.250" } }));
+  await panel.updateComplete;
+  el.shadowRoot!.querySelector("till-diet-filter")!.dispatchEvent(
+    new CustomEvent("menu-filters-selected", {
+      detail: { filters: { diets: [], exclude: { nuts: "all" } } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  await panel.updateComplete;
+  panel.shadowRoot!.querySelector<HTMLElement>(".add")!.click();
+  await panel.updateComplete;
+  const picker = panel.shadowRoot!.querySelector(
+    "till-modifier-picker",
+  )! as import("../widgets/modifier-picker.js").TillModifierPicker;
+  await picker.updateComplete;
+  expect(picker.shadowRoot!.querySelector(".confirm")!.hasAttribute("disabled")).toBe(true);
+  expect(picker.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+  expect(picker.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+    t("modifier.no_compatible_size"),
+  );
+  picker.confirm();
+  expect(el.store.lines).toHaveLength(0);
 });

@@ -1,5 +1,6 @@
 import type { AllergenCode, Kind, ProductAllergens } from "@waitron/shared";
 import type { TillProduct } from "./api/client.js";
+import { offeredListsOf } from "./state/order-line.js";
 
 /**
  * Only the grid is filtered: a screen keeps the full product set for name and allergen lookups,
@@ -72,6 +73,30 @@ function passesExclusions(
   });
 }
 
+export function allowsAllergenChoice(
+  allergens: ProductAllergens | null,
+  filters: MenuFilters,
+): boolean {
+  const exclusions = Object.entries(filters.exclude);
+  return (
+    !exclusions.some(([, selected]) => isActiveExclusion(selected)) ||
+    (allergens !== null && passesExclusions(allergens, exclusions))
+  );
+}
+
+function hasCompatibleExtras(product: TillProduct, filters: MenuFilters): boolean {
+  return offeredListsOf(product).every(
+    (entry) =>
+      entry.kind !== "extras" ||
+      entry.items.reduce(
+        (capacity, item) =>
+          capacity +
+          (allowsAllergenChoice(item.addAllergens, filters) ? (item.maxQuantity ?? Infinity) : 0),
+        0,
+      ) >= entry.minPicks,
+  );
+}
+
 export function visibleProducts(
   products: TillProduct[],
   selectedMenuId: string,
@@ -81,11 +106,15 @@ export function visibleProducts(
   const byDiet = filters.diets.reduce(filterProductsByDiet, byMenu);
   const exclusions = Object.entries(filters.exclude);
   if (!exclusions.some(([, selected]) => isActiveExclusion(selected))) return byDiet;
-  return byDiet.filter((product) => {
-    if (product.allergens !== null) return passesExclusions(product.allergens, exclusions);
-    return (product.variants ?? []).some(
-      (variant) => variant.allergens !== null && passesExclusions(variant.allergens, exclusions),
-    );
+  return byDiet.flatMap((product) => {
+    if (!hasCompatibleExtras(product, filters)) return [];
+    if ((product.variants?.length ?? 0) > 0) {
+      const variants = product.variants!.filter((variant) =>
+        allowsAllergenChoice(variant.allergens, filters),
+      );
+      return variants.length > 0 ? [{ ...product, variants }] : [];
+    }
+    return allowsAllergenChoice(product.allergens, filters) ? [product] : [];
   });
 }
 

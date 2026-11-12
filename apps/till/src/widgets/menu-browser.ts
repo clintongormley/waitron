@@ -1,6 +1,6 @@
 import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
-import { orderableMenus } from "../menu-filter.js";
+import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -389,6 +389,7 @@ export class TillMenuBrowser extends LitElement {
 
   /** This menu's offers as till products. */
   @property({ attribute: false }) products: TillProduct[] = [];
+  @property({ attribute: false }) filters: MenuFilters = EMPTY_MENU_FILTERS;
 
   /** This menu's offers before the diet filter. A section it holds and `products` does not is drawn
    * greyed in its place; unset, such a section is left out. */
@@ -483,10 +484,7 @@ export class TillMenuBrowser extends LitElement {
 
   #currentInfoOffer(product: TillProduct): TillProduct | undefined {
     const key = product.menuItemId ?? product.id;
-    return [
-      ...(this.unfilteredProducts ?? this.products),
-      ...(this.unfilteredServedProducts ?? this.servedProducts),
-    ].find(
+    return [...this.products, ...this.servedProducts].find(
       (candidate) =>
         (candidate.menuItemId ?? candidate.id) === key &&
         candidate.ordering !== "not_sold_separately",
@@ -931,13 +929,19 @@ export class TillMenuBrowser extends LitElement {
       }
       ${
         this.weighs
-          ? html`<till-tender-pay class="weigh" weighOnly .store=${this.store}></till-tender-pay>`
+          ? html`<till-tender-pay
+              class="weigh"
+              weighOnly
+              .store=${this.store}
+              .filters=${this.filters}
+            ></till-tender-pay>`
           : nothing
       }
       ${
         this.pickerProduct
           ? html`<till-modifier-picker
               .product=${this.pickerProduct}
+              .filters=${this.filters}
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) =>
                 this.#onModifierConfirm(event.detail)}
               @wt-modifier-cancel=${() => {

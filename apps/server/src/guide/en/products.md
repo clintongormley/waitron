@@ -252,9 +252,9 @@ variants whose allergens are unreviewed. Select a name to open that product's ow
 still publish or schedule: the warning asks you to check the declarations, rather than refusing
 the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
 
-While someone at the till uses **Filter** to hide an allergen, it also hides dishes whose allergens
-nobody has entered, either on the dish or on any of its variants. To let such a dish show, choose
-its allergens, or **Contains none of the 14**, and publish each menu it is on again.
+While someone at the till uses **Filter** to hide an allergen, unreviewed dishes and sizes are
+hidden too. Review the declarations for each size you sell, or choose **Contains none of the 14**,
+and publish each menu it is on again.
 
 Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.
@@ -403,6 +403,14 @@ own nutrition separate from the dish. When you choose a dish’s extras, each ex
 allergens its product declares before you add it. An unreviewed extra shows none, which does not
 establish that it is suitable. There is no separate Allergens screen or printed allergen sheet in
 the till.
+
+When you add a dish with an allergen exclusion active, you can choose only compatible sizes and
+extras whose declarations have been reviewed. Optional toppings do not hide the dish. If a
+preselected extra conflicts or is unreviewed, check the named extras and choose **Remove extras
+and continue**, or **Cancel**. Choose replacements when the extras group requires them. The same
+filter applies when adding a weighed dish or adding from its information window; it does not
+change dishes already in your order. Option answers, such as doneness, carry no allergen
+declarations and remain unfiltered: check them yourself.
 
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
 selects an available dish; tap or press Enter on a sold-out dish to open its information.
