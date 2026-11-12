@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7f1af622-4ac3-4f3b-9996-b12d0b52c2d7",
+  "id": "14ef5e69-5b68-400e-9b48-c3a292a23675",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4291,6 +4291,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "when_closed_sends_to_station_id": {
+          "name": "when_closed_sends_to_station_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -4324,6 +4331,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "kitchen_stations_when_closed_sends_to_station_id_kitchen_stations_id_fk": {
+          "name": "kitchen_stations_when_closed_sends_to_station_id_kitchen_stations_id_fk",
+          "tableFrom": "kitchen_stations",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "when_closed_sends_to_station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4336,6 +4356,10 @@
         "kitchen_stations_closed_sends_to_not_self_ck": {
           "name": "kitchen_stations_closed_sends_to_not_self_ck",
           "value": "\"kitchen_stations\".\"closed_sends_to_station_id\" <> \"kitchen_stations\".\"id\""
+        },
+        "kitchen_stations_when_closed_sends_to_not_self_ck": {
+          "name": "kitchen_stations_when_closed_sends_to_not_self_ck",
+          "value": "\"kitchen_stations\".\"when_closed_sends_to_station_id\" <> \"kitchen_stations\".\"id\""
         },
         "kitchen_stations_warm_after_ck": {
           "name": "kitchen_stations_warm_after_ck",

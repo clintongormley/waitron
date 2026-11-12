@@ -2012,6 +2012,61 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect((await listStations()).some((station) => station.name === name)).toBe(false);
   });
 
+  it("A1510 the station save sets, keeps and clears where a closed station's dishes go", async () => {
+    const stationRow = async (id: string) =>
+      (await listStations()).find((station) => station.id === id);
+    const id = await createStation(unique("Grill"));
+    const other = await createStation(unique("Fryer"));
+    expect(await stationRow(id)).toMatchObject({ whenClosedSendsTo: null });
+    const set = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ whenClosedSendsTo: other.toUpperCase() }) },
+      managerCookie,
+    );
+    expect(set.status).toBe(204);
+    expect(await stationRow(id)).toMatchObject({ whenClosedSendsTo: other });
+    const rename = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ name: unique("Grill two") }) },
+      managerCookie,
+    );
+    expect(rename.status).toBe(204);
+    expect(await stationRow(id)).toMatchObject({ whenClosedSendsTo: other });
+    const before = await stationRow(id);
+    for (const whenClosedSendsTo of ["grill", 1, true, ""]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ whenClosedSendsTo }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "whenClosedSendsTo" } },
+      });
+      expect(await stationRow(id)).toEqual(before);
+    }
+    const self = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ whenClosedSendsTo: id }) },
+      managerCookie,
+    );
+    expect(self.status).toBe(400);
+    expect(await self.json()).toMatchObject({
+      error: {
+        code: "station.destination_invalid",
+        params: { stationId: id, sendsToStationId: id, reason: "self" },
+      },
+    });
+    expect(await stationRow(id)).toEqual(before);
+    const cleared = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ whenClosedSendsTo: null }) },
+      managerCookie,
+    );
+    expect(cleared.status).toBe(204);
+    expect(await stationRow(id)).toMatchObject({ whenClosedSendsTo: null });
+  });
+
   it("A773 station policy: a manager reads the pass coverage", async () => {
     const stationName = unique("Grill");
     const grill = await createStation(stationName);

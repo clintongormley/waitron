@@ -170,3 +170,54 @@ it("exports neither today's keep-open nor station closure, and imports both as o
     })),
   );
 });
+
+it("A1510 exports where a station's dishes go when closed, and imports it naming the imported station", async () => {
+  const prepared = await applyHistoricalTestVenue(planVenue(request("B44001144"), ALL_MODULES), {
+    db: source.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(source.db, async (tx) => {
+    const [early] = await tx
+      .insert(kitchenStations)
+      .values({ name: "Early grill" })
+      .returning({ id: kitchenStations.id });
+    const [late] = await tx
+      .insert(kitchenStations)
+      .values({ name: "Late fryer" })
+      .returning({ id: kitchenStations.id });
+    await tx
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: late!.id })
+      .where(sql`${kitchenStations.id} = ${early!.id}`);
+    await tx
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: early!.id })
+      .where(sql`${kitchenStations.id} = ${late!.id}`);
+  });
+  const versions = await schemaVersionsByModule(
+    { venue: source.db, node: source.node },
+    ALL_MODULES,
+  );
+  const bundle = await buildConfigurationBundle(
+    source.db,
+    prepared,
+    ALL_MODULES,
+    new Date("2026-11-12T22:00:00Z"),
+    versions,
+  );
+  await applyHistoricalTestVenue(planVenue(request("B44001155"), ALL_MODULES), {
+    db: target.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+  });
+  expect(
+    target.db.all(
+      sql`select s.name as name, d.name as sendsTo from kitchen_stations s
+        left join kitchen_stations d on d.id = s.when_closed_sends_to_station_id
+        where s.name in ('Early grill', 'Late fryer') order by s.name`,
+    ),
+  ).toEqual([
+    { name: "Early grill", sendsTo: "Late fryer" },
+    { name: "Late fryer", sendsTo: "Early grill" },
+  ]);
+});

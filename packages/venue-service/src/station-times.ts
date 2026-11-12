@@ -18,6 +18,7 @@ async function requireStation(tx: Transaction, stationId: string) {
       isDefault: kitchenStations.isDefault,
       closedOnDay: kitchenStations.closedOnDay,
       closedSendsToStationId: kitchenStations.closedSendsToStationId,
+      whenClosedSendsToStationId: kitchenStations.whenClosedSendsToStationId,
     })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
@@ -62,8 +63,8 @@ export async function stationDestinations(
   tx: Transaction,
   stationId: string,
   at: Date,
-): Promise<readonly { id: string; name: string; isDefault: boolean }[]> {
-  await requireStation(tx, stationId);
+): Promise<readonly { id: string; name: string; isDefault: boolean; preferred: boolean }[]> {
+  const { whenClosedSendsToStationId } = await requireStation(tx, stationId);
   const stations = await tx
     .select({
       id: kitchenStations.id,
@@ -79,7 +80,8 @@ export async function stationDestinations(
   );
   return stations
     .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
-    .filter((station) => open.has(station.id));
+    .filter((station) => open.has(station.id))
+    .map((station) => ({ ...station, preferred: station.id === whenClosedSendsToStationId }));
 }
 
 export async function closeStationForToday(

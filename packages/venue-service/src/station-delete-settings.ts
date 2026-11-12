@@ -74,6 +74,10 @@ async function settings(tx: Transaction, id: string) {
     .select({ rowId: kitchenStations.id, id: kitchenStations.id, name: kitchenStations.name })
     .from(kitchenStations)
     .where(eq(kitchenStations.closedSendsToStationId, id));
+  const preferring = await tx
+    .select({ rowId: kitchenStations.id, id: kitchenStations.id, name: kitchenStations.name })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.whenClosedSendsToStationId, id));
   const displays = await tx
     .select({ id: devices.id, name: devices.label })
     .from(devices)
@@ -126,6 +130,7 @@ async function settings(tx: Transaction, id: string) {
   ]);
   const profileTargets = targets(profiles);
   const destinationTargets = targets(incoming);
+  const closedDefaultTargets = targets(preferring);
   const removes: DeleteImpactItem[] = [
     { key: "station_routing_cells", count: cells.length, targets: [] },
     { key: "station_routing_periods", count: periods.length, targets: [] },
@@ -137,8 +142,20 @@ async function settings(tx: Transaction, id: string) {
       count: destinationTargets.length,
       targets: destinationTargets,
     },
+    {
+      key: "station_closed_defaults",
+      count: closedDefaultTargets.length,
+      targets: closedDefaultTargets,
+    },
   ].filter((item) => item.count > 0);
-  return { cells, periods, daily, incoming, impact: { removes, boundScreens: targets(bound) } };
+  return {
+    cells,
+    periods,
+    daily,
+    incoming,
+    preferring,
+    impact: { removes, boundScreens: targets(bound) },
+  };
 }
 
 export async function readStationDeleteSettings(
@@ -171,7 +188,7 @@ export async function clearStationDeleteSettings(tx: Transaction, id: string): P
   await tx.delete(deviceKitchenScreenRemovals).where(eq(deviceKitchenScreenRemovals.stationId, id));
   await tx
     .update(kitchenStations)
-    .set({ closedOnDay: null, closedSendsToStationId: null })
+    .set({ closedOnDay: null, closedSendsToStationId: null, whenClosedSendsToStationId: null })
     .where(eq(kitchenStations.id, id));
   if (rows.incoming.length > 0)
     await tx
@@ -181,6 +198,16 @@ export async function clearStationDeleteSettings(tx: Transaction, id: string): P
         inArray(
           kitchenStations.id,
           rows.incoming.map((row) => row.rowId),
+        ),
+      );
+  if (rows.preferring.length > 0)
+    await tx
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: null })
+      .where(
+        inArray(
+          kitchenStations.id,
+          rows.preferring.map((row) => row.rowId),
         ),
       );
 }

@@ -48,6 +48,7 @@ export interface Station {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
   readyWarningAfterMinutes: number;
+  whenClosedSendsTo: string | null;
 }
 
 /**
@@ -142,6 +143,7 @@ export async function listStations(tx: Transaction): Promise<Station[]> {
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
       readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes,
+      whenClosedSendsTo: kitchenStations.whenClosedSendsToStationId,
     })
     .from(kitchenStations)
     .where(eq(kitchenStations.active, true))
@@ -167,6 +169,22 @@ export async function listStationsToday(tx: Transaction) {
   });
 }
 
+async function requireClosedDestination(
+  tx: Transaction,
+  stationId: string,
+  sendsToStationId: string,
+): Promise<void> {
+  const refuse = (reason: "self" | "unknown" | "inactive") =>
+    new AppError("station.destination_invalid", { stationId, sendsToStationId, reason });
+  if (sendsToStationId === stationId) throw refuse("self");
+  const [destination] = await tx
+    .select({ active: kitchenStations.active })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.id, sendsToStationId));
+  if (destination === undefined) throw refuse("unknown");
+  if (!destination.active) throw refuse("inactive");
+}
+
 export async function updateStation(
   tx: Transaction,
   id: string,
@@ -181,6 +199,7 @@ export async function updateStation(
     changesAfterSending?: ChangesAfterSending;
     waitsForPass?: boolean;
     printerIds?: readonly string[];
+    whenClosedSendsTo?: string | null;
   } & StationTimingPatch,
 ): Promise<void> {
   if (Object.hasOwn(patch, "active"))
@@ -192,8 +211,10 @@ export async function updateStation(
     forgottenAfterMinutes,
     readyWarningAfterMinutes,
     printerIds,
+    whenClosedSendsTo,
     ...set
   } = patch;
+  if (whenClosedSendsTo != null) await requireClosedDestination(tx, id, whenClosedSendsTo);
   const timingPatch: StationTimingPatch = {};
   if (warmAfterMinutes !== undefined) timingPatch.warmAfterMinutes = warmAfterMinutes;
   if (overdueAfterMinutes !== undefined) timingPatch.overdueAfterMinutes = overdueAfterMinutes;
@@ -214,7 +235,11 @@ export async function updateStation(
   if (Object.keys(timingPatch).length > 0) {
     assertStationTiming(timingPatch, station, { id, name: station.name });
   }
-  const changes = { ...set, ...timingPatch };
+  const changes = {
+    ...set,
+    ...timingPatch,
+    ...(whenClosedSendsTo === undefined ? {} : { whenClosedSendsToStationId: whenClosedSendsTo }),
+  };
   try {
     if (Object.keys(changes).length > 0) {
       await tx.update(kitchenStations).set(changes).where(eq(kitchenStations.id, id));

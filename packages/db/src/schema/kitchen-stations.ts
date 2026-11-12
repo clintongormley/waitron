@@ -43,6 +43,9 @@ export const kitchenStations = table(
     closedSendsToStationId: id("closed_sends_to_station_id").references(
       (): AnySQLiteColumn => kitchenStations.id,
     ),
+    whenClosedSendsToStationId: id("when_closed_sends_to_station_id").references(
+      (): AnySQLiteColumn => kitchenStations.id,
+    ),
   },
   (t) => [
     check(
@@ -52,6 +55,10 @@ export const kitchenStations = table(
     check(
       "kitchen_stations_closed_sends_to_not_self_ck",
       sql`${t.closedSendsToStationId} <> ${t.id}`,
+    ),
+    check(
+      "kitchen_stations_when_closed_sends_to_not_self_ck",
+      sql`${t.whenClosedSendsToStationId} <> ${t.id}`,
     ),
     check("kitchen_stations_warm_after_ck", sql`${t.warmAfterMinutes} >= 1`),
     check("kitchen_stations_ready_warning_after_ck", sql`${t.readyWarningAfterMinutes} >= 1`),

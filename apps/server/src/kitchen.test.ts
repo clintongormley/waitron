@@ -211,6 +211,7 @@ describe("kitchen-station config", () => {
         changesAfterSending: "held-or-waiting",
         waitsForPass: false,
         ...defaultThresholds,
+        whenClosedSendsTo: null,
       },
       {
         id: expect.any(String),
@@ -226,6 +227,7 @@ describe("kitchen-station config", () => {
         changesAfterSending: "held-or-waiting",
         waitsForPass: false,
         ...defaultThresholds,
+        whenClosedSendsTo: null,
       },
       {
         id: expect.any(String),
@@ -241,6 +243,7 @@ describe("kitchen-station config", () => {
         changesAfterSending: "held-or-waiting",
         waitsForPass: false,
         ...defaultThresholds,
+        whenClosedSendsTo: null,
       },
     ]);
   });
@@ -394,6 +397,7 @@ describe("kitchen-station config", () => {
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
         readyWarningAfterMinutes: 3,
+        whenClosedSendsTo: null,
       },
     ]);
     await asApp(cfg, (tx) => deleteStation(tx, id));
@@ -621,6 +625,48 @@ describe("kitchen-station config", () => {
       params: { field: "readyWarningAfterMinutes", name: "Pass" },
     });
     expect(await db.select({ id: kitchenStations.id }).from(kitchenStations)).toEqual([]);
+  });
+
+  it("A1510 updateStation saves where a station's dishes go when it is closed, and null clears it", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, { name: "Grill" }));
+    const { id: other } = await asApp(cfg, (tx) => createStation(tx, { name: "Fryer" }));
+    const setting = async () =>
+      (await asApp(cfg, (tx) => listStations(tx))).find((s) => s.id === id)!.whenClosedSendsTo;
+    expect(await setting()).toBeNull();
+    await asApp(cfg, (tx) => updateStation(tx, id, { whenClosedSendsTo: other }));
+    expect(await setting()).toBe(other);
+    await asApp(cfg, (tx) => updateStation(tx, id, { name: "Grill two" }));
+    expect(await setting()).toBe(other);
+    await asApp(cfg, (tx) => updateStation(tx, id, { whenClosedSendsTo: null }));
+    expect(await setting()).toBeNull();
+  });
+
+  it("A1510 updateStation refuses a when-closed station that is itself, unknown or deleted, and writes nothing", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, { name: "Grill" }));
+    const { id: gone } = await asApp(cfg, (tx) => createStation(tx, { name: "Old" }));
+    await asApp(cfg, (tx) => deleteStation(tx, gone));
+    const missing = randomUUID();
+    for (const [sendsToStationId, reason] of [
+      [id, "self"],
+      [missing, "unknown"],
+      [gone, "inactive"],
+    ] as const) {
+      await expect(
+        asApp(cfg, (tx) =>
+          updateStation(tx, id, { name: "Renamed", whenClosedSendsTo: sendsToStationId }),
+        ),
+      ).rejects.toMatchObject({
+        code: "station.destination_invalid",
+        params: { stationId: id, sendsToStationId, reason },
+      });
+    }
+    const [row] = await db
+      .select({ name: kitchenStations.name, to: kitchenStations.whenClosedSendsToStationId })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id));
+    expect(row).toEqual({ name: "Grill", to: null });
   });
 
   it("setDefaultStation throws station.not_found for an absent OR a deleted station", async () => {

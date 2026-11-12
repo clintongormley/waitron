@@ -431,6 +431,10 @@ const en = {
   "prep.delete_station_daily_states": "Remove {count} daily station settings.",
   "prep.delete_station_daily_destinations_one": "This closed station uses normal routing: {names}.",
   "prep.delete_station_daily_destinations": "These closed stations use normal routing: {names}.",
+  "prep.delete_station_closed_defaults_one":
+    "This station no longer sends its dishes here when closed: {names}.",
+  "prep.delete_station_closed_defaults":
+    "These stations no longer send their dishes here when closed: {names}.",
   "prep.actions": "Actions",
   "prep.service_zone": "Service zone",
   "hours.clock_change_conflict":
@@ -1384,6 +1388,10 @@ const es: Record<keyof typeof en, string> = {
     "Esta estación cerrada usa el enrutamiento normal: {names}.",
   "prep.delete_station_daily_destinations":
     "Estas estaciones cerradas usan el enrutamiento normal: {names}.",
+  "prep.delete_station_closed_defaults_one":
+    "Esta estación ya no envía aquí sus platos cuando cierra: {names}.",
+  "prep.delete_station_closed_defaults":
+    "Estas estaciones ya no envían aquí sus platos cuando cierran: {names}.",
   "prep.actions": "Acciones",
   "prep.service_zone": "Zona de servicio",
   "hours.clock_change_conflict":

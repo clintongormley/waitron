@@ -942,7 +942,7 @@ export interface VenueServiceContribution {
     tx: Transaction,
     stationId: string,
     at: Date,
-  ): Promise<readonly { id: string; name: string; isDefault: boolean }[]>;
+  ): Promise<readonly { id: string; name: string; isDefault: boolean; preferred: boolean }[]>;
   closeStationForToday(
     tx: Transaction,
     stationId: string,
