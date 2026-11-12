@@ -950,7 +950,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         return row;
       });
       if (inserted === undefined) {
-        // Disconnected mid-add: best-effort unpair the vendor reader so it is not stranded.
         await seat.readers.remove(runtimeDeps(), result.providerRef).catch(() => {});
         await gated(sessionId, (tx) => requireEnabled(tx, seat));
         throw new AppError("reader.provider_disconnected", { providerId });

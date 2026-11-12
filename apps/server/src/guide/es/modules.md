@@ -21,5 +21,5 @@ Antes, elimina o desvincula sus lectores en **Pagos con tarjeta**. Si quedan lec
 el aviso los nombra y te ofrece un enlace a esa página. Al desactivarlo, conservas sus credenciales
 para pagos anteriores y reembolsos.
 
-Para volver a añadir lectores, elige **Activar** y confirma. **Configurado** indica si sus
+Para volver a añadir lectores, selecciona **Deshabilitado** o **Todos**, luego elige **Activar** y confirma. **Configurado** indica si sus
 credenciales están guardadas; es independiente de **Habilitado**.

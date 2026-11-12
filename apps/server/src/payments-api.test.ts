@@ -12,6 +12,7 @@ import {
   nowIso,
   tenants,
   withTransaction,
+  saveSettings,
   type Database,
   venueLocationId,
 } from "@waitron/db";
@@ -34,6 +35,7 @@ import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-str
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import {
   PAYMENTS_PERMISSIONS,
+  PAYMENTS_SETTINGS,
   SimulatorPaymentProvider,
   cardReaderHolders,
   cardReaders,
@@ -3150,7 +3152,10 @@ describe("provider On/Off", () => {
         error: { code: "payment.provider_in_use", params: { readerNames: ["Front reader"] } },
       },
     });
-    await suite.db.delete(cardReaders).where(eq(cardReaders.id, reader[0]!.id));
+    await suite.db
+      .update(cardReaders)
+      .set({ active: false, unpairedAt: nowIso() })
+      .where(eq(cardReaders.id, reader[0]!.id));
     const off = await change(cookie, false, 0);
     expect({ status: off.status, body: await off.json() }).toEqual({
       status: 200,
@@ -3188,3 +3193,56 @@ describe("provider On/Off", () => {
     });
   });
 });
+
+it.each(["pair", "adopt"] as const)(
+  "refuses %s if the provider is switched off during its reply",
+  async (mode) => {
+    const venue = await seedVenueWithStaff();
+    const providerRef = nextRef();
+    const turnOff = () =>
+      withTransaction(suite.db, (tx) =>
+        saveSettings(tx, PAYMENTS_SETTINGS, {
+          doc: { providers: { stripe: false } },
+          expectedRevision: 0,
+          personId: null,
+        }),
+      );
+    const remove = vi.fn(async () => {});
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        add: async () => {
+          await turnOff();
+          return { providerRef, status: "paired" };
+        },
+        list: async () => {
+          await turnOff();
+          return [{ providerRef, name: "Front reader" }];
+        },
+        remove,
+      },
+    };
+    const app = mountApp(venue, [seat]);
+    expect((await connectStripe(app, venue)).status).toBe(200);
+    const response = await send(
+      app,
+      "POST",
+      mode === "pair"
+        ? "/management-api/payments/readers"
+        : "/management-api/payments/readers/adopt",
+      {
+        cookie: venue.managerCookie,
+        body: { providerId: "stripe", providerRef, reference: providerRef, name: "Front reader" },
+      },
+    );
+    expect(
+      await suite.db.select().from(cardReaders).where(eq(cardReaders.providerRef, providerRef)),
+    ).toEqual([]);
+    expect({ status: response.status, body: await response.json() }).toMatchObject({
+      status: 409,
+      body: { error: { code: "payment.provider_disabled" } },
+    });
+    expect(remove).toHaveBeenCalledTimes(mode === "pair" ? 1 : 0);
+  },
+);

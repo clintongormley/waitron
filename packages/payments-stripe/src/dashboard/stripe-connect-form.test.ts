@@ -63,7 +63,7 @@ describe("stripe-connect-form", () => {
   it.each(["secret-key", "webhook-secret", "success-url", "cancel-url"])(
     "submits the current credentials with Enter from %s",
     async (field) => {
-      const request = vi.fn(async () => ({ merchantName: "Deli" }));
+      const request = vi.fn(async () => ({ merchantName: "Deli" })) as unknown as DashboardRequest;
       const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
       await setInput(el, "secret-key", "sk_key");
       await setInput(el, "webhook-secret", "whsec_key");
@@ -98,7 +98,7 @@ describe("stripe-connect-form", () => {
     const onCancel = vi.fn();
     const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", {
       request,
-      actions: { saveLabel: "Save", cancelLabel: "Cancel", onCancel },
+      actions: { saveLabel: "Save", cancelLabel: "Cancel", onCancel, onBusy: vi.fn() },
     });
     await setInput(el, "secret-key", "key");
     q(el, "wt-button[slot=cancel]")!.click();

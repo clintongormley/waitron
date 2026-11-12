@@ -413,10 +413,6 @@ declare module "@waitron/shared" {
      * class backstops the settlement.
      */
     "payment.webhook_unresolved": { provider: string; externalRef: string };
-    /**
-     * A card provider cannot be disconnected while a card reader that uses it is still active.
-     * `activeReaders` is a COUNT; never a reader id or a secret.
-     */
     "payment.provider_in_use": { activeReaders: number; readerNames?: string[] };
     "payment.provider_disabled": { providerId: string };
     "payment.not_stuck": { paymentId: string };

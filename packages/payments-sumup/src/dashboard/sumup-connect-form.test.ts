@@ -93,7 +93,7 @@ async function connect(el: SumUpConnectForm): Promise<void> {
 
 describe("sumup-connect-form", () => {
   it.each(["api-key"])("submits the current credentials with Enter from %s", async (field) => {
-    const request = vi.fn(async () => ({ merchantName: "Deli" }));
+    const request = vi.fn(async () => ({ merchantName: "Deli" })) as unknown as DashboardRequest;
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
     await setInput(el, "api-key", "key");
     const input = q(el, `[data-test=${field}]`)!.shadowRoot!.querySelector("input")!;
@@ -119,7 +119,7 @@ describe("sumup-connect-form", () => {
     const onCancel = vi.fn();
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", {
       request,
-      actions: { saveLabel: "Save", cancelLabel: "Cancel", onCancel },
+      actions: { saveLabel: "Save", cancelLabel: "Cancel", onCancel, onBusy: vi.fn() },
     });
     await setInput(el, "api-key", "key");
     q(el, "wt-button[slot=cancel]")!.click();

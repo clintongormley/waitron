@@ -184,7 +184,14 @@ export class ModulesScreen extends LitElement {
     this.switchError = "";
     this.readerNames = [];
     try {
-      await this.api.setPaymentProviderState(row.id, !row.enabled, row.revision ?? 0);
+      const current = this.catalogue?.find(
+        (entry) => entry.id === row.id && entry.category === row.category,
+      );
+      await this.api.setPaymentProviderState(
+        row.id,
+        !row.enabled,
+        current?.revision ?? row.revision ?? 0,
+      );
       this.switching = undefined;
       void this.#load();
     } catch (error) {
@@ -193,6 +200,7 @@ export class ModulesScreen extends LitElement {
       this.readerNames = Array.isArray(names)
         ? names.filter((name): name is string => typeof name === "string")
         : [];
+      if (this.switchError === "settings.out_of_date") await this.#load();
     } finally {
       this.busy = false;
     }

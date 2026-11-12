@@ -196,3 +196,31 @@ it("offers no provider switch while the Payments module is disabled", async () =
       .shadowRoot!.querySelector("[data-test=switch-sumup]"),
   ).toBeNull();
 });
+
+it("refreshes a stale provider revision so the open confirmation can be retried", async () => {
+  const api = modulesClient({
+    listModules: vi
+      .fn()
+      .mockResolvedValueOnce([
+        { id: "sumup", category: "card-provider", enabled: true, revision: 0 },
+      ])
+      .mockResolvedValue([{ id: "sumup", category: "card-provider", enabled: true, revision: 1 }]),
+    setPaymentProviderState: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "settings.out_of_date" })
+      .mockResolvedValue({ enabled: false, revision: 2 }),
+  });
+  const el = await mount(api);
+  el.canManageProviders = true;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=switch-sumup]")!
+    .click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
+  await vi.waitFor(() => expect(api.listModules).toHaveBeenCalledTimes(2));
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
+  await vi.waitFor(() =>
+    expect(api.setPaymentProviderState).toHaveBeenLastCalledWith("sumup", false, 1),
+  );
+});

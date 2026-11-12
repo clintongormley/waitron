@@ -19,5 +19,5 @@ As an administrator, choose **Turn off** in the provider's row menu and confirm.
 unpair its readers on **Card payments** first; a refusal names any readers still attached and
 links you there. Turning it off keeps its credentials for earlier payments and refunds.
 
-To add readers again, choose **Turn on** and confirm. **Configured** tells you whether its
+To add readers again, select **Disabled** or **All**, then choose **Turn on** and confirm. **Configured** tells you whether its
 credentials are saved; it is separate from **Enabled**.
