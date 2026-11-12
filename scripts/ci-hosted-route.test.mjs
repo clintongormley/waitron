@@ -64,7 +64,32 @@ function fixture(running = 0, queued = 0) {
 
 describe("queue-pressure routing", () => {
   it.each([
+    [6, "hosted", "server"],
+    [0, "hosted", "hosted"],
+    [6, "health", "hosted"],
+  ])(
+    "routes idle capacity with %i slots and unreadable %s inventory to %s",
+    async (slots, fault, route) => {
+      const f = fixture(),
+        request = f.options.request,
+        outputs = [];
+      f.options.capacity = { observedAt: 1, slots, serverRunning: 0, serverWaiting: 0 };
+      f.options.request = async (path, options) => {
+        if (path.includes(fault === "health" ? "/workflows/ci.yml/runs?" : "/actions/runs?"))
+          return { total_count: 1, workflow_runs: [] };
+        return request(path, options);
+      };
+      await healthCommand("route", f.options, {
+        output: (line) => outputs.push(line),
+        report: () => {},
+      });
+      expect(outputs).toEqual([`server_route=${route}`]);
+    },
+  );
+
+  it.each([
     [0, 0, 6, 0, 0, "server"],
+    [0, 1, 6, 0, 0, "hosted"],
     [6, 0, 6, 19, 0, "hosted"],
     [1, 5, 6, 20, 0, "server"],
     [6, 12, 6, 0, 1, "hosted"],

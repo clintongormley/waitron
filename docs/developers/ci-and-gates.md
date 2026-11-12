@@ -199,7 +199,10 @@ single job. GitHub reports the hosted image job as `image / smoke`.
 expressions locally; these checks do not run a hosted image build. Existing check names, test commands, coverage merges,
 setup retries and execution limits remain unchanged.
 
-The routing job uses its existing read-only Actions token. With no stuck server queue,
+The routing job uses its existing read-only Actions token. After a successful server-health
+scan and capacity validation, positive server slots with zero running and waiting work select
+the server without reading hosted counts: every hosted count gives the same server-tie result.
+Otherwise, with no stuck server queue,
 it reads this repository's queued and running workflows, including fork pull requests,
 and their current-attempt jobs. Jobs with nonempty labels that do not include
 `self-hosted` count as hosted. Running jobs and `queued`, `pending`, `waiting` or `requested` jobs count.
@@ -209,8 +212,9 @@ quarantined slots and retained runners are excluded, and admitted jobs are not c
 A failed free-slot health check publishes zero slots; a full pool uses its recorded capacity. The router refreshes hosted counts through
 its existing read-only API scan and compares `(running + waiting) / slots` with the server
 snapshot, using the owner's stipulated 20 hosted slots. Ties select the server; zero server
-slots select hosted. Unknown inputs select hosted; readable-stall checks remain.
-The summary prints both counts, snapshot age and the chosen side, including in hosted mode. This repository snapshot reserves no capacity;
+slots select hosted. Unknown required inputs select hosted; readable-stall checks remain.
+For measured decisions, the summary prints snapshot age and the chosen side, including in hosted mode; it prints hosted
+counts when the comparison needs them. This repository snapshot reserves no capacity;
 simultaneous decisions can choose the same side. The run's own `changes` job counts while running.
 Before activation, verify repository-variable arrival in an ordinary run and check its route and labels.
 The snapshot has no expiry rule, so inspect the printed age; the decision routes a whole run.
@@ -230,7 +234,7 @@ The existing health check reads CI's queued and running workflows. A job's wait 
 If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
-inventory makes routing continue checking the other readable runs, then choose GitHub
+server-health inventory makes routing continue checking the other readable runs, then choose GitHub
 (owner, 2026-11-10, A1470). Degraded reads can leave the server idle. The summary
 names the uncertainty rather than presenting partial hosted counts as complete. A timed-out routing step leaves an empty result, which
 every routed job treats as hosted. This does not change the human routing switch.

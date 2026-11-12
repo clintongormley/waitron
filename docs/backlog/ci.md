@@ -524,14 +524,16 @@ A1424's live qualification was added on 7 November 2026.
   watchdog dispatches trusted-main health recovery for untouched queued PR planners;
   other stuck work is reported without moving runs. First-attempt PR planners use published
   spare capacity; non-PR planning remains hosted. A1473 still needs controller publication
-  and its staged overflow drill.
+  and its staged overflow drill. Run 43278084012’s first planner never ran the ratio during
+  its 32-minute wait; the historical admission/recovery cause remains unproved.
   Qualify the idle probe, browser guest
   requirements and current-head coverage/aggregate results.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
   drills. Keep the corrected v41 controller; the existing routing job compares refreshed hosted counts
-  with the published server snapshot (watcher, 2026-11-09 10:01). A1454 keeps six slots per host (owner,
+  with the published server snapshot (watcher, 2026-11-09 10:01), except that idle positive
+  server capacity needs no hosted read (watcher, 2026-11-12 20:47). A1454 keeps six slots per host (owner,
   2026-11-11; see Decisions and deliberate limits); A1461 reduces run sizes. Per-job
   overflow, the remaining workflows and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
@@ -693,6 +695,7 @@ A1424's live qualification was added on 7 November 2026.
   Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain. **2026-11-09 17:19:**
   the owner replaced initial-wave fit with whole-run queue pressure; qualify the count variable and route before activation.
   **2026-11-10, A1470:** the owner chose “Unsure → GitHub (Recommended)”. New-run routing uses GitHub when inventory, capacity or its module cannot be read; normal ratios and server ties remain. Degraded reads may leave the server idle; retain the first natural blind decision’s source, route and runner results before claiming live qualification.
+  **2026-11-12 20:47, watcher:** after successful server-health and capacity checks, idle positive server capacity needs no hosted-count read: all hosted counts select server. Busy and zero-capacity paths retain their checks; the earlier planner diagnosis stays open under A1473.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 
