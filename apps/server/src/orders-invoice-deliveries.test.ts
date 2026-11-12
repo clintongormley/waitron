@@ -443,24 +443,24 @@ describe("the order detail's delivery status", () => {
           designation: "duplicate",
           status: "queued",
           personId: venue.operatorId,
-          personName: "Ana",
+          personName: "Anna",
           printerHold: null,
         },
         originalCompleted: true,
         actions: { retryOriginal: null, print: null, receiptInstead: null },
         history: [
-          { medium: "a4", designation: "duplicate", personName: "Ana" },
+          { medium: "a4", designation: "duplicate", personName: "Anna" },
           {
             id: email.id,
             medium: "email",
             designation: "original",
             status: "sent",
             personId: venue.adminId,
-            personName: "Administradora",
+            personName: "Administrator",
           },
         ],
       },
-      invoicePdfDownloads: [{ personId: venue.adminId, personName: "Administradora" }],
+      invoicePdfDownloads: [{ personId: venue.adminId, personName: "Administrator" }],
     });
     const body = detail.json as {
       deliveries: { history: unknown[] };

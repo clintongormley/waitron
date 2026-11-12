@@ -1769,14 +1769,14 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
       revision: revision + 1,
       reminder: { groupId: party.cake.id, dueAt: null },
       groups: [
-        { id: party.fired.id, state: "fired", sentAt: expect.any(String), sentBy: "Ana" },
-        { id: party.cake.id, state: "held", remindAt, sentAt: expect.any(String), sentBy: "Ana" },
+        { id: party.fired.id, state: "fired", sentAt: expect.any(String), sentBy: "Anna" },
+        { id: party.cake.id, state: "held", remindAt, sentAt: expect.any(String), sentBy: "Anna" },
         {
           id: party.croquettes.id,
           state: "held",
           remindAt: null,
           sentAt: expect.any(String),
-          sentBy: "Ana",
+          sentBy: "Anna",
         },
       ],
       ungrouped: [],

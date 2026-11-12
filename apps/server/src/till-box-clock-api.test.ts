@@ -57,16 +57,16 @@ let venue: BillVenue;
 let counter: ZoneOffers;
 let dishId = "";
 let profileId = "";
-/** Ana, the provisioned staff member, PIN 5555. */
+/** Anna, the provisioned staff member, PIN 5555. */
 let staffCookie = "";
-/** Ana again, on the second till. */
+/** Anna again, on the second till. */
 let otherTillCookie = "";
 /** Marta, a manager, PIN 1234. */
 let managerId = "";
 /** The provisioned administrator, PIN 1234, signed in on a till of their own. */
 let adminTillCookie = "";
 let adminTillId = "";
-/** Ana on a till whose profile has no selling action. */
+/** Anna on a till whose profile has no selling action. */
 let clockOnlyCookie = "";
 let clockOnlyTillId = "";
 
@@ -504,7 +504,7 @@ it("sets the box's clock from a staff member's till during start-up, the control
   expect(incidentParams("clock.corrected", id)).toMatchObject({
     source: "staff",
     byStaff: true,
-    person: "Ana",
+    person: "Anna",
     device: "Barra",
   });
   const stop = await stopNow(box);
@@ -528,7 +528,7 @@ it("confirms the box's own time from a staff member's till that agrees", async (
   expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
     confirmedBy: "staff",
     byStaff: true,
-    person: "Ana",
+    person: "Anna",
     device: "Barra",
   });
   expect(await stopNow(box)).toMatchObject({ proof: "confirmed" });
@@ -1285,7 +1285,7 @@ it("confirms a waiting start from an agreeing till behind the chain, and lifts t
   expect(confirmationRow(id)).toMatchObject({ source: "staff", person_id: venue.operatorId });
   expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
     confirmedBy: "staff",
-    person: "Ana",
+    person: "Anna",
   });
   expect(start.status).toBe("by_person");
   expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toHaveLength(1);
@@ -1378,7 +1378,7 @@ it("sets a waiting box behind the chain from a till still more than a minute bef
   });
   expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
     confirmedBy: "staff",
-    person: "Ana",
+    person: "Anna",
   });
   expect(start.status).toBe("by_person");
   await expect(paymentsAdmitted(box)).resolves.toBeUndefined();

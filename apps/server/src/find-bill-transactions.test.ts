@@ -571,7 +571,7 @@ describe("completed post-invoice refund Transactions", () => {
       tableName: null,
       customerName: "Cliente Norte",
       methods: [{ method: "cash", last4: null }],
-      staff: { id: venue.supervisorId, name: "Sofía" },
+      staff: { id: venue.supervisorId, name: "Sophia" },
       amount: "-2.30",
     });
     expect(result.rows[1]).toMatchObject({

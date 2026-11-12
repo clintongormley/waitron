@@ -152,7 +152,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
           billId: p.tabId,
           draftId: owned.draft!.id,
           ownerId: venue.adminId,
-          ownerName: "Administradora",
+          ownerName: "Administrator",
           edit: owned.edit,
         },
       });

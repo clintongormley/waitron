@@ -264,7 +264,7 @@ describe("Orders routes", () => {
       invoices: [{ kind: "invoice" }, { kind: "credit_note" }],
       tenders: [{ method: "cash", amount: due }],
       party: { tables: [expect.stringMatching(/^Mesa /)] },
-      departure: { reason: "Se marcharon sin pagar", recordedBy: "Sofía", authorizedBy: "Sofía" },
+      departure: { reason: "Se marcharon sin pagar", recordedBy: "Sophia", authorizedBy: "Sophia" },
     });
   });
 

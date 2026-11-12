@@ -2057,7 +2057,7 @@ describe("A803 split: the panel's read", () => {
         code: "draft.out_of_date",
         params: {
           billId: octopusBill,
-          edit: { billId: octopusBill, editorId: venue.adminId, editorName: "Administradora" },
+          edit: { billId: octopusBill, editorId: venue.adminId, editorName: "Administrator" },
         },
       });
       const { edit } = refused.json.params as { edit: Record<string, unknown> };
