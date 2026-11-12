@@ -660,7 +660,6 @@ declare module "@waitron/shared" {
       moneyRefundable: string;
     };
     "invoice_correction.chain_unsound": { saleId: string };
-    "invoice_correction.refund_pending": { saleId: string; refundId: string };
     /** The bill cannot be closed by transfer: it is not one whole, positive, untouched bill. */
     "transfer_close.ineligible": {
       workingOrderId: string;

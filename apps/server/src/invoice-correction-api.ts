@@ -46,7 +46,6 @@ export function mountInvoiceCorrectionApi(
       "invoice_correction.money_short": 409,
       "invoice_correction.split_changed": 409,
       "invoice_correction.chain_unsound": 409,
-      "invoice_correction.refund_pending": 409,
     },
     "invoice_correction.failed",
   );
