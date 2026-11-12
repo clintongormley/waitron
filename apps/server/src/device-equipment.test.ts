@@ -184,7 +184,7 @@ async function readerHoldersOf(ids: string[]): Promise<Record<string, string>> {
   return Object.fromEntries(rows.map((r) => [r.readerId, r.deviceId]));
 }
 
-async function signIn(deviceId: string, displayName = "Lucía") {
+async function signIn(deviceId: string, displayName = "Lucy") {
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName, pinHash: hashPin("4321"), role: "staff" })
@@ -564,7 +564,7 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
       readers: await readerHoldersOf([reader]),
     };
 
-    const first = await signIn(a, "Ana");
+    const first = await signIn(a, "Anna");
     await inTx((tx) => endSession(tx, first.token));
     await signIn(a, "Bea");
     await inTx((tx) => endDeviceSessions(tx, a));
@@ -771,7 +771,7 @@ describe("readDeviceEquipment", () => {
     const one = await readsOf((tx) => readDeviceEquipment(tx, a));
     const both = await readsOf((tx) => readDevicesEquipment(tx, [a, b]));
 
-    expect(one.value.roles[0]!.default!.heldBy).toMatchObject({ deviceId: b, personName: "Lucía" });
+    expect(one.value.roles[0]!.default!.heldBy).toMatchObject({ deviceId: b, personName: "Lucy" });
     expect(both.value.get(b)![4]!.resolved).toMatchObject({ id: reader });
     // Devices, the profiles' printers, the printers with their holders; the device's reader
     // choices, the profiles' readers, the readers with their holders; then, for the device's own
@@ -857,9 +857,9 @@ describe("readDeviceEquipment", () => {
       default: { id: reader, name: "Lector", portable: true, heldBy: holderB },
     });
 
-    await signIn(b, "Lucía");
+    await signIn(b, "Lucy");
     const signedIn = await inTx((tx) => readDeviceEquipment(tx, a));
-    expect(signedIn.roles[0]!.default!.heldBy).toEqual({ ...holderB, personName: "Lucía" });
+    expect(signedIn.roles[0]!.default!.heldBy).toEqual({ ...holderB, personName: "Lucy" });
 
     const own = await inTx((tx) => readDeviceEquipment(tx, b));
     expect(own.roles[0]).toMatchObject({

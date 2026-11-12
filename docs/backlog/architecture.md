@@ -847,6 +847,7 @@ product failures.
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
   The backup-api.route and mirror-bundle-api suites use English staff display-name samples.
   The cancel-invoiced-order and unpaid-departure suites use Sophia for their local supervisor samples.
+  Local equipment and device-action fixtures use Lucy and Anna for staff names.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
