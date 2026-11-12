@@ -484,7 +484,7 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
 
 ## Bundle: Period dialogs
 
-1 entry, size S.
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
   updates; the server still refuses a delete sent with an old clock revision — left open by

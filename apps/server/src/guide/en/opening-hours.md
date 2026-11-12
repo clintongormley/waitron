@@ -17,4 +17,4 @@ Review public holidays after changing the venue’s city. Choosing another holid
 
 ## Check where a period is used {#periods}
 
-Open **Periods** from Calendar. In **Painted in**, choose a season or special day to check its timetable. Close that timetable to return to Periods.
+Open **Periods** from Calendar. In **Painted in**, choose a season or special day to check its timetable.

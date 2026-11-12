@@ -17,4 +17,4 @@ Revisa los festivos después de cambiar la ciudad del local. Si eliges otra zona
 
 ## Consulta dónde se usa un periodo {#periods}
 
-Abre **Periodos** desde Calendario. En **Pintado en**, elige una temporada o un día especial para consultar su horario. Cierra ese horario para volver a Periodos.
+Abre **Periodos** desde Calendario. En **Pintado en**, elige una temporada o un día especial para consultar su horario.

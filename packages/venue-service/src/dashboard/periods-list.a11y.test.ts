@@ -23,6 +23,7 @@ function expectBinsOnScreen(table: Element, rows: number) {
   const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-period]")];
   expect(bins).toHaveLength(rows);
   for (const [index, bin] of bins.entries()) {
+    bin.scrollIntoView({ block: "nearest", inline: "nearest" });
     const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
     expect(at.width, `row ${index}`).toBeGreaterThan(0);
     expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
@@ -155,6 +156,8 @@ async function mount(state: string, theme: "light" | "dark", inWindow = false) {
   screen.readOnly = state === "viewer";
   if (inWindow) {
     const frame = document.createElement("wt-modal");
+    frame.size = "wide";
+    frame.height = "medium";
     frame.open = true;
     wrapper.append(frame);
     frame.append(screen);
