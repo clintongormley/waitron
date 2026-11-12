@@ -59,7 +59,7 @@ describe("runDeclarationCommand", () => {
     expect(result).toEqual({
       status: 1,
       stdout: "",
-      stderr: 'declaration.release_blocked {"count":2}\n',
+      stderr: 'declaration.release_blocked {"count":1}\n',
     });
   });
 
@@ -71,9 +71,8 @@ describe("runDeclarationCommand", () => {
     expect(result.stdout).toContain("00000000T");
     expect(result.stdout).toContain("Elche – España");
     const blockers = result.stderr.trim().split("\n");
-    expect(blockers).toHaveLength(2);
+    expect(blockers).toHaveLength(1);
     expect(blockers[0]).toMatch(/^release-blocker: Item 1\.d\)/);
-    expect(blockers[1]).toMatch(/^release-blocker: A940 slice 4/);
   });
 
   it("writes a version that check accepts, leaving the producer's slots", async () => {

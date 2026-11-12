@@ -13,23 +13,20 @@ request has landed.
 ## No release can be cut yet
 
 Both commands refuse today, on purpose. The declaration's template,
-[`template.md`](../../packages/fiscal-verifactu/declarations/template.md), opens with two
-"release blocker" lines, and the package command both release commands call refuses while any is
-present, answering `declaration.release_blocked {"count":2}`:
+[`template.md`](../../packages/fiscal-verifactu/declarations/template.md), opens with a
+"release blocker" line, and the package command both release commands call refuses while one is
+present, answering `declaration.release_blocked {"count":1}`.
 
-- **The first line is for the asesor's question Q53.** Item d) of the declaration, which lists
-  what the system is made of, is still the draft sent to the asesor (the tax adviser) as Q53.
-  Whoever records the asesor's answer replaces item d) with the answered wording, keeping the
-  cloud-server phrase and the spare-server sentence only if the version can do them, and deletes
-  the line.
-- **The second line is for A940 slice 4.** Pushing a tag whose name starts with `v` already makes
-  CI publish an image under that version's number, but that image does not yet carry the
-  version's number in its records, nor its declaration. Slice 4 makes it carry both, and deletes
-  the line.
+The line is for the asesor's question Q53. Item d) of the declaration, which lists what the system
+is made of, is still the draft sent to the asesor (the tax adviser) as Q53. Whoever records the
+asesor's answer replaces item d) with the answered wording, keeping the cloud-server phrase and the
+spare-server sentence only if the version can do them, and deletes the line.
 
-Never push a `v*` tag by hand (`git tag v1.0.0 && git push origin v1.0.0`). Only the two commands
-read the blocker lines, so a tag pushed by hand skips them and publishes the image anyway. Slice 4
-will make CI refuse such a tag.
+Never push a `v*` tag by hand (`git tag v1.0.0 && git push origin v1.0.0`). The two commands check
+what they can before the tag exists, and a tag pushed by hand skips those checks. CI then refuses to
+publish a tag that is not on a commit of `main`, whose name is not `v` followed by a version such as
+`1.0.0`, whose declaration file is missing, still carries a blocker line or disagrees with the
+code, or whose version is already published.
 
 ## 1. Make the release worktree
 
@@ -55,8 +52,8 @@ cd ~/workspace/worktrees/waitron-release-1.0.0
 - AEAT's frequently asked questions about the declaration, and its worked example, are read again
   for changes ([our notes on them](../compliance/verifactu-faq-notes.md)).
 - The repository is still public (`gh repo view clintongormley/waitron --json visibility` answers
-  `"visibility":"PUBLIC"`). The declaration's annex item 2.b) links its releases page, which slice 4
-  makes the public archive of every declaration. If the repository is not public, stop: the
+  `"visibility":"PUBLIC"`). The declaration's annex item 2.b) links its releases page, the public
+  archive of every declaration. If the repository is not public, stop: the
   declarations move to a public place first, and this version's item 2.b) names the new address.
 
 ## 3. Load the producer's settings
@@ -154,8 +151,51 @@ gh run list --workflow ci.yml --limit 5
 gh run watch <run id>
 ```
 
-Pick the run whose branch is `v1.0.0`. Its `publish` job publishes the image only after the whole
-run is green.
+Pick the run whose branch is `v1.0.0`. It runs every check, as the nightly run does, and then
+two jobs make the release:
+
+1. **`publish`** waits for the whole run to be green. It refuses a tag that is not on `main` or
+   whose name is not a release version, then builds the image with the version stamped in. The
+   build renders the version's declaration into `/app/declaration/`, and fails if the committed
+   `declarations/v1.0.0.md` is missing, carries a blocker line or disagrees with the code. It runs
+   `check-release 1.0.0` inside the built image, refuses a version the registry already holds, and
+   only then pushes `ghcr.io/clintongormley/waitron:1.0.0` and the print agent's `:1.0.0`.
+2. **`release`** pulls that published image, copies its declaration's PDF and plain text out of
+   it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
+   `waitron-1.0.0-declaration.txt`, making the Release if there is none. Because the files come
+   out of the published image, they are the same bytes every box running `1.0.0` serves.
+
+Check the Release once the run is green:
+
+```sh
+gh release view v1.0.0
+```
+
+It should list both files. Open the PDF and check that it names version `1.0.0`, the producer and
+the date you signed.
+
+If `release` fails, for example on a network error, re-run only the failed job:
+
+```sh
+gh run rerun <run id> --failed
+```
+
+That repeats the upload and replaces the two files from the image the tag names. Do not re-run the
+whole workflow: its `publish` job stops, because the version is already published, and `release`
+never runs.
+
+## 8. Install the release on a box
+
+On the box, give `waitron.sh install` the tag:
+
+```sh
+sudo bash waitron.sh install v1.0.0
+```
+
+It pulls the published images for `1.0.0` rather than building anything, and pins them in the
+box's `.env`, so the box stays on that release. A production box starts only on a release: on any
+other build its start stops on the recovery page with `server.unreleased_build`. The box's own
+steps are in [the deploy guide](../../deploy/README.md#installing-a-release).
 
 ## Read the draft before the blockers go
 
