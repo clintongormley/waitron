@@ -494,8 +494,10 @@ Remaining Stripe qualification and maintenance.
   as an FYI the same day and built). While a card payment of a placed order is in flight — running
   in this process, still `attempting` at its provider, or already charged and not yet
   on a sale — a cash or hand-keyed card collect
-  of the order, a payment of it in the bill's payment window (or its preview; any card in flight,
-  part payments' included), a second card payment of it and an unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
+  of the order, a payment of it in the bill's payment window or its preview (added 2026-11-12;
+  there a card taken for a part payment is not counted, though its reservation is, as on an open
+  bill),
+  a second card payment of it and an unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
   nothing. Pressing Pay again to file a card that was already charged is never refused, even from
   another till and even while that card's own payment has not yet filed it: it files that charge and
   asks no reader. A till on another payment provider is refused until the charge is filed, by the

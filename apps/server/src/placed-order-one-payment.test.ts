@@ -106,7 +106,9 @@ function snapshot() {
       (select count(*) from tenders) as tenders,
       (select count(*) from sale_settlements) as settlements,
       (select count(*) from payments) as payments,
-      (select count(*) from print_jobs) as printJobs
+      (select count(*) from print_jobs) as printJobs,
+      (select count(*) from bill_payments) as billPayments,
+      (select count(*) from bill_payment_refunds) as billRefunds
   `)[0];
 }
 
@@ -337,6 +339,129 @@ describe("a placed order's bill payment while its card is in flight", () => {
     expect(await statusOf(venue, id)).toBe("placed");
     expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "attempting", saleId: null }]);
   });
+
+  it("refuses a cash bill payment and its preview while the whole order's card is charged but on no sale", async () => {
+    const id = await placed("uninvoiced");
+    venue.card.crashNextCollect("captured");
+    expect((await pay(id)).status).toBe(500);
+    expect(paymentAttemptIsLive(venue.db, id)).toBe(false);
+    const before = snapshot();
+
+    const preview = await previewCash(id);
+    const cash = await billCash(id);
+
+    expect(preview).toEqual(refusedInFlight(id));
+    expect(cash).toEqual(refusedInFlight(id));
+    expect(snapshot()).toEqual(before);
+    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "captured", saleId: null }]);
+    const recovered = await pay(id);
+    expect(recovered.json.outcome).toBe("captured");
+  });
+
+  function partCard(id: string) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "1.00",
+      method: "card",
+      entry: "reader",
+      applied: "1.00",
+      tip: "0.00",
+      expectedEdit: null,
+    });
+  }
+
+  function partCashOnTill2(id: string) {
+    return send(venue.app, venue.cookie2, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      ...cashAsk,
+      amount: "1.00",
+      tendered: "1.00",
+      applied: "1.00",
+    });
+  }
+
+  it("takes a cash part payment, against what is left, while another part payment's card is left unresolved by a reader timeout, as on an open bill", async () => {
+    const id = await placed("uninvoiced");
+    venue.card.stallNextCollect();
+    const card = await partCard(id);
+    expect(card).toMatchObject({ status: 200, json: { outcome: "timeout" } });
+    expect(
+      venue.db.all(sql`select state from bill_payments where working_order_id = ${id}`),
+    ).toEqual([{ state: "pending" }]);
+    expect(
+      venue.db.all(sql`
+        select state, bill_payment_id is not null as partPayment from payments
+        where working_order_id = ${id}`),
+    ).toEqual([{ state: "attempting", partPayment: 1 }]);
+
+    const preview = await send(
+      venue.app,
+      venue.cookie2,
+      "POST",
+      `/api/working-orders/${id}/payments/preview`,
+      { ...cashAsk, amount: "1.00", tendered: "1.00", applied: "1.00" },
+    );
+    const cash = await partCashOnTill2(id);
+
+    expect(preview.status).toBe(200);
+
+    expect(cash.status).toBe(200);
+    expect(cash.json).toMatchObject({
+      outcome: "received",
+      payment: { state: "received" },
+      balance: { total: "3.00", received: "1.00", reserved: "1.00", outstanding: "1.00" },
+    });
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(salesOf(id)).toEqual([]);
+  });
+
+  it("does not list a part payment's card at the reader as the whole order's live card, and takes cash beside it", async () => {
+    const id = await placed("uninvoiced");
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    let paying: ReturnType<typeof send> | undefined;
+    let observed;
+    try {
+      paying = partCard(id);
+      await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+      observed = { live: paymentAttemptIsLive(venue.db, id), cash: await partCashOnTill2(id) };
+    } finally {
+      release();
+    }
+    const card = await paying;
+
+    expect(observed.live).toBe(false);
+    expect(observed.cash.status).toBe(200);
+    expect(observed.cash.json).toMatchObject({
+      outcome: "received",
+      balance: { received: "1.00", reserved: "1.00", outstanding: "1.00" },
+    });
+    expect(card).toMatchObject({
+      status: 200,
+      json: { outcome: "received", balance: { received: "2.00", outstanding: "1.00" } },
+    });
+    expect(await statusOf(venue, id)).toBe("placed");
+  });
+
+  it("refuses a card payment of the whole order while a part payment's card is at the reader", async () => {
+    const id = await placed("uninvoiced");
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    let paying: ReturnType<typeof send> | undefined;
+    let whole;
+    try {
+      paying = partCard(id);
+      await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+      whole = await pay(id, venue.cookie2);
+    } finally {
+      release();
+    }
+    await paying;
+
+    expect(whole).toMatchObject({ status: 409, json: { code: "bill.payments_received" } });
+    expect(venue.card.collectCalls.length).toBe(calls + 1);
+  });
 });
 
 describe("giving back a part payment on a sent bill before its invoice", () => {
@@ -417,6 +542,34 @@ describe("giving back a part payment on a sent bill before its invoice", () => {
     });
     expect(await statusOf(venue, id)).toBe("placed");
     expect(salesOf(id)).toEqual([]);
+  });
+
+  it("refuses the refund once the sent bill's invoice is issued, writing nothing", async () => {
+    const id = await placed("uninvoiced");
+    const paymentId = await partCash(id);
+    await issueOrderInvoice(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    expect(salesOf(id)).toHaveLength(1);
+    expect(await statusOf(venue, id)).toBe("placed");
+    const before = snapshot();
+
+    const refused = await refundOf(id, paymentId);
+
+    expect(refused).toEqual({
+      status: 409,
+      json: { code: "working_order.not_open", params: { workingOrderId: id } },
+    });
+    expect(snapshot()).toEqual(before);
+    expect(refundCount(paymentId)).toBe(0);
   });
 
   it("refuses the refund while the sent bill records a card part payment still pending", async () => {

@@ -475,6 +475,10 @@ checks are the ones below.
   on another reader, each against what is still available after the pending one's reservation
   (§3.1). So a second device may take cash while a card is at the terminal. **Why:** at a large
   table two guests paying at once is ordinary, and the reservation is what keeps it safe.
+  _(2026-11-12: on a sent counter order, a payment here is refused `order.payment_in_flight`
+  while a card payment of the whole order is in flight (A526 in `docs/backlog/payments.md`). A card
+  taken for a part payment is not counted there, so this rule holds on a sent order as on an open
+  bill.)_
 - **A different bill of the same visit** is never locked by this bill's card payment.
 - **A pending card REFUND locks more than a pending payment** (§6b): while one is pending on a bill,
   every writer §4.4 names except joining and unjoining tables (each payment, refund, void,

@@ -1002,7 +1002,8 @@ async function hasInvoice(tx: Transaction, workingOrderId: string): Promise<bool
 }
 
 /** A bill whose payments can still be refunded before its invoice: open, or sent or presented with
- * no invoice issued. */
+ * no invoice issued; else `working_order.not_found` or `working_order.not_open`. Returns which of
+ * the two it found. */
 export async function requireRefundableBill(
   tx: Transaction,
   workingOrderId: string,
@@ -1049,7 +1050,7 @@ export async function previewBillPayment(
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
     if ((await requirePayableBill(tx, workingOrderId)) === "placed") {
-      await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId]);
+      await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
     }
     await requireOrderBillEditor(tx, workingOrderId, {
       operatorId,
@@ -1140,9 +1141,10 @@ export async function findSubmission(
 /**
  * The start every payment of a bill shares, in the caller's transaction: the operator must still
  * be signed in on the requesting device ({@link assertStillSignedIn}); a retry finds its first row;
- * otherwise the bill must be open and no payment of the whole order in flight, the allocation must be
- * the one the operator saw (design §3.6), and the payment and its lines are inserted in `state`. A new
- * payment answers the bill's total too, which the insert leaves as it was.
+ * otherwise the bill must be payable (`requirePayableBill`) with no payment of the whole order in
+ * flight, the allocation must be the one the operator saw (design §3.6), and the payment and its
+ * lines are inserted in `state`. A new payment answers the bill's total too, which the insert
+ * leaves as it was.
  *
  * Keyed by `submissionId` within the bill (design §5.1): the same payment again, whatever its
  * `guestCount`, answers the first row and writes nothing; the id with another payment, or naming one of
@@ -1192,7 +1194,10 @@ async function beginBillPayment(
   await assertBillHasNoUnsent(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
-  if (payable === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId]);
+  // A part payment's card reserves its share, as on an open bill (design §5.2).
+  if (payable === "placed") {
+    await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
+  }
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await billPaymentTotal(tx, workingOrderId);
@@ -1265,8 +1270,9 @@ async function captureBillPaymentAttendance(
 }
 
 /**
- * Take a cash or hand-keyed card payment against an open bill, in one transaction: it is received
- * at once, and when it leaves the bill fully paid the same transaction issues the invoice.
+ * Take a cash or hand-keyed card payment against a bill `requirePayableBill` admits, in one
+ * transaction: it is received at once, and when it leaves the bill fully paid the same transaction
+ * issues the invoice.
  */
 export async function takeBillPayment(
   deps: BillPaymentDeps,
