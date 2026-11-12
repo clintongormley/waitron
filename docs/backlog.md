@@ -2272,7 +2272,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local receipt-language, receipt-guests, till-receipt, promotion-endpoint and till-reroute
   fixtures use English staff display names.
   Local `issuance-pass.test.ts`, `till-sale-tender-block.test.ts`, `sale-till-source.receipt.test.ts`,
-  `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff names.
+  `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
