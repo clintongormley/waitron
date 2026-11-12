@@ -1,8 +1,7 @@
 # A1209: Help tooltip placement
 
 Author: Codex Sol high; separate Lane D plan author.
-Status: Claude approach read completed; corrections applied, pending watcher clearance. No owner approval of this design.
-Do not implement before both gates.
+Status: Claude approach read completed; corrections applied. Watcher cleared the plan on 2026-11-12 at 11:58 in Lane D questions.md: "Plan CLEARED by the watcher, inside the backlog entry docs/backlog/till.md:1455; both required Claude findings applied. Build it." No owner approval of this design is recorded.
 
 ## Request and smallest outcome
 

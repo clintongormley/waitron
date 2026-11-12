@@ -198,20 +198,44 @@ test("holds a left-edge tooltip at the same margin as a right-edge one", async (
   expect(tip.getBoundingClientRect().left).toBeCloseTo(8, 0);
 });
 
-test("lifts a bottom-anchored tooltip back inside the viewport", async () => {
+test("opens above when below cannot fit", async () => {
   const el = await mount('<wt-help-tooltip aria-label="Help">Short</wt-help-tooltip>');
-  // Hard against the bottom edge: placing the box below the trigger would put it off screen.
   el.style.position = "fixed";
   el.style.insetInlineStart = "50%";
   el.style.insetBlockEnd = "0";
   const button = el.shadowRoot!.querySelector("button")!;
   const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await document.fonts.ready;
   await userEvent.click(button);
   await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
 
+  const anchor = button.getBoundingClientRect();
   const box = tip.getBoundingClientRect();
+  expect(anchor.top - 4 - box.height).toBeGreaterThanOrEqual(8);
+  expect(anchor.bottom + 4 + box.height).toBeGreaterThan(innerHeight - 8);
+  expect(box.bottom).toBeCloseTo(anchor.top - 4, 0);
+  expect(box.top).toBeGreaterThanOrEqual(8);
+});
+
+test("keeps the bottom margin when neither side fits", async () => {
+  const el = await mount(
+    '<wt-help-tooltip aria-label="Help"><div style="height: 60vh">Tall explanation</div></wt-help-tooltip>',
+  );
+  el.style.position = "fixed";
+  el.style.insetInlineStart = "50%";
+  el.style.insetBlockStart = "50%";
+  const button = el.shadowRoot!.querySelector("button")!;
+  const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await document.fonts.ready;
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+  const anchor = button.getBoundingClientRect();
+  const box = tip.getBoundingClientRect();
+  expect(anchor.top - 4 - box.height).toBeLessThan(8);
+  expect(anchor.bottom + 4 + box.height).toBeGreaterThan(innerHeight - 8);
   expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
-  expect(box.top).toBeLessThan(button.getBoundingClientRect().bottom);
+  expect(box.top).toBeGreaterThanOrEqual(8);
 });
 
 test("names the tooltip to its trigger while open", async () => {
