@@ -127,7 +127,7 @@ it("lists committed emergency history with current box names, newest first, with
   });
 });
 
-it("keeps unknown copy activity and the interval after recorded sales arrive", async () => {
+it("does not fill unknown copy activity from recorded sales", async () => {
   const operationId = await activation("emergency", null);
   await seedSale(suite.db, venue, {
     invoiceNumber: 1,

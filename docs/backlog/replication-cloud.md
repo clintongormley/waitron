@@ -35,7 +35,7 @@ cloud_ in [the backlog](../backlog.md)) and Slice 9
 owner's reading of 2026-11-03, see below).
 **2026-11-11 — Slice 7:** simulated clients can declare, prepare and activate the spare.
 The signed declaration in `handover_activations.evidence` records the last dated activity
-the copy holds; Reports → Handover intervals now reads these committed emergency activations. The watcher
+the copy holds; Reporting → Handover intervals now reads these committed emergency activations. The watcher
 deferred both gap tables and the preview, and accepted no declaration withdrawal for this
 simulated-only slice.
 **2026-11-12 — Slice 8:** `/handover/emergency` on a joined spare checks the copy after sign-in,
@@ -47,7 +47,7 @@ as the watcher cleared at 03:59. Real-box and Cloud qualification remain open. T
 [page plan](../superpowers/plans/2026-11-12-a1018-8-emergency-page.md) was cleared by the watcher on 12 November;
 the last checked address it needs is kept across restarts since A947 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898)), so it no longer waits on that.
 
-The read-only interval list shows both current box names, copy activity or Unknown, labelled
+The read-only interval list shows both current box names, the copy’s latest sale/order time or Unknown, labelled
 venue-zone declaration and activation times, and the entered reason. **12a follow-up: report
 warnings and return completion** remains one bounded slice: no warning currently appears beside
 cash-up or affected reports, and this list keeps an interval unconfirmed even after a complete

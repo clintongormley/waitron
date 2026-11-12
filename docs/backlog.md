@@ -1858,12 +1858,12 @@ Not in any track until the standalone primary is done.
   boxes. Slice 8 adds the protected `/handover/emergency` page, saved-declaration resume and the
   existing clock check, with one entered password/code retained until completion or leaving and a
   replacement code only if it expires. Its [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
-  was cleared by the watcher on 12 November; real-box and Cloud qualification remain open. Reports → Handover intervals shows committed emergency takeovers from signed
-  declarations, including unknown copy activity and venue-zone dates. The bounded 12a follow-up must add warnings beside cash-up/affected reports and close intervals after a complete return; neither is available yet.
+  was cleared by the watcher on 12 November; real-box and Cloud qualification remain open. Reporting → Handover intervals shows committed emergency takeovers from signed
+  declarations, including unknown sale/order times and venue-zone dates. The bounded 12a follow-up must add warnings beside cash-up/affected reports and close intervals after a complete return; neither is available yet.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
   pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read
-  Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; the later A1342 return work supersedes Slices 10 and 11.
+  Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; the watcher said on 12 November, “Do not rebuild Slices 10/11”; Task 10.6 stays with A1342.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check

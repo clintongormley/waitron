@@ -109,9 +109,9 @@ casos.
 
 Después de un traspaso de emergencia, abre **Informes** y después **Intervalos del traspaso** para
 comprobar el período cuya actividad podría faltar. Necesitas permiso para ver informes. La lista
-muestra los equipos principal anterior y nuevo, la última actividad fechada de la copia, las horas
+muestra los equipos principal anterior y nuevo, la última hora de venta o pedido en la copia, las horas
 de declaración y activación, y el motivo indicado al tomar el relevo. Todas las horas usan la zona
-horaria del local. **Desconocida** significa que la copia no tenía actividad fechada; no significa
+horaria del local. **Desconocida** significa que la copia no tenía ventas ni pedidos fechados; no significa
 que no falte dinero.
 
 Abre esta lista por tu cuenta: el arqueo y los demás informes no muestran ningún aviso junto a sus
