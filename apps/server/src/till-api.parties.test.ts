@@ -822,6 +822,7 @@ describe("GET /api/parties/:id/bills", () => {
         total: "0.00",
         outstanding: "0.00",
         hasPayments: false,
+        leftUnpaid: false,
         receiptAvailable: false,
       },
     ]);
