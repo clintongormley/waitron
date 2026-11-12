@@ -269,6 +269,7 @@ it.each([
 
 it("does not offer a hidden job role for a new assignment", async () => {
   await mount(false);
+  el.staffRoleId = "head";
   el.week = {
     ...el.week,
     staffRoles: el.week.staffRoles.map((r) =>
@@ -285,7 +286,7 @@ it("keeps the current hidden role's name and allows time edits without assigning
   el.week = {
     ...el.week,
     staffRoles: el.week.staffRoles.map((r) =>
-      r.id === "head" ? { ...r, hidden: true as const } : r,
+      ["head", "sous"].includes(r.id) ? { ...r, hidden: true as const } : r,
     ),
   };
   await el.updateComplete;
@@ -294,6 +295,7 @@ it("keeps the current hidden role's name and allows time edits without assigning
     label: "Head chef",
     disabled: true,
   });
+  expect(role.options.map((option) => option.value)).not.toContain("sous");
   await change("endsAt", "18:00");
   button("save").click();
   await vi.waitFor(() => expect(api.updateRotaShift).toHaveBeenCalled());

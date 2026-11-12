@@ -201,6 +201,16 @@ describe("the rota week", () => {
       staffRoleId: v.staffRoleId,
       endsAt: "2026-12-07T02:30:00Z",
     });
+    const [visible] = await tx((t) =>
+      t.insert(staffRoles).values({ name: "Runner" }).returning({ id: staffRoles.id }),
+    );
+    const anotherShift = await add(v, { staffRoleId: visible!.id });
+    await expect(
+      tx((t) => api.updateRotaShift(t, anotherShift, { staffRoleId: v.staffRoleId })),
+    ).rejects.toMatchObject({
+      code: "staff_role.not_found",
+      params: { staffRoleId: v.staffRoleId },
+    });
   });
 
   it("a future shift in a hidden role still shows its name and outside-role warning", async () => {
