@@ -36,6 +36,7 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import type { TillSaleResult } from "./till-sale.js";
+import { listInvoicePrinter } from "./testing/invoice-printer.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
 beforeEach(async () => {
@@ -244,6 +245,76 @@ async function projectionInvoice(
   });
   return { id, lineId };
 }
+it("offers the device's Invoice printer for an orderless historical full invoice without printing", async () => {
+  const sale = await projectionInvoice({
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Stored recipient",
+  });
+  const profileId = await profile();
+  await inTx(venue, (tx) =>
+    listInvoicePrinter(tx, { profileId, printerId: venue.printerId, isDefault: true }),
+  );
+  const before = await snapshot(),
+    printed = await jobs();
+  const answer = await send(
+    venue.app,
+    venue.cookie,
+    "GET",
+    `/api/transactions/${sale.id}/deliveries`,
+  );
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(answer.json).toMatchObject({
+    originalCompleted: false,
+    actions: {
+      print: { designation: "original", printers: [{ id: venue.printerId, kind: "receipt" }] },
+      email: null,
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+  expect(await jobs()).toEqual(printed);
+});
+it("prints an orderless full invoice original on its Invoice receipt printer without money or drawer writes", async () => {
+  const sale = await projectionInvoice({
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Stored recipient",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: "Stored address",
+  });
+  const profileId = await profile();
+  await inTx(venue, (tx) =>
+    listInvoicePrinter(tx, { profileId, printerId: venue.printerId, isDefault: true }),
+  );
+  const before = await snapshot(),
+    printed = await jobs();
+  const answer = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/transactions/${sale.id}/deliveries`,
+    {
+      medium: "print",
+      requestKey: randomUUID(),
+      printerId: venue.printerId,
+    },
+  );
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(answer.json).toMatchObject({
+    medium: "receipt",
+    designation: "original",
+    status: "queued",
+  });
+  const after = await jobs();
+  expect(after.prints).toHaveLength(printed.prints.length + 1);
+  expect(after.prints.at(-1)).toMatchObject({
+    saleId: sale.id,
+    printerId: venue.printerId,
+    receiptCopy: false,
+    kind: "document",
+  });
+  expect(after.drawers).toEqual(printed.drawers);
+  expect(after.reprints).toEqual(printed.reprints);
+  expect(await snapshot()).toEqual(before);
+});
 it.each([false, true])(
   "a historical full invoice retains its own recipient, domicile and offset, paid=%s",
   async (paid) => {

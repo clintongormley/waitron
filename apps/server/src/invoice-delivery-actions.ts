@@ -20,6 +20,7 @@ import { resendInvoicePrintJob } from "./invoice-print.js";
 import { enqueueInvoiceReceipt, enqueueOriginalReceipt } from "./receipt-print.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { readSettledTicket } from "./till-sale.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 
 type Request = { requestKey: string; personId: string };
 
@@ -54,7 +55,7 @@ export async function requestPrintDelivery(
     cfg: TradingContext;
     onReceiptCopy?: (copy: { saleId: string; printJobId: string }) => Promise<void>;
   },
-  sale: { id: string; workingOrderId: string },
+  sale: { id: string; workingOrderId: string | null },
   offer: PrinterOffer,
   request: Request & { printerId: string },
 ): Promise<InvoiceDeliveryAttempt> {
@@ -91,7 +92,10 @@ export async function requestPrintDelivery(
     .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)
     .where(eq(printers.id, printer.id));
-  const ticket = await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
+  const ticket =
+    sale.workingOrderId === null
+      ? await readTransactionReceipt(deps.backend, tx, deps.cfg, sale.id)
+      : await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
   const row = await enqueueInvoiceReceipt(
     tx,
     deps.cfg,
