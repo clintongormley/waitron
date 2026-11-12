@@ -8,11 +8,12 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 //   holds the copy of its join. M1 sells afterwards, so what reaches M2 later comes by the final copy.
 // - M1's `nodes` row for M2, on the key M2 sealed in its own node.db.
 // - M2's endorsement in the chart both boxes hold. M1 answers M2's signed query only if the chart M2
-//   hands it after activation still carries it (`adopt.ts:154-159` checks the one a real join gives).
+//   hands it after activation still carries it (`adoptFromPrimary` checks the one a real join gives).
 // - M2's mirror link, naming M1 and pinning M1's certificate authority, and its pin of M1's key.
-// - The same key ring on both boxes (a real spare gets it at joining, `adopt.ts:167`), which the
-//   offer checks by version. M2 holds M1's authority, installed as a join installs it
-//   (`installVenueAuthority`), and no recovery key, where a join writes one.
+// - The same key ring on both boxes (a real spare gets it at joining, `persistCredentialsRing` in
+//   `adoptFromPrimary`), which the offer checks by version. M2 holds M1's authority, installed
+//   through `installVenueAuthority` as a join does (with a `localhost` certificate, where a join
+//   names the spare's own hostnames), and no recovery key, where a join writes one.
 //
 // What else this file gives the boxes for free:
 // - M1's first setup is the real selection and activation, with its selection kept in M1's state

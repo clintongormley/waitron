@@ -240,7 +240,8 @@ describe("a box that lost its own node.db", () => {
   }, 60_000);
 
   it("a box holding its signing key but no mode row, fenced by its held chart, starts fenced rather than refusing", async () => {
-    // A first box never writes a mode row; a chart it holds that lists it sell-only fences it.
+    // A first box has no mode row until a fenced start demotes it; a chart it holds that lists it
+    // sell-only fences it.
     // The chart lists no other box, so the start check has nobody to wait for.
     const venue = await setupVenue(suite.db);
     const nodeId = venue.cfg.nodeId;

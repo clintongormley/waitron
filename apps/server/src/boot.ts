@@ -1105,7 +1105,7 @@ function closingAlso(
 /**
  * Throws `node.state_missing` when node.db holds neither a mode row nor a signing key for this box,
  * and the held chart lists it in any standing but `serving-primary`, or with another box as
- * `serving-primary`.
+ * `serving-primary`. A key row this box's ring cannot open throws as `readNodeSigningKey` does.
  */
 async function refuseLostNodeState(
   db: Database,
