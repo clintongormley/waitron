@@ -1,3 +1,7 @@
+**Status, 2026-11-12:** closed without building this design. The owner chose to keep counter full
+invoices as the Pay window already issues them; see the A555 entry under "Decisions and deliberate
+limits" in [the fiscal backlog](../../backlog/fiscal.md#decisions-and-deliberate-limits).
+
 # 2026-10-22 precedence: A739 now asks after settlement
 
 The owner's ~09:05 [A739 payment and receipt flow](2026-10-22-a739-owner-payment-and-receipt-flow.md)

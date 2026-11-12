@@ -275,40 +275,20 @@ unchanged-database and empty-staging checks remain. This is preproduction format
 with no backward-compatibility implementation.
 
 The till offers **Full invoice**. A saved Spanish recipient can be invoiced through table bill
-payments or an unpaid departure. Email and A4 originals use the existing delivery queue. Direct
-counter cash/manual-card sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`) and
-unissued counter collection still refuse F1 with `sale.full_invoice_unavailable` until A555.
-The shared Full invoice control and automatic recipient prompt are visible at the counter;
-payment still refuses that choice. A555 must complete that path. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
+payments or an unpaid departure, and, since #2725, a Counter bill paid through the shared Pay
+window. Email and A4 originals use the existing delivery queue. Direct counter cash/manual-card
+sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`) and unissued counter
+collection still refuse F1 with `sale.full_invoice_unavailable`.
+The shared Full invoice control and automatic recipient prompt are visible at the counter; the
+till saves that choice on the order before the Pay window opens. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
 zone setting creates no separate public issuance route. Zero-total F1 counter requests retain
 the same refusal. A saved F1 choice still permits the bill to grow above the simplified ceiling;
 the existing recipient checks and F1 series selection remain in place.
 
-**Next action:** complete A555, A444, the physical 58/80 mm paper and QR checks, the asesor's
+**Next action:** complete A444, the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
 Future structured B2B integration has its own entry above. F3 conversion, F1's
 R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
-
-<a id="a555-counter-full-invoice-delivery-through-payment--design-proposed-2026-10-21"></a>
-
-## A555. Counter full-invoice delivery through payment — DESIGN APPROVED (2026-10-21)
-
-The [proposed design](../superpowers/specs/2026-10-21-a555-counter-invoice-delivery-design.md)
-and static pictures (removed from the repository on 2026-11-02) cover retaining Email PDF,
-A4 or receipt-printer delivery through Counter payment. The source audit records the current
-request/staging gap against `77ab2ced8`; it is not an executed public-F1 result.
-
-The owner chose “A, choose before paying” on 2026-10-21: a full invoice's original-delivery
-choice before payment, in A739's shared payment window. Delivery failure keeps payment complete; retained payment requests and
-invoice delivery retries have separate identities. Earlier partial-payment preferences cannot
-replace the final invoice's selected original. None remains an ordinary F2 receipt choice.
-
-**Next action:** plan/build against the released
-A739 seams. A444, B2B delivery, physical 58/80 mm paper/QR checks and the adviser's
-manual-remedy confirmation remain separate work; the owner removed them as switch prerequisites
-on 2026-10-27.
-This design does not close A554's saved-email-address question, change the consent decision or
-add invoice PDF storage.
 
 ## When the business e-invoicing regime starts
 
@@ -1083,6 +1063,15 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   [Detail](fiscal.md#protected-write-path-test-policy-quotation).
 
 ## Decisions and deliberate limits
+
+### A555: counter full invoices stay as the Pay window issues them (owner, 2026-11-12)
+
+The owner chose to keep counter full invoices through the shared Pay window as main issues them:
+"keep what works, fix the printer choice". The Full invoice choice, with an Email or A4 original,
+is saved before Pay and the invoice is issued on the last payment; paper is printed after payment,
+from Print in the window that follows it. Direct `POST /api/sales`, `POST /api/pay`, unissued
+`/collect` and zero-total counter bills still refuse F1 with `sale.full_invoice_unavailable`.
+Pinned by the full-invoice cases in `apps/server/src/counter-bill-payments.test.ts`.
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
