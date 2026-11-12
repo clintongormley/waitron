@@ -233,9 +233,52 @@ it("reports a held sale's imported payment without asking for manual entry (F4-4
   ]);
   const [after] = await inspect();
   expect(after!.readable).not.toContain("Handle these facts manually");
+  expect(after!.readable).not.toContain("Handle this fact manually");
+  expect(after!.readable).toContain("do not enter this payment again");
   expect(after!.readable).toContain(`Sale ${source.saleId} is held by the new main`);
   expect(after!.readable).toContain("Tender old-box-cash\nRow on the new main: present");
   expect(clash!.readable).toContain("Tender old-box-cash\nRow on the new main: absent");
+});
+
+it("keeps manual handling available for an unimported payment on a held sale", async () => {
+  const source = await original("Source", 1, copyBase);
+  await suite.db.insert(tenders).values({
+    id: "unimported-tip",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 100,
+    tipAmount: 100,
+    settledAt: "2026-07-20T17:21:30.000Z",
+  });
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const existing = structuredClone(returned);
+  existing.records[0]!.descripcion_operacion = "Held description";
+  existing.tenders = [];
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source.nodeId, existing, now),
+  );
+  const inspect = () =>
+    VERIFACTU_HANDOVER.returnRecords!.inspect!(
+      receiver.db,
+      source.nodeId,
+      returned as unknown as CanonicalValue,
+    );
+  const [clash] = await inspect();
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
+    ),
+  ).toEqual({ complete: false });
+  expect(receiver.db.all(sql`select id from tenders`)).toEqual([]);
+  const [after] = await inspect();
+  expect(after!.readable).toContain(`Sale ${source.saleId} is held by the new main`);
+  expect(after!.readable).toContain("Tender unimported-tip\nRow on the new main: absent");
+  expect(after!.readable).toContain("This fact is not imported. Handle this fact manually");
+  expect(after!.readable).toContain("Presence is as of this download");
+  expect(after!.readable).toContain("download again before resetting");
 });
 
 it("downloads totals, tax and payment facts for a sale blocked behind a clash (F4-2)", async () => {
@@ -332,7 +375,7 @@ it("downloads totals, tax and payment facts for a sale blocked behind a clash (F
   );
   expect(waiting).toContain("Capture later-capture\nRow on the new main: absent\nAmount: 10.00");
   expect(waiting).toContain(`Sale ${later.saleId} is not held by the new main`);
-  expect(waiting).toContain("Handle these facts manually");
+  expect(waiting).toContain("This fact is not imported. Handle this fact manually");
 });
 
 it.each([false, true])(
@@ -1799,6 +1842,8 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
   expect(clash!.readable).toContain("Tip: 1.00");
   expect(clash!.readable).toContain("Capture capture");
   expect(clash!.readable).toContain("recorded-charge");
+  expect(clash!.readable).toContain("Refund pending-refund\nRow on the new main: present");
+  expect(clash!.readable).toContain("Capture capture\nRow on the new main: present");
 
   expect(receiver.db.all<ReturnRow>(sql`select * from payments`)).toEqual(batch!.captures);
   expect(receiver.db.all<ReturnRow>(sql`select * from working_orders`)).toEqual(batch!.orders);

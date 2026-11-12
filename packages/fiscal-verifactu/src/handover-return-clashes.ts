@@ -87,11 +87,14 @@ function readablePayments(
   );
   const presence = (kind: string, row: ReturnRow) =>
     `Row on the new main: ${present.has(`${kind}:${row.id}`) ? "present" : "absent"}`;
+  const guidance = (kind: string, row: ReturnRow) =>
+    present.has(`${kind}:${row.id}`)
+      ? "Check any reported differences; do not enter this payment again."
+      : "This fact is not imported. Handle this fact manually before resetting only if it is still absent in the new download.";
   return [
     "\nOld-box payment facts for this sale",
-    saleHeld
-      ? `Sale ${saleId} is held by the new main. Its payments are compared and imported separately. Check the row presence below and any reported payment differences before entering a payment again.`
-      : `Sale ${saleId} is not held by the new main. Its payment facts below are not imported. Handle these facts manually before resetting the old box.`,
+    `Sale ${saleId} is ${saleHeld ? "held" : "not held"} by the new main.`,
+    "Presence is as of this download. After accepting, restart the old box to retry the return, then download again before resetting.",
     ...own(returned.tenders).map((row) =>
       [
         `Tender ${row.id}`,
@@ -100,6 +103,7 @@ function readablePayments(
         `Amount: ${rawCentsToDecimal(String(row.amount))}`,
         `Tip: ${rawCentsToDecimal(String(row.tip_amount))}`,
         `Settled at: ${row.settled_at}`,
+        guidance("tender", row),
       ].join("\n"),
     ),
     ...own(returned.refunds).map((row) =>
@@ -114,6 +118,7 @@ function readablePayments(
         `Provider: ${row.provider ?? "—"}`,
         `Provider payment reference: ${row.provider_payment_ref ?? "—"}`,
         `Provider refund reference: ${row.provider_refund_ref ?? "—"}`,
+        guidance("refund", row),
       ].join("\n"),
     ),
     ...own(returned.captures).map((row) =>
@@ -124,6 +129,7 @@ function readablePayments(
         `State: ${row.state}`,
         `Provider: ${row.provider}`,
         `Provider payment reference: ${row.payment_ref}`,
+        guidance("capture", row),
       ].join("\n"),
     ),
   ].join("\n");

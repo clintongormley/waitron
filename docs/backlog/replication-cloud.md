@@ -534,8 +534,9 @@ specifically accepted through the current main's internal API, alongside payment
 is no screen yet. The download shows both versions and their filing status; the new main does not
 submit the discarded version, which may already have an AEAT answer. The download lists every
 waiting record in the batch with its totals, tax and tender/refund/capture facts. It says whether
-each sale and payment row is on the main; only an unheld sale's payment facts need manual handling.
-Check reported payment differences for held sales before entering payments again. Later missing records stay blocked after an accepted record clash,
+each sale and payment row is on the main at download time. After retrying the return, download
+again and handle only still-absent payment facts manually; check reported payment differences
+before entering payments again. Later missing records stay blocked after an accepted record clash,
 including across batches; later batches have not been downloaded. Reset warns and
 remains available. Keep the file: node-local evidence survives restart but not venue backup or the
 next handover. The stopped box must be switched off and on to retry.
