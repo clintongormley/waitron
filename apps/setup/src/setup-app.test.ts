@@ -6003,11 +6003,11 @@ describe("first setup owner refusals", () => {
     for (const [locale, sentence] of [
       [
         "en-GB",
-        "The series cannot be made: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
+        "The invoice series cannot be created: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
       ],
       [
         "es-ES",
-        "No se pueden crear las series: el minuto que eligió esta configuración ya está en los registros de este equipo. Es un fallo de Waitron.",
+        "No se pueden crear las series de facturas: el minuto que eligió esta configuración ya está en los registros de este servidor. Es un fallo de Waitron.",
       ],
     ]) {
       try {
@@ -6132,8 +6132,8 @@ describe("a recovery request refused because another setup holds the server", ()
     return { el, host, copy, calls };
   }
 
-  /** Fills the fiscal module's recovery form and presses Compare clocks, which stages and prepares. */
-  async function compareClocks(copy: LitElement) {
+  /** Fills the fiscal module's recovery form and presses Proceed, which stages and prepares. */
+  async function fillRecoveryHour(copy: LitElement) {
     await vi.waitFor(() =>
       expect(copy.shadowRoot!.querySelector("setup-recovery-allocation")).not.toBeNull(),
     );
@@ -6148,17 +6148,19 @@ describe("a recovery request refused because another setup holds the server", ()
     const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
     input.value = "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
+    for (const name of [
+      "recovery-old-box-stopped",
+      "recovery-sole-operation",
+      "recovery-details-confirmed",
+    ]) {
       const box = entry.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
       box.checked = true;
       box.dispatchEvent(new Event("change"));
     }
-    const compare = () =>
-      entry.shadowRoot!.querySelector("[data-test=compare]") as HTMLElement & {
-        disabled: boolean;
-      };
-    await vi.waitFor(() => expect(compare().disabled).toBe(false));
-    compare().click();
+    const proceed = () =>
+      entry.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=compare]")!;
+    await vi.waitFor(() => expect(proceed().disabled).toBe(false));
+    proceed().click();
   }
 
   it.each([
@@ -6177,7 +6179,7 @@ describe("a recovery request refused because another setup holds the server", ()
           const { el, copy, calls } = await recoveryApp(source, refused);
           setLocale(locale);
           copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-          if (refused !== "preview") await compareClocks(copy);
+          if (refused !== "preview") await fillRecoveryHour(copy);
           const route =
             refused === "preview"
               ? "/preview"
@@ -6208,14 +6210,14 @@ describe("a recovery request refused because another setup holds the server", ()
   it.each([
     ["archive", "preview", "Couldn't review this backup."],
     ["cloud", "preview", "Couldn't review this backup."],
-    ["archive", "stage", "Check the fields and compare clocks again."],
-    ["bucket", "preparation", "Check the fields and compare clocks again."],
+    ["archive", "stage", "Could not complete this step."],
+    ["bucket", "preparation", "Could not complete this step."],
   ] as const)(
     "a %s recovery whose %s request is refused for another reason keeps the screen and its words",
     async (source, refused, words) => {
       const { el, host, copy, calls } = await recoveryApp(source, refused, "server.internal");
       copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-      if (refused !== "preview") await compareClocks(copy);
+      if (refused !== "preview") await fillRecoveryHour(copy);
       const errors = (root: ParentNode): string[] =>
         [...root.querySelectorAll("*")].flatMap((node) => [
           ...(node.shadowRoot ? errors(node.shadowRoot) : []),

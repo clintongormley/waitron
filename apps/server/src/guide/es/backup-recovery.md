@@ -82,7 +82,7 @@ por separado, comprueba la dirección HTTPS del servidor y detente si muestra un
 dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
 contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
 
-Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
+Apaga el servidor anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
 ## Elige tu copia {#source}
 
@@ -97,8 +97,8 @@ datos del restaurante. Elige una opción de restauración para recuperar un rest
 Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, introduce la clave que lo
 abre en **Clave de recuperación** y elige su **Entorno de la copia**. Para tu bucket, elige tu
 paquete de recuperación o archivo del kit en **Paquete de recuperación o archivo del kit**, o pega
-el kit en **Kit de recuperación**, y elige el **Entorno** en el que funcionaba la caja anterior. Si
-el paquete se hizo antes de que el equipo tuviera copia en el bucket, no es un paquete de
+el kit en **Kit de recuperación**, y elige el **Entorno** en el que funcionaba el servidor anterior. Si
+el paquete se hizo antes de que el servidor tuviera copia en el bucket, no es un paquete de
 recuperación de Waitron o está dañado o se modificó después de hacerse, la página lo dice bajo el
 campo. Para Waitron Cloud, elige **Iniciar la recuperación desde Cloud**, introduce el código que
 muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y después elige
@@ -113,13 +113,14 @@ necesitas la clave de recuperación de su nodo para identificarte.
 
 ## Identifícate ante la copia elegida {#proof}
 
-Bajo la revisión, en «Recuperar esta caja», elige en **PDF de recuperación** tu paquete de
+Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** tu paquete de
 recuperación, o un PDF de recuperación anterior, que tenga la clave del servidor de esta copia; o
 escribe la clave agrupada impresa en él en **Clave de recuperación**. Si el paquete no tiene la
 clave del servidor, la página lo dice y, cuando el paquete lo registra, indica el paquete o el
 nombre de la clave que hay que buscar. Un paquete o una hoja con una clave del servidor más nueva
-puede no abrir una copia anterior. Marca «La caja anterior está apagada y seguirá desconectada.» y
-«Soy la única persona recuperando este contribuyente, en todos sus locales.».
+puede no abrir una copia anterior. Marca «El servidor anterior está apagado y seguirá desconectado.»,
+«Soy la única persona recuperando este contribuyente, en todos sus locales.» y «Estos datos son
+correctos.».
 
 Si **Copias** no puede confirmar la clave guardada, conserva tanto la clave anterior como la que
 acabas de guardar. Al cambiar una clave, aún puedes copiar o descargar ambas claves mostradas
@@ -160,36 +161,43 @@ Si la copia en el bucket indica que otro equipo está escribiendo la copia de es
 bucket y ese equipo sustituyó a este, apaga este equipo: nunca deben vender dos equipos para un
 mismo local.
 
-## Crea las nuevas series {#series}
+## Crea las nuevas series de facturas {#series}
 
 Si este navegador guardó observaciones de facturas del contribuyente y entorno seleccionados, el
 formulario muestra **Facturas vistas en este dispositivo**. Cada entrada indica el último número
 que el navegador guardó de esa serie, su fecha de expedición y su huella. Compáralas con el
 historial que conservas: la lista puede estar incompleta y desaparece si borras los datos del
-navegador. Una serie anterior sigue siendo una observación; la recuperación usa series nuevas.
-Puedes recuperar desde un dispositivo nuevo o aunque el almacenamiento del navegador no esté
+navegador. Puedes recuperar desde un dispositivo nuevo o aunque el almacenamiento del navegador no esté
 disponible. Las observaciones permanecen en este navegador y no se envían con la solicitud de
 recuperación. El informe lee el almacenamiento disponible en esta dirección de Waitron; no busca
 observaciones en otros dispositivos.
 
 La restauración sustituye la base de datos que ya está en este equipo.
 
-Elige **Comparar relojes**. Sigue las instrucciones sobre relojes y esperas; no hay ningún código de
-instalación que escribir. Elige **Crear las series** cuando la página lo permita; después muestra el
-nombre de las nuevas series. Marca la confirmación que muestra la página —«Confirmo que ningún otro
-servidor en funcionamiento tiene datos más recientes del restaurante.» para un archivo de copia o
-una copia del bucket (para una copia del bucket, también «Este es mi negocio. Restáuralo en este
-servidor.»), o «Confirmo que el servidor anterior y los demás servidores que queden están
-detenidos, y acepto perder los cambios posteriores a esta instantánea.» para una copia de Waitron
-Cloud— y elige **Restaurar la copia**, **Restaurar desde mi bucket** o **Restaurar esta
-instantánea**.
+Escribe la clave de recuperación del nodo, marca las dos declaraciones y «Estos datos son
+correctos.», y elige **Continuar**. La serie de facturas es el código al principio de cada número de factura; la recuperación crea series
+nuevas para que el servidor nunca repita los números del servidor anterior. Después de **Continuar**, la
+página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
+muestre; no hay ningún código de instalación que escribir. Después muestra **Hemos creado estas
+series de facturas:** con las nuevas series de facturas. Si cambias la clave o desmarcas una casilla, la página se
+detiene hasta que vuelvas a elegir **Continuar**. Antes de **Continuar**, **Editar estos datos**
+vuelve a la elección de la copia.
 
-Si la copia tiene ventas con una fecha posterior en más de un minuto a la hora del equipo, el equipo
+Marca la confirmación que muestra la página —«Confirmo que ningún otro servidor en funcionamiento
+tiene datos más recientes del restaurante.» para un archivo de copia o una copia del bucket (para
+una copia del bucket, también «Este es mi negocio. Restáuralo en este servidor.»), o «Confirmo que
+el servidor anterior y los demás servidores que queden están detenidos, y acepto perder los cambios
+posteriores a esta instantánea.» para una copia de Waitron Cloud— y elige **Restaurar la copia**,
+**Restaurar desde mi bucket** o **Restaurar esta instantánea**.
+
+Si la copia tiene ventas con una fecha posterior en más de un minuto a la hora del servidor, el servidor
 deja de cobrar al terminar la recuperación hasta que su reloj las alcance o se confirme su hora: consulta
 [Cuando se paran los cobros por la hora](box-status.md#clock-behind).
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
-del reloj lo impide, resuelve la causa e inténtalo de nuevo. Si después el equipo muestra una
+del reloj lo impide, resuelve la causa y elige **Volver a comparar los relojes**. Si los relojes no
+coinciden, después de **Continuar** la página muestra la hora del servidor y la de este dispositivo y pregunta cuál es la correcta; corrige la hora de
+este dispositivo, vuelve a conectarte al servidor y elige **Volver a comparar los relojes**. Si después el servidor muestra una
 página que dice que no pudo crear sus nuevas series de facturas, conéctalo a internet y pulsa
 **Reintentar un arranque normal**.
 
@@ -202,11 +210,11 @@ Si sigue guardada una restauración anterior, se ejecutará cuando arranque el s
 Hasta que eliges el botón de restaurar, la página conserva lo que introdujiste solo mientras sigue
 abierta. Cambiar el archivo, la clave o el entorno descarta lo que comprobó, y al recargar se abre
 la primera pantalla de la página; desde ahí elige **Unirse o recuperar** y empieza de nuevo la
-restauración. Si el equipo rechaza la restauración, la página vuelve al formulario y tienes que
+restauración. Si el servidor rechaza la restauración, la página vuelve al formulario y tienes que
 introducir de nuevo la clave de recuperación del nodo.
 
 Cuando eliges el botón de restaurar, la página dice «Configurando este servidor» y te pide que la
-mantengas abierta. El equipo guarda la solicitud y se reinicia. Si se detiene después de guardar la
+mantengas abierta. El servidor guarda la solicitud y se reinicia. Si se detiene después de guardar la
 solicitud, el siguiente arranque la ejecuta; si se detiene mientras escribe la copia en su sitio,
 cada arranque siguiente la vuelve a ejecutar.
 

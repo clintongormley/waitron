@@ -315,7 +315,7 @@ it.each(["en-GB", "es-ES"])(
       const words = owner.querySelector("[data-test=owner-required]")!.textContent!;
       expect(words).toBe(
         locale === "es-ES"
-          ? "El equipo ya no deja que esta página continúe esta configuración."
+          ? "El servidor ya no deja que esta página continúe esta configuración."
           : "The box no longer lets this page carry this setup on.",
       );
     } finally {
@@ -518,13 +518,11 @@ it("reads back a completed activation after a lost response and offers no second
     "vf-first-setup-hour",
   )!;
   await hour.updateComplete;
-  await expect
-    .poll(() => hour.shadowRoot!.querySelector("[data-test=clock-readings]"))
-    .not.toBeNull();
+  await expect.poll(() => hour.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull();
   await userEvent.click(
     hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!,
   );
-  await click(hour, "select");
+  await click(hour, "compare");
   await proof();
   await expect
     .poll(() => hour.shadowRoot!.querySelector("[data-test=selected-hour]"))
@@ -904,4 +902,21 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
     ].sort(),
   );
   expect(claim.venue.dayCutover).toBe("05:00:00");
+});
+
+it("Edit these details on the series page asks for the venue step, which a claimed attempt answers with its frozen-details page", async () => {
+  const { app, requests } = await mount();
+  await liveVenue(app);
+  await screen(app, "cert");
+  emit(app, "setup-goto", { screen: "review" });
+  const allocation = await screen(app, "first-setup");
+  const sent = requests.length;
+  allocation.dispatchEvent(
+    new CustomEvent("initial-edit-details", { bubbles: true, composed: true }),
+  );
+  const owner = await screen(app, "first-owner");
+  expect(
+    (owner.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+  ).toContain("frozen");
+  expect(requests.slice(sent).filter((r) => r.path.endsWith("/claim"))).toEqual([]);
 });

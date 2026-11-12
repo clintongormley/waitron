@@ -1,6 +1,6 @@
 import axe from "axe-core";
 import { afterEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 import type { RecoveryHourEntry } from "./recovery-hour.js";
@@ -52,8 +52,8 @@ for (const theme of ["light", "dark"] as const)
           for (const state of [
             "empty",
             "invalid",
-            "compared",
             "disagreement",
+            "answered",
             "second-clock",
             "waiting",
             "later",
@@ -62,13 +62,14 @@ for (const theme of ["light", "dark"] as const)
             "selected",
             "refusal",
           ] as const) {
+            const differ = state === "disagreement" || state === "answered";
             const clock = {
               usable: [
                 { source: "box", lowerMs: instant, upperMs: instant },
                 {
                   source: "browser",
-                  lowerMs: instant + (state === "disagreement" ? 180_000 : 0),
-                  upperMs: instant + (state === "disagreement" ? 180_000 : 0),
+                  lowerMs: instant + (differ ? 180_000 : 0),
+                  upperMs: instant + (differ ? 180_000 : 0),
                 },
               ],
               unavailable: [
@@ -78,7 +79,7 @@ for (const theme of ["light", "dark"] as const)
                   : []),
               ],
               secondClock: state !== "second-clock",
-              disagreement: state === "disagreement",
+              disagreement: differ,
               releaseBlocked: false,
               rangeBlocked: false,
             };
@@ -112,7 +113,6 @@ for (const theme of ["light", "dark"] as const)
                         ? { ...clock, usable: clock.usable.slice(0, 1) }
                         : clock,
                   };
-                if (action === "preview") return { status: "preview" };
                 if (state === "in-use-no-time")
                   throw { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } };
                 if (state === "later" || state === "in-use")
@@ -130,7 +130,21 @@ for (const theme of ["light", "dark"] as const)
                       targetMs: Date.parse("2026-10-18T13:00:00Z"),
                       remainingMs: 1_800_000,
                     }
-                  : { status: "selected", identity: "0CSQW", binding, input: { selected: true } };
+                  : {
+                      status: "selected",
+                      identity: "0CSQW",
+                      binding,
+                      input: {
+                        allocation: {
+                          installationIdentity: "0CSQW",
+                          series: [
+                            { code: "A-0CSQW", purpose: "standard" },
+                            { code: "FF-0CSQW", purpose: "full" },
+                            { code: "R-0CSQW", purpose: "rectificative" },
+                          ],
+                        },
+                      },
+                    };
               },
             }) as RecoveryHourEntry;
             host.append(el);
@@ -148,21 +162,21 @@ for (const theme of ["light", "dark"] as const)
                 input.value = value!;
                 input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
               }
-              for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
+              for (const name of [
+                "recovery-old-box-stopped",
+                "recovery-sole-operation",
+                "recovery-details-confirmed",
+              ]) {
                 const input = el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
                 input.checked = true;
                 input.dispatchEvent(new Event("change"));
               }
-              await vi.waitFor(() =>
-                expect(
-                  (
-                    el.shadowRoot!.querySelector("[data-test=compare]") as HTMLElement & {
-                      disabled: boolean;
-                    }
-                  ).disabled,
-                ).toBe(false),
-              );
-              el.shadowRoot!.querySelector<HTMLElement>("[data-test=compare]")!.click();
+              const proceed = () =>
+                el.shadowRoot!.querySelector("[data-test=compare]") as HTMLElement & {
+                  disabled: boolean;
+                };
+              await vi.waitFor(() => expect(proceed().disabled).toBe(false));
+              await userEvent.click(proceed());
               if (state === "refusal")
                 await vi.waitFor(() =>
                   expect(
@@ -175,12 +189,12 @@ for (const theme of ["light", "dark"] as const)
                 );
               else
                 await vi.waitFor(() =>
-                  expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
+                  expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
                 );
-              if (state !== "compared" && state !== "refusal") {
-                el.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
+              if (state !== "refusal") {
                 const shown: string = {
                   disagreement: "[data-test=clock-refused]",
+                  answered: "[data-test=server-correct]",
                   "second-clock": "[data-test=clock-wait]",
                   waiting: "[data-test=remaining]",
                   later: "[data-test=minute-not-later]",
@@ -189,6 +203,14 @@ for (const theme of ["light", "dark"] as const)
                   selected: "[data-test=selected-hour]",
                 }[state]!;
                 await vi.waitFor(() => expect(el.shadowRoot!.querySelector(shown)).not.toBeNull());
+              }
+              if (state === "answered") {
+                await userEvent.click(
+                  el.shadowRoot!.querySelector<HTMLElement>("[data-test=server-correct]")!,
+                );
+                await vi.waitFor(() =>
+                  expect(el.shadowRoot!.querySelector("[data-test=correct-device]")).not.toBeNull(),
+                );
               }
             }
             await el.updateComplete;
@@ -218,7 +240,15 @@ for (const theme of ["light", "dark"] as const)
       try {
         for (const width of [390, 1280]) {
           await page.viewport(width, 1600);
-          for (const state of ["empty", "selected", "second-clock", "refused"] as const) {
+          for (const state of [
+            "empty",
+            "selected",
+            "second-clock",
+            "disagreement",
+            "answered",
+            "refused",
+          ] as const) {
+            const differ = state === "disagreement" || state === "answered";
             const host = document.createElement("main");
             hosts.push(host);
             document.body.append(host);
@@ -251,25 +281,41 @@ for (const theme of ["light", "dark"] as const)
                         { source: "box", lowerMs: instant, upperMs: instant },
                         ...(state === "second-clock"
                           ? []
-                          : [{ source: "browser", lowerMs: instant, upperMs: instant }]),
+                          : [
+                              {
+                                source: "browser",
+                                lowerMs: instant + (differ ? 180_000 : 0),
+                                upperMs: instant + (differ ? 180_000 : 0),
+                              },
+                            ]),
                       ],
                       unavailable:
                         state === "second-clock"
                           ? [{ source: "browser", result: "unavailable", reason: "same_machine" }]
                           : [],
                       secondClock: state !== "second-clock",
-                      disagreement: false,
+                      disagreement: differ,
                       releaseBlocked: false,
                       rangeBlocked: false,
                     },
                   };
-                if (action === "preview") return { status: "preview" };
-                return {
-                  status: "selected",
-                  binding,
-                  identity: "0CSQW",
-                  input: { selected: "server-input" },
-                };
+                if (action === "select")
+                  return {
+                    status: "selected",
+                    binding,
+                    identity: "0CSQW",
+                    input: {
+                      allocation: {
+                        installationIdentity: "0CSQW",
+                        series: [
+                          { code: "A-0CSQW", purpose: "standard" },
+                          { code: "FF-0CSQW", purpose: "full" },
+                          { code: "R-0CSQW", purpose: "rectificative" },
+                        ],
+                      },
+                    },
+                  };
+                throw new Error("unexpected promotion proposal");
               },
             }) as RecoveryHourEntry;
             host.append(el);
@@ -279,7 +325,13 @@ for (const theme of ["light", "dark"] as const)
                 `[data-test="${name}"]`,
               )!;
             if (state !== "empty") {
-              action("compare").click();
+              const tick = el.shadowRoot!.querySelector<HTMLInputElement>(
+                '[name="recovery-details-confirmed"]',
+              )!;
+              tick.checked = true;
+              tick.dispatchEvent(new Event("change"));
+              await vi.waitFor(() => expect(action("compare").disabled).toBe(false));
+              await userEvent.click(action("compare"));
               if (state === "refused") {
                 await vi.waitFor(() =>
                   expect(
@@ -291,11 +343,15 @@ for (const theme of ["light", "dark"] as const)
                   ).toBeGreaterThan(0),
                 );
               } else {
-                await vi.waitFor(() => expect(action("select").disabled).toBe(false));
-                action("select").click();
                 if (state === "selected")
                   await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
-                else
+                else if (differ) {
+                  await vi.waitFor(() => expect(action("server-correct")).not.toBeNull());
+                  if (state === "answered") {
+                    await userEvent.click(action("server-correct"));
+                    await vi.waitFor(() => expect(action("correct-device")).not.toBeNull());
+                  }
+                } else
                   await vi.waitFor(() =>
                     expect(el.shadowRoot!.querySelector('[data-test="clock-wait"]')).not.toBeNull(),
                   );

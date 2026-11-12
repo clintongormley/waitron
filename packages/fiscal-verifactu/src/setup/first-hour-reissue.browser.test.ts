@@ -113,14 +113,13 @@ async function mount(stage = async () => old, reissue = async () => replacement)
   await parent.updateComplete;
   const el = parent.shadowRoot!.querySelector<LitElement>("vf-first-setup-hour")!;
   await el.updateComplete;
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=clock-readings]"))
-    .not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull();
   expect(control(el, "replace-key"), "replacement is offered only for a frozen hour").toBeNull();
   await userEvent.click(
     el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!,
   );
-  await userEvent.click(control(el, "select"));
+  await expect.poll(() => control(el, "compare")?.disabled).toBe(false);
+  await userEvent.click(control(el, "compare"));
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
   return { el, parent, calls, api };
 }

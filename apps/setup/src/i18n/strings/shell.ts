@@ -38,7 +38,7 @@ export const shellEn = {
   "shell.first_setup.disk_full_restart_unknown":
     "The box's disk is full, so Waitron cannot save anything. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
   "shell.first_setup.series_minute_taken":
-    "The series cannot be made: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
+    "The invoice series cannot be created: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
 
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
@@ -230,11 +230,11 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
 
   "shell.first_setup.owner_required":
-    "El equipo ya no deja que esta página continúe esta configuración.",
+    "El servidor ya no deja que esta página continúe esta configuración.",
   "shell.first_setup.attempt_conflict":
     "Otro intento de configuración tiene el control de este local.",
   "shell.first_setup.attempt_uncertain":
-    "Puede que la configuración de este equipo ya haya usado su serie de facturas, así que el equipo no la repite ni la sustituye.",
+    "Puede que la configuración de este servidor ya haya usado su serie de facturas, así que el servidor no la repite ni la sustituye.",
   "shell.setup_not_accepted":
     "Este servidor no ha aceptado esta petición desde esta página, así que no ha cambiado nada. Recargar empieza la configuración de nuevo desde su primera pantalla; lo que has escrito en esta página no se guarda.",
   "shell.setup_conflict":
@@ -256,7 +256,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.first_setup.disk_full_restart_unknown":
     "El disco del equipo está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
   "shell.first_setup.series_minute_taken":
-    "No se pueden crear las series: el minuto que eligió esta configuración ya está en los registros de este equipo. Es un fallo de Waitron.",
+    "No se pueden crear las series de facturas: el minuto que eligió esta configuración ya está en los registros de este servidor. Es un fallo de Waitron.",
 
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",

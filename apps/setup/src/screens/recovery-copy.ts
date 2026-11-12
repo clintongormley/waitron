@@ -340,6 +340,10 @@ export class SetupRecoveryCopy extends LitElement {
               <p>${t("restore.preview_keep_keys")}</p>
               <p>${t("restore.preview_key_separate")}</p>
               <setup-recovery-allocation
+                @recovery-edit-details=${(event: Event) => {
+                  event.stopPropagation();
+                  this.#invalidate();
+                }}
                 .preview=${preview}
                 .prepare=${this.#prepare}
                 .errorMessage=${this.errorMessage}

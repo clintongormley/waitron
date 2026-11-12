@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -20,6 +21,9 @@ const preview: RecoveryBackupPreview = {
   },
 };
 const instant = Date.parse("2026-10-18T12:30:00Z");
+const selectedInput = {
+  allocation: { installationIdentity: "0CRHE", series: [{ code: "A-0CRHE", purpose: "standard" }] },
+};
 const clock = {
   usable: ["box", "browser", "internet"].map((source) => ({
     source,
@@ -65,13 +69,12 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
       if (proposal.action === "clock-challenge")
         return Response.json({ id: "challenge", boxInstantMs: instant, expiresInMs: 5000 });
       if (proposal.action === "compare-clocks") return Response.json({ id: "comparison", clock });
-      if (proposal.action === "preview") return Response.json({ status: "preview" });
       if (proposal.action === "select")
         return Response.json({
           status: "selected",
           binding: body.preparation.binding,
           identity: "0CRHE",
-          input: { server: "selected-input" },
+          input: selectedInput,
         });
     }
     throw new Error("unexpected URL " + url);
@@ -114,34 +117,22 @@ async function fill(entry: LitElement) {
     input.value = value!;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
-  for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
+  for (const name of [
+    "recovery-old-box-stopped",
+    "recovery-sole-operation",
+    "recovery-details-confirmed",
+  ]) {
     const field = entry.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
     field.checked = true;
     field.dispatchEvent(new Event("change"));
   }
+  const proceed = () =>
+    entry.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=compare]")!;
+  await vi.waitFor(() => expect(proceed().disabled).toBe(false));
+  await userEvent.click(proceed());
   await vi.waitFor(() =>
-    expect(
-      (
-        entry.shadowRoot!.querySelector("[data-test=compare]") as HTMLElement & {
-          disabled: boolean;
-        }
-      ).disabled,
-    ).toBe(false),
+    expect(entry.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
   );
-  entry.shadowRoot!.querySelector<HTMLElement>("[data-test=compare]")!.click();
-  await vi.waitFor(() =>
-    expect(entry.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
-  );
-  await vi.waitFor(() =>
-    expect(
-      (
-        entry.shadowRoot!.querySelector("[data-test=select]") as HTMLElement & {
-          disabled: boolean;
-        }
-      ).disabled,
-    ).toBe(false),
-  );
-  entry.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
 }
 it.each(["archive", "bucket", "cloud"] as const)(
   "prepares %s recovery through the real client and forwards bound credentials",
@@ -149,7 +140,7 @@ it.each(["archive", "bucket", "cloud"] as const)(
     const { el, entry, requests, artifact, stages } = await mounted(kind);
     await fill(entry);
     await vi.waitFor(() =>
-      expect(el.readCredentials()?.recoveryOperation.input).toEqual({ server: "selected-input" }),
+      expect(el.readCredentials()?.recoveryOperation.input).toEqual(selectedInput),
     );
     const credentials = el.readCredentials()!;
     expect(credentials.recoveryContext).toEqual({
@@ -166,9 +157,6 @@ it.each(["archive", "bucket", "cloud"] as const)(
       targetNodeId: "node-1",
     });
     expect(requests.map((r) => (r.preparation.proposal as { action: string }).action)).toEqual([
-      "clock-challenge",
-      "compare-clocks",
-      "preview",
       "clock-challenge",
       "compare-clocks",
       "select",

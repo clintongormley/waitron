@@ -135,11 +135,11 @@ export const venueEn = {
   "venue.help.day_cutover":
     "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
   "venue.help.series_code":
-    "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FS unless you need another series.",
+    "Ordinary invoice numbers start with this prefix, then a code Waitron adds, then the invoice's number: for example FS-0CSQW/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FS unless you need another invoice series.",
   "venue.help.full_series_code":
-    "This prefix identifies full invoices, for example FF/1. Use letters, numbers, / _ . or -, up to 21 characters.",
+    "Full invoice numbers start with this prefix, then a code Waitron adds, then the invoice's number: for example FF-0CSQW/1. Use letters, numbers, / _ . or -, up to 21 characters.",
   "venue.help.rectificative_series_code":
-    "This prefix identifies correction invoices, for example FR/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FR unless you need another series.",
+    "Correction invoice numbers start with this prefix, then a code Waitron adds, then the invoice's number: for example FR-0CSQW/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FR unless you need another invoice series.",
 
   "venue.error.invoice_locales": "Choose the receipt language.",
   "venue.error.tax_id": "Enter a valid tax ID for the selected country.",
@@ -395,11 +395,11 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.help.day_cutover":
     "Las ventas anteriores a esta hora pertenecen al día comercial anterior. Deja las 04:00 si cierras después de medianoche.",
   "venue.help.series_code":
-    "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FS salvo que necesites otra serie.",
+    "Los números de las facturas ordinarias empiezan por este prefijo, seguido de un código que añade Waitron y del número de la factura: por ejemplo FS-0CSQW/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FS salvo que necesites otra serie de facturas.",
   "venue.help.full_series_code":
-    "Este prefijo identifica las facturas completas, por ejemplo FF/1. Usa letras, números, / _ . o -, hasta 21 caracteres.",
+    "Los números de las facturas completas empiezan por este prefijo, seguido de un código que añade Waitron y del número de la factura: por ejemplo FF-0CSQW/1. Usa letras, números, / _ . o -, hasta 21 caracteres.",
   "venue.help.rectificative_series_code":
-    "Este prefijo identifica las facturas rectificativas, por ejemplo FR/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FR salvo que necesites otra serie.",
+    "Los números de las facturas rectificativas empiezan por este prefijo, seguido de un código que añade Waitron y del número de la factura: por ejemplo FR-0CSQW/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FR salvo que necesites otra serie de facturas.",
 
   "venue.error.invoice_locales": "Elige el idioma del recibo.",
   "venue.error.tax_id": "Introduce un número de identificación fiscal válido para el país elegido.",

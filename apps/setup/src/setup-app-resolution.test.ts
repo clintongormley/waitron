@@ -1509,13 +1509,13 @@ it("the repair page's words for a setup this page cannot carry on and an unsure 
     "The box no longer lets this page carry this setup on.",
   );
   expect(shellEs["shell.first_setup.owner_required"]).toBe(
-    "El equipo ya no deja que esta página continúe esta configuración.",
+    "El servidor ya no deja que esta página continúe esta configuración.",
   );
   expect(shellEn["shell.first_setup.attempt_uncertain"]).toBe(
     "The setup on this box may already have used its invoice series, so the box does not repeat or replace it.",
   );
   expect(shellEs["shell.first_setup.attempt_uncertain"]).toBe(
-    "Puede que la configuración de este equipo ya haya usado su serie de facturas, así que el equipo no la repite ni la sustituye.",
+    "Puede que la configuración de este servidor ya haya usado su serie de facturas, así que el servidor no la repite ni la sustituye.",
   );
 });
 

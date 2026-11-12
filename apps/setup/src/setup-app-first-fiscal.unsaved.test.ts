@@ -81,9 +81,7 @@ it("protects a nested module draft through the wizard's real leave coordinator",
     "vf-first-setup-hour",
   )!;
   await hour.updateComplete;
-  await expect
-    .poll(() => hour.shadowRoot!.querySelector("[data-test=clock-readings]"))
-    .not.toBeNull();
+  await expect.poll(() => hour.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull();
   const answer = hour.shadowRoot!.querySelector<HTMLInputElement>(
     'input[name="setup-details-confirmed"]',
   )!;

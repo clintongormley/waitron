@@ -14,15 +14,19 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   ClockWait,
-  clockProblem,
   clockWaitStrings,
-  dateTimeFormat,
   readClocks,
   record,
-  renderClockProblem,
   validWait,
   type ClockComparison,
 } from "./clock-wait.js";
+import {
+  checkVenueStrings,
+  checkVenueStyles,
+  detailRow,
+  focusNewScreen,
+  regionName,
+} from "./check-venue.js";
 
 type RecoveryContext = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
 type PromotionContext = Parameters<NonNullable<SetupContribution["createPromotion"]>>[0] & {
@@ -33,90 +37,68 @@ const isPromotion = (context: Context): context is PromotionContext => "mode" in
 interface Draft {
   oldBoxGone: boolean;
   soleRecovery: boolean;
+  detailsCorrect: boolean;
 }
-const empty = (): Draft => ({ oldBoxGone: false, soleRecovery: false });
+const empty = (): Draft => ({ oldBoxGone: false, soleRecovery: false, detailsCorrect: false });
 interface Selected {
   status: "selected";
   identity: string;
-  input: unknown;
+  input: { allocation: { series: { code: string }[] } };
 }
 const strings = {
   en: {
     ...clockWaitStrings.en,
-    inUse: `${clockWaitStrings.en.inUse} Reload this page and start the restore again: a new restore chooses a new series name.`,
+    ...checkVenueStrings.en,
+    inUse: `${clockWaitStrings.en.inUse} Reload this page and start the restore again: a new restore creates new invoice series.`,
     heading: "Recover this box",
     promotionHeading: "Start the venue on this box",
     promotionFailed:
-      "Check your password and code, then compare clocks again. Use a fresh authenticator code.",
-    promotionThrottled: "Wait before trying your password again, then compare clocks again.",
+      "Check your password and code, then try again. Use a fresh authenticator code.",
+    promotionThrottled: "Wait before trying your password again.",
     promotionPermission:
-      "Use an administrator account allowed to hand over the venue. Open this box at its own HTTPS address, then compare clocks again.",
-    promotionClock: "The clock check is too old. Compare clocks again before starting the venue.",
+      "Use an administrator account allowed to hand over the venue. Open this box at its own HTTPS address, then try again.",
+    promotionClock: "The clock check is too old. Check the clocks again before starting the venue.",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
-      "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete. Recovery still uses new series.",
+      "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete.",
     stopped: "The old box is stopped and will stay offline.",
     sole: "I am the only person recovering this taxpayer, across all venues.",
-    compare: "Compare clocks",
-    select: "Make the series",
-    again: "Check again",
-    readings: "Clock comparison",
-    box: "Box",
-    browser: "Browser",
-    internet: "Internet",
-    unavailable: "Unavailable",
-    failed: "Check the fields and compare clocks again.",
+    seriesLine:
+      "When you press Proceed, Waitron creates new invoice series for this box, so its invoice numbers never repeat the old box's. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
     missing: "Complete recovery before continuing.",
     key: "Check the key for this backup.",
-    chosen: "Series name",
-    blocked: "Box time precedes this Waitron release.",
-    rangeBlocked: "This date is outside the range of series names.",
     secondClockDo:
       "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.",
     secondClockEnds:
       "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.",
-    differDo:
-      "Try from another phone or laptop that has the backup. If they still differ, the box's time may be wrong: ask for help.",
     clear: "Clear",
   },
   es: {
     ...clockWaitStrings.es,
-    inUse: `${clockWaitStrings.es.inUse} Recarga esta página y vuelve a empezar la restauración: una restauración nueva elige otro nombre de serie.`,
-    heading: "Recuperar esta caja",
-    promotionHeading: "Iniciar el local en este equipo",
+    ...checkVenueStrings.es,
+    inUse: `${clockWaitStrings.es.inUse} Recarga esta página y vuelve a empezar la restauración: una restauración nueva crea series de facturas nuevas.`,
+    heading: "Recuperar este servidor",
+    promotionHeading: "Iniciar el local en este servidor",
     promotionFailed:
-      "Revisa la contraseña y usa un código nuevo del autenticador. Después, vuelve a comparar los relojes.",
-    promotionThrottled:
-      "Espera antes de volver a probar la contraseña y compara los relojes de nuevo.",
+      "Revisa la contraseña y usa un código nuevo del autenticador. Después, vuelve a intentarlo.",
+    promotionThrottled: "Espera antes de volver a probar la contraseña.",
     promotionPermission:
-      "Usa una cuenta de administrador con permiso para traspasar el local y abre la dirección HTTPS de este equipo. Después, vuelve a comparar los relojes.",
+      "Usa una cuenta de administrador con permiso para traspasar el local y abre la dirección HTTPS de este servidor. Después, vuelve a intentarlo.",
     promotionClock:
-      "La comprobación del reloj ha caducado. Vuelve a comparar los relojes antes de iniciar el local.",
+      "La comprobación del reloj ha caducado. Vuelve a comprobar los relojes antes de iniciar el local.",
     deviceInvoices: "Facturas vistas en este dispositivo",
     deviceInvoicesHint:
-      "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta. La recuperación sigue usando series nuevas.",
-    stopped: "La caja anterior está apagada y seguirá desconectada.",
+      "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta.",
+    stopped: "El servidor anterior está apagado y seguirá desconectado.",
     sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
-    compare: "Comparar relojes",
-    select: "Crear las series",
-    again: "Comprobar otra vez",
-    readings: "Comparación de relojes",
-    box: "Servidor",
-    browser: "Navegador",
-    internet: "Internet",
-    unavailable: "No disponible",
-    failed: "Revisa los campos y vuelve a comparar los relojes.",
+    seriesLine:
+      "Cuando pulses Continuar, Waitron creará series de facturas nuevas para este servidor, para que sus números de factura nunca repitan los del servidor anterior. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
     missing: "Completa la recuperación antes de continuar.",
     key: "Revisa la clave de esta copia.",
-    chosen: "Nombre de las series",
-    blocked: "La hora de la caja es anterior a esta versión de Waitron.",
-    rangeBlocked: "Esta fecha está fuera del rango de nombres de serie.",
     secondClockDo:
-      "Conecta el equipo a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
+      "Conecta el servidor a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
     secondClockEnds:
-      "Sigue sola cuando el equipo tenga internet, o en el otro aparato si sigues allí.",
-    differDo:
-      "Prueba desde otro móvil o portátil que tenga la copia. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
+      "Sigue sola cuando el servidor tenga internet, o en el otro aparato si sigues allí.",
     clear: "Borrar",
   },
 };
@@ -144,17 +126,19 @@ export class RecoveryHourEntry extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      dl {
+      dl:not(.details) {
         display: grid;
         gap: var(--wt-space-2);
+        margin-block: var(--wt-space-3);
       }
-      dd {
+      dl:not(.details) dd {
         margin: 0;
       }
-      dt {
+      dl:not(.details) dt {
         color: var(--wt-color-text-muted);
       }
     `,
+    checkVenueStyles,
   ];
   @property({ attribute: false }) context!: Context;
   @property() locale: "en" | "es" = "en";
@@ -162,6 +146,8 @@ export class RecoveryHourEntry extends LitElement {
   @property() refusedField?: string;
   @state() private draft = empty();
   @state() private busy = false;
+  /** The button whose own request is being sent, which stays on screen while it is. */
+  @state() private sending?: "proceed" | "compareAgain" | "tryAgain";
   @state() private comparison?: ClockComparison;
   @state() private error = false;
   #failure: unknown;
@@ -171,7 +157,10 @@ export class RecoveryHourEntry extends LitElement {
   #secret?: string;
   #generation = 0;
   #scope?: DraftScope<Draft>;
-  #wait = new ClockWait<Selected>(this, () => void this.#select(true));
+  #wait = new ClockWait<Selected>(this, () => void this.#run(true));
+  #seriesShown = false;
+  /** Proceed was pressed and no field has changed since: the page carries on to the series. */
+  #confirmed = false;
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
@@ -181,13 +170,25 @@ export class RecoveryHourEntry extends LitElement {
     if (changed.has("context")) this.clear();
     this.#register();
   }
+  override updated(): void {
+    const shown = this.#wait.result?.status === "selected";
+    if (shown && !this.#seriesShown)
+      focusNewScreen(
+        this.shadowRoot!,
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=selected-hour] h4"),
+      );
+    this.#seriesShown = shown;
+  }
   #register(): void {
     if (this.isConnected && !this.#scope) {
       this.#scope = draftScopeFor(this, {
         id: this,
         current: () => this.draft,
         snapshot: (value) => ({ ...value }),
-        equal: (a, b) => a.oldBoxGone === b.oldBoxGone && a.soleRecovery === b.soleRecovery,
+        equal: (a, b) =>
+          a.oldBoxGone === b.oldBoxGone &&
+          a.soleRecovery === b.soleRecovery &&
+          a.detailsCorrect === b.detailsCorrect,
         restore: () => this.clear(),
       }).scope;
       this.#scope.commit(empty());
@@ -210,7 +211,9 @@ export class RecoveryHourEntry extends LitElement {
   }
   #invalidate(): void {
     ++this.#generation;
+    this.#confirmed = false;
     this.busy = false;
+    this.sending = undefined;
     this.comparison = undefined;
     this.error = false;
     this.keyError = false;
@@ -218,7 +221,10 @@ export class RecoveryHourEntry extends LitElement {
   }
   #edit(change: Partial<Draft>): void {
     this.#edited("recoveryOperation");
+    // A statement edit leaves the key as the box refused it.
+    const keyError = this.keyError;
     this.#invalidate();
+    this.keyError = keyError;
     this.draft = { ...this.draft, ...change };
     this.#scope?.changed();
     this.#notify();
@@ -260,6 +266,7 @@ export class RecoveryHourEntry extends LitElement {
       !this.#secret ||
       !this.draft.oldBoxGone ||
       !this.draft.soleRecovery ||
+      !this.draft.detailsCorrect ||
       this.#wait.result?.status !== "selected"
     )
       return null;
@@ -291,7 +298,12 @@ export class RecoveryHourEntry extends LitElement {
     return words.promotionFailed;
   }
   readOperation(): ReturnType<ModulePromotionEntry["readOperation"]> {
-    if (!isPromotion(this.context) || this.busy || this.#wait.result?.status !== "selected")
+    if (
+      !isPromotion(this.context) ||
+      this.busy ||
+      !this.draft.detailsCorrect ||
+      this.#wait.result?.status !== "selected"
+    )
       return null;
     return {
       binding: { ...this.context.binding },
@@ -306,14 +318,10 @@ export class RecoveryHourEntry extends LitElement {
     return credentials;
   }
   get #canCompare(): boolean {
-    return (
-      isPromotion(this.context) ||
-      Boolean(this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery)
+    if (isPromotion(this.context)) return this.draft.detailsCorrect;
+    return Boolean(
+      this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery && this.draft.detailsCorrect,
     );
-  }
-  get #canSelect(): boolean {
-    const clock = this.comparison?.clock;
-    return this.#canCompare && clock !== undefined && !clock.releaseBlocked && !clock.rangeBlocked;
   }
   #request(context: RecoveryContext) {
     return {
@@ -352,30 +360,8 @@ export class RecoveryHourEntry extends LitElement {
       (cause.code === "promotion.break_glass_invalid" ||
         (record(cause.params) && cause.params.field === "nodeRecoverySecret"));
   }
-  async #compare(): Promise<void> {
-    if (this.busy || !this.#canCompare) return;
-    const { call, current } = this.#begin();
-    this.comparison = undefined;
-    this.#wait.show();
-    this.#notify();
-    try {
-      this.comparison = await readClocks(call);
-      if (this.comparison.clock.releaseBlocked) return;
-      this.#wait.showPreview(await call({ action: "preview" }));
-    } catch (cause) {
-      // A taken minute is counted down only after Make the series, whose select the box answers.
-      if (current() && clockProblem(cause)?.kind !== "next-minute")
-        this.#wait.settle(cause, false, (error) => this.#failed(error));
-    } finally {
-      if (current()) {
-        this.busy = false;
-        this.#notify();
-      }
-    }
-  }
-  async #select(automatic = false): Promise<void> {
-    if (this.busy || this.#wait.result?.status === "selected") return;
-    if (!(automatic ? this.#canCompare : this.#canSelect)) return;
+  async #run(automatic = false): Promise<void> {
+    if (!this.#confirmed || this.busy || this.#wait.result?.status === "selected") return;
     const { call, current } = this.#begin();
     const context = this.context;
     // An automatic re-check leaves the current explanation up until its answer replaces it.
@@ -384,8 +370,10 @@ export class RecoveryHourEntry extends LitElement {
     try {
       const comparison = await readClocks(call);
       this.comparison = comparison;
-      if (!comparison.clock.secondClock) return this.#wait.waitForSecondClock();
-      if (comparison.clock.disagreement) return this.#wait.show({ kind: "disagreement" });
+      const { clock } = comparison;
+      if (clock.releaseBlocked || clock.rangeBlocked) return this.#wait.show();
+      if (!clock.secondClock) return this.#wait.waitForSecondClock();
+      if (clock.disagreement) return this.#wait.show({ kind: "disagreement" });
       const selected = await call({ action: "select", comparisonId: comparison.id });
       if (!record(selected)) throw new Error("invalid selection");
       if (selected.status === "selected") {
@@ -394,7 +382,13 @@ export class RecoveryHourEntry extends LitElement {
           !record(selectedBinding) ||
           Object.entries(context.binding).some(([key, value]) => selectedBinding[key] !== value) ||
           !isMinuteIdentity(selected.identity) ||
-          selected.input === undefined
+          !record(selected.input) ||
+          !record(selected.input.allocation) ||
+          selected.input.allocation.installationIdentity !== selected.identity ||
+          !Array.isArray(selected.input.allocation.series) ||
+          !selected.input.allocation.series.every(
+            (series) => record(series) && typeof series.code === "string" && series.code !== "",
+          )
         )
           throw new Error("invalid selection");
       } else if (selected.status !== "waiting" || !validWait(selected))
@@ -405,6 +399,7 @@ export class RecoveryHourEntry extends LitElement {
     } finally {
       if (current()) {
         this.busy = false;
+        this.sending = undefined;
         this.#notify();
       }
     }
@@ -419,149 +414,190 @@ export class RecoveryHourEntry extends LitElement {
           ...baseWords,
           secondClockDo: en
             ? "Connect the box to the internet, or open this handover page on another phone or laptop."
-            : "Conecta el equipo a internet o abre esta página de traspaso en otro móvil o portátil.",
+            : "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
           secondClockEnds: en
             ? "Keep this page open, or continue on the other device."
             : "Mantén esta página abierta o continúa en el otro dispositivo.",
-          differDo: en
-            ? "Open this handover page on another phone or laptop and compare the clocks again."
-            : "Abre esta página de traspaso en otro móvil o portátil y vuelve a comparar los relojes.",
+          inUse: en ? clockWaitStrings.en.inUse : clockWaitStrings.es.inUse,
         }
       : baseWords;
-    const observations = isPromotion(context)
+    const observations = promote
       ? []
       : readInvoiceEvidenceReport({
           taxpayerId: context.selection.taxId,
           environment: context.selection.environment,
         });
-    const zone = classifySavedTimeZone(
-      isPromotion(context) ? context.timeZone : context.selection.timeZone,
-    );
+    const zone = classifySavedTimeZone(promote ? context.timeZone : context.selection.timeZone);
     const displayZone = zone.kind === "valid" ? zone.timeZone : "UTC";
-    const format = (ms: number) =>
-      dateTimeFormat(en ? "en" : "es", displayZone, {
-        dateStyle: "medium",
-        timeStyle: "long",
-      }).format(ms);
-    const utc = (ms: number) => new Date(ms).toISOString();
     const clock = this.comparison?.clock;
     const result = this.#wait.result;
-    const canSelect =
-      this.#canSelect && !this.busy && !this.#wait.waiting && result?.status !== "selected";
+    const problem = this.#wait.problem?.kind;
+    const sending = this.busy ? this.sending : undefined;
+    const action =
+      sending ??
+      (this.busy || result?.status === "selected" || problem === "in-use"
+        ? undefined
+        : this.keyError
+          ? "proceed"
+          : this.error
+            ? "tryAgain"
+            : clock?.releaseBlocked ||
+                clock?.rangeBlocked ||
+                problem === "disagreement" ||
+                problem === "later"
+              ? "compareAgain"
+              : this.#confirmed && this.#wait.waiting
+                ? undefined
+                : "proceed");
+    const enabled = !sending && (action !== "proceed" || this.#canCompare);
+    const selectedHour = result?.status === "selected" ? result : undefined;
+    const editable = !selectedHour && !this.#confirmed && !sending;
     return html`<h3>${promote ? words.promotionHeading : words.heading}</h3>
+      <div data-test="check-venue" ?hidden=${selectedHour !== undefined}>
+        ${
+          observations.length === 0
+            ? nothing
+            : html`<section data-test="device-invoices" aria-label=${words.deviceInvoices}>
+                <h4>${words.deviceInvoices}</h4>
+                <p>${words.deviceInvoicesHint}</p>
+                <dl>
+                  ${observations.map(
+                    (observation) =>
+                      html`<dt>${observation.invoiceNumber}</dt>
+                        <dd>${observation.issuedDate}<br />${observation.recordEvidence}</dd>`,
+                  )}
+                </dl>
+              </section>`
+        }
+        ${
+          promote
+            ? nothing
+            : html`<vf-recovery-key
+                  .selection=${context.selection}
+                  .locale=${this.locale}
+                  .errorMessage=${this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? this.errorMessage : undefined}
+                  @recovery-key-change=${(event: CustomEvent<{ secret?: string }>) => {
+                    event.stopPropagation();
+                    this.#secret = event.detail.secret;
+                    this.#edited("nodeRecoverySecret");
+                    this.#invalidate();
+                    this.#notify();
+                  }}
+                ></vf-recovery-key>
+                <label
+                  ><input
+                    type="checkbox"
+                    name="recovery-old-box-stopped"
+                    required
+                    aria-invalid=${this.attempted && !this.draft.oldBoxGone ? "true" : "false"}
+                    aria-describedby="stopped-error"
+                    .checked=${this.draft.oldBoxGone}
+                    @change=${(event: Event) => this.#edit({ oldBoxGone: (event.currentTarget as HTMLInputElement).checked })}
+                  />${words.stopped} *</label
+                >
+                <p id="stopped-error" class="error">
+                  ${this.attempted && !this.draft.oldBoxGone ? words.stopped : ""}
+                </p>
+                <label
+                  ><input
+                    type="checkbox"
+                    name="recovery-sole-operation"
+                    required
+                    aria-invalid=${this.attempted && !this.draft.soleRecovery ? "true" : "false"}
+                    aria-describedby="sole-error"
+                    .checked=${this.draft.soleRecovery}
+                    @change=${(event: Event) => this.#edit({ soleRecovery: (event.currentTarget as HTMLInputElement).checked })}
+                  />${words.sole} *</label
+                >
+                <p id="sole-error" class="error">
+                  ${this.attempted && !this.draft.soleRecovery ? words.sole : ""}
+                </p>`
+        }
+        <h4>${words.checkHeading}</h4>
+        <dl class="details" data-test="venue-review" data-clock=${clock ? "read" : "reading"}>
+          ${
+            promote
+              ? nothing
+              : html`${detailRow(words.environment, words[context.selection.environment])}
+                ${detailRow(words.country, regionName(this.locale, context.selection.country))}
+                ${detailRow(words.taxId, context.selection.taxId)}`
+          }
+          ${detailRow(words.zone, displayZone)}
+        </dl>
+        ${
+          clock
+            ? html`${clock.releaseBlocked || clock.rangeBlocked ? html`<p role="status">${clock.rangeBlocked ? words.rangeBlocked : words.blocked}</p>` : nothing}`
+            : nothing
+        }
+        <label
+          ><input
+            type="checkbox"
+            name="recovery-details-confirmed"
+            required
+            aria-invalid=${this.attempted && !this.draft.detailsCorrect ? "true" : "false"}
+            aria-describedby="details-error"
+            .checked=${this.draft.detailsCorrect}
+            @change=${(event: Event) => this.#edit({ detailsCorrect: (event.currentTarget as HTMLInputElement).checked })}
+          />${words.detailsCorrect} *</label
+        >
+        <p id="details-error" class="error">
+          ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
+        </p>
+        ${this.#wait.renderProblem(words, clock, this.locale, displayZone)}
+        ${this.#wait.counting ? this.#wait.renderWait(words) : nothing}
+        ${action === "proceed" && !sending ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}
+      </div>
       ${
-        observations.length === 0
-          ? nothing
-          : html`<section data-test="device-invoices" aria-label=${words.deviceInvoices}>
-              <h4>${words.deviceInvoices}</h4>
-              <p>${words.deviceInvoicesHint}</p>
-              <dl>
-                ${observations.map(
-                  (observation) =>
-                    html`<dt>${observation.invoiceNumber}</dt>
-                      <dd>${observation.issuedDate}<br />${observation.recordEvidence}</dd>`,
-                )}
-              </dl>
-            </section>`
-      }
-      ${
-        isPromotion(context)
-          ? nothing
-          : html`<vf-recovery-key
-                .selection=${context.selection}
-                .locale=${this.locale}
-                .errorMessage=${this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? this.errorMessage : undefined}
-                @recovery-key-change=${(event: CustomEvent<{ secret?: string }>) => {
-                  event.stopPropagation();
-                  this.#secret = event.detail.secret;
-                  this.#edited("nodeRecoverySecret");
-                  this.#invalidate();
-                  this.#notify();
-                }}
-              ></vf-recovery-key>
-              <label
-                ><input
-                  type="checkbox"
-                  name="recovery-old-box-stopped"
-                  required
-                  aria-invalid=${this.attempted && !this.draft.oldBoxGone ? "true" : "false"}
-                  aria-describedby="stopped-error"
-                  .checked=${this.draft.oldBoxGone}
-                  @change=${(event: Event) => this.#edit({ oldBoxGone: (event.currentTarget as HTMLInputElement).checked })}
-                />${words.stopped} *</label
-              >
-              <p id="stopped-error" class="error">
-                ${this.attempted && !this.draft.oldBoxGone ? words.stopped : ""}
-              </p>
-              <label
-                ><input
-                  type="checkbox"
-                  name="recovery-sole-operation"
-                  required
-                  aria-invalid=${this.attempted && !this.draft.soleRecovery ? "true" : "false"}
-                  aria-describedby="sole-error"
-                  .checked=${this.draft.soleRecovery}
-                  @change=${(event: Event) => this.#edit({ soleRecovery: (event.currentTarget as HTMLInputElement).checked })}
-                />${words.sole} *</label
-              >
-              <p id="sole-error" class="error">
-                ${this.attempted && !this.draft.soleRecovery ? words.sole : ""}
-              </p>`
-      }
-      ${
-        clock
-          ? html`<section aria-label=${words.readings} data-test="clock-readings">
-              <h4>${words.readings}</h4>
-              <p>${displayZone}</p>
-              <dl>
-                ${clock.usable.map(
-                  (reading) =>
-                    html`<dt>${words[reading.source]}</dt>
-                      <dd>
-                        ${format(reading.lowerMs)} – ${format(reading.upperMs)}<br />${utc(reading.lowerMs)}
-                        – ${utc(reading.upperMs)}
-                      </dd>`,
-                )}
-                ${clock.unavailable.map(
-                  (reading) =>
-                    html`<dt>${words[reading.source]}</dt>
-                      <dd>${words.unavailable}</dd>`,
-                )}
-              </dl>
-              ${clock.releaseBlocked || clock.rangeBlocked ? html`<p role="status">${clock.rangeBlocked ? words.rangeBlocked : words.blocked}</p>` : nothing}
+        selectedHour
+          ? html`<section data-test="selected-hour" role="status">
+              <h4 tabindex="-1">${words.chosen}</h4>
+              <ul>
+                ${selectedHour.input.allocation.series.map((s) => html`<li>${s.code}</li>`)}
+              </ul>
             </section>`
           : nothing
-      }
-      ${renderClockProblem(this.#wait.problem, words, clock)}
-      ${
-        this.#wait.counting
-          ? this.#wait.renderWait(words)
-          : result?.status === "selected"
-            ? html`<p role="status" data-test="selected-hour">
-                ${words.chosen}: <strong>${result.identity}</strong>
-              </p>`
-            : nothing
       }
       <wt-form-actions
         .error=${this.error ? (promote ? this.refusalMessage(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
       >
-        <wt-button
-          data-test="compare"
-          variant=${this.#canCompare ? "primary" : "secondary"}
-          ?disabled=${this.busy || !this.#canCompare}
-          @click=${() => void this.#compare()}
-          >${this.comparison || result ? words.again : words.compare}</wt-button
-        >
-        <wt-button
-          data-test="select"
-          variant=${canSelect ? "primary" : "secondary"}
-          ?disabled=${!canSelect}
-          @click=${() => void this.#select()}
-          >${words.select}</wt-button
-        >
-        <wt-button data-test="clear" variant="secondary" @click=${() => this.clear()}
-          >${words.clear}</wt-button
-        >
+        ${
+          action
+            ? html`<wt-button
+                data-test="compare"
+                variant=${enabled || sending ? "primary" : "secondary"}
+                ?disabled=${!enabled}
+                ?loading=${Boolean(sending)}
+                @click=${() => {
+                  if (this.busy) return;
+                  if (action === "proceed") this.#confirmed = true;
+                  void this.#run();
+                  this.sending = this.busy ? action : undefined;
+                }}
+                >${words[action]}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          editable
+            ? html`<wt-button
+                slot="secondary"
+                data-test="edit-details"
+                variant="secondary"
+                @click=${() =>
+                  this.dispatchEvent(
+                    new CustomEvent("recovery-edit-details", { bubbles: true, composed: true }),
+                  )}
+                >${words.editDetails}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          selectedHour
+            ? nothing
+            : html`<wt-button data-test="clear" variant="secondary" @click=${() => this.clear()}
+                >${words.clear}</wt-button
+              >`
+        }
       </wt-form-actions>`;
   }
 }

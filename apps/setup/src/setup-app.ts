@@ -1040,7 +1040,11 @@ export class SetupApp extends LitElement {
 
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
-    const destination = event.detail.screen;
+    this.#navigateTo(event.detail.screen);
+  }
+
+  /** Goes to `destination` once the screen being left has settled any unsaved changes. */
+  #navigateTo(destination: Screen): void {
     if (destination === this.screen) return;
     const origin = this.screen;
     const owner = this.shadowRoot?.querySelector<HTMLElement>(`[data-test=screen-${origin}]`);
@@ -2540,6 +2544,10 @@ export class SetupApp extends LitElement {
           .contributions=${SETUP_MODULES}
           .locale=${setupLocale()}
           @initial-reconnect=${() => void this.#reconnectFirstSetup()}
+          @initial-edit-details=${(event: Event) => {
+            event.stopPropagation();
+            this.#navigateTo("venue");
+          }}
           @initial-setup-ready=${() => {
             this.firstReady = true;
             this.#goto("review");

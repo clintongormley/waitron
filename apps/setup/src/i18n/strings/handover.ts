@@ -17,15 +17,16 @@ export const handoverEn = {
   "handover.closed":
     "This handover ended without activating this box. Open Servers on the main box to see its current state.",
   "handover.sign_in":
-    "Sign in as an administrator to compare clocks and start the venue here. Use the same account for both steps. Enter a fresh authenticator code before starting the venue.",
+    "Sign in as an administrator to confirm the details and start the venue here. Use a fresh authenticator code.",
   "handover.email": "Administrator email",
   "handover.password": "Password",
   "handover.code": "Authenticator code, if set up",
   "handover.compare": "Continue to clock check",
-  "handover.activate": "Start the venue on this box",
+  "handover.starting": "Starting the venue on this box…",
+  "handover.try_again": "Try again",
   "handover.fix": "Complete the highlighted fields to continue.",
   "handover.required": "Complete this field.",
-  "handover.zone": "Times are shown in your device’s time zone and UTC.",
+  "handover.zone": "Times are shown in your device’s time zone.",
   "handover.emergency.sign_in":
     "Sign in as an administrator to check this spare and start the venue here. Enter your password and current authenticator code, if set up. You only need a new code if this one expires.",
   "handover.emergency.saved":
@@ -79,56 +80,57 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.heading": "Traspasar el local",
   "handover.loading": "Consultando el progreso del traspaso…",
   "handover.copy":
-    "Preparando la copia final. Mantén los dos equipos conectados. Las ventas siguen detenidas hasta que el nuevo equipo esté listo.",
+    "Preparando la copia final. Mantén los dos servidores conectados. Las ventas siguen detenidas hasta que el nuevo servidor esté listo.",
   "handover.read_failed":
     "No se pudo consultar el progreso. Mantén esta página abierta mientras se recupera la conexión.",
   "handover.wait":
-    "El último intento no pudo continuar. Mantén los dos equipos conectados; esta página vuelve a comprobarlo automáticamente.",
+    "El último intento no pudo continuar. Mantén los dos servidores conectados; esta página vuelve a comprobarlo automáticamente.",
   "handover.space":
-    "El último intento detectó poco espacio en este equipo. Libera espacio y mantén esta página abierta para volver a intentarlo.",
+    "El último intento detectó poco espacio en este servidor. Libera espacio y mantén esta página abierta para volver a intentarlo.",
   "handover.source":
-    "El último intento no pudo conectar con el equipo anterior. Comprueba su alimentación y conexión de red.",
-  "handover.done": "Este equipo ha pasado a llevar el local.",
-  "handover.restarting": "El local se ha iniciado aquí; este equipo se está reiniciando.",
-  "handover.continue": "Continuar en este equipo",
+    "El último intento no pudo conectar con el servidor anterior. Comprueba su alimentación y conexión de red.",
+  "handover.done": "Este servidor ha pasado a llevar el local.",
+  "handover.restarting": "El local se ha iniciado aquí; este servidor se está reiniciando.",
+  "handover.continue": "Continuar en este servidor",
   "handover.closed":
-    "Este traspaso terminó sin activar este equipo. Abre Servidores en el equipo principal para consultar su estado actual.",
+    "Este traspaso terminó sin activar este servidor. Abre Servidores en el servidor principal para consultar su estado actual.",
   "handover.sign_in":
-    "Identifícate como administrador para comparar los relojes e iniciar el local aquí. Usa la misma cuenta en los dos pasos. Introduce un código nuevo del autenticador antes de iniciar el local.",
+    "Identifícate como administrador para confirmar los datos e iniciar el local aquí. Usa un código nuevo del autenticador.",
   "handover.email": "Correo del administrador",
   "handover.password": "Contraseña",
   "handover.code": "Código de autenticador, si está configurado",
   "handover.compare": "Continuar a la comprobación del reloj",
-  "handover.activate": "Iniciar el local en este equipo",
+  "handover.starting": "Iniciando el local en este servidor…",
+  "handover.try_again": "Volver a intentarlo",
   "handover.fix": "Completa los campos resaltados para continuar.",
   "handover.required": "Completa este campo.",
-  "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo y en UTC.",
+  "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo.",
   "handover.emergency.sign_in":
     "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
   "handover.emergency.saved":
     "Esta declaración está guardada y no se puede deshacer. Parar sale de esta página; no cancela la declaración.",
-  "handover.emergency.copy": "Copia guardada en este equipo de reserva",
+  "handover.emergency.copy": "Copia guardada en este servidor de reserva",
   "handover.emergency.copy_changed":
     "La copia cambió mientras la leías. Revisa su última actividad y vuelve a confirmar las tres declaraciones.",
   "handover.emergency.latest_activity": "Última actividad con fecha:",
   "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",
-  "handover.emergency.servers": "Abrir Servidores en el equipo principal anterior",
+  "handover.emergency.servers": "Abrir Servidores en el servidor principal anterior",
   "handover.emergency.one_way":
-    "Esta declaración no se puede deshacer. Apaga el equipo principal anterior antes de continuar y mantenlo apagado.",
+    "Esta declaración no se puede deshacer. Apaga el servidor principal anterior antes de continuar y mantenlo apagado.",
   "handover.emergency.split":
-    "Si el equipo principal anterior sigue encendido, ambos equipos podrían cobrar y enviar registros por separado. No continúes mientras siga encendido.",
+    "Si el servidor principal anterior sigue encendido, ambos servidores podrían cobrar y enviar registros por separado. No continúes mientras siga encendido.",
   "handover.emergency.returned":
-    "Conserva el equipo anterior y sus datos. Sus registros de facturación y hechos de pago registrados podrán volver más adelante; no se repiten pedidos, cambios de existencias ni aperturas de cajón.",
-  "handover.emergency.sourceSwitchedOff": "He apagado el equipo principal anterior.",
+    "Conserva el servidor anterior y sus datos. Sus registros de facturación y hechos de pago registrados podrán volver más adelante; no se repiten pedidos, cambios de existencias ni aperturas de cajón.",
+  "handover.emergency.sourceSwitchedOff": "He apagado el servidor principal anterior.",
   "handover.emergency.noParallelRecovery":
-    "No se está iniciando otro equipo ni una recuperación en la nube para este local.",
+    "No se está iniciando otro servidor ni una recuperación en la nube para este local.",
   "handover.emergency.missingTailAccepted":
-    "Acepto que esta copia puede no incluir la actividad más reciente del equipo anterior.",
+    "Acepto que esta copia puede no incluir la actividad más reciente del servidor anterior.",
   "handover.emergency.reason": "¿Por qué vas a iniciar el local aquí?",
   "handover.emergency.reason_long": "No uses más de 500 caracteres.",
   "handover.emergency.check": "Comprobar esta copia",
-  "handover.emergency.declare": "Declarar apagado el equipo principal anterior",
+  "handover.emergency.declare": "Declarar apagado el servidor principal anterior",
   "handover.emergency.stop": "Parar",
   "handover.emergency.progress": "Abrir el progreso del traspaso",
   "handover.emergency.controlled_link": "Abrir el traspaso pendiente",
@@ -141,15 +143,15 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.throttled":
     "Demasiados intentos de acceso. Espera un momento y vuelve a intentarlo.",
   "handover.emergency.source_answered":
-    "El equipo principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a comprobarlo.",
+    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a comprobarlo.",
   "handover.emergency.controlled":
     "Primero hay que resolver un traspaso controlado pendiente. Abre su página de progreso.",
   "handover.emergency.copy_failed":
-    "No se pudo verificar esta copia con la declaración guardada. Para aquí y conserva los datos de ambos equipos.",
+    "No se pudo verificar esta copia con la declaración guardada. Para aquí y conserva los datos de ambos servidores.",
   "handover.emergency.changed":
-    "El local o el traspaso ha cambiado. Comprueba el progreso y usa el equipo principal actual.",
+    "El local o el traspaso ha cambiado. Comprueba el progreso y usa el servidor principal actual.",
   "handover.emergency.trust":
-    "No se pudo comprobar la identidad o dirección del equipo principal anterior. Comprueba su conexión y dirección en Servidores antes de volver a intentarlo.",
+    "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en Servidores antes de volver a intentarlo.",
   "handover.emergency.failed":
     "No se pudo terminar este paso. Vuelve a comprobar esta copia antes de continuar.",
 };

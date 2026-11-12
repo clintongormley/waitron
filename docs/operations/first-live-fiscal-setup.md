@@ -12,11 +12,10 @@ If you imported a prepared configuration, review whether it belongs to this same
 continuing. Complete the applicable certificate, email and separate preproduction readiness steps.
 The readiness sample uses its own database and grants no production identity.
 
-Review the country, location, time zone and displayed date and time together. The box compares
-its clock with the clock of the device showing the page, and with the internet's when it reaches
-it, by itself; nobody types a time
-(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "automatically compares clocks
-and shows combined country, place, zone and local time before selection"). A page shown on the
+Review the country, location and time zone together. The box compares its clock with the clock
+of the device showing the page, and with the internet's when it reaches it, by itself; nobody types
+a time (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "automatically compares
+clocks and shows combined country, place and zone, with no clock time, before selection"). A page shown on the
 box's own screen runs on the box's clock, so it does not count as the second clock
 (`apps/server/src/request-from-box.test.ts` sorts a request from the box's own address as the box;
 `packages/fiscal-verifactu/src/hour-setup-clock.test.ts`, "a browser on the box itself is never
@@ -24,33 +23,82 @@ the second clock"). The box's clock must be within 30 seconds of every
 other clock it reads, ahead or behind, and there is no confirmation to get past it
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). There is no "last hour" question: the page has no such field
-(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation"). Before you
-press **Make the series**, a refused check on load explains nothing and retries nothing
-(`first-hour.browser.test.ts`, "a preview refused for %s on load shows the readings with no
-failure and no explanation").
+(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation").
 
-After you press it and the clocks pass, the box waits 90 to 150 seconds before it takes the name,
-and the page counts down; keep it open (`packages/fiscal-verifactu/src/hour-selection.test.ts`,
-"setup checked at %s waits until %s"; `first-hour.browser.test.ts`, "explains a waiting setup with
-a countdown that goes back to the server at zero"). A reload during the wait shows the time the
-box has left (`first-hour.browser.test.ts`, "a reload during a wait shows the server's time
-left"), and at zero the page makes the series by itself, with no press and whether or not the
-details are ticked (`first-hour.browser.test.ts`, "a reload during the box's wait makes the series
-by itself at zero, with no press or tick"); **Check again** during a wait does not stop that (the
-same file's "Check again after Make the series still makes the series by itself at the end of the
-wait"). What the page shows when it cannot go ahead, and what it asks for:
+Tick "These details are correct.", then press **Proceed**; once
+the clocks agree, the page asks the box for the invoice series
+(`first-hour.browser.test.ts`, "with the clocks agreeing, ticking the details and pressing Proceed
+makes the series"). The invoice series is the code at the start of every invoice number. The tick
+alone asks for nothing (the same file's "with the tick and the clocks agreeing, nothing asks for the
+series until Proceed"), and **Proceed** stays disabled until the tick is given (the same file's
+"Proceed is quiet and disabled until the details are ticked"). While the button reads **Proceed**,
+the page shows "When you press Proceed, Waitron creates this box's invoice series." with an example of what
+an invoice series is (the same file's "without the tick nothing asks for the series, and the page
+says Proceed starts it"). A missing second clock found when the page opens is explained at once, as
+in the list below (the same file's "%s found on load is explained, with no failure"); clocks that
+differ are explained only after **Proceed** (the same file's "%s found on load show no clock step
+until Proceed, then explain it with no failure"). Beside **Edit these details** the page has one main button; what it reads in each
+state is the same file's "while %s the page's one button reads %s".
+
+Each detail sits on its own row, its value beside its label (`first-hour.browser.test.ts`, "Check
+this venue puts each detail on a row of its own, label then value"), and the list shows no clock time
+(the same file's "when only the %s agrees, Check this venue shows no clock rows").
+When the clocks differ, after **Proceed** the page says "It is very important that the server time
+is set correctly. Which time is correct:", then shows a "Server time" row and a "This device" row (and
+an "Internet" row when the internet was read), each one time to the minute (with seconds on every
+row when another clock reads the server's minute), then **The server** and **Both times are wrong**;
+either answer sends nothing and says to correct this device's time and reconnect (the same file's
+"%s: clocks that differ show one time per clock, ask which is correct, and neither answer sends
+anything"). **Edit these details** sends nothing and asks the setup app for the venue step; while
+the attempt is claimed the app shows its page saying the details are frozen, with **Start again**
+(`apps/setup/src/setup-app-first-fiscal.test.ts`, "Edit these details on the series page asks for
+the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are
+made the page shows "We've created these invoice series:", explains the recovery pack and offers
+**Download recovery pack**, which makes the pack and starts the download.
+
+After **Proceed** the page carries on by itself through its waits. It stops for a press only when it
+shows **Compare the clocks again** (clocks that differ, a box time before this release, a date out of
+range, or a box clock earlier than a time it already used) or **Try again** (a failed request). The box waits 90 to 150 seconds before it takes the
+name, and the page counts down with no button; keep it open
+(`packages/fiscal-verifactu/src/hour-selection.test.ts`, "setup checked at %s waits until %s";
+`first-hour.browser.test.ts`, "explains a waiting setup with a countdown that goes back to the
+server at zero"). Taking the tick away stops the page's countdown; ticking again asks nothing until
+**Proceed** is pressed again (the same file's "taking the tick away during the box's wait stops the
+page, and ticking again asks nothing until Proceed"). A reload during the wait shows the time the
+box has left (`first-hour.browser.test.ts`, "a reload during a wait shows the server's time left"),
+and at zero the page makes the series by itself, with no tick and no press
+(`first-hour.browser.test.ts`, "a reload during the box's wait makes the series by itself at zero,
+with no press or tick"). If no second clock answers at zero, or the box answers with a new wait, the
+page carries on the same way (the same file's "a reload's wait whose second clock is missing at
+zero makes the series by itself once a clock answers" and "a reload's wait that the box answers at
+zero with a fresh wait makes the series by itself at that wait's zero"). If it stops for anything
+else, such as clocks that differ, it needs the tick and **Proceed** (the same file's "a reload's
+wait that stops at zero on clocks that differ needs the tick and Proceed, even after Compare the
+clocks again waits for a second clock"). Changing the tick, or the page being taken off the screen,
+ends that carrying-on for good (the same file's "a reload's wait ends for good once the tick
+changes, so nothing more is asked without Proceed", "a reload's wait ends when the page is taken
+off the screen" and "a recorded wait the load's preview shows only after the tick changed does not
+carry on by itself"). With no wait recorded, a reloaded page shows no countdown and waits for the
+tick and **Proceed** (the same file's "shows no countdown before the tick when no wait is
+recorded"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or till on the venue's network and enter the setup
-  password. It checks again about every 15 seconds and carries on by itself (`first-hour.browser.test.ts`,
-  "with no second clock it explains itself and carries on when the internet arrives").
-- **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
-  from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
-  It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
-  refusal shows both readings and no countdown, and waits for Check again").
-- **The minute this box would use is already taken**: the page says "The auto-generated
-  invoice series code (which is time-based) already exists in the database." and "Generating a new
-  code in: 03:00", counting down in minutes and seconds to the next free minute with no button
+  password. It checks again about every 15 seconds from when the page opens, and carries on by
+  itself once a second clock answers and **Proceed** has been pressed; **Proceed** can be pressed
+  while it waits. After a reload during the box's wait, no tick or press is needed (see above)
+  (`first-hour.browser.test.ts`, "with no second clock it explains itself and carries on when the
+  internet arrives" and "with no second clock on load it explains itself before the tick, and makes
+  the series once Proceed is pressed and a clock answers").
+- **The clocks differ by more than 30 seconds**: after **Proceed** the page shows the server's time,
+  this device's and, when it was read, the internet's, and asks which is correct; either answer says to correct this device's time and reconnect to the box.
+  It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
+  to the series once the clocks agree (`first-hour.browser.test.ts`, "a clock refusal shows each
+  clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again
+  after Proceed carries on to the series once the clocks agree").
+- **The minute this box would use is already taken**: the page says "This invoice series code has
+  already been used. Waitron creates a new one by itself when the countdown ends." and "New invoice series in
+  03:00", counting down in minutes and seconds to the next free minute with no button
   to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
   "a minute in use shows one countdown, checks again quietly and keeps saying why"). If one of those
   checks is lost on the network, the countdown carries on and the page checks again about every 15
@@ -58,21 +106,23 @@ wait"). What the page shows when it cannot go ahead, and what it asks for:
   (`first-hour.browser.test.ts`, "a lost re-check during a taken minute keeps counting and checks
   again"; `clock-wait.browser.test.ts`, "a taken minute's figure stays at 00:00 while lost re-checks
   repeat"). An answer from the box the page cannot read still shows the page's failure message
-  (`first-hour.browser.test.ts`, "an answer it cannot read during a taken minute shows the failure"). A reload before
-  the box's own wait begins shows no countdown; tick "The country, place, time zone and displayed
-  time are correct." and press **Make the series** again (read, not run: the page's check on load
-  ignores a refusal for a taken minute, `#compare` in `packages/fiscal-verifactu/src/setup/first-hour.ts`). If this attempt
+  (`first-hour.browser.test.ts`, "an answer it cannot read during a taken minute shows the failure"). If this attempt
   has already chosen its name and that name then turns up in the box's records, the attempt is refused
   (`minute_in_use`, with no time; `packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is
   refused when a record naming its own minute appears after it"). The page, and the setup app if
-  it happens when the series are made, say this is a fault in Waitron
+  it happens when the invoice series are made, say this is a fault in Waitron
   (`packages/fiscal-verifactu/src/setup/clock-wait.browser.test.ts`, "a minute in use with %j names
   no time and does not count down"; `apps/setup/src/setup-app.test.ts`, "shows a stored series
   pick found taken at activation as a fault in Waitron, without a retry, in both languages").
-- **A later minute is already in use** (no time given): the box's clock has gone back behind the
-  name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
-  its name
-  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backward clock refuses existing material and retains its spent hour").
+- **The box's clock is earlier than a time it has already used** (the page says "The invoice series
+  cannot be created yet: this box's clock is earlier than a time it has already used for invoice
+  series.", with no time given): the box's clock has gone back behind the name this attempt already
+  chose. It does not retry by itself; once the box's clock reaches the moment this attempt chose its
+  name, press **Compare the clocks again**
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backward clock refuses existing
+  material and retains its spent hour"; `first-hour.browser.test.ts`, "a later minute in use is
+  explained and does not count down", and the "a later minute is already in use" row of "while %s
+  the page's one button reads %s").
 
 For example, a setup whose clocks are compared at 09:00:00 UTC on 24 October 2026 (11:00 Madrid
 summer time) waits until 09:02:00 (`hour-selection.test.ts`, the setup test above), and that
@@ -84,7 +134,8 @@ you did not report.
 
 ## Keep recovery pack 1
 
-Choose **Make recovery pack**, then download `waitron-recovery-pack-1.pdf`, print it, or both. Both
+Choose **Download recovery pack**, which makes `waitron-recovery-pack-1.pdf` and downloads it; the
+page then offers it again to download or to print. Both
 actions use the same document within that delivery session. Check the business, venue, server ID
 and key name on its server-key page, then tick **I kept the recovery pack.** before continuing.
 There is no separate signing key, custodian computer, register or downloadable tool.

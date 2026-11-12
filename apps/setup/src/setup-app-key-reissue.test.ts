@@ -150,7 +150,9 @@ for (const locale of ["en-GB", "es-ES"] as const)
           const module = shell.shadowRoot!.querySelector<LitElement>("vf-first-fiscal-screen")!;
           await module.updateComplete;
           const hour = module.shadowRoot!.querySelector<LitElement>("vf-first-setup-hour")!;
-          await expect.poll(() => control(hour, "clock-readings")).not.toBeNull();
+          await expect
+            .poll(() => hour.shadowRoot!.querySelector("[data-clock=read]"))
+            .not.toBeNull();
           const password = async () => {
             await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
             await userEvent.fill(
@@ -166,7 +168,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
               'input[name="setup-details-confirmed"]',
             )!,
           );
-          await userEvent.click(control(hour, "select"));
+          await userEvent.click(control(hour, "compare"));
           await password();
           await expect.poll(() => control(hour, "selected-hour")).not.toBeNull();
           await userEvent.click(control(hour, "prepare-pdf"));

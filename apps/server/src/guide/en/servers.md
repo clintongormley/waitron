@@ -17,8 +17,9 @@ current authenticator code, if set up, then choose **Check this copy**. Read its
 activity. Anything newer may be missing; if no date is available, the page says so.
 
 Read the warnings, tick all three statements and give your reason. Choose **Declare the old main
-box switched off**, compare the clocks and choose **Start the venue on this box**. Keep the page
-open through the restart. You enter your password and code once; if the code expires, enter its
+box switched off**. At the clock check, tick **These details are correct.** and choose **Proceed**:
+the page compares the clocks, creates the new invoice series and starts the venue on this box by
+itself. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. Your reason and statements stay in place.
 
 If the copy changes before you declare, review the new activity and tick the three statements
@@ -48,10 +49,15 @@ A recent confirmation is reused; a recovery-code confirmation must be replaced w
 authenticator code. You need an account with a password, and that password and your current
 authenticator code, if set up, ready to sign in on the spare. A passkey cannot complete that step.
 
-Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once
-the copy is ready, enter the same administrator account, compare the clocks and make the new
-series. Choose **Start the venue on this box**. If the page says this box is restarting, keep it
-open until **Continue to this box** appears. Payments already recorded remain in the transferred copy.
+Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once the
+copy is ready, enter the same administrator account and choose **Continue to clock check**. Tick
+**These details are correct.** and choose **Proceed**: the page compares the clocks and creates the
+new invoice series by itself, including after any wait, and then starts the venue on the spare.
+An authenticator code lasts under a minute. If yours runs out before the page uses it, the page asks
+you to check your password and code: enter a fresh code and choose **Try again** to carry on.
+Before **Proceed**, **Edit these details** goes back to the sign-in.
+If the page says this box is restarting, keep it open until **Continue to this box** appears.
+Payments already recorded remain in the transferred copy.
 
 If an answer is lost in Servers, keep the dialog open and choose **Check handover progress**.
 On the spare’s handover page, you can reload to read progress. Do not start another handover.

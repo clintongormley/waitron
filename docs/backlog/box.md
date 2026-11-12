@@ -2311,7 +2311,14 @@ The bell's new area for the box is
   'Equipo' (design §4.3), and so is the sidebar's staff group (`nav.group.team`,
   `apps/dashboard/src/i18n/strings.ts`); since A798-B slice 7 the Box status page is «Estado del
   equipo» too (`nav.box_status`). The owner's picture 3 shows the first two. Not yet put to the
-  owner. Raised by A798-B slice 5's plan.
+  owner. Raised by A798-B slice 5's plan. The Servers screen's handover strings (`servers.handover_*`) call the
+  boxes «equipo» («este equipo», «el de reserva», «los dos equipos») and its guide
+  (`apps/server/src/guide/es/servers.md`) says «equipo de reserva», while the same screen's
+  `servers.intro` says «servidor en espera» and the handover page and the setup app say «servidor»
+  (A1466), except the setup app's start-up messages `shell.first_setup.workspace_unsupported`,
+  `disk_full` and `disk_full_restart_unknown` and its configuration-import messages
+  `shell.configuration.outdated` and `shell.configuration.privacy_*`
+  (`apps/setup/src/i18n/strings/shell.ts`), which still say «equipo».
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 

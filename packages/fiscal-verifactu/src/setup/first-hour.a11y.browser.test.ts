@@ -15,173 +15,177 @@ for (const theme of ["light", "dark"] as const)
       try {
         for (const width of [390, 1280]) {
           await page.viewport(width, 2200);
-          const host = document.createElement("main");
-          document.body.append(host);
-          hosts.push(host);
-          applyTokens(host);
-          host.dataset.theme = theme;
-          host.lang = locale;
-          host.style.cssText =
-            "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
-          const instant = Date.parse("2026-10-18T12:30:00Z");
-          let mode:
-            | "review"
-            | "refused"
-            | "second-clock"
-            | "waiting"
-            | "later"
-            | "in-use"
-            | "in-use-no-time"
-            | "pdf" = "review";
-          const parent = FISCAL_SETUP.create({
-            locale,
-            request: {
-              status: "claimed",
-              environment: "production",
-              venue: {
-                country: "ES",
-                taxId: "B12345674",
-                legalName: "Olivo Restauración SL",
-                seriesCode: "A",
-                fullSeriesCode: "FF",
-                rectificativeSeriesCode: "R",
-                name: "Olivo Centro",
-                city: "Las Palmas",
-                fiscalTerritory: "ES-canary",
-                timeZone: "Atlantic/Canary",
-              },
-            },
-            api: {
-              async preparation(value) {
-                if ((value as { action: string }).action === "clock-challenge")
-                  return { id: "challenge" };
-                return {
-                  id: "comparison",
-                  clock: {
-                    usable: [
-                      { source: "box", lowerMs: instant, upperMs: instant },
-                      ...(mode === "second-clock"
-                        ? []
-                        : [
-                            {
-                              source: "browser",
-                              lowerMs: instant + (mode === "refused" ? 180000 : 0),
-                              upperMs: instant + (mode === "refused" ? 180000 : 0),
-                            },
-                          ]),
-                    ],
-                    unavailable: [
-                      { source: "internet", result: "unavailable", reason: "tls" },
-                      ...(mode === "second-clock"
-                        ? [{ source: "browser", result: "unavailable", reason: "same_machine" }]
-                        : []),
-                    ],
-                    secondClock: mode !== "second-clock",
-                    disagreement: mode === "refused",
-                    rangeBlocked: false,
-                    releaseBlocked: false,
-                  },
-                };
-              },
-              async candidates() {
-                if (mode === "in-use-no-time")
-                  throw { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } };
-                if (mode === "later" || mode === "in-use")
-                  throw {
-                    code: "sif.allocation_invalid",
-                    params: {
-                      reason: mode === "later" ? "minute_not_later" : "minute_in_use",
-                      allowedFromMs: instant + 240000,
-                      ...(mode === "in-use" ? { remainingMs: 240000, recheckInMs: 90000 } : {}),
-                    },
-                  };
-                return mode === "waiting"
-                  ? { status: "waiting", targetMs: instant + 1800000, remainingMs: 1800000 }
-                  : {
-                      kind: "waitron-hour-setup",
-                      status: "selected",
-                      identity: "0CSQW",
-                      input: {
-                        allocation: {
-                          installationIdentity: "0CSQW",
-                          series: [
-                            { code: "A-0CSQW", purpose: "standard" },
-                            { code: "FF-0CSQW", purpose: "full" },
-                            { code: "R-0CSQW", purpose: "rectificative" },
-                          ],
-                        },
-                      },
-                    };
-              },
-              async request() {
-                throw new Error("no resume in this fixture");
-              },
-              async importInput() {},
-              async enrol() {},
-              async confirm() {},
-              async stageNodeKey() {
-                return {
-                  stage: { stageId: "stage", nodeId: "node", name: "Caja principal" },
-                  key: {
-                    nodeId: "node",
-                    name: "Caja principal",
-                    secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-                  },
-                };
-              },
-              async registerRecoveryDocument() {},
-              async confirmRecoveryDocument() {},
-            },
-          }) as LitElement;
-          host.append(parent);
-          await parent.updateComplete;
-          const el = parent.shadowRoot!.querySelector<LitElement>("vf-first-setup-hour")!;
-          await el.updateComplete;
-          const click = async (name: string) => {
-            await userEvent.click(
-              el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`)!,
-            );
-            await el.updateComplete;
-          };
-          const checked = async () => {
-            await userEvent.click(
-              el.shadowRoot!.querySelector<HTMLInputElement>(
-                'input[name="setup-details-confirmed"]',
-              )!,
-            );
-          };
-          const marker = {
-            refused: "clock-refused",
-            "second-clock": "clock-wait",
-            waiting: "remaining",
-            later: "minute-not-later",
-            "in-use": "minute-taken",
-            "in-use-no-time": "minute-in-use",
-            pdf: "prepare-pdf",
-          } as const;
-          await vi.waitFor(() =>
-            expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
-          );
           for (const state of [
             "review",
             "refused",
+            "answered",
             "second-clock",
             "waiting",
             "later",
             "in-use",
             "in-use-no-time",
+            "series",
             "pdf",
           ] as const) {
-            mode = state;
+            const host = document.createElement("main");
+            document.body.append(host);
+            hosts.push(host);
+            applyTokens(host);
+            host.dataset.theme = theme;
+            host.lang = locale;
+            host.style.cssText =
+              "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
+            const instant = Date.parse("2026-10-18T12:30:00Z");
+            const mode = state === "answered" ? "refused" : state;
+            const parent = FISCAL_SETUP.create({
+              locale,
+              request: {
+                status: "claimed",
+                environment: "production",
+                venue: {
+                  country: "ES",
+                  taxId: "B12345674",
+                  legalName: "Olivo Restauración SL",
+                  seriesCode: "A",
+                  fullSeriesCode: "FF",
+                  rectificativeSeriesCode: "R",
+                  name: "Olivo Centro",
+                  city: "Las Palmas",
+                  fiscalTerritory: "ES-canary",
+                  timeZone: "Atlantic/Canary",
+                },
+              },
+              api: {
+                async preparation(value) {
+                  if ((value as { action: string }).action === "clock-challenge")
+                    return { id: "challenge" };
+                  return {
+                    id: "comparison",
+                    clock: {
+                      usable: [
+                        { source: "box", lowerMs: instant, upperMs: instant },
+                        ...(mode === "second-clock"
+                          ? []
+                          : [
+                              {
+                                source: "browser",
+                                lowerMs: instant + (mode === "refused" ? 180000 : 0),
+                                upperMs: instant + (mode === "refused" ? 180000 : 0),
+                              },
+                            ]),
+                      ],
+                      unavailable: [
+                        { source: "internet", result: "unavailable", reason: "tls" },
+                        ...(mode === "second-clock"
+                          ? [{ source: "browser", result: "unavailable", reason: "same_machine" }]
+                          : []),
+                      ],
+                      secondClock: mode !== "second-clock",
+                      disagreement: mode === "refused",
+                      rangeBlocked: false,
+                      releaseBlocked: false,
+                    },
+                  };
+                },
+                async candidates() {
+                  if (mode === "in-use-no-time")
+                    throw { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } };
+                  if (mode === "later" || mode === "in-use")
+                    throw {
+                      code: "sif.allocation_invalid",
+                      params: {
+                        reason: mode === "later" ? "minute_not_later" : "minute_in_use",
+                        allowedFromMs: instant + 240000,
+                        ...(mode === "in-use" ? { remainingMs: 240000, recheckInMs: 90000 } : {}),
+                      },
+                    };
+                  return mode === "waiting"
+                    ? { status: "waiting", targetMs: instant + 1800000, remainingMs: 1800000 }
+                    : {
+                        kind: "waitron-hour-setup",
+                        status: "selected",
+                        identity: "0CSQW",
+                        input: {
+                          allocation: {
+                            installationIdentity: "0CSQW",
+                            series: [
+                              { code: "A-0CSQW", purpose: "standard" },
+                              { code: "FF-0CSQW", purpose: "full" },
+                              { code: "R-0CSQW", purpose: "rectificative" },
+                            ],
+                          },
+                        },
+                      };
+                },
+                async request() {
+                  throw new Error("no resume in this fixture");
+                },
+                async importInput() {},
+                async enrol() {},
+                async confirm() {},
+                async stageNodeKey() {
+                  return {
+                    stage: { stageId: "stage", nodeId: "node", name: "Caja principal" },
+                    key: {
+                      nodeId: "node",
+                      name: "Caja principal",
+                      secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+                    },
+                  };
+                },
+                async registerRecoveryDocument() {},
+                async confirmRecoveryDocument() {},
+              },
+            }) as LitElement;
+            host.append(parent);
+            await parent.updateComplete;
+            const el = parent.shadowRoot!.querySelector<LitElement>("vf-first-setup-hour")!;
+            await el.updateComplete;
+            const click = async (name: string) => {
+              await userEvent.click(
+                el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`)!,
+              );
+              await el.updateComplete;
+            };
+            const checked = async () => {
+              await userEvent.click(
+                el.shadowRoot!.querySelector<HTMLInputElement>(
+                  'input[name="setup-details-confirmed"]',
+                )!,
+              );
+            };
+            const marker = {
+              refused: "clock-refused",
+              answered: "server-correct",
+              "second-clock": "clock-wait",
+              waiting: "remaining",
+              later: "minute-not-later",
+              "in-use": "minute-taken",
+              "in-use-no-time": "minute-in-use",
+              series: "prepare-pdf",
+              pdf: "prepare-pdf",
+            } as const;
+            await vi.waitFor(() =>
+              expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
+            );
             if (state !== "review") {
+              await checked();
+              await vi.waitFor(() =>
+                expect(
+                  el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+                    "[data-test=compare]",
+                  )?.disabled,
+                ).toBe(false),
+              );
               await click("compare");
               await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
-              );
-              await checked();
-              await click("select");
-              await vi.waitFor(() =>
                 expect(el.shadowRoot!.querySelector(`[data-test=${marker[state]}]`)).not.toBeNull(),
+              );
+            }
+            if (state === "answered") {
+              await click("server-correct");
+              await vi.waitFor(() =>
+                expect(el.shadowRoot!.querySelector("[data-test=correct-device]")).not.toBeNull(),
               );
             }
             if (state === "pdf") {
@@ -197,8 +201,8 @@ for (const theme of ["light", "dark"] as const)
                 path: `__screenshots__/first-hour-look/${theme}-${locale}-${width}-${state}.png`,
                 element: host,
               });
+            host.remove();
           }
-          host.remove();
         }
       } finally {
         await page.viewport(previous[0]!, previous[1]!);

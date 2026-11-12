@@ -185,7 +185,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.allocation_invalid": "Revisa el registro de recuperación y la copia elegida.",
   "restore.allocation_key_missing": "Introduce la clave del nodo del papel de la copia elegida.",
   "restore.allocation_isolated":
-    "El equipo anterior está desconectado y no hay otra recuperación en curso.",
+    "El servidor anterior está desconectado y no hay otra recuperación en curso.",
   "restore.allocation_isolation_missing": "Confirma que esta es la única recuperación.",
   "restore.allocation_retained":
     "He guardado esta solicitud con los registros externos de recuperación.",
@@ -259,7 +259,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Un paquete de recuperación o un archivo del kit es tan delicado como la clave de recuperación: con el código de la copia en el bucket que lleva dentro, cualquiera puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
   "restore_bucket.kit_file": "Paquete de recuperación o archivo del kit",
   "restore_bucket.pack_no_code":
-    "Este paquete de recuperación no contiene el código de la copia en el bucket: el equipo no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el código.",
+    "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el código.",
   "restore_bucket.pack_not_a_pack":
     "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el código.",
   "restore_bucket.pack_damaged":

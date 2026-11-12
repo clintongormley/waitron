@@ -401,7 +401,7 @@ it.each([
     "es",
     { number: 2, madeOn: "2026-09-12", received: false },
     "Caja principal",
-    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 2, hecho el 12 de septiembre de 2026: elige ese paquete o introduce su clave. Cuando se hizo este paquete, la caja que lo hizo no había recibido la confirmación de que el paquete 2 había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.",
+    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 2, hecho el 12 de septiembre de 2026: elige ese paquete o introduce su clave. Cuando se hizo este paquete, el servidor que lo hizo no había recibido la confirmación de que el paquete 2 había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.",
   ],
   [
     "en",

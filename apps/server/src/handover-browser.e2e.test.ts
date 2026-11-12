@@ -519,9 +519,8 @@ it("hands over from built Servers through a real copy, placement restart and clo
       if (response.url().endsWith("/preparation"))
         void response.json().then((result) => notes.push(["preparation", result]));
     });
-    await page.getByRole("button", { name: "Compare clocks", exact: true }).click();
-    await page.getByRole("button", { name: "Make the series", exact: true }).click();
-    await page.getByRole("button", { name: "Start the venue on this box", exact: true }).click();
+    await page.locator('input[name="recovery-details-confirmed"]').check();
+    await page.getByRole("button", { name: "Proceed", exact: true }).click();
     await page.getByText("This box has taken over the venue.", { exact: true }).waitFor();
     expect((await readNodeMode(placed.node, standby.nodeId)).mode).toBe("primary");
     expect(
