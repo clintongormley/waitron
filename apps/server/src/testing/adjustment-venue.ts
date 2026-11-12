@@ -428,9 +428,9 @@ export async function provisionAdjustmentVenue(
       { kind: "no_preparation" },
     );
     const people = await seedPersons(tx, [
-      { displayName: "Ana", pinHash: fixturePinHash(PINS.staff), role: "staff" },
+      { displayName: "Anna", pinHash: fixturePinHash(PINS.staff), role: "staff" },
       { displayName: "Sara", pinHash: fixturePinHash(PINS.supervisor), role: "supervisor" },
-      { displayName: "Marta", pinHash: fixturePinHash(PINS.manager), role: "manager" },
+      { displayName: "Martha", pinHash: fixturePinHash(PINS.manager), role: "manager" },
     ]);
     const [profile] = await seedDeviceProfiles(tx, {
       name: "Counter till",
