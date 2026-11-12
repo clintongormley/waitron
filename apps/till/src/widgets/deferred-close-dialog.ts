@@ -20,6 +20,7 @@ export interface DeferredCloseBill {
 /**
  * Asks before a whole bill is closed as a deferred payment. It only asks: `deferred-close-confirm`
  * and `deferred-close-cancel` go to the app, which answers with {@link busy} and {@link refusal}.
+ * The app cancels a `deferred-close-confirm` it refused without sending, so the next one goes.
  */
 @customElement("till-deferred-close-dialog")
 export class TillDeferredCloseDialog extends LitElement {
@@ -78,14 +79,17 @@ export class TillDeferredCloseDialog extends LitElement {
       this.#sent = false;
   }
 
-  #emit(type: string): void {
-    this.dispatchEvent(new CustomEvent(type, { detail: {}, bubbles: true, composed: true }));
+  /** False when a listener cancelled the event. */
+  #emit(type: string, cancelable = false): boolean {
+    return this.dispatchEvent(
+      new CustomEvent(type, { detail: {}, bubbles: true, composed: true, cancelable }),
+    );
   }
 
   #confirm(): void {
     if (!this.open || this.busy || this.#sent || this.bill === null) return;
     this.#sent = true;
-    this.#emit("deferred-close-confirm");
+    if (!this.#emit("deferred-close-confirm", true)) this.#sent = false;
   }
 
   #close(event: Event): void {

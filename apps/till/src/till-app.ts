@@ -11214,7 +11214,7 @@ export class TillApp extends LitElement {
       .bill=${this.#deferredView(open.bill)}
       .busy=${open.busy}
       .refusal=${open.refusal}
-      @deferred-close-confirm=${() => void this.#onDeferredConfirm()}
+      @deferred-close-confirm=${(event: Event) => void this.#onDeferredConfirm(event)}
       @deferred-close-cancel=${() => this.#onDeferredCancel()}
     ></till-deferred-close-dialog>`;
   }
@@ -11276,9 +11276,10 @@ export class TillApp extends LitElement {
    * payment, it is not sent again ({@link #onDeferredFound}). Once a request is sent, its answer
    * settles the window even when the till has since left the bill; a refusal is then shown without
    * reading the bill again. A confirm from a window whose bill the till has left sends nothing and
-   * closes it.
+   * closes it. A confirm refused before anything is sent cancels `event`, so the window takes the
+   * next one.
    */
-  async #onDeferredConfirm(): Promise<void> {
+  async #onDeferredConfirm(event: Event): Promise<void> {
     const asked = this.deferredClosing;
     if (asked === null || asked.busy) return;
     let open: DeferredClosing = asked;
@@ -11293,6 +11294,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#unsentOnScreen(billId)) {
+      event.preventDefault();
       this.deferredClosing = { ...open, refusal: billUnsentText(this.#paymentBillLabel(billId)) };
       return;
     }

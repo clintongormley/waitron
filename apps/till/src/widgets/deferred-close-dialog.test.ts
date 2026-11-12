@@ -101,6 +101,22 @@ describe("till-deferred-close-dialog", () => {
     expect(confirmButton(el).loading).toBe(true);
   });
 
+  it("takes the next confirm when the app cancels one it refused without sending", async () => {
+    const el = await mount();
+    const confirms = count(el, "deferred-close-confirm");
+    el.addEventListener("deferred-close-confirm", (event) => {
+      event.preventDefault();
+      el.refusal = "Send or remove the unsent dishes first.";
+    });
+    confirmButton(el).click();
+    await el.updateComplete;
+    confirmButton(el).click();
+    await el.updateComplete;
+    confirmButton(el).click();
+    await el.updateComplete;
+    expect(confirms.n).toBe(3);
+  });
+
   it("shows a refusal at the bottom and keeps the confirm usable", async () => {
     const el = await mount();
     const confirms = count(el, "deferred-close-confirm");

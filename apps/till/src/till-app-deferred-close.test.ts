@@ -95,6 +95,24 @@ const documents = (el: TillApp) => el.shadowRoot!.querySelector("till-settlement
 
 const unedited = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
 
+/** Puts one unsent dish on the bill on screen. */
+function addWater(el: TillApp): void {
+  tableOrder(el).draftStore!.addProduct(
+    {
+      id: "water",
+      catalogueId: "cat-default",
+      menuItemId: "menu-item-water",
+      name: "Water",
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+    },
+    "1",
+  );
+}
+
 it("closes the bill and opens the documents window for its receipt", async () => {
   const api = deferredApi();
   const { el } = await mountWidget<TillApp>("till-app", { api });
@@ -131,24 +149,27 @@ it("refuses unsent dishes before sending anything", async () => {
   const api = deferredApi();
   const { el } = await mountWidget<TillApp>("till-app", { api });
   await openClosing(el);
-  tableOrder(el).draftStore!.addProduct(
-    {
-      id: "water",
-      catalogueId: "cat-default",
-      menuItemId: "menu-item-water",
-      name: "Water",
-      pricingUnit: "each",
-      unitPrice: "1.50",
-      vatClass: "general",
-      category: null,
-      allergens: null,
-    },
-    "1",
-  );
+  addWater(el);
   await flush(el);
   await confirm(el);
   expect(api.closeDeferred).not.toHaveBeenCalled();
   expect(closing(el)!.refusal).toBe(billUnsentText("4 · Bill 1"));
+});
+
+it("sends once the unsent dishes are removed, however often the refusal came", async () => {
+  const api = deferredApi();
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openClosing(el);
+  addWater(el);
+  await flush(el);
+  await confirm(el);
+  await confirm(el);
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+  tableOrder(el).draftStore!.removeLine(0);
+  await flush(el);
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(documents(el)).not.toBeNull();
 });
 
 it("after a refusal, the next confirm carries a new id and the re-read revision and total", async () => {
