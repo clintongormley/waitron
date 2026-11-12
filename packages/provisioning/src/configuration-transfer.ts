@@ -918,15 +918,7 @@ export async function importConfigurationTables(
     }
   }
   if (bundle.tables.person_staff_roles !== undefined) {
-    const importedRoles = await tx
-      .select()
-      .from(staffRoles)
-      .where(
-        inArray(
-          staffRoles.id,
-          (bundle.tables.staff_roles ?? []).map((row) => idMap.get(String(row.id))!),
-        ),
-      );
+    const importedRoles = await tx.select().from(staffRoles);
     const exportingRoles = (bundle.tables.person_staff_roles ?? [])
       .filter((row) => row.person_id === bundle.sourceOperatorId)
       .map((row) => idMap.get(String(row.staff_role_id))!);
