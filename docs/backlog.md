@@ -1561,9 +1561,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A700. A failed Opening hours read also hides the Calendar's other views.**
   [Detail](backlog/workforce.md#a700-a-failed-opening-hours-read-also-hides-the-calendars-other-views).
 
-- **A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day.**
-  [Detail](backlog/workforce.md#a701-opening-hours-month-reads-the-holiday-tables-twice-on-a-holiday-linked-special-day).
-
 - **Colour chooser placement** (bundle of 2, size S). [Detail](backlog/workforce.md#bundle-colour-chooser-placement)
 
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**

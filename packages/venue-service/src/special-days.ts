@@ -13,7 +13,6 @@ import {
   zoneDayRanges,
   zoneDays,
   type Transaction,
-  type VenuePlace,
 } from "@waitron/db";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
 import {
@@ -26,7 +25,7 @@ import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { nextOccurrence, occurrenceIn, repeatKey, standingInYear } from "./repeat-rules.js";
 import { storedTime, wireTime } from "./operations.js";
-import { readHolidayDates, readHolidayEnglishNames } from "./holidays.js";
+import { readHolidayDates, readHolidayEnglishNames, type HolidayReads } from "./holidays.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
 import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
@@ -55,12 +54,13 @@ async function holidayDatesFor(
   tx: Transaction,
   rules: readonly SpecialDayDateRule[],
   [fromYear, toYear]: readonly [number, number],
-  place?: VenuePlace,
+  readDates?: HolidayReads["dates"],
 ): Promise<HolidayDates> {
   const named = rules.filter(followsHoliday);
   if (named.length === 0) return NO_HOLIDAY_DATES;
   const first = Math.min(...named.map((rule) => yearOf(rule.date))) + 1;
-  return readHolidayDates(tx, Math.max(fromYear, first), toYear, place);
+  const from = Math.max(fromYear, first);
+  return readDates === undefined ? readHolidayDates(tx, from, toYear) : readDates(from, toYear);
 }
 
 const yearsInOrder = new WeakMap<HolidayDates, readonly number[]>();
@@ -188,7 +188,7 @@ export interface SpecialDayOccurrence {
 export async function specialDaysOn(
   tx: Transaction,
   days: readonly LocalDate[],
-  place?: VenuePlace,
+  readDates?: HolidayReads["dates"],
 ): Promise<Map<LocalDate, SpecialDayOccurrence | null>> {
   const found = new Map<LocalDate, SpecialDayOccurrence | null>(days.map((day) => [day, null]));
   if (days.length === 0) return found;
@@ -223,7 +223,7 @@ export async function specialDaysOn(
     tx,
     dates,
     [yearOf(ordered[0]!), yearOf(ordered[ordered.length - 1]!)],
-    place,
+    readDates,
   );
   const matched = new Map<LocalDate, (typeof dates)[number]>();
   const standingByYear = new Map<number, Map<LocalDate, (typeof dates)[number]>>();

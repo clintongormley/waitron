@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { departments, readVenueClock, type Transaction, type VenuePlace } from "@waitron/db";
+import { departments, readVenueClock, type Transaction } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
@@ -72,7 +72,6 @@ export type HolidayReader = (
   tx: Transaction,
   from: LocalDate,
   to: LocalDate,
-  place?: VenuePlace,
 ) => Promise<readonly HolidayFact[]>;
 
 async function readHolidays(

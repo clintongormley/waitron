@@ -33,6 +33,12 @@ export type PackLookup = (country: string) => CountryPack | undefined;
 
 type GeographyRow = NonNullable<VenueSettings["holidayArea"]>;
 
+/** `readHolidayDates` and `readHolidayFacts` for one place, sharing one address read. */
+export interface HolidayReads {
+  dates(fromYear: number, toYear: number): Promise<HolidayDates>;
+  facts(from: LocalDate, to: LocalDate): Promise<readonly HolidayFact[]>;
+}
+
 /** What the venue's stored address resolves to. `key` is set only when every part resolved. */
 interface Address {
   country: string;
@@ -120,10 +126,9 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     tx: Transaction,
     from: LocalDate,
     to: LocalDate,
-    place?: VenuePlace,
   ): Promise<HolidayRead> {
     rangeDates(from, to);
-    const address = await readAddress(tx, place);
+    const address = await readAddress(tx);
     const current = currentArea(address);
     return holidaysAt(address, current, from, to);
   }
@@ -185,12 +190,26 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     tx: Transaction,
     fromYear: number,
     toYear: number,
-    place?: VenuePlace,
   ): Promise<HolidayDates> {
-    if (fromYear > toYear) return new Map();
-    const address = await readAddress(tx, place);
-    const current = currentArea(address);
-    return holidayDatesAt(address, current, fromYear, toYear);
+    return holidayReadsAt(tx).dates(fromYear, toYear);
+  }
+
+  /** Reads nothing until a method is first called. */
+  function holidayReadsAt(tx: Transaction, place?: VenuePlace): HolidayReads {
+    let address: Promise<Address> | undefined;
+    const addressOnce = () => (address ??= readAddress(tx, place));
+    return {
+      async dates(fromYear, toYear) {
+        if (fromYear > toYear) return new Map();
+        const found = await addressOnce();
+        return holidayDatesAt(found, currentArea(found), fromYear, toYear);
+      },
+      async facts(from, to) {
+        rangeDates(from, to);
+        const found = await addressOnce();
+        return holidaysAt(found, currentArea(found), from, to).facts;
+      },
+    };
   }
 
   function holidayDatesAt(
@@ -216,8 +235,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     return byYear;
   }
 
-  const readHolidayFacts: HolidayReader = async (tx, from, to, place) =>
-    (await readHolidays(tx, from, to, place)).facts;
+  const readHolidayFacts: HolidayReader = (tx, from, to) => holidayReadsAt(tx).facts(from, to);
 
   async function readHolidayEnglishNames(
     tx: Transaction,
@@ -299,6 +317,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   return {
     readHolidays,
     readHolidayDates,
+    holidayReadsAt,
     readHolidayEnglishNames,
     readHolidayFacts,
     readHolidayAreaModel,
@@ -312,6 +331,7 @@ const INSTALLED = createHolidayStore();
 export const {
   readHolidays,
   readHolidayDates,
+  holidayReadsAt,
   readHolidayEnglishNames,
   readHolidayAreaModel,
   readHolidayYear,
