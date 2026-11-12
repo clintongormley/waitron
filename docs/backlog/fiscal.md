@@ -317,7 +317,7 @@ The plan's source observations are **READ ONLY / runtime UNVERIFIED** at
 `db7cddeb2d38984b284b23e8e391e7ebd7cb9156`. New orchestration/storage/export interfaces are
 proposals; no product test, renderer, fiscal or legal verification was run. A1003 is now landed
 (PR #1973); preserve its refusal/rollback boundary. Recheck released A696 clock, F/A739 Pay,
-A555/A948 delivery and A947 minute-allocation contracts before their dependent build steps.
+A948 delivery and A947 minute-allocation contracts before their dependent build steps.
 A948 enables existing table-payment and unpaid-departure F1 paths. Physical/manual-remedy/B2B qualification remains separate. The €5,000 transfer example
 is still a future path; €220 F2 stays within existing limits. The plan places a precise
 RUNNER H2 approval gate before later work reaches protected fiscal behavior, and keeps golden
@@ -1112,6 +1112,8 @@ assertions remain outside the change. See the [implementation plan](../superpowe
   Counter sales, integrated-card payment and unissued counter collection retain their F1 refusal
   until A555 carries original delivery through payment. Saved F1 choices may grow above the
   simplified-invoice ceiling.
+  2026-11-12: counter orders paid through the Pay window now issue full invoices (owner, A555);
+  see [Decisions and deliberate limits](#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12) in docs/backlog/fiscal.md.
 
 - **Backup access is independent of a retained setup's password (A731; owner, 2026-10-15).**
   Authenticate the selected backup with its own named node key, plus the archive key or source

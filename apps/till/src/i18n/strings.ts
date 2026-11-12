@@ -1607,7 +1607,7 @@ export const en = {
     "This change would leave this bill owing {amount} less than has already been paid on it. Change less, or refund {amount} first.",
   "bill.refund_excess": "Refund {amount}",
   "sale.over_simplified_limit":
-    "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice on a table bill, or remove items.",
+    "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.unsent": "Send or remove the unsent dishes before paying.",
@@ -3540,7 +3540,7 @@ export const es: Record<StringKey, string> = {
     "Con este cambio, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Cambia menos o devuelve antes {amount}.",
   "bill.refund_excess": "Devolver {amount}",
   "sale.over_simplified_limit":
-    "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
+    "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
   "bill_pay.unsent": "Envía o quita los platos sin enviar antes de cobrar.",
   "bill_pay.title": "Cobrar",

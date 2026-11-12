@@ -1974,7 +1974,7 @@ describe("till-app simplified-invoice limit", () => {
     expect(c.store.total).toBe("3.00");
     expect(c.store.lines).toHaveLength(1);
     expect(said(el)).toBe(
-      "El pedido pasaría de 3,00 €, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
+      "El pedido pasaría de 3,00 €, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
     );
   });
 
@@ -2134,7 +2134,7 @@ describe("till-app simplified-invoice limit", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(said(el)).toBe(
-      "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
+      "El pedido pasaría de 3010,00 €, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
     );
     expect(c.store.lines).toHaveLength(1);
   });
@@ -2150,18 +2150,18 @@ describe("till-app simplified-invoice limit", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(banner(el)!.textContent).toBe(
-      "Este pedido supera el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
+      "Este pedido supera el límite de una factura simplificada. Elige Factura completa o quita artículos.",
     );
   });
 
   it.each([
     [
       "en-GB",
-      "Counter payment cannot issue a full invoice yet. Use a table bill and its payments.",
+      "This payment cannot issue a full invoice. Choose Full invoice on the order, then pay the whole order with Pay. An order with nothing to pay cannot have a full invoice.",
     ],
     [
       "es-ES",
-      "El cobro de mostrador todavía no puede emitir una factura completa. Usa una cuenta de mesa y sus pagos.",
+      "Este cobro no puede emitir una factura completa. Elige Factura completa en el pedido y cobra el pedido entero con Cobrar. Un pedido sin nada que cobrar no puede tener factura completa.",
     ],
   ])("explains the counter F1 refusal in %s and keeps its basket", async (locale, message) => {
     try {

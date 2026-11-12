@@ -1053,8 +1053,6 @@ describe("a sale prints its goods in the default content language its lines stor
     expect(replay.body).toMatchObject({ locale: "es-ES", namesLocale: "ca-ES" });
   });
 
-  // A full invoice cannot be asked for at the counter (`sale.full_invoice_unavailable`), so the
-  // order is saved with the choice and paid the way a bill payment is completed.
   it("renders a full invoice's A4 and the till's receipt lines with the default content language's goods under Catalan fixed words", async () => {
     const { v, goods } = await goodsVenue();
     const id = randomUUID();
