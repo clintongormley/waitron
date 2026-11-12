@@ -399,6 +399,7 @@ import type {
   InvoiceDeliveryChoice,
   OriginalReceiptPrint,
   PartyBill,
+  MergeInvoiceChoice,
   TableActionResult,
   BillRevisions,
   MoveBillResult,
@@ -406,6 +407,11 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
+import {
+  mergeInvoiceChoice,
+  mergeInvoiceQuestion,
+  type MergeInvoiceQuestion,
+} from "./state/merge-invoice.js";
 import { kindOfFormFactor, LIVE_STREAM_KINDS } from "./layout.js";
 import {
   type KitchenScreenNotice,
@@ -764,6 +770,12 @@ function billWriteError(error: unknown, lineChange = false): CounterError {
   return refused?.code === "bill.received_exceeds_total" && typeof refused.excess === "string"
     ? { excess: refused.excess, ...(lineChange ? { lineChange: true } : {}) }
     : tableWriteError(error);
+}
+
+/** A bill's label as a catalogue that writes it lowercase inside a sentence reads it: Spanish's
+ * "la cuenta 2". */
+function inText(label: string): string {
+  return label.charAt(0).toLocaleLowerCase() + label.slice(1);
 }
 
 function isPaymentsReceived(error: unknown): boolean {
@@ -3427,6 +3439,11 @@ export class TillApp extends LitElement {
     limit: string;
     proceed: () => Promise<void>;
     cancel: () => void;
+  } | null = null;
+  /** A merge waiting on which bill's full invoice the merged bill keeps. */
+  @state() private mergeInvoiceAsk: {
+    question: MergeInvoiceQuestion;
+    answer: (keep: "into" | "from") => Promise<void>;
   } | null = null;
   /** The party of the order on screen as it was read just before that order's lines and bills: what
    * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
@@ -15578,6 +15595,63 @@ export class TillApp extends LitElement {
     </wt-dialog>`;
   }
 
+  #renderMergeInvoiceQuestion(): TemplateResult | typeof nothing {
+    const ask = this.mergeInvoiceAsk;
+    if (ask === null) return nothing;
+    const { question } = ask;
+    const into = billLabel(question.into);
+    const from = billLabel(question.from);
+    const bills = {
+      into,
+      from,
+      intoInText: inText(into),
+      fromInText: inText(from),
+      intoName: question.intoName ?? "",
+      fromName: question.fromName,
+    };
+    const cancel = html`<wt-button
+      variant="secondary"
+      data-merge-cancel
+      @click=${() => void this.#answerMergeInvoice(null)}
+      >${t("table.merge_invoice_cancel")}</wt-button
+    >`;
+    const keep = (side: "into" | "from", text: string) =>
+      html`<wt-button
+        variant="primary"
+        data-merge-keep=${side}
+        @click=${() => void this.#answerMergeInvoice(side)}
+        >${text}</wt-button
+      >`;
+    const simplified = question.intoName === null;
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-merge-invoice
+      .open=${true}
+      .heading=${fill(
+        t(simplified ? "table.merge_invoice_title" : "table.merge_invoice_both_title"),
+        bills,
+      )}
+      @wt-close=${() => void this.#answerMergeInvoice(null)}
+    >
+      <p>
+        ${fill(
+          t(simplified ? "table.merge_invoice_text" : "table.merge_invoice_both_text"),
+          simplified ? { ...bills, name: question.fromName } : bills,
+        )}
+      </p>
+      <div slot="footer">
+        ${
+          simplified
+            ? html`${cancel}
+              ${keep("from", fill(t("table.merge_invoice_action"), { name: question.fromName }))}`
+            : html`${keep("into", fill(t("table.merge_invoice_keep"), { name: bills.intoName }))}
+              ${keep("from", fill(t("table.merge_invoice_keep"), { name: question.fromName }))}
+              ${cancel}`
+        }
+      </div>
+    </wt-dialog>`;
+  }
+
   #clearErrorKeepingLateChange(): void {
     const late = this.#lateChangeShown();
     this.errorKey = late === undefined ? undefined : { lateChange: late };
@@ -17064,20 +17138,25 @@ export class TillApp extends LitElement {
     return false;
   }
 
-  async #onMergeBills(event: Event): Promise<void> {
+  async #onMergeBills(event: Event, choice?: MergeInvoiceChoice): Promise<void> {
     const { fromBillId } = (event as CustomEvent<{ fromBillId: string }>).detail;
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     const asked = this.#billComposition([this.activeTabId, fromBillId]);
     if (asked === null) return;
+    if (choice === undefined && this.#askMergeInvoice(event, asked, this.partyBills)) return;
+    const revisions = { ...asked.revisions, expectedEdits: asked.expectedEdits };
     try {
-      await asked.api.mergeBills(asked.billId, fromBillId, {
-        ...asked.revisions,
-        expectedEdits: asked.expectedEdits,
-      });
+      if (choice === undefined) await asked.api.mergeBills(asked.billId, fromBillId, revisions);
+      else await asked.api.mergeBills(asked.billId, fromBillId, revisions, choice);
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
-      if (isPaymentsReceived(error)) {
+      if ((error as { code?: string } | undefined)?.code === "bill.merge_invoice_choice_required") {
+        const read = await this.#loadPartyBills();
+        if (!this.#billCompositionCurrent(asked)) return;
+        if (read.bills === null || !this.#askMergeInvoice(event, asked, read.bills))
+          this.errorKey = { code: "bill.merge_invoice_choice_required" };
+      } else if (isPaymentsReceived(error)) {
         const bill = this.partyBills.find((row) => row.workingOrderId === fromBillId);
         this.errorKey = {
           code: "bill.payments_received",
@@ -17091,6 +17170,30 @@ export class TillApp extends LitElement {
     if (!this.#billCompositionCurrent(asked)) return;
     await this.#reloadOrder();
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
+  }
+
+  /** Opens the full-invoice question merging the event's bill into the one on screen raises in
+   * `bills`, if it raises one; an answer merges again, sending the choice built from `bills`. */
+  #askMergeInvoice(event: Event, asked: BillComposition, bills: readonly PartyBill[]): boolean {
+    const { fromBillId } = (event as CustomEvent<{ fromBillId: string }>).detail;
+    const question = mergeInvoiceQuestion(bills, asked.billId, fromBillId);
+    if (question === null) return false;
+    this.mergeInvoiceAsk = {
+      question,
+      answer: async (keep) => {
+        if (!this.#billCompositionCurrent(asked)) return;
+        await this.#ownBillsChange(() =>
+          this.#onMergeBills(event, mergeInvoiceChoice(question, keep)),
+        );
+      },
+    };
+    return true;
+  }
+
+  async #answerMergeInvoice(keep: "into" | "from" | null): Promise<void> {
+    const pending = this.mergeInvoiceAsk;
+    this.mergeInvoiceAsk = null;
+    if (pending !== null && keep !== null) await pending.answer(keep);
   }
 
   async #askDifferentPeople(
@@ -18270,6 +18373,7 @@ export class TillApp extends LitElement {
   /** Clears the open order's bill, table and party without moving the screen. */
   #forgetParty(): void {
     this.differentPeopleConfirmation = null;
+    this.mergeInvoiceAsk = null;
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
@@ -21509,6 +21613,7 @@ export class TillApp extends LitElement {
         ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
         ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
         ${this.#renderEditDeadEnds()} ${this.#renderDifferentPeopleConfirmation()}
+        ${this.#renderMergeInvoiceQuestion()}
         ${
           this.invoiceRecipientOpen
             ? html`<till-invoice-recipient-dialog

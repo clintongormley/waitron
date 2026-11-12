@@ -3209,6 +3209,31 @@ describe("TillApi", () => {
     });
   });
 
+  it("mergeBills sends the invoice choice in the body only when given", async () => {
+    const fetchStub = vi.fn(async () => new Response(null, { status: 204 }));
+    const api = new TillApi("", fetchStub);
+    const revisions = { expectedEdits: [] };
+    const choice = {
+      keep: "from" as const,
+      into: null,
+      from: {
+        taxId: "B12345678",
+        identifierType: "passport" as const,
+        identifierCountryCode: "FR",
+      },
+    };
+
+    await api.mergeBills("wo-into", "wo-from", revisions, choice);
+    await api.mergeBills("wo-into", "wo-from", revisions);
+
+    const bodies = fetchStub.mock.calls.map((call) =>
+      JSON.parse((call as unknown as [string, RequestInit])[1].body as string),
+    );
+    expect(bodies[0]).toEqual({ fromBillId: "wo-from", expectedEdits: [], invoiceChoice: choice });
+    expect(bodies[1]).toEqual({ fromBillId: "wo-from", expectedEdits: [] });
+    expect(Object.hasOwn(bodies[1], "invoiceChoice")).toBe(false);
+  });
+
   it("mergeBills POSTs { fromBillId } to the /merge route of the bill merged into, and answers nothing", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 

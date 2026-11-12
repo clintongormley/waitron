@@ -2108,6 +2108,21 @@ export interface TableParty {
   reminder: ReleaseReminder | null;
 }
 
+/** A full-invoice customer as a merge names one: legal name and address are not compared. */
+export interface InvoiceIdentity {
+  taxId: string;
+  identifierType?: RecipientIdentifierType;
+  identifierCountryCode?: string;
+}
+
+/** Which bill's invoice a merged bill keeps, and each bill's customer as the till read it; `into`
+ * is null when the receiving bill was simplified. */
+export interface MergeInvoiceChoice {
+  keep: "into" | "from";
+  into: InvoiceIdentity | null;
+  from: InvoiceIdentity;
+}
+
 /** One bill of a seated party from `GET /api/parties/:id/bills`. `outstanding` is zero on a settled or
  * abandoned bill; `receiptAvailable` says a sale was filed for it, so its receipt can be printed again. */
 export interface PartyBill {
@@ -4823,15 +4838,20 @@ export class TillApi {
     return this.#request(`/api/bills/${billId}/name`, "PUT", { name, ...revisions });
   }
 
-  /** The source has no payments; payments on the receiving open bill stay with it. */
+  /**
+   * The source has no payments; payments on the receiving open bill stay with it. `invoiceChoice` is
+   * sent only when given: the server refuses a `null` one as malformed.
+   */
   async mergeBills(
     intoBillId: string,
     fromBillId: string,
     revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
+    invoiceChoice?: MergeInvoiceChoice,
   ): Promise<void> {
     await this.#request<void>(`/api/bills/${intoBillId}/merge`, "POST", {
       fromBillId,
       ...revisions,
+      ...(invoiceChoice === undefined ? {} : { invoiceChoice }),
     });
   }
 

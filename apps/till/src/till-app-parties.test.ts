@@ -14032,3 +14032,197 @@ it.each(["en-GB", "es-ES"] as const)(
     }
   },
 );
+
+describe("till-app: merging a bill set for a full invoice (R4-merge)", () => {
+  const acme = {
+    taxId: "B11111111",
+    legalName: "Acme Travel SL",
+    address: "Carrer Major 1, Valencia",
+    countryCode: "ES",
+  };
+  const barSol = {
+    taxId: "B22222222",
+    legalName: "Bar Sol SL",
+    address: "Calle Sol 2, Madrid",
+    countryCode: "ES",
+  };
+  const acmeCheck: PartyBill = { ...checkBill, invoiceType: "F1", recipient: acme };
+  const barSolTab: PartyBill = { ...tabBill, invoiceType: "F1", recipient: barSol };
+  const mergeEdits = {
+    expectedPartyRevision: 3,
+    partyId: "v1",
+    expectedEdits: closingEdits,
+  };
+  const question = (el: TillApp) =>
+    el.shadowRoot!.querySelector<WtDialog & HTMLElement>("[data-merge-invoice]");
+  const buttons = (el: TillApp) =>
+    [...question(el)!.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.textContent!.trim());
+  const press = async (el: TillApp, selector: string) => {
+    question(el)!.querySelector<HTMLElement>(selector)!.click();
+    await flush(el);
+  };
+
+  async function mergeCheckInto(
+    bills: PartyBill[],
+    overrides: Record<string, unknown> = {},
+    language?: "es",
+  ) {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue(bills),
+      ...overrides,
+    });
+    const order = await openPartyTable(el);
+    if (language !== undefined) setLocale(language);
+    emit(order, "merge-bills", { fromBillId: "wo-check" });
+    await flush(el);
+    return el;
+  }
+
+  it("asks before merging a full-invoice bill into a simplified one, in English", async () => {
+    const el = await mergeCheckInto([tabBill, acmeCheck]);
+
+    expect(question(el)!.heading).toBe("Bill 2 has a full invoice");
+    expect(question(el)!.textContent).toContain(
+      "Bill 2 is set for a full invoice to Acme Travel SL. Merging puts every dish on Bill 1, invoiced to Acme Travel SL.",
+    );
+    expect(buttons(el)).toEqual(["Do not merge", "Merge and invoice Acme Travel SL"]);
+    expect(api.mergeBills).not.toHaveBeenCalled();
+  });
+
+  it("asks before merging a full-invoice bill into a simplified one, in Spanish", async () => {
+    try {
+      const el = await mergeCheckInto([tabBill, acmeCheck], {}, "es");
+
+      expect(question(el)!.heading).toBe("La cuenta 2 tiene factura completa");
+      expect(question(el)!.textContent).toContain(
+        "La cuenta 2 está a nombre de Acme Travel SL para factura completa. Al juntarlas, todos los platos pasan a la cuenta 1, facturada a Acme Travel SL.",
+      );
+      expect(buttons(el)).toEqual(["No juntar", "Juntar y facturar a Acme Travel SL"]);
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("Do not merge closes the question and sends nothing", async () => {
+    const el = await mergeCheckInto([tabBill, acmeCheck]);
+
+    await press(el, "[data-merge-cancel]");
+
+    expect(question(el)).toBeNull();
+    expect(api.mergeBills).not.toHaveBeenCalled();
+  });
+
+  it("Merge and invoice sends the merged-away bill's customer to keep, and the receiving bill as simplified", async () => {
+    const el = await mergeCheckInto([tabBill, acmeCheck]);
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(question(el)).toBeNull();
+    expect(api.mergeBills).toHaveBeenCalledWith("wo-4", "wo-check", mergeEdits, {
+      keep: "from",
+      into: null,
+      from: { taxId: "B11111111" },
+    });
+  });
+
+  it("asks which customer to keep when each bill has a different full invoice, in English", async () => {
+    const el = await mergeCheckInto([barSolTab, acmeCheck]);
+
+    expect(question(el)!.heading).toBe("Each bill has a full invoice");
+    expect(question(el)!.textContent).toContain(
+      "Bill 1 is invoiced to Bar Sol SL and Bill 2 to Acme Travel SL. The merged bill can have only one.",
+    );
+    expect(buttons(el)).toEqual(["Invoice Bar Sol SL", "Invoice Acme Travel SL", "Do not merge"]);
+    expect(api.mergeBills).not.toHaveBeenCalled();
+  });
+
+  it("asks which customer to keep when each bill has a different full invoice, in Spanish", async () => {
+    try {
+      const el = await mergeCheckInto([barSolTab, acmeCheck], {}, "es");
+
+      expect(question(el)!.heading).toBe("Cada cuenta tiene factura completa");
+      expect(question(el)!.textContent).toContain(
+        "La cuenta 1 se factura a Bar Sol SL y la cuenta 2 a Acme Travel SL. La cuenta juntada solo puede tener una.",
+      );
+      expect(buttons(el)).toEqual([
+        "Facturar a Bar Sol SL",
+        "Facturar a Acme Travel SL",
+        "No juntar",
+      ]);
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("each customer's button sends its choice, naming both customers as the till read them", async () => {
+    const passport = { ...acme, identifierType: "passport" as const, identifierCountryCode: "FR" };
+    const el = await mergeCheckInto([barSolTab, { ...acmeCheck, recipient: passport }]);
+    await press(el, '[data-merge-keep="into"]');
+    expect(api.mergeBills).toHaveBeenLastCalledWith("wo-4", "wo-check", mergeEdits, {
+      keep: "into",
+      into: { taxId: "B22222222" },
+      from: { taxId: "B11111111", identifierType: "passport", identifierCountryCode: "FR" },
+    });
+
+    emit(tableOrder(el)!, "merge-bills", { fromBillId: "wo-check" });
+    await flush(el);
+    await press(el, '[data-merge-keep="from"]');
+    expect(api.mergeBills).toHaveBeenLastCalledWith("wo-4", "wo-check", mergeEdits, {
+      keep: "from",
+      into: { taxId: "B22222222" },
+      from: { taxId: "B11111111", identifierType: "passport", identifierCountryCode: "FR" },
+    });
+  });
+
+  it.each([
+    ["both bills are simplified", [tabBill, checkBill]],
+    ["the bill merged away is simplified", [barSolTab, checkBill]],
+    [
+      "both bills name the same customer",
+      [{ ...tabBill, invoiceType: "F1", recipient: acme }, acmeCheck],
+    ],
+  ] as const)("asks nothing and sends no invoice choice when %s", async (_, bills) => {
+    const el = await mergeCheckInto([...bills]);
+
+    expect(question(el)).toBeNull();
+    expect(api.mergeBills).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.mergeBills).mock.calls[0]).toEqual(["wo-4", "wo-check", mergeEdits]);
+  });
+
+  it("a refusal for a changed invoice reads the bills again and asks the question they now raise", async () => {
+    let bills: PartyBill[] = [tabBill, acmeCheck];
+    const el = await mergeCheckInto([], {
+      getPartyBills: vi.fn(async () => bills),
+      mergeBills: vi.fn(async () => {
+        bills = [barSolTab, acmeCheck];
+        throw { code: "bill.merge_invoice_choice_required" };
+      }),
+    });
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(api.getPartyBills).toHaveBeenCalledTimes(reads + 1);
+    expect(question(el)!.heading).toBe("Each bill has a full invoice");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a refusal for a changed invoice whose bills now raise no question says the details changed", async () => {
+    let bills: PartyBill[] = [tabBill, acmeCheck];
+    const el = await mergeCheckInto([], {
+      getPartyBills: vi.fn(async () => bills),
+      mergeBills: vi.fn(async () => {
+        bills = [tabBill, checkBill];
+        throw { code: "bill.merge_invoice_choice_required" };
+      }),
+    });
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(question(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(
+      "The bills' invoice details changed while you were choosing. Check them and merge again.",
+    );
+    expect(api.mergeBills).toHaveBeenCalledOnce();
+  });
+});
