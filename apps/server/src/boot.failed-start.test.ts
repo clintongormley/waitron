@@ -604,11 +604,12 @@ describe("a start that fails after the venue folder is opened gives the folder b
     const venueDir = await seededVenueDir();
     const state = await stateDir();
     await writeFile(join(state, PENDING_ADOPTION_FILE), "not json");
-    const { letGo, folders } = await spyOnCheckedAddressesLetGo();
+    const { letGo, folders, holders } = await spyOnCheckedAddressesLetGo(venueDir);
 
     await expect(startServer(await tradingEnv(venueDir, state))).rejects.toThrow(SyntaxError);
     expect(folders).toEqual([state]);
-    expect(letGo).toHaveBeenCalledOnce();
+    expect(letGo).toHaveBeenCalled();
+    expect(holders[0]).toBe(process.pid);
   }, 60_000);
 
   it("when the pending-adoption file cannot be read", async () => {

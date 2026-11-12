@@ -1201,6 +1201,7 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   let attendanceSchemaBeforeMigrations: number | undefined;
+  let letGoOfCheckedAddresses: () => Promise<void>;
   try {
     // The first moment this start holds a node handle.
     if (placement?.kind === "copy_placed_owed") {
@@ -1223,7 +1224,7 @@ async function bootServer(
     // process's restore working folders.
     await emptyScratch(config.stateDir, log);
     // In every mode: a mirror skips the start's peer check but still asks the main box later.
-    const letGoOfCheckedAddresses = await rememberCheckedAddressesIn(config.stateDir, (error) =>
+    letGoOfCheckedAddresses = await rememberCheckedAddressesIn(config.stateDir, (error) =>
       log("warn", "mirror.checked_address_unsaved", { errorCode: codeOf(error) }),
     );
     undoOnFailure.push(letGoOfCheckedAddresses);
@@ -1262,6 +1263,8 @@ async function bootServer(
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
+  // Again, because undoing runs newest first: saving stops before the store gives up the venue folder.
+  undoOnFailure.push(letGoOfCheckedAddresses);
   const released = () => spareReleased(config.stateDir, log);
   const restoreSpare = spareRestorer({
     stateDir: config.stateDir,
