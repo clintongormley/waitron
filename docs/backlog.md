@@ -2283,7 +2283,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The main till API and profile-zone suites use Anna, Martha and Beatrice where present; local
   delivery, published-menu sale and unroutable-dish staff samples use Cashier.
   Local box-host, box-health, disk-stop and clock set/confirm route fixtures use Martha, Anna
-  and Simon where those staff roles are seeded.
+  and Simon for their manager, administrator and supervisor samples; the clock suites' administrators remain Mario and Berta.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
