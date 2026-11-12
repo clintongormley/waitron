@@ -44,6 +44,7 @@ import {
   enqueueHoldCorrections,
   enqueueKitchenTickets,
   firedQuantity,
+  leftToServe,
   printerMappings,
 } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
@@ -1656,7 +1657,7 @@ async function readGroups(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(and(eq(orderGroups.partyId, partyId), isNull(workingOrderLines.parentLineId), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
-  const remaining = gt(firedQuantity, workingOrderLines.servedQuantity);
+  const remaining = leftToServe();
   const ready = or(eq(ticketItems.madeHere, true), eq(ticketItems.state, "ready"));
   const kitchen = await tx
     .select({

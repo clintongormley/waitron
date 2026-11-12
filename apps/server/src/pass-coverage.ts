@@ -17,7 +17,7 @@ import { passScopeOf, passSees, rowsWatchZones, type PassScope } from "./pass-bo
 import { requestedItem } from "./kitchen-phase.js";
 import { passReleaseRefusal } from "./pass-release.js";
 import { byText } from "./text-order.js";
-import { liveKitchenDish } from "./working-order.js";
+import { liveKitchenDish } from "./kitchen-print.js";
 
 /** A waiting station and zone no pass device could fire. */
 export interface PassCoverageGap {
