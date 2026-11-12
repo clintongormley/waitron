@@ -36,11 +36,15 @@ and its ticket or screen card has an allergy marker. A separately routed extra c
 guest's instructions to its own station.
 
 If the dish or an active extra declares an allergen the guest avoids, the block also names that
-clash and says it was sent anyway. Missing nutritional information does not establish that a dish
-is suitable. Check it with the waiter before preparing it.
+clash and says it was sent anyway. A printed ticket lists the allergens each dish declares on a
+**Contains** line beneath it. An extra made with the dish lists its own after the extra's name; an extra made at another
+station lists them on that station's ticket. No **Contains** line, like missing
+nutritional information, does not establish that a dish is suitable. Check it with the waiter
+before preparing it.
 
-The kitchen keeps the instructions it first received. Later guest or catalogue edits do not
-silently replace the original block on the dish card, the pass or a reprint.
+The guest's block keeps the instructions the kitchen first received: later guest or catalogue
+edits do not silently replace it on the dish card, the pass or a reprint. A dish's **Contains**
+line shows what the dish declared when the ticket was made; a reprint reads it again.
 
 ## Read and acknowledge a correction {#corrections}
 

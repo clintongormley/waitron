@@ -943,7 +943,8 @@ describe("A773 pass release: paper", () => {
     await release(venue, every, askOf(card!));
     const added = gained(before, await printed(venue));
     const burger = "1 x BURG\n  > with CHIPS from Fryer\n";
-    const chips = "1 x CHIPS\n  > for BURG at Grill\n";
+    const chips =
+      "1 x CHIPS\n  > for BURG at Grill\n  Contains: Cereals containing gluten\n            (Wheat)\n";
     expect(added).toEqual({
       ...nothing,
       grill: [`Grill\nSplit extras\n1\n${AT_CLOCK}\n${burger}`],
@@ -1200,7 +1201,7 @@ describe("A773 pass release: paper", () => {
     vi.setSystemTime(new Date(LATER));
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    const chips = `Fryer\nSplit extras\n1\n${LATER_CLOCK}\nGROUP 1\n1 x CHIPS\n  > for BURG at Grill\n`;
+    const chips = `Fryer\nSplit extras\n1\n${LATER_CLOCK}\nGROUP 1\n1 x CHIPS\n  > for BURG at Grill\n  Contains: Cereals containing gluten\n            (Wheat)\n`;
     expect(added).toEqual({ ...nothing, fryer: [chips], pass: [chips] });
     expect((await rows([placed.chips]))[0]).toMatchObject({
       stationId: venue.stations.fryer,

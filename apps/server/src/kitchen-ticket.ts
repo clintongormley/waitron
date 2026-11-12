@@ -24,7 +24,6 @@ interface KitchenNoteHeading {
   locale: string;
 }
 
-/** One fired line. Modifiers and cross-references print beneath the item. */
 export interface KitchenTicketItem {
   allergy?: KitchenAllergyBlock | null;
   qty: number | string;
@@ -33,6 +32,8 @@ export interface KitchenTicketItem {
   /** The free-text kitchen note, printed as an indented `* <note>` sub-line beneath the dish. */
   note?: string;
   modifiers?: string[];
+  /** The item's own declared allergens, already worded; printed after the note. */
+  contains?: string[];
   /** Already-worded links to lines at other stations, printed after modifiers and before the note. */
   crossRefs?: string[];
   /** The permanent number on the group's original ticket. */
@@ -107,6 +108,7 @@ function entryKey(item: KitchenTicketItem): string {
     item.goesWith ?? [],
     item.modifiers ?? [],
     item.crossRefs ?? [],
+    item.contains ?? [],
     item.afterPeriod ?? null,
     item.allergy == null
       ? null
@@ -239,10 +241,6 @@ function emitAllergyHeading(
     b.line(line);
 }
 
-/**
- * Emit one item's `qty x name` line, `sign` before the quantity, then each modifier as `+ <name>` and
- * the note as `* <note>`.
- */
 function emitItem(
   b: ReturnType<typeof esc>,
   item: KitchenTicketItem,
@@ -262,6 +260,12 @@ function emitItem(
     // A note of nothing but control bytes sanitises to "" and is skipped.
     const note = sanitizeNote(item.note);
     if (note !== "") text(`  * ${note}`, 4);
+  }
+  if (item.contains !== undefined && item.contains.length > 0) {
+    const template = KITCHEN_ALLERGY_WORDS[ticketLanguage(locale)].contains;
+    const [before] = template.split("{allergens}");
+    const line = template.replace("{allergens}", () => item.contains!.join(", "));
+    text(`  ${line}`, prepareText(`  ${before}`).length);
   }
   emitAllergy(b, item.allergy, columns, locale);
 }

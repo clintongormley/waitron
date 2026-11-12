@@ -223,7 +223,8 @@ the basket resolved, and decides what is stored:
   If a cell in the routing grid sends it to another station (the default station alone never
   does; `chooseExtraMaker`, `packages/venue-service/src/routing.ts`), that child also gets its
   own kitchen record at that station. Its `+` line on the dish becomes a cross-reference, retaining the extra's allergen
-  and dietary marks; paper prints cross-references on `> ` lines (`readQueueSubItems`,
+  and dietary marks on the kitchen screens; paper prints cross-references on `> ` lines with no
+  allergens, and the extra's own ticket at its station carries its Contains line (`readQueueSubItems`,
   `apps/server/src/working-order.ts`; `buildTicketItems`, `apps/server/src/kitchen-print.ts`).
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than a non-null `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
