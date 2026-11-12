@@ -1252,10 +1252,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**
   [Detail](backlog/printers.md#a-used-by-link-to-a-prep-station-opens-the-stations-tab-not-the-station)
 
-- **A `wt-dialog` (and so `wt-modal`) holding hinted fields is taller inside than it shows (found
-  by A662; predates it).**
-  [Detail](backlog/printers.md#a-wt-dialog-holding-hinted-fields-is-taller-inside-than-it-shows)
-
 - **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
 
 - **A790. Remaining document and printer choices.** Orderless historical F1 Invoice delivery,

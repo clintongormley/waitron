@@ -86,6 +86,7 @@ export class WtDialog extends LitElement {
       /* Flex shrinking is shared out by factor times base size, so this factor makes a long body give
          up its height, down to its padding, before the footer's message gives up any. */
       .body {
+        position: relative;
         padding: var(--wt-space-5);
         min-height: 0;
         overflow: auto;
