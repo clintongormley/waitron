@@ -52,13 +52,11 @@ it("exports neither today's keep-open nor station closure, and imports both as o
       sql`update floor_zones set kept_open_day='2026-11-12', kept_open_from='22:00:00', kept_open_until='23:30:00'`,
     );
     const [destination] = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
-    await tx
-      .insert(kitchenStations)
-      .values({
-        name: "Grill closed today",
-        closedOnDay: "2026-11-12",
-        closedSendsToStationId: destination!.id,
-      });
+    await tx.insert(kitchenStations).values({
+      name: "Grill closed today",
+      closedOnDay: "2026-11-12",
+      closedSendsToStationId: destination!.id,
+    });
   });
   const versions = await schemaVersionsByModule(
     { venue: source.db, node: source.node },
