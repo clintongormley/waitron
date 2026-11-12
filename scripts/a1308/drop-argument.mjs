@@ -34,7 +34,8 @@ function statementEdit(source, node) {
 }
 
 const parse = (path, source) => ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
-// Names are matched without type resolution; select only files sharing the declared signature.
+// Matching uses spelling, not type resolution: every bare or property call with a matching
+// name in an input file must refer to the declared function.
 const nameOf = (node) =>
   ts.isIdentifier(node)
     ? node.text

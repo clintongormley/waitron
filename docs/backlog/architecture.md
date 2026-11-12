@@ -1523,7 +1523,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   constant (the theme colour is literal in three places).
 - **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
   `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
-  `readTransactionReceipt` retain `_cfg` in their signatures. Left open by SQLite slice 1
+  `readTransactionReceipt` retain `_cfg` in their signatures, among others
+  (`git grep -n '_cfg:' apps/server/src`). Left open by SQLite slice 1
   (#490 and the preparation tasks) and A1308 5f-ii's five-function scope.
 - `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) **is now
   called only by its own tests; delete it with its cases**: nothing else calls it, because the built
