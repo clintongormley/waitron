@@ -97,14 +97,17 @@ pantalla para hacerlo.
 Antes de aceptar una diferencia de factura, descarga ambas versiones con GET
 `/management-api/return-clashes/:clashId/download`. El archivo de texto tiene etiquetas en inglés
 y conserva los valores fiscales originales. Comprueba el estado de envío, el CSV y el error de
-cada versión. La versión anterior puede haberse enviado ya; el principal no enviará esa versión
+cada versión. También se enumeran los cobros, reembolsos y cargos de la venta anterior. Los que
+solo pertenecen a una venta descartada no se importan: gestiónalos manualmente antes de restablecer
+el equipo anterior. La versión anterior puede haberse enviado ya; el principal no enviará esa versión
 en conflicto. Conserva la descarga para gestionarla manualmente: las pruebas locales sobreviven
 al reinicio, pero no se incluyen en las copias de seguridad del local ni en el próximo traspaso.
 
 Acepta una diferencia admisible con POST `/management-api/return-clashes/:clashId/accept`, indicando
 `actionKey` y `reason`. Después, apaga y enciende el equipo detenido para reintentarlo. Los registros
-posteriores pueden seguir bloqueados y los lotes posteriores no se han descargado; repite para
-cada diferencia posterior admisible. Es una protección ante un fallo, un disco dañado o una
+posteriores pueden seguir bloqueados, incluso en otro lote. Los lotes posteriores no se han
+descargado. Solo se puede aceptar la primera diferencia de factura pendiente de un lote; las
+diferencias posteriores de ese lote siguen sin resolverse. Es una protección ante un fallo, un disco dañado o una
 manipulación: un traspaso normal inicia una nueva serie de facturas y cadena. Puedes restablecer
 el equipo, pero se borran sus datos del local, incluidos los registros aún pendientes. Descargar
 un lote no guarda esos registros posteriores.

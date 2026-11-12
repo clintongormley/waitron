@@ -5,7 +5,7 @@ import { createErrorBoundary, readJsonBody, type Logger } from "@waitron/server-
 import { signAsThisBox } from "./handover-signing.js";
 import { returnDigest, type ReturnRecordsDeps } from "./return-records.js";
 import {
-  acceptedReturnFingerprints,
+  acceptedReturnDecisions,
   checkedReturn,
   mountReturnClashAcceptance,
   refuseReturn,
@@ -44,13 +44,14 @@ export function mountReturnRecordsApi(
             canonicalize(chart as unknown as CanonicalValue)
           )
             return refuseReturn("membership changed");
-          const accepted = await acceptedReturnFingerprints(deps, body, tx);
+          const accepted = await acceptedReturnDecisions(deps, body, tx);
           const complete = await seat.receive(
             tx,
             source,
             body.payload!,
             deps.now?.() ?? new Date(),
-            accepted,
+            accepted.fingerprints,
+            accepted.priorAccepted,
           );
           return {
             complete,

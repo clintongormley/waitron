@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
   type Database,
+  insertInChunks,
   tenders,
   tenderRefunds,
   sales,
@@ -323,186 +324,240 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   ).toEqual([{ estado: "aceptado", csv: expect.any(String) }]);
 });
 
-it("downloads and accepts a signed already-answered record clash across a reopened receiver", async () => {
-  const source = await seedNode(old.db, "Source");
-  const receiver = await seedNode(old.db, "Receiver");
-  await stampDeployment(old.db, "preproduction");
-  await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
-  await copyBase();
-  await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiver.nodeId);
-  const sourceKey = await readNodeIdentityKey(old.node, ring, source.nodeId);
-  const receiverKey = await readNodeIdentityKey(current.node, ring, receiver.nodeId);
-  await pinMainBoxKey(current.node, receiver.nodeId, {
-    nodeId: source.nodeId,
-    publicKey: nodeSigningPublicKey(sourceKey),
-  });
-  const body = {
-    term: 2,
-    nodes: [
-      {
-        nodeId: receiver.nodeId,
-        contactUrl: "https://receiver.test",
-        standing: "serving-primary" as const,
-      },
-      { nodeId: source.nodeId, contactUrl: "https://source.test", standing: "sell-only" as const },
-    ],
-  };
-  const chart = {
-    body,
-    signerNodeId: receiver.nodeId,
-    signature: signDocumentBody(body, receiverKey),
-    endorsements: [
-      endorseKey(receiver.nodeId, nodeSigningPublicKey(receiverKey), source.nodeId, sourceKey),
-    ],
-  };
-  const saleId = await seedSale(old.db, source, 1);
-  const pending = await originalFor(old.db, source, saleId);
-  pending.entorno = "preproduction";
-  pending.input.NumSerieFactura = "Source/1";
-  await withTransaction(old.db, (tx) => appendToChain(tx, source.nodeId, pending));
-  await old.db.execute(sql`insert into envios (registro_id, estado, csv, proximo_intento_en)
+it.each([false, true])(
+  "downloads and accepts a signed record clash across a reopened receiver (later batch: %s)",
+  async (laterBatch) => {
+    const source = await seedNode(old.db, "Source");
+    const receiver = await seedNode(old.db, "Receiver");
+    await stampDeployment(old.db, "preproduction");
+    await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
+    await copyBase();
+    await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiver.nodeId);
+    const sourceKey = await readNodeIdentityKey(old.node, ring, source.nodeId);
+    const receiverKey = await readNodeIdentityKey(current.node, ring, receiver.nodeId);
+    await pinMainBoxKey(current.node, receiver.nodeId, {
+      nodeId: source.nodeId,
+      publicKey: nodeSigningPublicKey(sourceKey),
+    });
+    const body = {
+      term: 2,
+      nodes: [
+        {
+          nodeId: receiver.nodeId,
+          contactUrl: "https://receiver.test",
+          standing: "serving-primary" as const,
+        },
+        {
+          nodeId: source.nodeId,
+          contactUrl: "https://source.test",
+          standing: "sell-only" as const,
+        },
+      ],
+    };
+    const chart = {
+      body,
+      signerNodeId: receiver.nodeId,
+      signature: signDocumentBody(body, receiverKey),
+      endorsements: [
+        endorseKey(receiver.nodeId, nodeSigningPublicKey(receiverKey), source.nodeId, sourceKey),
+      ],
+    };
+    const saleId = await seedSale(old.db, source, 1);
+    const pending = await originalFor(old.db, source, saleId);
+    pending.entorno = "preproduction";
+    pending.input.NumSerieFactura = "Source/1";
+    await withTransaction(old.db, (tx) => appendToChain(tx, source.nodeId, pending));
+    await old.db.execute(sql`insert into envios (registro_id, estado, csv, proximo_intento_en)
     select id, 'aceptado', 'already-filed-csv', '2026-07-20T17:21:00.000Z'
     from registros_facturacion where node_id = ${source.nodeId}`);
-  const originals = await withTransaction(old.db, (tx) => readReturnedOriginals(tx, source.nodeId));
-  const held = structuredClone(originals);
-  held.records[0]!.descripcion_operacion = "Held version for manual accounting";
-  held.records[0]!.id = "held-record";
-  held.records[0]!.sale_id = "held-sale";
-  held.sales[0]!.id = "held-sale";
-  held.heads[0]!.ultimo_registro_id = "held-record";
-  held.deliveries[0]!.registro_id = "held-record";
-  held.deliveries[0]!.estado = "pendiente";
-  held.deliveries[0]!.csv = null;
-  await withTransaction(current.db, (tx) => receiveReturnedOriginals(tx, source.nodeId, held, now));
-  await writeNodeMembership(current.db, chart);
-  await writeNodeMembership(old.db, chart);
-  const appFor = (db = current.db, node = current.node) => {
-    const app = new Hono();
-    mountReturnRecordsApi(
-      app,
-      {
-        db,
-        node,
-        ring,
-        nodeId: receiver.nodeId,
-        modules,
-        requireWritable: () => {},
-        wake: () => {},
-        now: () => now,
-      },
-      () => {},
+    if (laterBatch) {
+      await insertInChunks(
+        old.db,
+        tenders,
+        Array.from({ length: 95 }, (_, index) => ({
+          id: `discarded-tip-${index}`,
+          saleId,
+          method: "cash" as const,
+          amount: 1,
+          tipAmount: 1,
+          settledAt: "2026-07-20T17:21:00.000Z",
+        })),
+      );
+      const laterSale = await seedSale(old.db, source, 2);
+      await withTransaction(old.db, (tx) =>
+        appendToChain(tx, source.nodeId, {
+          ...pending,
+          saleId: laterSale,
+          input: {
+            ...pending.input,
+            NumSerieFactura: "Source/2",
+            generadoEn: new Date("2026-07-20T17:20:02.000Z"),
+          },
+        }),
+      );
+    }
+    const originals = await withTransaction(old.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
     );
-    return app;
-  };
-  let app = appFor();
-  const send = () =>
-    runReturnRecordsPass({
-      db: old.db,
-      node: old.node,
-      ring,
-      nodeId: source.nodeId,
-      modules,
-      stopped: () => false,
-      fetch: async (url, init) => app.request(String(url), init),
+    if (laterBatch)
+      expect(
+        makeReturnedBatches(originals).map((batch) => batch.records.map((row) => row.secuencia)),
+      ).toEqual([[1], [2]]);
+    const held = structuredClone(originals);
+    held.records = held.records.slice(0, 1);
+    held.sales = held.sales.filter((row) => row.id === saleId);
+    held.tenders = [];
+    held.heads[0]!.secuencia = 1;
+    held.heads[0]!.ultima_huella = held.records[0]!.huella!;
+    held.records[0]!.descripcion_operacion = "Held version for manual accounting";
+    held.records[0]!.id = "held-record";
+    held.records[0]!.sale_id = "held-sale";
+    held.sales[0]!.id = "held-sale";
+    held.heads[0]!.ultimo_registro_id = "held-record";
+    held.deliveries[0]!.registro_id = "held-record";
+    held.deliveries[0]!.estado = "pendiente";
+    held.deliveries[0]!.csv = null;
+    await withTransaction(current.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, held, now),
+    );
+    await writeNodeMembership(current.db, chart);
+    await writeNodeMembership(old.db, chart);
+    const appFor = (db = current.db, node = current.node) => {
+      const app = new Hono();
+      mountReturnRecordsApi(
+        app,
+        {
+          db,
+          node,
+          ring,
+          nodeId: receiver.nodeId,
+          modules,
+          requireWritable: () => {},
+          wake: () => {},
+          now: () => now,
+        },
+        () => {},
+      );
+      return app;
+    };
+    let app = appFor();
+    const send = () =>
+      runReturnRecordsPass({
+        db: old.db,
+        node: old.node,
+        ring,
+        nodeId: source.nodeId,
+        modules,
+        stopped: () => false,
+        fetch: async (url, init) => app.request(String(url), init),
+      });
+    expect(await send()).toBe("clash");
+    registerModulePermissions(FISCAL_PERMISSIONS);
+    const session = await withTransaction(current.db, async (tx) => {
+      const [person] = await tx
+        .insert(persons)
+        .values({ displayName: "Administrator", role: "admin" })
+        .returning();
+      const session = await startManagementSession(tx, { personId: person!.id });
+      await setFreshManagementSignIn(tx, session.token);
+      return { ...session, personId: person!.id };
     });
-  expect(await send()).toBe("clash");
-  registerModulePermissions(FISCAL_PERMISSIONS);
-  const session = await withTransaction(current.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin" })
-      .returning();
-    const session = await startManagementSession(tx, { personId: person!.id });
-    await setFreshManagementSignIn(tx, session.token);
-    return { ...session, personId: person!.id };
-  });
-  const headers = { cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
-  const listing = (await (
-    await app.request("/management-api/return-clashes", { headers })
-  ).json()) as {
-    clashes: { clashId: string; kind: string; eligible: boolean; downloadUrl: string }[];
-  };
-  const clash = listing.clashes.find((row) => row.kind === "record")!;
-  expect(clash.eligible).toBe(true);
-  const file = await app.request(clash.downloadUrl, { headers });
-  expect(file.status).toBe(200);
-  const text = await file.text();
-  expect(text).toContain("Old-box record");
-  expect(text).toContain("Record held by the new main");
-  expect(text).toContain("Accepted (aceptado)");
-  expect(text).toContain("already-filed-csv");
-  expect(text).toContain("Source/1");
-  const accepted = await app.request(`/management-api/return-clashes/${clash.clashId}/accept`, {
-    method: "POST",
-    headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({
-      actionKey: "record-choice",
-      reason: "Accountant will handle the old version",
-    }),
-  });
-  expect(accepted.status, await accepted.clone().text()).toBe(200);
-  const decision = await accepted.json();
-  expect(decision).toMatchObject({
-    decision: {
-      body: {
-        personId: session.personId,
+    const headers = { cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+    const listing = (await (
+      await app.request("/management-api/return-clashes", { headers })
+    ).json()) as {
+      clashes: { clashId: string; kind: string; eligible: boolean; downloadUrl: string }[];
+    };
+    const clash = listing.clashes.find((row) => row.kind === "record")!;
+    expect(clash.eligible).toBe(true);
+    const file = await app.request(clash.downloadUrl, { headers });
+    expect(file.status).toBe(200);
+    const text = await file.text();
+    expect(text).toContain("Old-box record");
+    expect(text).toContain("Record held by the new main");
+    expect(text).toContain("Accepted (aceptado)");
+    expect(text).toContain("already-filed-csv");
+    expect(text).toContain("Source/1");
+    if (laterBatch) {
+      expect(text).toContain("Tender discarded-tip-0");
+      expect(text).toContain("not imported");
+    }
+    const accepted = await app.request(`/management-api/return-clashes/${clash.clashId}/accept`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        actionKey: "record-choice",
         reason: "Accountant will handle the old version",
-        evidenceDigest: clash.clashId,
+      }),
+    });
+    expect(accepted.status, await accepted.clone().text()).toBe(200);
+    const decision = await accepted.json();
+    expect(decision).toMatchObject({
+      decision: {
+        body: {
+          personId: session.personId,
+          reason: "Accountant will handle the old version",
+          evidenceDigest: clash.clashId,
+        },
       },
-    },
-  });
-  const directory = dirname(current.node.all<{ file: string }>(sql`pragma database_list`)[0]!.file);
-  const reopened = await openVenueDatabase(directory, { exclusive: false });
-  try {
-    app = appFor(reopened.venue, reopened.node);
-    expect(await send()).toBe("confirmed");
-  } finally {
-    await reopened.close();
-  }
-  expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(held.records);
-  expect(old.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
-    originals.records,
-  );
-  expect(current.db.all<ReturnRow>(sql`select * from sales`)).toEqual(held.sales);
-  expect(current.db.all<ReturnRow>(sql`select * from envios`)).toEqual(held.deliveries);
-  expect(
-    current.db.all<{ person_id: string }>(sql`select person_id from activity_log
+    });
+    const directory = dirname(
+      current.node.all<{ file: string }>(sql`pragma database_list`)[0]!.file,
+    );
+    const reopened = await openVenueDatabase(directory, { exclusive: false });
+    try {
+      app = appFor(reopened.venue, reopened.node);
+      expect(await send()).toBe(laterBatch ? "clash" : "confirmed");
+    } finally {
+      await reopened.close();
+    }
+    expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+      held.records,
+    );
+    expect(old.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+      originals.records,
+    );
+    expect(current.db.all<ReturnRow>(sql`select * from sales`)).toEqual(held.sales);
+    expect(current.db.all<ReturnRow>(sql`select * from envios`)).toEqual(held.deliveries);
+    expect(
+      current.db.all<{ person_id: string }>(sql`select person_id from activity_log
     where kind = 'handover.return_clash_accepted'`),
-  ).toEqual([{ person_id: session.personId }]);
-  const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
-  const client = aeat.client();
-  const submit = vi.spyOn(client, "submit");
-  const filed = await drain(
-    {
-      db: current.db,
-      resolveClient: async () => client,
-      environment: "preproduction",
-      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
-    },
-    now,
-  );
-  expect(filed.recordsSubmitted).toBe(1);
-  expect(
-    current.db.all<{ registro_id: string; estado: string }>(
-      sql`select registro_id, estado from envios`,
-    ),
-  ).toEqual([{ registro_id: "held-record", estado: "aceptado" }]);
-  const idle = await drain(
-    {
-      db: current.db,
-      resolveClient: async () => client,
-      environment: "preproduction",
-      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
-    },
-    new Date(now.getTime() + 61000),
-  );
-  expect(idle.recordsSubmitted).toBe(0);
-  const sent = JSON.stringify(submit.mock.calls);
-  expect(sent).not.toContain(String(originals.records[0]!.descripcion_operacion));
-  expect(sent).toContain("Held version for manual accounting");
-  expect(submit.mock.calls.flatMap(([, records]) => records)).toHaveLength(1);
-  submit.mockRestore();
-});
+    ).toEqual([{ person_id: session.personId }]);
+    const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
+    const client = aeat.client();
+    const submit = vi.spyOn(client, "submit");
+    const filed = await drain(
+      {
+        db: current.db,
+        resolveClient: async () => client,
+        environment: "preproduction",
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      },
+      now,
+    );
+    expect(filed.recordsSubmitted).toBe(1);
+    expect(
+      current.db.all<{ registro_id: string; estado: string }>(
+        sql`select registro_id, estado from envios`,
+      ),
+    ).toEqual([{ registro_id: "held-record", estado: "aceptado" }]);
+    const idle = await drain(
+      {
+        db: current.db,
+        resolveClient: async () => client,
+        environment: "preproduction",
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      },
+      new Date(now.getTime() + 61000),
+    );
+    expect(idle.recordsSubmitted).toBe(0);
+    const sent = JSON.stringify(submit.mock.calls);
+    expect(sent).not.toContain(String(originals.records[0]!.descripcion_operacion));
+    expect(sent).toContain("Held version for manual accounting");
+    expect(submit.mock.calls.flatMap(([, records]) => records)).toHaveLength(1);
+    submit.mockRestore();
+  },
+);
 
 async function copyBase() {
   await withTransaction(current.db, async (tx) => {

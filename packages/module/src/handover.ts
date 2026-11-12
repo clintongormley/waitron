@@ -34,6 +34,7 @@ export interface ModuleHandoverContribution {
       batch: CanonicalValue,
       now: Date,
       accepted?: readonly string[],
+      priorAccepted?: readonly ReturnDiscrepancy[],
     ): Promise<boolean>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;

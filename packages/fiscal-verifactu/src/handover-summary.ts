@@ -135,8 +135,16 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
         ...(await inspectReturnedPayments(tx, source, returned)),
       ];
     },
-    receive: async (tx, source, batch, now, accepted) =>
-      (await receiveReturnedOriginals(tx, source, readReturnedBatch(batch), now, accepted))
-        .complete,
+    receive: async (tx, source, batch, now, accepted, priorAccepted) =>
+      (
+        await receiveReturnedOriginals(
+          tx,
+          source,
+          readReturnedBatch(batch),
+          now,
+          accepted,
+          priorAccepted,
+        )
+      ).complete,
   },
 };

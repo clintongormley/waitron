@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { canonicalize } from "@waitron/membership";
+import { rawCentsToDecimal } from "@waitron/shared";
 import type { ReturnDiscrepancy } from "@waitron/module";
 import type { ReturnedOriginals, ReturnRow } from "./handover-return.js";
 
@@ -67,6 +68,45 @@ function readableRecord(record: ReturnRow, delivery: ReturnRow | undefined): str
   ].join("\n");
 }
 
+function readablePayments(returned: ReturnedOriginals, saleId: ReturnRow[string]): string {
+  const own = (rows: ReturnRow[]) => rows.filter((row) => row.sale_id === saleId);
+  return [
+    "\nOld-box payment facts for this sale",
+    "Tenders, refunds and captures belonging only to a discarded sale are not imported. Handle these facts manually before resetting the old box.",
+    ...own(returned.tenders).map((row) =>
+      [
+        `Tender ${row.id}`,
+        `Method: ${row.method}`,
+        `Amount: ${rawCentsToDecimal(String(row.amount))}`,
+        `Tip: ${rawCentsToDecimal(String(row.tip_amount))}`,
+        `Settled at: ${row.settled_at}`,
+      ].join("\n"),
+    ),
+    ...own(returned.refunds).map((row) =>
+      [
+        `Refund ${row.id}`,
+        `Tender: ${row.tender_id}`,
+        `Method: ${row.method}`,
+        `Applied amount: ${rawCentsToDecimal(String(row.applied_amount))}`,
+        `Tip: ${rawCentsToDecimal(String(row.tip_amount))}`,
+        `State: ${row.state}`,
+        `Provider: ${row.provider ?? "—"}`,
+        `Provider payment reference: ${row.provider_payment_ref ?? "—"}`,
+        `Provider refund reference: ${row.provider_refund_ref ?? "—"}`,
+      ].join("\n"),
+    ),
+    ...own(returned.captures).map((row) =>
+      [
+        `Capture ${row.id}`,
+        `Amount: ${rawCentsToDecimal(String(row.amount))}`,
+        `State: ${row.state}`,
+        `Provider: ${row.provider}`,
+        `Provider payment reference: ${row.payment_ref}`,
+      ].join("\n"),
+    ),
+  ].join("\n");
+}
+
 export function inspectReturnedRecords(
   tx: Transaction,
   sourceNodeId: string,
@@ -101,6 +141,7 @@ export function inspectReturnedRecords(
             tx.all<ReturnRow>(sql`select * from envios where registro_id = ${row.id}`)[0],
           ),
       ),
+      readablePayments(returned, record.sale_id),
       "\nRecords in this batch still waiting",
       ...pending.map(
         (row) =>

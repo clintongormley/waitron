@@ -31,7 +31,7 @@ import { returnDigest, returnVenue, type ReturnRecordsDeps } from "./return-reco
 import "./errors.js";
 
 const RECORD_WARNING =
-  "The new main will not submit the old box's conflicting record. Check its filing status and tax-agency receipt; it may already have been submitted. Later records may remain blocked. Later batches have not been downloaded. Resetting the old box deletes those records too, including sale lines and local backups.";
+  "The new main will not submit the old box's conflicting record. Check its filing status and tax-agency receipt; it may already have been submitted. Tenders, refunds and captures belonging only to a discarded sale are not imported; check those rows in the download and handle them manually. Later records may remain blocked. Later batches have not been downloaded. Resetting the old box deletes those records too, including sale lines and local backups.";
 
 type Deps = ReturnRecordsDeps & { requireWritable(): void };
 export function refuseReturn(reason: string): never {
@@ -188,33 +188,46 @@ async function decisionBody(deps: ReturnRecordsDeps, event: HandoverEvent) {
   return { decision, body: verified.body };
 }
 
-export async function acceptedReturnFingerprints(
+export async function acceptedReturnDecisions(
   deps: ReturnRecordsDeps,
   body: Record<string, CanonicalValue>,
   tx: Transaction,
 ) {
-  const group = evidenceGroups(await events(deps, "return-clash-evidence")).find(
-    (row) => row.event.detail.batchId === batchId(body),
-  );
-  if (!group) return [];
-  const evidence = await readEvidence(deps, group, tx);
-  const accepted: string[] = [];
-  for (const event of await events(deps, "return-clash-acceptance")) {
-    const decision = await decisionBody(deps, event);
-    const clash = evidence.current.find(
-      (row) => row.eligible && row.fingerprint === decision.body.fingerprint,
-    );
-    if (!clash || decision.body.evidenceDigest !== evidenceId(body, clash)) continue;
+  const fingerprints: string[] = [];
+  const priorAccepted: ReturnDiscrepancy[] = [];
+  const decisions = [];
+  for (const event of await events(deps, "return-clash-acceptance"))
+    decisions.push(await decisionBody(deps, event));
+  for (const group of evidenceGroups(await events(deps, "return-clash-evidence"))) {
     if (
-      canonicalize(binding(body)) !==
-      canonicalize(
-        Object.fromEntries(Object.keys(binding(body)).map((key) => [key, decision.body[key]!])),
+      ["venue", "sourceNodeId", "destinationNodeId", "module"].some(
+        (key) => canonicalize((group.event.detail[key] ?? null) as CanonicalValue) !== canonicalize(body[key]!),
       )
     )
       continue;
-    accepted.push(clash.fingerprint);
+    const evidence = await readEvidence(deps, group, tx);
+    const currentBatch = group.event.detail.batchId === batchId(body);
+    for (const decision of decisions) {
+      const clash = evidence.current.find(
+        (row) =>
+          row.fingerprint === decision.body.fingerprint &&
+          (currentBatch ? row.eligible : row.kind === "record"),
+      );
+      if (!clash || decision.body.evidenceDigest !== evidenceId(evidence.body, clash)) continue;
+      if (
+        canonicalize(binding(evidence.body)) !==
+        canonicalize(
+          Object.fromEntries(
+            Object.keys(binding(evidence.body)).map((key) => [key, decision.body[key]!]),
+          ),
+        )
+      )
+        continue;
+      if (currentBatch) fingerprints.push(clash.fingerprint);
+      else priorAccepted.push(clash);
+    }
   }
-  return accepted;
+  return { fingerprints, priorAccepted };
 }
 
 export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {

@@ -88,13 +88,16 @@ data intact. An administrator can inspect eligible differences with GET
 Before accepting an invoice difference, download both versions with GET
 `/management-api/return-clashes/:clashId/download`. The text file has English labels and preserves
 the original fiscal values. Check each version's filing status, tax-agency receipt and error.
+It also lists the old sale's tenders, refunds and captures. Those belonging only to a discarded
+sale are not imported: handle them manually before resetting the old box.
 The old version may already have been submitted; the new main will not submit that conflicting
 version. Keep the download for manual handling: the local evidence survives a restart, but is not
 included in venue backups or the next handover.
 
 Accept an eligible difference with POST `/management-api/return-clashes/:clashId/accept`, giving
 `actionKey` and `reason`. Then switch the stopped box off and on to retry. Later records may stay
-blocked and later batches have not been downloaded; repeat for any later eligible difference.
+blocked, including in a later batch. Later batches have not been downloaded. Only the first
+unresolved invoice clash in a batch can be accepted; later clashes in that batch stay unresolved.
 This is a safety net for a bug, damaged disk or tampering: normal takeover starts a new invoice
 series and chain. Reset remains available, but deletes this box's venue data, including any
 records still waiting. Downloading one batch does not save those later records.

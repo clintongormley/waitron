@@ -532,8 +532,9 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 Eligible invoice, chain-position and correction clashes can be downloaded as readable text and
 specifically accepted through the current main's internal API, alongside payment clashes. There
 is no screen yet. The download shows both versions and their filing status; the new main does not
-submit the discarded version, which may already have an AEAT answer. Later missing records stay
-blocked after an accepted record clash; later batches have not been downloaded. Reset warns and
+submit the discarded version, which may already have an AEAT answer. The download also lists the old sale's tender/refund/capture facts; those exclusive to a discarded
+sale are not imported. Later missing records stay blocked after an accepted record clash,
+including across batches; later batches have not been downloaded. Reset warns and
 remains available. Keep the file: node-local evidence survives restart but not venue backup or the
 next handover. The stopped box must be switched off and on to retry.
 Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain open.

@@ -54,16 +54,14 @@ async function recordClash(paid = false) {
     values (${source.recordId}, 'aceptado_con_errores', 'old-csv', '2000',
       '2026-07-20T17:21:00.000Z')`);
   if (paid)
-    await suite.db
-      .insert(tenders)
-      .values({
-        id: "discarded-tip",
-        saleId: source.saleId,
-        method: "cash",
-        amount: 100,
-        tipAmount: 100,
-        settledAt: "2026-07-20T17:21:00.000Z",
-      });
+    await suite.db.insert(tenders).values({
+      id: "discarded-tip",
+      saleId: source.saleId,
+      method: "cash",
+      amount: 100,
+      tipAmount: 100,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    });
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
@@ -123,6 +121,9 @@ it("accepts only the exact tail record clash without importing its sale or deliv
     source.nodeId,
     returned as unknown as CanonicalValue,
   );
+  expect(clash!.readable).toContain("Tender discarded-tip");
+  expect(clash!.readable).toContain("Amount: 1.00");
+  expect(clash!.readable).toContain("not imported");
   const receive = (fingerprint: string) =>
     withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, returned, now, [fingerprint]),
@@ -147,16 +148,14 @@ it("accepts only the exact tail record clash without importing its sale or deliv
 
 it("keeps a held sale's different payments unaccounted when accepting its only record clash", async () => {
   const source = await original("Source", 1, copyBase);
-  await suite.db
-    .insert(tenders)
-    .values({
-      id: "shared-tip",
-      saleId: source.saleId,
-      method: "cash",
-      amount: 200,
-      tipAmount: 200,
-      settledAt: "2026-07-20T17:21:00.000Z",
-    });
+  await suite.db.insert(tenders).values({
+    id: "shared-tip",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 200,
+    tipAmount: 200,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
@@ -184,56 +183,85 @@ it("keeps a held sale's different payments unaccounted when accepting its only r
   expect(receiver.db.all<ReturnRow>(sql`select * from tenders`)).toEqual(existing.tenders);
 });
 
-it("keeps every missing suffix record blocked after accepting a middle-of-chain clash", async () => {
-  const source = await original("Source", 1, copyBase);
-  await appendOriginal(source, "Source", 2);
-  const prefix = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
-  const existing = structuredClone(prefix);
-  const second = existing.records[1]!;
-  const discardedSale = second.sale_id;
-  second.id = "held-middle";
-  second.sale_id = "held-middle-sale";
-  existing.sales.find((row) => row.id === discardedSale)!.id = "held-middle-sale";
-  existing.heads[0]!.ultimo_registro_id = "held-middle";
-  const now = new Date("2026-07-20T17:22:00.000Z");
-  await withTransaction(receiver.db, (tx) =>
-    receiveReturnedOriginals(tx, source.nodeId, existing, now),
-  );
-  await appendOriginal(source, "Source", 3);
-  const returned = await withTransaction(suite.db, (tx) =>
-    readReturnedOriginals(tx, source.nodeId),
-  );
-  const [clash] = await VERIFACTU_HANDOVER.returnRecords!.inspect!(
-    receiver.db,
-    source.nodeId,
-    returned as unknown as CanonicalValue,
-  );
-  expect(clash!.eligible).toBe(true);
-  expect(
+it.each([false, true])(
+  "keeps every missing suffix record blocked after an accepted middle clash (split batches: %s)",
+  async (split) => {
+    const source = await original("Source", 1, copyBase);
+    await appendOriginal(source, "Source", 2);
+    const prefix = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
+    const existing = structuredClone(prefix);
+    const second = existing.records[1]!;
+    const discardedSale = second.sale_id;
+    second.id = "held-middle";
+    second.sale_id = "held-middle-sale";
+    existing.sales.find((row) => row.id === discardedSale)!.id = "held-middle-sale";
+    existing.heads[0]!.ultimo_registro_id = "held-middle";
+    const now = new Date("2026-07-20T17:22:00.000Z");
     await withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
-    ),
-  ).toEqual({ complete: false });
-  expect(
-    receiver.db.all<ReturnRow>(sql`select * from registros_facturacion order by secuencia`),
-  ).toEqual(existing.records);
-  expect(receiver.db.all<ReturnRow>(sql`select * from sales order by id`)).toEqual(
-    existing.sales.sort((a, b) => String(a.id).localeCompare(String(b.id))),
-  );
-  const directory = await mkdtemp(join(tmpdir(), "waitron-return-receiver-"));
-  try {
-    const file = join(directory, "receiver.db");
-    await archiveTo(receiver.db, file);
-    const opened = await openBackupQuery(file);
-    try {
-      expect(await checkFiscalChains(opened.query)).toBe("ok");
-    } finally {
-      await opened.close();
+      receiveReturnedOriginals(tx, source.nodeId, existing, now),
+    );
+    await appendOriginal(source, "Source", 3);
+    const returned = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
+    const [clash] = await VERIFACTU_HANDOVER.returnRecords!.inspect!(
+      receiver.db,
+      source.nodeId,
+      returned as unknown as CanonicalValue,
+    );
+    expect(clash!.eligible).toBe(true);
+    if (split) {
+      const first = structuredClone(returned);
+      first.records = first.records.slice(0, 2);
+      first.sales = first.sales.filter((row) =>
+        first.records.some((record) => record.sale_id === row.id),
+      );
+      expect(
+        await withTransaction(receiver.db, (tx) =>
+          receiveReturnedOriginals(tx, source.nodeId, first, now, [clash!.fingerprint]),
+        ),
+      ).toEqual({ complete: true });
+      returned.records = returned.records.slice(2);
+      returned.sales = returned.sales.filter((row) =>
+        returned.records.some((record) => record.sale_id === row.id),
+      );
     }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(
+          tx,
+          source.nodeId,
+          returned,
+          now,
+          split ? [] : [clash!.fingerprint],
+          split ? [clash!] : [],
+        ),
+      ),
+    ).toEqual({ complete: false });
+    expect(
+      receiver.db.all<ReturnRow>(sql`select * from registros_facturacion order by secuencia`),
+    ).toEqual(existing.records);
+    expect(receiver.db.all<ReturnRow>(sql`select * from sales order by id`)).toEqual(
+      existing.sales.sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    );
+    const directory = await mkdtemp(join(tmpdir(), "waitron-return-receiver-"));
+    try {
+      const file = join(directory, "receiver.db");
+      await archiveTo(receiver.db, file);
+      const opened = await openBackupQuery(file);
+      try {
+        expect(await checkFiscalChains(opened.query)).toBe("ok");
+      } finally {
+        await opened.close();
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 it("lists all held counterparts and permits only the first unheld sequence", async () => {
   const { source, returned, now } = await recordClash();
@@ -1606,7 +1634,20 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
   const invalidOrder = structuredClone(batch!);
   invalidOrder.orders[0]!.status = "held";
   await expect(receive(invalidOrder)).rejects.toMatchObject({ code: "fiscal.return_invalid" });
+  const clashing = structuredClone(batch!);
+  clashing.records[0]!.descripcion_operacion = "Different record to inspect";
   expect(await receive()).toEqual({ complete: true });
+  const [clash] = await VERIFACTU_HANDOVER.returnRecords!.inspect!(
+    receiver.db,
+    source.nodeId,
+    clashing as unknown as CanonicalValue,
+  );
+  expect(clash!.readable).toContain("Refund pending-refund");
+  expect(clash!.readable).toContain("Applied amount: 0.00");
+  expect(clash!.readable).toContain("Tip: 1.00");
+  expect(clash!.readable).toContain("Capture capture");
+  expect(clash!.readable).toContain("recorded-charge");
+
   expect(receiver.db.all<ReturnRow>(sql`select * from payments`)).toEqual(batch!.captures);
   expect(receiver.db.all<ReturnRow>(sql`select * from working_orders`)).toEqual(batch!.orders);
   await receiver.db.execute(sql`update tender_refunds set state = 'completed',

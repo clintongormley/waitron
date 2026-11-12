@@ -206,6 +206,7 @@ export async function receiveReturnedOriginals(
   returned: ReturnedOriginals,
   now: Date,
   accepted: readonly string[] = [],
+  priorAccepted: readonly ReturnDiscrepancy[] = [],
 ): Promise<{ complete: boolean }> {
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
@@ -243,6 +244,15 @@ export async function receiveReturnedOriginals(
     (a, b) => Number(a.secuencia) - Number(b.secuencia),
   )) {
     if (blocked) continue;
+    if (
+      priorAccepted.some(
+        (clash) =>
+          clash.kind === "record" &&
+          (clash.incoming as ReturnRow).node_id === sourceNodeId &&
+          Number((clash.incoming as ReturnRow).secuencia) < Number(record.secuencia),
+      )
+    )
+      skippedRecord = true;
     const counterparts = recordCounterparts(tx, record);
     const exact = counterparts.some((own) => canonicalize(own) === canonicalize(record));
     if (acceptedRecords.has(record.id)) {
