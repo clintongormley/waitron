@@ -1,8 +1,8 @@
-// Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_FROM_SPARE names, or on
+// Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/from-spare names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). CI's mount and the
 // macOS image are 48 MiB, so the venue, the 6 MiB spare and the 21.5 MiB of free room two cases
 // fill to fit; a folder you name needs room for the same. Without one each case is reported SKIPPED; with
-// CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md, "The full-disk start
+// CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 it FAILS instead (testing-guide.md, "The full-disk start
 // tests run on a small filesystem"). Its own filesystem: two files filling one at once can fail
 // each other.
 import {
@@ -61,7 +61,7 @@ let migrationsRoot: string | undefined;
 
 beforeAll(async () => {
   insecure = new Agent({ connect: { rejectUnauthorized: false } });
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE", 48);
+  opened = openSmallDisk("from-spare", 48);
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK) console.warn(`start-from-spare tests SKIPPED: ${opened.reason}`);
   migrationsRoot = await mkdtemp(join(tmpdir(), "wt-start-from-spare-migrations-"));

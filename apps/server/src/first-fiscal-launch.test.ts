@@ -438,7 +438,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     ...f.base,
     ...f.evidenceEnv,
     WAITRON_INITIAL_VENUE_INPUT: "",
-    WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+    WAITRON_MANAGEMENT_ORIGIN: "https://olivo.example.test:3443",
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_ADMIN_PASSWORD: "synthetic-password",

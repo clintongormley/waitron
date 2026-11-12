@@ -134,7 +134,7 @@ export function createFirstSetupCommandDeployment(options: {
       const ring = loadKeyRing({ ...storedEnvironment, ...environment });
       let contactUrl: string;
       try {
-        const parsed = new URL(environment.WAITRON_ADVERTISED_ORIGIN ?? "");
+        const parsed = new URL(environment.WAITRON_MANAGEMENT_ORIGIN ?? "");
         if (
           !["https:", "http:"].includes(parsed.protocol) ||
           parsed.username ||

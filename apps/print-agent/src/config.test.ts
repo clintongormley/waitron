@@ -2,13 +2,18 @@ import { describe, expect, it } from "vitest";
 import { readEnv } from "./config.js";
 
 describe("readEnv", () => {
+  it("names the agent after its host", () => {
+    expect(readEnv({}, "kitchen-pi").name).toBe("kitchen-pi");
+    expect(readEnv({ WAITRON_AGENT_NAME: "Bar" }, "kitchen-pi").name).toBe("kitchen-pi");
+  });
+
   it("reads a browser-facing setup URL independently of the server and listening port", () => {
     expect(
       readEnv(
         {
-          WAITRON_SERVER_URL: "https://127.0.0.1",
+          WAITRON_PRINT_AGENT_SERVER_URL: "https://127.0.0.1",
           WAITRON_SETUP_PORT: "9210",
-          WAITRON_SETUP_URL: "  http://192.168.10.40:9310/  ",
+          WAITRON_PRINT_AGENT_SETUP_URL: "  http://192.168.10.40:9310/  ",
         },
         "docker-container-id",
       ),
@@ -17,7 +22,8 @@ describe("readEnv", () => {
 
   it("treats an empty advertised setup URL as absent", () => {
     expect(
-      readEnv({ WAITRON_SETUP_URL: "  ", WAITRON_BOX_ADDRESSES: "  " }, "container").setupUrl,
+      readEnv({ WAITRON_PRINT_AGENT_SETUP_URL: "  ", WAITRON_BOX_ADDRESSES: "  " }, "container")
+        .setupUrl,
     ).toBeUndefined();
   });
 
@@ -36,7 +42,10 @@ describe("readEnv", () => {
   it("prefers the explicit setup URL to the box address", () => {
     expect(
       readEnv(
-        { WAITRON_BOX_ADDRESSES: "192.168.10.40", WAITRON_SETUP_URL: "https://agent.test" },
+        {
+          WAITRON_BOX_ADDRESSES: "192.168.10.40",
+          WAITRON_PRINT_AGENT_SETUP_URL: "https://agent.test",
+        },
         "h",
       ).setupUrl,
     ).toBe("https://agent.test");
@@ -67,8 +76,8 @@ describe("readEnv", () => {
     "http://0.0.0.0:9110",
     "http://[::]:9110",
   ])("refuses an unusable advertised setup URL: %s", (setupUrl) => {
-    expect(() => readEnv({ WAITRON_SETUP_URL: setupUrl }, "container")).toThrow(
-      /WAITRON_SETUP_URL/,
+    expect(() => readEnv({ WAITRON_PRINT_AGENT_SETUP_URL: setupUrl }, "container")).toThrow(
+      /WAITRON_PRINT_AGENT_SETUP_URL/,
     );
   });
 
@@ -85,18 +94,17 @@ describe("readEnv", () => {
     expect(
       readEnv(
         {
-          WAITRON_SERVER_URL: "https://box.test/",
-          WAITRON_AGENT_NAME: "n",
+          WAITRON_PRINT_AGENT_SERVER_URL: "https://box.test/",
           WAITRON_STATE_DIR: "/tmp/x",
           WAITRON_SETUP_PORT: "9200",
         },
         "h",
       ),
-    ).toEqual({ serverUrl: "https://box.test", name: "n", stateDir: "/tmp/x", setupPort: 9200 });
+    ).toEqual({ serverUrl: "https://box.test", name: "h", stateDir: "/tmp/x", setupPort: 9200 });
   });
 
-  it("treats an empty string as unset (CLAUDE.md §3): a blank url and name fall back", () => {
-    expect(readEnv({ WAITRON_SERVER_URL: "", WAITRON_AGENT_NAME: "" }, "kitchen-pi")).toEqual({
+  it("treats an empty string as unset (CLAUDE.md §3): a blank url falls back", () => {
+    expect(readEnv({ WAITRON_PRINT_AGENT_SERVER_URL: "" }, "kitchen-pi")).toEqual({
       serverUrl: undefined,
       name: "kitchen-pi",
       stateDir: "/var/lib/waitron-print-agent",
@@ -105,20 +113,20 @@ describe("readEnv", () => {
   });
 
   it("trims surrounding whitespace before deciding a value is set", () => {
-    expect(readEnv({ WAITRON_AGENT_NAME: "  till-1  ", WAITRON_STATE_DIR: "  /d  " }, "h")).toEqual(
-      {
-        serverUrl: undefined,
-        name: "till-1",
-        stateDir: "/d",
-        setupPort: 9110,
-      },
-    );
+    expect(readEnv({ WAITRON_STATE_DIR: "  /d  " }, "h")).toEqual({
+      serverUrl: undefined,
+      name: "h",
+      stateDir: "/d",
+      setupPort: 9110,
+    });
   });
 
   it("refuses a server url that is not an http(s) origin", () => {
-    expect(() => readEnv({ WAITRON_SERVER_URL: "not a url" }, "h")).toThrow(/WAITRON_SERVER_URL/);
-    expect(() => readEnv({ WAITRON_SERVER_URL: "ftp://box.test" }, "h")).toThrow(
-      /WAITRON_SERVER_URL/,
+    expect(() => readEnv({ WAITRON_PRINT_AGENT_SERVER_URL: "not a url" }, "h")).toThrow(
+      /WAITRON_PRINT_AGENT_SERVER_URL/,
+    );
+    expect(() => readEnv({ WAITRON_PRINT_AGENT_SERVER_URL: "ftp://box.test" }, "h")).toThrow(
+      /WAITRON_PRINT_AGENT_SERVER_URL/,
     );
   });
 

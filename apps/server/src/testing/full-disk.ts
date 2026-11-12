@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 export const REQUIRE_FULL_DISK =
-  process.env.CI === "true" || process.env.WAITRON_REQUIRE_FULL_DISK === "1";
+  process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 
 /** The largest filesystem the harness will fill, so a folder on a machine's main disk is refused. */
 const MAX_FILESYSTEM_BYTES = 64 * 1024 * 1024;
@@ -135,20 +135,20 @@ function hdiutilImage(sizeMiB: number): { ok: true; disk: SmallDisk } {
   return { ok: true, disk: smallDiskAt(mount, close) };
 }
 
-/**
- * A filesystem of 64 MiB or less that the tests may fill, or why there is none. Each file that fills
- * one names its own variable, so one file's fill never takes the room another's case measures.
- * `imageMiB` sizes the macOS image only; a named folder is whatever size its filesystem is.
- */
+export type FullDiskFolder =
+  "start" | "start-again" | "from-spare" | "backup-room" | "handover" | "placement" | "restore";
+
+/** Each filling test file has its own filesystem; imageMiB sizes the macOS image only. */
 export function openSmallDisk(
-  variable = "WAITRON_FULL_DISK_DIR",
+  folder: FullDiskFolder | "test-only",
   imageMiB = 32,
 ): { ok: true; disk: SmallDisk } | { ok: false; reason: string } {
-  const dir = process.env[variable];
-  if (dir !== undefined && dir !== "") return namedFolder(variable, dir);
+  const root = process.env.WAITRON_FULL_DISK_ROOT;
+  if (root !== undefined && root !== "")
+    return namedFolder(`WAITRON_FULL_DISK_ROOT/${folder}`, join(root, folder));
   if (process.platform === "darwin") return hdiutilImage(imageMiB);
   return {
     ok: false,
-    reason: `no small filesystem: set ${variable} to one of 64 MiB or less`,
+    reason: `no small filesystem: set WAITRON_FULL_DISK_ROOT to a folder whose ${folder} folder is a filesystem of 64 MiB or less`,
   };
 }

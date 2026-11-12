@@ -66,7 +66,7 @@ alone and says so in its row.
 `setup:litestream` downloads the pinned litestream release into the gitignored `.bin/` for this
 host's platform. Nothing else installs it, so the scenarios that drive litestream report SKIPPED
 until it has been run — every one of them but S4, which degrades to its SQLite half instead ("What S4
-measures, and what it does not", below). `resolveLitestream()` (`src/litestream.ts`) also accepts `$LITESTREAM_BIN` or
+measures, and what it does not", below). `resolveLitestream()` (`src/litestream.ts`) also accepts `$WAITRON_LITESTREAM_BIN` or
 a `litestream` on `PATH`, and takes **only** the pinned version from any of the three — each recorded
 result is a measurement on the version its row names, so a different build answering the same calls
 would be a result attributed to a version that never ran.

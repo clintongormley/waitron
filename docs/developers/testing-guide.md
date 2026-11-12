@@ -932,6 +932,8 @@ It leaves the other side of the pair open, which is the next section.
 
 ### The child's own retry budget is part of the test's worst case
 
+2026-11-12, env2: current runs use `WAITRON_TEST_HEALTH_TRIES` and `WAITRON_TEST_HEALTH_DELAY`; the measurements below keep their original names.
+
 The pair of bounds protects against two different failures, and reasoning about one says nothing
 about the other. Vitest's per-test timeout can fail a healthy test for its DURATION; `spawnSync`'s
 timeout KILLS a child that is still working. A suite can get the first right and still fail healthy
@@ -1198,7 +1200,7 @@ against Amazon S3 by hand, without the frozen-server stage's timing check: see [
 **Binaries.** `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs` installs
 both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
 the test elsewhere. A missing binary, or one reporting another version, SKIPS the case locally, and
-FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIRE_STREAM_BINARIES=1`.
+FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIRE_TEST_TOOLS=1`.
 CI runs both tests in `test-server-stream`, the one job that installs both binaries, together
 with the S3 test server's own suite, `apps/server/src/testing/s3-test-server.test.ts`, whose
 cases that start versitygw skip and fail the same way; its other cases start a stub or Node in
@@ -1508,15 +1510,17 @@ the system actually raise when the disk is full, and whether the start then does
 That is `apps/server/src/start-full-disk.e2e.test.ts`, and it needs a filesystem small enough to
 fill in a second.
 
+2026-11-12, env2: current runs use `WAITRON_REQUIRE_TEST_TOOLS=1` and the shared root below; dated run records retain their original names.
+
 **Where the filesystem comes from** (`apps/server/src/testing/full-disk.ts`, `openSmallDisk`):
 
-- With `WAITRON_FULL_DISK_DIR` set, the tests use that folder. They refuse it when its filesystem
+- With `WAITRON_FULL_DISK_ROOT` set, each test file uses its own folder below that root, as named below. They refuse it when its filesystem
   holds more than 64 MiB (`blocks × frsize` from `statfs`), so a typo naming a large disk is
   refused, and they work inside a fresh `wt-full-disk-*` folder there that they remove at the end.
   The limit refuses a large filesystem; it does not check that the folder is the one you meant.
 - Without it, on macOS, they make their own: an HFS+ image, `disk.dmg`, of the size the file passes
-  as `openSmallDisk`'s second argument (32 MiB for every file but `start-from-spare.e2e.test.ts`,
-  which passes 48), in a fresh `wt-full-disk-*` folder under the system's temporary folder, created
+  as `openSmallDisk`'s second argument (32 MiB by default, 48 MiB for
+  `start-from-spare.e2e.test.ts` and 64 MiB for `handover-placement-full-disk.e2e.test.ts`), in a fresh `wt-full-disk-*` folder under the system's temporary folder, created
   with `hdiutil create -size 32m -fs HFS+ -volname wt-full-disk -layout NONE` (`-size 48m` for
   `start-from-spare.e2e.test.ts`) and attached at `mnt` beside it with
   `hdiutil attach -nobrowse -noautoopen`. No `sudo` is needed (F1 below). At the end they detach it
@@ -1526,7 +1530,7 @@ fill in a second.
 - Otherwise, which means Linux without the variable, there is no small filesystem. The cases are
   SKIPPED, with `start-full-disk tests SKIPPED: <reason>` printed (hidden under an AI agent unless
   `AI_AGENT` and `CLAUDECODE` are unset), and **a skip reads as a pass**: the run prints
-  `Tests  7 skipped (7)` and exits 0. With `CI=true` or `WAITRON_REQUIRE_FULL_DISK=1` the same run
+  `Tests  7 skipped (7)` and exits 0. With `CI=true` or `WAITRON_REQUIRE_TEST_TOOLS=1` the same run
   FAILS instead, each case with `full-disk tests cannot run: <reason>`. This is the stream loop
   test's trap again. Measured 2026-10-21 on macOS by pointing the variable at `/tmp`, whose
   filesystem is far over the limit: `Tests  7 skipped (7)`; with `WAITRON_REQUIRE_FULL_DISK=1` added,
@@ -1539,8 +1543,8 @@ through `freeSpaceFloor`, because a filesystem of 64 MiB or less can never have 
 256 MiB free.
 
 **In CI** the file runs in `test-server-stream`, which already uses `sudo` for loopback's packet
-size. A step before the tests mounts a 32 MiB tmpfs at `$RUNNER_TEMP/full-disk` and gives it to the
-runner's user, the run step names it in `WAITRON_FULL_DISK_DIR`, and every `test-server` shard
+size. A step before the tests mounts a 32 MiB tmpfs at `$RUNNER_TEMP/full-disk/start` and gives it to the
+runner's user. The run step sets `WAITRON_FULL_DISK_ROOT` to `$RUNNER_TEMP/full-disk`, and every `test-server` shard
 excludes the file. Guard: the stream job's cases in `scripts/ci-workflow.test.mjs`, weaker than
 their name: they read `ci.yml` as text, so a step an `if:` switches off still passes them. Before the
 branch's first CI run, the mount had been run only in a privileged Linux container on Docker
@@ -1558,8 +1562,8 @@ with no spare file, that restart serves the full-disk page instead. It builds it
 held setup from the held-database fixture (`apps/server/test/held-setup-database.ts`), whose
 module-level hooks must not run in `start-full-disk.e2e.test.ts`, so it is a file of its own, and
 two files filling one filesystem at once could fail each other: the server's test files run up to four at once
-(`maxWorkers: 4`, `apps/server/vitest.config.ts`). It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN", 32)`,
-and CI mounts a second 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-start-again` for it in the same
+(`maxWorkers: 4`, `apps/server/vitest.config.ts`). It calls `openSmallDisk("start-again", 32)`,
+and CI mounts a second 32 MiB tmpfs at `$RUNNER_TEMP/full-disk/start-again` for it in the same
 `test-server-stream` step. On macOS each file makes its own image. While it runs, the file points
 `TMPDIR` at the small disk's `tmp` folder, so each case's folders land on the small disk (the suite's
 database, made earlier, does not). In `start-full-disk.e2e.test.ts`, `entryDeps` (which
@@ -1571,9 +1575,9 @@ passes `spareBytes: 0` for none.
 boots and the tills are stopped; without one the full-disk page is served; after a release the
 stop holds across a restart; and the running box writes the spare back and lifts it. It needs the
 `@hono/node-server` module mock, which must not reach the other two files, so it is a file of its
-own. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE", 48)`, and CI mounts a third tmpfs
-at `$RUNNER_TEMP/full-disk-from-spare` in the same step. CI's tmpfs and the macOS image are 48 MiB
-for this file, not 32 (a folder named in `WAITRON_FULL_DISK_DIR_FROM_SPARE` is whatever size its
+own. It calls `openSmallDisk("from-spare", 48)`, and CI mounts a third tmpfs
+at `$RUNNER_TEMP/full-disk/from-spare` in the same step. CI's tmpfs and the macOS image are 48 MiB
+for this file, not 32 (a folder named in `WAITRON_FULL_DISK_ROOT/from-spare` is whatever size its
 filesystem is): on 2026-11-03 (A1313) a 32 MiB macOS image held the migrated venue (4374528 bytes)
 and the 6 MiB spare with only 21987328 bytes free, less than the no-release case's 21.5 MiB, so its fill
 wrote nothing and the case failed. The boot-from-zero case uses the real 8 MiB
@@ -1591,8 +1595,8 @@ assert it while the server is up, so a run on the edge fails rather than passing
 two and three copies it deletes the older archive and stores; when even every deletable archive
 cannot meet the need it deletes nothing and is refused before copying; and a copy larger than the
 estimate is refused before the folder copy. It fills its disk, so it has one of its own: it calls
-`openSmallDisk("WAITRON_FULL_DISK_DIR_BACKUP_ROOM", 32)`, and CI mounts a fourth 32 MiB tmpfs at
-`$RUNNER_TEMP/full-disk-backup-room` in the same step. On a 32 MiB disk the product's 256 MiB floor
+`openSmallDisk("backup-room", 32)`, and CI mounts a fourth 32 MiB tmpfs at
+`$RUNNER_TEMP/full-disk/backup-room` in the same step. On a 32 MiB disk the product's 256 MiB floor
 and 2 GiB aim can never be met, so the file passes `spaceFloorBytes` 1 MiB and `spaceAimBytes`
 4 MiB with a 6 MiB estimate. Its measured figures are HFS+; CI's tmpfs is its first Linux run.
 
@@ -1603,8 +1607,8 @@ the file goes, the copy fits, the operation reaches `copy_accepted`, and with no
 copy it waits on `handover.no_room_to_place` rather than ask the old box to give up filing. Its
 control leaves room for half a copy, and the disk refuses with `ENOSPC`. The comparison is a stand-in
 and the old box's copy route a stub; the disk is what it is about. It calls
-`openSmallDisk("WAITRON_FULL_DISK_DIR_HANDOVER", 32)`, and CI mounts a fifth 32 MiB tmpfs at
-`$RUNNER_TEMP/full-disk-handover` in the same step.
+`openSmallDisk("handover", 32)`, and CI mounts a fifth 32 MiB tmpfs at
+`$RUNNER_TEMP/full-disk/handover` in the same step.
 
 **A sixth real-disk file checks what a spare says when placing runs out of room.**
 `apps/server/src/handover-placement-full-disk.e2e.test.ts` runs production's entry, with a real
@@ -1612,16 +1616,16 @@ start, over a box whose venue and state folders are on a small disk. A 24 MiB ac
 20 MiB free and then with 2 MiB free, ends in `handover.placement_no_room` and its page, and the next
 start with room places. Over 16 MiB free the partial copy's removal leaves too much room for the
 start's own full-disk check to name the failure. It calls
-`openSmallDisk("WAITRON_FULL_DISK_DIR_PLACEMENT", 64)`, and CI mounts a sixth tmpfs, 64 MiB, at
-`$RUNNER_TEMP/full-disk-placement` in the same step.
+`openSmallDisk("placement", 64)`, and CI mounts a sixth tmpfs, 64 MiB, at
+`$RUNNER_TEMP/full-disk/placement` in the same step.
 
 **A seventh real-disk file checks that a restore which runs out of room changes nothing.**
 `apps/server/src/restore-full-disk.e2e.test.ts` runs `restoreFromArtifact` with the box's state and
 venue folders on a small disk and its staging folder on the normal one. With too little room for a
 2 MiB secret the restore fails `ENOSPC` while staging that secret; with room for the secrets but not
 a 4 MiB database it fails `ENOSPC` copying the database. Both times the box's database, identity and
-secrets are left as they were. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_RESTORE", 32)`, and CI
-mounts a seventh 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-restore` in the same step.
+secrets are left as they were. It calls `openSmallDisk("restore", 32)`, and CI
+mounts a seventh 32 MiB tmpfs at `$RUNNER_TEMP/full-disk/restore` in the same step.
 
 **A test that runs a backup through the supervisor or boot depends on the machine's free disk.**
 The supervisor passes the run no floor or aim, so the product's defaults apply: below the need plus
@@ -1646,8 +1650,8 @@ hdiutil detach <mount>                # the …/mnt path from the /dev/diskN lin
 rm -rf <the wt-full-disk-XXXXXX folder above it>
 ```
 
-With `WAITRON_FULL_DISK_DIR` set, an interrupted run leaves a `wt-full-disk-*` folder, filler
-included, inside that filesystem instead; delete it.
+With `WAITRON_FULL_DISK_ROOT` set, an interrupted run leaves a `wt-full-disk-*` folder, filler
+included, inside that file's filesystem below the root instead; delete it.
 
 **What the cases show, on HFS+.** Run 2026-10-21 on macOS 26.6.2, Node v26.11.1, Vitest 4.1.11,
 `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts`: `Tests  7 passed
@@ -3718,6 +3722,10 @@ owner has not approved it separately.
   defaults**, so the floor timings leave out the work a floor plan would add.
 
 ## Root receipt excerpts moved on 2026-10-23
+
+2026-11-12, env2: the retained excerpts below keep their historical names. Current runs use
+`WAITRON_TEST_HEALTH_DELAY`, `WAITRON_REQUIRE_TEST_TOOLS` and `WAITRON_FULL_DISK_ROOT` as described above.
+
 
 These passages retain the root instruction receipts moved by A1026. They are excerpts
 from `CLAUDE.md` at `0285925d8c0ff55c1e4b86423a0471e78ab6e9b8`, not new measurements.

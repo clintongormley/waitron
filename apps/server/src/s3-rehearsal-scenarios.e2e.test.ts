@@ -1,7 +1,7 @@
 // The Amazon S3 rehearsal's scenarios run against versitygw (`./testing/s3-test-server.ts`), so each
 // runs locally before a rehearsal sends it to AWS. Install the server with
 // `node scripts/setup-s3-test-server.mjs`. Without it each case is reported SKIPPED; with CI=true or
-// WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS the case instead.
+// WAITRON_REQUIRE_TEST_TOOLS=1 a missing binary FAILS the case instead.
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -29,7 +29,7 @@ import {
 } from "./testing/s3-test-server.js";
 
 const INSTALL = "node scripts/setup-s3-test-server.mjs";
-const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 // After an abort a scenario may still be decrypting, which takes no stop signal.
 const ABORT_SETTLE_MS = 60_000;
 

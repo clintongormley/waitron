@@ -678,7 +678,7 @@ it("the real preproduction deployment adapter completes publication through the 
       db,
       node,
       environment: {
-        WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+        WAITRON_MANAGEMENT_ORIGIN: "https://olivo.example.test:3443",
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
       },
     });
@@ -695,7 +695,7 @@ it("a person who answers each recovery-pack question a minute late still complet
       db,
       node,
       environment: {
-        WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+        WAITRON_MANAGEMENT_ORIGIN: "https://olivo.example.test:3443",
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
       },
     });
@@ -827,7 +827,7 @@ async function realActivationFixture(environment: Record<string, string | undefi
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
   let interrupted = false;
   const env: Record<string, string | undefined> = {
-    WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+    WAITRON_MANAGEMENT_ORIGIN: "https://olivo.example.test:3443",
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
     ...environment,
   };
@@ -869,7 +869,7 @@ it.each([
   "https://olivo.example.test/?q=1",
   "https://olivo.example.test/#fragment",
 ])("an unusable membership origin (%s) refuses before venue creation", async (origin) => {
-  const f = await realActivationFixture({ WAITRON_ADVERTISED_ORIGIN: origin });
+  const f = await realActivationFixture({ WAITRON_MANAGEMENT_ORIGIN: origin });
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readTenantIdentities(venue.db)).toEqual([]);

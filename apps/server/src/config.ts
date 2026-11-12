@@ -98,12 +98,6 @@ export interface ServerConfig {
    * the configured Google redirect and the server route cannot drift. */
   googleOidc?: { clientId: string; clientSecret: string; redirectUri: string };
   /**
-   * This node's configured origin, and what the CORS allow-list treats as "self". Its chart row's
-   * `contactUrl` is `ownContactUrl` of it (`box-name.ts`). From `WAITRON_ADVERTISED_ORIGIN`; unset
-   * or empty → `managementOrigin`.
-   */
-  advertisedOrigin: string;
-  /**
    * The device cookie's `Domain` when the request host is under it, so one credential reaches
    * every one of the venue's servers after a promotion. From `WAITRON_TENANT_DOMAIN`, lower-cased;
    * unset OR empty → undefined (host-only cookies); a value carrying `/`, `:` or whitespace is
@@ -453,8 +447,6 @@ export function loadConfig(
       reason: "not_an_installation_origin",
     });
   }
-  // Resolved before the literal because `advertisedOrigin` defaults to `managementOrigin`. The RP
-  // ID first, so a production host missing both reports the RP ID.
   const managementRpId = requiredInProduction(
     env,
     "WAITRON_MANAGEMENT_RP_ID",
@@ -532,9 +524,6 @@ export function loadConfig(
           },
         }
       : {}),
-    advertisedOrigin: isUnset(env.WAITRON_ADVERTISED_ORIGIN)
-      ? managementOrigin
-      : bareOrigin(env.WAITRON_ADVERTISED_ORIGIN, "WAITRON_ADVERTISED_ORIGIN"),
     tenantDomain: loadTenantDomain(env),
     tillAppDir: isUnset(env.WAITRON_TILL_APP_DIR) ? undefined : env.WAITRON_TILL_APP_DIR,
     dashboardAppDir: isUnset(env.WAITRON_DASHBOARD_APP_DIR)

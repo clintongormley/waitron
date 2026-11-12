@@ -117,7 +117,7 @@ async function withServer(
       WAITRON_NODE_ID: venue.cfg.nodeId,
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
-      WAITRON_ADVERTISED_ORIGIN: TRUSTED,
+      WAITRON_MANAGEMENT_ORIGIN: TRUSTED,
       ...env,
     };
     if (env.WAITRON_STAFF_ORIGIN) {
@@ -204,11 +204,8 @@ describe("a management change in the running server", () => {
       const own = `http://127.0.0.1:${httpPort()}`;
       const rows: [string, Record<string, string>][] = [
         ["the box's own page", { origin: own, "sec-fetch-site": "same-origin" }],
-        [
-          "the dashboard on managementOrigin",
-          { origin: "http://localhost:5191", "sec-fetch-site": "same-origin" },
-        ],
-        ["a page on the advertised origin", { origin: TRUSTED, "sec-fetch-site": "cross-site" }],
+        ["the dashboard on managementOrigin", { origin: TRUSTED, "sec-fetch-site": "same-origin" }],
+        ["a page on the management origin", { origin: TRUSTED, "sec-fetch-site": "cross-site" }],
         ["a tool sending neither header", {}],
         ["a page the person opened themselves", { origin: own, "sec-fetch-site": "none" }],
       ];

@@ -288,7 +288,7 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
       WAITRON_BOX_ADDRESSES: "10.1.2.3",
-      WAITRON_ADVERTISED_ORIGIN: "https://box.example.test",
+      WAITRON_MANAGEMENT_ORIGIN: "https://box.example.test",
     });
     try {
       await awaitListening(httpPort());

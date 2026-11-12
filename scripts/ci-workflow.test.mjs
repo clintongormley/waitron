@@ -4351,16 +4351,17 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
 
   // Each real-disk file fills its own filesystem, so one file's fill never takes another's room.
   it.each([
-    ["full-disk", "WAITRON_FULL_DISK_DIR", "32m"],
-    ["full-disk-start-again", "WAITRON_FULL_DISK_DIR_START_AGAIN", "32m"],
-    ["full-disk-from-spare", "WAITRON_FULL_DISK_DIR_FROM_SPARE", "48m"],
-    ["full-disk-backup-room", "WAITRON_FULL_DISK_DIR_BACKUP_ROOM", "32m"],
-    ["full-disk-handover", "WAITRON_FULL_DISK_DIR_HANDOVER", "32m"],
-    ["full-disk-placement", "WAITRON_FULL_DISK_DIR_PLACEMENT", "64m"],
-    ["full-disk-restore", "WAITRON_FULL_DISK_DIR_RESTORE", "32m"],
+    ["start", "32m"],
+    ["start-again", "32m"],
+    ["from-spare", "48m"],
+    ["backup-room", "32m"],
+    ["handover", "32m"],
+    ["placement", "64m"],
+    ["restore", "32m"],
   ])(
-    "mounts a small filesystem at %s before it runs them, and names it to the tests as %s",
-    (dir, variable, size) => {
+    "mounts a small filesystem at %s before it runs them, under the shared test root",
+    (folder, size) => {
+      const dir = `full-disk/${folder}`;
       const body = stream().body;
       const code = (line) => !line.trim().startsWith("#");
       const run = body.findIndex((line) => code(line) && /pnpm .*\btest:shard\b/.test(line));
@@ -4382,7 +4383,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
       const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
       const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
       expect(body.slice(stepStart, runKey)).toContain(
-        `          ${variable}: \${{ runner.temp }}/${dir}`,
+        "          WAITRON_FULL_DISK_ROOT: ${{ runner.temp }}/full-disk",
       );
     },
   );

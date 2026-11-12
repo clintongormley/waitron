@@ -288,7 +288,7 @@ stub(
 case "$*" in
   "show -p FragmentPath --value bluetooth.service") [ -n "\${WT_BT_UNIT}" ] && echo "\${WT_BT_UNIT}" ;;
   "show -p DropInPaths --value bluetooth.service")
-    find "$(dirname "\${WAITRON_SH_BLUETOOTH_DROPIN}")" -maxdepth 1 -name '*.conf' 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' ;;
+    find "\${WAITRON_TEST_HOST_ROOT}/etc/systemd/system/bluetooth.service.d" -maxdepth 1 -name '*.conf' 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' ;;
   "enable --now waitron-box.socket") [ "\${WT_BOX_ENABLE_FAIL}" = "1" ] && exit 1 ;;
   "restart bluetooth")
     n=$(cat "\${WT_LOG}.restarts" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.restarts"
@@ -422,10 +422,10 @@ function sandbox({
   }
   // The box's clock service is installed only on a host that booted with systemd, which a case asks
   // for with `systemd: true`; every other case is a host without it, so that step adds no calls.
-  const systemdDir = join(root, systemd ? "run-systemd-system" : "no-systemd");
-  if (systemd) mkdirSync(systemdDir);
-  mkdirSync(join(root, "units"));
-  const dropIn = join(root, "bluetooth.service.d", "waitron-noautopair.conf");
+  const systemdDir = join(root, "run/systemd/system");
+  if (systemd) mkdirSync(systemdDir, { recursive: true });
+  mkdirSync(join(root, "etc/systemd/system"), { recursive: true });
+  const dropIn = join(root, "etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf");
   // Other drop-ins of bluetooth.service, by file name: written beside ours before the case runs.
   for (const [name, body] of Object.entries(bluetoothDropIns)) {
     mkdirSync(dirname(dropIn), { recursive: true });
@@ -448,7 +448,7 @@ function sandbox({
       WT_BT_UNIT: unit,
       WT_BT_RESTART_FAIL: bluetoothRestartFail === true ? "1" : bluetoothRestartFail || "0",
       WT_MKTEMP_FAIL: mktempFail,
-      WAITRON_SH_BLUETOOTH_DROPIN: dropIn,
+      WAITRON_TEST_HOST_ROOT: root,
       WT_LOG: log,
       WT_TRADING_ENV: tradingEnv,
       WT_DB_STAMP: dbStamp,
@@ -471,9 +471,6 @@ function sandbox({
       WT_RMI_FAIL: rmiFail ? "1" : "0",
       WT_GROUPS: groups,
       WT_BOX_ENABLE_FAIL: boxEnableFail ? "1" : "0",
-      WAITRON_SH_SYSTEMD_DIR: systemdDir,
-      WAITRON_SH_BOX_LIB_DIR: join(root, "lib"),
-      WAITRON_SH_BOX_UNIT_DIR: join(root, "units"),
       // A path that does not exist: no case reads the machine's own routing table.
       WAITRON_SH_PROC_NET_ROUTE: join(root, "no-route"),
     },
@@ -489,7 +486,7 @@ function sandbox({
 //
 // spawnSync's timeout is the OTHER side, and it kills a child that is still working. It therefore
 // has to clear the child's own worst case: `wait_healthy` in `deploy/waitron.sh` retries for about
-// three minutes by default, which no per-test bound can rescue. `WAITRON_SH_HEALTH_DELAY` below
+// three minutes by default, which no per-test bound can rescue. `WAITRON_TEST_HEALTH_DELAY` below
 // shrinks that budget for every case while leaving the retrying in place. Receipt in
 // `docs/developers/testing-guide.md`.
 const RUN_TIMEOUT_MS = 20_000;
@@ -503,7 +500,7 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
       PATH: `${STUB_BIN}${delimiter}${process.env.PATH}`,
       WAITRON_DIR: sb.boxDir,
       // The child's whole health-retry budget, shrunk from ~175s to ~2s.
-      WAITRON_SH_HEALTH_DELAY: "0.05",
+      WAITRON_TEST_HEALTH_DELAY: "0.05",
       ...sb.env,
       ...extraEnv,
     },
@@ -1434,7 +1431,7 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     const retried = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
     writeFileSync(retried.log, "");
     // The same directory the failed run left: nothing there, so this install writes and restarts.
-    retried.env.WAITRON_SH_BLUETOOTH_DROPIN = failed.dropIn;
+    retried.env.WAITRON_TEST_HOST_ROOT = failed.root;
     retried.env.WT_SANDBOX = failed.root;
     expect(run(retried, ["install"]).status).toBe(0);
     expect(existsSync(failed.dropIn)).toBe(true);
@@ -1531,9 +1528,9 @@ describe("waitron.sh install and the box's host service", () => {
     );
     const grouped = log.indexOf("groupadd --system --gid 10001 waitron-box");
     const installed = [
-      ["0755", join(sb.root, "lib", "waitron-box.sh")],
-      ["0644", join(sb.root, "units", "waitron-box.socket")],
-      ["0644", join(sb.root, "units", "waitron-box@.service")],
+      ["0755", join(sb.root, "usr/local/lib/waitron", "waitron-box.sh")],
+      ["0644", join(sb.root, "etc/systemd/system", "waitron-box.socket")],
+      ["0644", join(sb.root, "etc/systemd/system", "waitron-box@.service")],
     ].map(([mode, dest]) =>
       log.findIndex(
         (c) => c.startsWith(`install -m ${mode} -o root -g root `) && c.endsWith(` ${dest}`),
@@ -1547,9 +1544,15 @@ describe("waitron.sh install and the box's host service", () => {
     expect(reloaded).toBeGreaterThan(Math.max(...installed));
     expect(enabled).toBeGreaterThan(reloaded);
     expect(up).toBeGreaterThan(enabled);
-    expect(statSync(join(sb.root, "lib", "waitron-box.sh")).mode & 0o777).toBe(0o755);
-    expect(statSync(join(sb.root, "units", "waitron-box.socket")).mode & 0o777).toBe(0o644);
-    expect(statSync(join(sb.root, "units", "waitron-box@.service")).mode & 0o777).toBe(0o644);
+    expect(statSync(join(sb.root, "usr/local/lib/waitron", "waitron-box.sh")).mode & 0o777).toBe(
+      0o755,
+    );
+    expect(statSync(join(sb.root, "etc/systemd/system", "waitron-box.socket")).mode & 0o777).toBe(
+      0o644,
+    );
+    expect(statSync(join(sb.root, "etc/systemd/system", "waitron-box@.service")).mode & 0o777).toBe(
+      0o644,
+    );
     expect(env(sb)).toMatch(/^WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
     expect(r.stdout).toContain("installed the box's clock service");
   });
@@ -1595,7 +1598,10 @@ describe("waitron.sh install and the box's host service", () => {
 
   it("restarts a running socket whose file an update changed, and only then", () => {
     const changed = sandbox({ systemd: true });
-    writeFileSync(join(changed.root, "units", "waitron-box.socket"), "[Socket]\nold\n");
+    writeFileSync(
+      join(changed.root, "etc/systemd/system", "waitron-box.socket"),
+      "[Socket]\nold\n",
+    );
     expect(run(changed, ["install"]).status).toBe(0);
     const log = calls(changed);
     expect(log.indexOf("systemctl restart waitron-box.socket")).toBeGreaterThan(
@@ -1603,7 +1609,7 @@ describe("waitron.sh install and the box's host service", () => {
     );
     const same = sandbox({ systemd: true });
     // The curl stand-in serves every box file as this one line.
-    writeFileSync(join(same.root, "units", "waitron-box.socket"), "stub\n");
+    writeFileSync(join(same.root, "etc/systemd/system", "waitron-box.socket"), "stub\n");
     expect(run(same, ["install"]).status).toBe(0);
     expect(calls(same)).toContain("systemctl enable --now waitron-box.socket");
     expect(calls(same)).not.toContain("systemctl restart waitron-box.socket");
@@ -1656,7 +1662,7 @@ describe("waitron.sh install deletes the images the box ran before", () => {
 
   it("keeps the old images when the new box does not come up healthy", () => {
     const sb = sandbox({ oldImages: true, dockerPs: "unhealthy" });
-    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    const r = run(sb, ["install"], { WAITRON_TEST_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
     expect(removals(sb)).toEqual([]);
   });
@@ -1720,14 +1726,14 @@ describe("waitron.sh health check", () => {
   // "unhealthy" contains "healthy": the whole health value must match, not a substring.
   it("does not report an unhealthy container as ready", () => {
     const sb = sandbox({ dockerPs: "unhealthy" });
-    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    const r = run(sb, ["install"], { WAITRON_TEST_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/did not come up healthy/);
   });
-  // Both cases below leave WAITRON_SH_MAX_HEALTH_TRIES alone, so they run the try count the script
+  // Both cases below leave WAITRON_TEST_HEALTH_TRIES alone, so they run the try count the script
   // ships, and both assert the probe COUNT — the status and the message alone are satisfied by a
   // child that never retries at all.
-  const SHIPPED_TRIES = readFileSync(SCRIPT, "utf8").match(/WAITRON_SH_MAX_HEALTH_TRIES:-(\d+)/)[1];
+  const SHIPPED_TRIES = readFileSync(SCRIPT, "utf8").match(/WAITRON_TEST_HEALTH_TRIES:-(\d+)/)[1];
   const probes = (sb) => readFileSync(`${sb.log}.probes`, "utf8").trim();
 
   it("retries while the container has no health verdict yet, then succeeds", () => {
@@ -1738,7 +1744,7 @@ describe("waitron.sh health check", () => {
     expect(r.stdout).toContain("https://waitron.local/manage/email");
   });
 
-  // This is the case that holds the spawn bound: delete `WAITRON_SH_HEALTH_DELAY` from `run()` and
+  // This is the case that holds the spawn bound: delete `WAITRON_TEST_HEALTH_DELAY` from `run()` and
   // the child retries for ~175s, so `spawnSync` kills it. The case above does NOT prove that.
   it("gives up with the unhealthy message after the shipped number of tries", () => {
     const sb = sandbox({ dockerPs: "starting" });
@@ -1768,7 +1774,7 @@ describe("waitron.sh database_ahead advice", () => {
   // The try pin keeps these cases to one probe, so a failure here reads as the advice being wrong.
   it("tells a non-production box to reset", () => {
     const sb = sandbox({ dockerPs: "starting", aheadLogs: true });
-    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    const r = run(sb, ["install"], { WAITRON_TEST_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("in one step: 'waitron.sh --reset install [ref]'");
   });
@@ -1779,7 +1785,7 @@ describe("waitron.sh database_ahead advice", () => {
       aheadLogs: true,
       tradingEnv: "WAITRON_ENV=production",
     });
-    const r = run(sb, ["install"], { WAITRON_SH_MAX_HEALTH_TRIES: "1" });
+    const r = run(sb, ["install"], { WAITRON_TEST_HEALTH_TRIES: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/install the version that wrote the database/i);
     expect(r.stderr).not.toMatch(/waitron\.sh (--reset|reset)\b/);

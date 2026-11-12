@@ -3041,7 +3041,7 @@ full disk with a stamp due, and PIN sign-in still refuses" (`GET /api/till` and
 notice reader answers on a full disk with a change waiting, and a source that writes fails alone";
 and "the equipment read answers with the red notice on a full disk with a change waiting". They run
 on macOS through `hdiutil` and in CI on a tmpfs, and skip on a Linux machine without
-`WAITRON_FULL_DISK_DIR` (see [testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
+`WAITRON_FULL_DISK_ROOT` (see [testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
 
 **The dashboard's full-disk reads (A798-B slice 7).** Measured for the slice
 ([plan](../superpowers/plans/2026-10-22-a798-7-box-status-page.md#measured-for-this-plan)), on the
@@ -3080,7 +3080,7 @@ change waiting", "free-space deletion frees a rotated log on a full disk, and th
 "a supervisor is refused on a full disk". The fallback's own refusals (a supervisor, an ended,
 expired or suspended session) are pinned by the "on a full disk" half of the `describe.each` in
 `box-health-api.test.ts`, through a stand-in that refuses every write turn. On the real disk a
-supervisor is refused before the fallback. Measured 2026-10-22 on macOS with the harness's `hdiutil`
+supervisor is refused before the fallback. Current runs use `WAITRON_REQUIRE_TEST_TOOLS=1` (env2, 2026-11-12); the following measurement keeps its original command. Measured 2026-10-22 on macOS with the harness's `hdiutil`
 image: with `box-health-api.ts`'s fallback `return (await check(db, false)).authorizedBy;` replaced
 by `throw error;`, `WAITRON_REQUIRE_FULL_DISK=1 pnpm exec vitest run
 src/start-full-disk.e2e.test.ts -t 'a supervisor is refused on a full disk'` in `apps/server` still

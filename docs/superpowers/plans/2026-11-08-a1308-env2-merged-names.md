@@ -31,6 +31,20 @@ variable is set nowhere outside tests, environment.md §3). Read, not run.
 
 **No venue reset.**
 
+## Current-base corrections, 2026-11-12
+
+The watcher cleared these corrections in Lane H's questions.md at 22:44 and 23:31:
+include the newer tag and network host helpers under `WAITRON_TEST_HOST_ROOT`; preserve dated
+receipts and update only current instructions, with dated pointers; omit `first-setup-publication.ts`,
+removed by #2638, and update all eight current `boot.ts` readers; run the print-agent checks against
+`@waitron/print-agent-app`, the application package. The role-named receiving parameters stay. At 23:40 the watcher also cleared retaining
+`EnvConfig.name?: string` so the host's saved-name and final fallback checks remain unchanged;
+`readEnv` always supplies the hostname.
+The retired-name check uses `git grep -w` because a positive control with `git grep -E` and `\b`
+matched nothing on this Mac.
+Historical grep exceptions are the dated retry-budget, full-disk and versitygw measurements in
+`testing-guide.md`, `conventions-data.md` and `aws-backup-rehearsal.md`; current instructions use the new names.
+
 ## Global Constraints
 
 - An empty value counts as unset (`isUnset`, `apps/server/src/env-value.ts:5-7`); the print agent's
@@ -140,7 +154,7 @@ output (about 120 lines across 40 files) and pure deletions. About 3 hours.
 
 1. `node scripts/a1308/env2-renames.mjs && git diff --exit-code` (the script is idempotent on its
    own output).
-2. `git grep -n -E "WAITRON_(ADVERTISED_ORIGIN|SERVER_URL|SETUP_URL|AGENT_NAME|SH_(HEALTH_DELAY|MAX_HEALTH_TRIES|SYSTEMD_DIR|BOX_LIB_DIR|BOX_UNIT_DIR|BLUETOOTH_DROPIN)|BOX_(STATE_DIR|NTP_UNITS_DIRS|UPTIME|TIMESYNC_CLOCK|TIMESYNC_SYNCHRONIZED|READ_SECONDS)|REQUIRE_(STREAM_BINARIES|FULL_DISK)|FULL_DISK_DIR|PREPROD_)\b" -- . ':!docs/superpowers' ':!scripts/a1308'`
+2. `git grep -n -w -E "WAITRON_(ADVERTISED_ORIGIN|SERVER_URL|SETUP_URL|AGENT_NAME|SH_(HEALTH_DELAY|MAX_HEALTH_TRIES|SYSTEMD_DIR|BOX_LIB_DIR|BOX_UNIT_DIR|BLUETOOTH_DROPIN)|BOX_(STATE_DIR|NTP_UNITS_DIRS|UPTIME|TIMESYNC_CLOCK|TIMESYNC_SYNCHRONIZED|READ_SECONDS)|REQUIRE_(STREAM_BINARIES|FULL_DISK)|FULL_DISK_DIR|PREPROD_)" -- . ':!docs/superpowers' ':!scripts/a1308'`
    prints nothing, apart from `apps/print-agent/src/config.test.ts`, whose Task 2 case passes
    `WAITRON_AGENT_NAME` on purpose to prove it is ignored (rerun with `':!apps/print-agent/src/config.test.ts'`
    added and it prints nothing); and `git grep -n -w LITESTREAM_BIN -- bench` prints nothing.

@@ -46,8 +46,8 @@ runs skipped 16 and 195 cases respectively. They do not represent their full sui
 ## Operator work that remains
 
 **Replacement addresses still require configuration.** `loadConfig` in
-[`config.ts`](../../apps/server/src/config.ts) reads `WAITRON_MANAGEMENT_ORIGIN`,
-`WAITRON_MANAGEMENT_RP_ID` and `WAITRON_ADVERTISED_ORIGIN`; the last falls back to the first.
+[`config.ts`](../../apps/server/src/config.ts) reads `WAITRON_MANAGEMENT_ORIGIN` and
+`WAITRON_MANAGEMENT_RP_ID`.
 The first trading start consumes that origin when it rewrites membership. The deployment's
 [`compose.yml`](../../deploy/compose.yml) exposes the management settings, and
 [`deploy/README.md`](../../deploy/README.md) documents them. A guided recovery step should check

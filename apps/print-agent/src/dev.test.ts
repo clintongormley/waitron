@@ -67,16 +67,15 @@ describe("development print agent", () => {
   it("keeps HTTP before the leaf working copy is published", async () => {
     await mkdir(join(stateDir, "tls"));
     await writeFile(join(stateDir, "tls", "server.pem.tmp"), "leaf and private key");
-    expect((await prepareDevEnv({ WAITRON_STATE_DIR: stateDir })).WAITRON_SERVER_URL).toBe(
-      "http://127.0.0.1:8080",
-    );
+    expect(
+      (await prepareDevEnv({ WAITRON_STATE_DIR: stateDir })).WAITRON_PRINT_AGENT_SERVER_URL,
+    ).toBe("http://127.0.0.1:8080");
   });
 
   it("preserves an explicit server and agent options without copying the local CA", async () => {
     const input = {
       WAITRON_STATE_DIR: stateDir,
-      WAITRON_SERVER_URL: "https://other-box.test",
-      WAITRON_AGENT_NAME: "Kitchen",
+      WAITRON_PRINT_AGENT_SERVER_URL: "https://other-box.test",
       WAITRON_SETUP_PORT: "9120",
     };
     expect(await prepareDevEnv(input)).toEqual({
@@ -92,7 +91,7 @@ describe("development print agent", () => {
     async (value) => {
       const env = await prepareDevEnv({
         WAITRON_STATE_DIR: value,
-        WAITRON_SERVER_URL: "http://127.0.0.1:8080",
+        WAITRON_PRINT_AGENT_SERVER_URL: "http://127.0.0.1:8080",
       });
       expect(env.WAITRON_STATE_DIR).toBe(
         fileURLToPath(new URL("../../server/src/state/print-agent", import.meta.url)),
@@ -102,8 +101,8 @@ describe("development print agent", () => {
 
   it("treats a blank server URL as local development", async () => {
     expect(
-      (await prepareDevEnv({ WAITRON_STATE_DIR: stateDir, WAITRON_SERVER_URL: "  " }))
-        .WAITRON_SERVER_URL,
+      (await prepareDevEnv({ WAITRON_STATE_DIR: stateDir, WAITRON_PRINT_AGENT_SERVER_URL: "  " }))
+        .WAITRON_PRINT_AGENT_SERVER_URL,
     ).toBe("http://127.0.0.1:8080");
   });
 });

@@ -1,7 +1,7 @@
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
-// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_BACKUP_ROOM names, or on
+// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/backup-room names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
-// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
+// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem").
 import { randomBytes } from "node:crypto";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
@@ -29,7 +29,7 @@ let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;
 
 beforeAll(() => {
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_BACKUP_ROOM", 32);
+  opened = openSmallDisk("backup-room", 32);
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK)
     console.warn(`backup-room full-disk tests SKIPPED: ${opened.reason}`);

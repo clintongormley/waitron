@@ -3,7 +3,7 @@
 // `./testing/aws-rehearsal-interrupt-driver.ts`, or Vitest running
 // `./testing/aws-rehearsal-interrupt.vitest-case.ts`, in a process group of its own. Install the
 // server with `node scripts/setup-s3-test-server.mjs`. Without it each case is reported SKIPPED;
-// with CI=true or WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS the case.
+// with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 a missing binary FAILS the case.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer, request, type Server } from "node:http";
@@ -46,7 +46,7 @@ import {
 } from "./testing/s3-test-server.js";
 
 const INSTALL = "node scripts/setup-s3-test-server.mjs";
-const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 const DRIVER = fileURLToPath(
   new URL("./testing/aws-rehearsal-interrupt-driver.ts", import.meta.url),
 );

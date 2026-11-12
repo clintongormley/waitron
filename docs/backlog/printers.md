@@ -242,8 +242,7 @@ which the port-9100 sweep cannot reach. The first things to try on the box: add 
 ## The setup-page link is unproven on the box
 
 The print agent builds it from
-`WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
-passes through), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`);
+`WAITRON_PRINT_AGENT_SETUP_URL` (passed through by `deploy/compose.yml`), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`);
 no review seat ran the deployed compose and nobody has yet followed the link from a dashboard on
 the real box.
 

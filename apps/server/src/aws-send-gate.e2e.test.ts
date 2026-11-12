@@ -1,6 +1,6 @@
 // The rehearsal's send gate (`./testing/aws-send-gate.ts`) against versitygw, whose own access log
 // says which requests reached it. Install the server with `node scripts/setup-s3-test-server.mjs`.
-// Without it each case is reported SKIPPED; with CI=true or WAITRON_REQUIRE_STREAM_BINARIES=1 a
+// Without it each case is reported SKIPPED; with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 a
 // missing binary FAILS the case instead.
 import { createServer, type Server } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -33,7 +33,7 @@ import {
 } from "./testing/s3-test-server.js";
 
 const INSTALL = "node scripts/setup-s3-test-server.mjs";
-const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 /** Not a rehearsal bucket's name, so a refusal must not name it. */
 const OTHER_BUCKET = "waitron-other-venue";
 const ISSUED = "issued-run/";
