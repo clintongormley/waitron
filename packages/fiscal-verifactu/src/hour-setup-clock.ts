@@ -55,11 +55,12 @@ function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
 }
 /** Asks the host to set the box's clock from a measured device, unless the device is earlier
- * than the hour already chosen for `binding`: a name is never issued for a minute already named. */
+ * than the hour already chosen for `binding`: the series step would then refuse
+ * `minute_not_later` with the clock already set. */
 export async function setBoxClockFrom(
   host: ModuleOperationHost,
   binding: OperationBinding,
-  state: { readonly value: unknown; readonly history: readonly unknown[] },
+  state: { readonly value: unknown; readonly history: unknown },
   measured: SetupClockMeasurement,
 ): Promise<ModuleClockSetAnswer> {
   if (measured.status === "refused") return measured;

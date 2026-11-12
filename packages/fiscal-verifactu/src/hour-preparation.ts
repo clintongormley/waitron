@@ -9,7 +9,11 @@ import {
 import { AppError } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
-import { createHourSelection, type HourSelectionFacts } from "./hour-selection.js";
+import {
+  createHourSelection,
+  type HourSelectionFacts,
+  type HourSelectionStore,
+} from "./hour-selection.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { HourClockDecision } from "./hour-clock.js";
 import type { HourHistorySource } from "./hour-history.js";
@@ -166,8 +170,12 @@ export function createHostedHourPreparation(
     binding: ModuleOperationInput["binding"],
     run: (
       facts: Awaited<ReturnType<NonNullable<ModuleOperationHost["readSetupFacts"]>>>,
+      state: Parameters<Parameters<HourSelectionStore>[1]>[0],
     ) => T | Promise<T>,
-  ) => host.withPreparationState!(binding, async () => run(await host.readSetupFacts!(binding)));
+  ) =>
+    host.withPreparationState!(binding, async (state) =>
+      run(await host.readSetupFacts!(binding), state),
+    );
   return {
     ...preparation,
     clockChallenge(binding: ModuleOperationInput["binding"]) {
@@ -178,11 +186,14 @@ export function createHostedHourPreparation(
       browser: Parameters<typeof clocks.setFromBrowser>[1],
       client: Parameters<typeof clocks.setFromBrowser>[2],
     ) {
-      return host.withPreparationState!(binding, async (state) => {
-        const facts = await host.readSetupFacts!(binding);
-        const measured = clocks.setFromBrowser(facts.contextKey, browser, client);
-        return setBoxClockFrom(host, binding, state, measured);
-      });
+      return withFacts(binding, (facts, state) =>
+        setBoxClockFrom(
+          host,
+          binding,
+          state,
+          clocks.setFromBrowser(facts.contextKey, browser, client),
+        ),
+      );
     },
     compareClocks(
       binding: ModuleOperationInput["binding"],

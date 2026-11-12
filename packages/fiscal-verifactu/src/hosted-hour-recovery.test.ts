@@ -10,6 +10,7 @@ import {
 import { FISCAL_OPERATIONS } from "./index.js";
 import * as internet from "./hour-clock-internet.js";
 import * as release from "./hour-release.js";
+import { encodeMinuteIdentity } from "./hour-identity.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00.000Z");
 const binding: OperationBinding = {
@@ -829,3 +830,40 @@ it.each([
   });
   expect(setBoxClock).not.toHaveBeenCalled();
 });
+
+it.each(["contradictory", "missing"])(
+  "set-clock refuses a %s preparation history without asking the host",
+  async (kind) => {
+    const f = fixture();
+    vi.setSystemTime(NOW - 120_000);
+    const operations = FISCAL_OPERATIONS.configure!(f.host);
+    await withOperationAuthority(binding, key, async (authority) => {
+      const operation = { binding, authority };
+      await selectAfterWait(operations, operation);
+      const recorded = structuredClone(f.history.at(-1)) as {
+        entries: { kind: string; issuedAt: string; identity: string }[];
+      };
+      const intent = recorded.entries.find((entry) => entry.kind === "intent")!;
+      const later = Date.parse(intent.issuedAt) + 3_600_000;
+      Object.assign(intent, {
+        issuedAt: new Date(later).toISOString(),
+        identity: encodeMinuteIdentity(later),
+      });
+      const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+      f.host.setBoxClock = setBoxClock;
+      const original = f.host.withPreparationState!;
+      f.host.withPreparationState = (held, run) =>
+        original(held, (state) =>
+          run({
+            value: kind === "contradictory" ? recorded : state.value,
+            history: (kind === "contradictory" ? state.history : null) as never,
+            replace: state.replace,
+          }),
+        );
+      await expect(setClock(operations, operation, Date.now())).rejects.toMatchObject(
+        refusal("history_invalid"),
+      );
+      expect(setBoxClock).not.toHaveBeenCalled();
+    });
+  },
+);

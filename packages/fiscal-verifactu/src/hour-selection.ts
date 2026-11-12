@@ -256,15 +256,50 @@ function resumedIntent(entries: readonly Entry[]) {
 }
 
 /** When the hour already chosen for `binding`'s event was issued, if one was. */
+/** Every recorded entry once, refusing `history_invalid` where two copies of one disagree or an
+ * event's resumptions do not follow from its intent. */
+function retainedEntries(state: { readonly value: unknown; readonly history: unknown }): Entry[] {
+  if (!Array.isArray(state.history)) return refuse("history_invalid");
+  const retained = new Map<string, Entry>();
+  for (const value of [state.value, ...state.history]) {
+    for (const entry of parseState(value)) {
+      const key = entryKey(entry);
+      const prior = retained.get(key);
+      const detail = (value: Entry) =>
+        JSON.stringify([
+          fingerprint(value),
+          value.kind !== "wait"
+            ? [value.identity, value.issuedAt, [...value.references].sort()]
+            : value.targetMs,
+          ...(value.kind === "resume" ? [value.fromContextKey, value.documentBinding] : []),
+        ]);
+      if (prior !== undefined && detail(prior) !== detail(entry)) return refuse("history_invalid");
+      retained.set(key, entry);
+    }
+  }
+  const entries = [...retained.values()];
+  const events = new Map<string, Entry[]>();
+  for (const entry of entries) {
+    const key = JSON.stringify([entry.binding.module, entry.binding.eventId]);
+    const group = events.get(key) ?? [];
+    group.push(entry);
+    events.set(key, group);
+  }
+  for (const group of events.values()) resumedIntent(group);
+  return entries;
+}
+
+/** When the hour already chosen for `binding`'s event was issued, if one was. */
 export function chosenHourIssuedAtMs(
-  state: { readonly value: unknown; readonly history: readonly unknown[] },
+  state: { readonly value: unknown; readonly history: unknown },
   binding: OperationBinding,
 ): number | undefined {
-  const entries = new Map<string, Entry>();
-  for (const entry of [state.value, ...state.history].flatMap(parseState))
-    if (entry.binding.module === binding.module && entry.binding.eventId === binding.eventId)
-      entries.set(entryKey(entry), entry);
-  const intent = resumedIntent([...entries.values()]);
+  const intent = resumedIntent(
+    retainedEntries(state).filter(
+      (entry) =>
+        entry.binding.module === binding.module && entry.binding.eventId === binding.eventId,
+    ),
+  );
   return intent === undefined ? undefined : Date.parse(intent.issuedAt);
 }
 
@@ -319,34 +354,7 @@ export function createHourSelection(options: {
         bases: ordered(fresh.bases),
         history: structuredClone(fresh.history),
       };
-      if (!Array.isArray(state.history)) return refuse("history_invalid");
-      const retained = new Map<string, Entry>();
-      for (const value of [state.value, ...state.history]) {
-        for (const entry of parseState(value)) {
-          const key = entryKey(entry);
-          const prior = retained.get(key);
-          const detail = (value: Entry) =>
-            JSON.stringify([
-              fingerprint(value),
-              value.kind !== "wait"
-                ? [value.identity, value.issuedAt, [...value.references].sort()]
-                : value.targetMs,
-              ...(value.kind === "resume" ? [value.fromContextKey, value.documentBinding] : []),
-            ]);
-          if (prior !== undefined && detail(prior) !== detail(entry))
-            return refuse("history_invalid");
-          retained.set(key, entry);
-        }
-      }
-      const entries = [...retained.values()];
-      const events = new Map<string, Entry[]>();
-      for (const entry of entries) {
-        const key = JSON.stringify([entry.binding.module, entry.binding.eventId]);
-        const group = events.get(key) ?? [];
-        group.push(entry);
-        events.set(key, group);
-      }
-      for (const group of events.values()) resumedIntent(group);
+      const entries = retainedEntries(state);
       const sameEvent = entries.filter(
         (entry) =>
           entry.binding.module === request.binding.module &&
