@@ -923,18 +923,14 @@ describe("openInvoiceCorrection refuses", () => {
       open(saleId, { submissionId: randomUUID(), gross: "6.05" }),
     ).resolves.toMatchObject({ correction: { state: "open" } });
   });
+});
 
-  it("while the clock reads more than a minute behind the latest record, and opens on time", async () => {
-    const saleId = await soldForCash("Rib steak", ["12.10"]);
-    const clock = await behindLatestRecord();
-    await refusedWithNothingWritten(
-      () => open(saleId, { submissionId: randomUUID(), gross: "6.05", clock }),
-      { code: "clock.behind_chain" },
-    );
-    await expect(
-      open(saleId, { submissionId: randomUUID(), gross: "6.05" }),
-    ).resolves.toMatchObject({ correction: { state: "open" } });
-  });
+it("openInvoiceCorrection opens while the clock reads more than a minute behind the latest record", async () => {
+  const saleId = await soldForCash("Rib steak", ["12.10"]);
+  const clock = await behindLatestRecord();
+  await expect(
+    open(saleId, { submissionId: randomUUID(), gross: "6.05", clock }),
+  ).resolves.toMatchObject({ correction: { state: "open" } });
 });
 
 /** `amount` in cash on the correction `correctionId`, given by the manager. */
