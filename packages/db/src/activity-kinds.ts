@@ -23,6 +23,13 @@ export interface ActivityKindData {
   readonly "membership.node_removed": { readonly contactUrl: string; readonly term: number };
   /** Who cleared a removed machine from the chart, freeing its place, at which term. */
   readonly "membership.node_cleared": { readonly term: number };
+  /** Calendar dates and invoice counts only; never a customer or supplier named in the file. */
+  readonly "accountant_export.downloaded": {
+    readonly from: string;
+    readonly to: string;
+    readonly invoices: number;
+    readonly purchases: number;
+  };
   /** Who downloaded the file of deferred payments, for which business days, and its row
    * count; never a customer named in the file. */
   readonly "transfer_export.downloaded": {
@@ -41,5 +48,6 @@ export const ACTIVITY_KINDS = {
   "membership.node_removed": { subject: "node" },
   "membership.node_cleared": { subject: "node" },
   "transfer_export.downloaded": { subject: "report" },
+  "accountant_export.downloaded": { subject: "report" },
 } as const satisfies Record<ActivityKind, ActivityKindRule>;
 export type ActivitySubjectKind = (typeof ACTIVITY_KINDS)[ActivityKind]["subject"];

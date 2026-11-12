@@ -53,25 +53,22 @@ import { requirePeriod, requireRange } from "@waitron/server-kit";
 import { formatCategorySalesPage } from "./category-sales-page.js";
 import { toLanguage } from "./personal-data-export-api.js";
 import { listTransferClosedInvoices, renderTransferClosedCsv } from "./transfer-closed-export.js";
+import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import type { Logger } from "./logger.js";
 
 /**
  * On a mirror the data node is the ORIGIN recorded in node.db's `node_mirror_link`, not the
- * mirror's own id. Per-node reports use it; the overview, modelo 303 and the deferred-payments
- * file read every node.
+ * mirror's own id. Per-node reports use it; venue-wide reports read every node.
  */
 export interface ReportApiDeps {
   db: Database;
   cfg: { nodeId: string };
   /** The printed page's language when neither the person nor the browser names one, and always the
-   * deferred-payments file's. */
+   * download language. */
   venueLocale: SupportedLocale;
 }
 
-/** Two distinct seams: viewing the takings dashboard is not exporting the accountant's files (modelo
- * 303 and the deferred-payments file); a supervisor holds `report.view` but not
- * `report.export`. */
 const REPORT_EXPORT_PERMISSION: Permission = "report.export";
 const REPORT_VIEW_PERMISSION: Permission = "report.view";
 
@@ -394,6 +391,33 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return c.body(renderTransferClosedCsv(rows, toLanguage(deps.venueLocale)), 200, {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="deferred-payments-${from}-${to}.csv"`,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+    }),
+  );
+
+  app.post("/management-api/reports/accountant-export", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
+      const data = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: REPORT_EXPORT_PERMISSION,
+        });
+        const data = await listAccountantExport(tx, { from, to });
+        await recordActivity(tx, {
+          kind: "accountant_export.downloaded",
+          subjectId: "accountant-export",
+          personId: authorizedBy,
+          data: { from, to, invoices: data.invoices.length, purchases: data.purchases.length },
+        });
+        return data;
+      });
+      return c.body(await renderAccountantWorkbook(data, toLanguage(deps.venueLocale)), 200, {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="accountant-${from}-${to}.xlsx"`,
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       });
