@@ -187,14 +187,13 @@ function observeStart(options: StartCase): () => Observed {
       WAITRON_NODE_ID: box,
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
-      WAITRON_MAX_TICK_MS: "600000",
-      WAITRON_MIN_TICK_MS: "200",
       WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     };
 
     const calls: Record<string, number> = {};
     loop.passesFinished = 0;
     server = await startServer(env, env, {
+      timings: { maxTickMs: 600000, minTickMs: 200 },
       peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
       cardPool: ({ db }) => {
         const card = new FakePaymentProvider(db);

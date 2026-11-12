@@ -139,6 +139,7 @@ export interface StartResult {
 }
 
 const makeSeams = (restart: () => void = () => {}) => ({
+  timings: { minTickMs: 200, maxTickMs: 600_000 },
   // Beside a real chart whose other box is not running.
   peerCheck: async () => ({ result: "proceed" as const, successorNodeId: null }),
   stepdown: { mount: () => {}, restart },
@@ -406,8 +407,6 @@ export function placeCopyBoxes(deps: {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-      WAITRON_MAX_TICK_MS: "600000",
-      WAITRON_MIN_TICK_MS: "200",
       WAITRON_LOG_DIR: join(stateDir, "logs"),
     };
     return {

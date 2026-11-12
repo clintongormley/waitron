@@ -146,7 +146,13 @@ import {
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
-import { loadConfig, type ServerConfig } from "./config.js";
+import {
+  loadConfig,
+  resolveDutyTimings,
+  LOG_MAX_BYTES,
+  LOG_MAX_FILES,
+  type ServerConfig,
+} from "./config.js";
 import { refuseUnreleasedBuild } from "./release-check.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
@@ -201,7 +207,6 @@ import {
   healthApp,
   logDegradedDuties,
   recordPass,
-  DUTY_BUDGET_MS,
   type HealthState,
 } from "./health.js";
 import { abandonMailClaims, startMailSender } from "./mail-sender.js";
@@ -209,7 +214,7 @@ import { accountActionMail } from "./account-mail.js";
 import { runLoop } from "./loop.js";
 import { createLoopWaker } from "./loop-wake.js";
 import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
-import { runPass, DRAIN_DUTY, type PassReport } from "./pass.js";
+import { runPass, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
@@ -978,6 +983,7 @@ function makeStartedServer(
 
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
+  timings?: Parameters<typeof resolveDutyTimings>[0];
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store" | "mainCheckIntervalMs">;
   appendOnlyWatch?: { intervalMs?: number };
   /** The spare file's size; defaults to SPARE_SPACE_BYTES. */
@@ -1112,15 +1118,7 @@ async function bootServer(
   if (backupKeysInEnv(base)) await assertBackupOutsideScratch(env, config.stateDir);
   await assertOutsideScratchResolved(config.stateDir, config.venueDir, "WAITRON_VENUE_DIR");
   await assertOutsideScratchResolved(config.stateDir, config.logDir, "WAITRON_LOG_DIR");
-  // Here rather than in `loadConfig`: `health.ts` imports from `config.ts` to build `DUTY_BUDGET_MS`,
-  // so `config.ts` importing it back would be a cycle. An idle host sleeps `config.maxTickMs`
-  // verbatim, so a ceiling at or past the drain budget would read the drain duty as stale.
-  if (config.maxTickMs >= DUTY_BUDGET_MS[DRAIN_DUTY]) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_MAX_TICK_MS",
-      reason: "at_or_above_drain_budget",
-    });
-  }
+  const timings = resolveDutyTimings(seams.timings);
   // Each configured built-SPA directory must hold an `index.html`; checked before the store is opened
   // or migrations run, and in both modes, so a wrong or never-built dir fails the boot loudly.
   if (config.dashboardAppDir !== undefined) {
@@ -1183,10 +1181,10 @@ async function bootServer(
   const stdoutLog = createLogger(stdoutSink, now);
   // Logging never throws into a request path: a lost log directory loses the file, not the sale.
   const fileSink = createRotatingFileSink(
-    { dir: config.logDir, maxBytes: config.logMaxBytes, maxFiles: config.logMaxFiles },
+    { dir: config.logDir, maxBytes: LOG_MAX_BYTES, maxFiles: LOG_MAX_FILES },
     () => stdoutLog("warn", "log.file_unavailable"),
   );
-  const reader = createLogReader({ dir: config.logDir, maxFiles: config.logMaxFiles });
+  const reader = createLogReader({ dir: config.logDir, maxFiles: LOG_MAX_FILES });
   // The two halves are deliberately NOT filtered alike. The FILE half masks URL credentials, because
   // the recovery page serves that file's tail to anyone on the venue's LAN with no login. The STDOUT
   // half is left whole: it is the installer's channel, reachable only with a shell on the box, and
@@ -2450,7 +2448,7 @@ async function bootServer(
       environment: config.environment,
       makeStripe: defaultMakeStripe,
     }),
-    ...(config.settlementLagMs === undefined ? {} : { settlementLagMs: config.settlementLagMs }),
+    ...(timings.settlementLagMs === undefined ? {} : { settlementLagMs: timings.settlementLagMs }),
   });
   const duty = reconcilerAsDuty(reconciler);
 
@@ -2994,7 +2992,7 @@ async function bootServer(
   );
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
-  const drainWaker = createLoopWaker({ minTickMs: config.minTickMs });
+  const drainWaker = createLoopWaker({ minTickMs: timings.minTickMs });
   // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
   // over the full `tradingContext` here, so `nodeId` never enters a module's cfg.
   const nodePreparation = createNodeOperationPreparation({
@@ -3944,7 +3942,7 @@ async function bootServer(
       isPrimary: () => holders.singletonRole.current === "primary",
       now,
       log,
-      maxWaitMs: config.maxTickMs,
+      maxWaitMs: timings.maxTickMs,
     }),
   );
 
@@ -3961,14 +3959,14 @@ async function bootServer(
           db,
           ring,
           environment: config.environment,
-          skipRetryMs: config.skipRetryMs,
+          skipRetryMs: timings.skipRetryMs,
           log,
           observeAuthorityTime: authorityClock.observe,
           signal: controller.signal,
         },
         at,
       ),
-    skipRetryMs: config.skipRetryMs,
+    skipRetryMs: timings.skipRetryMs,
     log,
   });
 
@@ -3978,7 +3976,7 @@ async function bootServer(
     nodeId: tradingContext.nodeId,
     clock: tillClock,
     environment: config.environment,
-    skipRetryMs: config.skipRetryMs,
+    skipRetryMs: timings.skipRetryMs,
     log,
   });
   const fiscalReconciliation =
@@ -3988,8 +3986,8 @@ async function bootServer(
           pass: reconciliationPass,
           enabled: () => holders.singletonRole.current === "primary" && fiscalDrainEnabled(config),
           now,
-          maxWaitMs: Math.min(config.maxTickMs, 60_000),
-          retryMs: config.skipRetryMs,
+          maxWaitMs: Math.min(timings.maxTickMs, 60_000),
+          retryMs: timings.skipRetryMs,
           log,
         });
   undoOnFailure.push(async () => fiscalReconciliation?.stop());
@@ -4013,12 +4011,12 @@ async function bootServer(
                   {
                     db,
                     duties: [duty],
-                    horizonDays: config.scheduler.horizonDays,
-                    maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                    maxAttempts: config.scheduler.maxAttempts,
-                    backoffBaseMs: config.scheduler.backoffBaseMs,
-                    staleAfterMs: config.scheduler.staleAfterMs,
-                    skipRetryMs: config.skipRetryMs,
+                    horizonDays: timings.scheduler.horizonDays,
+                    maxPeriodsPerTick: timings.scheduler.maxPeriodsPerTick,
+                    maxAttempts: timings.scheduler.maxAttempts,
+                    backoffBaseMs: timings.scheduler.backoffBaseMs,
+                    staleAfterMs: timings.scheduler.staleAfterMs,
+                    skipRetryMs: timings.skipRetryMs,
                   },
                   at2,
                 ),
@@ -4034,8 +4032,8 @@ async function bootServer(
     now,
     sleep: drainWaker.sleep,
     signal: controller.signal,
-    minTickMs: config.minTickMs,
-    maxTickMs: config.maxTickMs,
+    minTickMs: timings.minTickMs,
+    maxTickMs: timings.maxTickMs,
     log,
     onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
   });

@@ -22,7 +22,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 // - The dashboard session is minted; the password it then signs in with is checked for real.
 // - M1's certificate is sealed as setup seals one, not through the dashboard's install route.
 // - The test calls `startServer`, so production's entry steps before it never run.
-// - `WAITRON_MIN_TICK_MS` and `WAITRON_MAX_TICK_MS` set how often its duties run.
+// - The start timings set how often its duties run.
 //
 // What is a stand-in for the outside world, here and later in the run:
 // - AEAT is `createFakeAeat`, reached through the real drain, one record to a batch, and records what
@@ -388,7 +388,10 @@ const startsRunning = new Set<Promise<void>>();
 async function start(box: Box): Promise<void> {
   if (runEnded) throw new Error(`${box.name} started after the run ended`);
   box.restartAsked = hold();
-  const starting = startServer(box.env, box.env, seamsFor(box));
+  const starting = startServer(box.env, box.env, {
+    ...seamsFor(box),
+    timings: { minTickMs: 200, maxTickMs: 600_000 },
+  });
   let gaveUp = false;
   startsRunning.add(
     starting.then(
@@ -689,8 +692,6 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
-    WAITRON_MIN_TICK_MS: "200",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
   });
   const m1File = m1Files.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;

@@ -579,18 +579,21 @@ No package threshold, exclusion or ignore changes.
 
 ## Task 4 startup configuration order, 2026-10-17
 
+**2026-11-12, A1308 env1:** the maximum-tick environment setting and its startup refusal are
+retired. The default idle sleep is now checked against the drain budget in `health.test.ts`.
+The original two-case command is retained in this file's history; the current checks are:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/health.test.ts src/boot.test.ts
+```
+
 With a configured setup directory missing `index.html`, or a maximum tick interval at the drain
 budget, you receive `server.config_invalid` before the server inspects setup workspace files.
 The workspace admission check remains before module configuration and the venue opener.
 
-After rebasing onto main `f4ef363028efdb5670054cc083e937939a0e1364`, this command first fails
+After rebasing onto main `f4ef363028efdb5670054cc083e937939a0e1364`, the original two-case command first fails
 both existing cases with `setup.attempt_uncertain`, then passes them after moving the existing
-configuration checks ahead of workspace inspection:
-
-```sh
-pnpm --filter @waitron/server exec vitest run src/boot.test.ts --maxWorkers=1 \
-  -t 'fails the boot LOUDLY when WAITRON_SETUP_APP_DIR|rejects WAITRON_MAX_TICK_MS at or above'
-```
+configuration checks ahead of workspace inspection.
 
 No assertion or fixture changes. The complete boot, first-setup entry, resolution entry, failed-start
 and clock-wiring suites pass 129 tests. The plan's five-file setup/readiness command passes 59;

@@ -49,13 +49,6 @@ export interface ServerConfig {
   spareStoreLoopbackPort: number;
   /** Defaults to loopback, because `/health` is unauthenticated. */
   httpHost: string;
-  minTickMs: number;
-  maxTickMs: number;
-  /** How long after a skipped tenant or pair either duty reports work due again; one value for
-   * both duties. */
-  skipRetryMs: number;
-  /** Undefined means "let the neutral layer apply its own seven days" — not zero. */
-  settlementLagMs: number | undefined;
   migrationsRoot: string;
   /** `WAITRON_LITESTREAM_BIN`; unset or empty means `litestream`, found on PATH. */
   litestreamBin: string;
@@ -90,10 +83,6 @@ export interface ServerConfig {
    * default, never `resolve("")`; an override is used verbatim.
    */
   logDir: string;
-  /** The rotation ceiling in bytes; `WAITRON_LOG_MAX_BYTES`. */
-  logMaxBytes: number;
-  /** How many rotated files the sink keeps and the reader reads back; `WAITRON_LOG_MAX_FILES`. */
-  logMaxFiles: number;
   /** Operator-supplied PEM files, both or neither; they override the box leaf under `stateDir`. */
   tls?: { certFile: string; keyFile: string };
   node?: NodeIdentityConfig;
@@ -135,7 +124,6 @@ export interface ServerConfig {
    * placeholder shell. `WAITRON_SETUP_APP_DIR`, as `tillAppDir`.
    */
   setupAppDir?: string;
-  scheduler: SchedulerConfig;
 }
 
 /** A liveness floor: `drain`'s hourly duty must not be lengthened by a quiet ledger. `health.ts`
@@ -151,8 +139,8 @@ export const DEFAULT_HTTP_PORT = 8080;
 export const DEFAULT_HTTP_LANDING_PORT = 80;
 const DEFAULT_SPARE_STORE_PORT = 7443;
 const DEFAULT_SPARE_STORE_LOOPBACK_PORT = 7444;
-const DEFAULT_LOG_MAX_BYTES = 10_000_000;
-const DEFAULT_LOG_MAX_FILES = 5;
+export const LOG_MAX_BYTES = 10_000_000;
+export const LOG_MAX_FILES = 5;
 /** Loopback, so an unconfigured box never binds a public interface. Exported for recovery. */
 export const DEFAULT_HTTP_HOST = "127.0.0.1";
 /** The highest port `net.Server.listen` accepts; above it `serve()` throws a raw `RangeError`
@@ -162,6 +150,57 @@ export const MAX_HTTP_PORT = 65_535;
  * dashboard's Vite dev server. */
 const DEFAULT_MANAGEMENT_RP_ID = "localhost";
 const DEFAULT_MANAGEMENT_ORIGIN = "http://localhost:5191";
+
+export interface DutyTimings {
+  minTickMs: number;
+  maxTickMs: number;
+  skipRetryMs: number;
+  /** Undefined lets the neutral layer apply its own seven days. */
+  settlementLagMs: number | undefined;
+  scheduler: SchedulerConfig;
+}
+
+export const DEFAULT_DUTY_TIMINGS: DutyTimings = {
+  minTickMs: DEFAULT_MIN_TICK_MS,
+  maxTickMs: DEFAULT_MAX_TICK_MS,
+  skipRetryMs: DEFAULTS.skipRetryMs,
+  settlementLagMs: undefined,
+  scheduler: {
+    horizonDays: DEFAULTS.horizonDays,
+    maxPeriodsPerTick: DEFAULTS.maxPeriodsPerTick,
+    maxAttempts: DEFAULTS.maxAttempts,
+    backoffBaseMs: DEFAULTS.backoffBaseMs,
+    staleAfterMs: DEFAULTS.staleAfterMs,
+  },
+};
+
+export function resolveDutyTimings(
+  override?: Partial<Omit<DutyTimings, "scheduler">> & { scheduler?: Partial<SchedulerConfig> },
+): DutyTimings {
+  const timings = {
+    ...DEFAULT_DUTY_TIMINGS,
+    ...override,
+    scheduler: { ...DEFAULT_DUTY_TIMINGS.scheduler, ...override?.scheduler },
+  };
+  for (const [option, value] of Object.entries({
+    minTickMs: timings.minTickMs,
+    maxTickMs: timings.maxTickMs,
+    skipRetryMs: timings.skipRetryMs,
+    ...(timings.settlementLagMs === undefined ? {} : { settlementLagMs: timings.settlementLagMs }),
+    ...Object.fromEntries(
+      Object.entries(timings.scheduler).map(([key, value]) => [`scheduler.${key}`, value]),
+    ),
+  })) {
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw new Error(`${option} must be a positive safe integer`);
+  }
+  if (timings.maxTickMs > 2_147_483_647) throw new Error("maxTickMs exceeds the timer limit");
+  if (timings.minTickMs > timings.maxTickMs) throw new Error("minTickMs exceeds maxTickMs");
+  if (timings.skipRetryMs < timings.minTickMs || timings.skipRetryMs > timings.maxTickMs) {
+    throw new Error("skipRetryMs must be between minTickMs and maxTickMs");
+  }
+  return timings;
+}
 
 type Env = Record<string, string | undefined>;
 
@@ -261,10 +300,6 @@ function parsePositiveInt(env: Env, variable: string): number | undefined {
 // Exported so `backup-config.ts` validates its knobs by the same rule.
 export function positiveInt(env: Env, variable: string, fallback: number): number {
   return parsePositiveInt(env, variable) ?? fallback;
-}
-
-function optionalPositiveInt(env: Env, variable: string): number | undefined {
-  return parsePositiveInt(env, variable);
 }
 
 /** A port a listener binds: `1..MAX_HTTP_PORT`. */
@@ -368,47 +403,6 @@ export function loadConfig(
   defaultMigrationsRoot: string,
   defaultStateRoot: string,
 ): ServerConfig {
-  const minTickMs = positiveInt(env, "WAITRON_MIN_TICK_MS", DEFAULT_MIN_TICK_MS);
-  const maxTickMs = positiveInt(env, "WAITRON_MAX_TICK_MS", DEFAULT_MAX_TICK_MS);
-  if (maxTickMs > 2_147_483_647) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_MAX_TICK_MS",
-      reason: "above_timer_limit",
-    });
-  }
-  // Checked here because the sleep clamp would silently resolve an impossible range. All three
-  // tick-cadence guards name both variables, since the operator may have set only the other one.
-  if (minTickMs > maxTickMs) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_MIN_TICK_MS",
-      value: minTickMs,
-      otherVariable: "WAITRON_MAX_TICK_MS",
-      otherValue: maxTickMs,
-      reason: "above_max_tick",
-    });
-  }
-  const skipRetryMs = positiveInt(env, "WAITRON_SKIP_RETRY_MS", DEFAULTS.skipRetryMs);
-  // `sleepMsFor`'s clamp (`loop.ts`) would silently raise a too-low value to `minTickMs`, restoring
-  // the retry-at-the-floor spin this variable exists to remove.
-  if (skipRetryMs < minTickMs) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_SKIP_RETRY_MS",
-      value: skipRetryMs,
-      otherVariable: "WAITRON_MIN_TICK_MS",
-      otherValue: minTickMs,
-      reason: "below_min_tick",
-    });
-  }
-  // Likewise the clamp would silently lower a value above `maxTickMs`.
-  if (skipRetryMs > maxTickMs) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_SKIP_RETRY_MS",
-      value: skipRetryMs,
-      otherVariable: "WAITRON_MAX_TICK_MS",
-      otherValue: maxTickMs,
-      reason: "above_max_tick",
-    });
-  }
   const httpPort = listeningPort(env, "WAITRON_HTTP_PORT", DEFAULT_HTTP_PORT);
   const landingPort = boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT);
   const spareStorePort = listeningPort(env, "WAITRON_SPARE_STORE_PORT", DEFAULT_SPARE_STORE_PORT);
@@ -513,10 +507,6 @@ export function loadConfig(
     spareStorePort,
     spareStoreLoopbackPort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
-    minTickMs,
-    maxTickMs,
-    skipRetryMs,
-    settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     litestreamBin: resolveLitestreamBin(env),
     versitygwBin: isUnset(env.WAITRON_VERSITYGW_BIN) ? "versitygw" : env.WAITRON_VERSITYGW_BIN,
@@ -528,8 +518,6 @@ export function loadConfig(
     // Validated at load so a typo fails boot rather than minting a certificate for it.
     boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
     logDir,
-    logMaxBytes: positiveInt(env, "WAITRON_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
-    logMaxFiles: positiveInt(env, "WAITRON_LOG_MAX_FILES", DEFAULT_LOG_MAX_FILES),
     ...(tls === undefined ? {} : { tls }),
     node: tryLoadNodeIdentity(env),
     tillApp: loadTillAppSettings(env),
@@ -553,16 +541,5 @@ export function loadConfig(
       ? undefined
       : env.WAITRON_DASHBOARD_APP_DIR,
     setupAppDir: isUnset(env.WAITRON_SETUP_APP_DIR) ? undefined : env.WAITRON_SETUP_APP_DIR,
-    scheduler: {
-      horizonDays: positiveInt(env, "WAITRON_SCHEDULER_HORIZON_DAYS", DEFAULTS.horizonDays),
-      maxPeriodsPerTick: positiveInt(
-        env,
-        "WAITRON_SCHEDULER_MAX_PERIODS_PER_TICK",
-        DEFAULTS.maxPeriodsPerTick,
-      ),
-      maxAttempts: positiveInt(env, "WAITRON_SCHEDULER_MAX_ATTEMPTS", DEFAULTS.maxAttempts),
-      backoffBaseMs: positiveInt(env, "WAITRON_SCHEDULER_BACKOFF_BASE_MS", DEFAULTS.backoffBaseMs),
-      staleAfterMs: positiveInt(env, "WAITRON_SCHEDULER_STALE_AFTER_MS", DEFAULTS.staleAfterMs),
-    },
   };
 }

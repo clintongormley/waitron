@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
-import { deploymentEnvironment, isDevMode, loadConfig } from "./config.js";
+import {
+  deploymentEnvironment,
+  isDevMode,
+  loadConfig,
+  DEFAULT_DUTY_TIMINGS,
+  resolveDutyTimings,
+  LOG_MAX_BYTES,
+  LOG_MAX_FILES,
+} from "./config.js";
 
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -82,11 +90,6 @@ describe("loadConfig", () => {
       spareStoreLoopbackPort: 7444,
       // /health is unauthenticated, so loopback-only is the default.
       httpHost: "127.0.0.1",
-      minTickMs: 5_000,
-      maxTickMs: 3_600_000,
-      // The scheduler's own default, not a copy that happens to agree.
-      skipRetryMs: DEFAULTS.skipRetryMs,
-      settlementLagMs: undefined,
       migrationsRoot: ROOT,
       litestreamBin: "litestream",
       versitygwBin: "versitygw",
@@ -94,8 +97,6 @@ describe("loadConfig", () => {
       stateDir: STATE_ROOT,
       venueDir: resolve(STATE_ROOT, "venue"),
       logDir: resolve(STATE_ROOT, "logs"),
-      logMaxBytes: 10_000_000,
-      logMaxFiles: 5,
       // `tls` is absent from the object, not present-but-undefined.
       node: EXPECTED_NODE,
       tillApp: EXPECTED_TILL_APP,
@@ -107,13 +108,6 @@ describe("loadConfig", () => {
       tillAppDir: undefined,
       dashboardAppDir: undefined,
       setupAppDir: undefined,
-      scheduler: {
-        horizonDays: 30,
-        maxPeriodsPerTick: 7,
-        maxAttempts: 3,
-        backoffBaseMs: 900_000,
-        staleAfterMs: 3_600_000,
-      },
     });
   });
 
@@ -226,18 +220,9 @@ describe("loadConfig", () => {
         WAITRON_ENV: "production",
         WAITRON_HTTP_PORT: "9000",
         WAITRON_HTTP_HOST: "0.0.0.0",
-        WAITRON_MIN_TICK_MS: "1000",
-        WAITRON_MAX_TICK_MS: "90000",
-        WAITRON_SKIP_RETRY_MS: "60000",
-        WAITRON_SETTLEMENT_LAG_MS: "172800000",
         WAITRON_MIGRATIONS_DIR: "/srv/migrations",
         WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
         WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
-        WAITRON_SCHEDULER_HORIZON_DAYS: "14",
-        WAITRON_SCHEDULER_MAX_PERIODS_PER_TICK: "3",
-        WAITRON_SCHEDULER_MAX_ATTEMPTS: "5",
-        WAITRON_SCHEDULER_BACKOFF_BASE_MS: "1000",
-        WAITRON_SCHEDULER_STALE_AFTER_MS: "2000",
       },
       ROOT,
       STATE_ROOT,
@@ -245,20 +230,9 @@ describe("loadConfig", () => {
     expect(config.environment).toBe("production");
     expect(config.httpPort).toBe(9000);
     expect(config.httpHost).toBe("0.0.0.0");
-    expect(config.minTickMs).toBe(1000);
-    expect(config.maxTickMs).toBe(90_000);
-    expect(config.skipRetryMs).toBe(60_000);
-    expect(config.settlementLagMs).toBe(172_800_000);
     expect(config.migrationsRoot).toBe("/srv/migrations");
     expect(config.managementRpId).toBe("dashboard.example.com");
     expect(config.managementOrigin).toBe("https://dashboard.example.com");
-    expect(config.scheduler).toEqual({
-      horizonDays: 14,
-      maxPeriodsPerTick: 3,
-      maxAttempts: 5,
-      backoffBaseMs: 1000,
-      staleAfterMs: 2000,
-    });
   });
 
   it("refuses an HTTP management origin in production", async () => {
@@ -522,9 +496,6 @@ describe("loadConfig", () => {
     ["WAITRON_SPARE_STORE_LOOPBACK_PORT", "store", "not_a_positive_integer"],
     ["WAITRON_SPARE_STORE_LOOPBACK_PORT", "0", "not_a_positive_integer"],
     ["WAITRON_SPARE_STORE_LOOPBACK_PORT", "65536", "port_out_of_range"],
-    ["WAITRON_MIN_TICK_MS", "-1", "not_a_positive_integer"],
-    ["WAITRON_SKIP_RETRY_MS", "nope", "not_a_positive_integer"],
-    ["WAITRON_SCHEDULER_MAX_ATTEMPTS", "1.5", "not_a_positive_integer"],
   ])("rejects %s=%s", async (variable, value, reason) => {
     const error = await captureError(() =>
       Promise.resolve(loadConfig({ ...MIN_ENV, [variable]: value }, ROOT, STATE_ROOT)),
@@ -532,24 +503,6 @@ describe("loadConfig", () => {
     expect(codeOf(error)).toBe("server.config_invalid");
     // Never the value, which could be a mistyped secret.
     expect(isAppError(error) && error.params).toEqual({ variable, reason });
-  });
-
-  it("rejects a maxTick above Node's timer limit", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadConfig({ ...MIN_ENV, WAITRON_MAX_TICK_MS: "2147483648" }, ROOT, STATE_ROOT),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_MAX_TICK_MS",
-      reason: "above_timer_limit",
-    });
-  });
-
-  it("accepts a maxTick exactly at Node's timer limit", () => {
-    const config = loadConfig({ ...MIN_ENV, WAITRON_MAX_TICK_MS: "2147483647" }, ROOT, STATE_ROOT);
-    expect(config.maxTickMs).toBe(2_147_483_647);
   });
 
   it.each([undefined, ""])("defaults the spare's store port when its value is %s", (value) => {
@@ -580,109 +533,6 @@ describe("loadConfig", () => {
     expect(config.spareStoreLoopbackPort).toBe(9444);
   });
 
-  it.each([undefined, ""])("defaults maxTick when its value is %s", (value) => {
-    const config = loadConfig({ ...MIN_ENV, WAITRON_MAX_TICK_MS: value }, ROOT, STATE_ROOT);
-    expect(config.maxTickMs).toBe(3_600_000);
-  });
-
-  it("rejects a minTick above maxTick, which would make the clamp unsatisfiable", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadConfig(
-          { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_MAX_TICK_MS: "5000" },
-          ROOT,
-          STATE_ROOT,
-        ),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    // Both variables and both values, so an operator can tell which of the two they set.
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_MIN_TICK_MS",
-      value: 10_000,
-      otherVariable: "WAITRON_MAX_TICK_MS",
-      otherValue: 5_000,
-      reason: "above_max_tick",
-    });
-  });
-
-  it("rejects a skipRetryMs below minTickMs, which sleepMsFor's clamp would otherwise silently round back up to the floor", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadConfig(
-          { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_SKIP_RETRY_MS: "9999" },
-          ROOT,
-          STATE_ROOT,
-        ),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    // An operator who set only WAITRON_MIN_TICK_MS must still see it named.
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_SKIP_RETRY_MS",
-      value: 9_999,
-      otherVariable: "WAITRON_MIN_TICK_MS",
-      otherValue: 10_000,
-      reason: "below_min_tick",
-    });
-  });
-
-  it("accepts a skipRetryMs exactly equal to minTickMs — the boundary the rejection above lives one below", () => {
-    const config = loadConfig(
-      { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_SKIP_RETRY_MS: "10000" },
-      ROOT,
-      STATE_ROOT,
-    );
-    expect(config.minTickMs).toBe(10_000);
-    expect(config.skipRetryMs).toBe(10_000);
-  });
-
-  it("boots with the shipped defaults (skipRetryMs 300000, minTickMs 5000) — the new guard must not reject them", () => {
-    const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
-    expect(config.minTickMs).toBe(5_000);
-    expect(config.skipRetryMs).toBe(DEFAULTS.skipRetryMs);
-  });
-
-  it("rejects a skipRetryMs above maxTickMs, which sleepMsFor's clamp would otherwise silently round back down past the floor", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadConfig(
-          { ...MIN_ENV, WAITRON_MAX_TICK_MS: "5000", WAITRON_SKIP_RETRY_MS: "300000" },
-          ROOT,
-          STATE_ROOT,
-        ),
-      ),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_SKIP_RETRY_MS",
-      value: 300_000,
-      otherVariable: "WAITRON_MAX_TICK_MS",
-      otherValue: 5_000,
-      reason: "above_max_tick",
-    });
-  });
-
-  it("accepts a skipRetryMs exactly equal to maxTickMs — the boundary the rejection above lives one above", () => {
-    const config = loadConfig(
-      { ...MIN_ENV, WAITRON_MAX_TICK_MS: "300000", WAITRON_SKIP_RETRY_MS: "300000" },
-      ROOT,
-      STATE_ROOT,
-    );
-    expect(config.maxTickMs).toBe(300_000);
-    expect(config.skipRetryMs).toBe(300_000);
-  });
-
-  it("accepts a skipRetryMs comfortably below maxTickMs", () => {
-    const config = loadConfig(
-      { ...MIN_ENV, WAITRON_MAX_TICK_MS: "120000", WAITRON_SKIP_RETRY_MS: "60000" },
-      ROOT,
-      STATE_ROOT,
-    );
-    expect(config.maxTickMs).toBe(120_000);
-    expect(config.skipRetryMs).toBe(60_000);
-  });
-
   it("defaults stateDir to the supplied default root when WAITRON_STATE_DIR is unset", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config.stateDir).toBe(STATE_ROOT);
@@ -703,11 +553,9 @@ describe("loadConfig", () => {
     expect(config.stateDir).not.toBe(process.cwd());
   });
 
-  it("defaults logDir to join(stateDir, 'logs') and the rotation knobs to 10MB / 5 files", () => {
+  it("defaults logDir to join(stateDir, 'logs')", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config.logDir).toBe(resolve(STATE_ROOT, "logs"));
-    expect(config.logMaxBytes).toBe(10_000_000);
-    expect(config.logMaxFiles).toBe(5);
   });
 
   it("derives the default logDir from a WAITRON_STATE_DIR override, not the boot default root", () => {
@@ -719,20 +567,16 @@ describe("loadConfig", () => {
     expect(config.logDir).toBe(resolve("/var/lib/waitron", "logs"));
   });
 
-  it("reads WAITRON_LOG_DIR / WAITRON_LOG_MAX_BYTES / WAITRON_LOG_MAX_FILES overrides when set", () => {
+  it("reads a WAITRON_LOG_DIR override when set", () => {
     const config = loadConfig(
       {
         ...MIN_ENV,
         WAITRON_LOG_DIR: "/srv/logs",
-        WAITRON_LOG_MAX_BYTES: "2000000",
-        WAITRON_LOG_MAX_FILES: "3",
       },
       ROOT,
       STATE_ROOT,
     );
     expect(config.logDir).toBe("/srv/logs");
-    expect(config.logMaxBytes).toBe(2_000_000);
-    expect(config.logMaxFiles).toBe(3);
   });
 
   // Never `resolve("")`, which is cwd.
@@ -1128,3 +972,54 @@ it.each(["WAITRON_VENUE_DIR", "WAITRON_LOG_DIR"])(
     );
   },
 );
+
+describe("duty timings", () => {
+  it("has the defaults the box runs with", () => {
+    expect(DEFAULT_DUTY_TIMINGS).toEqual({
+      minTickMs: 5_000,
+      maxTickMs: 3_600_000,
+      skipRetryMs: DEFAULTS.skipRetryMs,
+      settlementLagMs: undefined,
+      scheduler: {
+        horizonDays: DEFAULTS.horizonDays,
+        maxPeriodsPerTick: DEFAULTS.maxPeriodsPerTick,
+        maxAttempts: DEFAULTS.maxAttempts,
+        backoffBaseMs: DEFAULTS.backoffBaseMs,
+        staleAfterMs: DEFAULTS.staleAfterMs,
+      },
+    });
+    expect(resolveDutyTimings()).toEqual(DEFAULT_DUTY_TIMINGS);
+  });
+  it("merges an override field by field", () => {
+    expect(
+      resolveDutyTimings({
+        minTickMs: 50,
+        maxTickMs: 200,
+        skipRetryMs: 100,
+        scheduler: { maxPeriodsPerTick: 1 },
+      }),
+    ).toEqual({
+      ...DEFAULT_DUTY_TIMINGS,
+      minTickMs: 50,
+      maxTickMs: 200,
+      skipRetryMs: 100,
+      scheduler: { ...DEFAULT_DUTY_TIMINGS.scheduler, maxPeriodsPerTick: 1 },
+    });
+  });
+  it("refuses an impossible override", () => {
+    for (const [override, option] of [
+      [{ minTickMs: 300, maxTickMs: 200 }, "minTickMs"],
+      [{ skipRetryMs: 1 }, "skipRetryMs"],
+      [{ skipRetryMs: 4_000_000 }, "skipRetryMs"],
+      [{ maxTickMs: 2_147_483_648 }, "maxTickMs"],
+      [{ minTickMs: 0 }, "minTickMs"],
+      [{ settlementLagMs: 0 }, "settlementLagMs"],
+      [{ scheduler: { maxAttempts: 1.5 } }, "scheduler.maxAttempts"],
+    ] as const)
+      expect(() => resolveDutyTimings(override)).toThrow(option);
+  });
+  it("logs rotate at 10 MB and keep five files", () => {
+    expect(LOG_MAX_BYTES).toBe(10_000_000);
+    expect(LOG_MAX_FILES).toBe(5);
+  });
+});

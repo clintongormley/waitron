@@ -80,11 +80,7 @@ const KEY_ENV = {
 };
 
 // Short ticks so the boot loop's first pass lands inside the poll budget.
-const TICK_ENV = {
-  WAITRON_MIN_TICK_MS: "250",
-  WAITRON_MAX_TICK_MS: "1000",
-  WAITRON_SKIP_RETRY_MS: "250",
-};
+const TIMINGS = { minTickMs: 250, maxTickMs: 1_000, skipRetryMs: 250 };
 
 // The same credentials key boot loads, so the identity sealed here is the one a promote unseals.
 const RING = loadKeyRing({
@@ -301,15 +297,18 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-mirror-state-"));
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
 
-    const server = await startServer({
-      ...KEY_ENV,
-      ...TICK_ENV,
-      WAITRON_NODE_ID: seed.nodeId,
-      WAITRON_VENUE_DIR: mirrorVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_STATE_DIR: stateDir,
-    }).catch(async (err: unknown) => {
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_NODE_ID: seed.nodeId,
+        WAITRON_VENUE_DIR: mirrorVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      },
+      {},
+      { timings: TIMINGS },
+    ).catch(async (err: unknown) => {
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });
@@ -400,12 +399,15 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
 
 /** Boot a non-mirror trading server against the shared venue directory. */
 async function bootTrading(port: number) {
-  return startServer({
-    ...KEY_ENV,
-    ...TICK_ENV,
-    ...TILL_ENV,
-    WAITRON_VENUE_DIR: appVenueDir,
-    WAITRON_HTTP_PORT: String(port),
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
-  });
+  return startServer(
+    {
+      ...KEY_ENV,
+      ...TILL_ENV,
+      WAITRON_VENUE_DIR: appVenueDir,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    },
+    {},
+    { timings: TIMINGS },
+  );
 }

@@ -222,7 +222,6 @@ async function boot(
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),
     ...(options.httpHost === undefined ? {} : { WAITRON_HTTP_HOST: options.httpHost }),
@@ -306,8 +305,11 @@ async function boot(
   try {
     server =
       options.port === undefined
-        ? await startServer(env, env, options.seams)
-        : await startConfiguredServer(env, env, options.seams);
+        ? await startServer(env, env, { ...options.seams, timings: { maxTickMs: 600000 } })
+        : await startConfiguredServer(env, env, {
+            ...options.seams,
+            timings: { maxTickMs: 600000 },
+          });
     // The fixture honours a fixed port only during the call; the normal start after a wait binds
     // later, so the case keeps it honoured until its own end.
     if (options.port !== undefined) listener.configured = true;
@@ -534,7 +536,7 @@ describe("the start check on a real start", () => {
           await server!.close();
           server = undefined;
           beforeServerStarts();
-          server = await startServer(booted.env, booted.env);
+          server = await startServer(booted.env, booted.env, { timings: { maxTickMs: 600_000 } });
           const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
           expect(await node.json()).toMatchObject({ acceptingSales: false });
         }
@@ -756,6 +758,7 @@ describe("the start check on a real start", () => {
       const second = vi.fn(() => Promise.resolve(wait));
       beforeServerStarts();
       server = await startServer(booted.env, booted.env, {
+        timings: { maxTickMs: 600_000 },
         ...seams(second),
         waitingStart: { intervalMs: 60_000 },
       });

@@ -210,12 +210,7 @@ carry none.
   key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who can read the
   status can test a guessed key against it.
 
-## `apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it cannot
-
-- `sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
-  `minTickMs > maxTickMs`; `config.test.ts`'s test title (near line 572) says "round back down
-  past the floor" where it means "to the floor". The restore question A38 (#669) raised about
-  `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
+- The restore question A38 (#669) raised about `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
   deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
   `database is locked` in the pending-payment sweep (a candidate cause, not verified for the sweep:
   a busy wait on the server's own thread,

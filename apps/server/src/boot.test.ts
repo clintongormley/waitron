@@ -88,8 +88,6 @@ import { DEFAULT_MIGRATIONS_ROOT, MAX_UPLOAD_BYTES, type StartedServer } from ".
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
-import { DUTY_BUDGET_MS } from "./health.js";
-import { DRAIN_DUTY } from "./pass.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
@@ -604,22 +602,21 @@ describe("startServer, against a migrated venue directory", () => {
     // Read back below to show the rotating file sink is wired into `startServer`.
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-logs-"));
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
-      const started = await startConfiguredServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_LOG_DIR: logDir,
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        // Distinctive and far apart, so a swapped mapping shows as 1000 rather than 94327.
-        WAITRON_MIN_TICK_MS: "1000",
-        WAITRON_MAX_TICK_MS: "94327",
-        // Within [minTickMs, maxTickMs] only to satisfy `loadConfig`; nothing due is seeded, so it
-        // plays no part in `sleeping.sleepMs`.
-        WAITRON_SKIP_RETRY_MS: "9000",
-        WAITRON_SETTLEMENT_LAG_MS: "1000",
-        // The non-default value: `preproduction` is also what a hardcoded argument would produce.
-        WAITRON_ENV: "production",
-      });
+      const started = await startConfiguredServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_LOG_DIR: logDir,
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          // The non-default value: `preproduction` is also what a hardcoded argument would produce.
+          WAITRON_ENV: "production",
+        },
+        {},
+        {
+          timings: { minTickMs: 1000, maxTickMs: 94327, skipRetryMs: 9000, settlementLagMs: 1000 },
+        },
+      );
       // `loop.ts` logs `loop.sleeping` after `onPass` runs, so this also shows the first pass done.
       const event = await waitForEvent(lines, "loop.sleeping");
       const listeningEvent = await waitForEvent(lines, "server.listening");
@@ -1184,17 +1181,18 @@ describe("startServer, against a migrated venue directory", () => {
     let server: StartedServer | undefined;
     try {
       const [started, reconcileLine] = await withCapturedStdout(async (lines) => {
-        const s = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "production",
-          WAITRON_MIN_TICK_MS: "50",
-          WAITRON_MAX_TICK_MS: "200",
-          WAITRON_SKIP_RETRY_MS: "100",
-        });
+        const s = await startServer(
+          {
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: sharedVenueDir,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_ENV: "production",
+          },
+          {},
+          { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+        );
         const found = await waitForEvent(lines, "module.reconcile");
         return [s, found] as const;
       });
@@ -1413,14 +1411,15 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       let caught: unknown;
       try {
-        await startServer({
-          WAITRON_VENUE_DIR: UNOPENABLE_VENUE_DIR,
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_MIN_TICK_MS: "50",
-          WAITRON_MAX_TICK_MS: "200",
-          WAITRON_SKIP_RETRY_MS: "100",
-          WAITRON_SETUP_APP_DIR: emptyDir,
-        });
+        await startServer(
+          {
+            WAITRON_VENUE_DIR: UNOPENABLE_VENUE_DIR,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_SETUP_APP_DIR: emptyDir,
+          },
+          {},
+          { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+        );
       } catch (error) {
         caught = error;
       }
@@ -2076,16 +2075,17 @@ describe("startServer, against a migrated venue directory", () => {
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {
     // A provisioned box mounts the till API and not the setup routes.
     const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
+      },
+      {},
+      { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+    );
     try {
       const staff = await fetch(`http://127.0.0.1:${httpPort()}/api/staff`);
       expect(staff.status).toBe(200);
@@ -2138,16 +2138,17 @@ describe("startServer, against a migrated venue directory", () => {
       startManagementSession(tx, { personId: person!.id }),
     );
     const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
+      },
+      {},
+      { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+    );
     let bookingId: string | undefined;
     try {
       const send = async (method: string, path: string, body?: unknown) =>
@@ -2243,16 +2244,17 @@ describe("startServer, against a migrated venue directory", () => {
   it("trading mode serves public certificate help without setup discovery, alongside trading routes", async () => {
     // No till SPA is configured, so an absent machine-discovery endpoint must return a real 404.
     const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
+      },
+      {},
+      { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+    );
     try {
       const disc = await fetch(`http://127.0.0.1:${httpPort()}/setup-api/discovery`);
       expect(disc.status).toBe(404);
@@ -2467,18 +2469,18 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
+  it("boots without a settlement lag, taking the neutral layer's own default", async () => {
     const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      // Within [minTickMs, maxTickMs]: the default (300000) would fail `loadConfig`'s guard here.
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+    );
 
     try {
       await waitForPass(server.health);
@@ -2505,15 +2507,16 @@ describe("startServer, against a migrated venue directory", () => {
       );
       return result.image.filename;
     });
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+    );
 
     try {
       const image = await fetch(`http://127.0.0.1:${httpPort()}/media/${imageName}`);
@@ -2561,16 +2564,16 @@ describe("startServer, against a migrated venue directory", () => {
         let started: StartedServer | undefined;
         try {
           const [server, failure] = await withCapturedStdout(async (lines) => {
-            const s = await startConfiguredServer({
-              ...KEY_ENV,
-              WAITRON_VENUE_DIR: sharedVenueDir,
-              WAITRON_HTTP_PORT: String(port),
-              WAITRON_MIGRATIONS_DIR: migrationsRoot,
-              WAITRON_MIN_TICK_MS: "1000",
-              WAITRON_MAX_TICK_MS: "2000",
-              // Within [minTickMs, maxTickMs]: the default (300000) would fail `loadConfig`'s guard.
-              WAITRON_SKIP_RETRY_MS: "1500",
-            });
+            const s = await startConfiguredServer(
+              {
+                ...KEY_ENV,
+                WAITRON_VENUE_DIR: sharedVenueDir,
+                WAITRON_HTTP_PORT: String(port),
+                WAITRON_MIGRATIONS_DIR: migrationsRoot,
+              },
+              {},
+              { timings: { minTickMs: 1000, maxTickMs: 2000, skipRetryMs: 1500 } },
+            );
             const event = await waitForEvent(lines, "server.listen_failed");
             return [s, event] as const;
           });
@@ -2596,19 +2599,19 @@ describe("startServer, against a migrated venue directory", () => {
         let started: StartedServer | undefined;
         try {
           const [server, failure] = await withCapturedStdout(async (lines) => {
-            const s = await startConfiguredServer({
-              ...KEY_ENV,
-              WAITRON_VENUE_DIR: sharedVenueDir,
-              WAITRON_HTTP_PORT: String(port),
-              // Every other boot binds the default host, so a failure here shows `config.httpHost`
-              // reaches `serve()`.
-              WAITRON_HTTP_HOST: "not-a-real-hostname.invalid",
-              WAITRON_MIGRATIONS_DIR: migrationsRoot,
-              WAITRON_MIN_TICK_MS: "1000",
-              WAITRON_MAX_TICK_MS: "2000",
-              // Within [minTickMs, maxTickMs]: the default (300000) would fail `loadConfig`'s guard.
-              WAITRON_SKIP_RETRY_MS: "1500",
-            });
+            const s = await startConfiguredServer(
+              {
+                ...KEY_ENV,
+                WAITRON_VENUE_DIR: sharedVenueDir,
+                WAITRON_HTTP_PORT: String(port),
+                // Every other boot binds the default host, so a failure here shows `config.httpHost`
+                // reaches `serve()`.
+                WAITRON_HTTP_HOST: "not-a-real-hostname.invalid",
+                WAITRON_MIGRATIONS_DIR: migrationsRoot,
+              },
+              {},
+              { timings: { minTickMs: 1000, maxTickMs: 2000, skipRetryMs: 1500 } },
+            );
             const event = await waitForEvent(lines, "server.listen_failed");
             return [s, event] as const;
           });
@@ -2668,7 +2671,7 @@ describe("startServer, against a migrated venue directory", () => {
   // the typecheck and every unit test. A due `envios` row is seeded with no `fiscal.aeat` credential,
   // and the loop's logged sleep is read back. That row would stay due forever in the shared directory,
   // where other tests assert `consecutiveFailures === 0`, so the `finally` deletes it.
-  it("sleeps on WAITRON_SKIP_RETRY_MS, not WAITRON_MIN_TICK_MS, for a tenant with due fiscal work and no fiscal.aeat credential", async () => {
+  it("sleeps on the skip retry, not the minimum tick, for a tenant with due fiscal work and no fiscal.aeat credential", async () => {
     const port = await freePort();
     // `seedPendingEnvios`'s fixed `proximo_intento_en` is in the past, so the row is due at once.
     const seeded = await seedPendingEnvios(sharedDb, {
@@ -2683,21 +2686,19 @@ describe("startServer, against a migrated venue directory", () => {
 
     try {
       const [server, sleeping, skipped] = await withCapturedStdout(async (lines) => {
-        const started = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_MIN_TICK_MS: "1000",
-          // Comfortably above the distinctive skip-retry value below, so neither clamp can mask it.
-          WAITRON_MAX_TICK_MS: "600000",
-          // Preparation intentionally performs no fiscal submissions. Use production here because
-          // this test exercises the live drain's missing-credential retry schedule.
-          WAITRON_ENV: "production",
-          // Distinctive: not `WAITRON_MIN_TICK_MS`'s default, not the scheduler's
-          // `DEFAULTS.skipRetryMs`, and strictly between the two clamps.
-          WAITRON_SKIP_RETRY_MS: "45678",
-        });
+        const started = await startServer(
+          {
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: sharedVenueDir,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            // Preparation intentionally performs no fiscal submissions. Use production here because
+            // this test exercises the live drain's missing-credential retry schedule.
+            WAITRON_ENV: "production",
+          },
+          {},
+          { timings: { minTickMs: 1000, maxTickMs: 600000, skipRetryMs: 45678 } },
+        );
         const skippedEvent = await waitForEvent(lines, "drain.tenant_skipped");
         const event = await waitForEvent(lines, "loop.sleeping");
         return [started, event, skippedEvent] as const;
@@ -2988,17 +2989,19 @@ describe("startServer, against a migrated venue directory", () => {
     // `startServer` exposes no handle on the transport a pass built, so its release is observed here.
     const closeSpy = vi.spyOn(Agent.prototype, "close");
     try {
-      const server = await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_MIN_TICK_MS: "1000",
-        WAITRON_MAX_TICK_MS: "600000",
-        // Matches `seedPendingEnvios`'s default `entorno`, so the drain's environment guard does not
-        // refuse the row and the pass makes a real submission attempt.
-        WAITRON_ENV: "production",
-      });
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          // Matches `seedPendingEnvios`'s default `entorno`, so the drain's environment guard does not
+          // refuse the row and the pass makes a real submission attempt.
+          WAITRON_ENV: "production",
+        },
+        {},
+        { timings: { minTickMs: 1000, maxTickMs: 600000 } },
+      );
       try {
         await waitForPass(server.health);
         expect(closeSpy).toHaveBeenCalled();
@@ -3033,39 +3036,6 @@ describe("startServer, against a migrated venue directory", () => {
     } finally {
       await sharedDb.execute(sql`delete from deployment where id = 1`);
     }
-  });
-});
-
-// The reject test needs no storage: the guard runs at the top of `startServer`, and an unopenable
-// venue directory keeps a storage failure from passing for it. The accept test needs the migrated
-// directory: its proof is reaching `credentials.key_missing` at `loadKeyRing`, which runs after the
-// stamp probe and migrations. No credentials key is set, so that is where a boot past the guard stops.
-describe("startServer's maxTickMs-vs-drain-budget guard", () => {
-  it("rejects WAITRON_MAX_TICK_MS at or above drain's staleness budget, before touching any infrastructure", async () => {
-    const error = await captureError(() =>
-      startServer({
-        ...TILL_ENV,
-        WAITRON_VENUE_DIR: UNOPENABLE_VENUE_DIR,
-        WAITRON_MAX_TICK_MS: String(DUTY_BUDGET_MS[DRAIN_DUTY]),
-      }),
-    );
-    expect(isAppError(error) && error.code).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_MAX_TICK_MS",
-      reason: "at_or_above_drain_budget",
-    });
-  });
-
-  it("lets a maxTickMs comfortably below the budget past this guard", async () => {
-    const error = await captureError(() =>
-      startServer({
-        ...TILL_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_MAX_TICK_MS: String(DUTY_BUDGET_MS[DRAIN_DUTY] - 1),
-      }),
-    );
-    expect(isAppError(error) && error.code).toBe("credentials.key_missing");
   });
 });
 
@@ -3114,17 +3084,18 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       );
       await withCapturedStdout(async () => {
         const port = await freePort();
-        const server = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_HTTP_HOST: "0.0.0.0",
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "dev",
-          WAITRON_MIN_TICK_MS: "50",
-          WAITRON_MAX_TICK_MS: "200",
-          WAITRON_SKIP_RETRY_MS: "100",
-        });
+        const server = await startServer(
+          {
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: sharedVenueDir,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_HTTP_HOST: "0.0.0.0",
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "dev",
+          },
+          {},
+          { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+        );
         try {
           const headers = {
             cookie: `waitron_till_session=${session.token}`,
@@ -3174,17 +3145,18 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   it("under devMode, the x-waitron-dev-device header authenticates AS that device on /api/device/me (no cookie)", async () => {
     await withCapturedStdout(async (lines) => {
       const port = await freePort();
-      const server = await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_HTTP_HOST: "0.0.0.0",
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "dev",
-        WAITRON_MIN_TICK_MS: "50",
-        WAITRON_MAX_TICK_MS: "200",
-        WAITRON_SKIP_RETRY_MS: "100",
-      });
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "dev",
+        },
+        {},
+        { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+      );
       try {
         expect(lines.some((line) => line.includes('"event":"mdns.responding"'))).toBe(false);
         // Device-2's binding: the override selected the named device, not device-1 or a default.
@@ -3206,17 +3178,18 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   it("the equipment read carries the notice keys", async () => {
     await withCapturedStdout(async () => {
       const port = await freePort();
-      const server = await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_HTTP_HOST: "0.0.0.0",
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "dev",
-        WAITRON_MIN_TICK_MS: "50",
-        WAITRON_MAX_TICK_MS: "200",
-        WAITRON_SKIP_RETRY_MS: "100",
-      });
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "dev",
+        },
+        {},
+        { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+      );
       try {
         const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
           headers: { [DEV_DEVICE_HEADER]: deviceId1 },
@@ -3235,17 +3208,18 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     await withCapturedStdout(async () => {
       const port = await freePort();
       witnessStores.length = 0;
-      const server = await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_HTTP_HOST: "0.0.0.0",
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "dev",
-        WAITRON_MIN_TICK_MS: "50",
-        WAITRON_MAX_TICK_MS: "200",
-        WAITRON_SKIP_RETRY_MS: "100",
-      });
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "dev",
+        },
+        {},
+        { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+      );
       try {
         const deviceMs = Date.now();
         const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
@@ -3272,12 +3246,12 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
           WAITRON_HTTP_HOST: "0.0.0.0",
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_ENV: "dev",
-          WAITRON_MIN_TICK_MS: "50",
-          WAITRON_MAX_TICK_MS: "200",
-          WAITRON_SKIP_RETRY_MS: "100",
         },
         {},
-        { requestFromBox: () => false },
+        {
+          timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 },
+          requestFromBox: () => false,
+        },
       );
       try {
         const deviceMs = Date.now();
@@ -3329,17 +3303,18 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     try {
       await withCapturedStdout(async () => {
         const port = await freePort();
-        const server = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_HTTP_HOST: "0.0.0.0",
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "dev",
-          WAITRON_MIN_TICK_MS: "50",
-          WAITRON_MAX_TICK_MS: "200",
-          WAITRON_SKIP_RETRY_MS: "100",
-        });
+        const server = await startServer(
+          {
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: sharedVenueDir,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_HTTP_HOST: "0.0.0.0",
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "dev",
+          },
+          {},
+          { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+        );
         try {
           const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
             headers: { [DEV_DEVICE_HEADER]: deviceId1 },
@@ -3375,17 +3350,18 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       startManagementSession(tx, { personId: person!.id }),
     );
     const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_HTTP_HOST: "0.0.0.0",
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "dev",
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_HOST: "0.0.0.0",
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "dev",
+      },
+      {},
+      { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+    );
     try {
       const response = await fetch(
         `http://127.0.0.1:${httpPort()}/management-api/orders/${randomUUID()}/reprint`,
@@ -3412,17 +3388,18 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   it("a boot NOT in devMode ignores the header (401 with no cookie)", async () => {
     const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+        WAITRON_HTTP_LANDING_PORT: "0",
+      },
+      {},
+      { timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 } },
+    );
     try {
       // With `config.devMode` false the header is inert, and with no cookie the read is refused.
       const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/me`, {

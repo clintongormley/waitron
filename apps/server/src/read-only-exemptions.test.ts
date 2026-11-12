@@ -182,10 +182,9 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
-  WAITRON_MIN_TICK_MS: "250",
-  WAITRON_MAX_TICK_MS: "1000",
-  WAITRON_SKIP_RETRY_MS: "250",
 };
+
+const TIMINGS = { minTickMs: 250, maxTickMs: 1_000, skipRetryMs: 250 };
 
 // The same credentials key boot loads, so the key sealed here is the one boot unseals.
 const RING = loadKeyRing({
@@ -442,13 +441,17 @@ const PREPARATION_REFUSAL = { status: 403, code: "authorization.not_permitted" }
 
 describe("each listed route is reached on a real read-only start, and nothing else is", () => {
   it("on a mirror", async () => {
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: mirror.dir,
-      WAITRON_NODE_ID: mirror.nodeId,
-      WAITRON_HTTP_PORT: String(await freePort()),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: mirror.dir,
+        WAITRON_NODE_ID: mirror.nodeId,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await waitForFirstPass(server);
@@ -490,13 +493,17 @@ describe("each listed route is reached on a real read-only start, and nothing el
   }, 60_000);
 
   it("near misses of the operation id row answer node.read_only on a mirror", async () => {
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: mirror.dir,
-      WAITRON_NODE_ID: mirror.nodeId,
-      WAITRON_HTTP_PORT: String(await freePort()),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: mirror.dir,
+        WAITRON_NODE_ID: mirror.nodeId,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     const base = `http://127.0.0.1:${httpPort()}`;
     const id = MIRROR_OPERATION_ID;
     try {
@@ -525,13 +532,17 @@ describe("each listed route is reached on a real read-only start, and nothing el
   }, 60_000);
 
   it("a mirror partway through a handover refuses an ordinary promote, and it stays a mirror", async () => {
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: midHandover.dir,
-      WAITRON_NODE_ID: midHandover.nodeId,
-      WAITRON_HTTP_PORT: String(await freePort()),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: midHandover.dir,
+        WAITRON_NODE_ID: midHandover.nodeId,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await waitForFirstPass(server);
@@ -580,13 +591,17 @@ describe("each listed route is reached on a real read-only start, and nothing el
   }, 60_000);
 
   it("a valid offer on a mirror records `prepared`", async () => {
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: spare.dir,
-      WAITRON_NODE_ID: spare.nodeId,
-      WAITRON_HTTP_PORT: String(await freePort()),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: spare.dir,
+        WAITRON_NODE_ID: spare.nodeId,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await waitForFirstPass(server);
@@ -612,13 +627,17 @@ describe("each listed route is reached on a real read-only start, and nothing el
   }, 60_000);
 
   it("on a fenced box", async () => {
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: fenced.dir,
-      WAITRON_NODE_ID: fenced.nodeId,
-      WAITRON_HTTP_PORT: String(await freePort()),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: fenced.dir,
+        WAITRON_NODE_ID: fenced.nodeId,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
       await waitForFirstPass(server);
@@ -660,14 +679,18 @@ describe("each listed route is reached on a real read-only start, and nothing el
 it("a real fenced start can prove its existing session and retire, while wrong proof changes nothing", async () => {
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
-  const server = await startServer({
-    ...KEY_ENV,
-    WAITRON_VENUE_DIR: fencedProof.dir,
-    WAITRON_NODE_ID: fencedProof.nodeId,
-    WAITRON_HTTP_PORT: String(port),
-    WAITRON_MANAGEMENT_ORIGIN: base,
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
-  });
+  const server = await startServer(
+    {
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: fencedProof.dir,
+      WAITRON_NODE_ID: fencedProof.nodeId,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MANAGEMENT_ORIGIN: base,
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    },
+    {},
+    { timings: TIMINGS },
+  );
   const send = (path: string, body: unknown) =>
     fetch(`http://127.0.0.1:${httpPort()}${path}`, {
       method: "POST",

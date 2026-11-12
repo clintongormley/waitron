@@ -1391,7 +1391,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-27 entries, size M.
+26 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
@@ -1419,9 +1419,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   #656 while pruning comments. No production caller sets `skipSecrets` any more, so whether the
   option should go is open.
   [Detail](box.md#appsserversrcerrorsts-still-cites-claudemd-5-for-things-5-does-not-say)
-- **`apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp
-  can round a value "past" a bound, which it cannot** — found by #653 while pruning comments.
-  [Detail](box.md#appsserverreadmemd-near-line-230-the-waitron_skip_retry_ms-row-says-the-sleep-clamp-can-round-a-value-past-a-bound-which-it-cannot)
+
 - **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there**
   [Detail](box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
 - **`packages/provisioning/README.md` also says only `ES-common` is implemented** — found by #561

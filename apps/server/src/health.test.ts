@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import type { StreamStatus, StreamView } from "@waitron/stream";
-import { DEFAULT_MAX_TICK_MS } from "./config.js";
+import { DEFAULT_DUTY_TIMINGS, DEFAULT_MAX_TICK_MS } from "./config.js";
 import { DRAIN_DUTY, RECONCILE_DUTY, type DutyReport, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
 import {
@@ -704,4 +704,8 @@ describe("runner jobs on health", () => {
     state.readJobs = () => ({ "menu.activation": view });
     expect(healthSnapshot(state, AT).body).toEqual({ ok: true, tradingAvailable: false });
   });
+});
+
+it("drain's budget exceeds the longest idle sleep", () => {
+  expect(DEFAULT_DUTY_TIMINGS.maxTickMs).toBeLessThan(DUTY_BUDGET_MS[DRAIN_DUTY]);
 });

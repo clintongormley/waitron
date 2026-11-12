@@ -136,11 +136,7 @@ const KEY_ENV = {
 };
 
 // Short ticks, so the passes the cases wait on land inside the poll budget.
-const TICK_ENV = {
-  WAITRON_MIN_TICK_MS: "250",
-  WAITRON_MAX_TICK_MS: "1000",
-  WAITRON_SKIP_RETRY_MS: "250",
-};
+const TIMINGS = { minTickMs: 250, maxTickMs: 1_000, skipRetryMs: 250 };
 
 // The same key boot loads, so the identity sealed here is the one a promote unseals.
 const RING = loadKeyRing({
@@ -384,7 +380,6 @@ function mirrorEnv(
 ): Record<string, string> {
   return {
     ...KEY_ENV,
-    ...TICK_ENV,
     WAITRON_NODE_ID: nodeId,
     WAITRON_VENUE_DIR: dir,
     WAITRON_HTTP_PORT: String(port),
@@ -418,10 +413,14 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
 
     killSpy.mockClear();
 
-    const mirror = await startServer({
-      ...mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
-      ...allocationEnv,
-    }).catch(async (err: unknown) => {
+    const mirror = await startServer(
+      {
+        ...mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
+        ...allocationEnv,
+      },
+      {},
+      { timings: TIMINGS },
+    ).catch(async (err: unknown) => {
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });
@@ -486,7 +485,6 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       primary = await startServer(
         {
           ...KEY_ENV,
-          ...TICK_ENV,
           WAITRON_NODE_ID: persisted.WAITRON_NODE_ID!,
           WAITRON_VENUE_DIR: venueDir.main,
           WAITRON_HTTP_PORT: String(primaryPort),
@@ -494,7 +492,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
           WAITRON_STATE_DIR: stateDir,
         },
         {},
-        { boxHost: synchronisedBoxHost() },
+        { timings: TIMINGS, boxHost: synchronisedBoxHost() },
       );
       await poll(async () => primary!.health.lastPassAt ?? undefined);
 
@@ -605,10 +603,14 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     const allocationEnv = await writeAllocationInput(stateDir, keyFixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
-    const server = await startServer({
-      ...mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
-      ...allocationEnv,
-    }).catch(async (err: unknown) => {
+    const server = await startServer(
+      {
+        ...mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
+        ...allocationEnv,
+      },
+      {},
+      { timings: TIMINGS },
+    ).catch(async (err: unknown) => {
       await rm(stateDir, { recursive: true, force: true });
       throw err;
     });
@@ -717,10 +719,14 @@ describe("a real offer beside a real promotion on a real start", () => {
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
-    const server = await startServer({
-      ...mirrorEnv(venueDir[venue], port, seed.nodeId, stateDir),
-      ...allocationEnv,
-    });
+    const server = await startServer(
+      {
+        ...mirrorEnv(venueDir[venue], port, seed.nodeId, stateDir),
+        ...allocationEnv,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
       await body({

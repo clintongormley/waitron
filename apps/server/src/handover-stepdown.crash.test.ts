@@ -218,8 +218,9 @@ registerHooks({ resolve(specifier, context, next) {
   return swap === undefined ? next(specifier, context) : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(swap[1]) };
 }});
 const { startServer } = await import(${JSON.stringify(here("./boot.ts"))});
-const { env, binding } = JSON.parse(process.argv[1]);
+const { env, binding, timings } = JSON.parse(process.argv[1]);
 await startServer(env, env, {
+  timings,
   peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
   stepdown: {
     mount(app, stepDown) {
@@ -278,7 +279,7 @@ async function startChild(
       "--input-type=module",
       "-e",
       CHILD,
-      JSON.stringify({ env, binding }),
+      JSON.stringify({ env, binding, timings: { minTickMs: 200, maxTickMs: 600_000 } }),
     ],
     {
       env: { ...base, ...env, WAITRON_TEST_CRASH_AT: at },
@@ -406,8 +407,6 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
-    WAITRON_MIN_TICK_MS: "200",
   };
   const env = { ...childEnv, WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" };
 
@@ -442,7 +441,7 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
 
   // Read before the restart, which replays the log; a graceful close would have removed the file.
   const nodeWalBytes = (await stat(join(venueDir, `${NODE_FILE}-wal`))).size;
-  server = await startServer(env, env);
+  server = await startServer(env, env, { timings: { maxTickMs: 600000, minTickMs: 200 } });
   const restartedBase = `http://127.0.0.1:${httpPort()}`;
   await vi.waitFor(
     async () => {
