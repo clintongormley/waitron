@@ -23228,15 +23228,13 @@ describe("A737 Find a bill page", () => {
       getTransactionReceiptPrint: vi
         .fn()
         .mockResolvedValue({ status: "done", jobId: "history-print", canRetry: false }),
-      getTransactionDeliveries: vi
-        .fn()
-        .mockResolvedValue({
-          current: null,
-          originalCompleted: true,
-          originalPrinterId: null,
-          history: [],
-          actions: { print: null, retryOriginal: null, receiptInstead: null, email: null },
-        }),
+      getTransactionDeliveries: vi.fn().mockResolvedValue({
+        current: null,
+        originalCompleted: true,
+        originalPrinterId: null,
+        history: [],
+        actions: { print: null, retryOriginal: null, receiptInstead: null, email: null },
+      }),
     });
     counter.store.addProduct(coffee, "2");
     await view.updateComplete;
