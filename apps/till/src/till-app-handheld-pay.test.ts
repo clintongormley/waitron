@@ -6260,7 +6260,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
 });
 
 describe("till-app: Finish table refused from the ⋮ on a handheld opened from the floor", () => {
-  it("shows the refusal, its Take payment and its Record unpaid departure in the window at 390x844", async () => {
+  it("shows the refusal, its Take payment and direction to the Bill action in the window at 390x844", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
@@ -6300,9 +6300,9 @@ describe("till-app: Finish table refused from the ⋮ on a handheld opened from 
       expect(inOrder(order, "[data-finish-refusal] [data-take-payment]")!.checkVisibility()).toBe(
         true,
       );
-      expect(
-        inOrder(order, "[data-finish-refusal] [data-record-departure]")!.checkVisibility(),
-      ).toBe(true);
+      const hint = refusal.querySelector<HTMLElement>(".finish-refusal-actions span")!;
+      expect(hint.checkVisibility()).toBe(true);
+      expect(text(hint)).toBe(t("departure.finish_hint"));
       await expect
         .poll(() => {
           const box = refusal.getBoundingClientRect();
@@ -6310,6 +6310,11 @@ describe("till-app: Finish table refused from the ⋮ on a handheld opened from 
           return box.top >= 0 && Math.round(box.bottom) <= innerHeight;
         })
         .toBe(true);
+      await openTableMenu(order);
+      const record = inOrder(order, "[data-table-menu] [data-record-departure]")!;
+      expect(record.checkVisibility()).toBe(true);
+      const box = record.getBoundingClientRect();
+      expect(box.top >= 0 && Math.round(box.bottom) <= innerHeight).toBe(true);
     } finally {
       await page.viewport(viewport.width, viewport.height);
     }

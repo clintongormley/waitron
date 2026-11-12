@@ -376,12 +376,16 @@ describe("A803 no tab panel", () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       const take = q(el, "[data-finish-refusal] [data-take-payment]")!;
-      const record = q(el, "[data-finish-refusal] [data-record-departure]")!;
+      const hint = refusal.querySelector<HTMLElement>(".finish-refusal-actions span")!;
       expect(take.checkVisibility()).toBe(true);
-      expect(record.checkVisibility()).toBe(true);
+      expect(hint.checkVisibility()).toBe(true);
+      expect(hint.textContent).toBe(t("departure.finish_hint"));
       const departures = capture(el, "record-unpaid-departure");
+      await openTableMenu(el);
+      const record = q(el, "[data-table-menu] [data-record-departure]")!;
+      expect(record.checkVisibility()).toBe(true);
       await userEvent.click(record);
-      expect(departures).toHaveLength(1);
+      expect(departures.map((event) => event.detail)).toEqual([{ workingOrderId: footerBill.workingOrderId }]);
       await userEvent.click(take);
       expect(payments.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-5" }]);
     },

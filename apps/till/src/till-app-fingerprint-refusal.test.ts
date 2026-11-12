@@ -274,7 +274,7 @@ it.each(["en-GB", "es-ES"])(
     const write = vi.fn().mockRejectedValue(refusal);
     const { el } = await mount(locale, { recordUnpaidDeparture: write });
     const screen = await openTable(el);
-    emit(screen, "record-unpaid-departure");
+    emit(screen, "record-unpaid-departure", { workingOrderId: screen.orderId });
     await flush(el);
     const editor = el.shadowRoot!.querySelector("till-unpaid-departure-dialog")!;
     const field = editor

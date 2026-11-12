@@ -3740,7 +3740,7 @@ export const es: Record<StringKey, string> = {
   "departure.scope":
     "Esta cuenta queda registrada sin pagar. Se detiene su comida pendiente de servir; las demás cuentas conservan la suya. No se imprime ticket. La mesa sigue abierta mientras otros comensales sigan comiendo o tengan cuentas pendientes de cerrar.",
   "departure.finish_hint":
-    "Si alguien se ha ido sin pagar, elige su cuenta y después Registrar salida sin pagar en el menú de esa cuenta.",
+    "Si alguien se ha ido sin pagar, elige su cuenta y después Registrar salida sin pagar en ⋮ de esa cuenta.",
   "departure.reason": "Motivo",
   "departure.reason_invalid": "Indica por qué queda sin pagar",
   "departure.reason_long": "Usa 500 caracteres como mucho para el motivo",
