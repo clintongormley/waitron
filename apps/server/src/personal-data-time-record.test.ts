@@ -25,7 +25,7 @@ import { TIME_RECORD_FILES, timeRecordPersonalData } from "./personal-data-time-
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
 });
-/** The venue's date is 2026-03-10; Marta's last entry is on 2026-03-20, after it. */
+/** The venue's date is 2026-03-10; Martha's last entry is on 2026-03-20, after it. */
 const AT = new Date("2026-03-10T12:00:00Z");
 /** Her first entry's local day is 2026-01-01 (offset -120); its UTC date is 2026-01-02. */
 const START = "2026-01-01";
@@ -43,7 +43,7 @@ beforeEach(async () => {
   });
   const nodeId = await seedNode(suite.db);
   const [marta, colleague] = await seedPersons(suite.db, [
-    { displayName: "Marta López", email: "marta@example.test", role: "staff" },
+    { displayName: "Martha Lewis", email: "marta@example.test", role: "staff" },
     { displayName: COLLEAGUE_NAME, email: "colleague@example.test", role: "staff" },
   ]);
   martaId = marta!.id;
@@ -184,7 +184,7 @@ describe("the server's working-time part", () => {
     const built = await files();
     const csv = text(named(built, "time-record.csv"));
     const pdf = await pdfText(named(built, "time-record.pdf"));
-    expect(pdf).toContain("Marta López");
+    expect(pdf).toContain("Martha Lewis");
     for (const content of [csv, pdf]) {
       expect(content).not.toContain(COLLEAGUE_NAME);
       expect(content).not.toContain(colleagueId);

@@ -37,7 +37,7 @@ const MALFORMED_ID = "not-a-uuid";
 const staffPath = (id: string) => `/management-api/staff/${id}/personal-data/export`;
 const OWN_PATH = "/management-api/me/personal-data/export";
 const MARTA = {
-  displayName: "Marta López",
+  displayName: "Martha Lewis",
   email: "marta@example.test",
   telephone: "+34611222333",
   firstNames: "MARTA-FIRST-CANARY",
@@ -127,7 +127,7 @@ beforeEach(async () => {
   });
   await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [
-    { displayName: "Ana Admin", email: "ana@example.test", role: "admin" },
+    { displayName: "Anna Admin", email: "ana@example.test", role: "admin" },
     { displayName: "Otto Admin", email: "otto@example.test", role: "admin" },
     { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
     { displayName: "Sam Supervisor", email: "sam@example.test", role: "supervisor" },
@@ -169,7 +169,7 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/zip");
     expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="marta-lopez-2026-10-05.zip"',
+      'attachment; filename="martha-lewis-2026-10-05.zip"',
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");

@@ -119,7 +119,7 @@ beforeEach(async () => {
   await seedNode(suite.db);
   const [marta, colleague] = await seedPersons(suite.db, [
     {
-      displayName: "Marta López",
+      displayName: "Martha Lewis",
       email: "marta@example.test",
       pinHash: MARTA_PIN_HASH,
       role: "staff",
@@ -144,7 +144,7 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/zip");
     expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="marta-lopez-2026-10-05.zip"',
+      'attachment; filename="martha-lewis-2026-10-05.zip"',
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
@@ -276,7 +276,7 @@ describe("GET /management-api/me/personal-data/export", () => {
     const response = await ask(mounted());
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="marta-lopez-2026-10-04.zip"',
+      'attachment; filename="martha-lewis-2026-10-04.zip"',
     );
     expect(subjects).toEqual([{ personId: martaId, language: "en", at: NOW, timeZone: "UTC" }]);
     expect(subjects[0]).not.toHaveProperty("locationId");
@@ -302,7 +302,7 @@ describe("GET /management-api/me/personal-data/export", () => {
     const response = await ask(mounted({ now: () => new Date("1970-01-01T00:00:00Z") }));
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="marta-lopez-1970-01-01.zip"',
+      'attachment; filename="martha-lewis-1970-01-01.zip"',
     );
     expect(Object.keys(await unzipped(response))).toContain("extra.json");
   });
@@ -320,7 +320,7 @@ describe("sendPersonalData", () => {
   it("runs the caller's authorisation before reading and again after building", async () => {
     const authorize = vi.fn<PersonalDataAuthorize>(async () => {
       order.push("authorize");
-      return { personId: martaId, label: "Marta López", language: "en" };
+      return { personId: martaId, label: "Martha Lewis", language: "en" };
     });
     const response = await testRoute(authorize).request("/t");
     expect(response.status).toBe(200);
@@ -331,7 +331,7 @@ describe("sendPersonalData", () => {
   it("sends nothing when the second authorisation names a different person", async () => {
     const authorize = vi
       .fn<PersonalDataAuthorize>()
-      .mockResolvedValueOnce({ personId: martaId, label: "Marta López", language: "en" })
+      .mockResolvedValueOnce({ personId: martaId, label: "Martha Lewis", language: "en" })
       .mockResolvedValueOnce({ personId: colleagueId, label: "Colleague Canary", language: "en" });
     const response = await testRoute(authorize).request("/t");
     expect(response.status).toBe(500);

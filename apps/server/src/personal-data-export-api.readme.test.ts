@@ -82,7 +82,7 @@ beforeEach(async () => {
   });
   await seedNode(suite.db);
   const [marta] = await seedPersons(suite.db, {
-    displayName: "Marta López",
+    displayName: "Martha Lewis",
     email: "marta@example.test",
     role: "staff",
   });
@@ -106,7 +106,7 @@ describe("the README in a person's own personal-data download", () => {
       personalDataReadme({
         language: "en",
         venue: "Test SL",
-        person: "Marta López",
+        person: "Martha Lewis",
         date: "2026-10-05",
         files: ["profile.json", "sign-in.json", "extra.json"],
       }),
