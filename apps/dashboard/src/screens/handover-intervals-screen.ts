@@ -101,7 +101,7 @@ export class HandoverIntervalsScreen extends LitElement {
         label: t("returned_invoices.chain"),
         cell: (row) =>
           html`<span part="value"
-            >${row.installation}<br />${row.generationId}<br />${fill("returned_invoices.position", { sequence: row.sequence })}</span
+            >${row.installation}<br />${row.generationId}<br />${fill("returned_invoices.position", { sequence: String(row.sequence) })}</span
           >`,
       },
       {
@@ -109,7 +109,7 @@ export class HandoverIntervalsScreen extends LitElement {
         label: t("returned_invoices.invoice"),
         cell: (row) =>
           html`<span part="value"
-            >${row.invoiceNumber}<br />${row.issueDate}<br />${row.kind === "cancellation" ? t("returned_invoices.cancellation") : row.kind}</span
+            >${row.invoiceNumber}<br />${row.issueDate}<br />${t(`returned_invoices.kind_${row.category}`)}${row.category === "cancellation" ? "" : html`<br />${row.kind}`}</span
           >`,
       },
       {

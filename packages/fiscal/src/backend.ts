@@ -414,6 +414,7 @@ export interface ReturnedInvoiceRecord {
   invoiceNumber: string;
   issueDate: string;
   kind: string;
+  category: "invoice" | "simplified" | "replacement" | "correction" | "cancellation";
   correctsRecordId: string | null;
   taxable: string | null;
   gross: string | null;

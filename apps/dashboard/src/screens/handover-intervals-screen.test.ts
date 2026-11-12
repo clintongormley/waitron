@@ -132,6 +132,7 @@ it("loads returned invoices independently and pages, retries and refreshes to ze
     invoiceNumber: "A/42",
     issueDate: "2026-07-20",
     kind: "F2",
+    category: "simplified",
     correctsRecordId: null,
     taxable: "0.30",
     gross: "0.33",
@@ -171,6 +172,8 @@ it("loads returned invoices independently and pages, retries and refreshes to ze
   expect(table().emptyMessage).toBe("");
   await click("refresh");
   await vi.waitFor(() => expect(table().rows).toEqual([invoice]));
+  expect(table().shadowRoot!.textContent).toContain("Simplified invoice");
+  expect(table().shadowRoot!.textContent).toContain("F2");
   expect(table().shadowRoot!.textContent).toContain("2026-07-20");
   expect(table().shadowRoot!.textContent).toContain("01:30");
   await click("next");

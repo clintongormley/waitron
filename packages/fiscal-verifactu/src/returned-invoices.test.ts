@@ -1,3 +1,4 @@
+import { appendOriginalForReturn } from "./testing/returned-invoice.js";
 import type { CanonicalValue } from "@waitron/membership";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -11,7 +12,7 @@ import {
   receiveReturnedOriginals,
   type ReturnRow,
 } from "./handover-return.js";
-import { returnedInvoices } from "./returned-invoices.js";
+import { returnedInvoices, storedBases } from "./returned-invoices.js";
 import { VERIFACTU_HANDOVER } from "./handover-summary.js";
 
 const source = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -47,19 +48,8 @@ async function fixture() {
   });
   return node;
 }
-async function append(node: SeededNode, number: number) {
-  const sale = await seedSale(source.db, node, number);
-  const identity = source.db.get<{ nif: string; installation: string }>(
-    sql`select nif, numero_instalacion as installation from registro_sif where id = ${node.sifId}`,
-  )!;
-  const pending = altaFor(node, sale, number, number);
-  pending.input.IDEmisorFactura = identity.nif;
-  pending.input.SistemaInformatico.NumeroInstalacion = identity.installation;
-  await withTransaction(source.db, (tx) => appendToChain(tx, node.nodeId, pending));
-  return source.db.get<{ id: string }>(
-    sql`select id from registros_facturacion where sale_id = ${sale}`,
-  )!.id;
-}
+const append = (node: SeededNode, number: number) =>
+  appendOriginalForReturn(source.db, node, number);
 async function inventory(node: SeededNode) {
   return withTransaction(source.db, (tx) => readReturnedOriginals(tx, node.nodeId));
 }
@@ -164,6 +154,7 @@ it("reads only marked invoices with stored bases and separate record kinds", asy
       invoiceNumber: "A/1",
       issueDate: "2026-07-20",
       kind: "F2",
+      category: "simplified",
       correctsRecordId: null,
       taxable: "102.02",
       gross: "123.45",
@@ -236,3 +227,53 @@ it("sums the stored bases exactly instead of subtracting totals, and retains cor
     tax: "0.03",
   });
 });
+
+it.each([
+  ["F1", "invoice"],
+  ["F2", "simplified"],
+  ["F3", "replacement"],
+  ["R1", "correction"],
+  ["R2", "correction"],
+  ["R3", "correction"],
+  ["R4", "correction"],
+  ["R5", "correction"],
+] as const)("keeps original type %s beside neutral category %s", async (kind, category) => {
+  const node = await fixture();
+  const original = await append(node, 1);
+  const first = await inventory(node);
+  const sale = await seedSale(source.db, node, 2);
+  const pending = altaFor(node, sale, 2, 2);
+  pending.input.IDEmisorFactura = String(first.records[0]!.id_emisor_factura);
+  pending.input.SistemaInformatico.NumeroInstalacion = source.db.get<{ value: string }>(
+    sql`select numero_instalacion as value from registro_sif where id = ${node.sifId}`,
+  )!.value;
+  pending.input.TipoFactura = kind;
+  if (kind !== "F2" && kind !== "R5")
+    pending.input.Destinatarios = {
+      IDDestinatario: [{ NombreRazon: "Customer", NIF: "89890001K" }],
+    };
+  const reference = {
+    IDEmisorFactura: pending.input.IDEmisorFactura,
+    NumSerieFactura: "A/1",
+    FechaExpedicionFactura: pending.input.FechaExpedicionFactura,
+  };
+  if (kind === "F3") pending.input.FacturasSustituidas = [reference];
+  if (kind.startsWith("R")) {
+    pending.input.TipoRectificativa = "I";
+    pending.input.FacturasRectificadas = [reference];
+  }
+  await withTransaction(source.db, (tx) => appendToChain(tx, node.nodeId, pending));
+  expect(await receive(node, await inventory(node))).toBe(true);
+  const rows = await withTransaction(receiver.db, (tx) =>
+    returnedInvoices(tx, { offset: 0, limit: 101 }),
+  );
+  expect(rows[0]!.recordId).toBe(original);
+  expect(rows[1]).toMatchObject({ kind, category });
+});
+
+it.each(["[{}]", '[{"BaseImponibleOimporteNoSujeto":7}]'])(
+  "leaves a missing or non-string stored base unrecorded (%s)",
+  (breakdown) => {
+    expect(storedBases(breakdown)).toBeNull();
+  },
+);

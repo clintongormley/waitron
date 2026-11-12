@@ -92,12 +92,26 @@ describe.each(["light", "dark"] as const)("returned invoices (%s)", (theme) => {
         invoiceNumber: "A/42",
         issueDate: "2026-07-20",
         kind: "cancellation",
+        category: "cancellation",
         correctsRecordId: "prior-record",
         taxable: null,
         gross: null,
         tax: null,
         receivedAt: "2026-07-21T23:30:00Z",
       };
+      const records = [
+        row,
+        {
+          ...row,
+          recordId: "original",
+          kind: "F2",
+          category: "simplified",
+          correctsRecordId: null,
+          taxable: "100.00",
+          gross: "121.00",
+          tax: "21.00",
+        },
+      ];
       const listReturnedInvoices = vi
         .fn()
         .mockImplementationOnce(
@@ -106,7 +120,7 @@ describe.each(["light", "dark"] as const)("returned invoices (%s)", (theme) => {
               resolve = r;
             }),
         )
-        .mockResolvedValueOnce({ records: [row], nextOffset: null, timeZone: "Europe/Madrid" })
+        .mockResolvedValueOnce({ records, nextOffset: null, timeZone: "Europe/Madrid" })
         .mockRejectedValueOnce({ code: "report.failed" })
         .mockResolvedValue({ records: [], nextOffset: null, timeZone: "Europe/Madrid" });
       const { el, host } = await mountWidget<HandoverIntervalsScreen>(
@@ -128,10 +142,15 @@ describe.each(["light", "dark"] as const)("returned invoices (%s)", (theme) => {
       await expectNoA11yViolations(host);
       const button = el.shadowRoot!.querySelector<HTMLElement>('[data-invoices="refresh"]')!;
       await userEvent.click(button);
-      await vi.waitFor(() => expect(table().rows).toEqual([row]));
+      await vi.waitFor(() => expect(table().rows).toEqual(records));
       await table().updateComplete;
       expect(table().shadowRoot!.textContent).toContain(words["returned_invoices.not_recorded"]);
-      expect(table().shadowRoot!.textContent).toContain(words["returned_invoices.cancellation"]);
+      expect(table().shadowRoot!.textContent).toContain(
+        words["returned_invoices.kind_cancellation"],
+      );
+      expect(table().shadowRoot!.textContent).toContain(words["returned_invoices.kind_simplified"]);
+      expect(table().shadowRoot!.textContent).toContain("F2");
+      expect(table().shadowRoot!.textContent).toContain("100.00");
       expect(table().shadowRoot!.textContent).toContain("prior-record");
       expect(table().shadowRoot!.textContent).toContain("2026-07-20");
       expect(table().shadowRoot!.textContent).toContain("1:30");

@@ -4,23 +4,15 @@ import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 
 export function absentInvoiceIds(tx: Transaction, ids: readonly string[]): string[] {
-  const absent: string[] = [];
-  for (let start = 0; start < ids.length; start += 500) {
-    const chunk = ids.slice(start, start + 500);
-    const held = new Set(
-      tx
-        .all<{ id: string }>(
-          sql`select id from registros_facturacion
-      where id in (${sql.join(
-        chunk.map((id) => sql`${id}`),
-        sql`, `,
-      )})`,
-        )
-        .map((row) => row.id),
-    );
-    absent.push(...chunk.filter((id) => !held.has(id)));
-  }
-  return absent;
+  const held = new Set(
+    tx
+      .all<{ id: string }>(
+        sql`select id from registros_facturacion
+    where id in (select value from json_each(${JSON.stringify(ids)}))`,
+      )
+      .map((row) => row.id),
+  );
+  return ids.filter((id) => !held.has(id));
 }
 
 export async function markReturnedInvoices(
@@ -28,15 +20,9 @@ export async function markReturnedInvoices(
   ids: readonly string[],
   now: Date,
 ): Promise<void> {
-  for (let start = 0; start < ids.length; start += 500) {
-    const chunk = ids.slice(start, start + 500);
-    await tx.execute(sql`insert into returned_invoice_records (record_id, received_at)
-      select id, ${now.toISOString()} from registros_facturacion
-      where id in (${sql.join(
-        chunk.map((id) => sql`${id}`),
-        sql`, `,
-      )})`);
-  }
+  await tx.execute(sql`insert into returned_invoice_records (record_id, received_at)
+    select id, ${now.toISOString()} from registros_facturacion
+    where id in (select value from json_each(${JSON.stringify(ids)}))`);
 }
 
 export async function returnedInvoices(
@@ -49,6 +35,11 @@ export async function returnedInvoices(
       r.secuencia as sequence, r.num_serie_factura as invoiceNumber,
       r.fecha_expedicion_factura as issueDate,
       case when r.tipo_registro = 'anulacion' then 'cancellation' else r.tipo_factura end as kind,
+      case when r.tipo_registro = 'anulacion' then 'cancellation'
+        when r.tipo_factura = 'F2' then 'simplified'
+        when r.tipo_factura = 'F3' then 'replacement'
+        when r.tipo_factura in ('R1', 'R2', 'R3', 'R4', 'R5') then 'correction'
+        else 'invoice' end as category,
       r.corrects_registro_id as correctsRecordId, r.desglose as breakdown,
       r.importe_total as gross, r.cuota_total as tax, m.received_at as receivedAt
     from returned_invoice_records m join registros_facturacion r on r.id = m.record_id
@@ -58,7 +49,7 @@ export async function returnedInvoices(
   return rows.map(({ breakdown, ...row }) => ({ ...row, taxable: storedBases(breakdown) }));
 }
 
-function storedBases(breakdown: string | null): string | null {
+export function storedBases(breakdown: string | null): string | null {
   if (breakdown === null) return null;
   try {
     const rows: unknown = JSON.parse(breakdown);

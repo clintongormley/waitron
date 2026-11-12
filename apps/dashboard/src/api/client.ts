@@ -1,5 +1,3 @@
-import type { ReturnedInvoiceRecord } from "@waitron/fiscal";
-export type { ReturnedInvoiceRecord };
 import type { RecipientIdentifier } from "@waitron/country-packs";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-types.js";
@@ -26,6 +24,25 @@ export interface HandoverInterval {
   activatedAt: string;
   reason: string;
 }
+export interface ReturnedInvoiceRecord {
+  recordId: string;
+  saleId: string;
+  sourceNodeId: string;
+  sourceName: string;
+  generationId: string;
+  installation: string;
+  sequence: number;
+  invoiceNumber: string;
+  issueDate: string;
+  kind: string;
+  category: "invoice" | "simplified" | "replacement" | "correction" | "cancellation";
+  correctsRecordId: string | null;
+  taxable: string | null;
+  gross: string | null;
+  tax: string | null;
+  receivedAt: string;
+}
+
 export interface ReturnedInvoices {
   records: ReturnedInvoiceRecord[];
   nextOffset: number | null;

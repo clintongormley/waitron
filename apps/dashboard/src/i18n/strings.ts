@@ -27,7 +27,7 @@ export const en = {
 
   "returned_invoices.title": "Returned invoices",
   "returned_invoices.tracking":
-    "This list tracks invoices first received after this feature was installed. It does not identify duplicates or mark invoices in reports.",
+    "Tracking starts with this feature. Invoices already held in a copy are not added. This list does not identify duplicates or mark invoices in reports.",
   "returned_invoices.chain": "Generating installation and chain",
   "returned_invoices.position": "Chain position {sequence}",
   "returned_invoices.invoice": "Invoice, issue date and kind",
@@ -39,7 +39,11 @@ export const en = {
   "returned_invoices.tax": "Tax amount",
   "returned_invoices.received": "First received",
   "returned_invoices.not_recorded": "Not recorded",
-  "returned_invoices.cancellation": "Cancellation",
+  "returned_invoices.kind_cancellation": "Cancellation",
+  "returned_invoices.kind_invoice": "Invoice",
+  "returned_invoices.kind_simplified": "Simplified invoice",
+  "returned_invoices.kind_replacement": "Replacement invoice",
+  "returned_invoices.kind_correction": "Corrective invoice",
   "returned_invoices.refresh": "Refresh invoices",
   "returned_invoices.previous": "Previous",
   "returned_invoices.next": "Next",
@@ -3951,7 +3955,7 @@ export const es: Record<StringKey, string> = {
 
   "returned_invoices.title": "Facturas devueltas",
   "returned_invoices.tracking":
-    "Esta lista incluye las facturas recibidas por primera vez desde que se instaló esta función. No identifica duplicados ni marca las facturas en los informes.",
+    "El seguimiento empieza con esta función. No se añaden las facturas que ya estaban en una copia. Esta lista no identifica duplicados ni marca las facturas en los informes.",
   "returned_invoices.chain": "Instalación y cadena de origen",
   "returned_invoices.position": "Posición en la cadena: {sequence}",
   "returned_invoices.invoice": "Factura, fecha de expedición y tipo",
@@ -3963,7 +3967,11 @@ export const es: Record<StringKey, string> = {
   "returned_invoices.tax": "Cuota total",
   "returned_invoices.received": "Primera recepción",
   "returned_invoices.not_recorded": "No consta",
-  "returned_invoices.cancellation": "Anulación",
+  "returned_invoices.kind_cancellation": "Anulación",
+  "returned_invoices.kind_invoice": "Factura",
+  "returned_invoices.kind_simplified": "Factura simplificada",
+  "returned_invoices.kind_replacement": "Factura de sustitución",
+  "returned_invoices.kind_correction": "Factura rectificativa",
   "returned_invoices.refresh": "Actualizar facturas",
   "returned_invoices.previous": "Anterior",
   "returned_invoices.next": "Siguiente",
