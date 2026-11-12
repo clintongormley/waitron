@@ -7,7 +7,7 @@ import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial } from "../test/first-setup-browser.js";
-import { click, namedSummary, q } from "../test/missing-database-browser.js";
+import { click, formErrors, namedSummary, q, shown } from "../test/missing-database-browser.js";
 import { heldFixture, refusedCause, settled } from "../test/held-database-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 
@@ -22,12 +22,6 @@ const locales = ["en-GB", "es-ES"] as const;
 const stringsFor = (locale: string) => initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
 const shellFor = (locale: string) => (locale.startsWith("es") ? shellEs : shellEn);
 const text = (app: SetupApp) => app.shadowRoot!.textContent!;
-const formErrors = (app: SetupApp) =>
-  [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
-    (f) => f.error,
-  );
-// A form's error is drawn inside wt-form-actions' own shadow root, out of reach of text(app).
-const shown = (app: SetupApp) => [text(app), ...formErrors(app)].join("\n");
 const startAgainSends = (requests: { path: string }[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/start-again"));
 function expectNoConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {

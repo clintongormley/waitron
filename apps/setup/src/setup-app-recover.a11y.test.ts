@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import type { WtButton } from "@waitron/ui";
+import type { WtButton, WtChoiceRow } from "@waitron/ui";
 import { setLocale } from "./i18n/t.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
@@ -48,7 +48,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             const { app, host } = await wipeFixture({ ...fixtures[state]!(), locale, theme });
             await click(app, "recover-backup");
             let section = q<HTMLElement>(app, "screen-first-owner")!;
-            let focusable: WtButton;
+            let focusable: WtButton | WtChoiceRow;
             if (state === "refused-fault") {
               await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
               await settled(app);
@@ -56,8 +56,9 @@ for (const locale of ["en-GB", "es-ES"] as const)
             } else {
               await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
               await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-              focusable = q<WtButton>(app, "confirm-recover")!;
-              await expect.poll(() => focusable.disabled).toBe(false);
+              const confirm = q<WtButton>(app, "confirm-recover")!;
+              focusable = confirm;
+              await expect.poll(() => confirm.disabled).toBe(false);
               if (state === "join-or-recover") {
                 await click(app, "confirm-recover");
                 const restarting = initialOwnerStrings[locale === "es-ES" ? "es" : "en"].restarting;
@@ -67,7 +68,9 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 const role = q<LitElement>(app, "screen-role")!;
                 await role.updateComplete;
                 section = role;
-                focusable = role.shadowRoot!.querySelector<WtButton>("[data-test=choose-restore]")!;
+                focusable = role.shadowRoot!.querySelector<WtChoiceRow>(
+                  "[data-test=choose-restore]",
+                )!;
               }
             }
             await app.updateComplete;
@@ -78,8 +81,8 @@ for (const locale of ["en-GB", "es-ES"] as const)
               await page.screenshot({
                 path: `__screenshots__/a1131bc-recover/${locale}-${theme}-${width}-${state}.png`,
               });
-            expect(focusable.disabled).toBe(false);
             const native = focusable.shadowRoot!.querySelector("button")!;
+            if ("disabled" in focusable) expect(focusable.disabled).toBe(false);
             native.focus();
             expect(focusable.shadowRoot!.activeElement).toBe(native);
             expect(native.getBoundingClientRect().width).toBeGreaterThan(0);

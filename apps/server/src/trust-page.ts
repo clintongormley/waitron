@@ -136,7 +136,7 @@ code, a { overflow-wrap: anywhere; }
 ${steps}
 <section class="go"><h2>${caAvailable ? "4" : "2"}. Open Waitron</h2>
 <p>Open Waitron with the link below, then check the address bar of the page it opens. If that still
-shows <span class="warning-words">“not secure”</span>, come back here and start again from step 1.</p>
+shows <span class="warning-words">Not secure</span>, come back here and start again from step 1.</p>
 <p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to Waitron</a></p>
 <ul>${urlItems}</ul></section>
 ${qrSvg ? `<section class="qr"><h2>Open this page on another device</h2><figure>${qrSvg}</figure></section>` : ""}

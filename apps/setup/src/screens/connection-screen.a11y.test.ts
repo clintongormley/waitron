@@ -4,7 +4,7 @@ import "./connection-screen.js";
 import type { SetupConnectionScreen } from "./connection-screen.js";
 
 /**
- * Every distinct rendering, in both themes. The red "not secure" words matter here: colour is the
+ * Every distinct rendering, in both themes. The red Not secure words matter here: colour is the
  * one thing an axe contrast check can catch that reading the template cannot, and the dead-end state
  * removes the only focusable control after the link, so its keyboard order changes shape.
  */

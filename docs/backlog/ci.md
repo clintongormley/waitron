@@ -586,7 +586,7 @@ A1424's live qualification was added on 7 November 2026.
 
 ## Bundle: Add a control to each check that cannot fail
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Three adjustment-portion refusal checks also pass with shortened ID lists.** Qualify the
   intended mixed-row, note and course refusals with accepting controls, without weakening the
@@ -596,10 +596,6 @@ A1424's live qualification was added on 7 November 2026.
   Add an independent check for address checking, stopping on a certificate warning and the page's
   replacement limit. The earlier Spanish installer referral passes the whole current page suite.
   [Observed control](ci.md#spanish-separately-installed-certificate-test-checks-mapping-only).
-- **Two setup-app checks for an absent error message cannot fail** (left open by A1176).
-  Read the form errors too, as `shown()` in `setup-app-held-refusals.test.ts` does, and
-  prove each check by injecting the message.
-  [Detail](ci.md#two-setup-app-checks-for-an-absent-error-message-cannot-fail-left-open-by-a1176).
 - **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
   [Detail](ci.md#appsserversrcbootmirrortesttss-adoption-pending-case-no-longer-has-a-negative-control).
 
@@ -1602,14 +1598,6 @@ action. Since A1216 the merge runs `scripts/download-coverage-blobs.mjs`, which 
 highest-id copy of each report name. Check on a throwaway branch (fail one shard on purpose,
 re-run it, read which artifact id the helper downloads) that the highest id is the re-run's. If
 it is, delete this entry; if not, make the helper keep the re-run's copy.
-
-## Two setup-app checks for an absent error message cannot fail (left open by A1176)
-
-`apps/setup/src/setup-app-missing-database.test.ts`'s "a damaged record reaches the
-confirmation" case and the activity re-read case that checks for `initialOwnerStrings.en.error`
-read the page's own text, but those messages are drawn only inside `wt-form-actions`' shadow
-root. Read the form errors too, as `shown()` in `setup-app-held-refusals.test.ts` does, and
-prove each check by injecting the message. Found by reading, not run.
 
 ## The mutation report downloads still use `actions/download-artifact`
 

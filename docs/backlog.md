@@ -440,7 +440,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   open by A1131bc slice 3.
   [Detail](backlog/setup.md#the-saved-setup-cannot-be-read-contact-support)
 
-- **Setup wizard tidy** (bundle of 5, size S). [Detail](backlog/setup.md#bundle-setup-wizard-tidy)
+- **Setup wizard tidy** (bundle of 3, size S). [Detail](backlog/setup.md#bundle-setup-wizard-tidy)
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** But
   the option is still there and the flow still runs, so an operator can still spend a box on it.
@@ -2038,7 +2038,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   five-second limit on A790's first run; retain phase timings before changing its fixture or deadline.
   [Receipt and next check](backlog/ci.md#store-bound-value-test-timeout).
 
-- **Add a control to each check that cannot fail** (bundle of 4, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
+- **Add a control to each check that cannot fail** (bundle of 3, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
 
 - **The logo retry checks' deadline and counting** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-the-logo-retry-checks-deadline-and-counting)
 

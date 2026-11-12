@@ -12,6 +12,13 @@ export const q = <T extends Element>(app: SetupApp, name: string) =>
 export async function click(app: SetupApp, name: string) {
   await userEvent.click(q<WtButton>(app, name)!.shadowRoot!.querySelector("button")!);
 }
+export const formErrors = (app: SetupApp) =>
+  [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+    (f) => f.error,
+  );
+/** The page's text and its forms' errors, which wt-form-actions draws in its own shadow root. */
+export const shown = (app: SetupApp) =>
+  [app.shadowRoot!.textContent!, ...formErrors(app)].join("\n");
 export const namedSummary: StartAgainSummary = { reached: "named" };
 export const damagedSummary: StartAgainSummary = { ...namedSummary, recoveryRecordDamaged: true };
 export async function missingDatabaseFixture(

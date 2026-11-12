@@ -114,7 +114,7 @@ it("warns that a download may need confirming before it reaches the disk", () =>
 it("judges the page the link opens, not the one the operator is reading", () => {
   const html = renderTrustPage({ ...base, device: "windows" });
   // `deploy/waitron.sh` prints an HTTP entry point, and installing a certificate authority does not
-  // make an HTTP page secure, so THIS page reads "not secure" however well the install went.
+  // make an HTTP page secure, so THIS page reads "Not secure" however well the install went.
   expect(html).toContain(
     "Open Waitron with the link below, then check the address bar of the page it opens.",
   );
@@ -125,7 +125,7 @@ it("judges the page the link opens, not the one the operator is reading", () => 
 
 it("shows the browser's own warning words when telling the operator to start again", () => {
   const html = renderTrustPage({ ...base, device: "windows" });
-  expect(html).toContain('<span class="warning-words">“not secure”</span>');
+  expect(html).toContain('<span class="warning-words">Not secure</span>');
   expect(html).toContain("come back here and start again from step 1.");
 });
 

@@ -14,11 +14,6 @@ import { mountWidget } from "../src/widgets/test-helpers.js";
 
 export const t = initialOwnerStrings.en;
 export const text = (app: SetupApp) => app.shadowRoot!.textContent!;
-// A form's error is drawn inside wt-form-actions' own shadow root, out of reach of text(app).
-export const formErrors = (app: SetupApp) =>
-  [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
-    (f) => f.error,
-  );
 export const OWNER_HEADER = "X-Waitron-Setup-Owner";
 /** Any page request to the repair page's old recovery from backup. */
 export const OLD_RECOVERY_ROUTE = /\/resolution\/backup\//;

@@ -6,14 +6,19 @@ import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn } from "./i18n/strings/shell.js";
 import { initial, wizardApi } from "../test/first-setup-browser.js";
-import { click, damagedSummary, namedSummary, q } from "../test/missing-database-browser.js";
+import {
+  click,
+  damagedSummary,
+  formErrors,
+  namedSummary,
+  q,
+} from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import {
   OWNER_HEADER,
   cases,
   confirmation,
   fieldsIn,
-  formErrors,
   oldRecoveryRequests,
   sends,
   summaryReads,
