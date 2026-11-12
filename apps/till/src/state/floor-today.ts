@@ -338,10 +338,7 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
 export type SheetAction =
   "join-with" | "split-off" | "rotate" | "seats" | "rename" | "back" | "take-off";
 
-export function sheetActions(
-  table: TableState,
-  _zoneTables: readonly TableState[] = [],
-): SheetAction[] {
+export function sheetActions(table: TableState): SheetAction[] {
   const today = table.today;
   if (today === null || today.placement === null || today.takenOff) return [];
   const merged = today.joinId !== null;

@@ -163,9 +163,7 @@ export class TillTableDetailsSheet extends LitElement {
 
   #todayActions(table: TableState): TemplateResult | typeof nothing {
     const offered = this.actions
-      ? sheetActions(table, this.tables).filter(
-          (action) => this.offersJoinWith || action !== "join-with",
-        )
+      ? sheetActions(table).filter((action) => this.offersJoinWith || action !== "join-with")
       : [];
     if (offered.length === 0) return nothing;
     return html`<div class="today-actions">

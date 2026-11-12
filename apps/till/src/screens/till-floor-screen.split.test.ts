@@ -49,7 +49,7 @@ function table(id: string, label: string, x: number, over: Partial<TableToday> =
   };
 }
 
-const longTable = (parts = ["c3", "c4", "c5"], _splitOff: string[] = []) =>
+const longTable = (parts = ["c3", "c4", "c5"]) =>
   table("c3", "Counter 3", 10, {
     joinId: parts.length >= 2 ? "g" : null,
     joinSeats: 10,
@@ -240,7 +240,7 @@ describe("till-floor-screen: splitting a saved ordinary group", () => {
     expect(refreshes.count).toBe(1);
 
     el.tables = [
-      longTable(["c3", "c4"], ["c5"]),
+      longTable(["c3", "c4"]),
       part("c4", "Counter 4"),
       table("c5", "Counter 5", 30, {}),
     ];

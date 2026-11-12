@@ -522,12 +522,11 @@ describe("Split tables… on a group", () => {
   const zone = [c5, long, c3, bar, c4];
 
   it("offers Split tables… on any table in a group, and never the old Split", () => {
-    expect(sheetActions(bar, zone)).toContain("split-off");
-    expect(sheetActions(c4, zone)).toContain("split-off");
-    expect(sheetActions(bar, zone)).not.toContain("split");
+    expect(sheetActions(bar)).toContain("split-off");
+    expect(sheetActions(c4)).toContain("split-off");
+    expect(sheetActions(bar)).not.toContain("split");
     const one = table("a", "1", { today: today({ joinId: "m" }) });
-    const two = table("b", "2", { today: today({ joinId: "m", placement: place(4, 0) }) });
-    expect(sheetActions(one, [one, two])).toContain("split-off");
+    expect(sheetActions(one)).toContain("split-off");
   });
 
   it("lists the group's tables in number order and names the group after them", () => {
