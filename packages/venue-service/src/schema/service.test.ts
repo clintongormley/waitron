@@ -14,8 +14,7 @@ import {
   stationDayStates,
   withTransaction,
   workingLineContexts,
-  zoneSalePolicies,
-  zoneServicePolicies,
+  floorZones,
 } from "@waitron/db";
 import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -54,26 +53,6 @@ const EXPECTED: Record<
       "department_sale_policies_order_start_ck",
       "department_sale_policies_paid_when_ck",
       "department_sale_policies_collection_number_ck",
-    ],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
-  zone_service_policies: {
-    table: zoneServicePolicies,
-    foreignKeys: ["zone_service_policies_zone_fk", "zone_service_policies_department_fk"],
-    checks: [],
-    indexes: ["zone_service_policies_one_counter_default_key"],
-    uniqueConstraints: [],
-    primaryKeys: ["zone_service_policies_pk"],
-  },
-  zone_sale_policies: {
-    table: zoneSalePolicies,
-    foreignKeys: ["zone_sale_policies_zone_fk"],
-    checks: [
-      "zone_sale_policies_order_start_ck",
-      "zone_sale_policies_paid_when_ck",
-      "zone_sale_policies_collection_number_ck",
     ],
     indexes: [],
     uniqueConstraints: [],
@@ -205,7 +184,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(13);
+    expect(Object.keys(EXPECTED)).toHaveLength(11);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {
@@ -227,14 +206,15 @@ describe("venue-service schema", () => {
   it("keeps every partial index partial", () => {
     const partial = [
       ...getTableConfig(departments).indexes,
-      ...getTableConfig(zoneServicePolicies).indexes,
+      ...getTableConfig(floorZones).indexes,
       ...getTableConfig(kitchenNotices).indexes,
       ...getTableConfig(routingCells).indexes,
     ].filter((index) => index.config.where !== undefined);
     expect(partial.map((index) => [index.config.name, index.config.unique])).toEqual([
       ["departments_name_key", true],
       ["departments_one_default_key", true],
-      ["zone_service_policies_one_counter_default_key", true],
+      ["floor_zones_one_counter_default_key", true],
+      ["floor_zones_name_key", true],
       ["kitchen_notices_open_idx", false],
       ["routing_cells_category_every_zone_key", true],
       ["routing_cells_category_zone_key", true],

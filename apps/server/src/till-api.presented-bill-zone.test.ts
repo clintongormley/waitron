@@ -6,7 +6,7 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { sales, withTransaction } from "@waitron/db";
+import { sales, withTransaction, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -15,7 +15,6 @@ import {
   createServiceZone,
   orderServiceContexts,
   setProfileServiceAccess,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -78,9 +77,9 @@ beforeAll(async () => {
 async function departmentOf(zoneId: string): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
     tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, zoneId)),
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, zoneId)),
   );
   return row!.departmentId;
 }

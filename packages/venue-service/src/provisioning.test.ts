@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDeviceProfiles, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
@@ -213,8 +213,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       select name, trading_name from departments `);
     expect(rows.rows).toEqual([{ name: "The Square", trading_name: "The Square" }]);
     const zones = await db.execute<{ name: string }>(sql`
-      select z.name from zone_service_policies p join floor_zones z on z.id = p.zone_id
-      where p.is_counter_default = 1`);
+      select name from floor_zones where is_counter_default = 1`);
     expect(zones.rows).toEqual([{ name: STARTER_ZONE_NAMES.Counter.es }]);
     const periods = await db.execute<{ name: string }>(sql`
       select p.name from menu_periods p join departments d on d.id = p.department_id
@@ -346,11 +345,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       collection_number: string | null;
     }>(sql`
       select paid_when, collection_number
-      from zone_sale_policies
-      where zone_id = (
-        select zone_id from zone_service_policies
-        where is_counter_default = 1
-      )`);
+      from floor_zones where is_counter_default = 1`);
     expect(zone.rows).toEqual([{ paid_when: null, collection_number: null }]);
   });
 
@@ -374,9 +369,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await db.execute(sql`
       insert into menu_periods (id, department_id, name, menu_id)
       select ${randomUUID()}, department_id, 'Authored', ${menus[1]!.id}
-      from zone_service_policies`);
+      from floor_zones`);
     await db.execute(
-      sql`update zone_sale_policies set order_start = 'counter', paid_when = 'ticket_then_pay'`,
+      sql`update floor_zones set order_start = 'counter', paid_when = 'ticket_then_pay'`,
     );
     await runSeed();
 
@@ -385,7 +380,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const zones = await db.execute<{ count: number }>(sql`
       select count(*) as count from floor_zones`);
     const policies = await db.execute<{ order_start: string | null; paid_when: string | null }>(sql`
-      select order_start, paid_when from zone_sale_policies`);
+      select order_start, paid_when from floor_zones`);
     const periods = await db.execute<{ menu_id: string }>(sql`
       select menu_id from menu_periods`);
     expect(departments.rows[0]!.count).toBe(1);
@@ -553,7 +548,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const access = (id: string) => db.transaction((tx) => readProfileServiceAccess(tx, id));
       const defaults = async () => {
         const rows = await db.execute<{ department_id: string; zone_id: string }>(sql`
-          select department_id, zone_id from zone_service_policies
+          select department_id, id as zone_id from floor_zones
           where is_counter_default = 1`);
         return rows.rows[0]!;
       };
@@ -647,7 +642,8 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
     operationDescription: "Hospitality",
   });
   const node = { nodeId: await seedNode(db) };
-  const [old] = await db.insert(floorZones).values({ name: "Counter", active: false }).returning();
+  const seeded = await seedZone(db, { name: "Counter", active: false });
+  const [old] = await db.select().from(floorZones).where(eq(floorZones.id, seeded.id));
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
   const rows = await db
     .select()
@@ -661,7 +657,7 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
   expect(
     (
       await db.execute<{ zone_id: string }>(
-        sql`select zone_id from zone_service_policies where is_counter_default = 1`,
+        sql`select id as zone_id from floor_zones where is_counter_default = 1`,
       )
     ).rows,
   ).toEqual([{ zone_id: replacement.id }]);

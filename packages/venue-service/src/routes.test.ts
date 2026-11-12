@@ -21,12 +21,15 @@ import {
   locations,
   serviceSteps,
   withTransaction,
-  zoneSalePolicies,
-  zoneServicePolicies,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedTenant,
+  seedVenueSettings,
+  seedBusinessDay,
+  seedZone,
+} from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -73,10 +76,11 @@ async function fixture(
   });
   await seedBusinessDay(db, {});
   const scopedLocationId = location!.id;
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Terrace" })
-    .returning({ id: floorZones.id });
+  const [unavailable] = await db
+    .insert(departments)
+    .values({ name: "Unavailable", tradingName: "Unavailable", active: false })
+    .returning();
+  const zone = await seedZone(db, { name: "Terrace", departmentId: unavailable!.id });
   const [station] = await db
     .insert(kitchenStations)
     .values({ name: "Terrace bar", isDefault: true })
@@ -527,18 +531,28 @@ describe("whole service settings saves", () => {
         { zoneId: fx.zoneId, ...input, effective: { ...effective, printTradingName: true } },
       ]);
       const [stored] = await db
-        .select()
-        .from(zoneSalePolicies)
-        .where(eq(zoneSalePolicies.zoneId, fx.zoneId));
+        .select({
+          zoneId: floorZones.id,
+          orderStart: floorZones.orderStart,
+          paidWhen: floorZones.paidWhen,
+          collectionNumber: floorZones.collectionNumber,
+        })
+        .from(floorZones)
+        .where(eq(floorZones.id, fx.zoneId));
       expect(stored!.orderStart).toBe(input.orderStart);
     }
     expect((await send(fx.app, "PUT", fx.zonePath, fx.managerCookie, zoneSettings)).status).toBe(
       204,
     );
     const [retained] = await db
-      .select()
-      .from(zoneSalePolicies)
-      .where(eq(zoneSalePolicies.zoneId, fx.zoneId));
+      .select({
+        zoneId: floorZones.id,
+        orderStart: floorZones.orderStart,
+        paidWhen: floorZones.paidWhen,
+        collectionNumber: floorZones.collectionNumber,
+      })
+      .from(floorZones)
+      .where(eq(floorZones.id, fx.zoneId));
     expect(retained!.orderStart).toBe("counter");
   });
 
@@ -1134,12 +1148,12 @@ describe("venue service management routes", () => {
         const target = await createDepartment(tx, { name: "Target", orderStart: "table" });
         await configureZone(tx, { zoneId: fx.zoneId, departmentId: source.id, orderStart });
         await tx.run(
-          sql`update zone_sale_policies set paid_when = 'ticket_then_pay', collection_number = 'numbered' where zone_id = ${fx.zoneId}`,
+          sql`update floor_zones set paid_when = 'ticket_then_pay', collection_number = 'numbered' where id = ${fx.zoneId}`,
         );
         return [source, target];
       });
       const before = await db.all(
-        sql`select * from zone_sale_policies where zone_id = ${fx.zoneId}`,
+        sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`,
       );
       const response = await send(
         fx.app,
@@ -1150,13 +1164,15 @@ describe("venue service management routes", () => {
       );
       expect(response.status).toBe(204);
       expect(
-        await db.all(sql`select * from zone_sale_policies where zone_id = ${fx.zoneId}`),
+        await db.all(
+          sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`,
+        ),
       ).toEqual(before);
       expect(
         await db
-          .select({ departmentId: zoneServicePolicies.departmentId })
-          .from(zoneServicePolicies)
-          .where(eq(zoneServicePolicies.zoneId, fx.zoneId)),
+          .select({ departmentId: floorZones.departmentId })
+          .from(floorZones)
+          .where(eq(floorZones.id, fx.zoneId)),
       ).toEqual([{ departmentId: target!.id }]);
       expect(source!.id).not.toBe(target!.id);
     },
@@ -1264,12 +1280,12 @@ describe("venue service management routes", () => {
           displayOrder: displayOrder ?? 0,
         },
       ]);
-      expect(
-        await db.select().from(zoneServicePolicies).where(eq(zoneServicePolicies.zoneId, id)),
-      ).toMatchObject([{ departmentId: department.id }]);
-      expect(db.all(sql`select order_start from zone_sale_policies where zone_id = ${id}`)).toEqual(
-        [{ order_start: null }],
-      );
+      expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toMatchObject([
+        { departmentId: department.id },
+      ]);
+      expect(db.all(sql`select order_start from floor_zones where id = ${id}`)).toEqual([
+        { order_start: null },
+      ]);
     },
   );
 
@@ -1329,6 +1345,10 @@ describe("venue service management routes", () => {
           .where(eq(departments.id, department.id));
         await tx.update(floorZones).set({ active }).where(eq(floorZones.id, fx.zoneId));
       });
+      const original = await db
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, fx.zoneId));
       const before = await rawSettingsSnapshot();
       const response = await send(
         fx.app,
@@ -1345,10 +1365,10 @@ describe("venue service management routes", () => {
       });
       expect(await rawSettingsSnapshot()).toEqual(before);
       const policies = await db
-        .select({ departmentId: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
-      expect(policies).toEqual([]);
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, fx.zoneId));
+      expect(policies).toEqual(original);
       expect(
         await db
           .select({ active: floorZones.active })
@@ -1401,6 +1421,7 @@ describe("venue service management routes", () => {
         name: "Garden service",
       })
     ).json()) as { id: string };
+    const original = await db.select().from(floorZones).where(eq(floorZones.id, fx.zoneId));
     const response = await send(
       fx.app,
       "POST",
@@ -1410,9 +1431,9 @@ describe("venue service management routes", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: { code: "zone.name_taken" } });
-    expect(
-      await db.select().from(zoneServicePolicies).where(eq(zoneServicePolicies.zoneId, fx.zoneId)),
-    ).toEqual([]);
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, fx.zoneId))).toEqual(
+      original,
+    );
   });
 
   it("rolls back the floor zone when its department assignment fails", async () => {
@@ -1423,8 +1444,8 @@ describe("venue service management routes", () => {
       })
     ).json()) as { id: string };
     await db.execute(sql`
-      create trigger refuse_garden_assignment before insert on zone_service_policies
-      when new.zone_id in (select id from floor_zones where name = 'Rollback garden')
+      create trigger refuse_garden_assignment before insert on floor_zones
+      when new.name = 'Rollback garden'
       begin select raise(abort, 'assignment refused'); end
     `);
     try {
@@ -1451,12 +1472,9 @@ describe("venue service management routes", () => {
         name: "Restaurant",
       })
     ).json()) as { id: string };
-    const [secondZone] = await db
-      .insert(floorZones)
-      .values({
-        name: "Dining room",
-      })
-      .returning({ id: floorZones.id });
+    const secondZone = await seedZone(db, {
+      name: "Dining room",
+    });
     await withTransaction(db, async (tx) => {
       await configureZone(tx, {
         zoneId: fx.zoneId,
@@ -1505,7 +1523,7 @@ describe("venue service management routes", () => {
             name,
           })),
         },
-        { key: "zone_policies", count: 4, targets: [] },
+        { key: "zone_policies", count: 2, targets: [] },
         { key: "department_policy", count: 1, targets: [] },
         { key: "service_steps", count: 3, targets: [] },
         {
@@ -1544,7 +1562,7 @@ describe("venue service management routes", () => {
     expect(await db.select().from(diningTables)).toEqual(tables);
     const [otherVenue] = await db
       .insert(floorZones)
-      .values({ name: "Other terrace" })
+      .values({ name: "Other terrace", departmentId: (await db.select().from(departments))[0]!.id })
       .returning({ zoneId: floorZones.id });
     expect(
       (
@@ -1743,20 +1761,16 @@ describe("venue service management routes", () => {
         sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${department.id}`,
       ),
     ).toEqual([{ order_start: "table" }]);
-    expect(
-      db.all(
-        sql`select p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
-      ),
-    ).toEqual([{ order_start: "counter" }]);
+    expect(db.all(sql`select order_start from floor_zones where id=${fx.zoneId}`)).toEqual([
+      { order_start: "counter" },
+    ]);
     const zonePath = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy/orderStart`;
     expect((await send(fx.app, "PATCH", zonePath, fx.managerCookie, { value: null })).status).toBe(
       204,
     );
-    expect(
-      db.all(
-        sql`select p.order_start from zone_service_policies s join zone_sale_policies p on p.zone_id=s.zone_id where s.zone_id=${fx.zoneId}`,
-      ),
-    ).toEqual([{ order_start: null }]);
+    expect(db.all(sql`select order_start from floor_zones where id=${fx.zoneId}`)).toEqual([
+      { order_start: null },
+    ]);
   });
 
   it.each(["department", "zone"] as const)(
@@ -1782,7 +1796,7 @@ describe("venue service management routes", () => {
         db.all(
           kind === "department"
             ? sql`select * from department_sale_policies where department_id = ${department.id}`
-            : sql`select * from zone_sale_policies where zone_id = ${fx.zoneId}`,
+            : sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`,
         );
       const before = rows();
       for (const value of ["auto", "on_request", null]) {
@@ -1826,7 +1840,7 @@ describe("venue service management routes", () => {
       error: { code: "management.request_invalid", params: { field: "nonsense" } },
     });
     const saved = await db.execute<{ paid_when: string }>(sql`
-      select paid_when from zone_sale_policies where zone_id = ${fx.zoneId}`);
+      select paid_when from floor_zones where id = ${fx.zoneId}`);
     expect(saved.rows).toEqual([{ paid_when: "ticket_then_pay" }]);
   });
 
@@ -3550,7 +3564,17 @@ describe("atomic zone editor save", () => {
         )[0],
       ).toEqual({ name: "Garden" });
       expect(
-        (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
+        (
+          await db
+            .select({
+              zoneId: floorZones.id,
+              orderStart: floorZones.orderStart,
+              paidWhen: floorZones.paidWhen,
+              collectionNumber: floorZones.collectionNumber,
+            })
+            .from(floorZones)
+            .where(eq(floorZones.id, fx.zoneId))
+        )[0],
       ).toEqual({
         zoneId: fx.zoneId,
         orderStart: input.orderStart,
@@ -3562,7 +3586,7 @@ describe("atomic zone editor save", () => {
 
   it("a duplicate name refuses without changing name or policy", async () => {
     const fx = await settingsFixture();
-    await db.insert(floorZones).values({ name: "Garden" });
+    await seedZone(db, { name: "Garden" });
     const before = await rawSettingsSnapshot();
     const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
     expect(response.status).toBe(409);
@@ -3594,28 +3618,22 @@ describe("atomic zone editor save", () => {
     expect(await rawSettingsSnapshot()).toEqual(before);
   });
 
-  it.each(["deleted", "unassigned", "unknown"])(
-    "refuses a %s zone without writes",
-    async (kind) => {
-      const fx = await settingsFixture();
-      let id = fx.zoneId;
-      if (kind === "deleted")
-        await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
-      if (kind === "unassigned") {
-        const [zone] = await db
-          .insert(floorZones)
-          .values({ name: "Unassigned" })
-          .returning({ id: floorZones.id });
-        id = zone!.id;
-      }
-      if (kind === "unknown") id = randomUUID();
-      const before = await rawSettingsSnapshot();
-      const response = await send(fx.app, "PUT", path(id), fx.managerCookie, edited);
-      expect(response.status).toBe(404);
-      expect(await response.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
-      expect(await rawSettingsSnapshot()).toEqual(before);
-    },
-  );
+  it.each(["deleted", "inactive", "unknown"])("refuses a %s zone without writes", async (kind) => {
+    const fx = await settingsFixture();
+    let id = fx.zoneId;
+    if (kind === "deleted")
+      await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
+    if (kind === "inactive") {
+      const zone = await seedZone(db, { name: "Inactive", active: false });
+      id = zone!.id;
+    }
+    if (kind === "unknown") id = randomUUID();
+    const before = await rawSettingsSnapshot();
+    const response = await send(fx.app, "PUT", path(id), fx.managerCookie, edited);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
+    expect(await rawSettingsSnapshot()).toEqual(before);
+  });
 
   it("requires the shared venue permission for service settings and renaming", async () => {
     const fx = await settingsFixture();
@@ -3654,7 +3672,17 @@ describe("atomic zone editor save", () => {
       ).status,
     ).toBe(204);
     expect(
-      (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
+      (
+        await db
+          .select({
+            zoneId: floorZones.id,
+            orderStart: floorZones.orderStart,
+            paidWhen: floorZones.paidWhen,
+            collectionNumber: floorZones.collectionNumber,
+          })
+          .from(floorZones)
+          .where(eq(floorZones.id, fx.zoneId))
+      )[0],
     ).toEqual({ zoneId: fx.zoneId, ...zoneSettings });
     expect(
       (
@@ -3669,8 +3697,8 @@ describe("atomic zone editor save", () => {
     const fx = await settingsFixture();
     const before = await rawSettingsSnapshot();
     await db.execute(sql`
-      create trigger refuse_editor_policy before insert on zone_sale_policies
-      when new.zone_id in (select id from floor_zones where name = 'Garden')
+      create trigger refuse_editor_policy before update of order_start, paid_when, collection_number on floor_zones
+      when new.id in (select id from floor_zones where name = 'Garden')
       begin select raise(abort, 'policy refused'); end
     `);
     try {

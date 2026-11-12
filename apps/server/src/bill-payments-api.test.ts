@@ -1806,10 +1806,10 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const billId = await tabWith("Salad");
     const [previous] = suite.db.all<{ trading_name: string }>(sql`
       select trading_name from departments
-      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+      where id = (select department_id from floor_zones where id = ${venue.offers.zoneId})`);
     await suite.db.execute(sql`
       update departments set trading_name = 'Blue terrace'
-      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+      where id = (select department_id from floor_zones where id = ${venue.offers.zoneId})`);
     try {
       const paid = await contribute(billId, "12.00");
       expect(paid.status).toBe(200);
@@ -1823,7 +1823,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     } finally {
       await suite.db.execute(sql`
         update departments set trading_name = ${previous!.trading_name}
-        where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+        where id = (select department_id from floor_zones where id = ${venue.offers.zoneId})`);
     }
   });
 
@@ -1834,7 +1834,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       join devices d on d.device_profile_id = p.id where d.id = ${venue.deviceId}`);
     const [department] = suite.db.all<{ id: string; trading_name: string }>(sql`
       select id, trading_name from departments
-      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+      where id = (select department_id from floor_zones where id = ${venue.offers.zoneId})`);
     const [policy] = suite.db.all<{ print_trading_name: number }>(sql`
       select print_trading_name from department_sale_policies
       where department_id = ${department!.id}`);

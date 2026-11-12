@@ -2,7 +2,13 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { ticketItems, withTransaction, workingOrderLines, type Database } from "@waitron/db";
+import {
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+  type Database,
+  floorZones,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -11,7 +17,6 @@ import {
   resolveZoneContext,
   listZoneOffers,
   menuPeriods,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
@@ -130,7 +135,7 @@ async function counts(db: Database) {
   const { rows } = await db.execute<Record<string, number>>(sql`
     select
       (select count(*) from floor_zones) as zones,
-      (select count(*) from zone_service_policies) as policies,
+      (select count(*) from floor_zones) as policies,
       (select count(*) from departments) as departments,
       (select count(*) from catalogues) as menus,
       (select count(*) from menu_periods) as periods,
@@ -166,11 +171,8 @@ describe("offerProducts", () => {
     const [savedPeriod] = await suite.db
       .select({ id: menuPeriods.id })
       .from(menuPeriods)
-      .innerJoin(
-        zoneServicePolicies,
-        eq(zoneServicePolicies.departmentId, menuPeriods.departmentId),
-      )
-      .where(and(eq(zoneServicePolicies.zoneId, first.zoneId), eq(menuPeriods.name, "Always")));
+      .innerJoin(floorZones, eq(floorZones.departmentId, menuPeriods.departmentId))
+      .where(and(eq(floorZones.id, first.zoneId), eq(menuPeriods.name, "Always")));
     for (const hour of ["03", "15"]) {
       const served = await withTransaction(suite.db, (tx) =>
         listZoneOffers(tx, first.zoneId, {

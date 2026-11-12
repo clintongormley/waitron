@@ -37,8 +37,6 @@ import {
   zoneDayRanges,
   zoneDays,
   zoneExtensions,
-  zoneSalePolicies,
-  zoneServicePolicies,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
@@ -82,10 +80,10 @@ async function fixture(tx: Transaction, suffix = "") {
   const zs = await tx
     .insert(floorZones)
     .values([
-      { ...cfg, name: "Deleted", displayOrder: 0 },
-      { ...cfg, name: "Unpermitted", displayOrder: 1 },
-      { ...cfg, name: "Permitted", displayOrder: 2 },
-      { ...cfg, name: "Elsewhere", displayOrder: 0 },
+      { ...cfg, name: "Deleted", displayOrder: 0, departmentId: ds[0]!.id, isCounterDefault: true },
+      { ...cfg, name: "Unpermitted", displayOrder: 1, departmentId: ds[0]!.id },
+      { ...cfg, name: "Permitted", displayOrder: 2, departmentId: ds[0]!.id },
+      { ...cfg, name: "Elsewhere", displayOrder: 0, departmentId: ds[2]!.id },
     ])
     .returning();
   const [gone, forbidden, allowed, elsewhere] = zs.map((row) => row.id) as [
@@ -95,14 +93,6 @@ async function fixture(tx: Transaction, suffix = "") {
     string,
   ];
   const [department, beta, alpha] = ds.map((row) => row.id) as [string, string, string];
-  await tx.insert(zoneServicePolicies).values(
-    zs.map((row, i) => ({
-      ...cfg,
-      zoneId: row.id,
-      departmentId: i === 3 ? alpha : department,
-      isCounterDefault: i === 0,
-    })),
-  );
   await tx.insert(departmentSalePolicies).values(ds.map((row) => ({ departmentId: row.id })));
   const ps = await seedDeviceProfiles(tx, [
     { name: "Explicit" + suffix, formFactor: "till" },
@@ -338,7 +328,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         menuId: menu!.id,
       })),
     );
-    await tx.insert(zoneSalePolicies).values([{ zoneId: f.gone }, { zoneId: f.elsewhere }]);
     await tx.insert(zoneExtensions).values(
       [f.gone, f.elsewhere].map((zoneId) => ({
         zoneId,
@@ -364,8 +353,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       children: routingCellPeriods,
       periods: menuPeriods,
       staff: menuPeriodStaffMenus,
-      policies: zoneServicePolicies,
-      overrides: zoneSalePolicies,
+      policies: floorZones,
       zoneExtensions,
       sales: departmentSalePolicies,
       desks: departmentTransferDesks,
@@ -381,7 +369,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       { key: "routing_rules", count: 1, targets: [] },
       { key: "routing_periods", count: 3, targets: [] },
       { key: "profile_zones", count: 2, targets: [] },
-      { key: "zone_policies", count: 4, targets: [] },
+      { key: "zone_policies", count: 3, targets: [] },
       { key: "zone_extensions", count: 1, targets: [] },
       { key: "department_periods", count: 2, targets: [] },
       { key: "staff_menus", count: 2, targets: [] },
@@ -424,10 +412,20 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
     expect(await tx.select().from(departmentTransferDestinations)).toEqual(
       before.routes!.filter((row) => row.sourceDepartmentId === f.alpha),
     );
-    expect(await tx.select().from(zoneServicePolicies)).toEqual(
-      before
-        .policies!.filter((row) => ![f.gone, f.forbidden, f.allowed].includes(row.zoneId as string))
-        .map((row) => (row.zoneId === f.elsewhere ? { ...row, isCounterDefault: true } : row)),
+    expect(await tx.select().from(floorZones)).toEqual(
+      before.policies!.map((row) =>
+        [f.gone, f.forbidden, f.allowed].includes(row.id as string)
+          ? {
+              ...row,
+              isCounterDefault: false,
+              orderStart: null,
+              paidWhen: null,
+              collectionNumber: null,
+            }
+          : row.id === f.elsewhere
+            ? { ...row, isCounterDefault: true }
+            : row,
+      ),
     );
     expect(
       await tx
@@ -651,9 +649,9 @@ it("delete counter default chooses by display order then name then id within its
     await clearServiceDeleteSettings(tx, [f.gone], null);
     expect(
       await tx
-        .select({ zoneId: zoneServicePolicies.zoneId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.isCounterDefault, true)),
+        .select({ zoneId: floorZones.id })
+        .from(floorZones)
+        .where(eq(floorZones.isCounterDefault, true)),
     ).toEqual([{ zoneId: f.allowed }]);
     expect((await resolveNewOrderZone(tx, {})).zoneId).toBe(f.allowed);
   });

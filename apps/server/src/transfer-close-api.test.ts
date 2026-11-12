@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { hashPin, hashSessionToken, sessions } from "@waitron/identity";
 import type { ProfileAction } from "@waitron/layouts";
-import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { markServed } from "./working-order.js";
@@ -261,9 +261,9 @@ describe("POST /api/working-orders/:id/close-by-transfer, refusals", () => {
     const zoned = await till();
     const { billId, body } = await counterBill();
     const [policy] = await suite.db
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, t.counterZone));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, t.counterZone));
     const coverOnly = (zones: string[]) =>
       inTx(t.venue, (tx) =>
         setProfileServiceAccess(tx, zoned.profileId, {
@@ -458,10 +458,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
       bodyOf(await t.requestFor(party.tabId, "12.00", party.partyId)),
     );
     const terrace = await inTx(t.venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: `Terrace ${randomUUID().slice(0, 8)}` })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: `Terrace ${randomUUID().slice(0, 8)}` })];
       const zoneId = (
         await offerProducts(tx, t.venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" })
       ).zoneId;
@@ -481,9 +478,9 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
       }),
     );
     const [policy] = await suite.db
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, terrace.zoneId));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, terrace.zoneId));
     await inTx(t.venue, (tx) =>
       setProfileServiceAccess(tx, zoned.profileId, {
         departmentId: policy!.departmentId,

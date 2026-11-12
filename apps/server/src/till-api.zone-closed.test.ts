@@ -12,6 +12,7 @@ import {
   workingOrders,
   workingOrderLines,
   withTransaction,
+  floorZones,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -23,7 +24,6 @@ import {
   menuPeriods,
   replaceMenuWeek,
   replaceZoneClosedWeek,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { createTable } from "./testing/live-table.js";
 import { provisionBillVenue, send as rawGroupSend, type BillVenue } from "./testing/bill-venue.js";
@@ -40,10 +40,7 @@ async function venue() {
   const v = await provisionBillVenue(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await seedBusinessDay(tx, { dayCutover: "06:00" });
-    const [policy] = await tx
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, v.zoneId));
+    const [policy] = await tx.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
     const [period] = await tx
       .select()
       .from(menuPeriods)
@@ -425,10 +422,7 @@ describe("moving into closed zones", () => {
   async function moveVenue() {
     const v = await venue();
     const dining = await withTransaction(suite.db, async (tx) => {
-      const [policy] = await tx
-        .select()
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, v.zoneId));
+      const [policy] = await tx.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
       const zone = await createServiceZone(tx, {
         name: "Dining room",
         departmentId: policy!.departmentId,

@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -11,7 +12,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
-  floorZones,
   insertNodeSeriesTx,
   invoiceSeries,
   orderAmendments,
@@ -1402,7 +1402,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
 
   function noInvoiceZone(name: string) {
     return inTx(venue, async (tx) => {
-      const [zone] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name })];
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
@@ -1499,10 +1499,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
 
   it("derives no key for an override sent with an order that has no invoice", async () => {
     const ticketFirst = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra sin factura, sin clave" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra sin factura, sin clave" })];
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
@@ -1756,10 +1753,7 @@ function paymentsOf(workingOrderId: string) {
 describe("cancelling a placed order with no invoice", () => {
   it("abandons it with its reasoned amendment and files nothing", async () => {
     const ticketFirst = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra ticket" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra ticket" })];
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
@@ -1780,10 +1774,7 @@ describe("cancelling a placed order with no invoice", () => {
 
   it("refuses while a card is at the reader for it, and the card then files its sale", async () => {
     const ticketFirst = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra tarjeta" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra tarjeta" })];
       return offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",

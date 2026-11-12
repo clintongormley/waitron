@@ -1,4 +1,4 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { readZoneKeepOpenState } from "./operations.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
@@ -21,7 +21,6 @@ import {
   departmentDayRanges,
   departmentDays,
   departments,
-  floorZones,
   locations,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
@@ -33,8 +32,8 @@ import {
   zoneDayRanges,
   zoneDays,
   zoneExtensions,
-  zoneServicePolicies,
   type Transaction,
+  floorZones,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { type BusinessDayClock } from "@waitron/shared";
@@ -170,8 +169,11 @@ async function fixture(
     let zoneId: string | undefined;
     if (options.zone) {
       zoneId = randomUUID();
-      await tx.insert(floorZones).values({ id: zoneId, name: "Zone", active: !options.disabled });
-      await tx.insert(zoneServicePolicies).values({ zoneId, departmentId });
+      await seedZone(tx, { id: zoneId, name: "Zone", active: !options.disabled });
+      await tx
+        .update(floorZones)
+        .set({ departmentId: departmentId })
+        .where(eq(floorZones.id, zoneId));
       if (ranges.length && specialDayId) {
         const dayId = randomUUID();
         await tx.insert(zoneDays).values({ id: dayId, zoneId, specialDayDateId });

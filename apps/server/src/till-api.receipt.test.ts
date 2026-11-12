@@ -227,7 +227,7 @@ async function setupVenue(): Promise<{
       grossPrice: "1.50",
     });
     const counter = await tx.execute<{ zone_id: string }>(sql`
-      select zone_id from zone_service_policies
+      select id as zone_id from floor_zones
       where is_counter_default`);
     await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
@@ -2509,7 +2509,7 @@ describe("persisted cash receipt facts", () => {
   it("returns the filed department heading on first sale and replay after a rename", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const scopes = await suite.db.execute<{ zone_id: string; department_id: string }>(sql`
-      select zone_id, department_id from zone_service_policies
+      select id as zone_id, department_id from floor_zones
       limit 1
     `);
     const [scope] = scopes.rows;
@@ -3136,7 +3136,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
         .from(invoiceSeries)
         .where(eq(invoiceSeries.purpose, "full"));
       const scope = await tx.execute<{ zone_id: string }>(
-        sql`select zone_id from zone_service_policies  limit 1`,
+        sql`select id as zone_id from floor_zones  limit 1`,
       );
       await createOpenOrder(
         tx,

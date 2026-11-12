@@ -42,6 +42,7 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
   expect(bundle.modules.core).toBe(99);
   expect(bundle.tables).not.toHaveProperty("department_sale_policies");
   expect(bundle.tables).not.toHaveProperty("zone_sale_policies");
+  for (const row of bundle.tables.floor_zones!) expect(row).not.toHaveProperty("order_start");
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-previous-export-"));
   dirs.push(stateDir);
   const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 17).toString("base64") });

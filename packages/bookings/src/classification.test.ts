@@ -4,14 +4,13 @@ import {
   CORE_CHANGE_SOURCES,
   diningTables,
   floorTodayTables,
-  floorZones,
   installChangeFeed,
   subscribeToChanges,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import type { ResourceChange } from "@waitron/shared";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { createBooking, updateBooking, cancelBooking } from "./bookings.js";
@@ -66,7 +65,7 @@ describe("booking change interests", () => {
     });
     const venueId = await venueLocationId(suite.db);
     const cfg = { locationId: venueId };
-    const [zone] = await suite.db.insert(floorZones).values({ name: "Events" }).returning();
+    const zone = await seedZone(suite.db, { name: "Events" });
     const tables = await suite.db
       .insert(diningTables)
       .values(

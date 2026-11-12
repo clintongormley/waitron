@@ -11,7 +11,6 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  floorZones,
   settings as businessDaySettingsTable,
   specialDays,
   withTransaction,
@@ -20,7 +19,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -55,10 +54,7 @@ async function routed() {
   });
   const venueId = await venueLocationId(db);
   const cfg = { locationId: venueId };
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Room", displayOrder: 0 })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: "Room", displayOrder: 0 });
   const made = await scoped(async (tx) => {
     const restaurant = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id;
     await configureZone(tx, { zoneId: zone!.id, departmentId: restaurant });

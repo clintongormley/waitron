@@ -17,8 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { DeviceKitchenScreen } from "@waitron/module";
-
-import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -607,9 +606,9 @@ async function tablesTillPass(venue: Venue, capabilities: CapabilityFlag[] = TIL
   const departmentOf = async (zoneId: string) =>
     (
       await db
-        .select({ id: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, zoneId))
+        .select({ id: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, zoneId))
     )[0]!.id;
   const department = await departmentOf(T);
   expect(await departmentOf(venue.counter.zoneId)).toBe(department);

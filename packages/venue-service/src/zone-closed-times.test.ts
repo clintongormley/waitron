@@ -12,7 +12,7 @@ import {
   zoneDays,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import * as closures from "./zone-closed-times.js";
@@ -45,7 +45,7 @@ async function venue() {
     const cfg = { locationId: venueId };
     const departmentId = (await createDepartment(db, { name: "Dining", orderStart: "table" })).id;
     const zone = async (name: string, displayOrder: number, active = true) => {
-      const [z] = await db.insert(floorZones).values({ name, displayOrder }).returning();
+      const z = await seedZone(db, { name, displayOrder });
       await configureZone(db, { zoneId: z!.id, departmentId });
       if (!active)
         await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, z!.id));
@@ -140,7 +140,7 @@ describe("zone closed times", () => {
     await tx((db) =>
       (async () => {
         await db.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${b.departmentId})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${b.departmentId})`,
         );
         await db.execute(sql`update departments set active = false where id = ${b.departmentId}`);
       })(),

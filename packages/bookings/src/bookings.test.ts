@@ -7,7 +7,6 @@ import {
   floorPlanTables,
   floorPlans,
   floorTodayTables,
-  floorZones,
   newId,
   nowIso,
   venueLocationId,
@@ -16,7 +15,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
@@ -56,10 +55,7 @@ interface Venue {
 
 /** Raw inserts supply the id and timestamp; the helper optionally gives the table a today row. */
 async function insertDiningTable(label: string, active = true): Promise<string> {
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: label })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: label });
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (id, created_at, zone_id, label)
     values (${newId()}, ${nowIso()}, ${zone!.id}, ${label})
@@ -717,10 +713,7 @@ it("refuses booking a table with no today's row", async () => {
 describe("a part of a joined table on a layout", () => {
   /** Long table (10 seats) made of Counter 3 (2), 4 (6) and 5 (4) on a layout, each with a live table on today's plan. */
   async function longTable(): Promise<Record<"long" | "c3" | "c4" | "c5", string>> {
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: "Counter" })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(db, { name: "Counter" });
     const [set] = await db.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
     await db.insert(floorPlans).values({ zoneId: zone!.id, setId: set!.id, savedAt: nowIso() });
     const seats = { long: 10, c3: 2, c4: 6, c5: 4 } as const;

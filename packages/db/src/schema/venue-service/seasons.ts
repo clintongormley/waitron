@@ -14,7 +14,8 @@ import {
 } from "../columns.js";
 import type { CalendarColour } from "@waitron/shared";
 import { menuPeriods } from "./menus.js";
-import { departments, zoneServicePolicies } from "./service.js";
+import { departments } from "./service.js";
+import { floorZones } from "../floor-zones.js";
 
 export const ZONE_PAINT_KINDS = ["closed", "open"] as const;
 
@@ -155,7 +156,7 @@ export const zoneDays = table(
   (t) => [
     foreignKey({
       columns: [t.zoneId],
-      foreignColumns: [zoneServicePolicies.zoneId],
+      foreignColumns: [floorZones.id],
       name: "zone_days_zone_fk",
     }).onDelete("cascade"),
     foreignKey({

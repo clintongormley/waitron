@@ -423,7 +423,7 @@ describe("seedFloor", () => {
     await provisionVenue();
     const seeding = withTransaction(suite.db, async (tx) => {
       const { rows } = await tx.execute<{ zone_id: string }>(
-        sql`select zone_id from zone_service_policies
+        sql`select id as zone_id from floor_zones
             where is_counter_default limit 1`,
       );
       await createTable(
@@ -447,7 +447,7 @@ describe("seedFloor", () => {
     await provisionVenue();
     const seeding = withTransaction(suite.db, async (tx) => {
       const { rows } = await tx.execute<{ zone_id: string }>(sql`
-        select zone_id from zone_service_policies
+        select id as zone_id from floor_zones
         where is_counter_default limit 1`);
       await createTable(
         tx,

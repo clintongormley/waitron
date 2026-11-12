@@ -16,7 +16,6 @@ import {
   billPayments,
   catalogues,
   diningTables,
-  floorZones,
   invoiceSeries,
   locations,
   parties,
@@ -35,7 +34,13 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedKitchenStation, seedNode, seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedKitchenStation,
+  seedNode,
+  seedDevice,
+  seedVenue,
+  seedZone,
+} from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 /**
@@ -510,10 +515,7 @@ export async function seedFiredOrder(
   // `working_order_lines_require_open_parent_*` triggers refuse a line on a non-open parent.
   const { orderId } = await seedOpenOrder(db, seed, opts.orderNumber);
   if (opts.tableLabel !== undefined) {
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: randomUUID() })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(db, { name: randomUUID() });
     const [table] = await db
       .insert(diningTables)
       .values({ label: opts.tableLabel, zoneId: zone!.id })
@@ -559,10 +561,7 @@ export async function seedPartyAt(
     .values({ openedBy: randomUUID() })
     .returning({ id: parties.id });
   for (const table of tables) {
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: randomUUID() })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(db, { name: randomUUID() });
     const [row] = await db
       .insert(diningTables)
       .values({ id: table.id, label: table.label, zoneId: zone!.id })

@@ -623,9 +623,19 @@ CREATE TABLE `floor_zones` (
 	`name` text NOT NULL,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
-	`created_at` text NOT NULL
+	`created_at` text NOT NULL,
+	`department_id` text NOT NULL,
+	`is_counter_default` integer DEFAULT false NOT NULL,
+	`order_start` text,
+	`paid_when` text,
+	`collection_number` text,
+	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "floor_zones_order_start_ck" CHECK("floor_zones"."order_start" in ('table', 'counter')),
+	CONSTRAINT "floor_zones_paid_when_ck" CHECK("floor_zones"."paid_when" in ('prepay', 'ticket_then_pay')),
+	CONSTRAINT "floor_zones_collection_number_ck" CHECK("floor_zones"."collection_number" in ('none', 'numbered'))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `floor_zones_one_counter_default_key` ON `floor_zones` (`is_counter_default`) WHERE "floor_zones"."is_counter_default" = 1 and "floor_zones"."active" = 1;--> statement-breakpoint
 CREATE UNIQUE INDEX `floor_zones_name_key` ON `floor_zones` (`name`) WHERE "floor_zones"."active" = 1;--> statement-breakpoint
 CREATE TABLE `kitchen_stations` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -2277,26 +2287,6 @@ CREATE TABLE `working_line_contexts` (
 	CONSTRAINT "working_line_contexts_vat_class_ck" CHECK("working_line_contexts"."vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
-CREATE TABLE `zone_sale_policies` (
-	`zone_id` text PRIMARY KEY NOT NULL,
-	`order_start` text,
-	`paid_when` text,
-	`collection_number` text,
-	FOREIGN KEY (`zone_id`) REFERENCES `zone_service_policies`(`zone_id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "zone_sale_policies_order_start_ck" CHECK("zone_sale_policies"."order_start" in ('table', 'counter')),
-	CONSTRAINT "zone_sale_policies_paid_when_ck" CHECK("zone_sale_policies"."paid_when" in ('prepay', 'ticket_then_pay')),
-	CONSTRAINT "zone_sale_policies_collection_number_ck" CHECK("zone_sale_policies"."collection_number" in ('none', 'numbered'))
-);
---> statement-breakpoint
-CREATE TABLE `zone_service_policies` (
-	`zone_id` text PRIMARY KEY NOT NULL,
-	`department_id` text NOT NULL,
-	`is_counter_default` integer DEFAULT false NOT NULL,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `zone_service_policies_one_counter_default_key` ON `zone_service_policies` (`is_counter_default`) WHERE "zone_service_policies"."is_counter_default";--> statement-breakpoint
 CREATE TABLE `kitchen_notices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
@@ -2471,7 +2461,7 @@ CREATE TABLE `zone_extensions` (
 	`business_day` text NOT NULL,
 	`starts_at` text NOT NULL,
 	`ends_at` text NOT NULL,
-	FOREIGN KEY (`zone_id`) REFERENCES `zone_service_policies`(`zone_id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "zone_extensions_step_ck" CHECK(substr("zone_extensions"."starts_at", 4, 2) in ('00', '15', '30', '45')
       and substr("zone_extensions"."ends_at", 4, 2) in ('00', '15', '30', '45'))
 );
@@ -2642,7 +2632,7 @@ CREATE TABLE `zone_days` (
 	`season_id` text,
 	`weekday` integer,
 	`special_day_date_id` text,
-	FOREIGN KEY (`zone_id`) REFERENCES `zone_service_policies`(`zone_id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`season_id`) REFERENCES `seasons`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`special_day_date_id`) REFERENCES `special_day_dates`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "zone_days_one_day_ck" CHECK(("zone_days"."season_id" is null) <> ("zone_days"."special_day_date_id" is null) and ("zone_days"."season_id" is null) = ("zone_days"."weekday" is null)),

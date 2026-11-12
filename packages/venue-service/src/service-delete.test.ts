@@ -15,7 +15,6 @@ import {
   workingOrders,
   type Transaction,
   venueLocationId,
-  zoneServicePolicies,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -39,6 +38,45 @@ const noFloor: FloorDeletion = {
   clear: async () => {},
 };
 
+it("deleting the counter zone clears its rules and passes the mark to its replacement", async () => {
+  await run(async (tx) => {
+    await seedVenue(tx);
+    const department = await serviceDelete.createDepartment(tx, { name: "Dining" });
+    const gone = await serviceDelete.createServiceZone(tx, {
+      name: "Counter",
+      departmentId: department.id,
+      orderStart: "counter",
+    });
+    const kept = await serviceDelete.createServiceZone(tx, {
+      name: "Terrace",
+      departmentId: department.id,
+    });
+    await tx
+      .update(floorZones)
+      .set({
+        isCounterDefault: true,
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+      })
+      .where(eq(floorZones.id, gone.id));
+    await serviceDelete.deleteZone(tx, noFloor, gone.id, NOW);
+    const rows = await tx.select().from(floorZones);
+    expect(rows.find((row) => row.id === gone.id)).toMatchObject({
+      active: false,
+      departmentId: department.id,
+      isCounterDefault: false,
+      orderStart: null,
+      paidWhen: null,
+      collectionNumber: null,
+    });
+    expect(rows.find((row) => row.id === kept.id)).toMatchObject({
+      active: true,
+      departmentId: department.id,
+      isCounterDefault: true,
+    });
+  });
+});
+
 async function fixture() {
   return run(async (tx) => {
     await seedVenue(tx, {
@@ -59,16 +97,11 @@ async function fixture() {
     const zs = await tx
       .insert(floorZones)
       .values([
-        { ...cfg, name: "Alpha", displayOrder: 2 },
-        { ...cfg, name: "Beta", displayOrder: 1 },
-        { ...cfg, name: "Gamma", displayOrder: 0 },
+        { ...cfg, name: "Alpha", displayOrder: 2, departmentId: ds[0]!.id },
+        { ...cfg, name: "Beta", displayOrder: 1, departmentId: ds[0]!.id },
+        { ...cfg, name: "Gamma", displayOrder: 0, departmentId: ds[1]!.id },
       ])
       .returning();
-    await tx.insert(zoneServicePolicies).values([
-      { ...cfg, zoneId: zs[0]!.id, departmentId: ds[0]!.id },
-      { ...cfg, zoneId: zs[1]!.id, departmentId: ds[0]!.id },
-      { ...cfg, zoneId: zs[2]!.id, departmentId: ds[1]!.id },
-    ]);
     return {
       cfg,
       dining: ds[0]!.id,
@@ -627,7 +660,7 @@ describe("service deletion", () => {
           .where(eq(floorZones.id, f.alpha)),
       ),
     ).toEqual([{ name: "Alpha", active: false }]);
-    await run((tx) => tx.insert(floorZones).values({ name: "Alpha" }));
+    await run((tx) => tx.insert(floorZones).values({ name: "Alpha", departmentId: f.dining }));
     expect(
       await refusal(run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW))),
     ).toBe("service_zone.not_found");

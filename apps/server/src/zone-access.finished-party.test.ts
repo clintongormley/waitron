@@ -3,14 +3,13 @@ import crypto, { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { devices, parties } from "@waitron/db";
+import { devices, parties, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createServiceZone,
   listDepartments,
   setProfileServiceAccess,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { mergeBills } from "./bill-actions.js";
@@ -140,9 +139,9 @@ async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promi
 async function patioZone() {
   return inTx(venue, async (tx) => {
     const [policy] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, venue.tables.zoneId));
     const zone = await createServiceZone(tx, {
       name: `Patio-${randomUUID()}`,
       departmentId: policy!.departmentId,

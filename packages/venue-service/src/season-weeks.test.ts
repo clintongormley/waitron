@@ -11,7 +11,6 @@ import {
   CORE_MIGRATIONS,
   departmentDayRanges,
   departmentDays,
-  floorZones,
   seasons,
   withTransaction,
   type Database,
@@ -21,7 +20,7 @@ import {
   zoneDays,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { readOpeningHoursModel, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -59,10 +58,7 @@ async function venue() {
   });
   const venueId = await venueLocationId(db);
   const cfg: { locationId: string } = { locationId: venueId };
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Dining room", displayOrder: 0 })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: "Dining room", displayOrder: 0 });
   return scoped(async (tx) => {
     const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
       .id;

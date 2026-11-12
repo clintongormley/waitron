@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -5,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Hono } from "hono";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorZones, invoiceSeries, withTransaction } from "@waitron/db";
+import { invoiceSeries, withTransaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -47,10 +48,7 @@ useVenueDb({
       });
       freeId = water.id;
       await assignCatalogueToVenue(tx, cat.id);
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Free counter" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Free counter" })];
       free = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",

@@ -53,7 +53,7 @@ async function fixture() {
     ).id;
     const [zone] = await tx
       .insert(floorZones)
-      .values({ ...cfg, name: `Dining${suffix}` })
+      .values({ ...cfg, name: `Dining${suffix}`, departmentId })
       .returning();
     await configureZone(tx, { zoneId: zone!.id, departmentId });
     const menu = await createCatalogue(tx, { name: `Menu ${venueId}${suffix}` });

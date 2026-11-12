@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -2584,10 +2584,10 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     it("a PATCH naming a zone the profile's pass screen does not offer is kitchen_screen.zone_not_allowed 400", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const [offered, other] = await suite.db
-        .insert(floorZones)
-        .values([{ name: "Terrace" }, { name: "Bar" }])
-        .returning({ id: floorZones.id });
+      const [offered, other] = [
+        await seedZone(suite.db, { name: "Terrace" }),
+        await seedZone(suite.db, { name: "Bar" }),
+      ];
       const profileId = await seedProfile("kds");
       await withTransaction(suite.db, (tx) =>
         VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
@@ -2613,10 +2613,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     it("a stale previously stored deleted zone id is refused on device save", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const [zone] = await suite.db
-        .insert(floorZones)
-        .values({ name: "Deleted pass zone" })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(suite.db, { name: "Deleted pass zone" });
       const profileId = await seedProfile("kds");
       const screen: DeviceKitchenScreen = {
         kind: "pass",

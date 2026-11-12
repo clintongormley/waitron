@@ -1,11 +1,6 @@
 import { asc, eq } from "drizzle-orm";
-import { parties, withTransaction, type Database } from "@waitron/db";
-import {
-  saveServiceSteps,
-  serviceSteps,
-  zoneServicePolicies,
-  type ServiceStepInput,
-} from "@waitron/venue-service";
+import { floorZones, parties, withTransaction, type Database } from "@waitron/db";
+import { saveServiceSteps, serviceSteps, type ServiceStepInput } from "@waitron/venue-service";
 
 interface HasVenue {
   db: Database;
@@ -14,9 +9,9 @@ interface HasVenue {
 export async function departmentOf(v: HasVenue, zoneId: string): Promise<string> {
   const [row] = await withTransaction(v.db, (tx) =>
     tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, zoneId)),
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, zoneId)),
   );
   return row!.departmentId;
 }

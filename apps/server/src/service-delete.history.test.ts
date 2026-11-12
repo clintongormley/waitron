@@ -9,6 +9,7 @@ import {
   saleLines,
   withTransaction,
   workingOrders,
+  floorZones,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -24,7 +25,6 @@ import {
   orderServiceContexts,
   workingLineContexts,
   saleReceiptHeaders,
-  zoneServicePolicies,
   readDepartmentTransfer,
   setProfileServiceScope,
   listSentDepartmentTransfers,
@@ -47,10 +47,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   const run = <T>(fn: (tx: import("@waitron/db").Transaction) => Promise<T>) =>
     withTransaction(suite.db, fn);
   const [policy] = await run((tx) =>
-    tx
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.counter.zoneId)),
+    tx.select().from(floorZones).where(eq(floorZones.id, venue.counter.zoneId)),
   );
   const departmentId = policy!.departmentId;
   const [original] = await run((tx) =>

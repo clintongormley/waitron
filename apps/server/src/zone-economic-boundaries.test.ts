@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { withTransaction, workingOrderLines, billPayments } from "@waitron/db";
+import { withTransaction, workingOrderLines, billPayments, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCategory, createProduct } from "@waitron/catalogue";
@@ -12,7 +12,6 @@ import {
   createServiceZone,
   readProfileServiceScopes,
   setProfileServiceAccess,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { decimal, deviceOrigin } from "@waitron/shared";
@@ -527,9 +526,9 @@ it.each(["move-dishes", "merge"] as const)(
     try {
       await withTransaction(venue.db, async (tx) => {
         const [policy] = await tx
-          .select({ departmentId: zoneServicePolicies.departmentId })
-          .from(zoneServicePolicies)
-          .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
+          .select({ departmentId: floorZones.departmentId })
+          .from(floorZones)
+          .where(eq(floorZones.id, venue.zoneId));
         const other = await createServiceZone(tx, {
           name: `Other ${randomUUID()}`,
           departmentId: policy!.departmentId,

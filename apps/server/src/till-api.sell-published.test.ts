@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -10,7 +10,6 @@ import { Hono } from "hono";
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  floorZones,
   products,
   saleLines,
   sales,
@@ -249,7 +248,7 @@ async function setupLunch(): Promise<Lunch> {
     const postres = await createSectionIn(tx, rootId, { internalName: "Postres" });
     await addProducts(tx, postres.id, [flan.id]);
     const zone = await tx.execute<{ id: string }>(sql`
-      select zone_id as id from zone_service_policies
+      select id from floor_zones
       where is_counter_default`);
     const zoneId = zone.rows[0]!.id;
     await offerMenuThroughZone(tx, zoneId, lunch.id, { makeDefault: true });
@@ -936,10 +935,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         name: "Mesas",
         orderStart: "table",
       });
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Test tables" })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: "Test tables" });
       await configureZone(tx, { zoneId: zone!.id, departmentId: department.id });
     });
     const tables = await withTransaction(suite.db, (tx) =>

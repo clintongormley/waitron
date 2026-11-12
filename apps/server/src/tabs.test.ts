@@ -1145,12 +1145,10 @@ describe("listTablesWithState (occupancy)", () => {
       await tx.execute(
         sql`insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'table')`,
       );
-      await tx.execute(sql`update zone_service_policies
+      await tx.execute(sql`update floor_zones
         set department_id = ${department!.id}
-        where zone_id = ${zone.id}`);
-      await tx.execute(
-        sql`update zone_sale_policies set order_start = 'table' where zone_id = ${zone.id}`,
-      );
+        where id = ${zone.id}`);
+      await tx.execute(sql`update floor_zones set order_start = 'table' where id = ${zone.id}`);
       await offerMenuThroughZone(tx, zone.id, menuId, { makeDefault: true });
       await setRoutingCell(
         tx,

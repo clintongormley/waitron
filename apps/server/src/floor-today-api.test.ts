@@ -24,6 +24,7 @@ import {
   parties,
   ticketItems,
   workingOrders,
+  floorZones,
 } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import {
@@ -32,7 +33,6 @@ import {
   departmentFloorPlanSets,
   linkFloorPlanSet,
   menuPeriods,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { floorDeletionFor } from "./floor-delete.js";
@@ -1190,8 +1190,8 @@ describe("the till's zone list", () => {
 async function payFirst(zoneId: string, paidWhen: "prepay" | "ticket_then_pay"): Promise<void> {
   await inTx(v, async (tx) => {
     await tx.execute(sql`
-      update zone_sale_policies set order_start = 'counter', paid_when = ${paidWhen}
-      where zone_id = ${zoneId}`);
+      update floor_zones set order_start = 'counter', paid_when = ${paidWhen}
+      where id = ${zoneId}`);
   });
 }
 
@@ -1336,10 +1336,7 @@ describe("Reset to … plan", () => {
 
   async function moveToDepartment(zoneId: string, departmentId: string): Promise<void> {
     await inTx(v, (tx) =>
-      tx
-        .update(zoneServicePolicies)
-        .set({ departmentId })
-        .where(eq(zoneServicePolicies.zoneId, zoneId)),
+      tx.update(floorZones).set({ departmentId }).where(eq(floorZones.id, zoneId)),
     );
   }
 

@@ -10,7 +10,6 @@ import {
   withTransaction,
   type Transaction,
   venueLocationId,
-  zoneServicePolicies,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -277,10 +276,7 @@ describe("deleted service targets", () => {
     await run(async (tx) => {
       await tx.update(departments).set({ isDefault: true }).where(eq(departments.id, f.gone));
       await tx.update(floorZones).set({ name: "Counter" }).where(eq(floorZones.id, f.zone));
-      await tx
-        .update(zoneServicePolicies)
-        .set({ isCounterDefault: true })
-        .where(eq(zoneServicePolicies.zoneId, f.zone));
+      await tx.update(floorZones).set({ isCounterDefault: true }).where(eq(floorZones.id, f.zone));
     });
     const beforeClash = await snapshot();
     await expect(
@@ -310,11 +306,11 @@ describe("deleted service targets", () => {
     });
     expect(ds.filter((row) => row.isDefault)).toEqual([expect.objectContaining({ active: true })]);
     expect(zs.find((row) => row.id === f.zone)).toMatchObject({ active: false, name: "Counter" });
-    const policy = await run((tx) => tx.select().from(zoneServicePolicies));
+    const policy = await run((tx) => tx.select().from(floorZones));
     expect(policy.filter((row) => row.isCounterDefault)).toEqual([
-      expect.objectContaining({ zoneId: expect.any(String) }),
+      expect.objectContaining({ id: expect.any(String) }),
     ]);
-    expect(policy.find((row) => row.isCounterDefault)?.zoneId).not.toBe(f.zone);
+    expect(policy.find((row) => row.isCounterDefault)?.id).not.toBe(f.zone);
     expect(
       await run((tx) => tx.select().from(menuPeriods).where(eq(menuPeriods.departmentId, f.gone))),
     ).toHaveLength(1);

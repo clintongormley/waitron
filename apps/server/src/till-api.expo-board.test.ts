@@ -5,11 +5,11 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { ticketItems, workingOrderLines } from "@waitron/db";
+import { ticketItems, workingOrderLines, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loginWithPin, persons } from "@waitron/identity";
-import { createServiceZone, zoneServicePolicies } from "@waitron/venue-service";
+import { createServiceZone } from "@waitron/venue-service";
 import type { PassBoard, PassCard } from "./pass-card.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
@@ -42,9 +42,9 @@ async function fixture() {
     await routeProductTo(tx, v.productId("Burger"), grill);
     await routeProductTo(tx, v.productId("Red wine bottle"), bar);
     const [policy] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, v.tables.zoneId));
     const terrace = await createServiceZone(tx, {
       name: "Terrace",
       departmentId: policy!.departmentId,

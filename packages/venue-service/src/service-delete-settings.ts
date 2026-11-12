@@ -25,8 +25,6 @@ import {
   zoneDayRanges,
   zoneDays,
   zoneExtensions,
-  zoneSalePolicies,
-  zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
 import { createLabelComparator, type DeleteImpactItem, type DeleteTarget } from "@waitron/shared";
@@ -59,14 +57,6 @@ async function settings(
         departmentId === null ? undefined : eq(routingCellPeriods.departmentId, departmentId),
       ),
     );
-  const policies = await tx
-    .select()
-    .from(zoneServicePolicies)
-    .where(inArray(zoneServicePolicies.zoneId, zoneIds));
-  const overrides = await tx
-    .select()
-    .from(zoneSalePolicies)
-    .where(inArray(zoneSalePolicies.zoneId, zoneIds));
   const extensions = await tx
     .select()
     .from(zoneExtensions)
@@ -100,11 +90,10 @@ async function settings(
     .select({
       id: floorZones.id,
       name: floorZones.name,
-      departmentId: zoneServicePolicies.departmentId,
+      departmentId: floorZones.departmentId,
     })
     .from(floorZones)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .where(and(eq(floorZones.active, true), eq(departments.active, true)))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
   const surviving = candidates.filter(
@@ -217,7 +206,7 @@ async function settings(
         .orderBy(asc(departments.name), asc(departments.id))
         .then((rows) => rows.filter((row) => row.id !== departmentId))
     : [];
-  const oldCounter = policies.find((row) => row.isCounterDefault);
+  const oldCounter = zones.find((row) => row.isCounterDefault);
   const counterReplacement =
     oldCounter === undefined
       ? undefined
@@ -319,7 +308,7 @@ async function settings(
           })),
       ),
     },
-    { key: "zone_policies", count: policies.length + overrides.length, targets: [] },
+    { key: "zone_policies", count: zones.length, targets: [] },
     { key: "zone_extensions", count: extensions.length, targets: [] },
     { key: "department_periods", count: departmentPeriods.length, targets: [] },
     { key: "floor_plan_sets", count: floorPlanSets.length, targets: [] },
@@ -393,7 +382,6 @@ export async function clearServiceDeleteSettings(
   );
   await tx.delete(zoneExtensions).where(inArray(zoneExtensions.zoneId, selected.zoneIds));
   await tx.delete(zoneDays).where(inArray(zoneDays.zoneId, selected.zoneIds));
-  await tx.delete(zoneSalePolicies).where(inArray(zoneSalePolicies.zoneId, selected.zoneIds));
   for (const start of selected.starts)
     await tx
       .update(deviceProfileServiceAccess)
@@ -420,7 +408,10 @@ export async function clearServiceDeleteSettings(
   await tx
     .delete(deviceKitchenScreenRemovals)
     .where(inArray(deviceKitchenScreenRemovals.zoneId, selected.zoneIds));
-  await tx.delete(zoneServicePolicies).where(inArray(zoneServicePolicies.zoneId, selected.zoneIds));
+  await tx
+    .update(floorZones)
+    .set({ isCounterDefault: false, orderStart: null, paidWhen: null, collectionNumber: null })
+    .where(inArray(floorZones.id, selected.zoneIds));
   if (selected.departmentId !== null) {
     await tx
       .delete(menuPeriodStaffMenus)
@@ -456,7 +447,7 @@ export async function clearServiceDeleteSettings(
   }
   if (selected.counterReplacement !== undefined)
     await tx
-      .update(zoneServicePolicies)
+      .update(floorZones)
       .set({ isCounterDefault: true })
-      .where(eq(zoneServicePolicies.zoneId, selected.counterReplacement.id));
+      .where(eq(floorZones.id, selected.counterReplacement.id));
 }

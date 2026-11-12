@@ -1,10 +1,10 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  floorZones,
   kitchenNotices,
   printJobs,
   ticketItems,
@@ -29,13 +29,10 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     zoneId = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Counter, pays after sending" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Counter, pays after sending" })];
       await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
       await tx.execute(
-        sql`update zone_sale_policies set paid_when = 'ticket_then_pay' where zone_id = ${zone!.id}`,
+        sql`update floor_zones set paid_when = 'ticket_then_pay' where id = ${zone!.id}`,
       );
       return zone!.id;
     });

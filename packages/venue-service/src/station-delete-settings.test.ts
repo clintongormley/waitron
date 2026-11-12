@@ -12,7 +12,6 @@ import {
   deviceKitchenScreenZones,
   deviceProfileKitchenScreens,
   devices,
-  floorZones,
   kitchenStations,
   menuPeriods,
   routingCellPeriods,
@@ -24,7 +23,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import * as module from "./index.js";
 import {
   readDeviceKitchenScreens,
@@ -70,10 +69,7 @@ async function fixture(tx: Transaction) {
       { ...cfg, name: "Survivor" },
     ])
     .returning();
-  const [zone] = await tx
-    .insert(floorZones)
-    .values({ ...cfg, name: "Zone" })
-    .returning();
+  const zone = await seedZone(tx, { name: "Zone" });
   return {
     cfg,
     gone: stations[0]!.id,

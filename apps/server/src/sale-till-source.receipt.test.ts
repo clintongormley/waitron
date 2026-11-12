@@ -159,7 +159,7 @@ async function setupVenue(): Promise<{
       grossPrice: "1.50",
     });
     const counter = await tx.execute<{ zone_id: string }>(sql`
-      select zone_id from zone_service_policies
+      select id as zone_id from floor_zones
       where is_counter_default`);
     await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);

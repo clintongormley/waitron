@@ -2,16 +2,9 @@ import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  invoiceSeries,
-  sales,
-  workingOrders,
-  floorZones,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { invoiceSeries, sales, workingOrders, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import {
   departments,
@@ -54,7 +47,7 @@ async function fixture(nullHeader = false) {
     orderNumber: 1,
     status: "open",
   });
-  const [zone] = await suite.db.insert(floorZones).values({ name: "Dining zone" }).returning();
+  const zone = await seedZone(suite.db, { name: "Dining zone" });
   await suite.db.insert(orderServiceContexts).values({
     workingOrderId: order!.id,
     zoneId: zone!.id,

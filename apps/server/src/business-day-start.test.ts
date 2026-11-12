@@ -1184,12 +1184,11 @@ describe("a keep-open for tonight past the new changeover", () => {
     const zoneId = randomUUID();
     await inTx(async (tx) => {
       await tx.execute(
-        sql`insert into floor_zones (id, name, created_at)
-            values (${zoneId}, 'Terrace', ${at.toISOString()})`,
+        sql`insert into floor_zones (id, name, created_at, department_id)
+            values (${zoneId}, 'Terrace', ${at.toISOString()}, ${department.id})`,
       );
       await tx.execute(
-        sql`insert into zone_service_policies (zone_id, department_id)
-            values (${zoneId}, ${department.id})`,
+        sql`update floor_zones set department_id = ${department.id} where id = ${zoneId}`,
       );
       await tx.execute(
         sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)

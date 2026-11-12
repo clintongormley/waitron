@@ -8,13 +8,12 @@ import {
   orderServiceContexts,
   saleReceiptHeaders,
   sales,
-  floorZones,
   venueLocationId,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { createDepartment, listDepartments } from "./operations.js";
 import * as receipts from "./index.js";
@@ -502,7 +501,7 @@ describe("receipt department lookups", () => {
       orderNumber: 1,
     });
     expect(await scoped((tx) => receipts.receiptDepartmentForOrder(tx, order.id))).toBeNull();
-    const [zone] = await suite.db.insert(floorZones).values({ name: "Bar" }).returning();
+    const zone = await seedZone(suite.db, { name: "Bar" });
     await suite.db.insert(orderServiceContexts).values({
       workingOrderId: order.id,
       zoneId: zone!.id,

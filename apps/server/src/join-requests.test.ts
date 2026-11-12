@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 /**
  * The join-request verbs — mint, cap, sweep, challenge, accept, deny, self-enrol.
  */
@@ -1721,10 +1722,7 @@ describe("deleted zone joins", () => {
   it("pending join acceptance cannot restore a deleted zone", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("kds");
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ name: "Pending pass zone" })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(suite.db, { name: "Pending pass zone" });
     const screen: DeviceKitchenScreen = {
       kind: "pass",
       stationIds: [venue.defaultStationId],

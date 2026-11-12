@@ -2394,7 +2394,7 @@ Ordering profiles keep one department. A nonretired ordering profile bound to th
 refuses its deletion, even without an active device. Removing its only usable zone also refuses.
 When a removed starting zone has a permitted survivor, its replacement follows the declared order.
 Default department and counter-zone replacements use surviving configuration; deletion creates no
-menu or zone. An explicit empty kitchen-screen parent stays empty, and Every stays Every, so
+menu or zone. A deleted zone keeps its row and department, with its sale overrides and counter-default mark cleared. An explicit empty kitchen-screen parent stays empty, and Every stays Every, so
 cleanup cannot widen access.
 
 Deleted names become available for a new id. Current configuration reads and writes refuse the old
@@ -5255,7 +5255,7 @@ they did not test every migration caller.
 
 You choose how orders start separately from when a counter order is paid.
 `department_sale_policies.order_start` holds `table` or `counter`;
-`zone_sale_policies.order_start` is nullable, with null following the department.
+`floor_zones.order_start` is nullable, with null following the department.
 The same zone-first resolution applies to paid-when and collection tickets.
 The receipt-print field and its controls are retired.
 

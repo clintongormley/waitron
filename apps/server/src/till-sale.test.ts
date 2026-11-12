@@ -226,7 +226,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     });
     await assignCatalogueToVenue(tx, cat.id);
     const zone = await tx.execute<{ id: string }>(sql`
-      select zone_id as id from zone_service_policies
+      select id from floor_zones
       where is_counter_default`);
     const offer = await addProductToMenu(tx, {
       menuId: cat.id,

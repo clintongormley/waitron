@@ -24,7 +24,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { type BusinessDayClock } from "@waitron/shared";
 import {
   readDayPlan,
@@ -69,18 +69,19 @@ async function venue(options: { oneSeason?: boolean } = {}) {
   const cfg: { locationId: string } = {
     locationId: await venueLocationId(db),
   };
+  const departmentId = await scoped(
+    async (tx) => (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id,
+  );
   const zones = await db
     .insert(floorZones)
     .values([
-      { name: "Dining room", displayOrder: 0 },
-      { name: "Terrace", displayOrder: 1 },
+      { name: "Dining room", displayOrder: 0, departmentId },
+      { name: "Terrace", displayOrder: 1, departmentId },
     ])
     .returning({ id: floorZones.id });
   if (options.oneSeason === true)
     await db.insert(seasons).values({ name: "All year", startsOn: "01-01" });
   return scoped(async (tx) => {
-    const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
-      .id;
     for (const zone of zones) await configureZone(tx, { zoneId: zone.id, departmentId });
     const menus: Record<string, string> = {};
     const period = async (name: string) => {
@@ -706,10 +707,7 @@ describe("special-day paint over the season", () => {
   it("reads special-day dates and their paint once, however many zones and days a call covers", async () => {
     const v = await venue();
     const third = await scoped(async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Bar", displayOrder: 2 })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: "Bar", displayOrder: 2 });
       await configureZone(tx, { zoneId: zone!.id, departmentId: v.departmentId });
       return zone!.id;
     });

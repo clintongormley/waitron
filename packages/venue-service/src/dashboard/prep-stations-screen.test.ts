@@ -6010,7 +6010,6 @@ describe("A773 station policy: the pass coverage warning", () => {
       // readProfilesZones
       "device_profile_service_access",
       "device_profile_zones",
-      "zone_service_policies",
       "departments",
     ]);
   });
@@ -6042,7 +6041,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       await settle(el);
       await settle(el);
     };
-    for (const type of ["zone_service_policies", "device_kitchen_screen_removals", "devices"]) {
+    for (const type of ["floor_zones", "device_kitchen_screen_removals", "devices"]) {
       const before = passCoverageCalls(a);
       liveData.invalidate([{ type }]);
       await vi.waitFor(() => expect(passCoverageCalls(a)).toBe(before + 1));

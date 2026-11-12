@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./floor-label.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -22,8 +23,6 @@ import {
   menuPeriods,
   replaceMenuWeek,
   saveMenuPeriod,
-  zoneSalePolicies,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "../floor-plan.js";
 import { defaultLayout } from "./floor-sets.js";
@@ -55,15 +54,15 @@ export async function tableServiceZone(v: PartyVenue): Promise<string> {
   const id = randomUUID();
   await inTx(v, async (tx) => {
     const [tables] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    await tx.insert(floorZones).values({ id, name: `Zone ${id.slice(0, 8)}` });
-    await tx.insert(zoneServicePolicies).values({
-      zoneId: id,
-      departmentId: tables!.departmentId,
-    });
-    await tx.insert(zoneSalePolicies).values({ zoneId: id, orderStart: "table" });
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, v.tables.zoneId));
+    await seedZone(tx, { id, name: `Zone ${id.slice(0, 8)}` });
+    await tx
+      .update(floorZones)
+      .set({ departmentId: tables!.departmentId })
+      .where(eq(floorZones.id, id));
+    await tx.update(floorZones).set({ orderStart: "table" }).where(eq(floorZones.id, id));
   });
   return id;
 }

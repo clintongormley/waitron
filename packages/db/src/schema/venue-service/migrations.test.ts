@@ -15,12 +15,17 @@ import {
   UNIQUE_VIOLATION,
   withTransaction,
   locations,
-  zoneServicePolicies,
 } from "../../index.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "../../index.js";
 import { useVenueDb } from "../../testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedTenant, seedVenue } from "../../testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedTenant,
+  seedVenue,
+  seedZone,
+} from "../../testing/seed.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -34,7 +39,7 @@ beforeAll(() => {
 
 const TABLES = [
   "departments",
-  "zone_service_policies",
+  "floor_zones",
   "zone_extensions",
   "menu_period_staff_menus",
   "device_profile_service_access",
@@ -147,7 +152,7 @@ describe("retired service-style storage", () => {
       column: "default_service_mode",
     },
     {
-      statement: sql`update zone_service_policies set service_mode = 'prepay'`,
+      statement: sql`update floor_zones set service_mode = 'prepay'`,
       column: "service_mode",
     },
   ])("refuses a write to the retired $column column", async ({ statement, column }) => {
@@ -248,13 +253,13 @@ describe("the venue-service tables carry no tenant column", () => {
         primaryKey: ["id"],
         foreignKeys: [],
       },
-      zone_service_policies: {
-        primaryKey: ["zone_id"],
-        foreignKeys: ["(department_id) -> departments(id)", "(zone_id) -> floor_zones(id)"],
+      floor_zones: {
+        primaryKey: ["id"],
+        foreignKeys: ["(department_id) -> departments(id)"],
       },
       zone_extensions: {
         primaryKey: ["id"],
-        foreignKeys: ["(zone_id) -> zone_service_policies(zone_id)"],
+        foreignKeys: ["(zone_id) -> floor_zones(id)"],
       },
       menu_period_staff_menus: {
         primaryKey: ["period_id", "menu_id"],
@@ -401,7 +406,7 @@ describe("the venue-service tables carry no tenant column", () => {
         foreignKeys: [
           "(season_id) -> seasons(id) on delete cascade",
           "(special_day_date_id) -> special_day_dates(id) on delete cascade",
-          "(zone_id) -> zone_service_policies(zone_id) on delete cascade",
+          "(zone_id) -> floor_zones(id) on delete cascade",
         ],
       },
       zone_day_ranges: {
@@ -429,16 +434,14 @@ describe("the venue-service tables carry no tenant column", () => {
     expect(columns("departments_name_key")).toEqual(["name"]);
     expect(columns("departments_one_default_key")).toEqual(["is_default"]);
     expect(predicate("departments_one_default_key")).toBe(`"departments"."is_default"`);
-    expect(columns("zone_service_policies_one_counter_default_key")).toEqual([
-      "is_counter_default",
-    ]);
-    expect(predicate("zone_service_policies_one_counter_default_key")).toBe(
-      `"zone_service_policies"."is_counter_default"`,
+    expect(columns("floor_zones_one_counter_default_key")).toEqual(["is_counter_default"]);
+    expect(predicate("floor_zones_one_counter_default_key")).toBe(
+      `"floor_zones"."is_counter_default" = 1 and "floor_zones"."active" = 1`,
     );
     for (const name of [
       "departments_name_key",
       "departments_one_default_key",
-      "zone_service_policies_one_counter_default_key",
+      "floor_zones_one_counter_default_key",
     ]) {
       expect(defs[name]?.unique, name).toBe(true);
     }
@@ -462,10 +465,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     });
     await seedBusinessDay(db, {});
     const locationId = location!.id;
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: `Terrace ${locationId}` })
-      .returning({ id: floorZones.id });
     const [department] = await db
       .insert(departments)
       .values({
@@ -473,6 +472,10 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         tradingName: "Bar",
       })
       .returning({ id: departments.id });
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ name: `Terrace ${locationId}`, departmentId: department!.id })
+      .returning({ id: floorZones.id });
     const menu = await insertMenu(`Drinks ${locationId}`);
     return {
       locationId: locationId as string,
@@ -484,8 +487,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   async function orderStartPolicies() {
     const v = await venue();
-    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
-      values (${v.zoneId}, ${v.departmentId})`);
     return v;
   }
 
@@ -493,7 +494,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await orderStartPolicies();
     await db.execute(sql`insert into department_sale_policies (department_id)
       values (${v.departmentId})`);
-    await db.execute(sql`insert into zone_sale_policies (zone_id) values (${v.zoneId})`);
     expect(
       (
         await db.execute(sql`select order_start from department_sale_policies
@@ -502,8 +502,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     ).toEqual([{ order_start: "counter" }]);
     expect(
       (
-        await db.execute(sql`select order_start from zone_sale_policies
-      where zone_id = ${v.zoneId}`)
+        await db.execute(sql`select order_start from floor_zones
+      where id = ${v.zoneId}`)
       ).rows,
     ).toEqual([{ order_start: null }]);
   });
@@ -512,33 +512,30 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await orderStartPolicies();
     await db.execute(sql`insert into department_sale_policies (department_id, order_start)
       values (${v.departmentId}, 'table')`);
-    await db.execute(sql`insert into zone_sale_policies (zone_id, order_start)
-      values (${v.zoneId}, 'counter')`);
+    await db.execute(sql`update floor_zones set order_start = 'counter' where id = ${v.zoneId}`);
     expect(
       (
         await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
-      from department_sale_policies p join zone_sale_policies q on q.zone_id = ${v.zoneId}
+      from department_sale_policies p join floor_zones q on q.id = ${v.zoneId}
       where p.department_id = ${v.departmentId}`)
       ).rows,
     ).toEqual([{ department_start: "table", zone_start: "counter" }]);
     await db.execute(sql`update department_sale_policies set order_start = 'counter'
       where department_id = ${v.departmentId}`);
-    await db.execute(sql`update zone_sale_policies set order_start = 'table'
-      where zone_id = ${v.zoneId}`);
+    await db.execute(sql`update floor_zones set order_start = 'table'
+      where id = ${v.zoneId}`);
     expect(
       (
         await db.execute(sql`select p.order_start as department_start, q.order_start as zone_start
-      from department_sale_policies p join zone_sale_policies q on q.zone_id = ${v.zoneId}
+      from department_sale_policies p join floor_zones q on q.id = ${v.zoneId}
       where p.department_id = ${v.departmentId}`)
       ).rows,
     ).toEqual([{ department_start: "counter", zone_start: "table" }]);
-    await db.execute(
-      sql`update zone_sale_policies set order_start = null where zone_id = ${v.zoneId}`,
-    );
+    await db.execute(sql`update floor_zones set order_start = null where id = ${v.zoneId}`);
     expect(
       (
-        await db.execute(sql`select order_start from zone_sale_policies
-      where zone_id = ${v.zoneId}`)
+        await db.execute(sql`select order_start from floor_zones
+      where id = ${v.zoneId}`)
       ).rows,
     ).toEqual([{ order_start: null }]);
   });
@@ -551,37 +548,37 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         policy === "department"
           ? sql`insert into department_sale_policies (department_id, order_start)
             values (${v.departmentId}, 'tab')`
-          : sql`insert into zone_sale_policies (zone_id, order_start) values (${v.zoneId}, 'tab')`;
+          : sql`update floor_zones set order_start = 'tab' where id = ${v.zoneId}`;
       const insertError = await captureError(() => withTransaction(db, (tx) => tx.execute(insert)));
       expect(isRefusal(insertError, CHECK_VIOLATION)).toBe(true);
       expect(engineErrorMessage(insertError)).toContain(
         policy === "department"
           ? "department_sale_policies_order_start_ck"
-          : "zone_sale_policies_order_start_ck",
+          : "floor_zones_order_start_ck",
       );
       await db.execute(
         policy === "department"
           ? sql`insert into department_sale_policies (department_id, order_start)
             values (${v.departmentId}, 'table')`
-          : sql`insert into zone_sale_policies (zone_id, order_start) values (${v.zoneId}, 'counter')`,
+          : sql`update floor_zones set order_start = 'counter' where id = ${v.zoneId}`,
       );
       const update =
         policy === "department"
           ? sql`update department_sale_policies set order_start = 'tab' where department_id = ${v.departmentId}`
-          : sql`update zone_sale_policies set order_start = 'tab' where zone_id = ${v.zoneId}`;
+          : sql`update floor_zones set order_start = 'tab' where id = ${v.zoneId}`;
       const updateError = await captureError(() => withTransaction(db, (tx) => tx.execute(update)));
       expect(isRefusal(updateError, CHECK_VIOLATION)).toBe(true);
       expect(engineErrorMessage(updateError)).toContain(
         policy === "department"
           ? "department_sale_policies_order_start_ck"
-          : "zone_sale_policies_order_start_ck",
+          : "floor_zones_order_start_ck",
       );
       expect(
         (
           await db.execute(
             policy === "department"
               ? sql`select order_start from department_sale_policies where department_id = ${v.departmentId}`
-              : sql`select order_start from zone_sale_policies where zone_id = ${v.zoneId}`,
+              : sql`select order_start from floor_zones where id = ${v.zoneId}`,
           )
         ).rows,
       ).toEqual([{ order_start: policy === "department" ? "table" : "counter" }]);
@@ -620,8 +617,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   async function zoneWithPolicy() {
     const v = await venue();
-    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
-      values (${v.zoneId}, ${v.departmentId})`);
     return v;
   }
 
@@ -675,15 +670,12 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(engineErrorMessage(error)).toContain("zone_extensions_step_ck");
   });
 
-  it("ties a zone extension to an existing zone service policy", async () => {
+  it("ties a zone extension to an existing zone", async () => {
     const v = await venue();
     const extension = (zoneId: string) => sql`insert into zone_extensions
       (id, zone_id, business_day, starts_at, ends_at)
       values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`;
-    await refusal(extension(v.zoneId), "zone_extensions_zone_fk");
     await refusal(extension(randomUUID()), "zone_extensions_zone_fk");
-    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
-      values (${v.zoneId}, ${v.departmentId})`);
     await db.execute(extension(v.zoneId));
     expect(
       (
@@ -894,14 +886,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const missing = "00000000-0000-4000-8000-00000000dead";
 
     await refusal(
-      sql`insert into zone_service_policies (zone_id, department_id)
-        values (${missing}, ${v.departmentId})`,
-      "zone_service_policies_zone_fk",
-    );
-    await refusal(
-      sql`insert into zone_service_policies (zone_id, department_id)
-        values (${v.zoneId}, ${missing})`,
-      "zone_service_policies_department_fk",
+      sql`update floor_zones set department_id = ${missing} where id = ${v.zoneId}`,
+      "floor_zones_department_fk",
     );
     await refusal(
       sql`insert into menu_periods (id, department_id, name, menu_id)
@@ -951,8 +937,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await db.execute(sql`insert into department_day_ranges
         (id, day_id, department_id, period_id, starts_at, ends_at)
       values (${randomUUID()}, ${weekDayId}, ${v.departmentId}, ${periodId}, '12:00:00', '16:00:00')`);
-    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
-      values (${v.zoneId}, ${v.departmentId})`);
     const zoneDayId = randomUUID();
     await db.execute(sql`insert into zone_days (id, zone_id, season_id, weekday)
       values (${zoneDayId}, ${v.zoneId}, ${seasonId}, 6)`);
@@ -1177,10 +1161,7 @@ describe("the kitchen screen tables refuse what their rules forbid", () => {
       .insert(kitchenStations)
       .values({ name: "Grill" })
       .returning({ id: kitchenStations.id });
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: "Terrace" })
-      .returning({ id: floorZones.id });
+    const zone = await seedZone(db, { name: "Terrace" });
     const [profile] = await seedDeviceProfiles(db, { name: "Front till", formFactor: "till" });
     const device = await seedDevice(db, { profileId: profile!.id, label: "Till 1" });
     return {
@@ -1367,17 +1348,16 @@ describe("single-venue defaults", () => {
       .values({ name: "Main", tradingName: "Main" })
       .returning();
     async function add(name: string, isCounterDefault: boolean) {
-      const [zone] = await single.db.insert(floorZones).values({ name }).returning();
       return single.db
-        .insert(zoneServicePolicies)
-        .values({ zoneId: zone!.id, departmentId: department!.id, isCounterDefault });
+        .insert(floorZones)
+        .values({ name, departmentId: department!.id, isCounterDefault });
     }
     await add("Counter", true);
     const error = await captureError(() => add("Other counter", true));
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toContain("zone_service_policies.is_counter_default");
+    expect(engineErrorMessage(error)).toContain("floor_zones.is_counter_default");
     await add("Ordinary one", false);
     await add("Ordinary two", false);
-    expect(await single.db.select().from(zoneServicePolicies)).toHaveLength(3);
+    expect(await single.db.select().from(floorZones)).toHaveLength(3);
   });
 });

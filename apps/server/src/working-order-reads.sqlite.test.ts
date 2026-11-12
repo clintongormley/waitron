@@ -12,7 +12,7 @@ import {
   workingOrders,
   type Database,
 } from "@waitron/db";
-import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { randomUUID } from "node:crypto";
@@ -90,10 +90,7 @@ beforeAll(async () => {
     queuedAt,
     firedAt: nowIso(),
   });
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Tables" })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: "Tables" });
   tableId = randomUUID();
   await db.insert(diningTables).values({ id: tableId, zoneId: zone!.id, label: "Table 1" });
   await db.insert(floorTodayTables).values({ tableId: tableId });
@@ -109,10 +106,7 @@ beforeAll(async () => {
 
 describe("the kitchen and floor read models on a real migrated venue", () => {
   it("omits missing-today and disabled-zone tables from both floor lists, keeping taken-off tables", async () => {
-    const [zone] = await db
-      .insert(floorZones)
-      .values({ name: "Closed", active: false })
-      .returning();
+    const zone = await seedZone(db, { name: "Closed", active: false });
     const [normalZone] = await db.select().from(floorZones).where(eq(floorZones.name, "Tables"));
     const [absent, closed, takenOff] = await db
       .insert(diningTables)

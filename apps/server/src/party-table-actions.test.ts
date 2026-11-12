@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -9,7 +10,6 @@ import { createPrinter } from "@waitron/printing";
 import {
   captureError,
   diningTables,
-  floorZones,
   kitchenStations,
   orderGroupEvents,
   orderGroups,
@@ -154,10 +154,7 @@ useVenueDb({
       };
     });
     terraceZone = await inTx(v, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Terrace" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Terrace" })];
       return (await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" }))
         .zoneId;
     });

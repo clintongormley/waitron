@@ -1,7 +1,9 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
+import { departments } from "../schema/venue-service/service.js";
+import { floorZones } from "../schema/floor-zones.js";
 import { deviceFormFactorEnum, deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
@@ -242,4 +244,48 @@ export async function seedBusinessDay(
       dayCutover: stored,
     })
     .onConflictDoNothing({ target: dayCutoverChanges.effectiveBusinessDay });
+}
+
+export async function seedZone(
+  db: Database | Transaction,
+  input: {
+    id?: string;
+    name: string;
+    displayOrder?: number;
+    active?: boolean;
+    departmentId?: string;
+    isCounterDefault?: boolean;
+  },
+): Promise<{ id: string; departmentId: string }> {
+  let departmentId = input.departmentId;
+  if (departmentId === undefined) {
+    const [active] = await db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.active, true))
+      .orderBy(asc(departments.createdAt))
+      .limit(1);
+    departmentId = active?.id;
+    if (departmentId === undefined) {
+      const [existingDefault] = await db
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.isDefault, true))
+        .limit(1);
+      const [created] = await db
+        .insert(departments)
+        .values({
+          name: "Test floor department",
+          tradingName: "Test floor department",
+          isDefault: existingDefault === undefined,
+        })
+        .returning({ id: departments.id });
+      departmentId = created!.id;
+    }
+  }
+  const [zone] = await db
+    .insert(floorZones)
+    .values({ ...input, departmentId })
+    .returning({ id: floorZones.id, departmentId: floorZones.departmentId });
+  return zone!;
 }

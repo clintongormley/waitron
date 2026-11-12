@@ -6,11 +6,10 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedNode, seedVenue, seedZone, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
-import { floorZones } from "./floor-zones.js";
 import { workingOrders } from "./orders.js";
 
 // The proof by deletion switches off EVERY foreign key at once, so it separates "a foreign key
@@ -55,10 +54,7 @@ describe("an order's delivery table", () => {
   /** One active table. The Drizzle builder, since `id` and `created_at` are `$defaultFn` columns. */
   async function openTable(label: string): Promise<string> {
     return inTx(async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: label })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: label });
       const [row] = await tx
         .insert(diningTables)
         .values({ label, zoneId: zone!.id })

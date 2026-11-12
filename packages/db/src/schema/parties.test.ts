@@ -6,11 +6,10 @@ import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedNode, seedVenue, seedZone, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
-import { floorZones } from "./floor-zones.js";
 import { parties, partyTables, serviceCommands } from "./parties.js";
 
 /** An order opened from the dashboard, needing no device. */
@@ -37,10 +36,7 @@ describe("parties, party_tables and service_commands", () => {
 
   async function table(label: string): Promise<string> {
     return inTx(async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: label })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: label });
       const [row] = await tx
         .insert(diningTables)
         .values({ label, zoneId: zone!.id })

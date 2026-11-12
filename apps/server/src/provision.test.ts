@@ -1,4 +1,4 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -10,7 +10,6 @@ import {
   readDeploymentEnvironment,
   stampDeployment,
   kitchenStations,
-  floorZones,
   dayCutoverChanges,
   settings as businessDaySettingsTable,
   withTransaction,
@@ -429,7 +428,7 @@ describe("provisionVenue", () => {
 });
 
 describe("clearProvisionFixture", () => {
-  it("clears today's zone extension before deleting its zone service policy", async () => {
+  it("clears today's zone extension before deleting its zone", async () => {
     const db = ownerDb();
     await applyHistoricalTestVenue(
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
@@ -437,10 +436,7 @@ describe("clearProvisionFixture", () => {
     );
     const zoneId = randomUUID();
     await withTransaction(db, async (tx) => {
-      await tx.insert(floorZones).values({ id: zoneId, name: "Terrace" });
-      await tx.execute(sql`insert into zone_service_policies (zone_id, department_id)
-        select ${zoneId}, id from departments
-         limit 1`);
+      await seedZone(tx, { id: zoneId, name: "Terrace" });
       await tx.execute(sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
         values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`);
     });
@@ -454,11 +450,10 @@ describe("clearProvisionFixture", () => {
       (
         await db.execute(sql`select
       (select count(*) from zone_extensions) as extensions,
-      (select count(*) from zone_service_policies) as policies,
       (select count(*) from floor_zones) as zones,
       (select count(*) from locations) as locations`)
       ).rows,
-    ).toEqual([{ extensions: 0, policies: 0, zones: 0, locations: 0 }]);
+    ).toEqual([{ extensions: 0, zones: 0, locations: 0 }]);
   });
 
   it("clears a venue's holiday area geography before the venue", async () => {

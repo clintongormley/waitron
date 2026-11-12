@@ -1,3 +1,4 @@
+import { madridWithFoldedTables } from "./testing/madrid-folded-tables.js";
 import { madridWithDocument } from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";
 import {
@@ -638,6 +639,26 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
+      expected[phase] = madridWithFoldedTables(expected[phase], [
+        {
+          from: "zone_service_policies",
+          into: "floor_zones",
+          match: { from: "zone_id", into: "id" },
+          columns: { department_id: "department_id", is_counter_default: "is_counter_default" },
+        },
+        {
+          from: "zone_sale_policies",
+          into: "floor_zones",
+          match: { from: "zone_id", into: "id" },
+          columns: {
+            order_start: "order_start",
+            paid_when: "paid_when",
+            collection_number: "collection_number",
+          },
+        },
+      ]);
+      delete phases[phase]!.zone_service_policies;
+      delete phases[phase]!.zone_sale_policies;
       expected[phase].tables.convenio_config!.columns.find((column) => column.name === "id")!.type =
         "INTEGER";
       if (phase !== "before") {

@@ -1,10 +1,16 @@
 # A1308 fk1 — a zone's department and sale rules live on the zone row: implementation plan
 
+> 2026-11-12, watcher 09:14: #2804 retired receipt_print_mode; fold only the three remaining sale overrides (five new zone columns total). Every receipt-mode enum, column, CHECK, reader/validator and test expectation below, including the protection prediction, is void. Carry fk0’s finished library and build its still-unbuilt seedZone rewrite here. Watcher 09:18 clears removing only the missing-policy readiness element at operations.test.ts:582; keep all subsequent assertions and let the schema refuse a missing department.
+
+> 2026-11-12, watcher 09:50: fk1 carries fk0; use the combined forecast of about 1,420 counted lines and a 1.5× stop at about 2,130. Count at every checkpoint; keep generated files and committed script output separate under the slice rules.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to build this plan task by task. Steps use checkbox
 > (`- [ ]`) syntax. Every step also follows
 > [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules" below), which this plan cites
 > and does not repeat.
+
+> 2026-11-12, watcher 11:06: remaining impossible fixtures may use inactive zones or known absent ids, preserving behaviour assertions; configuration-transfer retires BARE_ZONE beside its retained absent/closed cases. Clock-compatibility reads retain inactive zones, as does recorded-receipt resolution (10:34). Revised combined forecast about 2,400 counted additions; stop beyond about 2,600.
 
 **Goal:** `zone_service_policies` (a zone's department and the "counter default" mark) and
 `zone_sale_policies` (a zone's four sale-rule overrides) fold into `floor_zones`, so a zone is one

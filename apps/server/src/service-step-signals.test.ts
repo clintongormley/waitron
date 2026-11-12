@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -5,7 +6,6 @@ import { DatabaseSync, StatementSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
   diningTables,
-  floorZones,
   orderGroupEvents,
   parties,
   partyTables,
@@ -423,14 +423,11 @@ describe("readTableSteps", () => {
     });
   });
 
-  it("a table whose zone has no department shows no step", async () => {
+  it("a table whose zone is inactive shows no step", async () => {
     const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
     const outside = await inTx(v, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Loose" })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: "Inactive", active: false });
       const [table] = await tx
         .insert(diningTables)
         .values({ label: "L1", zoneId: zone!.id })

@@ -1,4 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -14,7 +15,6 @@ import { describe, expect, it } from "vitest";
 import {
   billPayments,
   deviceMadeHereStations,
-  floorZones,
   kitchenStations,
   orderGroupHoldStations,
   orderGroups,
@@ -1325,10 +1325,7 @@ describe("made-here route wiring", () => {
     "/api/sales makes a no-party %s counter order here when payment sends it",
     async (serviceMode) => {
       const { zoneId, menuItemId } = await inTx(venue, async (tx) => {
-        const [zone] = await tx
-          .insert(floorZones)
-          .values({ name: `${serviceMode} ${randomUUID()}` })
-          .returning();
+        const [zone] = [await seedZone(tx, { name: `${serviceMode} ${randomUUID()}` })];
         const [lager] = await tx
           .select({ id: products.id })
           .from(products)

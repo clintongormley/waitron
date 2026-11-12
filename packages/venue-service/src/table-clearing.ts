@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { departments, diningTables, zoneServicePolicies, type Transaction } from "@waitron/db";
+import { departments, diningTables, floorZones, type Transaction } from "@waitron/db";
 
 export async function readTablesNeedingClearing(
   tx: Transaction,
@@ -9,11 +9,17 @@ export async function readTablesNeedingClearing(
   const rows = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, diningTables.zoneId))
+    .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
     // Not filtered on departments.active, unlike listNeedsClearingDepartmentIds:
     // plan 2026-10-19-a757-1, Decision 3.
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .where(and(inArray(diningTables.id, [...tableIds]), eq(departments.needsClearing, true)));
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(
+      and(
+        inArray(diningTables.id, [...tableIds]),
+        eq(departments.needsClearing, true),
+        eq(floorZones.active, true),
+      ),
+    );
   return new Set(rows.map((row) => row.id));
 }
 

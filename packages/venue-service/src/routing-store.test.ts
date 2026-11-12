@@ -102,14 +102,14 @@ async function fixture(tx: Transaction, suffix = "") {
   });
   const venueId = await venueLocationId(tx);
   const cfg = { locationId: venueId };
-  const [terrace] = await tx
-    .insert(floorZones)
-    .values({ ...cfg, name: "Terrace" })
-    .returning();
   const department = await createDepartment(tx, {
     name: "Dining",
     orderStart: "table",
   });
+  const [terrace] = await tx
+    .insert(floorZones)
+    .values({ ...cfg, name: "Terrace", departmentId: department.id })
+    .returning();
   await configureZone(tx, { zoneId: terrace!.id, departmentId: department.id });
   const stations = await tx
     .insert(kitchenStations)
@@ -395,7 +395,7 @@ describe("maker descriptions and the deciding cell", () => {
       const zone = async (name: string) => {
         const [row] = await tx
           .insert(floorZones)
-          .values({ ...f.cfg, name })
+          .values({ ...f.cfg, departmentId: f.department, name })
           .returning();
         await configureZone(tx, { zoneId: row!.id, departmentId: f.department });
         return row!.id;
@@ -515,8 +515,8 @@ describe("stored preparation rules", () => {
       const [inside, garden] = await tx
         .insert(floorZones)
         .values([
-          { ...f.cfg, name: "Upstairs", displayOrder: 1 },
-          { ...f.cfg, name: "Garden", displayOrder: 0, active: false },
+          { ...f.cfg, departmentId: f.department, name: "Upstairs", displayOrder: 1 },
+          { ...f.cfg, departmentId: f.department, name: "Garden", displayOrder: 0, active: false },
         ])
         .returning();
       await configureZone(tx, { zoneId: inside!.id, departmentId: f.department });
@@ -702,7 +702,7 @@ describe("the browser's selection rules", () => {
       const f = await fixture(tx);
       const [upstairs] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, name: "Upstairs" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Upstairs" })
         .returning();
       await configureZone(tx, { zoneId: upstairs!.id, departmentId: f.department });
       const written: RoutingCell[] = [
@@ -780,12 +780,12 @@ describe("the browser's selection rules", () => {
       const f = await fixture(tx);
       const [upstairs] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, name: "Upstairs" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Upstairs" })
         .returning();
       await configureZone(tx, { zoneId: upstairs!.id, departmentId: f.department });
       const [inside] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, name: "Inside" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Inside" })
         .returning();
       await configureZone(tx, { zoneId: inside!.id, departmentId: f.department });
       const written: RoutingCell[] = [
@@ -1307,7 +1307,7 @@ describe("routing previews", () => {
       const f = await fixture(tx);
       const [inside] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, name: "Inside" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Inside" })
         .returning();
       await setRoutingCell(
         tx,
@@ -1422,7 +1422,7 @@ describe("routing previews", () => {
       const f = await fixture(tx);
       const [inside] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, name: "Inside" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Inside" })
         .returning();
       const menu = await createCatalogue(tx, { name: "Drinks menu" });
       const lager = await createProduct(tx, {
@@ -1849,7 +1849,7 @@ describe("routing previews", () => {
         const f = await withExtras(tx);
         const [patio] = await tx
           .insert(floorZones)
-          .values({ ...f.cfg, name: "Patio" })
+          .values({ ...f.cfg, departmentId: f.department, name: "Patio" })
           .returning();
         const takeaway = await createDepartment(tx, {
           name: "Takeaway",
@@ -1885,7 +1885,7 @@ describe("routing previews", () => {
 
         const [patio] = await tx
           .insert(floorZones)
-          .values({ ...f.cfg, name: "Patio" })
+          .values({ ...f.cfg, departmentId: f.department, name: "Patio" })
           .returning();
         await configureZone(tx, { zoneId: patio!.id, departmentId: f.department });
         const dishes = [await f.product("Soup", f.food), await f.product("Pie", f.food)];
@@ -2016,14 +2016,14 @@ describe("routing previews", () => {
       const venueId = await venueLocationId(tx);
       const cfg = { locationId: venueId };
       const zone = async (name: string) => {
-        const [row] = await tx
-          .insert(floorZones)
-          .values({ ...cfg, name })
-          .returning();
         const department = await createDepartment(tx, {
           name: `${name} service`,
           orderStart: "table",
         });
+        const [row] = await tx
+          .insert(floorZones)
+          .values({ ...cfg, name, departmentId: department.id })
+          .returning();
         await configureZone(tx, { zoneId: row!.id, departmentId: department.id });
         return row!.id;
       };
@@ -2979,7 +2979,7 @@ describe("routing during a service period", () => {
     );
     const [dining] = await tx
       .insert(floorZones)
-      .values({ ...f.cfg, name: "Dining room" })
+      .values({ ...f.cfg, departmentId: f.department, name: "Dining room" })
       .returning();
     await configureZone(tx, { zoneId: dining!.id, departmentId: f.department });
     const [upstairs, downstairs] = await tx
@@ -3152,7 +3152,7 @@ describe("saving a cell's period choices", () => {
     const barDepartment = (await createDepartment(tx, { name: "Bar", orderStart: "table" })).id;
     const [patio] = await tx
       .insert(floorZones)
-      .values({ ...f.cfg, name: "Patio" })
+      .values({ ...f.cfg, departmentId: f.department, name: "Patio" })
       .returning();
     await configureZone(tx, { zoneId: patio!.id, departmentId: barDepartment });
     const barLunch = await period(barDepartment, "Lunch", lunchMenu);
@@ -3188,27 +3188,27 @@ describe("saving a cell's period choices", () => {
       .select({ periodId: routingCellPeriods.periodId, stationId: routingCellPeriods.stationId })
       .from(routingCellPeriods);
 
-  it("gives each zone of the model its department, or null where it serves none", async () =>
+  it("gives each zone of the model its department", async () =>
     scoped(async (tx) => {
       const f = await choicesFixture(tx);
       const [garden] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, name: "Garden" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Garden" })
         .returning();
       const { zones } = await routingModel(tx, at);
       expect(zones).toEqual([
-        { id: garden!.id, name: "Garden", departmentId: null },
+        { id: garden!.id, name: "Garden", departmentId: f.department },
         { id: f.patio, name: "Patio", departmentId: f.barDepartment },
         { id: f.terrace, name: "Terrace", departmentId: f.department },
       ]);
     }));
 
-  it("refuses a cell with period lines at a zone that serves no department, writing nothing", async () =>
+  it("refuses a cell with period lines at an inactive zone, writing nothing", async () =>
     scoped(async (tx) => {
       const f = await choicesFixture(tx);
       const [garden] = await tx
         .insert(floorZones)
-        .values({ ...f.cfg, name: "Garden" })
+        .values({ ...f.cfg, departmentId: f.department, name: "Garden", active: false })
         .returning();
       const address: CellAddress = { row: categoryRow(f.cocktails), zoneId: garden!.id };
       for (const write of [

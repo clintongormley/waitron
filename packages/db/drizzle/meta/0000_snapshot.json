@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6d236174-0396-4b10-af19-75200c669ba6",
+  "id": "9b1276c8-f6f1-44af-89e3-5626304ca471",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4253,9 +4253,53 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "department_id": {
+          "name": "department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_counter_default": {
+          "name": "is_counter_default",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "order_start": {
+          "name": "order_start",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "paid_when": {
+          "name": "paid_when",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "collection_number": {
+          "name": "collection_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
+        "floor_zones_one_counter_default_key": {
+          "name": "floor_zones_one_counter_default_key",
+          "columns": [
+            "is_counter_default"
+          ],
+          "isUnique": true,
+          "where": "\"floor_zones\".\"is_counter_default\" = 1 and \"floor_zones\".\"active\" = 1"
+        },
         "floor_zones_name_key": {
           "name": "floor_zones_name_key",
           "columns": [
@@ -4265,10 +4309,37 @@
           "where": "\"floor_zones\".\"active\" = 1"
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "floor_zones_department_fk": {
+          "name": "floor_zones_department_fk",
+          "tableFrom": "floor_zones",
+          "tableTo": "departments",
+          "columnsFrom": [
+            "department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "floor_zones_order_start_ck": {
+          "name": "floor_zones_order_start_ck",
+          "value": "\"floor_zones\".\"order_start\" in ('table', 'counter')"
+        },
+        "floor_zones_paid_when_ck": {
+          "name": "floor_zones_paid_when_ck",
+          "value": "\"floor_zones\".\"paid_when\" in ('prepay', 'ticket_then_pay')"
+        },
+        "floor_zones_collection_number_ck": {
+          "name": "floor_zones_collection_number_ck",
+          "value": "\"floor_zones\".\"collection_number\" in ('none', 'numbered')"
+        }
+      }
     },
     "kitchen_stations": {
       "name": "kitchen_stations",
@@ -15346,139 +15417,6 @@
         }
       }
     },
-    "zone_sale_policies": {
-      "name": "zone_sale_policies",
-      "columns": {
-        "zone_id": {
-          "name": "zone_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "order_start": {
-          "name": "order_start",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "paid_when": {
-          "name": "paid_when",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "collection_number": {
-          "name": "collection_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "zone_sale_policies_zone_fk": {
-          "name": "zone_sale_policies_zone_fk",
-          "tableFrom": "zone_sale_policies",
-          "tableTo": "zone_service_policies",
-          "columnsFrom": [
-            "zone_id"
-          ],
-          "columnsTo": [
-            "zone_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "zone_sale_policies_order_start_ck": {
-          "name": "zone_sale_policies_order_start_ck",
-          "value": "\"zone_sale_policies\".\"order_start\" in ('table', 'counter')"
-        },
-        "zone_sale_policies_paid_when_ck": {
-          "name": "zone_sale_policies_paid_when_ck",
-          "value": "\"zone_sale_policies\".\"paid_when\" in ('prepay', 'ticket_then_pay')"
-        },
-        "zone_sale_policies_collection_number_ck": {
-          "name": "zone_sale_policies_collection_number_ck",
-          "value": "\"zone_sale_policies\".\"collection_number\" in ('none', 'numbered')"
-        }
-      }
-    },
-    "zone_service_policies": {
-      "name": "zone_service_policies",
-      "columns": {
-        "zone_id": {
-          "name": "zone_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "is_counter_default": {
-          "name": "is_counter_default",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        }
-      },
-      "indexes": {
-        "zone_service_policies_one_counter_default_key": {
-          "name": "zone_service_policies_one_counter_default_key",
-          "columns": [
-            "is_counter_default"
-          ],
-          "isUnique": true,
-          "where": "\"zone_service_policies\".\"is_counter_default\""
-        }
-      },
-      "foreignKeys": {
-        "zone_service_policies_zone_fk": {
-          "name": "zone_service_policies_zone_fk",
-          "tableFrom": "zone_service_policies",
-          "tableTo": "floor_zones",
-          "columnsFrom": [
-            "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "zone_service_policies_department_fk": {
-          "name": "zone_service_policies_department_fk",
-          "tableFrom": "zone_service_policies",
-          "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "kitchen_notices": {
       "name": "kitchen_notices",
       "columns": {
@@ -16626,12 +16564,12 @@
         "zone_extensions_zone_fk": {
           "name": "zone_extensions_zone_fk",
           "tableFrom": "zone_extensions",
-          "tableTo": "zone_service_policies",
+          "tableTo": "floor_zones",
           "columnsFrom": [
             "zone_id"
           ],
           "columnsTo": [
-            "zone_id"
+            "id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -17802,12 +17740,12 @@
         "zone_days_zone_fk": {
           "name": "zone_days_zone_fk",
           "tableFrom": "zone_days",
-          "tableTo": "zone_service_policies",
+          "tableTo": "floor_zones",
           "columnsFrom": [
             "zone_id"
           ],
           "columnsTo": [
-            "zone_id"
+            "id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"

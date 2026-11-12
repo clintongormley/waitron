@@ -35,12 +35,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
 import { AppError, deviceOrigin } from "@waitron/shared";
-import {
-  departments,
-  orderServiceContexts,
-  setProfileServiceAccess,
-  zoneServicePolicies,
-} from "@waitron/venue-service";
+import { departments, orderServiceContexts, setProfileServiceAccess } from "@waitron/venue-service";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -80,7 +75,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = await venueLocationId(db);
+  await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: CAPS });
   profileId = device.profileId;
@@ -120,12 +115,12 @@ beforeEach(async () => {
   zones = (
     await db
       .insert(floorZones)
-      .values([{ name: "Inside" }, { name: "Outside" }])
+      .values([
+        { name: "Inside", departmentId },
+        { name: "Outside", departmentId },
+      ])
       .returning()
   ).map((row) => row.id);
-  await db
-    .insert(zoneServicePolicies)
-    .values(zones.map((zoneId) => ({ locationId: placeId, zoneId, departmentId })));
   counter = 0;
 });
 afterEach(async () => {

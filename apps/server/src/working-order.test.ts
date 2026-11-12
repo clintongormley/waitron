@@ -239,17 +239,15 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         (id, name, trading_name, created_at)
       values (${departmentId}, 'Restaurant', 'Restaurant', ${createdAt})`);
       await tx.execute(sql`
-      insert into floor_zones (id, name, created_at)
-      values (${zoneId}, 'Counter', ${createdAt})`);
-      await tx.execute(sql`
-      insert into zone_service_policies
-        (zone_id, department_id, is_counter_default)
-      values (${zoneId}, ${departmentId}, true)`);
+      insert into floor_zones (id, name, department_id, created_at)
+      values (${zoneId}, 'Counter', ${departmentId}, ${createdAt})`);
+      await tx.execute(
+        sql`update floor_zones set department_id = ${departmentId}, is_counter_default = true where id = ${zoneId}`,
+      );
       await tx.execute(sql`
       insert into department_sale_policies (department_id, order_start, paid_when)
       values (${departmentId}, 'counter', ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
-      await tx.execute(sql`
-      insert into zone_sale_policies (zone_id) values (${zoneId})`);
+
       await offerMenuThroughZone(tx, zoneId, cat.id, {
         makeDefault: true,
       });
@@ -748,7 +746,7 @@ describe("parkOrder", () => {
   it("freezes a quick order's zone payment timing when it opens", async () => {
     const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
     await db.execute(sql`
-      update zone_sale_policies set paid_when = 'ticket_then_pay' where zone_id = ${zoneId}`);
+      update floor_zones set paid_when = 'ticket_then_pay' where id = ${zoneId}`);
 
     const first = randomUUID();
     await parkOrder({ db }, cfg, {
@@ -757,7 +755,7 @@ describe("parkOrder", () => {
       lines: [{ menuItemId: premiumCoffeeOfferId, quantity: "1" }],
     });
     await db.execute(sql`
-      update zone_sale_policies set paid_when = 'prepay' where zone_id = ${zoneId}`);
+      update floor_zones set paid_when = 'prepay' where id = ${zoneId}`);
     const second = randomUUID();
     await parkOrder({ db }, cfg, {
       id: second,
@@ -1077,7 +1075,7 @@ describe("seating from order start", () => {
       await withTransaction(db, async (tx) => {
         if (zoneOverride) {
           await tx.execute(
-            sql`update zone_sale_policies set order_start = 'counter' where zone_id = ${zoneId}`,
+            sql`update floor_zones set order_start = 'counter' where id = ${zoneId}`,
           );
         } else {
           await tx.execute(
@@ -1164,13 +1162,13 @@ describe("openTab service context", () => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments )`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
-        insert into floor_zones (id, name, created_at)
-        values (${randomUUID()}, 'Downstairs', ${nowIso()}) returning id`);
-      await tx.execute(sql`
-        insert into zone_service_policies (zone_id, department_id)
-        values (${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id})`);
+        insert into floor_zones (id, name, department_id, created_at)
+        values (${randomUUID()}, 'Downstairs', ${department.rows[0]!.id}, ${nowIso()}) returning id`);
       await tx.execute(
-        sql`insert into zone_sale_policies (zone_id, order_start) values (${downstairsZone.rows[0]!.id}, 'table')`,
+        sql`update floor_zones set department_id = ${department.rows[0]!.id} where id = ${downstairsZone.rows[0]!.id}`,
+      );
+      await tx.execute(
+        sql`update floor_zones set order_start = 'table' where id = ${downstairsZone.rows[0]!.id}`,
       );
       const upstairsBar = await createStation(tx, { name: "Upstairs bar" });
       const downstairsBar = await createStation(tx, { name: "Downstairs bar" });

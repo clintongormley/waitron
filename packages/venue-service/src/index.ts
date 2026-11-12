@@ -51,8 +51,6 @@ export {
   zoneDayRanges,
   zoneDays,
   zoneExtensions,
-  zoneSalePolicies,
-  zoneServicePolicies,
 } from "@waitron/db";
 export type { ServiceStepStart } from "@waitron/db";
 export * from "./operations.js";

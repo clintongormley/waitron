@@ -15,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, sessions, setProfileAdmission } from "@waitron/identity";
-import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import { endSessionsNotAdmitted } from "./device.js";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import {
@@ -44,9 +44,9 @@ async function restrict(allowed: string[]) {
   const profile = await profileId();
   await inTx(venue, async (tx) => {
     const [zone] = await tx
-      .select({ id: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
+      .select({ id: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, venue.counterZone));
     await setProfileServiceAccess(tx, profile, {
       departmentId: zone!.id,
       allowedZoneIds: allowed.length ? allowed : [venue.counterZone],

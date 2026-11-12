@@ -2,7 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { devices, withTransaction, workingOrders } from "@waitron/db";
+import { devices, withTransaction, workingOrders, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -11,7 +11,6 @@ import {
   orderServiceContexts,
   setProfileServiceScope,
   replaceZoneClosedWeek,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
@@ -138,7 +137,7 @@ it("an explicit zone wins over the profile starting zone", async () => {
 });
 
 it("with no profile start or counter default, refuses an empty order before allocating its number", async () => {
-  await suite.db.update(zoneServicePolicies).set({ isCounterDefault: false });
+  await suite.db.update(floorZones).set({ isCounterDefault: false });
   const before = suite.db.all(sql`select * from working_order_counters order by node_id`);
   const id = randomUUID();
   await expect(
@@ -184,7 +183,7 @@ it("splitting a counter bill retains its zone and frozen payment flow without us
     .update(orderServiceContexts)
     .set({ serviceMode: "ticket_then_pay" })
     .where(eq(orderServiceContexts.workingOrderId, id));
-  await suite.db.update(zoneServicePolicies).set({ isCounterDefault: false });
+  await suite.db.update(floorZones).set({ isCounterDefault: false });
   const result = await withTransaction(suite.db, (tx) =>
     splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
       operatorId: venue.operator.personId,

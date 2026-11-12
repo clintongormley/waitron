@@ -1,4 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -7,7 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorPlans, floorPlanSets, floorTodayZones, floorZones } from "@waitron/db";
+import { departments, floorPlans, floorPlanSets, floorTodayZones } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   createDepartment,
@@ -280,11 +281,17 @@ describe("hasPlan says the department has a set", () => {
     expect((await zoneAt(LUNCH, zoneId)).hasPlan).toBe(false);
   });
 
-  it("is false for a zone in no department", async () => {
+  it("is false for a zone of an inactive department", async () => {
     const zoneId = randomUUID();
-    await inTx(v, (tx) =>
-      tx.insert(floorZones).values({ id: zoneId, name: `Loose ${zoneId.slice(0, 8)}` }),
-    );
+    await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, { name: `Inactive ${zoneId}` });
+      await tx.update(departments).set({ active: false }).where(eq(departments.id, department.id));
+      await seedZone(tx, {
+        id: zoneId,
+        name: `Loose ${zoneId.slice(0, 8)}`,
+        departmentId: department.id,
+      });
+    });
     await unlinkedPlanRow(zoneId);
 
     expect((await zoneAt(LUNCH, zoneId)).hasPlan).toBe(false);

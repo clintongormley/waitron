@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { day, id, newId, table, timeOfDay } from "../columns.js";
-import { zoneServicePolicies } from "./service.js";
+import { floorZones } from "../floor-zones.js";
 
 export const zoneExtensions = table(
   "zone_extensions",
@@ -15,7 +15,7 @@ export const zoneExtensions = table(
   (t) => [
     foreignKey({
       columns: [t.zoneId],
-      foreignColumns: [zoneServicePolicies.zoneId],
+      foreignColumns: [floorZones.id],
       name: "zone_extensions_zone_fk",
     }),
     uniqueIndex("zone_extensions_day_key").on(t.zoneId, t.businessDay),

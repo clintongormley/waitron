@@ -8,14 +8,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { printJobs, ticketItems } from "@waitron/db";
+import { printJobs, ticketItems, floorZones } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
-import {
-  kitchenNotices,
-  setZoneSalePolicyOverride,
-  zoneSalePolicies,
-} from "@waitron/venue-service";
+import { kitchenNotices, setZoneSalePolicyOverride } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -635,9 +631,9 @@ describe("back to its saved place on a group renamed for today, as the kitchen s
 async function deliveredCounterOrder(zoneId: string, tableId: string): Promise<string> {
   const [saved] = await inTx(v, (tx) =>
     tx
-      .select({ orderStart: zoneSalePolicies.orderStart, paidWhen: zoneSalePolicies.paidWhen })
-      .from(zoneSalePolicies)
-      .where(eq(zoneSalePolicies.zoneId, zoneId)),
+      .select({ orderStart: floorZones.orderStart, paidWhen: floorZones.paidWhen })
+      .from(floorZones)
+      .where(eq(floorZones.id, zoneId)),
   );
   const setZone = (orderStart: typeof saved.orderStart, paidWhen: typeof saved.paidWhen) =>
     inTx(v, async (tx) => {

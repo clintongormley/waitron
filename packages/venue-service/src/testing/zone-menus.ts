@@ -5,7 +5,7 @@ import {
   menuPeriods,
   menuPeriodStaffMenus,
   readVenueClock,
-  zoneServicePolicies,
+  floorZones,
   type Transaction,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -24,9 +24,9 @@ export async function offerMenuThroughZone(
     .where(eq(catalogues.id, menuId));
   if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const [policy] = await tx
-    .select({ departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.zoneId, zoneId));
+    .select({ departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
   if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
   const [stored] = await tx
     .select({ id: menuPeriods.id, menuId: menuPeriods.menuId })

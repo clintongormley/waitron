@@ -15,13 +15,14 @@ import {
   deviceInvoiceRevisions,
   tenants,
   products,
+  floorZones,
 } from "@waitron/db";
 import { persons, sessions, startManagementSession } from "@waitron/identity";
 import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { setProfileServiceScope, zoneServicePolicies } from "@waitron/venue-service";
+import { setProfileServiceScope } from "@waitron/venue-service";
 import { recordSale } from "@waitron/core";
 import {
   billlessSale,
@@ -385,10 +386,7 @@ it("accompanying profiles must see every source bill's zone", async () => {
   const [product] = await suite.db.select({ name: products.name }).from(products);
   const bill = await placedIssuedBill(venue, product!.name);
   const [issued] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, bill));
-  const [policy] = await suite.db
-    .select()
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
+  const [policy] = await suite.db.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
   await withTransaction(suite.db, (tx) =>
     setProfileServiceScope(tx, till.deviceProof.device.deviceProfileId, {
       departmentId: policy!.departmentId,

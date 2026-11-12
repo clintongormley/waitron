@@ -1,10 +1,9 @@
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  floorZones,
   kitchenStations,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
@@ -45,10 +44,7 @@ async function venue() {
   const venueId = await venueLocationId(db);
   const cfg = { locationId: venueId };
   await db.insert(kitchenStations).values({ name: "Kitchen", isDefault: true });
-  const [zone] = await db
-    .insert(floorZones)
-    .values({ name: "Bar" })
-    .returning({ id: floorZones.id });
+  const zone = await seedZone(db, { name: "Bar" });
   const barZone = zone!.id;
   return withTransaction(db, async (tx) => {
     const seasonId = (await ensureDefaultSeasons(tx))[0]!.id;

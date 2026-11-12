@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
@@ -16,7 +16,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
-  floorZones,
   invoiceSeries,
   kitchenStations,
   partyTables,
@@ -102,10 +101,7 @@ useVenueDb({
       )
     ).zoneId;
     prepayZone = await inTx(venue, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Barra prepago" })
-        .returning({ id: floorZones.id });
+      const [zone] = [await seedZone(tx, { name: "Barra prepago" })];
       return (
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" })
       ).zoneId;

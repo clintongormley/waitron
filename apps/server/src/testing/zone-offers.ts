@@ -1,3 +1,4 @@
+import { seedZone } from "@waitron/db/testing/seed.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogues, floorZones, products, readVenue } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -9,7 +10,6 @@ import {
   setRoutingCell,
   setZoneSalePolicyOverride,
   listDepartments,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 
@@ -90,18 +90,18 @@ async function resolveZone(
     zoneId = zone.zoneId;
   } else if (zone === "counter") {
     const [counter] = await tx
-      .select({ zoneId: zoneServicePolicies.zoneId })
-      .from(zoneServicePolicies)
-      .where(and(eq(zoneServicePolicies.isCounterDefault, true)));
-    zoneId = counter?.zoneId ?? (await floorZone(tx, COUNTER_ZONE));
+      .select({ zoneId: floorZones.id })
+      .from(floorZones)
+      .where(and(eq(floorZones.isCounterDefault, true)));
+    zoneId = counter?.zoneId ?? (await floorZone(tx, COUNTER_ZONE, orderStart));
   } else {
-    zoneId = await floorZone(tx, TABLES_ZONE);
+    zoneId = await floorZone(tx, TABLES_ZONE, orderStart);
   }
 
   const [policy] = await tx
-    .select({ departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.zoneId, zoneId));
+    .select({ departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
   const departmentId = policy?.departmentId ?? (await department(tx, orderStart));
   const location = await readVenue(tx);
   await tx
@@ -113,19 +113,20 @@ async function resolveZone(
     .onConflictDoNothing({ target: departmentReceipts.departmentId });
   await configureZone(tx, { zoneId, departmentId, orderStart });
   if (zone === "counter") {
-    await tx
-      .update(zoneServicePolicies)
-      .set({ isCounterDefault: true })
-      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    await tx.update(floorZones).set({ isCounterDefault: true }).where(eq(floorZones.id, zoneId));
   }
   return zoneId;
 }
 
-async function floorZone(tx: Transaction, name: string): Promise<string> {
+async function floorZone(
+  tx: Transaction,
+  name: string,
+  orderStart: "table" | "counter",
+): Promise<string> {
   const where = and(eq(floorZones.name, name));
   const [existing] = await tx.select({ id: floorZones.id }).from(floorZones).where(where);
   if (existing !== undefined) return existing.id;
-  const [created] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });
+  const created = await seedZone(tx, { name, departmentId: await department(tx, orderStart) });
   return created!.id;
 }
 

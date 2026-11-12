@@ -600,22 +600,22 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
   await db
     .insert(kitchenStations)
     .values({ name: `Cocina${suffix}`, isDefault: existing === undefined });
-  const zone = async (name: string, displayOrder: number) =>
+  const zone = async (name: string, displayOrder: number, departmentId: string) =>
     (
       await db
         .insert(floorZones)
-        .values({ name: `${name}${suffix}`, displayOrder })
+        .values({ name: `${name}${suffix}`, displayOrder, departmentId })
         .returning({ id: floorZones.id })
     )[0]!.id;
-  const barra = await zone("Barra", 0);
-  const sala = await zone("Sala", 1);
-  const terraza = await zone("Terraza", 2);
-  const mostrador = await zone("Mostrador deli", 3);
   return scoped(async (tx) => {
     const restaurant = (
       await createDepartment(tx, { name: `Restaurant${suffix}`, orderStart: "table" })
     ).id;
     const deli = (await createDepartment(tx, { name: `Deli${suffix}`, orderStart: "counter" })).id;
+    const barra = await zone("Barra", 0, restaurant);
+    const sala = await zone("Sala", 1, restaurant);
+    const terraza = await zone("Terraza", 2, restaurant);
+    const mostrador = await zone("Mostrador deli", 3, deli);
     for (const zoneId of [barra, sala, terraza])
       await configureZone(tx, { zoneId, departmentId: restaurant });
     await configureZone(tx, { zoneId: mostrador, departmentId: deli });
@@ -925,7 +925,7 @@ describe("the menu a zone starts on", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),
@@ -1802,7 +1802,7 @@ describe("the editor's model", () => {
     await scoped(async (tx) => {
       await (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })();
@@ -2253,7 +2253,7 @@ describe("department service periods", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),
@@ -2284,7 +2284,7 @@ describe("department service periods", () => {
     await scoped((tx) =>
       (async () => {
         await tx.execute(
-          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+          sql`update floor_zones set active = false where id in (select id as zone_id from floor_zones where department_id = ${v.deli})`,
         );
         await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
       })(),

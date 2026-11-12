@@ -1,9 +1,9 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   diningTables,
   serviceStepCompletions,
   serviceSteps,
-  zoneServicePolicies,
+  floorZones,
   type ServiceStepStart,
   type Transaction,
 } from "@waitron/db";
@@ -26,7 +26,7 @@ export async function readTableStepRules(
   const rows = await tx
     .select({
       tableId: diningTables.id,
-      departmentId: zoneServicePolicies.departmentId,
+      departmentId: floorZones.departmentId,
       id: serviceSteps.id,
       name: serviceSteps.name,
       start: serviceSteps.start,
@@ -34,9 +34,9 @@ export async function readTableStepRules(
       minutes: serviceSteps.minutes,
     })
     .from(diningTables)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, diningTables.zoneId))
-    .leftJoin(serviceSteps, eq(serviceSteps.departmentId, zoneServicePolicies.departmentId))
-    .where(inArray(diningTables.id, [...tableIds]))
+    .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
+    .leftJoin(serviceSteps, eq(serviceSteps.departmentId, floorZones.departmentId))
+    .where(and(inArray(diningTables.id, [...tableIds]), eq(floorZones.active, true)))
     .orderBy(asc(serviceSteps.position), asc(serviceSteps.id));
   for (const row of rows) {
     let table = found.get(row.tableId);

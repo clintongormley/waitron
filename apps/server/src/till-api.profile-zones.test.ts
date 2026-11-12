@@ -21,6 +21,7 @@ import {
   workingOrders,
   type Transaction,
   withTransaction,
+  floorZones,
 } from "@waitron/db";
 import { completeBillPayment } from "./bill-payments.js";
 import { lookUpBills } from "./bill-lookup-api.js";
@@ -38,7 +39,6 @@ import {
   createDepartment,
   createServiceZone,
   setProfileServiceAccess,
-  zoneServicePolicies,
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -330,9 +330,9 @@ async function profile(): Promise<string> {
 
 async function departmentOf(tx: Transaction, zoneId: string): Promise<string> {
   const [row] = await tx
-    .select({ departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.zoneId, zoneId));
+    .select({ departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
   return row!.departmentId;
 }
 
@@ -1897,9 +1897,9 @@ describe("a Restaurant profile in its own zones", () => {
     expect((await send(restaurant, "GET", `/api/parties/${partyId}/bills`)).status).toBe(200);
     const [deli] = await inTx(v, (tx) =>
       tx
-        .select({ departmentId: zoneServicePolicies.departmentId })
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.zoneId, f.deliCounter)),
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, f.deliCounter)),
     );
     await inTx(v, (tx) => configureZone(tx, { zoneId: terrace, departmentId: deli!.departmentId }));
     expect(await send(restaurant, "GET", `/api/service-zones/${terrace}/offers`)).toEqual(

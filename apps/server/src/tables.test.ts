@@ -236,8 +236,8 @@ describe("zone CRUD", () => {
     await db.execute(sql`create trigger test_zone_key_clash before update on floor_zones
       when new.name = 'Trigger collision'
       begin
-        insert into floor_zones (id, name, created_at)
-        values (old.id, 'Another zone', old.created_at);
+        insert into floor_zones (id, name, department_id, created_at)
+        values (old.id, 'Another zone', old.department_id, old.created_at);
       end`);
     try {
       await expect(
@@ -260,8 +260,8 @@ describe("zone CRUD", () => {
     await db.execute(sql`create trigger test_zone_name_clash before update on floor_zones
       when new.name = old.name
       begin
-        insert into floor_zones (id, name, created_at)
-        values ('name-clash-control', old.name, old.created_at);
+        insert into floor_zones (id, name, department_id, created_at)
+        values ('name-clash-control', old.name, old.department_id, old.created_at);
       end`);
     try {
       await expect(
@@ -353,7 +353,6 @@ describe("zone CRUD", () => {
   it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
-    // `floor_zones` declares no CHECK, so a temporary trigger supplies the non-unique refusal.
     await db.execute(sql`
       create trigger floor_zones_refuse_update before update on floor_zones
       begin select raise(abort, 'zone update refused'); end`);

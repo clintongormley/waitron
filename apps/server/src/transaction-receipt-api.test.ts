@@ -24,7 +24,7 @@ import {
 import { payments } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import { inTx, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -323,10 +323,7 @@ it("a substitution uses its own receipt, and source-zone access checks all of it
   });
   const profileId = await profile();
   await inTx(venue, async (tx) => {
-    const [policy] = await tx
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
+    const [policy] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.counterZone));
     await setProfileServiceAccess(tx, profileId, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.zoneId],
@@ -444,10 +441,7 @@ it("allows an orderless invoice even when the permitted-zone set is empty", asyn
   const own = await billlessSale(venue),
     profileId = await profile();
   await inTx(venue, async (tx) => {
-    const [policy] = await tx
-      .select()
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, venue.counterZone));
+    const [policy] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.counterZone));
     await setProfileServiceAccess(tx, profileId, {
       departmentId: policy!.departmentId,
       allowedZoneIds: [venue.counterZone],

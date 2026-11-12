@@ -82,29 +82,24 @@ async function fixture() {
 }
 
 describe.each(["one row", "every row"])("with %s missing", (missing) => {
-  it.each([
-    ["department_sale_policies", "department_id"],
-    ["zone_service_policies", "zone_id"],
-    ["zone_sale_policies", "zone_id"],
-  ] as const)("refuses an import missing a %s row and preserves the target", async (table, key) => {
-    const f = await fixture();
-    const id = key === "department_id" ? f.department.id : f.zone.id;
-    const rows = f.bundle.tables[table]!;
-    expect(rows.some((row) => row[key] === id)).toBe(true);
-    f.bundle.tables[table] = missing === "one row" ? rows.filter((row) => row[key] !== id) : [];
-    if (table === "zone_service_policies")
-      f.bundle.tables.zone_sale_policies = f.bundle.tables.zone_sale_policies!.filter(
-        (row) => missing === "one row" && row.zone_id !== id,
-      );
-    expect(f.bundle.tables[table]).toHaveLength(missing === "one row" ? rows.length - 1 : 0);
-    const before = await exportConfigurationTables(target.db, ALL_MODULES);
-    await expect(
-      withTransaction(target.db, (tx) =>
-        importConfigurationTables(tx, f.bundle, ALL_MODULES, f.versions),
-      ),
-    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: table } });
-    expect(await exportConfigurationTables(target.db, ALL_MODULES)).toEqual(before);
-  });
+  it.each([["department_sale_policies", "department_id"]] as const)(
+    "refuses an import missing a %s row and preserves the target",
+    async (table, key) => {
+      const f = await fixture();
+      const id = key === "department_id" ? f.department.id : f.zone.id;
+      const rows = f.bundle.tables[table]!;
+      expect(rows.some((row) => row[key] === id)).toBe(true);
+      f.bundle.tables[table] = missing === "one row" ? rows.filter((row) => row[key] !== id) : [];
+      expect(f.bundle.tables[table]).toHaveLength(missing === "one row" ? rows.length - 1 : 0);
+      const before = await exportConfigurationTables(target.db, ALL_MODULES);
+      await expect(
+        withTransaction(target.db, (tx) =>
+          importConfigurationTables(tx, f.bundle, ALL_MODULES, f.versions),
+        ),
+      ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: table } });
+      expect(await exportConfigurationTables(target.db, ALL_MODULES)).toEqual(before);
+    },
+  );
 });
 
 it("imports complete policies and resolves inherited values for the remapped zone", async () => {
