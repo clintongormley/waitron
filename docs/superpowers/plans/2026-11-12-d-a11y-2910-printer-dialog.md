@@ -2,7 +2,7 @@
 
 ## Request
 
-Recorded at `/Users/clintongormley/waitron-campaign-d/receipts/d-a11y-2910/request.md`, word for word:
+Recorded in the local Lane D campaign receipt `receipts/d-a11y-2910/request.md`, word for word:
 
 - **Ask:** `apps/dashboard/src/screens/printers-screen.a11y.test.ts` "keeps setup forms inside desktop and phone dialogs" (light and dark) fails axe color-contrast [serious] at `#printer-details-used-by` on #2896, #2914 and perf/a1398-2 (test-dashboard (4)). It started after #2910 (bf3fead0bf, 06:04: `.body` in wt-dialog.ts gained a position), whose PR CI ran only the ui package, not the dashboard that depends on it (CLAUDE.md §2: PRs test changed packages, not dependents).
 - **Do:** run that test on main and on bf3fead0bf^ in a throwaway checkout to confirm the cause, then fix forward in the shared primitive (or the screen, if the primitive is right), keeping #2910's hint containment and its regression test. Never weaken or skip the accessibility check. Run the dashboard's other dialog a11y files too. Small; one PR; tell lanes K and L in their questions.md when it lands.
@@ -22,6 +22,6 @@ The screenshot shows no visible heading/button overlap. The claim is limited to 
 
 ## Bounds and clearance
 
-Forecast: production +1/-0; tests +1–3/-0; support 0; docs 20–40 lines. No palettes, controls, helpers, guide wording or other behaviour. Claude reviewed this plan (198 seconds); the driver accepted the test-selection, current-head CI, font fallback, parent-SHA and claim limits. The watcher must still clear it before implementation; neither is owner design approval. One PR; notify K/L after landing.
+Forecast: production +1/-0; tests +1–3/-0; support 0; docs 20–40 lines. No palettes, controls, helpers, guide wording or other behaviour. Claude reviewed this plan (198 seconds); the driver accepted the test-selection, current-head CI, font fallback, parent-SHA and claim limits. Neither review nor clearance is owner design approval. One PR; notify K/L after landing.
 
 **Clearance:** The watcher cleared this plan on 2026-11-12 at 07:56 in Lane D questions.md: “Build the one-line shared footer fix and the fixture font line, keep #2910's hint containment and its regression test unchanged, and weaken no assertion.” This is watcher clearance, not owner design approval.

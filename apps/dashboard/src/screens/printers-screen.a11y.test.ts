@@ -832,7 +832,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       { api: stubApi() },
       theme,
     );
-    // Exercise scrolled content at the footer boundary with fixed font metrics.
+    // Exercise scrolled content at the footer boundary with an explicit font.
     host.style.setProperty("--wt-font-family", "Arial, sans-serif");
     await flush(el);
     try {
