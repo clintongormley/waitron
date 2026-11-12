@@ -191,7 +191,7 @@ it("deleting a special day's date deletes its staffing days and their blocks", a
 
 async function assignedShift(v: Awaited<ReturnType<typeof venue>>) {
   return withTransaction(suite.db, async (tx) => {
-    const [person] = await seedPersons(tx, { displayName: "Ada", role: "staff" });
+    const [person] = await seedPersons(tx, { displayName: "Ada", role: "staff", jobRoles: [] });
     const [shift] = await tx
       .insert(shifts)
       .values({

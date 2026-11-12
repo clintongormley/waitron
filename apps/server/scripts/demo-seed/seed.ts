@@ -90,7 +90,7 @@ export async function seedDemoRestaurant(
     await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
     await seedFloor(tx, { locale, departmentTradingNames, dataSet, menuIds });
     await giveKitchenDisplaysThePass(tx);
-    await seedStaff(tx, { dataSet });
+    await seedStaff(tx, { dataSet, locale });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
     await seedMedia(tx, { productsByImage, mediaDataSet: dataSet.mediaDataSet });
     // Publish after modifiers and media so each version freezes their seeded values.

@@ -1,5 +1,5 @@
 import { persons } from "../schema/identity/persons.js";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
@@ -18,6 +18,22 @@ import { readSettings, saveSettings } from "../settings.js";
 import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
 import { catalogues } from "../schema/catalogue.js";
 import { createVenueSettings, saveVenueFields, venueLocationId, type Venue } from "../venue.js";
+
+import { staffRoles } from "../schema/identity/staff-roles.js";
+
+export const FIXTURE_JOB_ROLE = "Fixture team";
+export async function ensureFixtureJobRole(db: Database | Transaction): Promise<string> {
+  const [existing] = await db
+    .select({ id: staffRoles.id })
+    .from(staffRoles)
+    .where(and(eq(staffRoles.name, FIXTURE_JOB_ROLE), isNull(staffRoles.hiddenAt)));
+  if (existing) return existing.id;
+  const [created] = await db
+    .insert(staffRoles)
+    .values({ name: FIXTURE_JOB_ROLE })
+    .returning({ id: staffRoles.id });
+  return created!.id;
+}
 
 export async function seedVenueSettings(
   db: Database | Transaction,

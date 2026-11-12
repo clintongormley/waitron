@@ -16,7 +16,7 @@ export async function seedVenueWithStaff(db: Database) {
     await seedVenue(tx, venue);
     const locationId = await venueLocationId(tx);
     const person = async (displayName: string) => {
-      const [row] = await seedPersons(tx, { displayName, role: "staff" });
+      const [row] = await seedPersons(tx, { jobRoles: [], displayName, role: "staff" });
       return row!.id;
     };
     const suffix = randomUUID().slice(0, 8);

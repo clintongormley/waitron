@@ -1862,6 +1862,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/staffing':
+        specifier: workspace:*
+        version: link:../staffing
       '@waitron/store':
         specifier: workspace:*
         version: link:../store

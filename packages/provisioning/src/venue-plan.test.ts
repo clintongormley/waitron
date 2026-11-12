@@ -1,3 +1,4 @@
+import { STARTER_JOB_ROLE_NAMES } from "./starter-content.js";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -213,6 +214,7 @@ describe("planVenue", () => {
     expect(actions[0]?.kind).toBe("ensure-tenant");
     expect(actions[1]).toEqual({
       kind: "seed-admin",
+      jobRoleName: STARTER_JOB_ROLE_NAMES.Team.es,
       displayName: "Owner",
       firstNames: null,
       lastNames: null,
@@ -484,6 +486,7 @@ describe("describeVenueAction", () => {
   it("shows only the parts of the admin a plan actually carries", () => {
     const admin = {
       kind: "seed-admin" as const,
+      jobRoleName: STARTER_JOB_ROLE_NAMES.Team.es,
       displayName: "Owner",
       firstNames: null,
       lastNames: null,
@@ -501,6 +504,7 @@ describe("describeVenueAction", () => {
     // A distinctive hash, so the negative assertions cannot pass by coincidence.
     const line = describeVenueAction({
       kind: "seed-admin",
+      jobRoleName: STARTER_JOB_ROLE_NAMES.Team.es,
       displayName: "Alicia",
       firstNames: "Alicia Maria",
       lastNames: "Fernandez Ruiz",

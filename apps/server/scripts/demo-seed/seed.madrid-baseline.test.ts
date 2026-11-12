@@ -1,3 +1,4 @@
+import { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import { madridWithFoldedTables } from "./testing/madrid-folded-tables.js";
 import { madridWithDocument } from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";
@@ -762,6 +763,68 @@ for (const locale of ["en", "es"] as const) {
           }),
         );
         phases[phase]!.kitchen_courses = 4;
+      }
+      if (phase !== "before") {
+        const team = STARTER_JOB_ROLE_NAMES.Team.es;
+        const names = [
+          team,
+          ...(phase === "seeded"
+            ? locale === "en"
+              ? ["Waiter", "Kitchen", "Manager on duty"]
+              : Object.values(DEMO_JOB_ROLE_NAMES).map((row) => row.es)
+            : []),
+        ];
+        const roleId = (name: string) => `@staff_roles:${stable([name])}`;
+        expected[phase].tables.staff_roles!.rows = Object.fromEntries(
+          names
+            .map((name) => {
+              const id = roleId(name);
+              return [id, { id, name, colour: "grey", position: 0, hidden_at: null }];
+            })
+            .sort(([a], [b]) => String(a).localeCompare(String(b))),
+        );
+        phases[phase]!.staff_roles = phase === "seeded" ? 4 : 1;
+        const memberships = [
+          ["owner@example.test", team],
+          ...(phase === "seeded"
+            ? [
+                ["diego@demo.waitron.local", names[2]!],
+                ["javier@demo.waitron.local", names[1]!],
+                ["lucia@demo.waitron.local", names[1]!],
+                ["manager@demo.waitron.local", names[1]!],
+                ["manager@demo.waitron.local", names[3]!],
+                ["sofia@demo.waitron.local", names[2]!],
+              ]
+            : []),
+        ].map(([email, name]) => ({
+          person_id: `@persons:${stable([email])}`,
+          staff_role_id: roleId(name!),
+        }));
+        expected[phase].tables.person_staff_roles!.rows = Object.fromEntries(
+          memberships
+            .map((row) => [stable(row), row])
+            .sort(([a], [b]) => String(a).localeCompare(String(b))),
+        );
+        phases[phase]!.person_staff_roles = phase === "seeded" ? 7 : 1;
+        const data = { staffRoleId: roleId(team), name: team };
+        const subject = '@persons:["owner@example.test"]';
+        const id = `@activity_log:${stable(["job_role.member_added", subject, at, JSON.stringify(data)])}`;
+        expected[phase].tables.activity_log!.rows[id] = {
+          id,
+          at,
+          kind: "job_role.member_added",
+          subject_kind: "person",
+          subject_id: subject,
+          person_id: null,
+          device_id: null,
+          data,
+        };
+        expected[phase].tables.activity_log!.rows = Object.fromEntries(
+          Object.entries(expected[phase].tables.activity_log!.rows).sort(([a], [b]) =>
+            a.localeCompare(b),
+          ),
+        );
+        phases[phase]!.activity_log! += 1;
       }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

@@ -266,7 +266,12 @@ async function rig() {
     nodeId: m1.nodeId,
     publicKey: nodeSigningPublicKey(m1Key),
   });
-  const [person] = await seedPersons(db, { displayName: "Owner", role: "admin", status: "active" });
+  const [person] = await seedPersons(db, {
+    displayName: "Owner",
+    role: "admin",
+    status: "active",
+    jobRoles: [],
+  });
   const authorisedBy = person!.id;
 
   const binding: HandoverBinding = {

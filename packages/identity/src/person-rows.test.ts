@@ -1,6 +1,12 @@
 import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, persons, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  persons,
+  staffRoles,
+  personStaffRoles,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons, setBuiltInRoleForTest, builtInRoleForTest } from "../test/person-rows.js";
 
@@ -41,4 +47,30 @@ it("changes only the named person's role and reads it back", async () => {
 });
 it("reads a missing person's role as null", async () => {
   expect(await builtInRoleForTest(suite.db, "missing")).toBeNull();
+});
+
+it("gives seeded people one shared fixture job role across calls", async () => {
+  const [first] = await seedPersons(suite.db, { displayName: "First" });
+  const [second] = await withTransaction(suite.db, (tx) =>
+    seedPersons(tx, { displayName: "Second" }),
+  );
+  expect(await suite.db.select({ name: staffRoles.name }).from(staffRoles)).toEqual([
+    { name: "Fixture team" },
+  ]);
+  const held = await suite.db.select().from(personStaffRoles);
+  expect(held.map((row) => row.personId).sort()).toEqual([first!.id, second!.id].sort());
+  expect(new Set(held.map((row) => row.staffRoleId)).size).toBe(1);
+});
+it("uses explicit job roles and leaves jobRoles: [] without memberships", async () => {
+  const [role] = await suite.db.insert(staffRoles).values({ name: "Kitchen" }).returning();
+  const people = await seedPersons(suite.db, [
+    { displayName: "Kitchen", jobRoles: [role!.id] },
+    { displayName: "No job", jobRoles: [] },
+  ]);
+  expect(await suite.db.select().from(personStaffRoles)).toEqual([
+    { personId: people[0]!.id, staffRoleId: role!.id },
+  ]);
+  expect(await suite.db.select({ name: staffRoles.name }).from(staffRoles)).toEqual([
+    { name: "Kitchen" },
+  ]);
 });

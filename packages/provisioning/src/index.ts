@@ -242,3 +242,5 @@ export {
 } from "./environment-recovery-move.js";
 
 export { readRestoreFlowPhase, type RestoreFlowPhase } from "./restore-flow-phase.js";
+
+export { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "./starter-content.js";

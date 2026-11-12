@@ -22,6 +22,7 @@ export {
 export { readStaffingMonth } from "./month.js";
 export {
   createStaffRole,
+  createStarterStaffRole,
   deleteStaffRole,
   listStaffRoles,
   reorderStaffRoles,

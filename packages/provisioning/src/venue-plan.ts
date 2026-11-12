@@ -4,7 +4,11 @@ import { resolveInstalledStarterLanguages, starterName } from "@waitron/country-
 import { DEFAULT_DEVICE_PROFILES, type CapabilityFlag, type FormFactor } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { resolveFiscalModules } from "./fiscal-modules.js";
-import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.js";
+import {
+  STARTER_PROFILE_NAMES,
+  STARTER_STATION_NAMES,
+  STARTER_JOB_ROLE_NAMES,
+} from "./starter-content.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
@@ -72,6 +76,7 @@ export type VenueAction =
     }
   | {
       kind: "seed-admin";
+      jobRoleName: string;
       displayName: string;
       // Not optional here, unlike on the request: the planner resolves "not given" to `null`, the
       // value the columns' `is null or length > 0` checks accept.
@@ -184,6 +189,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     },
     {
       kind: "seed-admin",
+      jobRoleName: starterName(STARTER_JOB_ROLE_NAMES, "Team", staffLanguage),
       displayName: request.admin.displayName,
       firstNames: request.admin.firstNames ?? null,
       lastNames: request.admin.lastNames ?? null,

@@ -141,9 +141,12 @@ export async function canonicalMadridSemantics(
         key = [row.name ?? JSON.parse(String(venue?.doc ?? "{}")).name];
         break;
       }
-      case "activity_log":
-        key = parts("kind", "subject_id", "at", "data");
+      case "activity_log": {
+        const data = JSON.parse(String(row.data)) as Record<string, unknown>;
+        if (typeof data.staffRoleId === "string") data.staffRoleId = alias(data.staffRoleId);
+        key = [...parts("kind", "subject_id", "at"), JSON.stringify(data)];
         break;
+      }
       case "catalogues":
       case "categories":
       case "departments":
@@ -154,6 +157,7 @@ export async function canonicalMadridSemantics(
       case "nodes":
       case "option_lists":
       case "printers":
+      case "staff_roles":
       case "seasons":
       case "special_days":
         key = parts("name");

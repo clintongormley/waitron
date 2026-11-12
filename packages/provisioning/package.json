@@ -25,6 +25,7 @@
     "test:merge": "vitest --merge-reports .vitest-reports --coverage"
   },
   "dependencies": {
+    "@waitron/staffing": "workspace:*",
     "@waitron/composition": "workspace:*",
     "@waitron/core": "workspace:*",
     "@waitron/country-packs": "workspace:*",

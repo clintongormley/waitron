@@ -1,3 +1,4 @@
+import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 /** The staff seed, end to end. */
 
 import { describe, expect, it } from "vitest";
@@ -94,3 +95,27 @@ describe("seedStaff", () => {
     }
   });
 });
+
+for (const locale of ["en", "es"] as const) {
+  it(`gives every demo person their jobs in ${locale}`, async () => {
+    await provisionVenue();
+    await withTransaction(suite.db, (tx) => seedStaff(tx, { dataSet: CASA_DELGADO_ES, locale }));
+    const jobs = suite.db.all<{
+      email: string;
+      name: string;
+    }>(sql`select p.email, r.name from persons p
+      join person_staff_roles h on h.person_id = p.id join staff_roles r on r.id = h.staff_role_id
+      where p.role <> 'admin' order by p.email, r.name`);
+    const names =
+      locale === "en"
+        ? ["Waiter", "Kitchen", "Manager on duty"]
+        : Object.values(DEMO_JOB_ROLE_NAMES).map((row) => row.es);
+    expect(jobs).toEqual([
+      { email: "diego@demo.waitron.local", name: names[1] },
+      { email: "javier@demo.waitron.local", name: names[0] },
+      { email: "lucia@demo.waitron.local", name: names[0] },
+      ...[names[0], names[2]].sort().map((name) => ({ email: "manager@demo.waitron.local", name })),
+      { email: "sofia@demo.waitron.local", name: names[1] },
+    ]);
+  });
+}

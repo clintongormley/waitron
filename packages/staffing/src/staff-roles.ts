@@ -133,6 +133,11 @@ export async function listStaffRolesWithHolderNames(tx: Transaction): Promise<Li
   });
 }
 
+export async function createStarterStaffRole(tx: Transaction, name: string): Promise<string> {
+  const [row] = await tx.insert(staffRoles).values({ name }).returning({ id: staffRoles.id });
+  return row!.id;
+}
+
 /** Adds a staff role after the last one. */
 export async function createStaffRole(
   tx: Transaction,
