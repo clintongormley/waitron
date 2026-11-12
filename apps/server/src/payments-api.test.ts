@@ -3141,6 +3141,19 @@ describe("provider On/Off", () => {
       startManagementSession(tx, { personId: admin!.id }),
     );
     const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
+    for (const [body, field] of [
+      [{ enabled: null, revision: 0 }, "enabled"],
+      [{ enabled: true, revision: "0" }, "revision"],
+    ] as const) {
+      const invalid = await send(app, "PUT", "/management-api/payments/providers/stripe/state", {
+        cookie,
+        body,
+      });
+      expect({ status: invalid.status, body: await invalid.json() }).toMatchObject({
+        status: 400,
+        body: { error: { code: "management.request_invalid", params: { field } } },
+      });
+    }
     const reader = await suite.db
       .insert(cardReaders)
       .values({ provider: "stripe", providerRef: nextRef(), name: "Front reader" })

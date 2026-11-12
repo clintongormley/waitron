@@ -795,7 +795,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         !Number.isInteger(body.revision) ||
         (body.revision as number) < 0
       )
-        throw new AppError("management.request_invalid", {});
+        throw new AppError("management.request_invalid", {
+          field: typeof body.enabled === "boolean" ? "revision" : "enabled",
+        });
       const seat = cardProviderById(deps.providers, c.req.param("id"));
       const result = await gated(sessionId, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
