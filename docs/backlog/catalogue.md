@@ -1143,8 +1143,10 @@ What the design has to settle:
 not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
 11 November runtime checks and their limits. The owner accepted its recommendations at 22:01;
 the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-split the implementation into six follow-ups. The guest menu and sent-order declarations remain open.
-The [cleared sent-order/history plan](../superpowers/plans/2026-11-12-a1517-6-sent-allergen-history.md) captures at first sending and adds saved declarations to Orders detail; both build slices remain open.
+split the implementation into six follow-ups. The guest menu and Orders history detail remain open.
+The till's sent dishes retain declarations captured at first sending, while held dishes remain
+live until released. The [cleared sent-order/history plan](../superpowers/plans/2026-11-12-a1517-6-sent-allergen-history.md)
+leaves the Orders detail slice open.
 The proposal distinguishes the narrower measured cases from these original observations.
 
 1. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was

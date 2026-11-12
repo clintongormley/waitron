@@ -1,10 +1,11 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, onTestFinished } from "vitest";
 import { userEvent } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillProduct } from "../api/client.js";
 import type { WtInput, WtTextarea } from "@waitron/ui";
 import type { TillModifierPicker } from "./modifier-picker.js";
+import { dish as listedDish } from "../screens/till-table-order-screen.sent-prices.test-helpers.js";
 import { TillBasket } from "./basket.js";
 import { TillCounterScreen } from "../screens/till-counter-screen.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -326,3 +327,77 @@ it("a line note's label draws the Bold weight", async () => {
   expect(label.textContent).toContain(":");
   expect(getComputedStyle(label).fontWeight).toBe("800");
 });
+
+it.each([
+  { nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["halal"] }, want: "Milk" },
+  { nutrition: undefined, want: "The declaration was not recorded when this dish was sent." },
+])(
+  "uses the sent declaration in a read-only counter dish window ($want)",
+  async ({ nutrition, want }) => {
+    const locale = currentLocale();
+    onTestFinished(() => setLocale(locale));
+    setLocale("en");
+    const store = new WorkingOrderStore();
+    store.loadFrom(
+      "wo-9",
+      [
+        {
+          product: dish,
+          quantity: "2",
+          workingOrderLineId: "l-1",
+          extras: [
+            { listId: "sides", productId: "side", name: "Side", quantity: 1, price: "1.00" },
+          ],
+        },
+      ],
+      undefined,
+      4,
+    );
+    const { el } = await mountWidget<TillBasket>("till-basket", {
+      store,
+      lineDetails: true,
+      readOnly: true,
+      storedLines: {
+        orderId: "wo-9",
+        revision: 4,
+        lines: [
+          {
+            ...listedDish,
+            id: "l-1",
+            productId: dish.id,
+            quantity: "2.000",
+            unitPriceGross: "5.00",
+            sentAt: "2026-11-12T08:00:00Z",
+            nutrition,
+          },
+          {
+            ...listedDish,
+            id: "l-extra",
+            lineNo: 2,
+            productId: "side",
+            parentLineNo: 1,
+            listId: "sides",
+            sentAt: "2026-11-12T08:00:00Z",
+            nutrition: { allergens: { eggs: {} }, dietaryDeclarations: ["kosher"] },
+          },
+        ],
+      },
+    });
+    expect(el.shadowRoot!.querySelector(".extra-allergens")?.textContent?.trim()).toBe("Eggs");
+    el.nutritionLines = el.storedLines;
+    el.storedLines = null;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".extra-allergens")?.textContent?.trim()).toBe("Eggs");
+    el.openLineDetails(store.lines[0]!);
+    await el.updateComplete;
+    const picker = pickerOf(el)!;
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain(want);
+    expect(picker.shadowRoot!.textContent).not.toContain("Walnuts");
+    expect(picker.shadowRoot!.textContent).not.toContain("Vegan");
+    if (nutrition !== undefined) {
+      expect(picker.shadowRoot!.textContent).toContain("Recorded when sent");
+      expect(el.shadowRoot!.querySelector('wt-icon[name="allergen-milk"]')).not.toBeNull();
+    }
+  },
+);

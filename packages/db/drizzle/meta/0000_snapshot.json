@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "07b34c96-50cb-4330-9a87-a4958e4162ad",
+  "id": "75a25b13-2b0b-4e5d-a14a-8575d4f44534",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15131,6 +15131,13 @@
         },
         "allergens": {
           "name": "allergens",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sent_nutrition": {
+          "name": "sent_nutrition",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

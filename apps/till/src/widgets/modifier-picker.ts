@@ -276,6 +276,7 @@ export class TillModifierPicker extends LitElement {
   @property() minQuantityMessage = "";
   @property({ type: Boolean }) readOnly = false;
   @property({ attribute: false }) nutrition: LineNutrition | null = null;
+  @property({ type: Boolean }) recordedWhenSent = false;
   @property({ attribute: false }) stagedRemoval?: StagedRemoval;
   #removalStaged = false;
   /** What the fields show once open, in place of {@link initialSelections}, which stays what a
@@ -772,7 +773,7 @@ export class TillModifierPicker extends LitElement {
   override render() {
     const { stale, totals, saveAction, satisfied } = this.#checks;
     const fields = html`<div ?inert=${this.disabled}>
-      ${this.inline ? nothing : html`<slot name="line-details"></slot>${lineNutrition(this.nutrition)}`}
+      ${this.inline ? nothing : html`<slot name="line-details"></slot>${lineNutrition(this.nutrition, this.recordedWhenSent)}`}
       ${
         this.readOnly
           ? html`

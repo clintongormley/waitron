@@ -20529,6 +20529,7 @@ export class TillApp extends LitElement {
         .receiptGuests=${null}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
+        .nutritionLines=${this.counterLines}
         .stationMoveLines=${this.capabilities.includes("take-orders") ? this.counterLines : null}
         .makeAtStations=${this.stations}
         .orderInFlight=${this.#counterOrderInFlight()}

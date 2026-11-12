@@ -1,3 +1,4 @@
+import { VENUE_SERVICE } from "./modules.js";
 import { inArray, eq } from "drizzle-orm";
 import { workingOrderLines, products, type Transaction } from "@waitron/db";
 import {
@@ -12,8 +13,47 @@ export interface LineNutrition {
   dietaryDeclarations: string[];
 }
 
-/** Like the kitchen queue, persisted table rows read the dish's effective live nutrition. */
 export async function readLineNutrition(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Map<string, LineNutrition>> {
+  const declarations = await currentLineDeclarations(tx, lineIds);
+  return new Map(
+    [...declarations].filter(
+      ([, row]) =>
+        row.allergens !== null &&
+        (Object.keys(row.allergens).length > 0 || row.dietaryDeclarations.length > 0),
+    ),
+  );
+}
+
+export async function readDisplayLineNutrition(
+  tx: Transaction,
+  lines: readonly { id: string; sentAt: string | null }[],
+): Promise<Map<string, LineNutrition>> {
+  const live = await readLineNutrition(
+    tx,
+    lines.filter((line) => line.sentAt === null).map((line) => line.id),
+  );
+  const saved = await VENUE_SERVICE.readSentLineNutrition(
+    tx,
+    lines.filter((line) => line.sentAt !== null).map((line) => line.id),
+  );
+  return new Map([...live, ...saved]);
+}
+
+export async function captureSentLineNutrition(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<void> {
+  const declarations = await currentLineDeclarations(tx, lineIds);
+  await VENUE_SERVICE.recordSentLineNutrition(
+    tx,
+    [...declarations].map(([lineId, nutrition]) => ({ lineId, nutrition })),
+  );
+}
+
+async function currentLineDeclarations(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<Map<string, LineNutrition>> {
@@ -29,13 +69,12 @@ export async function readLineNutrition(
     .leftJoin(parentProducts, parentJoin)
     .where(inArray(workingOrderLines.id, [...lineIds]));
   return new Map(
-    rows.flatMap((row) => {
-      const allergens = row.allergens as ProductAllergens | null;
-      const dietaryDeclarations = row.dietaryDeclarations as string[];
-      return allergens === null ||
-        (Object.keys(allergens).length === 0 && dietaryDeclarations.length === 0)
-        ? []
-        : [[row.lineId, { allergens, dietaryDeclarations }]];
-    }),
+    rows.map((row) => [
+      row.lineId,
+      {
+        allergens: row.allergens as ProductAllergens | null,
+        dietaryDeclarations: (row.dietaryDeclarations as string[] | null) ?? [],
+      },
+    ]),
   );
 }

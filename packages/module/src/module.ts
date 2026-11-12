@@ -1202,6 +1202,17 @@ export interface VenueServiceContribution {
     }[],
     offers: ZoneOffers,
   ): Promise<void>;
+  readSentLineNutrition(
+    tx: Transaction,
+    lineIds: readonly string[],
+  ): Promise<ReadonlyMap<string, { allergens: AllergenMap | null; dietaryDeclarations: string[] }>>;
+  recordSentLineNutrition(
+    tx: Transaction,
+    rows: readonly {
+      lineId: string;
+      nutrition: { allergens: AllergenMap | null; dietaryDeclarations: string[] };
+    }[],
+  ): Promise<void>;
   copyOrderContext(
     tx: Transaction,
     fromWorkingOrderId: string,

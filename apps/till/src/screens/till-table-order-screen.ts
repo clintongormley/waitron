@@ -3781,7 +3781,7 @@ export class TillTableOrderScreen extends LitElement {
                 ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
-              ${lineNutrition(row.nutrition)}
+              ${lineNutrition(row.nutrition, row.sentAt !== undefined)}
               ${row.workingOrderId === this.orderId ? this.#paidMarkOf(members!.map((member) => member.row)) : nothing}
               ${
                 seed === undefined

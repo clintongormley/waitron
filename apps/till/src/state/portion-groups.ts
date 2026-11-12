@@ -1,4 +1,4 @@
-import type { ExpoItem, StationQueueItem, TabLine } from "../api/client.js";
+import type { ExpoItem, LineNutrition, StationQueueItem, TabLine } from "../api/client.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { SentSlice } from "./sent-panel.js";
 
@@ -43,7 +43,18 @@ function wholePortion(line: TabLine): boolean {
   );
 }
 
-/** What tells two bill lines apart for {@link tabLinePortionKey}, the line's own fields only. */
+function nutritionFacts(nutrition: LineNutrition | undefined) {
+  if (nutrition === undefined) return null;
+  return [
+    nutrition.allergens === null
+      ? null
+      : Object.keys(nutrition.allergens)
+          .sort()
+          .map((code) => [code, [...new Set(nutrition.allergens![code]!.kinds ?? [])].sort()]),
+    [...new Set(nutrition.dietaryDeclarations)].sort(),
+  ];
+}
+
 export function portionLineFacts(line: TabLine) {
   return [
     line.productId,
@@ -58,15 +69,11 @@ export function portionLineFacts(line: TabLine) {
     trimQuantity(line.cancelledQuantity ?? "0"),
     (line.optionSnapshots ?? []).map((answer) => JSON.stringify(answer)).sort(),
     line.note,
+    line.sentAt !== null,
+    nutritionFacts(line.nutrition),
   ];
 }
 
-/**
- * What makes two bill lines the same portion: the dish's product, offer, names, answers, note,
- * course, release group, station and kitchen state, served or not, cancellation, prices and
- * extras (compared as a set, each with its count), plus `shown` — whatever else the caller prints
- * for the line, such as its allergy mark or paid mark. Null for a line that is not a whole portion.
- */
 export function tabLinePortionKey(
   dish: TabLine,
   lines: readonly TabLine[],
@@ -117,6 +124,8 @@ export function sentSlicePortionKey(
         row.readyAt,
         row.firedAt,
         row.kitchen,
+        row.sentAt !== undefined,
+        nutritionFacts(row.nutrition),
       ]);
 }
 

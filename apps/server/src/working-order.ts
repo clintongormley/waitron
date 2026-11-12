@@ -52,7 +52,11 @@ import {
   survivingParty,
 } from "./party-allergy.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
-import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import {
+  captureSentLineNutrition,
+  readDisplayLineNutrition,
+  type LineNutrition,
+} from "./line-nutrition.js";
 import {
   attachKitchenAllergyCopies,
   copyAllergyWorkingTicks,
@@ -2233,7 +2237,7 @@ async function stampSent(
   at: string,
 ): Promise<void> {
   if (lineIds.length === 0) return;
-  await tx
+  const stamped = await tx
     .update(workingOrderLines)
     .set({ sentAt: at })
     .where(
@@ -2251,7 +2255,12 @@ async function stampSent(
             .where(and(eq(workingOrders.id, orderId), ne(workingOrders.status, "abandoned"))),
         ),
       ),
-    );
+    )
+    .returning({ id: workingOrderLines.id });
+  await captureSentLineNutrition(
+    tx,
+    stamped.map((row) => row.id),
+  );
 }
 
 /**
@@ -4050,9 +4059,18 @@ export interface TabLine {
   portion: boolean;
 }
 
-/** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
+/** Counter collection still needs the dish details after placing, while edits retain their open-order guard. */
 export async function readTabLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
-  await assertTabOpen(tx, tabId);
+  const [order] = await tx
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (
+    order === undefined ||
+    (order.status !== "open" && !(order.status === "placed" && order.partyId === null))
+  ) {
+    throw new AppError("tab.not_open", { tabId });
+  }
   return readBillLines(tx, tabId);
 }
 
@@ -4106,15 +4124,10 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  const nutrition = await readLineNutrition(
-    tx,
-    rows.map((row) => row.id),
-  );
+  const nutrition = await readDisplayLineNutrition(tx, rows);
+  const contexts = await VENUE_SERVICE.listLineContexts(tx, tabId);
   const menuItemByLine = new Map(
-    (await VENUE_SERVICE.listLineContexts(tx, tabId)).map((context) => [
-      context.workingOrderLineId,
-      context.menuItemId,
-    ]),
+    contexts.map((context) => [context.workingOrderLineId, context.menuItemId]),
   );
   // The stored `line_no` is what this read returns, so, unlike `readLockedLines`, no renumbering.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
@@ -6938,10 +6951,15 @@ export async function placeOrder(
           lines.map((line) => line.id),
         );
         // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
-        await tx
+        const stamped = await tx
           .update(workingOrderLines)
           .set({ sentAt: nowIso() })
-          .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
+          .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)))
+          .returning({ id: workingOrderLines.id });
+        await captureSentLineNutrition(
+          tx,
+          stamped.map((row) => row.id),
+        );
 
         await markOrderPlaced(tx, deps.clock, cfg, id, operatorId, deps.attendance);
 

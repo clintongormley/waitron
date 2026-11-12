@@ -158,6 +158,24 @@ const routedExtra = () =>
   });
 
 describe("A669 reads", () => {
+  it("keeps kitchen declarations live after a sent dish's product changes", async () => {
+    await sent();
+    await inTx(v, (tx) =>
+      updateProduct(tx, v.productId("Burger"), {
+        allergens: { eggs: {} },
+        dietaryDeclarations: ["halal"],
+      }),
+    );
+    const items = (await inTx(v, (tx) => listStationQueue(tx, stationId))).flatMap(
+      (order) => order.items,
+    );
+    expect(items).toHaveLength(3);
+    for (const item of items) {
+      expect(item.asServed.allergens).toEqual({ eggs: {} });
+      expect(item.asServedDiet?.halal).toBe("yes");
+    }
+  });
+
   it("keeps a routed extra's frozen copy at its own station and on every pass projection", async () => {
     const extra = await routedExtra();
     const p = await sent("fire", true, [

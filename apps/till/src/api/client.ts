@@ -589,6 +589,8 @@ export interface CurrentOrderRow {
    *  `firedAt` for a dish with no kitchen work. */
   requestedAt: string | null;
   firedAt: string | null;
+  /** First-send time, independent of whether Serve is currently available. */
+  sentAt?: string;
   nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;
@@ -4334,10 +4336,7 @@ export class TillApi {
     });
   }
 
-  /**
-   * Read one open tab's lines → `GET /api/working-orders/:orderId/lines`. A non-open or absent tab
-   * rejects with `tab.not_open`. `revision` is what an edit of this copy sends back.
-   */
+  /** The revision identifies this listing for a later adjustment to an open order. */
   getTabLines(orderId: string, options: ReadOptions = {}): Promise<TabLines> {
     return this.#request<TabLines>(
       `/api/working-orders/${orderId}/lines`,

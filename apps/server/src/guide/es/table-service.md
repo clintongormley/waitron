@@ -273,6 +273,10 @@ elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras.
 detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.
 Para reducirla, usa **Cancelar…**.
 
+Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, abre sus detalles y
+lee **Registrado al enviar**. Un plato en espera sigue mostrando su declaración actual hasta que
+lo liberas.
+
 Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
 plato al peso tienes dos líneas, no una del doble de peso, y un plato al peso pasa entero a otra
 cuenta. En una mesa o en el mostrador puedes añadir hasta 99 unidades de un mismo plato cada vez.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CurrentOrderRow, TabLine } from "../api/client.js";
+import type { CurrentOrderRow, LineNutrition, TabLine } from "../api/client.js";
 import type { SentSlice } from "./sent-panel.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "./portion-groups.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
@@ -92,6 +92,7 @@ describe("A803 portion grouping: bill lines", () => {
     ["release group", { groupId: "g2" }],
     ["station", { stationId: "kitchen" }],
     ["kitchen state", { state: "ready" }],
+    ["first send", { sentAt: null }],
     ["fired time", { firedAt: "2026-10-28T12:05:00.000Z" }],
     ["served", { servedAt: "2026-10-28T12:20:00.000Z" }],
     ["cancelled with its charge kept", { cancelledQuantity: "1.000" }],
@@ -223,6 +224,7 @@ describe("A803 portion grouping: Sent panel rows", () => {
     ["kind", {}, { kind: "served" }],
     ["readiness", { readyAt: "2026-10-28T12:10:00.000Z" }, {}],
     ["release", { released: false }, {}],
+    ["first send", { sentAt: "2026-10-28T12:00:00.000Z" }, {}],
     ["kitchen record", { kitchen: null }, {}],
     ["amount", { netAmount: "9.00" }, { amount: "9.00" }],
     ["firing", { firedAt: "2026-10-28T12:03:00.000Z" }, {}],
@@ -232,6 +234,15 @@ describe("A803 portion grouping: Sent panel rows", () => {
       ["b1"],
       ["b2"],
     ]);
+  });
+
+  it("keeps the Sent row's own displayed declarations separate even when the bill lines match", () => {
+    expect(
+      group([
+        slice(row("b1", 1, { nutrition: { allergens: { milk: {} }, dietaryDeclarations: [] } })),
+        slice(row("b2", 2, { nutrition: { allergens: { eggs: {} }, dietaryDeclarations: [] } })),
+      ]),
+    ).toEqual([["b1"], ["b2"]]);
   });
 
   it("never groups a slice of a line of more than one, or a row whose bill line is not known", () => {
@@ -252,5 +263,55 @@ describe("A803 portion grouping: Sent panel rows", () => {
       ["b1"],
       ["b2"],
     ]);
+  });
+});
+
+describe("recorded declarations in portion grouping", () => {
+  it.each<[string, LineNutrition | undefined, LineNutrition | undefined]>([
+    [
+      "allergens",
+      { allergens: { milk: {} }, dietaryDeclarations: [] },
+      { allergens: { eggs: {} }, dietaryDeclarations: [] },
+    ],
+    [
+      "kinds",
+      { allergens: { gluten: { kinds: ["rye"] } }, dietaryDeclarations: [] },
+      { allergens: { gluten: { kinds: ["wheat"] } }, dietaryDeclarations: [] },
+    ],
+    [
+      "diet",
+      { allergens: {}, dietaryDeclarations: ["vegan"] },
+      { allergens: {}, dietaryDeclarations: ["halal"] },
+    ],
+    [
+      "unreviewed versus reviewed empty",
+      { allergens: null, dietaryDeclarations: [] },
+      { allergens: {}, dietaryDeclarations: [] },
+    ],
+    ["missing versus unreviewed capture", undefined, { allergens: null, dietaryDeclarations: [] }],
+  ])("keeps portions with different %s separate", (_, left, right) => {
+    const lines = [line("b1", 1, { nutrition: left }), line("b2", 2, { nutrition: right })];
+    expect(ids(portionGroups(lines, keyOf(lines), (dish) => dish.lineNo))).toEqual([
+      ["b1"],
+      ["b2"],
+    ]);
+  });
+
+  it("groups equal declarations regardless of allergen, kind and diet order", () => {
+    const lines = [
+      line("b1", 1, {
+        nutrition: {
+          allergens: { milk: {}, gluten: { kinds: ["rye", "wheat"] } },
+          dietaryDeclarations: ["halal", "kosher"],
+        },
+      }),
+      line("b2", 2, {
+        nutrition: {
+          allergens: { gluten: { kinds: ["wheat", "rye"] }, milk: {} },
+          dietaryDeclarations: ["kosher", "halal"],
+        },
+      }),
+    ];
+    expect(ids(portionGroups(lines, keyOf(lines), (dish) => dish.lineNo))).toEqual([["b1", "b2"]]);
   });
 });

@@ -939,6 +939,8 @@ export const en = {
   "product_info.dietary": "Dietary",
   "product_info.not_reviewed": "Allergens not yet reviewed",
   "allergens.contains": "Contains",
+  "allergens.recorded_when_sent": "Recorded when sent",
+  "allergens.sent_not_recorded": "The declaration was not recorded when this dish was sent.",
   "floor.allergy": "Allergy",
   "allergens.as_served_none": "No declared allergens",
   // Dietary classification
@@ -2914,6 +2916,8 @@ export const es: Record<StringKey, string> = {
   "product_info.dietary": "Dieta",
   "product_info.not_reviewed": "Alérgenos pendientes de revisión",
   "allergens.contains": "Contiene",
+  "allergens.recorded_when_sent": "Registrado al enviar",
+  "allergens.sent_not_recorded": "No se registró la declaración al enviar este plato.",
   "floor.allergy": "Alergia",
   "allergens.as_served_none": "Sin alérgenos declarados",
   "diet.label": "Dieta",
