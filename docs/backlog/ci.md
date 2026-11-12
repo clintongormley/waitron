@@ -424,7 +424,7 @@ Dashboard packing uses refreshed complete-run file durations. Measure the curren
 coverage-on whole jobs before claiming a speed gain or the four-minute goal; any
 remaining product-editor, product-list or menu cut still needs a demonstrated cause.
 The till’s warm-cache `cpu-features` rebuild remains the next diagnostic target;
-its install time still needs a root-cause fix.
+find why it compiles despite a cache hit before choosing a fix.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.
