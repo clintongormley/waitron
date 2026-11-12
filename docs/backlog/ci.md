@@ -532,7 +532,7 @@ A1424's live qualification was added on 7 November 2026.
   CI compares server and GitHub `(running + waiting) / slots`, with server ties
   and the owner’s stipulated 20 hosted slots;
   ordinary same-repository jobs are eligible for the measured global pool. Family caps
-  have been removed, and routing, recovery, image smoke, the final aggregate and publication stay hosted.
+  have been removed; recovery, image smoke, the final aggregate and publication stay hosted.
   Image smoke remains hosted until a disposable guest is qualified (watcher, 2026-11-09 08:20);
   both retained failures, runs 42550200310 and 42525659420, stop at the Bluetooth check
   with `dbus_unreachable`. Guest diagnosis remains open.

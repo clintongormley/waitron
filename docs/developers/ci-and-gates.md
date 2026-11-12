@@ -164,7 +164,8 @@ disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
 PR planning (`changes`) uses a server guest only on the first attempt of a same-repository
 PR, with server mode and the existing selected-head and hosted-attempt gates. The published
 snapshot must show no waiting server jobs and fewer occupied slots than usable slots.
-Absent or zero capacity selects GitHub. This placement reads no output from its own job;
+Absent, partial or zero capacity selects GitHub. The capacity variable must contain valid JSON,
+as must the existing hosted-attempt variable. This placement reads no output from its own job;
 the downstream queue-pressure routing described below stays unchanged. Later planner
 attempts, forks, pushes, schedules and manual runs stay hosted. Concurrent placements
 reserve no slots, and the snapshot has no new expiry rule.
@@ -172,7 +173,8 @@ reserve no slots, and the snapshot has no new expiry rule.
 A server planning job installs a missing `gh` with three bounded apt attempts; each update
 and install has a 20-second outer timeout and 10-second HTTP/HTTPS limits. The setup step
 has its own three-minute limit inside the unchanged five-minute job limit. Hosted planning
-uses the provided tool. Checkout still fetches full history.
+uses the provided tool. Exhausted setup attempts do not fail planning: without `gh`,
+the existing routing step selects GitHub. Checkout still fetches full history.
 
 The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
 measured global pool limits simultaneous guests. Removing a workflow cap does not add

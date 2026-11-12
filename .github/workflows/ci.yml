@@ -50,7 +50,7 @@ jobs:
   # Package scope is shared with the push hook. Full verification also enables coverage.
   changes:
     if: ${{ !inputs.server_probe }}
-    runs-on: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 && vars.DISPOSABLE_TESTS_MODE == 'server' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').serverWaiting == 0 && fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').serverRunning < fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').slots && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-changes-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 && vars.DISPOSABLE_TESTS_MODE == 'server' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && toJSON(fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').serverWaiting) == '0' && toJSON(fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').serverRunning) != 'null' && fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').serverRunning >= 0 && fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').serverRunning < fromJSON(vars.DISPOSABLE_TESTS_CAPACITY || '{}').slots && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-changes-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       contents: read
@@ -121,6 +121,7 @@ jobs:
           find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
       - name: Set up gh on the server
+        continue-on-error: true
         if: runner.environment == 'self-hosted'
         timeout-minutes: 3
         run: |
