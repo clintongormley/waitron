@@ -1132,7 +1132,7 @@ the helper's constant status is not evidence of the write.
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: 5e–5h of A1308's slice 5; the backup screen's folder wording goes with
+  slices. Still open: 5f–5h of A1308's slice 5; the backup screen's folder wording goes with
   the venue-id work.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).

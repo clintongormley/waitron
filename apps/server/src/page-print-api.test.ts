@@ -1031,7 +1031,7 @@ it("an A4 invoice queued during a held receipt pull wakes its agent", async () =
   const bus = new LiveEvents();
   onTestFinished(() => bus.close());
   const v = await venue({ bus });
-  const office = await printer(v, v.agentOne);
+  const office = await printer(v.agentOne);
   const sale = await fullInvoice(v);
   await installChangeFeed(suite.db, [{ table: "invoice_deliveries", type: "invoice_deliveries" }]);
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));

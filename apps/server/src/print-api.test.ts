@@ -6405,7 +6405,6 @@ describe("held print pulls", () => {
     const [printer] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId,
         name: "Office",
         host: "192.0.2.9",
         port: 631,
