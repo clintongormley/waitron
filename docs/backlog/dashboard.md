@@ -91,8 +91,8 @@ printer keys.
 ## The form plumbing is hand-written per form
 
 Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
-plumbing in the remaining dashboard
-editors, the image library, Stripe and SumUp forms, Voids and comps (`packages/adjustments`),
+plumbing in the remaining dashboard editors, the image library, Stripe and SumUp forms,
+Voids and comps (`packages/adjustments`),
 Departments and zones, and the till's forms onto `FormFeedback` in `@waitron/ui`. Inventory each
 later batch before migrating it; leave single-job forms local. Preserve each form's field mapping
 and message behavior. See the [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md).
@@ -803,8 +803,8 @@ forms receive field messages from their parent screen.
     also uses it (`waitron-cloud/apps/portal/src/screens.ts:14,68`, `app.ts:227`; watcher checked
     2026-11-10, read, not run), pinned at ui-core 0.2.1. Keep its published export while that
     consumer remains.
-  - Share repeated bottom-message assembly and move the remaining repeated form-feedback
-    plumbing onto the shared helper, preserving each form's field mapping and message behavior.
+  - Move the remaining repeated form-feedback plumbing onto the shared helper, preserving each
+    form's field mapping and message behavior.
     [Detail](dashboard.md#the-form-plumbing-is-hand-written-per-form)
   - Found during C47 part 2 and not fixed: a blue line along the top of a `wt-modal` editor's
     footer, in a screenshot after a refusal that names no field, which looks like the modal's
