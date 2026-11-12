@@ -157,6 +157,43 @@ describe("saved F1 issue offset", () => {
 });
 
 describe("receipt dates", () => {
+  it.each(
+    [PRINTER_58, PRINTER_80].flatMap((printer) =>
+      [false, true].flatMap((duplicate) =>
+        [
+          ["es-ES", "1 mar 2026, 00:05"],
+          ["ca-ES", "1 de març 2026, 00:05"],
+          ["gl-ES", "1 de mar. de 2026, 00:05"],
+          ["eu-ES", "2026(e)ko mar. 1(a) (00:05)"],
+          ["en-GB", "1 Mar 2026, 00:05"],
+        ].map(([locale, date]) => ({ printer, duplicate, locale: locale!, date: date! })),
+      ),
+    ),
+  )(
+    "prints an F1's heading and whole date row in $locale on $printer.paperWidth, duplicate=$duplicate",
+    ({ printer, duplicate, locale, date }) => {
+      const lines = drawn(
+        formatReceipt({
+          result: {
+            ...FILED_SALE,
+            invoiceType: "F1",
+            issuedAt: "2026-03-01T00:05:00.000+01:00",
+            issuedOffsetMinutes: 60,
+          },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: locale,
+          printer,
+          duplicate,
+        }),
+      );
+      const content = lines.join(" ").replace(/\s+/g, " ");
+      const labels = receiptLabelsFor(locale);
+      expect(content).toContain(`${labels.invoiceHeading} A/1`);
+      expect(content).toContain(`${labels.date} ${date}`);
+    },
+  );
+
   it.each([undefined, "F1", "F2"] as const)("prints only the issue date for %s", (invoiceType) => {
     const lines = drawn(
       formatReceipt({

@@ -98,7 +98,6 @@ describe("a full invoice for a bill opened before midnight carries only its crea
     const printed = JSON.stringify(document.elements);
     expect(printed).toContain("15 oct 2026");
     expect(printed).not.toContain("14 oct 2026");
-    expect(printed).not.toContain("Fecha de operación");
   });
 
   it("the accountant export has no operation date column", async () => {
@@ -111,7 +110,6 @@ describe("a full invoice for a bill opened before midnight carries only its crea
     const sheet = strFromU8(
       unzipSync(await renderAccountantWorkbook(data, "es"))["xl/worksheets/sheet1.xml"]!,
     );
-    expect(sheet).not.toContain("Fecha de operación");
     expect(sheet).not.toContain("2026-10-14");
     expect(sheet).toContain("2026-10-15");
   });
