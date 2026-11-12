@@ -1521,9 +1521,10 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
   `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
   constant (the theme colour is literal in three places).
-- **`void cfg` lines remain in test helpers in `apps/server/src`**
-  (`git grep -n 'void cfg;' apps/server/src`). Left open by SQLite slice 1
-  (#490 and the preparation tasks).
+- **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
+  `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
+  `readTransactionReceipt` retain `_cfg` in their signatures. Left open by SQLite slice 1
+  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope.
 - `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) **is now
   called only by its own tests; delete it with its cases**: nothing else calls it, because the built
   Task 6 works out the default itself, and only the demo-data plan's Task 6 sketch still names it.

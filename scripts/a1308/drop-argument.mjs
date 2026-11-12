@@ -34,6 +34,7 @@ function statementEdit(source, node) {
 }
 
 const parse = (path, source) => ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+// Names are matched without type resolution; select only files sharing the declared signature.
 const nameOf = (node) =>
   ts.isIdentifier(node)
     ? node.text
