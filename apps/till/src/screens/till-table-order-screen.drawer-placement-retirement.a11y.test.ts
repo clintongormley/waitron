@@ -27,17 +27,15 @@ afterEach(async () => {
 
 describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
-    it.each([390, 1280])("keeps Recall and New order Move usable at %i", async (width) => {
+    it.each([390, 1280])("keeps sent Fire and fresh New order Move usable at %i", async (width) => {
       await page.viewport(width, 1400);
       setLocale(locale);
       const draft = new DraftStore();
-      const recalled = { ...storedDish, id: "recalled", name: "Recalled dish", lineNo: 2 };
       draft.loadFrom("draft", [
         {
-          product: { ...beer, name: "Recalled dish" },
+          product: { ...beer, name: "Fresh dish" },
           quantity: "2.000",
           place: { kind: "fire" },
-          source: { line: recalled, extras: [], netAmount: "6.50" },
         },
       ]);
       const { el, host } = await mountWidget<TillTableOrderScreen>(
@@ -104,7 +102,7 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       const more = q("[data-sent-line-dialog] wt-row-actions") as WtRowActions;
       await more.updateComplete;
       await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
-      expect(q("[data-sent-line-recall]").checkVisibility()).toBe(true);
+      expect(el.shadowRoot!.querySelector("[data-sent-line-recall]")).toBeNull();
       expect(q("[data-sent-line-fire]").checkVisibility()).toBe(true);
       expect(
         q("[data-sent-line-dialog]").querySelector("[data-move-line], [data-split-group-line]"),

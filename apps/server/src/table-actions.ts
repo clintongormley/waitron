@@ -2,7 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
-import { moveCheckedDishes, reservedRefusal, resolveMoveLines } from "./bill-actions.js";
+import { moveCheckedDishes, resolveMoveLines } from "./bill-actions.js";
 import {
   readPartyBillIds,
   relocateBillEditor,
@@ -303,7 +303,7 @@ export interface SplitSelection {
  * bill of the party; it takes its next number at the new party in its old number order, and keeps
  * its payments. A loose source must be an open bill of the party; its dishes move as
  * {@link moveCheckedDishes} moves them, and the new bill numbers last, at the new party, so the
- * staying table's numbers keep no gap. Held dishes not recalled into a draft move to one held copy
+ * staying table's numbers keep no gap. Held dishes move to one held copy
  * of each of their groups, however many of the bills share it ({@link copyHeldGroups}), and
  * dishes `waitingDishesOnHoldPaper` keeps in a fired group to a fired copy of theirs
  * ({@link copyWaitingGroups}); the rest of each bill's dishes group as that bill arrives
@@ -340,25 +340,14 @@ export async function splitTable(
   const named = [...wholeBillIds, ...looseIds];
   if (new Set(named).size !== named.length || loose.some((entry) => entry.lineIds.length === 0))
     throw new AppError("management.request_invalid", { field: "selection" });
-  const edits = await requireSplitEditors(
-    tx,
-    wholeBillIds,
-    looseIds,
-    options.operatorId,
-    options.expectedEdits,
-  );
+  await requireSplitEditors(tx, wholeBillIds, looseIds, options.operatorId, options.expectedEdits);
   for (const billId of wholeBillIds) await refuseUnsplittableBill(tx, partyId, billId);
   const looseSourceIds = await inNumberOrder(tx, looseIds);
   const looseMoves: { billId: string; transfers: { lineNo: number }[] }[] = [];
   for (const billId of looseSourceIds) {
     await requireBillOfParty(tx, partyId, billId);
     const { lineIds } = loose.find((entry) => entry.billId === billId)!;
-    const { transfers, recalled } = await resolveMoveLines(tx, billId, lineIds);
-    if (recalled)
-      throw reservedRefusal(
-        billId,
-        edits.find((edit) => edit.billId === billId)!,
-      );
+    const { transfers } = await resolveMoveLines(tx, billId, lineIds);
     looseMoves.push({ billId, transfers });
   }
   const leaving: { billId: string; firers: ReadonlyMap<string, Firer> }[] = [];

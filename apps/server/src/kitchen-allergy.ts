@@ -20,7 +20,6 @@ import { readLineNutrition } from "./line-nutrition.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import { survivingParty } from "./party-allergy.js";
 import { fingerprint, partyFamily } from "./parties.js";
-import { isRecalledDish } from "./draft-source.js";
 import {
   enqueueAllergyCorrectionSlips,
   foldPortionNotices,
@@ -309,7 +308,6 @@ async function enqueueKitchenAllergyUpdates(
       group: orderGroups.displayNumber,
       groupState: orderGroups.state,
       holdPrintedAt: orderGroups.holdPrintedAt,
-      recalled: isRecalledDish(tx),
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -360,7 +358,6 @@ async function enqueueKitchenAllergyUpdates(
     if (
       remaining <= 0 ||
       !exposed ||
-      row.recalled ||
       row.madeHere ||
       row.collectedAt !== null ||
       row.orderStatus === "abandoned" ||

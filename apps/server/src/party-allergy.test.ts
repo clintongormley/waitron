@@ -44,8 +44,6 @@ import {
 } from "./testing/party-venue.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { FreshDraftLineInput } from "./order-drafts.js";
-import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { createCourse } from "./kitchen.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -412,32 +410,6 @@ describe("A669 candidate sets", () => {
       expect.arrayContaining(lines.slice(0, 3).map((l) => ({ kind: "working", id: l.id }))),
     );
     expect(result.dishes).toHaveLength(3);
-  });
-
-  it("a recalled held dish keeps its source identity and does not become a new offer", async () => {
-    const p = await party();
-    const [line] = await held(p);
-    const expectedPartyRevision = await revisionOf(v, p.partyId);
-    const recalled = await inTx(v, async (tx) =>
-      recallToDraft(tx, v.cfg, p.partyId, line!.id, {
-        submissionId: randomUUID(),
-        operatorId: OPERATOR,
-        expectedPartyRevision,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-      }),
-    );
-    const result = await view(p.partyId, {
-      kind: "draft",
-      draftId: recalled.draft.id,
-      lineIds: [recalled.draft.lines[0]!.id],
-    });
-    expect(result.dishes).toEqual([
-      expect.objectContaining({ line: { kind: "working", id: line!.id }, offeredBefore: true }),
-    ]);
-    expect((await view(p.partyId)).dishes).toHaveLength(1);
-    await expect(
-      view(p.partyId, { kind: "lines", orderId: p.tabId, lineNos: [line!.lineNo] }),
-    ).rejects.toMatchObject({ code: "allergy.invalid" });
   });
 
   it("retains a no-preparation held dish without a ticket or HOLD printing", async () => {

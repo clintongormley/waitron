@@ -204,24 +204,10 @@ function heldLine(over: Partial<TabLine> = {}): TabLine {
   };
 }
 
-it("Recall from More names the original line and closes information before continuing", async () => {
+it("offers no Recall for a sent dish", async () => {
   const el = await openLine("held", { lines: [heldLine()], bills: [bill("open")] });
-  const events = capture(el, "recall-lines");
   await openMore(el);
-  await userEvent.click(q(el, "[data-sent-line-recall]"));
-  await el.updateComplete;
-  expect(events.map((event) => event.detail)).toEqual([{ lineNos: [1] }]);
-  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
-});
-
-it("A1426: Recall on a row of one recalls at once, asking no count", async () => {
-  const el = await openLine("held", { lines: [heldLine()], bills: [bill("open")] });
-  const events = capture(el, "recall-lines");
-  await openMore(el);
-  await userEvent.click(q(el, "[data-sent-line-recall]"));
-  await el.updateComplete;
-  expect(events.map((event) => event.detail)).toEqual([{ lineNos: [1] }]);
-  expect(q(el, "[data-serve-dialog]").hasAttribute("open")).toBe(false);
+  expect(q(el, "[data-sent-line-recall]")).toBeNull();
 });
 
 it.each([
@@ -254,70 +240,6 @@ it.each([
     expect(q(el, "[data-sent-line-fire]")!.checkVisibility()).toBe(true);
   },
 );
-
-it.each(["owner", "station", "paid", "started", "gone", "api", "visit"] as const)(
-  "a retained Recall refuses a newer %s state before a repaint",
-  async (change) => {
-    const store = new DraftStore();
-    const el = await openLine("held", {
-      lines: [heldLine()],
-      bills: [bill("open")],
-      draftStore: store,
-    });
-    const events = capture(el, "recall-lines");
-    await openMore(el);
-    const recall = q(el, "[data-sent-line-recall]");
-    expect(recall).not.toBeNull();
-    if (change === "owner") store.ownershipLocked = true;
-    if (change === "station") el.lines = [heldLine({ changesAfterSending: "never" })];
-    if (change === "paid") el.bills = [bill("settled")];
-    if (change === "started") el.lines = [heldLine({ state: "preparing" })];
-    if (change === "gone") el.lines = [];
-    if (change === "api") el.api = {} as TillTableOrderScreen["api"];
-    if (change === "visit") el.serviceVisit++;
-    recall.click();
-    await el.updateComplete;
-    expect(events).toEqual([]);
-  },
-);
-
-async function recallOffered(lines: TabLine[]) {
-  const el = await openLine("held", { lines, bills: [bill("open")] });
-  await openMore(el);
-  return q(el, "[data-sent-line-recall]") !== null;
-}
-
-it("offers Recall on a held line at a While held station and not on a waiting one", async () => {
-  expect(await recallOffered([heldLine({ changesAfterSending: "held" })])).toBe(true);
-  cleanupWidgets();
-  const sent = "2026-10-24T10:00:00.000Z";
-  expect(
-    await recallOffered([heldLine({ changesAfterSending: "held", sentAt: sent, firedAt: sent })]),
-  ).toBe(false);
-});
-
-it("offers no Recall when a split-off extra's station does not allow it", async () => {
-  const extra = (changesAfterSending: TabLine["changesAfterSending"]) =>
-    heldLine({ id: "l-cream", lineNo: 2, parentLineNo: 1, stationId: "bar", changesAfterSending });
-  expect(await recallOffered([heldLine({ changesAfterSending: "held" }), extra("never")])).toBe(
-    false,
-  );
-  cleanupWidgets();
-  expect(await recallOffered([heldLine({ changesAfterSending: "held" }), extra("held")])).toBe(
-    true,
-  );
-});
-
-it("offers Recall on a sent line no station makes", async () => {
-  const sent = "2026-10-24T10:00:00.000Z";
-  const none = { changesAfterSending: null, stationId: null, state: null, sentAt: sent };
-  expect(
-    await recallOffered([
-      heldLine(none),
-      heldLine({ ...none, id: "l-cream", lineNo: 2, parentLineNo: 1 }),
-    ]),
-  ).toBe(true);
-});
 
 it("station move from More carries the sent row's original bill, dish and station", async () => {
   const orders = structuredClone(current());

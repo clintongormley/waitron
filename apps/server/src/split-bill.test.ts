@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { sendLines, updateOrderLine } from "./testing/order-writer-fixture.js";
@@ -655,7 +656,9 @@ describe("splitting a line the kitchen has", () => {
       ] as const) {
         const revision = await revisionOf(orderId);
         await expect(
-          asApp(cfg, (tx) => updateOrderLine(tx, cfg, orderId, 1, { note: "otra" }, revision)),
+          asApp(cfg, (tx) =>
+            updateOrderLine(tx, cfg, orderId, 1, { portionLineNos: [], note: "otra" }, revision),
+          ),
         ).rejects.toMatchObject({ code: "ticket.already_started", params: { ticketItemId } });
       }
     },
@@ -807,9 +810,8 @@ describe("splitting a line the kitchen has", () => {
     const { billId: checkId } = await asApp(cfg, (tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "2" }]),
     );
-    const revision = await revisionOf(checkId);
 
-    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, checkId, 1, { quantity: "1" }, revision));
+    await asApp(cfg, (tx) => cancelItemForTest(tx, cfg, checkId, 1, "1"));
 
     const slip = (await printedBy(printerId)).at(-1)!;
     expect(slip).toContain("*** VOID ***");

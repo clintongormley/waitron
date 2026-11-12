@@ -69,7 +69,6 @@ import { createPrinter } from "@waitron/printing";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { inTx, seat, setupPartyVenue } from "./testing/party-venue.js";
 import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { withStationDishes } from "./station-closing.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
@@ -1615,33 +1614,6 @@ describe("A773 pass release: races", () => {
     };
   }
 
-  for (const order of ["recall", "release"] as const)
-    it(`settles a Fire against a draft recall of its dish, the ${order} committing first`, async () => {
-      const f = await burgerCard();
-      const expected = await withTransaction(db, async (tx) => ({
-        operatorId: OPERATOR,
-        submissionId: randomUUID(),
-        expectedPartyRevision: await partyRevisionOf(tx, f.venue.party.partyId),
-        expectedEdit: await readBillEditState(tx, f.venue.party.tabId),
-      }));
-      const recall = (tx: Transaction) =>
-        recallToDraft(tx, f.venue.cfg, f.venue.party.partyId, f.placed.line, expected);
-      const outcome = order === "recall" ? await race(recall, f.fire) : await race(f.fire, recall);
-      const recalled = `*** RECALLED ***\nGrill\nSplit extras\n1\n${AT_CLOCK}\n1 x BURG\n`;
-      expect(outcome).toMatchObject(
-        order === "recall"
-          ? [fulfilled, refusedWith("ticket.pass_context_changed")]
-          : [fulfilled, fulfilled],
-      );
-      expect(await rows([f.placed.item])).toEqual([]);
-      const paper = order === "recall" ? [] : [GRILL_FIRE, recalled];
-      expect(gained(f.start, await printed(f.venue))).toEqual({
-        ...nothing,
-        grill: paper,
-        pass: paper,
-      });
-    });
-
   for (const order of ["move", "release"] as const)
     it(`settles a Fire against a move between two of its stations, the ${order} committing first`, async () => {
       const f = await burgerCard(true);
@@ -1951,7 +1923,7 @@ describe("A773 pass release: races", () => {
 
   it("lets a waiter's edit read before a Fire commit after it", async () => {
     const f = await burgerAndWater();
-    const edit = await pendingEdit(f.venue, f.water, { quantity: "2" });
+    const edit = await pendingEdit(f.venue, f.water, { portionLineNos: [], quantity: "2" });
     expect(await race(f.fire, edit)).toMatchObject([fulfilled, fulfilled]);
     expect(await rows([f.placed.item])).toEqual(f.before.map(releasedRow));
     const [water] = await withTransaction(db, (tx) =>
@@ -1972,8 +1944,8 @@ describe("A773 pass release: races", () => {
     it(`settles a waiter's edit committed before a Fire that ${touched ? "touched" : "left"} its dish`, async () => {
       const f = await burgerAndWater();
       const edit = touched
-        ? await pendingEdit(f.venue, f.placed.line, { quantity: "2" })
-        : await pendingEdit(f.venue, f.water, { quantity: "2" });
+        ? await pendingEdit(f.venue, f.placed.line, { portionLineNos: [], quantity: "2" })
+        : await pendingEdit(f.venue, f.water, { portionLineNos: [], quantity: "2" });
       expect(await race(edit, f.fire)).toMatchObject(
         touched ? [fulfilled, refusedWith("ticket.pass_context_changed")] : [fulfilled, fulfilled],
       );
@@ -1987,7 +1959,7 @@ describe("A773 pass release: races", () => {
     const f = await burgerAndWater();
     const read = await cardOf(f.pass.by, f.placed.groupId);
     expect(read.items.map((item) => item.note)).toEqual([null]);
-    const edit = await pendingEdit(f.venue, f.placed.line, { note: "No salt" });
+    const edit = await pendingEdit(f.venue, f.placed.line, { portionLineNos: [], note: "No salt" });
     expect(await race(edit, f.fire)).toMatchObject([fulfilled, fulfilled]);
     expect(await rows([f.placed.item])).toEqual(
       f.before.map((row) => releasedRow({ ...row, note: "No salt" })),

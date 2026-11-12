@@ -14,7 +14,6 @@ import { menuOfferToTillProduct } from "./api/client.js";
 import type {
   DraftSubmission,
   MenuState,
-  RecalledDraftLine,
   TillApi,
   TillMenuOffer,
   TillSaleResult,
@@ -579,60 +578,6 @@ const BREAKFAST_ENDED = refusal(
   [offerId(BREAKFAST_MENU, "Omelette")],
 );
 
-/** An Omelette sent earlier and recalled into Ana's draft on table 2. */
-function seedRecalledOmelette(): void {
-  const line: RecalledDraftLine["source"]["line"] = {
-    changesAfterSending: null,
-    id: "sent-omelette",
-    name: "Omelette",
-    productId: "Omelette",
-    parentProductId: null,
-    menuItemId: offerId(BREAKFAST_MENU, "Omelette"),
-    lineNo: 1,
-    parentLineNo: null,
-    quantity: "1",
-    priceQuantity: "1",
-    unitPrecision: 0,
-    unitPriceGross: "3.00",
-    listUnitPriceGross: "3.00",
-    servedAt: null,
-    courseId: null,
-    sentAt: null,
-    firedAt: null,
-    state: null,
-    stationId: null,
-    movable: true,
-    groupId: null,
-    note: null,
-    listId: null,
-  };
-  drafts.drafts.push({
-    id: "draft-recalled",
-    partyId: "party-a",
-    billId: "wo-7",
-    ownerId: "p1",
-    ownerName: "Ana",
-    revision: 2,
-    takenOverFrom: null,
-    lines: [
-      {
-        id: "reference-sent-omelette",
-        sourceLineId: "sent-omelette",
-        source: { line, extras: [], netAmount: "2.48" },
-        quantity: "1",
-        note: null,
-        courseId: null,
-        makeAt: null,
-        noMerge: true,
-        unavailable: false,
-        slot: 0,
-        joinGroupId: null,
-        afterGroupId: null,
-      },
-    ],
-  });
-}
-
 const heading = (el: TillApp) => windowOf(el)!.shadowRoot!.querySelector("wt-dialog")!.heading;
 
 describe("a table's send from the refusal", () => {
@@ -683,26 +628,18 @@ describe("a table's send from the refusal", () => {
     ]);
   });
 
-  it("lists the fresh dish alone, and Remove keeps the recalled dish and the Coffee", async () => {
-    seedRecalledOmelette();
+  it("lists the refused fresh dish alone, and Remove keeps the Coffee", async () => {
     const el = await breakfastTable({
       submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(BREAKFAST_ENDED),
     });
-    expect(store.lines.map((line) => line.source?.line.id)).toEqual([
-      "sent-omelette",
-      undefined,
-      undefined,
-    ]);
+    expect(store.lines.map((line) => line.product.name)).toEqual(["Omelette", "Coffee"]);
     await act(el, "send-all");
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
 
     await choose(el, "data-late-remove");
 
     expect(windowOf(el)).toBeNull();
-    expect(store.lines.map((line) => line.source?.line.id ?? line.product.name)).toEqual([
-      "sent-omelette",
-      "Coffee",
-    ]);
+    expect(store.lines.map((line) => line.product.name)).toEqual(["Coffee"]);
     expect(submissions()).toHaveLength(1);
   });
 

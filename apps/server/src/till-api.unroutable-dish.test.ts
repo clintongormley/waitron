@@ -1561,11 +1561,27 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await switchOff(original);
     const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
     const ignored = await inTx(v, (tx) =>
-      updateOrderLine(tx, v.cfg, id, 1, { makeAt: original }, revision, OPERATOR),
+      updateOrderLine(
+        tx,
+        v.cfg,
+        id,
+        1,
+        { portionLineNos: [], makeAt: original },
+        revision,
+        OPERATOR,
+      ),
     );
     expect(ignored).toBe(revision);
     await inTx(v, (tx) =>
-      updateOrderLine(tx, v.cfg, id, 1, { quantity: "2", makeAt: chosen }, revision, OPERATOR),
+      updateOrderLine(
+        tx,
+        v.cfg,
+        id,
+        1,
+        { portionLineNos: [], quantity: "2", makeAt: chosen },
+        revision,
+        OPERATOR,
+      ),
     );
     const rows = await inTx(v, (tx) =>
       tx
@@ -1594,7 +1610,15 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
     const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
     await inTx(v, (tx) =>
-      updateOrderLine(tx, v.cfg, id, 1, { quantity: "2", makeAt: null }, revision, OPERATOR),
+      updateOrderLine(
+        tx,
+        v.cfg,
+        id,
+        1,
+        { portionLineNos: [], quantity: "2", makeAt: null },
+        revision,
+        OPERATOR,
+      ),
     );
     const rows = await inTx(v, (tx) =>
       tx
@@ -1623,7 +1647,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
     await inTx(v, (tx) => setStationToday(tx, original, "closed", new Date()));
     const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
-    await inTx(v, (tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "2" }, revision, OPERATOR));
+    await inTx(v, (tx) =>
+      updateOrderLine(tx, v.cfg, id, 1, { portionLineNos: [], quantity: "2" }, revision, OPERATOR),
+    );
     const items = await kitchenItems(id);
     expect(items.map((item) => item.stationId)).toEqual([original, original]);
   });
@@ -1672,7 +1698,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
     await switchOff(original);
     const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
-    await inTx(v, (tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "2" }, revision, OPERATOR));
+    await inTx(v, (tx) =>
+      updateOrderLine(tx, v.cfg, id, 1, { portionLineNos: [], quantity: "2" }, revision, OPERATOR),
+    );
     expect((await kitchenItems(id)).map((item) => item.stationId)).toEqual([original, fallback]);
   });
 });

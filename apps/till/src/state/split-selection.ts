@@ -34,7 +34,7 @@ export interface SplitSource {
     ownerName: string | null;
     takenFromYou: boolean;
   } | null;
-  /** This person's own unsent dishes on it: a saved draft, or dishes recalled on screen. */
+  /** This person's saved unsent draft on this bill. */
   ownUnsent: boolean;
   /** A card refund on it has not finished, so the money it holds is not known yet. */
   refundPending: boolean;
@@ -258,24 +258,19 @@ export function anywayNote(
 
 /**
  * The panel's rows from the read (D11), the party's bills, every draft of the party and this person.
- * A bill the bills list does not hold is left out until the next read. `recalled` is the bill on
- * screen's unsaved recalls, which no draft read has yet.
+ * A bill the bills list does not hold is left out until the next read.
  */
 export function splitSourcesFrom(
   read: { bills: readonly { billId: string; lines: readonly TabLine[]; balance: BillBalance }[] },
   bills: readonly PartyBill[],
   drafts: readonly Draft[],
   personId: string,
-  recalled: ReadonlySet<string>,
   keyFor: (lines: readonly TabLine[], balance: BillBalance) => (dish: TabLine) => string | null,
 ): SplitSource[] {
   const billById = new Map(bills.map((bill) => [bill.workingOrderId, bill]));
-  const inAnyDraft = new Set(recalled);
   const foreign = new Map<string, Draft>();
   const withOwnDraft = new Set<string>();
   for (const draft of drafts) {
-    for (const line of draft.lines)
-      if (line.sourceLineId !== null) inAnyDraft.add(line.sourceLineId);
     if (draft.ownerId === personId) withOwnDraft.add(draft.billId);
     else foreign.set(draft.billId, draft);
   }
@@ -286,7 +281,7 @@ export function splitSourcesFrom(
     return [
       {
         bill,
-        groups: pickGroups(lines, keyFor(lines, balance), balance, inAnyDraft),
+        groups: pickGroups(lines, keyFor(lines, balance), balance),
         held:
           holder === undefined
             ? null
@@ -297,7 +292,7 @@ export function splitSourcesFrom(
                 ownerName: holder.ownerName === "" ? null : holder.ownerName,
                 takenFromYou: holder.takenOverFrom?.personId === personId,
               },
-        ownUnsent: withOwnDraft.has(billId) || lines.some((line) => recalled.has(line.id)),
+        ownUnsent: withOwnDraft.has(billId),
         refundPending: balance.payments.some((payment) =>
           payment.refunds.some((refund) => refund.state === "pending"),
         ),

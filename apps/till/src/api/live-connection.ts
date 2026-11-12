@@ -23,7 +23,6 @@ const ORDER_TYPES = [
   "line_service_cancellations",
   "order_drafts",
   "order_draft_lines",
-  "order_draft_recalled_lines",
 ];
 const MENU_TYPES = [
   "products",

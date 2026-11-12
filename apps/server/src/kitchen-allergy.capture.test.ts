@@ -490,11 +490,19 @@ describe("A669 capture", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, p.tabId));
-        await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
-          admission: testTradingAdmission(),
-          operatorId: OPERATOR,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        });
+        await updateOrderLine(
+          tx,
+          v.cfg,
+          p.tabId,
+          1,
+          { portionLineNos: [], extras: selection },
+          order!.revision,
+          {
+            admission: testTradingAdmission(),
+            operatorId: OPERATOR,
+            expectedEdit: await readBillEditState(tx, p.tabId),
+          },
+        );
       });
       const rows = copies(p.tabId);
       expect(rows).toHaveLength(2);
@@ -544,11 +552,19 @@ describe("A669 capture", () => {
       const oldJobs = await v.db.select().from(printJobs);
       await inTx(v, async (tx) => {
         const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
-        await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
-          admission: testTradingAdmission(),
-          operatorId: OPERATOR,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        });
+        await updateOrderLine(
+          tx,
+          v.cfg,
+          p.tabId,
+          1,
+          { portionLineNos: [], extras: selection },
+          order!.revision,
+          {
+            admission: testTradingAdmission(),
+            operatorId: OPERATOR,
+            expectedEdit: await readBillEditState(tx, p.tabId),
+          },
+        );
       });
       const rows = copies(p.tabId);
       const parent = rows.find((row) => row.lineId === original.lineId)!;
@@ -582,11 +598,19 @@ describe("A669 capture", () => {
           .select()
           .from(workingOrderLines)
           .where(eq(workingOrderLines.id, original.lineId));
-        await updateOrderLine(tx, v.cfg, p.tabId, line!.lineNo, { extras: [] }, order!.revision, {
-          admission: testTradingAdmission(),
-          operatorId: OPERATOR,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        });
+        await updateOrderLine(
+          tx,
+          v.cfg,
+          p.tabId,
+          line!.lineNo,
+          { portionLineNos: [], extras: [] },
+          order!.revision,
+          {
+            admission: testTradingAdmission(),
+            operatorId: OPERATOR,
+            expectedEdit: await readBillEditState(tx, p.tabId),
+          },
+        );
       });
       expect(copies(p.tabId)).toEqual([
         {
@@ -633,11 +657,19 @@ describe("A669 capture", () => {
     await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
     await inTx(v, async (tx) => {
       const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
-      await updateOrderLine(tx, v.cfg, p.tabId, 1, { extras: selection }, order!.revision, {
-        admission: testTradingAdmission(),
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-      });
+      await updateOrderLine(
+        tx,
+        v.cfg,
+        p.tabId,
+        1,
+        { portionLineNos: [], extras: selection },
+        order!.revision,
+        {
+          admission: testTradingAdmission(),
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+        },
+      );
     });
     const rows = copies(p.tabId);
     expect(rows).toHaveLength(2);
@@ -692,11 +724,19 @@ describe("A669 capture", () => {
         .select({ revision: workingOrders.revision })
         .from(workingOrders)
         .where(eq(workingOrders.id, p.tabId));
-      await updateOrderLine(tx, v.cfg, p.tabId, 1, { note: "New dish note" }, order!.revision, {
-        admission: testTradingAdmission(),
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-      });
+      await updateOrderLine(
+        tx,
+        v.cfg,
+        p.tabId,
+        1,
+        { portionLineNos: [], note: "New dish note" },
+        order!.revision,
+        {
+          admission: testTradingAdmission(),
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+        },
+      );
     });
     const after = copies(p.tabId);
     expect(after).toHaveLength(2);
@@ -731,11 +771,19 @@ describe("A669 capture", () => {
         .select({ revision: workingOrders.revision })
         .from(workingOrders)
         .where(eq(workingOrders.id, p.tabId));
-      await updateOrderLine(tx, v.cfg, p.tabId, 1, { note: "Changed note" }, order!.revision, {
-        admission: testTradingAdmission(),
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-      });
+      await updateOrderLine(
+        tx,
+        v.cfg,
+        p.tabId,
+        1,
+        { portionLineNos: [], note: "Changed note" },
+        order!.revision,
+        {
+          admission: testTradingAdmission(),
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+        },
+      );
     });
     const replacement = expectCopies(p.tabId, null);
     expect(replacement.lineId).toBe(old.lineId);

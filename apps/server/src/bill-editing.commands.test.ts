@@ -4,10 +4,8 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billEditStates,
-  kitchenStations,
   orderDraftEvents,
   orderDraftLines,
-  orderDraftRecalledLines,
   orderDrafts,
   parties,
   serviceCommands,
@@ -19,20 +17,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons } from "@waitron/identity";
-import {
-  readChangesAfterSending,
-  setChangesAfterSending,
-} from "./testing/changes-after-sending.js";
 import { AppError } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { discardDraft, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
-import { recallToDraft } from "./draft-recall.js";
-import { setStationsWaitForPass } from "./testing/pass-waiting.js";
-
-import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 
 let venue: BillVenue;
@@ -108,51 +98,12 @@ function take(
   );
 }
 
-async function sentDish(p: Awaited<ReturnType<typeof fixture>>) {
-  await inTx(venue, (tx) =>
-    submitGroups(tx, venue.cfg, p.partyId, {
-      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      operatorId: venue.operatorId,
-      submissionId: randomUUID(),
-      expectedPartyRevision: p.revision,
-      groups: [{ release: "fire", lines: [fresh()] }],
-    }),
-  );
-  const [line] = await venue.db
-    .select()
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, p.tabId));
-  return line!;
-}
-
-async function recall(
-  partyId: string,
-  lineId: string,
-  expectedEdit: BillEditExpected,
-  operatorId = venue.operatorId,
-  submissionId = randomUUID(),
-) {
-  const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
-  return inTx(venue, (tx) =>
-    recallToDraft(tx, venue.cfg, partyId, lineId, {
-      expectedPartyRevision: party!.revision,
-      operatorId,
-      submissionId,
-      expectedEdit,
-    }),
-  );
-}
-
 async function rows() {
   return {
     parties: await venue.db.select().from(parties).orderBy(parties.id),
     edits: await venue.db.select().from(billEditStates).orderBy(billEditStates.billId),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
-    sources: await venue.db
-      .select()
-      .from(orderDraftRecalledLines)
-      .orderBy(orderDraftRecalledLines.id),
     events: await venue.db.select().from(orderDraftEvents).orderBy(orderDraftEvents.id),
     commands: await venue.db.select().from(serviceCommands).orderBy(serviceCommands.id),
     charges: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
@@ -316,7 +267,6 @@ describe("bill editor in real save and takeover commands", () => {
     });
     const after = await rows();
     expect(after.fresh).toEqual(before.fresh);
-    expect(after.sources).toEqual(before.sources);
     expect(after.charges).toEqual(before.charges);
     expect(after.tickets).toEqual(before.tickets);
     expect(after.bills).toEqual(before.bills);
@@ -493,120 +443,6 @@ describe("bill editor in real save and takeover commands", () => {
     expect(reacquired.edit.editorVersion).toBe(3);
   });
 
-  it("Recall acquires an unowned bill and returns its saved source and edit state", async () => {
-    const p = await fixture();
-    const source = await sentDish(p);
-    const recalled = await recall(p.partyId, source.id, blank(p.tabId));
-    expect(recalled).toMatchObject({
-      draft: { billId: p.tabId, ownerId: venue.operatorId, lines: [{ sourceLineId: source.id }] },
-      edit: { billId: p.tabId, editorId: venue.operatorId, editorVersion: 1, draftRevision: 0 },
-    });
-    expect(recalled.edit.draftId).toBe(recalled.draft.id);
-  });
-
-  it("Recall loses to a rival first save without changing charges, tickets or audit", async () => {
-    const p = await fixture();
-    const source = await sentDish(p);
-    const saved = await save(p.partyId, blank(p.tabId), [fresh()], venue.adminId);
-    await refused(() => recall(p.partyId, source.id, blank(p.tabId)), "draft.taken_over", {
-      billId: p.tabId,
-      draftId: saved.draft!.id,
-      ownerId: venue.adminId,
-      ownerName: saved.edit.editorName,
-      edit: saved.edit,
-    });
-  });
-
-  it("A773 requested lifecycle: Recall of a Requested dish loses to another editor, writing nothing", async () => {
-    const stationIds = (
-      await venue.db.select({ id: kitchenStations.id }).from(kitchenStations)
-    ).map((row) => row.id);
-    await inTx(venue, (tx) => setStationsWaitForPass(tx, true, stationIds));
-    try {
-      const p = await fixture();
-      const source = await sentDish(p);
-      const [item] = await venue.db
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderLineId, source.id));
-      expect(item).toMatchObject({ requestedAt: expect.any(String), firedAt: null });
-      const saved = await save(p.partyId, blank(p.tabId), [fresh()], venue.adminId);
-      const current = await inTx(venue, (tx) => readBillEditState(tx, p.tabId));
-      await refused(() => recall(p.partyId, source.id, current), "draft.taken_over", {
-        billId: p.tabId,
-        draftId: saved.draft!.id,
-        ownerId: venue.adminId,
-        ownerName: saved.edit.editorName,
-        edit: saved.edit,
-      });
-    } finally {
-      await inTx(venue, (tx) => setStationsWaitForPass(tx, false, stationIds));
-    }
-  });
-
-  it("first save loses to a rival Recall without creating a parallel outbox", async () => {
-    const p = await fixture();
-    const source = await sentDish(p);
-    const recalled = await recall(p.partyId, source.id, blank(p.tabId), venue.adminId);
-    await refused(() => save(p.partyId, blank(p.tabId)), "draft.taken_over", {
-      billId: p.tabId,
-      draftId: recalled.draft.id,
-      ownerId: venue.adminId,
-      ownerName: recalled.edit.editorName,
-      edit: recalled.edit,
-    });
-  });
-
-  it("Recall appends to the editor's current outbox without changing the editor version", async () => {
-    const p = await fixture();
-    const source = await sentDish(p);
-    const saved = await save(p.partyId, blank(p.tabId));
-    const recalled = await recall(p.partyId, source.id, saved.edit);
-    expect(recalled.edit).toEqual({ ...saved.edit, draftRevision: 1 });
-    expect(recalled.draft.id).toBe(saved.draft!.id);
-    expect(recalled.draft.lines.map((line) => line.id)[0]).toBe(saved.draft!.lines[0]!.id);
-    expect(recalled.draft.lines[1]!.sourceLineId).toBe(source.id);
-  });
-
-  it("a completed Recall replays its original edit state after takeover", async () => {
-    const p = await fixture();
-    const source = await sentDish(p);
-    const id = randomUUID();
-    const recalled = await recall(p.partyId, source.id, blank(p.tabId), venue.operatorId, id);
-    await take(p.partyId, recalled.edit);
-    const before = await rows();
-    expect(await recall(p.partyId, source.id, blank(p.tabId), venue.operatorId, id)).toEqual(
-      recalled,
-    );
-    expect(await rows()).toEqual(before);
-    await refused(
-      () =>
-        recall(p.partyId, source.id, { ...blank(p.tabId), editorVersion: 1 }, venue.operatorId, id),
-      "submission.id_reused",
-      { submissionId: id },
-    );
-  });
-  it("Recall checks the other editor before the station's sent-edit restriction", async () => {
-    const p = await fixture();
-    const source = await sentDish(p);
-    const saved = await save(p.partyId, blank(p.tabId), [fresh()], venue.adminId);
-    const found = await inTx(venue, (tx) => readChangesAfterSending(tx));
-    await inTx(venue, (tx) => setChangesAfterSending(tx, "never"));
-    try {
-      await refused(() => recall(p.partyId, source.id, blank(p.tabId)), "draft.taken_over", {
-        billId: p.tabId,
-        draftId: saved.draft!.id,
-        ownerId: venue.adminId,
-        ownerName: saved.edit.editorName,
-        edit: saved.edit,
-      });
-    } finally {
-      await inTx(venue, async (tx) => {
-        for (const [id, value] of found) await setChangesAfterSending(tx, value, [id]);
-      });
-    }
-  });
-
   it("the save HTTP route refuses a missing expectation without allocating an outbox", async () => {
     const p = await fixture();
     const before = await rows();
@@ -624,29 +460,6 @@ describe("bill editor in real save and takeover commands", () => {
       },
     });
     expect(await rows()).toEqual(before);
-  });
-
-  it("the Recall HTTP route uses the required edit state and returns its acquired snapshot", async () => {
-    const p = await fixture();
-    const source = await sentDish(p);
-    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
-    const answer = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${p.partyId}/lines/${source.id}/recall`,
-      {
-        submissionId: randomUUID(),
-        expectedPartyRevision: party!.revision,
-        expectedEdit: blank(p.tabId),
-        operatorId: venue.adminId,
-      },
-    );
-    expect(answer.status).toBe(200);
-    expect(answer.json).toMatchObject({
-      draft: { ownerId: venue.operatorId, billId: p.tabId, lines: [{ sourceLineId: source.id }] },
-      edit: { editorId: venue.operatorId, editorVersion: 1, billId: p.tabId },
-    });
   });
 
   it("a takeover replay still requires a current authenticated session", async () => {
@@ -707,15 +520,10 @@ function discardSaved(
   operatorId = venue.operatorId,
 ) {
   return inTx(venue, (tx) =>
-    discardDraft(
-      tx,
-      venue.cfg,
-      saved.draft!.partyId,
-      saved.draft!.id,
-      operatorId,
-      { ...ask, admission: testTradingAdmission() },
-      "es-ES",
-    ),
+    discardDraft(tx, venue.cfg, saved.draft!.partyId, saved.draft!.id, operatorId, {
+      ...ask,
+      admission: testTradingAdmission(),
+    }),
   );
 }
 

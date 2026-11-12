@@ -3,7 +3,7 @@ import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   sales,
@@ -11,7 +11,6 @@ import {
   tenders,
   orderDraftEvents,
   orderDraftLines,
-  orderDraftRecalledLines,
   orderDrafts,
   parties,
   printJobs,
@@ -19,11 +18,10 @@ import {
   ticketItems,
   workingOrderLines,
   workingOrders,
-  withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
+import { adjustments } from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   allergyLineTicks,
@@ -35,23 +33,10 @@ import { discardDraft, type Draft, type BillDraftSnapshot } from "./order-drafts
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { AppError, PERSON_HEADER } from "@waitron/shared";
-import {
-  watchDerivationsAndLock,
-  watchedDerivationCount,
-  watchedOrder,
-} from "./testing/watched-scrypt.js";
-
-vi.mock("node:crypto", async (importOriginal) =>
-  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
-);
-afterEach(async () => {
-  await watchedOrder();
-});
 import { fiscalRecordCount, send as rawPaymentSend } from "./testing/bill-venue.js";
 import {
   billWith,
   inTx,
-  PINS,
   provisionAdjustmentVenue,
   rowsOf,
   type AdjustmentVenue,
@@ -74,27 +59,7 @@ async function billRevision(billId: string) {
   const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   return bill!.revision;
 }
-async function recall(partyId: string, lineId: string) {
-  const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
-  const [line] = await venue.db
-    .select()
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.id, lineId));
-  const answer = await call("POST", `/api/parties/${partyId}/lines/${lineId}/recall`, {
-    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, line!.workingOrderId)),
-    submissionId: randomUUID(),
-    expectedPartyRevision: party!.revision,
-  });
-  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-  return (answer.json as unknown as { draft: Draft }).draft;
-}
-async function setup(
-  paidLast = false,
-  paidWater = false,
-  discounted = false,
-  release: "hold" | "fire" = "hold",
-  shape?: "grouped",
-) {
+async function setup(paidWater = false, discounted = false) {
   const p = await billWith(
     venue,
     [
@@ -102,17 +67,17 @@ async function setup(
       { name: "Burger", quantity: "3" },
       { name: "Water" },
     ],
-    { release, ...(shape === undefined ? {} : { shape }) },
+    { release: "hold", shape: "grouped" },
   );
   const [pizza, extra, burger, water] = await rowsOf(venue, p.billId);
-  if (paidLast || paidWater) {
+  if (paidWater) {
     const payment = await call("POST", `/api/working-orders/${p.billId}/payments`, {
       submissionId: randomUUID(),
       kind: "items",
-      lines: [{ lineNo: (paidWater ? water : burger)!.lineNo, quantity: paidWater ? "1" : "2" }],
+      lines: [{ lineNo: water!.lineNo, quantity: "1" }],
       method: "cash",
-      tendered: paidWater ? "2.00" : "24.00",
-      applied: paidWater ? "2.00" : "24.00",
+      tendered: "2.00",
+      applied: "2.00",
       tip: "0.00",
     });
     expect(payment.status, JSON.stringify(payment.json)).toBe(200);
@@ -130,9 +95,42 @@ async function setup(
     });
     expect(discount.status, JSON.stringify(discount.json)).toBe(200);
   }
-  await recall(p.partyId, pizza!.id);
-  const draft = await recall(p.partyId, burger!.id);
-  return { ...p, pizza: pizza!, extra: extra!, burger: burger!, draft };
+  let draft: Draft;
+  for (let revision = 0; revision < 2; revision++) {
+    const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+      billId: p.billId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
+      draftId: revision === 0 ? null : draft!.id,
+      revision: 0,
+      lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
+    });
+    expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+    draft = (saved.json as unknown as BillDraftSnapshot).draft!;
+  }
+  if (paidWater) {
+    for (const line of [pizza!, burger!]) {
+      const path = `/api/parties/${p.partyId}/lines/${line.id}`;
+      const read = await call("GET", `${path}/cancellation`);
+      expect(read.status, JSON.stringify(read.json)).toBe(200);
+      const current = read.json as unknown as {
+        context: unknown;
+        revision: number;
+        billRevision: number;
+      };
+      const cancelled = await call("POST", `${path}/cancel-item`, {
+        quantity: line.quantity,
+        outcome: "remove_charge",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
+        expectedPartyRevision: current.revision,
+        expectedBillRevision: current.billRevision,
+        expectedContext: current.context,
+        submissionId: randomUUID(),
+        reasonId: venue.reasonId.houseVoid,
+      });
+      expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
+    }
+  }
+  return { ...p, pizza: pizza!, extra: extra!, burger: burger!, draft: draft! };
 }
 async function request(
   p: Awaited<ReturnType<typeof setup>>,
@@ -143,8 +141,6 @@ async function request(
     revision: p.draft.revision,
     expectedRevision: await billRevision(p.billId),
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
-    reasonId: venue.reasonId.houseVoid,
-    note: null,
     ...overrides,
   };
 }
@@ -160,10 +156,6 @@ async function frozen() {
     lines: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
-    sources: await venue.db
-      .select()
-      .from(orderDraftRecalledLines)
-      .orderBy(orderDraftRecalledLines.id),
     events: await venue.db.select().from(orderDraftEvents).orderBy(orderDraftEvents.id),
     parties: await venue.db.select().from(parties).orderBy(parties.id),
     commands: await venue.db.select().from(serviceCommands).orderBy(serviceCommands.id),
@@ -189,8 +181,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
         p.draft.id,
         venue.staffId,
         { ...body, admission: testTradingAdmission() },
-        venue.venueLocale,
-        undefined,
         attendance,
       ),
     );
@@ -213,8 +203,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
           p.draft.id,
           venue.staffId,
           { ...body, admission: testTradingAdmission() },
-          venue.venueLocale,
-          undefined,
           attendance,
         ),
       ),
@@ -227,7 +215,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     ).toEqual(facts);
   });
 
-  it("rolls back cancelled families, discard and attendance together if final capture refuses", async () => {
+  it("rolls back the fresh discard and attendance together if final capture refuses", async () => {
     const p = await setup();
     const body = await request(p);
     const facts = await venue.db
@@ -244,8 +232,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
           p.draft.id,
           venue.staffId,
           { ...body, admission: testTradingAdmission() },
-          venue.venueLocale,
-          undefined,
           {
             clock: venue.clock,
             recorder: async (recordTx, fact) => {
@@ -304,7 +290,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     },
   );
 
-  it("keeps another owner's other-bill draft while the current owner discards recalled dishes", async () => {
+  it("keeps another owner's other-bill draft while the current owner discards fresh dishes", async () => {
     const p = await setup();
     const otherBill = await inTx(venue, (tx) =>
       seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId: p.partyId }),
@@ -329,14 +315,13 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(after.drafts.find((r) => r.id === otherDraft.id)).toEqual(
       before.drafts.find((r) => r.id === otherDraft.id),
     );
-    expect(after.fresh).toEqual(before.fresh);
+    expect(after.fresh).toEqual(before.fresh.filter((row) => row.draftId !== p.draft.id));
     const read = await call("GET", `/api/parties/${p.partyId}/drafts`);
     expect(read.json).toEqual({ drafts: [otherDraft], billEdits: expect.any(Array) });
   });
 
-  it("allows the new owner after takeover while retaining the adjustment actor", async () => {
-    // Grouped, as an order stored before portions.
-    const p = await setup(false, false, false, "hold", "grouped");
+  it("allows the new owner after takeover and records that owner as the discard actor", async () => {
+    const p = await setup();
     const taken = await call(
       "POST",
       `/api/parties/${p.partyId}/drafts/${p.draft.id}/take-over`,
@@ -352,15 +337,14 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const answer = await discard(p, await request(p), venue.cookie.manager);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(
-      (await frozen()).adjustments.filter(
-        (r) => r.workingOrderId === p.billId && r.action === "cancel",
-      ),
-    ).toMatchObject([{ requestedBy: venue.managerId }, { requestedBy: venue.managerId }]);
+      (await frozen()).events.filter((r) => r.draftId === p.draft.id && r.kind === "discarded"),
+    ).toMatchObject([
+      { actorId: venue.managerId, fromPerson: venue.managerId, toPerson: venue.managerId },
+    ]);
   });
 
-  it("removes cancelled sources' allergy ticks and keeps each guest and another dish's tick", async () => {
-    // Grouped, as an order stored before portions.
-    const p = await setup(false, false, false, "hold", "grouped");
+  it("removes discarded fresh allergy ticks and keeps each guest and the bill's tick", async () => {
+    const p = await setup();
     const water = (await rowsOf(venue, p.billId))[3]!;
     const allergy = await inTx(venue, async (tx) => {
       const [party] = await tx.select().from(parties).where(eq(parties.id, p.partyId));
@@ -375,7 +359,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         venue.staffId,
       );
       await setAllergyLineTicks(tx, p.partyId, [
-        { workingLineId: p.pizza.id, guestId: saved.guests[0]!.id },
+        { draftLineId: p.draft.lines[0]!.id, guestId: saved.guests[0]!.id },
         { workingLineId: water.id, guestId: saved.guests[0]!.id },
       ]);
       return saved;
@@ -386,65 +370,11 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const after = await frozen();
     expect(after.allergyGuests).toEqual(before.allergyGuests);
     expect(after.allergyTicks).toEqual(
-      before.allergyTicks.filter((t) => t.workingLineId !== p.pizza.id),
+      before.allergyTicks.filter((t) => t.draftLineId !== p.draft.lines[0]!.id),
     );
     expect(
       after.allergyTicks.some((t) => t.workingLineId === water.id && t.guestId === guestId),
     ).toBe(true);
-  });
-
-  it("derives one manager key outside the write lock for all recalled families", async () => {
-    const p = await setup();
-    const reason = await inTx(venue, (tx) =>
-      createAdjustmentReason(tx, {
-        name: `Discard-key-${randomUUID()}`,
-        names: {},
-        kind: "void",
-        actions: ["cancel"],
-        maxPercentBp: null,
-        maxAmount: null,
-        applyRoles: [],
-        approverRoles: [],
-        noteRequired: false,
-      }),
-    );
-    const body = await request(p, {
-      reasonId: reason.id,
-      approver: { personId: venue.managerId, pin: PINS.manager },
-    });
-    watchDerivationsAndLock(venue.db, PINS.manager, () =>
-      withTransaction(venue.db, (tx) => tx.execute(sql`select 1`)),
-    );
-    const answer = await discard(p, body);
-    expect(answer.status).toBe(200);
-    expect(await watchedOrder()).toEqual(["writer", "derived"]);
-    expect(watchedDerivationCount()).toBe(1);
-  });
-
-  it("rejects a wrong approver PIN without partially cancelling", async () => {
-    const p = await setup(false, false, false, "fire");
-    const reason = await inTx(venue, (tx) =>
-      createAdjustmentReason(tx, {
-        name: `Discard-pin-${randomUUID()}`,
-        names: {},
-        kind: "void",
-        actions: ["cancel"],
-        maxPercentBp: null,
-        maxAmount: null,
-        applyRoles: [],
-        approverRoles: [],
-        noteRequired: false,
-      }),
-    );
-    const body = await request(p, {
-      reasonId: reason.id,
-      approver: { personId: venue.managerId, pin: "9999" },
-    });
-    const before = await frozen();
-    const answer = await discard(p, body);
-    expect(answer.status).toBe(401);
-    expect(answer.json).toMatchObject({ code: "pin.invalid" });
-    expect(await frozen()).toEqual(before);
   });
 
   it.each([
@@ -452,10 +382,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
     ["revision", -1],
     ["expectedRevision", null],
     ["expectedRevision", "1"],
-    ["reasonId", null],
-    ["reasonId", ["not-a-uuid"]],
-    ["note", 123],
-    ["note", "x".repeat(501)],
     ["submissionId", ""],
   ])("refuses malformed %s before changing the draft", async (field, value) => {
     const p = await setup();
@@ -466,57 +392,25 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(await frozen()).toEqual(before);
   });
 
-  it("cancels both frozen discounted families, discards fresh work and replays once", async () => {
-    // Grouped, as an order stored before portions.
-    const p = await setup(false, false, true, "hold", "grouped");
-    const read = await call("GET", `/api/parties/${p.partyId}/drafts`);
-    const current = (read.json as unknown as { drafts: Draft[] }).drafts[0]!;
-    const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
-      billId: p.billId,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
-      draftId: current.id,
-      revision: current.revision,
-      lines: [...current.lines, { menuItemId: venue.item("Bread"), quantity: "1" }],
-    });
-    expect(saved.status, JSON.stringify(saved.json)).toBe(200);
-    p.draft = (saved.json as unknown as BillDraftSnapshot).draft!;
+  it("discards fresh work once while keeping discounted bill families and other drafts unchanged", async () => {
+    const p = await setup(false, true);
     const other = await setup();
     const before = await frozen();
+    const records = fiscalRecordCount(venue);
     const body = await request(p);
     const answer = await discard(p, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(await rowsOf(venue, p.billId)).toEqual([
-      expect.objectContaining({ name: "Water", quantity: "1.000", lineTotal: "1.80" }),
-    ]);
     const after = await frozen();
-    const cancelled = after.adjustments.filter(
-      (r) => r.workingOrderId === p.billId && r.action === "cancel",
-    );
-    expect(cancelled).toHaveLength(2);
-    expect(cancelled).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          lineId: p.pizza.id,
-          quantity: 2000,
-          reduction: 2160,
-          nominalValue: 2400,
-        }),
-        expect.objectContaining({
-          lineId: p.burger.id,
-          quantity: 3000,
-          reduction: 3240,
-          nominalValue: 3600,
-        }),
-      ]),
-    );
-    expect(
-      after.adjustments.filter((r) => before.adjustments.some((old) => old.id === r.id)),
-    ).toEqual(before.adjustments);
+    expect(after.lines).toEqual(before.lines);
+    expect(after.adjustments).toEqual(before.adjustments);
+    expect(after.sales).toEqual(before.sales);
+    expect(after.saleLines).toEqual(before.saleLines);
+    expect(after.tenders).toEqual(before.tenders);
+    expect(fiscalRecordCount(venue)).toBe(records);
     expect(after.drafts.find((r) => r.id === p.draft.id)).toMatchObject({
       state: "discarded",
-      revision: p.draft.revision + 3,
+      revision: p.draft.revision + 1,
     });
-    expect(after.sources.filter((r) => r.draftId === p.draft.id)).toEqual([]);
     expect(
       after.events.filter((r) => r.draftId === p.draft.id && r.kind === "discarded"),
     ).toMatchObject([
@@ -529,22 +423,24 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(after.drafts.find((r) => r.id === other.draft.id)).toEqual(
       before.drafts.find((r) => r.id === other.draft.id),
     );
-    expect(after.sources.filter((r) => r.draftId === other.draft.id)).toEqual(
-      before.sources.filter((r) => r.draftId === other.draft.id),
-    );
     expect(after.items).toEqual(before.items);
     expect(after.jobs).toEqual(before.jobs);
     expect(answer.json).toMatchObject({
       draftId: p.draft.id,
-      revision: p.draft.revision + 3,
-      adjustmentIds: [
-        cancelled.find((r) => r.lineId === p.pizza.id)!.id,
-        cancelled.find((r) => r.lineId === p.burger.id)!.id,
-      ],
+      revision: p.draft.revision + 1,
+      adjustmentIds: [],
     });
     expect((await discard(p, body)).json).toEqual(answer.json);
     expect(await frozen()).toEqual(after);
-    expect((await discard(p, { ...body, note: "Another request" })).json).toMatchObject({
+    expect(
+      (
+        await discard(p, {
+          ...body,
+          revision: body.revision + 1,
+          expectedEdit: { ...body.expectedEdit, draftRevision: body.revision + 1 },
+        })
+      ).json,
+    ).toMatchObject({
       code: "submission.id_reused",
     });
     expect(await frozen()).toEqual(after);
@@ -555,7 +451,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   it.each([false, true])(
     "rolls back the discard and its cached answer when issuance refuses (recorded=%s)",
     async (recordFirst) => {
-      const p = await setup(false, true, false, "hold", "grouped");
+      const p = await setup(true);
       const body = await request(p);
       const before = await frozen();
       const records = fiscalRecordCount(venue);
@@ -582,7 +478,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   );
 
   it("rolls back the invoice when caching the completed discard refuses", async () => {
-    const p = await setup(false, true, false, "hold", "grouped");
+    const p = await setup(true);
     const body = await request(p);
     const before = await frozen();
     const records = fiscalRecordCount(venue);
@@ -601,9 +497,8 @@ describe("Discard resolves the whole owned draft atomically", () => {
     }
   });
 
-  it("uses the existing settlement when cancelling sources leaves the remaining bill fully paid", async () => {
-    // Grouped, as an order stored before portions.
-    const p = await setup(false, true, false, "hold", "grouped");
+  it("issues the paid bill once after the final fresh draft is discarded", async () => {
+    const p = await setup(true);
     const body = await request(p);
     const before = await frozen();
     const recordsBefore = fiscalRecordCount(venue);
@@ -645,73 +540,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(await frozen()).toEqual(before);
   });
 
-  it("rolls back the first family when a later recalled family contains paid units", async () => {
-    // Grouped, as an order stored before portions.
-    const p = await setup(true, false, false, "hold", "grouped");
-    const before = await frozen();
-    const answer = await discard(p, await request(p));
-    expect(answer.json).toMatchObject({
-      code: "bill.line_paid",
-      params: { lineNo: p.burger.lineNo },
-    });
-    expect(await frozen()).toEqual(before);
-  });
-
-  it("retains reason, required-note and refund-approval policy for the whole Discard", async () => {
-    // Grouped, as an order stored before portions.
-    const p = await setup(false, false, false, "fire", "grouped");
-    const reason = await inTx(venue, (tx) =>
-      createAdjustmentReason(tx, {
-        name: `Discard-${randomUUID()}`,
-        names: {},
-        kind: "void",
-        actions: ["cancel"],
-        maxPercentBp: null,
-        maxAmount: null,
-        applyRoles: [],
-        approverRoles: [],
-        noteRequired: true,
-      }),
-    );
-    const before = await frozen();
-    const body = await request(p, { reasonId: reason.id });
-    expect((await discard(p, body)).json).toMatchObject({ code: "adjustment.note_required" });
-    expect(await frozen()).toEqual(before);
-    expect((await discard(p, { ...body, note: "Duplicate order" })).json).toMatchObject({
-      code: "adjustment.approval_required",
-    });
-    expect(await frozen()).toEqual(before);
-    const approved = await discard(p, {
-      ...body,
-      note: "Duplicate order",
-      approver: { personId: venue.managerId, pin: PINS.manager },
-    });
-    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
-    const rows = (await frozen()).adjustments.filter(
-      (r) => r.workingOrderId === p.billId && r.action === "cancel",
-    );
-    expect(rows).toMatchObject([
-      {
-        requestedBy: venue.staffId,
-        approvedBy: venue.managerId,
-        note: "Duplicate order",
-        reasonId: reason.id,
-      },
-      {
-        requestedBy: venue.staffId,
-        approvedBy: venue.managerId,
-        note: "Duplicate order",
-        reasonId: reason.id,
-      },
-    ]);
-    expect(rows).toHaveLength(2);
-    const commands = (await frozen()).commands.filter(
-      (r) => r.scopeId === p.billId || r.scopeId === p.partyId,
-    );
-    expect(JSON.stringify(commands)).not.toContain(JSON.stringify(PINS.manager));
-    expect(JSON.stringify(commands)).not.toContain('"pin"');
-  });
-
   it("does not take over another person's draft", async () => {
     const p = await setup();
     const before = await frozen();
@@ -746,7 +574,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   );
 
   it.each(["placed", "settled", "paying"] as const)(
-    "refuses a %s bill before discarding sources",
+    "refuses a %s bill before discarding fresh work",
     async (status) => {
       const p = await setup();
       await inTx(venue, (tx) =>
@@ -815,46 +643,20 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(await frozen()).toEqual(before);
   });
 
-  it("requires a reason only when the draft holds recalled charges", async () => {
+  it("discards a fresh draft without an adjustment reason", async () => {
     const p = await setup();
-    const body = await request(p);
-    delete (body as { reasonId?: string }).reasonId;
     const before = await frozen();
-    expect((await discard(p, body)).json).toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "reasonId" },
-    });
-    expect(await frozen()).toEqual(before);
-    const freshParty = await billWith(venue, [{ name: "Water" }], { release: "hold" });
-    const saved = await call("PUT", `/api/parties/${freshParty.partyId}/drafts`, {
-      billId: freshParty.billId,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, freshParty.billId)),
-      draftId: null,
-      revision: 0,
-      lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
-    });
-    expect(saved.status).toBe(200);
-    const draft = (saved.json as unknown as BillDraftSnapshot).draft!;
-    const freshBefore = await frozen();
-    const answer = await discard(
-      { ...freshParty, draft },
-      {
-        submissionId: randomUUID(),
-        revision: draft.revision,
-        expectedRevision: await billRevision(freshParty.billId),
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, freshParty.billId)),
-      },
-    );
+    const answer = await discard(p, await request(p));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(answer.json).toMatchObject({
-      draftId: draft.id,
-      revision: draft.revision + 1,
+      draftId: p.draft.id,
+      revision: p.draft.revision + 1,
       adjustmentIds: [],
     });
     const after = await frozen();
-    expect(after.lines).toEqual(freshBefore.lines);
-    expect(after.adjustments).toEqual(freshBefore.adjustments);
-    expect(after.drafts.find((r) => r.id === draft.id)).toMatchObject({ state: "discarded" });
+    expect(after.lines).toEqual(before.lines);
+    expect(after.adjustments).toEqual(before.adjustments);
+    expect(after.drafts.find((r) => r.id === p.draft.id)).toMatchObject({ state: "discarded" });
   });
 });
 

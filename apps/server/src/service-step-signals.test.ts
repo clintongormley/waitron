@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { DatabaseSync, StatementSync } from "node:sqlite";
@@ -5,8 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   diningTables,
   floorZones,
-  orderDraftRecalledLines,
-  orderDrafts,
   orderGroupEvents,
   parties,
   partyTables,
@@ -23,11 +22,9 @@ import {
   serviceSteps,
 } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { createCourse } from "./kitchen.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { discardDraft } from "./order-drafts.js";
 import { fireGroup } from "./order-groups.js";
 import {
   readStepFacts,
@@ -256,7 +253,7 @@ describe("readTableSteps", () => {
     ]);
   });
 
-  it("a recalled dish and an abandoned bill's dishes are left out", async () => {
+  it("a cancelled dish and an abandoned bill's dishes are left out", async () => {
     const v = await setupPartyVenue(suite.db);
     const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains", heldUntilFired: false }));
     const [dessert] = await setSteps(v, await tablesDepartment(v), [
@@ -275,16 +272,8 @@ describe("readTableSteps", () => {
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, abandoned)),
     );
     await openDraft(v, partyId, tabId);
-    const lineId = await lineIdOf(v, tabId, "Paella");
-    await inTx(v, async (tx) => {
-      const [draft] = await tx
-        .select({ id: orderDrafts.id })
-        .from(orderDrafts)
-        .where(eq(orderDrafts.partyId, partyId));
-      await tx
-        .insert(orderDraftRecalledLines)
-        .values({ draftId: draft!.id, sourceLineId: lineId, position: 1 });
-    });
+    const paellaNo = await lineNoOf(v, tabId, "Paella");
+    await inTx(v, (tx) => cancelItemForTest(tx, v.cfg, tabId, paellaNo, undefined, OPERATOR));
 
     const servedAt = await serve(v, tabId, "Burger");
 
@@ -884,62 +873,6 @@ describe("a party whose dishes arrived from another table or the counter", () =>
   }
 
   for (const release of ["hold", "fire"] as const) {
-    it(`${release}: the only arrived dish recalled into a draft stops counting, and discarding the draft removes it`, async () => {
-      const v = await setupPartyVenue(suite.db);
-      const { takeOrder, partyId, tableId, billId, lineId } = await arrivedDish(v, release);
-
-      const expectedPartyRevision = await revisionOf(v, partyId);
-      const { draft } = await inTx(v, async (tx) =>
-        recallToDraft(tx, v.cfg, partyId, lineId, {
-          submissionId: randomUUID(),
-          expectedPartyRevision,
-          operatorId: OPERATOR,
-          expectedEdit: await readBillEditState(tx, billId),
-        }),
-      );
-
-      expect(await factsOf(v, partyId, tableId)).toMatchObject({
-        firstOrderAt: null,
-        lastOrderAt: null,
-        ordersArrived: false,
-        drafting: true,
-      });
-      expect(await liveAt(v, partyId, tableId)).toEqual([]);
-
-      await inTx(v, async (tx) => {
-        await ensureOperator(tx, OPERATOR);
-        const [bill] = await tx
-          .select({ revision: workingOrders.revision })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, billId));
-        await discardDraft(
-          tx,
-          v.cfg,
-          partyId,
-          draft.id,
-          OPERATOR,
-          {
-            submissionId: randomUUID(),
-            revision: draft.revision,
-            expectedRevision: bill!.revision,
-            expectedEdit: await readBillEditState(tx, billId),
-            reasonId: await cancelReasonId(tx),
-            note: null,
-            admission: testTradingAdmission(),
-          },
-          v.cfg.locale,
-        );
-      });
-
-      expect(await factsOf(v, partyId, tableId)).toMatchObject({
-        firstOrderAt: null,
-        lastOrderAt: null,
-        ordersArrived: false,
-        drafting: false,
-      });
-      expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([takeOrder]);
-    });
-
     it(`${release}: the only arrived dish cancelled off the bill stops counting`, async () => {
       const v = await setupPartyVenue(suite.db);
       const { takeOrder, partyId, tableId, billId } = await arrivedDish(v, release);

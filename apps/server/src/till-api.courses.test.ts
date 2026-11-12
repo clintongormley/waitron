@@ -489,48 +489,6 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
 });
 
 describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)", () => {
-  /** Recalls SOUP (line 1, fired) so it is held again, outside any held group. */
-  async function recallSoup(tabId: string): Promise<void> {
-    const recall = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: await billBody(tabId, { lineNos: [1] }),
-    });
-    expect(recall.status).toBe(200);
-  }
-
-  it("sends a NAMED recalled line (200) — the queue then shows it fired", async () => {
-    const tabId = await tabWithSoupAndSteak();
-    const station = await kitchenStationId();
-    await recallSoup(tabId);
-    expect((await queueItemsByName(tabId, station)).get(SOUP)!.firedAt).toBeNull();
-
-    const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: await billBody(tabId, { lineNos: [1] }),
-    });
-    expect(res.status).toBe(200);
-    expect((await queueItemsByName(tabId, station)).get(SOUP)!.firedAt).not.toBeNull();
-  });
-
-  it("an OMITTED line list sends every recalled line (200) and leaves the held group's line held", async () => {
-    const tabId = await tabWithSoupAndSteak();
-    const station = await kitchenStationId();
-    await recallSoup(tabId);
-    expect((await queueItemsByName(tabId, station)).get(SOUP)!.firedAt).toBeNull();
-
-    const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: await billBody(tabId, {}),
-    });
-    expect(res.status).toBe(200);
-    const after = await queueItemsByName(tabId, station);
-    expect(after.get(SOUP)!.firedAt).not.toBeNull();
-    expect(after.get(STEAK)!.firedAt).toBeNull();
-  });
-
   it("a malformed tab id is 409 tab.not_open, screened by requireTabParam before any DB touch", async () => {
     const res = await app.request(`/api/working-orders/not-a-uuid/lines/send`, {
       method: "POST",
@@ -545,84 +503,6 @@ describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)
 
   it("REJECTS with 401 session.required when no cookie is present", async () => {
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/send`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ lineNos: [1] }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-});
-
-describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started line)", () => {
-  it("recalls a fired-not-started line (200) — the queue then shows it held again", async () => {
-    const tabId = await tabWithSoupAndSteak();
-    const station = await kitchenStationId();
-    // SOUP (line 1) was sent in a group released `fire` — the queue shows it fired.
-    expect((await queueItemsByName(tabId, station)).get(SOUP)!.firedAt).not.toBeNull();
-
-    const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: await billBody(tabId, { lineNos: [1] }),
-    });
-    expect(res.status).toBe(200);
-    // Recalled → fired_at cleared, so the line greys back to held on the station display.
-    expect((await queueItemsByName(tabId, station)).get(SOUP)!.firedAt).toBeNull();
-  });
-
-  it("refuses a STARTED line (409 ticket.already_started), naming its item id", async () => {
-    const tabId = await tabWithSoupAndSteak();
-    const station = await kitchenStationId();
-    const soupItemId = (await queueItemsByName(tabId, station)).get(SOUP)!.id;
-
-    // The kitchen begins the (fired) SOUP line — advance it to `preparing` via the bump route.
-    const advance = await app.request(`/api/ticket-items/${soupItemId}/advance`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "preparing", stationId: station }),
-    });
-    expect(advance.status).toBe(200);
-
-    // Recall is now refused — a started line is cancelled, not recalled.
-    const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: await billBody(tabId, { lineNos: [1] }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "ticket.already_started", params: { ticketItemId: soupItemId } },
-    });
-  });
-
-  it("a body naming no lines recalls nothing (200) — the fired line stays fired", async () => {
-    const tabId = await tabWithSoupAndSteak();
-    const station = await kitchenStationId();
-
-    const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: await billBody(tabId, {}),
-    });
-    expect(res.status).toBe(200);
-    expect((await queueItemsByName(tabId, station)).get(SOUP)!.firedAt).not.toBeNull();
-  });
-
-  it("a malformed tab id is 409 tab.not_open, screened by requireTabParam before any DB touch", async () => {
-    const res = await app.request(`/api/working-orders/not-a-uuid/lines/recall`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lineNos: [1] }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.not_open", params: { tabId: "not-a-uuid" } },
-    });
-  });
-
-  it("REJECTS with 401 session.required when no cookie is present", async () => {
-    const res = await app.request(`/api/working-orders/${randomUUID()}/lines/recall`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ lineNos: [1] }),

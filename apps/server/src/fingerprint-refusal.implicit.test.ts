@@ -1,3 +1,5 @@
+import { createAdjustmentReason } from "@waitron/adjustments";
+import { GIVE_AWAY_REASON } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -236,7 +238,12 @@ describe("late issuance rolls back its initiating command", () => {
       } else if (kind === "line edit") {
         method = "PUT";
         path = `/api/working-orders/${billId}/lines/1`;
-        body = { revision: bill!.revision, expectedEdit: edit, note: "Revised note" };
+        body = {
+          revision: bill!.revision,
+          expectedEdit: edit,
+          note: "Revised note",
+          portionLineNos: [],
+        };
       } else if (kind === "bill split") {
         path = `/api/bills/${billId}/split`;
         body = {
@@ -276,7 +283,13 @@ describe("late issuance rolls back its initiating command", () => {
         };
       } else {
         path = `/api/working-orders/${billId}/adjustments`;
-        body = await cancelBody(suite.db, billId, 2);
+        body = {
+          ...(await cancelBody(suite.db, billId, 2)),
+          action: "comp",
+          reasonId: await withTransaction(suite.db, (tx) =>
+            createAdjustmentReason(tx, GIVE_AWAY_REASON),
+          ).then((reason) => reason.id),
+        };
       }
     }
     const before = snapshot();

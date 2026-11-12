@@ -1,10 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import {
-  orderDraftLines,
-  orderDraftRecalledLines,
-  orderDrafts,
-  workingOrderLines,
-} from "@waitron/db";
+import { orderDraftLines, orderDrafts } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
@@ -23,13 +18,8 @@ export async function readBillUnsent(tx: Transaction, billId: string) {
     .select({ draftId: orderDraftLines.draftId, quantity: orderDraftLines.quantity })
     .from(orderDraftLines)
     .where(inArray(orderDraftLines.draftId, ids));
-  const recalled = await tx
-    .select({ draftId: orderDraftRecalledLines.draftId, quantity: workingOrderLines.quantity })
-    .from(orderDraftRecalledLines)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId))
-    .where(inArray(orderDraftRecalledLines.draftId, ids));
   const quantities = new Map<string, number>();
-  for (const line of [...fresh, ...recalled])
+  for (const line of fresh)
     quantities.set(line.draftId, (quantities.get(line.draftId) ?? 0) + line.quantity);
   const owners = [];
   for (const draft of drafts) {

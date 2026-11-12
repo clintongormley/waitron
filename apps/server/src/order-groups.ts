@@ -7,20 +7,7 @@ import {
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
-import {
-  and,
-  asc,
-  eq,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  ne,
-  not,
-  notExists,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { Column, SQL } from "drizzle-orm";
 import { productUnits, staffPresentationName, unitOwnerJoin, units } from "@waitron/catalogue";
 import { countsWholePortions } from "./order-state-counts.js";
@@ -34,7 +21,6 @@ import {
   orderGroupHoldStations,
   orderGroups,
   orderDraftLines,
-  orderDraftRecalledLines,
   orderDrafts,
   ticketItems,
   parties,
@@ -95,7 +81,6 @@ import "./errors.js";
 import { heldPaperReach, stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { readPartyTables } from "./orders-list.js";
-import { isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
 import {
   parseBillEditExpected,
   parseBillEditExpecteds,
@@ -165,7 +150,6 @@ export interface OrderGroup {
    * Present while released dishes remain and every component is ready to serve.
    */
   ready?: true;
-  /** Dishes with active service, excluding recalled sources. */
   lineIds: string[];
   courseIds: string[];
   /** The dishes by staff name, e.g. "2 × Steak, 1 × Fish". */
@@ -283,9 +267,6 @@ export async function placeGroups(
   await requireBillOfParty(tx, partyId, tabId);
   await refusePaymentInFlight(tx, [tabId]);
   await requireBillEditor(tx, tabId, operatorId, expectedEdit);
-  const existingLineIds = input.groups.flatMap((group) => group.existingLineIds ?? []);
-  if (existingLineIds.length > 0)
-    await refuseRecalledWrite(tx, inArray(workingOrderLines.id, existingLineIds));
   if (input.groups.length === 0) {
     throw new AppError("management.request_invalid", { field: "groups" });
   }
@@ -326,7 +307,6 @@ export async function placeGroups(
   );
   const empty = (group: PlaceGroupsInput["groups"][number]) =>
     group.lines.length === 0 && (group.existingLineIds?.length ?? 0) === 0;
-  // Recalled families already carry their charge and must bypass fresh pricing.
   const priced =
     lines.length === 0 && !groups.some(empty)
       ? null
@@ -581,7 +561,6 @@ export async function fireHeldLine(
       if (line.state !== "held") throw new AppError("group.not_held", { groupId: line.groupId! });
       if (line.billStatus === "abandoned")
         throw new AppError("tab.not_open", { tabId: line.workingOrderId });
-      await refuseRecalledWrite(tx, eq(workingOrderLines.id, lineId));
       const cancelled = (await readLineCancellations(tx, [lineId])).get(lineId) ?? 0;
       if (line.quantity <= cancelled)
         throw new AppError("management.request_invalid", { field: "lineId" });
@@ -849,7 +828,6 @@ async function copyGroups(
         isNull(workingOrderLines.parentLineId),
         eq(orderGroups.partyId, fromPartyId),
         eq(orderGroups.state, state),
-        not(isRecalledDish(tx)),
       ),
     )
     .orderBy(
@@ -984,30 +962,8 @@ async function pointDraftsAtCopies(
         inArray(orderDraftLines.afterGroupId, sourceIds),
       ),
     );
-  await tx
-    .update(orderDraftRecalledLines)
-    .set({ joinGroupId: toCopy(orderDraftRecalledLines.joinGroupId) })
-    .where(
-      and(
-        inArray(orderDraftRecalledLines.draftId, drafts),
-        inArray(orderDraftRecalledLines.joinGroupId, sourceIds),
-      ),
-    );
-  await tx
-    .update(orderDraftRecalledLines)
-    .set({ afterGroupId: toCopy(orderDraftRecalledLines.afterGroupId) })
-    .where(
-      and(
-        inArray(orderDraftRecalledLines.draftId, drafts),
-        inArray(orderDraftRecalledLines.afterGroupId, sourceIds),
-      ),
-    );
 }
 
-/**
- * A group's dishes with a quantity left uncancelled, less any recalled dish, in the order
- * {@link releaseGroup} fires them.
- */
 async function activeGroupLines(tx: Transaction, groupId: string) {
   const lines = await tx
     .select({
@@ -1017,13 +973,7 @@ async function activeGroupLines(tx: Transaction, groupId: string) {
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(
-      and(
-        eq(workingOrderLines.groupId, groupId),
-        isNull(workingOrderLines.parentLineId),
-        not(isRecalledDish(tx)),
-      ),
-    )
+    .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
   const cancellations = await readLineCancellations(
     tx,
@@ -1084,7 +1034,6 @@ export async function releaseHeldWorkOf(
       );
       continue;
     }
-    // Only these bills' lines: a recalled dish on another bill keeps the group held to rejoin it.
     const lines = await tx
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
@@ -1361,13 +1310,6 @@ export async function moveLinesToGroup(
         await refusePaymentInFlight(tx, [billId]);
       }
       await requireBillEditors(tx, billIds, args.operatorId, expectedEdits);
-      await refuseRecalledWrite(
-        tx,
-        inArray(
-          workingOrderLines.id,
-          moves.map((move) => move.lineId),
-        ),
-      );
       const printed = await printedHeldGroups(tx, [
         ...lines.map((line) => line.groupId!),
         ...(target === "new" ? [] : [target.groupId]),
@@ -1494,65 +1436,6 @@ export async function splitHeldLineIntoUnits(
     { partyId, lineId, operatorId: args.operatorId, expectedEdit },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
-      const [source] = await tx
-        .select({ draft: orderDrafts, line: workingOrderLines })
-        .from(orderDraftRecalledLines)
-        .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
-        .innerJoin(
-          workingOrderLines,
-          eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId),
-        )
-        .where(
-          and(eq(orderDraftRecalledLines.sourceLineId, lineId), eq(orderDrafts.state, "open")),
-        );
-      if (source !== undefined) {
-        if (
-          source.draft.partyId !== partyId ||
-          source.line.parentLineId !== null ||
-          source.draft.billId !== source.line.workingOrderId
-        )
-          throw new AppError("group.not_found", { lineId });
-        await requireBillOfParty(tx, partyId, source.line.workingOrderId);
-        await refusePaymentInFlight(tx, [source.line.workingOrderId]);
-        await requireBillEditor(tx, source.line.workingOrderId, args.operatorId, expectedEdit);
-        if (
-          source.line.unitPrecision !== 0 ||
-          source.line.quantity < 2000 ||
-          source.line.quantity % 1000 !== 0
-        )
-          throw new AppError("tab.transfer_quantity_invalid", {
-            tabId: source.line.workingOrderId,
-            lineNo: source.line.lineNo,
-            quantity: thousandthsToDecimal(source.line.quantity),
-          });
-        for (let unit = 1; unit < source.line.quantity / 1000; unit += 1)
-          await splitLinesWithinOrder(
-            tx,
-            cfg,
-            source.line.workingOrderId,
-            [{ lineNo: source.line.lineNo, quantity: "1" }],
-            { splitExtras: true },
-          );
-        await tx
-          .update(orderDrafts)
-          .set({ revision: source.draft.revision + 1, updatedAt: nowIso() })
-          .where(eq(orderDrafts.id, source.draft.id));
-        await bumpRevision(tx, [source.line.workingOrderId]);
-        await recordGroupEvent(
-          tx,
-          {
-            partyId,
-            groupId: source.line.groupId,
-            kind: "lines_moved",
-            actorId: args.operatorId,
-            detail: { splitLineId: lineId },
-          },
-          attendance === undefined
-            ? undefined
-            : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
-        );
-        return { revision };
-      }
       const [line] = await tx
         .select({
           workingOrderId: workingOrderLines.workingOrderId,
@@ -1769,7 +1652,6 @@ async function readGroups(
       variantName: workingOrderLines.variantName,
       quantity: workingOrderLines.quantity,
       courseId: workingOrderLines.courseId,
-      recalled: isRecalledDish(tx).mapWith(Boolean),
     })
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -1807,7 +1689,6 @@ async function readGroups(
   return groups.map((group) => {
     const own = linesByGroup.get(group.id) ?? [];
     const active = own
-      .filter((line) => !line.recalled)
       .map((line) => ({
         ...line,
         quantity: serviceQuantities(line.quantity, 0, cancellations.get(line.id) ?? 0).active,
@@ -1949,7 +1830,6 @@ export async function readReleaseReminders(
         // The NULL-parent index range includes historical top-level dishes.
         isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
-        not(isRecalledDish(tx)),
       ),
     );
   for (const partyId of new Set(groups.map((group) => group.partyId))) {
@@ -2014,7 +1894,6 @@ export async function readHeldCounts(
         // The NULL-parent index range includes historical top-level dishes.
         isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
-        not(isRecalledDish(tx)),
       ),
     );
   for (const line of lines) {
@@ -2033,9 +1912,7 @@ export interface CurrentOrderKitchen {
   stationId: string;
   movable: boolean;
   phase: KitchenPhase;
-  /** Null while the item is held, or since it was recalled. */
   requestedAt: string | null;
-  /** Null while the item is held or Requested, or since it was recalled. */
   firedAt: string | null;
 }
 
@@ -2181,7 +2058,6 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         displayOrder: kitchenCourses.displayOrder,
         heldUntilFired: kitchenCourses.heldUntilFired,
       },
-      recalled: isRecalledDish(tx).mapWith(Boolean),
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
@@ -2277,7 +2153,6 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   for (const line of lines) {
     if (line.parentLineId !== null) continue;
     if (line.course !== null) retainedCourses.set(line.course.id, line.course);
-    if (line.recalled) continue;
     const group = line.groupId === null ? undefined : byId.get(line.groupId);
     if (line.groupId !== null && group === undefined) continue;
     dishes.push({
@@ -2867,12 +2742,6 @@ export async function groupArrivingDishes(
         eq(workingOrderLines.workingOrderId, billId),
         isNull(workingOrderLines.parentLineId),
         isNull(workingOrderLines.groupId),
-        notExists(
-          tx
-            .select({ id: orderDraftRecalledLines.id })
-            .from(orderDraftRecalledLines)
-            .where(eq(orderDraftRecalledLines.sourceLineId, workingOrderLines.id)),
-        ),
       ),
     )
     .orderBy(

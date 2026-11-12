@@ -113,7 +113,7 @@ function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Pick
       lines,
       paid === null ? null : (paidQuantities(paid).get(row.lineNo) ?? null),
     );
-  return pickRows(pickGroups(lines, keyOf, paid, new Set()), picks);
+  return pickRows(pickGroups(lines, keyOf, paid), picks);
 }
 
 const nameOf = (dish: TabLine) => dish.name ?? "";

@@ -2,8 +2,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as cataloguePricing from "@waitron/catalogue";
+import { beforeEach, describe, expect, it } from "vitest";
 import { products, withTransaction, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -20,7 +19,7 @@ import {
 import { workingLineContexts } from "@waitron/venue-service";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { createOpenOrder, prepareRecalledModifiers, priceOrderLines } from "./working-order.js";
+import { createOpenOrder, priceOrderLines } from "./working-order.js";
 import { readSettledTicket, recordTillSaleOrchestration, reprintSale } from "./till-sale.js";
 import { resolveTranslationCells } from "@waitron/catalogue/src/content-translation-cells.js";
 import { saveContentTranslations } from "@waitron/catalogue/src/content-translations.js";
@@ -104,84 +103,6 @@ async function arrange() {
 }
 
 describe("future order customer fallback", () => {
-  it("carries recorded dish maps unchanged while preparing a recalled dish's new extra", async () => {
-    const setup = await arrange();
-    const id = randomUUID();
-    const parent = await withTransaction(venue.db, async (tx) => {
-      await createOpenOrder(
-        tx,
-        venue.cfg,
-        id,
-        [{ menuItemId: setup.offers.offerFor(setup.dish.id), quantity: "1" }],
-        null,
-        { zoneId: setup.offers.zoneId },
-      );
-      const [line] = await tx
-        .update(workingOrderLines)
-        .set({
-          descriptions: { "es-ES": "Recorded first", "en-GB": "Recorded second" },
-          unitName: { "fr-FR": "Recorded abbreviation" },
-        })
-        .where(eq(workingOrderLines.workingOrderId, id))
-        .returning();
-      await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "fr"] });
-      return line!;
-    });
-    const before = await venue.db
-      .select()
-      .from(workingLineContexts)
-      .where(eq(workingLineContexts.workingOrderLineId, parent.id));
-    const pricing = vi.spyOn(cataloguePricing, "grossBasketWithOptions");
-    try {
-      const plans = await withTransaction(venue.db, (tx) =>
-        prepareRecalledModifiers(tx, venue.cfg, id, [
-          {
-            parent,
-            children: [],
-            input: {
-              quantity: "1",
-              extras: [
-                { listId: setup.extra.id, picks: [{ productId: setup.variant.id, quantity: 1 }] },
-              ],
-            },
-          },
-        ]),
-      );
-      const [basket] = pricing.mock.calls.at(-1)!;
-      expect(basket[0]!.product.descriptions).toEqual({
-        "es-ES": "Recorded first",
-        "en-GB": "Recorded second",
-      });
-      expect(basket[0]!.product.unit.abbreviation).toEqual({ "fr-FR": "Recorded abbreviation" });
-      const priced = pricing.mock.results.at(-1)!.value as ReturnType<
-        typeof cataloguePricing.grossBasketWithOptions
-      >;
-      expect(priced.lines[0]!.descriptions).toEqual({
-        "es-ES": "Recorded first",
-        "en-GB": "Recorded second",
-      });
-      expect(priced.lines[0]!.unitName).toEqual({ "fr-FR": "Recorded abbreviation" });
-      expect(plans.get(parent.id)!.added!.lineRows[0]!.descriptions).toEqual({
-        "es-ES": "Staff topping (Requested large)",
-        "en-GB": "Staff topping (Requested large)",
-      });
-      expect(plans.get(parent.id)!.added!.lineRows).toHaveLength(1);
-    } finally {
-      pricing.mockRestore();
-    }
-    const [after] = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.id, parent.id));
-    expect(after).toEqual(parent);
-    expect(
-      await venue.db
-        .select()
-        .from(workingLineContexts)
-        .where(eq(workingLineContexts.workingOrderLineId, parent.id)),
-    ).toEqual(before);
-  });
-
   it("keeps complete recorded rows and receipt facts across translation save, a default change and reprint", async () => {
     const setup = await arrange();
     const id = randomUUID();

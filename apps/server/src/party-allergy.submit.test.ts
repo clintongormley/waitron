@@ -11,15 +11,13 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergyPatch } from "@waitron/module";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import { submitDraft, type FreshDraftLineInput } from "./order-drafts.js";
 import { submitGroups, type GroupRelease } from "./order-groups.js";
-import { readAllergySendView, readPartyAllergyView } from "./party-allergy.js";
+import { readPartyAllergyView } from "./party-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { AppError } from "@waitron/shared";
 import * as orderWrites from "./working-order.js";
-import { recallToDraft } from "./draft-recall.js";
 import {
   createCatalogue,
   createCategory,
@@ -518,48 +516,6 @@ describe("A669 atomic submit", () => {
       },
     );
   }
-
-  it("reticks a recalled parent through its preview reference while retaining its working identity", async () => {
-    const p = await party(),
-      first = await directCommand(p, "hold", { party: guests, ticks: [] });
-    await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, first));
-    await inTx(v, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
-    const [source] = await v.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
-    const expectedPartyRevision = await revisionOf(v, p.partyId);
-    const recalled = await inTx(v, async (tx) =>
-      recallToDraft(tx, v.cfg, p.partyId, source!.id, {
-        submissionId: randomUUID(),
-        expectedPartyRevision,
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-      }),
-    );
-    const preview = await inTx(v, (tx) =>
-      readAllergySendView(tx, v.cfg, p.partyId, {
-        kind: "draft",
-        draftId: recalled.draft.id,
-        lineIds: [recalled.draft.lines[0]!.id],
-      }),
-    );
-    expect(preview.dishes.map((d) => d.line)).toEqual([{ kind: "working", id: source!.id }]);
-    const ask = await draftCommand(p, recalled.draft, "fire", {
-      ticks: [{ line: preview.dishes[0]!.line, guestIndex: 1 }],
-    });
-    await inTx(v, (tx) => submitDraft(tx, v.cfg, p.partyId, recalled.draft.id, ask));
-    const saved = await snapshot(p);
-    expect(saved.ticks).toEqual([
-      { guestId: saved.guests[1]!.id, draftLineId: null, workingLineId: source!.id },
-    ]);
-    expect(
-      await v.db
-        .select()
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, p.tabId)),
-    ).toHaveLength(1);
-  });
 
   it("considers unticked held dishes even without HOLD printing and can join more dishes without resetting the answer", async () => {
     const p = await party(),

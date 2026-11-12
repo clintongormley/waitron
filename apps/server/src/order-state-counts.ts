@@ -11,7 +11,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { menuItems, productUnits, unitOwnerJoin, units } from "@waitron/catalogue";
-import { isRecalledDish } from "./draft-source.js";
 import { initiatedAt } from "./kitchen-phase.js";
 
 export interface OrderStateCounts {
@@ -38,7 +37,6 @@ export interface CountedLine extends KitchenPart {
   servedAt: string | null;
   unitPrecision: number | null;
   unit: { hardwareUnit: string | null; precision: number; measure: boolean } | null;
-  recalled: boolean;
   sentAt: string | null;
   groupState: string | null;
 }
@@ -73,7 +71,7 @@ export function dishCounts(
   if (left === 0) return counts;
   const leftUnits = asOne ? 1 : Math.ceil(left / 1000);
   const parts = [dish, ...extras];
-  if (dish.recalled || (dish.ticket === null && dish.groupState === null && dish.sentAt === null))
+  if (dish.ticket === null && dish.groupState === null && dish.sentAt === null)
     counts.unsent = leftUnits;
   else if (
     extras.some((extra) => extra.ticket !== null && initiatedAt(extra.ticket) === null) ||
@@ -124,7 +122,6 @@ export async function readOrderStateCounts(
       hardwareUnit: units.hardwareUnit,
       precision: units.precision,
       measure: units.measure,
-      recalled: isRecalledDish(tx).mapWith(Boolean),
       sentAt: workingOrderLines.sentAt,
       groupState: orderGroups.state,
       ticketId: ticketItems.id,
@@ -160,7 +157,6 @@ export async function readOrderStateCounts(
         line.unitId === null
           ? null
           : { hardwareUnit: line.hardwareUnit, precision: line.precision!, measure: line.measure! },
-      recalled: line.recalled,
       sentAt: line.sentAt,
       groupState: line.groupState,
     };
@@ -197,7 +193,6 @@ export async function readOrderStateCounts(
         line.unitId === null
           ? null
           : { hardwareUnit: line.hardwareUnit, precision: line.precision!, measure: line.measure! },
-      recalled: false,
       sentAt: null,
       groupState: null,
     };

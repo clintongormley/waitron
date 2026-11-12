@@ -5975,8 +5975,7 @@ one in a unit with no decimals; a weighed or measured line, and a line no portio
 always stand alone.
 
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
-many members; Recall asks how many and recalls its first that many members, in line order; Move
-station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
+many members; Move station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it; Fire now fires the first member only, because its request names one line. On the
 kitchen screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
@@ -5992,7 +5991,7 @@ Move dishes… draws the bill's dishes through `till-portion-picker`
 line ids; the screen keeps the picks in its action draft scope, so leaving with picks or a chosen destination asks first. A
 row is one dish, or [identical portions](#identical-portions-share-one-row) with their count; its
 amount, extras included, is what its picked dishes take off the bill, or the whole row's while none
-is picked. A dish recalled into an unsent order is left out.
+is picked.
 
 - **A tick** is a native checkbox labelled with the dish's name, then each of its extras on a line
   of its own beneath, in the names the screen gives the bill's lines. A dish or extra adds its
@@ -6470,8 +6469,8 @@ note opens the same existing modifiers window. Quantity, extras and note are sta
 An unchanged Save stays quiet and disabled; Cancel, Escape and leaving retain the shared draft
 protection. Sent lines are read-only. A sent, unpaid Counter dish can offer Move to station in that
 window using its separately checked movement facts. Table draft, group, course and sending controls
-keep their own placement and permissions. A recalled table quantity decrease requests the existing
-cancellation flow; that request does not apply other staged note or modifier changes.
+keep their own placement and permissions. A sent dish leaves its bill through Cancel item;
+Change dish changes its details or increases its count.
 
 The status row above the menu or selected list shows the service, zone and receipt-equipment
 availability. Unknown, unconfigured,

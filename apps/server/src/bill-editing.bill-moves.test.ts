@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  orderDrafts,
-  orderDraftLines,
-  orderDraftRecalledLines,
-  parties,
-  workingOrderLines,
-} from "@waitron/db";
+import { orderDrafts, orderDraftLines, parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -25,7 +19,6 @@ import { moveBill } from "./move-bill.js";
 import { mergeBills } from "./bill-actions.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { recallToDraft } from "./draft-recall.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
@@ -756,7 +749,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
     },
   );
 
-  it("keeps recalled and fresh row identities, slot offsets and both allergy tick kinds", async () => {
+  it("keeps fresh row identities, slot offsets and both allergy tick kinds", async () => {
     const p = await party(),
       from = await otherBill(p.partyId);
     await inTx(venue, async (tx) => {
@@ -775,15 +768,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, p.tabId));
-    const [row] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
-    const recalled = await inTx(venue, (tx) =>
-      recallToDraft(tx, venue.cfg, p.partyId, dish!.id, {
-        expectedPartyRevision: row!.revision,
-        operatorId: venue.operatorId,
-        submissionId: randomUUID(),
-        expectedEdit: blank(p.tabId),
-      }),
-    );
+    const saved = await save(p.partyId, p.tabId);
     const source = await save(p.partyId, from);
     await inTx(venue, async (tx) => {
       await tx
@@ -791,9 +776,9 @@ describe("bill merges require both editors and release the consumed bill", () =>
         .set({ slot: 1 })
         .where(eq(orderDraftLines.id, source.draft!.lines[0]!.id));
       await tx
-        .update(orderDraftRecalledLines)
+        .update(orderDraftLines)
         .set({ slot: 2 })
-        .where(eq(orderDraftRecalledLines.id, recalled.draft.lines[0]!.id));
+        .where(eq(orderDraftLines.id, saved.draft!.lines[0]!.id));
       const [pRow] = await tx.select().from(parties).where(eq(parties.id, p.partyId));
       const allergy = await VENUE_SERVICE.savePartyAllergy(
         tx,
@@ -809,10 +794,6 @@ describe("bill merges require both editors and release the consumed bill", () =>
     });
     const allergy = await inTx(venue, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
     const charges = await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id);
-    const sources = await venue.db
-      .select()
-      .from(orderDraftRecalledLines)
-      .orderBy(orderDraftRecalledLines.id);
     await merge(p.partyId, from, p.tabId, await billEdits(from, p.tabId));
     const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
     expect(drafts).toHaveLength(1);
@@ -821,23 +802,14 @@ describe("bill merges require both editors and release the consumed bill", () =>
       drafts[0]!.lines.map((l) => ({ id: l.id, sourceLineId: l.sourceLineId, slot: l.slot })),
     ).toEqual([
       { id: source.draft!.lines[0]!.id, sourceLineId: null, slot: 1 },
-      { id: recalled.draft.lines[0]!.id, sourceLineId: dish!.id, slot: 3 },
+      { id: saved.draft!.lines[0]!.id, sourceLineId: null, slot: 3 },
     ]);
     expect(await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id)).toEqual(
       charges.map((c) => (c.workingOrderId === p.tabId ? { ...c, workingOrderId: from } : c)),
     );
-    expect(
-      await venue.db.select().from(orderDraftRecalledLines).orderBy(orderDraftRecalledLines.id),
-    ).toEqual(
-      sources.map((r) =>
-        r.draftId === recalled.draft.id
-          ? { ...r, draftId: source.draft!.id, position: 2, slot: 3 }
-          : r,
-      ),
-    );
     expect(await inTx(venue, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId))).toEqual({
       ...allergy,
-      revision: 4,
+      revision: 3,
     });
   });
 });

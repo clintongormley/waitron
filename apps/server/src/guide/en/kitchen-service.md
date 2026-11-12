@@ -90,9 +90,7 @@ that has the group's HOLD paper keeps getting it, its corrections and the ticket
 if its switch is turned off. Any other station prints its part unmarked when the group is fired,
 including on a shared printer: only the sections that already received HOLD paper are marked FIRE.
 
-Firing held work at the same station does not duplicate an existing allergy correction. Recalling
-a dish into a draft ends its old kitchen work. Sending that draft again creates a new kitchen copy
-from the instructions you confirm for that send.
+Firing held work at the same station does not duplicate an existing allergy correction.
 
 ## Read a group's heading on kitchen paper {#group-headings}
 
@@ -147,14 +145,13 @@ with **Add station**, and under **Late flags (minutes)** when you edit it in **P
 phone or tablet, the Ready bar turns amber once a ready dish has waited that long: see
 [See which tables have food ready](table-service.md#ready-bar). Each
 prep station also sets how identical dishes print on its tickets,
-whether it prints held groups in advance, and whether a dish already sent to it can be recalled or
+whether it prints held groups in advance, and whether a dish already sent to it can be
 changed, under **Identical dishes on a kitchen ticket**, **Print held groups in advance** and
 **Changes after sending**: **Not allowed**, **While held**, or
 **While held or waiting**. It also sets whether its dishes wait for the pass to fire them, under
 **Waits for the pass**: see [Make a station wait for the pass](kitchen-service.md#station-waits).
-A dish the kitchen has started is never recalled or changed. A dish that went to no
-station, with no extra that went to a station of its own, can be recalled or changed whatever the stations
-allow.
+A dish the kitchen has started cannot be changed. A dish that went to no station, with no extra
+that went to a station of its own, can be changed whatever the stations allow.
 
 ## Work the kitchen screen {#kitchen-screen}
 

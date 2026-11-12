@@ -470,9 +470,16 @@ export async function tendersOfBill(venue: BillVenue, billId: string) {
  * named dish sent to the kitchen as one group on the bill seating opens, in order (line 1, 2, …).
  * `revision` is the party's after the order.
  */
-export async function seatedWith(
+export function seatedWith(venue: BillVenue, ...names: string[]) {
+  return seatedWithRelease(venue, names, "fire");
+}
+export function seatedHeldWith(venue: BillVenue, ...names: string[]) {
+  return seatedWithRelease(venue, names, "hold");
+}
+async function seatedWithRelease(
   venue: BillVenue,
-  ...names: string[]
+  names: string[],
+  release: "fire" | "hold",
 ): Promise<{ partyId: string; tabId: string; tableId: string; revision: number }> {
   const { id: tableId } = await withTransaction(venue.db, (tx) =>
     createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
@@ -491,7 +498,7 @@ export async function seatedWith(
       groups: [
         {
           lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
-          release: "fire",
+          release,
         },
       ],
     });

@@ -89,9 +89,7 @@ async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedP
     ...stored.flatMap(({ line }) => (line.productId === null ? [] : [line.productId])),
     ...drafts.flatMap((draft) =>
       draft.lines.flatMap((line) =>
-        line.sourceLineId === null
-          ? line.extras.flatMap((list) => list.picks.map((pick) => pick.productId))
-          : [],
+        line.extras.flatMap((list) => list.picks.map((pick) => pick.productId)),
       ),
     ),
   ]);
@@ -113,9 +111,7 @@ async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedP
     sentAt: storedById.get(row.lineId)!.sentAt,
     offeredBefore: true,
   }));
-  const freshIds = drafts.flatMap((draft) =>
-    draft.lines.flatMap((line) => (line.sourceLineId === null ? [line.menuItemId] : [])),
-  );
+  const freshIds = drafts.flatMap((draft) => draft.lines.map((line) => line.menuItemId));
   const zoneId = await partyZone(tx, cfg, partyId);
   const offers = new Map(
     zoneId === null || freshIds.length === 0
@@ -129,24 +125,6 @@ async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedP
   );
   for (const draft of drafts) {
     for (const line of draft.lines) {
-      if (line.sourceLineId !== null) {
-        const { source } = line;
-        dishes.push({
-          line: { kind: "working", id: line.sourceLineId },
-          billId: draft.billId,
-          name: source.line.name,
-          quantity: line.quantity,
-          allergens: allergens(line.sourceLineId),
-          extras: source.extras.map((extra) => ({
-            name: extra.name,
-            quantity: extra.quantity,
-            allergens: allergens(extra.id),
-          })),
-          sentAt: source.line.sentAt,
-          offeredBefore: true,
-        });
-        continue;
-      }
       const offer = offers.get(line.menuItemId);
       const variant =
         line.variantId === null ? undefined : offer?.variants.find((v) => v.id === line.variantId);

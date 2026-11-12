@@ -631,7 +631,7 @@ Open:
   the amount due. Such a table can only be finished by taking the rest as payment.
 - **Collecting PART of the debt later is not built**, for the same reason. Collecting it in
   full uses `POST /api/working-orders/:id/collect`.
-- **A dish never sent, on hold, recalled, or waiting for the pass and not fully served blocks the
+- **A dish never sent, on hold, or waiting for the pass and not fully served blocks the
   departure** (`unpaid_departure.unfired_dishes`); staff cancel it first.
 - **The table screen still reads a credited presented bill at its full amount.** Its per-bill
   "to pay" line (`apps/till/src/screens/till-table-order-screen.ts`, `bill.outstanding`) and
@@ -694,8 +694,7 @@ Open:
 - **Task 9 (#874, dishes arriving in a party get a kitchen group).** P16 is kept (owner,
   2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
   time is picked by comparing the stored times as text, right only while every writer stores the
-  same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a dish
-  recalled and fired again carries its new fire time but its old group's firer.
+  same `toISOString()` form (every writer found uses `nowIso()`; not proven for all).
   The owner's replacement for C80's earlier course-placement rule is retained under
   [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
 - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
@@ -1313,17 +1312,6 @@ against the Requested by names; on a phone the table scrolls sideways inside its
 the cut-off last column to say so. Owner to look at the pictures and say whether either wants
 changing.
 
-
-## A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been started (left open by A758-1).
-
-Cancel item… asks "Has preparation started?" and removes a dish
-not started with no PIN (`apps/server/src/line-cancel.ts`). A recalled draft's Discard previews
-each sent dish as a cancel through the adjustment path (`apps/till/src/till-app.ts`
-`#onAdjustPreview`), which cannot ask, so a fired dish counts as possibly started and needs
-someone who can give refunds (`evaluateCancel`, `packages/adjustments/src/policy.ts`). Stricter
-than design D12. Decide whether Discard should ask the question too.
-
-
 ## A785. A kitchen screen in device mode keeps the theme it started with until reload (left open by A768, 2026-10-17).
 
 Nobody signs in on it, so it runs no menu-state poll and never sees the
@@ -1866,10 +1854,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
 - **A959. By reason's layout (left open by A758-3).** Owner to look at the pictures and say whether
   either wants changing.
   [Detail](till.md#a959-by-reasons-layout-left-open-by-a758-3)
-- **A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been started
-  (left open by A758-1).** Cancel item… asks "Has preparation started?" and removes a dish not
-  started with no PIN (`apps/server/src/line-cancel.ts`).
-  [Detail](till.md#a909-a-recalled-drafts-discard-asks-for-a-refund-pin-for-a-dish-that-may-not-have-been-started-left-open-by-a758-1)
+
 - **A Ready card on the pass turns red, counts as overdue and says Forgotten, aged from when it was
   sent (question for the owner, seen in A773-2 B4a's look).** The old pass did the same. Should a
   card stop ageing once it is Ready? Relates to A1250's colour question.
@@ -2847,8 +2832,7 @@ Held, Fire and the table's Send controls retain their own meanings.
 
 Use the existing modifiers window for line details. Sent extras and notes remain read-only; moving
 a sent unpaid Counter dish uses its separate current movement facts. A739 owns the payment-window
-redesign. A recalled table quantity decrease retains its cancellation flow and does not apply
-other staged note or modifier changes with that request. The custom item's permission and
+redesign. Sent-dish removal uses Cancel item. The custom item's permission and
 catalogue/report/invoice identity remain undecided.
 
 
@@ -2963,8 +2947,8 @@ clears the cookie only when it carries no person header.
 The server cases are in `apps/server/src/till-session.person.test.ts`, the walk of every till,
 device and schedule route in `till-api.session-person.test.ts`, `GET /api/device/me`'s in
 `device-api.test.ts`, more sign-out cases in `till-api.test.ts`, and the refusals of a save, a
-take-over, a recall, a line split and a discard naming someone else in `till-api.drafts.test.ts`,
-`draft-recall.test.ts`, `till-api.groups.test.ts` and `draft-discard.test.ts`. The till's are in
+take-over, a line split and a discard naming someone else in `till-api.drafts.test.ts`,
+`till-api.groups.test.ts` and `draft-discard.test.ts`. The till's are in
 `apps/till/src/api/client.test.ts` ("TillApi: the tab's person on every request") and
 `apps/till/src/till-app-person-refusal.test.ts`, which drives the app through its real client. The
 other server tests send the signed-in person's header through
@@ -2996,6 +2980,9 @@ the accepted two portions. They cover English and Spanish, both themes, at 390 a
 These app checks use a controlled API boundary; server persistence and the physical-till trial
 remain separate. The quantity buttons use the standard size; their previous small setting measured
 32 px high in those cases on 2026-10-19.
+
+**2026-11-11:** [R3-owner](../superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
+retires the Recall paths in the following historical test receipt.
 
 The [modifiers integration guide](../developers/modifiers.md#ordering-and-stored-facts) distinguishes
 fresh table-draft selections, priced on submission, from recalled sources whose modifier changes

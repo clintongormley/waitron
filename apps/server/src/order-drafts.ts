@@ -1,14 +1,12 @@
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { and, asc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   kitchenCourses,
   newId,
   nowIso,
   orderDraftEvents,
   orderDraftLines,
-  orderDraftRecalledLines,
-  workingOrderLines,
   orderDrafts,
   billEditStates,
   orderGroups,
@@ -17,11 +15,9 @@ import {
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
-import type { AllergyPatch, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
+import type { AllergyPatch, ZoneMenuOffer } from "@waitron/module";
 import {
   AppError,
-  centsToDecimal,
-  sumDecimals,
   isUuid,
   normaliseDraftLines,
   stringToThousandths,
@@ -30,7 +26,7 @@ import {
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { listOrderGroups, placeGroups } from "./order-groups.js";
+import { placeGroups } from "./order-groups.js";
 import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
@@ -44,22 +40,15 @@ import {
 } from "./parties.js";
 import {
   createOpenOrder,
-  moveOrderLines,
-  bumpRevision,
-  prepareRecalledModifiers,
-  readTabLines,
   readOrderRevision,
   refusePaymentInFlight,
   screenNote,
   takesExtras,
 } from "./working-order.js";
-import type { TabLine, OrderAttendance } from "./working-order.js";
+import type { OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
-import { saveRecalledLine } from "./draft-recall.js";
-import { applyAdjustment, rowsAmong, type AdjustmentArgs } from "./adjustments-apply.js";
-import type { PinAttempts } from "@waitron/identity";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import {
   acquireBillEditor,
@@ -71,10 +60,8 @@ import {
   requireBillEditor,
   transferBillEditor,
 } from "./bill-editing.js";
-import { readGrowingPortions } from "./order-portions.js";
 import "./errors.js";
 import { orderTableLabel } from "./kitchen-print.js";
-import { assertBillInvariant } from "./bill-payments.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
@@ -103,28 +90,7 @@ export interface FreshDraftLine {
   afterGroupId: string | null;
   unavailable: boolean;
 }
-
-export interface RecalledDraftLine {
-  id: string;
-  sourceLineId: string;
-  source: { line: TabLine; extras: TabLine[]; netAmount: string };
-  quantity: string;
-  note: string | null;
-  courseId: string | null;
-  course?: FreshDraftLine["course"];
-  makeAt: string | null;
-  noMerge: true;
-  slot: number;
-  joinGroupId: string | null;
-  afterGroupId: string | null;
-  unavailable: false;
-  menuItemId?: never;
-  variantId?: never;
-  menuVersionId?: never;
-  options?: never;
-  extras?: never;
-}
-export type DraftLine = FreshDraftLine | RecalledDraftLine;
+export type DraftLine = FreshDraftLine;
 
 export interface Draft {
   id: string;
@@ -216,40 +182,6 @@ export async function splitDraft(
         billId: newBillId,
         ownerId: input.operatorId,
       });
-      const sourceIds = selected.filter(isRecalled).map((line) => line.sourceLineId);
-      if (sourceIds.length > 0) {
-        const families = await tx
-          .select({ lineNo: workingOrderLines.lineNo })
-          .from(workingOrderLines)
-          .where(
-            and(
-              eq(workingOrderLines.workingOrderId, billId),
-              or(
-                inArray(workingOrderLines.id, sourceIds),
-                inArray(workingOrderLines.parentLineId, sourceIds),
-              ),
-            ),
-          );
-        await moveOrderLines(
-          tx,
-          cfg,
-          billId,
-          newBillId,
-          families.map((line) => line.lineNo),
-          { actorId: input.operatorId },
-        );
-        await assertBillInvariant(tx, [billId]);
-        await bumpRevision(tx, [billId, newBillId]);
-        await tx
-          .update(orderDraftRecalledLines)
-          .set({ draftId: newDraftId })
-          .where(
-            and(
-              eq(orderDraftRecalledLines.draftId, id),
-              inArray(orderDraftRecalledLines.id, lineIds),
-            ),
-          );
-      }
       await tx
         .update(orderDraftLines)
         .set({ draftId: newDraftId })
@@ -310,22 +242,7 @@ export type FreshDraftLineInput = Omit<
   FreshDraftLine,
   "id" | "unavailable" | "course" | "source"
 > & { id?: string };
-export type RecalledDraftLineInput = Pick<
-  RecalledDraftLine,
-  | "id"
-  | "sourceLineId"
-  | "quantity"
-  | "note"
-  | "courseId"
-  | "makeAt"
-  | "slot"
-  | "joinGroupId"
-  | "afterGroupId"
-> & {
-  options?: OptionSelection[];
-  extras?: ExtraSelection[];
-};
-export type DraftLineInput = FreshDraftLineInput | RecalledDraftLineInput;
+export type DraftLineInput = FreshDraftLineInput;
 
 export interface SaveDraftInput {
   expectedEdit: BillEditExpected;
@@ -354,109 +271,6 @@ export async function readDrafts(
   partyId: string,
 ): Promise<Draft[]> {
   return readOpenDrafts(tx, cfg, partyId);
-}
-
-export async function appendRecalledLine(
-  tx: Transaction,
-  cfg: TradingContext,
-  partyId: string,
-  billId: string,
-  operatorId: string,
-  sourceLineId: string,
-  joinGroupId: string | null,
-  attendance?: OrderAttendance,
-): Promise<Draft> {
-  const [own] = await openDraftsOn(tx, partyId, operatorId, billId);
-  const draftId = own?.id ?? newId();
-  if (own === undefined) {
-    await tx.insert(orderDrafts).values({ id: draftId, partyId, billId, ownerId: operatorId });
-    await recordDraftEvents(
-      tx,
-      attendance === undefined
-        ? undefined
-        : {
-            recorder: attendance.recorder,
-            at: attendance.clock.now().instant.toISOString(),
-          },
-      {
-        draftId,
-        kind: "created",
-        fromPerson: null,
-        toPerson: operatorId,
-        actorId: operatorId,
-        detail: {},
-      },
-    );
-  } else
-    await tx
-      .update(orderDrafts)
-      .set({ revision: own.revision + 1, updatedAt: nowIso() })
-      .where(eq(orderDrafts.id, draftId));
-  const held = await storedLines(tx, [draftId]);
-  const position = held.reduce((maximum, line) => Math.max(maximum, line.position), 0) + 1;
-  const place =
-    joinGroupId === null
-      ? await recalledPlace(
-          tx,
-          partyId,
-          sourceLineId,
-          held.map((row) => row.line),
-        )
-      : { joinGroupId, slot: 0, afterGroupId: null };
-  await tx.insert(orderDraftRecalledLines).values({ draftId, sourceLineId, position, ...place });
-  return readOpenDraft(tx, cfg, partyId, draftId);
-}
-
-async function recalledPlace(
-  tx: Transaction,
-  partyId: string,
-  sourceLineId: string,
-  own: readonly DraftLine[],
-): Promise<{ slot: number; joinGroupId: string | null; afterGroupId: string | null }> {
-  const fire = { slot: 0, joinGroupId: null, afterGroupId: null };
-  const [source] = await tx
-    .select({ courseId: workingOrderLines.courseId })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.id, sourceLineId));
-  if (source!.courseId === null) return fire;
-  const courses = await tx.select().from(kitchenCourses);
-  const course = courses.find((candidate) => candidate.id === source!.courseId);
-  if (course?.heldUntilFired === false) return fire;
-  const groups = (await listOrderGroups(tx, partyId)).groups.filter(
-    (group) => group.state === "held",
-  );
-  const slots = [
-    ...new Map(own.filter((line) => line.slot > 0).map((line) => [line.slot, line])).values(),
-  ].sort((a, b) => a.slot - b.slot);
-  const atSlot = (slot: number) =>
-    own.some((line) => line.slot === slot && line.courseId === source!.courseId);
-  const placeOf = (line: DraftLine) => ({
-    slot: line.slot,
-    joinGroupId: null,
-    afterGroupId: line.afterGroupId,
-  });
-  for (const group of groups) {
-    if (
-      group.courseIds.includes(source!.courseId) ||
-      own.some((line) => line.joinGroupId === group.id && line.courseId === source!.courseId)
-    )
-      return { ...fire, joinGroupId: group.id };
-    const match = slots.find((line) => line.afterGroupId === group.id && atSlot(line.slot));
-    if (match !== undefined) return placeOf(match);
-  }
-  const ids = new Set(groups.map((group) => group.id));
-  const match = slots.find((line) => !ids.has(line.afterGroupId ?? "") && atSlot(line.slot));
-  if (match !== undefined) return placeOf(match);
-  const later =
-    course !== undefined &&
-    groups.length > 0 &&
-    groups.every((group) =>
-      group.courseIds.every((id) => {
-        const previous = courses.find((candidate) => candidate.id === id);
-        return previous !== undefined && course.displayOrder > previous.displayOrder;
-      }),
-    );
-  return later ? { ...fire, slot: (slots.at(-1)?.slot ?? 0) + 1 } : fire;
 }
 
 export async function saveDraft(
@@ -496,73 +310,15 @@ export async function saveDraft(
     if (!owned.has(line.id) || named.has(line.id)) throw invalid(`lines.${index}.id`);
     named.add(line.id);
   }
-  const retainedSources = new Set(previous.filter(isRecalled).map((line) => line.id));
-  for (const [index, line] of lines.entries()) {
-    const prior = line.id === undefined ? undefined : owned.get(line.id);
-    if (line.sourceLineId === null) {
-      if (prior?.sourceLineId != null) throw invalid(`lines.${index}.sourceLineId`);
-      continue;
-    }
-    if (prior?.sourceLineId !== line.sourceLineId) throw invalid(`lines.${index}.sourceLineId`);
-    const source = prior as RecalledDraftLine;
-    if (stringToThousandths(line.quantity) < stringToThousandths(source.quantity))
-      throw invalid(`lines.${index}.quantity`);
-    if (
-      source.source.line.menuItemId === null &&
-      (line.options !== undefined || line.extras !== undefined)
-    )
-      throw invalid(`lines.${index}.sourceLineId`);
-    retainedSources.delete(line.id);
-  }
-  if (retainedSources.size > 0) {
-    // A save that began before a raise added copies of a named portion knows only the original;
-    // the till reloads on draft.out_of_date and would otherwise be refused on every later save.
-    const omitted = previous.filter((line) => retainedSources.has(line.id));
-    const portions = await readGrowingPortions(tx, [
-      ...omitted.map((line) => line.sourceLineId!),
-      ...lines.flatMap((line) => (line.sourceLineId === null ? [] : [line.sourceLineId])),
-    ]);
-    const namedCohorts = new Set(
-      lines.flatMap((line) =>
-        line.sourceLineId === null ? [] : (portions.get(line.sourceLineId)?.cohortId ?? []),
-      ),
-    );
-    if (omitted.some((line) => namedCohorts.has(portions.get(line.sourceLineId!)?.cohortId ?? "")))
-      throw new AppError("draft.out_of_date", {
-        billId,
-        draftId: edit.draftId,
-        revision: edit.draftRevision,
-        edit,
-      });
-    throw invalid("lines");
-  }
-  const freshLines = lines.filter(isFresh);
   await validateDraftPlaces(tx, partyId, lines);
-  await requireCourses(tx, freshLines, previous.filter(isFresh));
-  const choiceOffers = lines.flatMap((line) =>
-    line.sourceLineId !== null && (line.options !== undefined || line.extras !== undefined)
-      ? [(owned.get(line.id)! as RecalledDraftLine).source.line.menuItemId!]
-      : [],
+  await requireCourses(tx, lines, previous);
+  const offers = await offersFor(
+    tx,
+    cfg,
+    partyId,
+    lines.map((line) => line.menuItemId),
   );
-  let snapshot: ZoneOffers | undefined;
-  if (choiceOffers.length > 0) {
-    const zoneId = await partyZone(tx, cfg, partyId);
-    if (zoneId !== null)
-      snapshot = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
-        menuItemIds: [...new Set([...choiceOffers, ...freshLines.map((line) => line.menuItemId)])],
-        withDefault: false,
-      });
-  }
-  const offers =
-    snapshot === undefined
-      ? await offersFor(
-          tx,
-          cfg,
-          partyId,
-          freshLines.map((line) => line.menuItemId),
-        )
-      : new Map(snapshot.offers.map((offer) => [offer.id, offer]));
-  for (const line of freshLines) {
+  for (const line of lines) {
     const offer = offers.get(line.menuItemId);
     if (offer?.ordering === "not_sold_separately") {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
@@ -594,56 +350,17 @@ export async function saveDraft(
         .where(eq(orderDrafts.id, draftId));
   }
   const priorChoices = new Map<string, number>();
-  for (const line of previous.filter(isFresh)) {
+  for (const line of previous) {
     if (line.makeAt == null) continue;
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     priorChoices.set(key, (priorChoices.get(key) ?? 0) + 1);
   }
-  for (const line of freshLines) {
+  for (const line of lines) {
     if (line.makeAt == null) continue;
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     const held = priorChoices.get(key) ?? 0;
     if (held > 0) priorChoices.set(key, held - 1);
     else await requireMakeAtStation(tx, line.makeAt);
-  }
-  const sources = lines.filter((line) => line.sourceLineId !== null);
-  const families =
-    sources.length === 0
-      ? []
-      : await tx
-          .select()
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, billId));
-  const sourcePlans = await prepareRecalledModifiers(
-    tx,
-    cfg,
-    billId,
-    sources.map((line) => {
-      const parent = families.find((row) => row.id === line.sourceLineId);
-      if (parent === undefined) throw invalid("sourceLineId");
-      return {
-        parent,
-        children: families.filter((child) => child.parentLineId === parent.id),
-        input: line,
-      };
-    }),
-    snapshot,
-  );
-  const copiesOf = new Map<string, { referenceId: string; sourceLineId: string }[]>();
-  for (const line of lines) {
-    if (line.sourceLineId !== null)
-      copiesOf.set(
-        line.id!,
-        await saveRecalledLine(
-          tx,
-          cfg,
-          partyId,
-          line.sourceLineId,
-          line,
-          operatorId,
-          sourcePlans.get(line.sourceLineId),
-        ),
-      );
   }
   const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
   const assigned = new Set(
@@ -654,34 +371,14 @@ export async function saveDraft(
     [draftId],
     draftId,
     normaliseDraftLines(
-      lines.flatMap((line): (DraftLine & { measured?: boolean })[] => {
-        if (line.sourceLineId === null)
-          return [
-            {
-              ...line,
-              source: null,
-              id: line.id ?? newId(),
-              noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
-              unavailable: false,
-              measured: soldMeasured(offers.get(line.menuItemId)),
-            },
-          ];
-        const recalled: RecalledDraftLine = {
-          ...(owned.get(line.id)! as RecalledDraftLine),
-          slot: line.slot,
-          joinGroupId: line.joinGroupId,
-          afterGroupId: line.afterGroupId,
-        };
-        // A raised portion's copies are placed with it, straight after it.
-        return [
-          recalled,
-          ...copiesOf.get(line.id)!.map((copy) => ({
-            ...recalled,
-            id: copy.referenceId,
-            sourceLineId: copy.sourceLineId,
-          })),
-        ];
-      }),
+      lines.map((line) => ({
+        ...line,
+        source: null,
+        id: line.id ?? newId(),
+        noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+        unavailable: false,
+        measured: soldMeasured(offers.get(line.menuItemId)),
+      })),
     ),
   );
   if (lines.length === 0) {
@@ -876,17 +573,6 @@ export async function discardPartyDrafts(
   const at = nowIso();
   const open = await openDraftsOn(tx, partyId);
   if (open.length === 0) return;
-  const [unresolved] = await tx
-    .select({ id: orderDraftRecalledLines.id })
-    .from(orderDraftRecalledLines)
-    .where(
-      inArray(
-        orderDraftRecalledLines.draftId,
-        open.map((draft) => draft.id),
-      ),
-    )
-    .limit(1);
-  if (unresolved !== undefined) throw invalid("drafts");
   await discardDrafts(
     tx,
     open.map((draft) => draft.id),
@@ -923,9 +609,6 @@ export interface DiscardDraftInput {
   submissionId: string;
   revision: number;
   expectedRevision: number;
-  reasonId?: string;
-  note: string | null;
-  approver?: AdjustmentArgs["approver"];
 }
 
 export async function discardDraft(
@@ -935,8 +618,6 @@ export async function discardDraft(
   draftId: string,
   operatorId: string,
   input: DiscardDraftInput & { admission: TradingAdmission },
-  venueLocale: string,
-  attempts?: PinAttempts,
   attendance?: OrderAttendance,
   complete?: (billId: string) => Promise<TillSaleResult | null>,
 ): Promise<{
@@ -952,13 +633,14 @@ export async function discardDraft(
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
   if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
   if (input.revision !== expectedEdit.draftRevision) throw invalid("revision");
-  const { submissionId, approver, admission, ...command } = input;
+  const { submissionId, admission: _, ...command } = input;
+  void _;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     submissionId,
     "draft.discard",
-    { ...command, expectedEdit, draftId: id, operatorId, approverId: approver?.personId },
+    { ...command, expectedEdit, draftId: id, operatorId },
     async () => {
       const draft = await draftOnParty(tx, id, partyId);
       const billId = uuid(draft.billId, "billId");
@@ -969,62 +651,8 @@ export async function discardDraft(
       const revision = await readOrderRevision(tx, billId);
       if (revision !== input.expectedRevision)
         throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
-      const sources = await tx
-        .select({ sourceLineId: orderDraftRecalledLines.sourceLineId })
-        .from(orderDraftRecalledLines)
-        .where(eq(orderDraftRecalledLines.draftId, draft.id))
-        .orderBy(orderDraftRecalledLines.position);
-      if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
-      const adjustmentIds: string[] = [];
-      // A row of identical dishes recalled together is cancelled as one, as one grouped line is.
-      const rows =
-        sources.length === 0
-          ? []
-          : await rowsAmong(
-              tx,
-              billId,
-              sources.map((source) => source.sourceLineId),
-            );
-      for (const row of rows) {
-        // Reservation release and charge cancellation share the validated Discard transaction.
-        await tx
-          .delete(orderDraftRecalledLines)
-          .where(
-            and(
-              eq(orderDraftRecalledLines.draftId, draft.id),
-              inArray(orderDraftRecalledLines.sourceLineId, row),
-            ),
-          );
-        const applied = await applyAdjustment(
-          tx,
-          cfg,
-          {
-            admission,
-            orderId: billId,
-            expectedEdit: await readBillEditState(tx, billId),
-            expectedRevision: await readOrderRevision(tx, billId),
-            submissionId: newId(),
-            lineId: row[0]!,
-            ...(row.length === 1 ? {} : { lineIds: row }),
-            action: "cancel",
-            reasonId: input.reasonId!,
-            note: input.note,
-            operatorId,
-            ...(approver === undefined ? {} : { approver }),
-          },
-          venueLocale,
-          attempts,
-          attendance,
-        );
-        await tx
-          .update(orderDrafts)
-          .set({ revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
-          .where(eq(orderDrafts.id, draft.id));
-        adjustmentIds.push(...applied.adjustmentIds);
-      }
       const at = nowIso();
       await tx.delete(orderDraftLines).where(eq(orderDraftLines.draftId, draft.id));
-      await tx.delete(orderDraftRecalledLines).where(eq(orderDraftRecalledLines.draftId, draft.id));
       await closeBillDraft(
         tx,
         billId,
@@ -1063,7 +691,7 @@ export async function discardDraft(
         draftId: draft.id,
         billId,
         revision: closed!.revision,
-        adjustmentIds,
+        adjustmentIds: [],
         party: await partyRevisionOfOrder(tx, billId),
       };
     },
@@ -1144,11 +772,9 @@ export async function submitDraft(
           lines
             .filter((line) => named.has(line.id))
             .map((line) => ({
-              ref: isFresh(line)
-                ? { kind: "draft" as const, id: line.id }
-                : { kind: "working" as const, id: line.sourceLineId },
-              draftLineId: isFresh(line) ? line.id : null,
-              workingLineId: isFresh(line) ? null : line.sourceLineId,
+              ref: { kind: "draft" as const, id: line.id },
+              draftLineId: line.id,
+              workingLineId: null,
             })),
         );
         await enqueueKitchenAllergyChanges(tx, cfg, changes);
@@ -1162,13 +788,13 @@ export async function submitDraft(
         tx,
         cfg,
         partyId,
-        lines.filter(isFresh).map((line) => line.menuItemId),
+        lines.map((line) => line.menuItemId),
       );
       const freshGroups = groups.map(({ lineIds }) => {
         const selected = new Set(lineIds);
         return normaliseDraftLines(
           lines
-            .filter(isFresh)
+
             .filter((line) => selected.has(line.id))
             .map((line) => ({
               ...line,
@@ -1180,27 +806,16 @@ export async function submitDraft(
             })),
         );
       });
-      const sources = lines.filter(isRecalled).filter((line) => named.has(line.id));
-      await tx.delete(orderDraftRecalledLines).where(
-        inArray(
-          orderDraftRecalledLines.id,
-          sources.map((line) => line.id),
-        ),
-      );
       const placed = await placeGroups(
         tx,
         cfg,
         partyId,
         {
-          groups: groups.map(({ lineIds, release, joinGroupId, afterGroupId }, index) => {
-            const inGroup = new Set(lineIds);
+          groups: groups.map(({ release, joinGroupId, afterGroupId }, index) => {
             return {
               release,
               joinGroupId,
               afterGroupId,
-              existingLineIds: sources
-                .filter((line) => inGroup.has(line.id))
-                .map((line) => line.sourceLineId),
               lines: freshGroups[index]!.map(groupLine),
             };
           }),
@@ -1285,15 +900,14 @@ export async function readUnsentDrafts(
       ownerId: orderDrafts.ownerId,
       ownerName: persons.displayName,
       savedAt: orderDrafts.updatedAt,
-      lineCount: sql<number>`cast(count(distinct ${orderDraftLines.id}) + count(distinct ${orderDraftRecalledLines.id}) as int)`,
+      lineCount: sql<number>`cast(count(distinct ${orderDraftLines.id}) as int)`,
     })
     .from(orderDrafts)
     .leftJoin(orderDraftLines, eq(orderDraftLines.draftId, orderDrafts.id))
-    .leftJoin(orderDraftRecalledLines, eq(orderDraftRecalledLines.draftId, orderDrafts.id))
     .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
     .where(and(inArray(orderDrafts.billId, billIds), eq(orderDrafts.state, "open")))
     .groupBy(orderDrafts.id)
-    .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`);
+    .having(sql`count(${orderDraftLines.id}) > 0`);
   const byBill = new Map(rows.map((row) => [row.billId, row]));
   for (const [partyId, bills] of shown) {
     // A bill with no number (a fault in Waitron) comes after the numbered ones.
@@ -1415,24 +1029,8 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
     const afterGroupId = optionalId(entry.afterGroupId, field("afterGroupId"));
     if (joinGroupId !== null && slot !== 0) throw invalid(field("slot"));
     if (afterGroupId !== null && slot === 0) throw invalid(field("afterGroupId"));
-    const sourceLineId =
-      entry.sourceLineId === undefined || entry.sourceLineId === null
-        ? null
-        : uuid(entry.sourceLineId, field("sourceLineId"));
-    if (sourceLineId !== null)
-      return {
-        id: uuid(entry.id, field("id")),
-        sourceLineId,
-        quantity,
-        note: screenNote(note),
-        courseId: optionalId(entry.courseId, field("courseId")),
-        makeAt: optionalId(entry.makeAt, field("makeAt")),
-        slot,
-        joinGroupId,
-        afterGroupId,
-        ...(entry.options === undefined ? {} : { options: readOptionSelections(entry.options) }),
-        ...(entry.extras === undefined ? {} : { extras: readExtraSelections(entry.extras) }),
-      };
+    if (entry.sourceLineId !== undefined && entry.sourceLineId !== null)
+      throw invalid(field("sourceLineId"));
     return {
       ...(entry.id === undefined ? {} : { id: uuid(entry.id, field("id")) }),
       sourceLineId: null,
@@ -1606,19 +1204,6 @@ async function recordDraftEvents(
   }
 }
 
-/**
- * The drafts' stored lines, in position order, each with its draft's id, and `unavailable` not yet
- * worked out.
- */
-function isRecalled(line: DraftLine): line is RecalledDraftLine {
-  return line.sourceLineId !== null;
-}
-function isFresh<T extends DraftLine | DraftLineInput>(
-  line: T,
-): line is T & (FreshDraftLine | FreshDraftLineInput) {
-  return line.sourceLineId === null;
-}
-
 async function storedLines(
   tx: Transaction,
   draftIds: readonly string[],
@@ -1664,68 +1249,7 @@ async function storedLines(
         },
       }) satisfies { draftId: string; position: number; line: FreshDraftLine },
   );
-  const sources = await tx
-    .select({
-      reference: orderDraftRecalledLines,
-      billId: orderDrafts.billId,
-      sourceBillId: workingOrderLines.workingOrderId,
-      parentLineId: workingOrderLines.parentLineId,
-      course: {
-        id: kitchenCourses.id,
-        name: kitchenCourses.name,
-        displayOrder: kitchenCourses.displayOrder,
-        heldUntilFired: kitchenCourses.heldUntilFired,
-      },
-      makeAt: workingOrderLines.makeAtStationId,
-    })
-    .from(orderDraftRecalledLines)
-    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId))
-    .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
-    .where(inArray(orderDraftRecalledLines.draftId, [...draftIds]));
-  const recalled: { draftId: string; position: number; line: RecalledDraftLine }[] = [];
-  for (const billId of new Set(sources.map((row) => row.billId))) {
-    if (billId === null) throw invalid("billId");
-    const bill = await readTabLines(tx, billId);
-    const amounts = await tx
-      .select({ id: workingOrderLines.id, total: workingOrderLines.lineTotal })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, billId));
-    const totals = new Map(amounts.map((row) => [row.id, centsToDecimal(row.total)]));
-    for (const { reference, sourceBillId, parentLineId, makeAt, course } of sources.filter(
-      (row) => row.billId === billId,
-    )) {
-      if (sourceBillId !== billId || parentLineId !== null) throw invalid("sourceLineId");
-      const line = bill.find((line) => line.id === reference.sourceLineId)!;
-      const extras = bill.filter((child) => child.parentLineNo === line.lineNo);
-      recalled.push({
-        draftId: reference.draftId,
-        position: reference.position,
-        line: {
-          id: reference.id,
-          sourceLineId: line.id,
-          source: {
-            line,
-            extras,
-            netAmount: sumDecimals([line, ...extras].map((row) => totals.get(row.id)!)),
-          },
-          quantity: line.quantity,
-          note: line.note,
-          courseId: line.courseId,
-          ...(course === null ? {} : { course }),
-          makeAt,
-          noMerge: true,
-          unavailable: false,
-          slot: reference.slot,
-          joinGroupId: reference.joinGroupId,
-          afterGroupId: reference.afterGroupId,
-        },
-      });
-    }
-  }
-  return [...fresh, ...recalled].sort(
-    (a, b) => a.position - b.position || a.line.id.localeCompare(b.line.id),
-  );
+  return fresh.sort((a, b) => a.position - b.position || a.line.id.localeCompare(b.line.id));
 }
 
 async function replaceLines(
@@ -1734,22 +1258,7 @@ async function replaceLines(
   intoDraftId: string,
   lines: readonly DraftLine[],
 ): Promise<void> {
-  for (const [index, line] of lines.entries()) {
-    if (isRecalled(line))
-      await tx
-        .update(orderDraftRecalledLines)
-        .set({
-          draftId: intoDraftId,
-          position: index + 1,
-          slot: line.slot,
-          joinGroupId: line.joinGroupId,
-          afterGroupId: line.afterGroupId,
-        })
-        .where(eq(orderDraftRecalledLines.id, line.id));
-  }
-  const fresh = lines.flatMap((line, index) =>
-    isFresh(line) ? [{ line, position: index + 1 }] : [],
-  );
+  const fresh = lines.map((line, index) => ({ line, position: index + 1 }));
   // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
   await tx.delete(orderDraftLines).where(
     and(
@@ -1855,7 +1364,7 @@ async function readOpenDrafts(
       tx,
       cfg,
       partyId,
-      lines.flatMap(({ line }) => (isFresh(line) ? [line.menuItemId] : [])),
+      lines.map(({ line }) => line.menuItemId),
     ));
   const takenFrom = await takenOverFrom(
     tx,
@@ -1868,14 +1377,10 @@ async function readOpenDrafts(
     takenOverFrom: takenFrom.get(draft.id) ?? null,
     lines: lines
       .filter((stored) => stored.draftId === draft.id)
-      .map(({ line }) =>
-        isRecalled(line)
-          ? line
-          : {
-              ...line,
-              unavailable: unavailable(line, offers.get(line.menuItemId)),
-            },
-      ),
+      .map(({ line }) => ({
+        ...line,
+        unavailable: unavailable(line, offers.get(line.menuItemId)),
+      })),
   }));
 }
 

@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
@@ -49,7 +50,6 @@ import { systemClock } from "./till-backend.js";
 import { printSaleReceipt } from "./till-sale.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
-import { cancelBody } from "./testing/cancel-line.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -265,16 +265,11 @@ async function lockedWrites(billId: string, paymentId: string) {
   return {
     cash: (await pay(billId, "cash", "5.00")).answer,
     lineEdit: await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/lines/1`, {
+      portionLineNos: [],
       revision: lines.json.revision,
       note: "sin cebolla",
     }),
-    reduction: await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(venue.db, billId, 2),
-    ),
+    reduction: await cancelItemHttp(venue.db, venue.app, venue.cookie, billId, 2),
     billSplit: await send(
       venue.app,
       venue.cookie,
@@ -1972,13 +1967,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     venue.card.scriptNextRefund({ made: "completed", answer: LOST });
     await refund(billId, card.id, { applied: "10.00" });
 
-    const reduction = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(venue.db, billId, 3),
-    );
+    const reduction = await cancelItemHttp(venue.db, venue.app, venue.cookie, billId, 3);
 
     expect(reduction.status).toBe(409);
     expect(reduction.json).toEqual({

@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
@@ -10,17 +11,15 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { afterEach, describe, expect, it } from "vitest";
 import { mergeCheckedBills, splitBill, transferItems } from "./bill-actions.js";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./move-bill.js";
-import { saveDraft, splitDraft, submitDraft, type BillEditExpected } from "./order-drafts.js";
+import { saveDraft, submitDraft, type BillEditExpected } from "./order-drafts.js";
 import { expandPortionRows, registerPortions, type PortionRef } from "./order-portions.js";
 import { partyRevision, seatTable } from "./parties.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
-import { cancelItemForTest, cancelLine, cancelReasonId } from "./testing/cancel-line.js";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
+import { cancelLine, cancelReasonId } from "./testing/cancel-line.js";
 import { createTable } from "./testing/live-table.js";
 import { addPortionRound } from "./testing/portion-bill.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -297,37 +296,6 @@ describe("A803 portion lifecycle: moves", () => {
     ]);
   });
 
-  it("a draft split records a moved event with its operator for the recalled portion", async () => {
-    const p = await fixture();
-    const [first] = p.portions;
-    const recalled = await inTx(venue, async (tx) => {
-      await setChangesAfterSending(tx, "held-or-waiting");
-      return recallToDraft(tx, venue.cfg, p.partyId, first!.lineId, {
-        ...(await command(p)),
-        expectedEdit: await readBillEditState(tx, p.billId),
-        submissionId: randomUUID(),
-      });
-    });
-    const draft = recalled.draft!;
-    const result = await inTx(venue, async (tx) =>
-      splitDraft(tx, venue.cfg, p.partyId, draft.id, {
-        ...(await command(p)),
-        expectedEdit: await readBillEditState(tx, p.billId),
-        submissionId: randomUUID(),
-        lineIds: draft.lines.map((line) => line.id),
-      }),
-    );
-    expect(eventsOf(p.portions)).toEqual([
-      {
-        portion_id: first!.portionId,
-        kind: "moved",
-        from_order_id: p.billId,
-        to_order_id: result.billId,
-        actor_id: venue.adminId,
-      },
-    ]);
-  });
-
   it("a transfer refused for a stale editor leaves registry, binding and event rows exactly as before", async () => {
     const p = await fixture();
     const stale = await bothEdits(p);
@@ -421,10 +389,13 @@ describe("A803 portion lifecycle: cancellations", () => {
   it("Cancel item removing a portion records a cancelled event and drops its binding", async () => {
     const p = await fixture();
     const [first, second] = p.portions;
-    const firstLine = (await linesOf(p.billId)).find((line) => line.id === first!.lineId)!;
-    await inTx(venue, (tx) =>
-      cancelItemForTest(tx, venue.cfg, p.billId, firstLine.lineNo, undefined, venue.adminId),
-    );
+    await inTx(venue, async (tx) => {
+      const [line] = await tx
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, first!.lineId));
+      await cancelItemForTest(tx, venue.cfg, p.billId, line!.lineNo, undefined, venue.adminId);
+    });
     expect(bindingOf(first!.lineId)).toEqual([]);
     expect(registryHas(first!.portionId)).toBe(true);
     expect(bindingOf(second!.lineId)).toEqual([{ portion_id: second!.portionId }]);

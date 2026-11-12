@@ -345,6 +345,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
               ],
             })
           : await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${tabId}/lines/1`, {
+              portionLineNos: [],
               revision,
               expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
               quantity: "2",
@@ -411,6 +412,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
               ],
             })
           : await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${tabId}/lines/1`, {
+              portionLineNos: [],
               revision,
               quantity: "2",
               makeAt: null,
@@ -463,7 +465,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       venue.cookie,
       "PUT",
       `/api/working-orders/${tabId}/lines/1`,
-      { revision: moved.json.revision, quantity: "2", makeAt: bar },
+      { portionLineNos: [], revision: moved.json.revision, quantity: "2", makeAt: bar },
     );
     expect(edited.status).toBe(200);
     const records = await inTx(venue, (tx) =>

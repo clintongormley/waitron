@@ -179,11 +179,5 @@ export function fireGroups(
 }
 
 export function panelTotal(storedTotal: string, ownLines: readonly OrderLine[]): string {
-  return toScale(
-    sumDecimals([
-      decimal(storedTotal),
-      ...ownLines.filter((line) => line.source === undefined).map(lineGross),
-    ]),
-    MONEY_SCALE,
-  );
+  return toScale(sumDecimals([decimal(storedTotal), ...ownLines.map(lineGross)]), MONEY_SCALE);
 }

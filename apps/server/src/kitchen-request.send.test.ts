@@ -24,7 +24,7 @@ import {
 } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroupedRound, submitGroups } from "./testing/group-submit-fixture.js";
-import { addTabRound, recallLines } from "./testing/order-writer-fixture.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { OPERATOR } from "./testing/party-venue.js";
@@ -340,62 +340,6 @@ describe("A773 waiter request: send", () => {
       expect(second).toEqual(first);
       expect(await items(tx, venue.party.tabId)).toEqual(rowsAfterFirst);
       expect(await jobCounts(tx, venue)).toEqual(jobsAfterFirst);
-    });
-  });
-
-  it("a legacy recall puts a released item back to held, both stamps cleared", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [burgerLine(venue)]);
-      const [released] = await items(tx, venue.party.tabId);
-      expect(released).toEqual({
-        ...released,
-        requestedAt: released!.firedAt,
-        firedAt: expect.any(String),
-        passControlled: false,
-      });
-      const [line] = await tx
-        .select({ lineNo: workingOrderLines.lineNo })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.id, released!.lineId));
-      await recallLines(tx, venue.cfg, venue.party.tabId, [line!.lineNo]);
-      const [recalled] = await items(tx, venue.party.tabId);
-      expect(recalled).toEqual({
-        ...released,
-        requestedAt: null,
-        firedAt: null,
-        passControlled: false,
-      });
-      expect(kitchenPhase(recalled!)).toBe("held");
-    });
-  });
-
-  it("a legacy recall puts a requested item back to held, no longer pass-controlled", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [burgerLine(venue)]);
-      const [requested] = await items(tx, venue.party.tabId);
-      expect(requested).toEqual({
-        ...requested,
-        requestedAt: expect.any(String),
-        firedAt: null,
-        passControlled: true,
-      });
-      const [line] = await tx
-        .select({ lineNo: workingOrderLines.lineNo, sentAt: workingOrderLines.sentAt })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.id, requested!.lineId));
-      expect(requested!.requestedAt).toBe(line!.sentAt);
-      await recallLines(tx, venue.cfg, venue.party.tabId, [line!.lineNo]);
-      const [recalled] = await items(tx, venue.party.tabId);
-      expect(recalled).toEqual({
-        ...requested,
-        requestedAt: null,
-        firedAt: null,
-        passControlled: false,
-      });
-      expect(kitchenPhase(recalled!)).toBe("held");
     });
   });
 

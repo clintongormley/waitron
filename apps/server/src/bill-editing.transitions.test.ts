@@ -4,7 +4,6 @@ import {
   billEditStates,
   CORE_MIGRATIONS,
   orderDraftLines,
-  orderDraftRecalledLines,
   orderDrafts,
   parties,
   withTransaction,
@@ -73,7 +72,7 @@ async function open(data: Awaited<ReturnType<typeof fixture>>, operatorId = data
   });
 }
 
-async function reserveSource(data: Awaited<ReturnType<typeof fixture>>, draftId: string) {
+async function addCharge(data: Awaited<ReturnType<typeof fixture>>) {
   return inTx(async (tx) => {
     const [source] = await tx
       .insert(workingOrderLines)
@@ -90,9 +89,6 @@ async function reserveSource(data: Awaited<ReturnType<typeof fixture>>, draftId:
         note: "No pepper",
       })
       .returning();
-    await tx
-      .insert(orderDraftRecalledLines)
-      .values({ draftId, sourceLineId: source!.id, position: 2 });
     return source!;
   });
 }
@@ -102,7 +98,6 @@ async function rows() {
     states: await suite.db.select().from(billEditStates),
     drafts: await suite.db.select().from(orderDrafts),
     lines: await suite.db.select().from(orderDraftLines),
-    sources: await suite.db.select().from(orderDraftRecalledLines),
     bills: await suite.db.select().from(workingOrders),
     charges: await suite.db.select().from(workingOrderLines),
   };
@@ -213,18 +208,6 @@ describe("bill editor lifecycle", () => {
     );
   });
 
-  it("never releases an outbox that still reserves a recalled source", async () => {
-    const data = await fixture();
-    const { draft, line, edit } = await open(data);
-    await inTx((tx) => tx.delete(orderDraftLines).where(eq(orderDraftLines.id, line.id)));
-    await reserveSource(data, draft.id);
-    await refused(
-      (tx) => editing.closeBillDraft(tx, data.bill.id, data.ana.id, edit, "submitted"),
-      "management.request_invalid",
-      { field: "lines" },
-    );
-  });
-
   it("reacquires a released bill without reopening the closed draft or reusing its version", async () => {
     const data = await fixture();
     const first = await open(data);
@@ -278,7 +261,7 @@ describe("bill editor lifecycle", () => {
   it("transfers the saved draft in place without moving lines or changing another bill", async () => {
     const data = await fixture();
     const { draft, edit } = await open(data);
-    await reserveSource(data, draft.id);
+    await addCharge(data);
     await open({ ...data, bill: data.other }, data.luis.id);
     const before = await rows();
     const transferred = await inTx((tx) =>
@@ -294,7 +277,6 @@ describe("bill editor lifecycle", () => {
     });
     const after = await rows();
     expect(after.lines).toEqual(before.lines);
-    expect(after.sources).toEqual(before.sources);
     expect(after.bills).toEqual(before.bills);
     expect(after.charges).toEqual(before.charges);
     expect(after.states.filter((row) => row.billId === data.other.id)).toEqual(
@@ -366,7 +348,6 @@ describe("bill editor lifecycle", () => {
     expect(moved).toEqual({ ...edit, editorVersion: 2, draftRevision: 1 });
     const after = await rows();
     expect(after.lines).toEqual(before.lines);
-    expect(after.sources).toEqual(before.sources);
     expect(after.bills).toEqual(before.bills);
     expect(after.charges).toEqual(before.charges);
     expect(after.drafts).toMatchObject([

@@ -1,4 +1,3 @@
-import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -16,7 +15,6 @@ import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.
 import { fireGroup, readCurrentOrders, readReleaseReminders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { createStation } from "./kitchen.js";
-import { recallToDraft } from "./draft-recall.js";
 import {
   fireableLineColumns,
   fireLines,
@@ -99,25 +97,6 @@ async function rows(billId: string) {
 }
 
 describe("serving with charged cancellations", () => {
-  it.each([1, 3])(
-    "refuses Recall of a family carrying %s cancelled dishes without changing its bill or party",
-    async (cancelled) => {
-      const order = await fixture(3, cancelled);
-      const before = await rows(order.billId);
-      const command = await args(order.partyId);
-      await expect(
-        inTx(venue, async (tx) =>
-          recallToDraft(tx, venue.cfg, order.partyId, order.parent.id, {
-            ...command,
-            expectedEdit: await readBillEditState(tx, order.billId),
-          }),
-        ),
-      ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineId" } });
-      expect(await rows(order.billId)).toEqual(before);
-      expect((await args(order.partyId)).expectedPartyRevision).toBe(command.expectedPartyRevision);
-    },
-  );
-
   it("dates completion of the one active dish and its two extras without changing billed quantities", async () => {
     const order = await fixture();
     const command = await args(order.partyId);

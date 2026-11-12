@@ -151,7 +151,6 @@ export {
   orderDrafts,
 } from "./schema/order-drafts.js";
 export { billEditStates } from "./schema/bill-edit-states.js";
-export { orderDraftRecalledLines } from "./schema/order-draft-recalled-lines.js";
 export { lineServiceCancellations } from "./schema/line-service-cancellations.js";
 export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";

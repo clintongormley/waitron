@@ -126,7 +126,16 @@ async function act(
     );
   if (action === "line")
     return run((tx) =>
-      updateOrderLine(tx, v.cfg, id, 1, { note: "No salt" }, 0, worker, attendance),
+      updateOrderLine(
+        tx,
+        v.cfg,
+        id,
+        1,
+        { portionLineNos: [], note: "No salt" },
+        0,
+        worker,
+        attendance,
+      ),
     );
   if (action === "label")
     return setWorkingOrderLabel(
@@ -142,7 +151,18 @@ describe("accepted order attendance", () => {
   it("a quantity-only line edit keeps line credit but captures its editor", async () => {
     const id = await parked();
     expect(
-      await run((tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "2" }, 0, worker, capture())),
+      await run((tx) =>
+        updateOrderLine(
+          tx,
+          v.cfg,
+          id,
+          1,
+          { portionLineNos: [], quantity: "2" },
+          0,
+          worker,
+          capture(),
+        ),
+      ),
     ).toBe(1);
     const rows = await suite.db
       .select()
@@ -191,7 +211,7 @@ describe("accepted order attendance", () => {
           v.cfg,
           id,
           1,
-          { options: [{ listId: option.id, labelId: option.labels[1]!.id }] },
+          { portionLineNos: [], options: [{ listId: option.id, labelId: option.labels[1]!.id }] },
           0,
           worker,
           capture(),
@@ -231,6 +251,7 @@ describe("accepted order attendance", () => {
           id,
           1,
           {
+            portionLineNos: [],
             extras: [
               { listId: list.id, picks: [{ productId: v.productId("Water"), quantity: 1 }] },
             ],
@@ -306,7 +327,18 @@ describe("accepted order attendance", () => {
       ),
     ).toBe(1);
     expect(
-      await run((tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "1" }, 1, worker, capture())),
+      await run((tx) =>
+        updateOrderLine(
+          tx,
+          v.cfg,
+          id,
+          1,
+          { portionLineNos: [], quantity: "1" },
+          1,
+          worker,
+          capture(),
+        ),
+      ),
     ).toBe(1);
     expect(
       await updateHeldOrder(
@@ -338,7 +370,16 @@ describe("accepted order attendance", () => {
     const id = await parked();
     expect(
       await run((tx) =>
-        updateOrderLine(tx, v.cfg, id, 1, { note: "No salt" }, 0, undefined, capture()),
+        updateOrderLine(
+          tx,
+          v.cfg,
+          id,
+          1,
+          { portionLineNos: [], note: "No salt" },
+          0,
+          undefined,
+          capture(),
+        ),
       ),
     ).toBe(1);
     expect((await line(id)).note).toBe("No salt");

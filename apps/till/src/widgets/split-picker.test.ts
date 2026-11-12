@@ -110,7 +110,7 @@ function source(
       hasPayments: (options.received ?? "0.00") !== "0.00",
       receiptAvailable: false,
     },
-    groups: pickGroups(lines, keyFor(lines, balance), balance, new Set()),
+    groups: pickGroups(lines, keyFor(lines, balance), balance),
     held: options.held ?? null,
     ownUnsent: options.ownUnsent ?? false,
     refundPending: false,
@@ -533,7 +533,6 @@ describe("till-split-picker", () => {
         held("b3", null),
       ],
       "ana",
-      new Set(),
       keyFor,
     );
     const { el } = await picker(sources);

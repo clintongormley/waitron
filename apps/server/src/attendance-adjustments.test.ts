@@ -22,6 +22,7 @@ import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce"
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { send } from "./testing/bill-venue.js";
+import { cancelItemRequest } from "./testing/cancel-line.js";
 import {
   billWith,
   lineIdOf,
@@ -88,7 +89,19 @@ async function prepare(action: Action) {
     operatorId: v.managerId,
     at: "2026-01-06T22:00:00Z",
   };
-  return { ...bill, body };
+  const request =
+    action === "cancel"
+      ? await cancelItemRequest(v.db, bill.billId, 1, undefined, {
+          submissionId: body.submissionId,
+          reasonId: body.reasonId,
+          preparationStarted: true,
+        })
+      : { path: `/api/working-orders/${bill.billId}/adjustments`, body };
+  return {
+    ...bill,
+    path: request.path,
+    body: { ...request.body, operatorId: body.operatorId, at: body.at },
+  };
 }
 async function state() {
   return {
@@ -105,25 +118,12 @@ async function state() {
 }
 async function heldCancellation(app: Hono) {
   const bill = await billWith(v, [{ name: "Burger" }], { operatorId: v.staffId, release: "hold" });
-  const body = {
-    submissionId: newId(),
-    expectedRevision: bill.revision,
-    expectedEdit: await readBillEditState(v.db, bill.billId),
-    lineId: await lineIdOf(v, bill.billId, 1),
+  const { path, body } = await cancelItemRequest(v.db, bill.billId, 1, undefined, {
     reasonId: v.reasonId.houseVoid,
-    action: "cancel",
-    note: null,
-  };
+  });
   return {
     billId: bill.billId,
-    send: () =>
-      send(
-        app,
-        v.cookie.supervisor,
-        "POST",
-        `/api/working-orders/${bill.billId}/adjustments`,
-        body,
-      ),
+    send: () => send(app, v.cookie.supervisor, "POST", path, body),
   };
 }
 describe("an adjustment that empties a held group", () => {
@@ -176,15 +176,24 @@ describe("adjustment order activity", () => {
   it.each(actions)(
     "%s retains the initiating worker rather than line credit or supplied attribution",
     async (action) => {
-      const { billId, revision, body } = await prepare(action);
+      const { billId, partyId, revision, path, body } = await prepare(action);
+      const [party] = await suite.db.select().from(parties).where(eq(parties.id, partyId));
       const response = await send(
         api(recordAttendanceFact),
         v.cookie.supervisor,
         "POST",
-        `/api/working-orders/${billId}/adjustments`,
+        path,
         body,
       );
-      expect(response).toMatchObject({ status: 200, json: { revision: revision + 1 } });
+      expect(response).toMatchObject({
+        status: 200,
+        json: { revision: action === "cancel" ? party!.revision + 1 : revision + 1 },
+      });
+      const [order] = await suite.db
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId));
+      expect(order!.revision).toBe(revision + 1);
       expect(
         (await state()).facts.map((r) => [
           r.source,
@@ -223,7 +232,7 @@ describe("adjustment order activity", () => {
   it.each(actions)(
     "%s rolls back its money, kitchen, replay marker and activity after recorder refusal",
     async (action) => {
-      const { billId, body } = await prepare(action),
+      const { path, body } = await prepare(action),
         before = await state();
       const response = await send(
         api(async (tx, fact) => {
@@ -232,7 +241,7 @@ describe("adjustment order activity", () => {
         }),
         v.cookie.supervisor,
         "POST",
-        `/api/working-orders/${billId}/adjustments`,
+        path,
         body,
       );
       expect(response).toMatchObject({ status: 400, json: { code: "attendance.invalid" } });
@@ -240,42 +249,22 @@ describe("adjustment order activity", () => {
     },
   );
   it.each(actions)("a replayed %s creates no new attendance or clock reading", async (action) => {
-    const { billId, body } = await prepare(action),
+    const { path, body } = await prepare(action),
       app = api(recordAttendanceFact);
-    const response = await send(
-      app,
-      v.cookie.supervisor,
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      body,
-    );
+    const response = await send(app, v.cookie.supervisor, "POST", path, body);
     expect(response).toMatchObject({ status: 200 });
     const before = await state();
     vi.spyOn(v.clock, "now").mockImplementation(() => {
       throw new Error("replayed adjustment clock");
     });
-    expect(
-      await send(
-        app,
-        v.cookie.supervisor,
-        "POST",
-        `/api/working-orders/${billId}/adjustments`,
-        body,
-      ),
-    ).toEqual(response);
+    expect(await send(app, v.cookie.supervisor, "POST", path, body)).toEqual(response);
     expect(await state()).toEqual(before);
   });
   it.each(actions)("%s without attendance creates no workforce state", async (action) => {
-    const { billId, body } = await prepare(action);
-    expect(
-      await send(
-        api(),
-        v.cookie.supervisor,
-        "POST",
-        `/api/working-orders/${billId}/adjustments`,
-        body,
-      ),
-    ).toMatchObject({ status: 200 });
+    const { path, body } = await prepare(action);
+    expect(await send(api(), v.cookie.supervisor, "POST", path, body)).toMatchObject({
+      status: 200,
+    });
     expect((await state()).facts).toEqual([]);
     expect((await state()).days).toEqual([]);
   });

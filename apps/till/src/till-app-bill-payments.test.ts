@@ -48,7 +48,7 @@ import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
   cancelReason,
-  cancelThroughDialog,
+  cancellationStubs,
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
@@ -3792,16 +3792,30 @@ describe("till-app: a change refused on a bill that holds money", () => {
   });
 
   it("shows a Cancel refused because issuing the invoice finds a sold-out dish above the Cancel, and reads the bill again", async () => {
-    const { el, order, reads } = await openHolding({
+    const { el, order } = await openHolding({
       ...adjustmentStubs(),
-      applyAdjustment: vi
+      ...cancellationStubs(),
+      cancelItem: vi
         .fn()
         .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "p" }),
     });
 
-    await cancelThroughDialog(el, order, "line-5", () => flush(el));
-
-    const adjust = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+    emit(order, "cancel-item", { lineId: "line-5" });
+    await flush(el);
+    const adjust = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
+    const reads = {
+      bills: vi.mocked(api.getPartyBills).mock.calls.length,
+      balance: vi.mocked(api.getBillBalance).mock.calls.length,
+      lines: vi.mocked(api.getTabLines).mock.calls.length,
+    };
+    emit(adjust, "cancel-item-choice", {
+      lineId: "line-5",
+      quantity: "1",
+      outcome: "remove_charge",
+      consent: adjust.consent,
+      reasonId: cancelReason.id,
+    });
+    await flush(el);
     expect(
       adjust.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
     ).toBe(codeMessage("product.unavailable"));

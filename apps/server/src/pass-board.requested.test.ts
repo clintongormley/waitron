@@ -365,7 +365,6 @@ describe("A773 pass board: reads", () => {
         readyAt: null,
         passControlled: true,
         remaining: 1000,
-        recalled: false,
         stationChosenAt: null,
         stationRetainedAtRelease: false,
         makeAtStationId: null,

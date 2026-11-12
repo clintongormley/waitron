@@ -37,12 +37,10 @@ New order separates **Fire now**, new held groups and dishes that will join an e
 second bill choice. To fire only some dishes, select them and press **Fire**. Fresh dishes that
 cannot currently be sold stay in New order.
 
-When you Recall a sent dish, it keeps its recorded bill row, price and existing discount. You can
-send it again even if the dish is no longer offered. If either kind still needs a station choice,
-it stays in New order. Changing a recalled dish's modifiers can change its bill
-amount during the draft save; newly added extras use current prices. See the
-[modifier contract](../../docs/developers/modifiers.md#ordering-and-stored-facts) for the save and
-send rules. Only unsent dishes have selection controls; sent dishes have their own line window.
+Use **Change dish** in a sent dish's line window to change its details or increase the count.
+Use **Cancel item** to remove sent dishes. At the counter, × on a sent dish opens the same
+cancellation window. Unsent dishes stay in **New order**, where you can edit or remove them
+before sending.
 
 Each bill has one saved New order and one editor while it contains unsent dishes. You and a
 colleague can edit different bills at the same table. On the same bill, a colleague's saved dishes

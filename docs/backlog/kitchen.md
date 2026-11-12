@@ -162,8 +162,7 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
 
 - Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
   right only while every writer stores the same `toISOString()` form (every writer found uses
-  `nowIso()`; not proven for all); and a dish recalled and fired again carries its new fire time but
-  its old group's firer. Left open by the table actions plan's Task 9 (#874, dishes arriving in a
+  `nowIso()`; not proven for all). Left open by the table actions plan's Task 9 (#874, dishes arriving in a
   party get a kitchen group).
 
 ## `GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller
@@ -343,6 +342,10 @@ The station editor keeps its switch. Picture 10's "Held courses: Print when sent
 fired" dropdown (A773) is not adopted.
 
 ### Changes after sending: every part of a dish decides, and removal is not gated (A756 PR 8, 2026-10-24)
+
+**2026-11-11:** [R3-owner](../superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
+retires Recall and moves every sent-dish removal to Cancel item. The following dated ruling
+records the earlier order-edit removal path; the station setting still governs Change dish.
 
 Owner FYIs, built this way; say if any should change. A dish the kitchen has started is refused
 first. Since A1382 (owner, 2026-11-07), a bare quantity raise of a started dish is not refused as

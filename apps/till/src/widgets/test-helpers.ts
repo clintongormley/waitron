@@ -22,6 +22,8 @@ import type {
   SubmittedDraft,
   SubmittedGroups,
 } from "../api/client.js";
+import type { CancellationRead } from "../api/line-cancel-types.js";
+import type { TillCancelItemDialog } from "./cancel-item-dialog.js";
 import type { DocumentMember, ServedMenu } from "@waitron/shared";
 import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { png } from "@waitron/ui/test/venue-logo-fixture.js";
@@ -377,37 +379,14 @@ export function draftServer(
     rowsAtRevision.set(draft.revision, rows);
   };
   const reidentify = (lines: DraftSave["lines"]): DraftLine[] =>
-    normaliseDraftLines(
-      lines.map((line) => (line.sourceLineId != null ? { ...line, noMerge: true as const } : line)),
-    ).map((line) => {
-      let saved: DraftLine;
-      if (line.sourceLineId != null) {
-        const prior =
-          server.linesById.get(line.id) ??
-          server.drafts.flatMap((draft) => draft.lines).find((row) => row.id === line.id);
-        if (prior?.sourceLineId !== line.sourceLineId)
-          throw { code: "management.request_invalid", status: 400, field: "sourceLineId" };
-        saved = {
-          ...prior,
-          quantity: line.quantity,
-          note: line.note,
-          courseId: line.courseId,
-          makeAt: line.makeAt,
-          slot: line.slot,
-          joinGroupId: line.joinGroupId,
-          afterGroupId: line.afterGroupId,
-          noMerge: true,
-          unavailable: false,
-        };
-      } else {
-        saved = {
-          ...line,
-          sourceLineId: null,
-          source: null,
-          id: line.id ?? `line-${++ids}`,
-          unavailable: false,
-        };
-      }
+    normaliseDraftLines(lines).map((line) => {
+      const saved: DraftLine = {
+        ...line,
+        sourceLineId: null,
+        source: null,
+        id: line.id ?? `line-${++ids}`,
+        unavailable: false,
+      };
       server.linesById.set(saved.id, saved);
       return saved;
     });
@@ -643,12 +622,40 @@ function emitFrom(source: Element, type: string, detail: unknown = {}): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
-/**
- * Cancels line `lineId` of the app's open order as a waiter does: the table screen asks for the
- * cancel dialog, {@link cancelReason} is chosen and previewed, then confirmed unless the preview
- * was refused. `quantity` "1" takes one unit of several. `settle` lets the app finish each step's
- * requests.
- */
+/** An opened bill's cancellation read and successful cancellation, before any fixture override. */
+export function cancellationStubs(
+  billId = "wo-4",
+  quantity = "1",
+): Record<"getCancellation" | "cancelItem", Mock> {
+  return {
+    getCancellation: vi.fn(async (_target: unknown, lineId: string): Promise<CancellationRead> => ({
+      billId,
+      revision: 3,
+      billRevision: 0,
+      context: {
+        billStatus: "open",
+        stage: "started",
+        components: [
+          {
+            id: "kitchen-1",
+            lineId,
+            state: "preparing",
+            firedAt: "2026-10-17T10:00:00Z",
+            requestedAt: null,
+            stationId: "station-1",
+            quantity,
+            kitchenQuantity: quantity,
+            servedQuantity: "0.000",
+            cancelledQuantity: "0.000",
+          },
+        ],
+      },
+    })),
+    cancelItem: vi.fn().mockResolvedValue({ revision: 4 }),
+  };
+}
+
+/** Cancels an open table's dish through its Cancel item window, using the context that window read. */
 export async function cancelThroughDialog(
   app: HTMLElement,
   screen: Element,
@@ -656,23 +663,17 @@ export async function cancelThroughDialog(
   settle: () => Promise<void>,
   quantity?: "1",
 ): Promise<void> {
-  const target = {
-    lineId,
-    name: lineId,
-    quantity: quantity === undefined ? "1" : "2",
-    total: "2.00",
-    unitTotal: quantity === undefined ? null : "1.00",
-  };
-  emitFrom(screen, "adjust", { kind: "cancel", target });
+  emitFrom(screen, "cancel-item", { lineId });
   await settle();
-  const dialog = app.shadowRoot!.querySelector("till-adjustment-dialog")!;
+  const dialog = app.shadowRoot!.querySelector<TillCancelItemDialog>("till-cancel-item-dialog");
   expect(dialog).not.toBeNull();
-  const choice = { action: "cancel", reasonId: cancelReason.id, note: null };
-  emitFrom(dialog, "adjust-preview", quantity === undefined ? choice : { ...choice, quantity });
-  await settle();
-  // A refused preview leaves the dialog on its form, where there is nothing to confirm.
-  if ((dialog as HTMLElement & { preview: unknown }).preview === null) return;
-  emitFrom(dialog, "adjust-confirm");
+  emitFrom(dialog!, "cancel-item-choice", {
+    lineId,
+    quantity: quantity ?? "1",
+    outcome: "remove_charge",
+    consent: dialog!.consent,
+    reasonId: cancelReason.id,
+  });
   await settle();
 }
 

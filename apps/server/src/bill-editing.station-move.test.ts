@@ -5,12 +5,9 @@ import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
 import { saveDraft, takeOverDraft, type BillEditExpected } from "./order-drafts.js";
-import { recallToDraft } from "./draft-recall.js";
-import { partyRevisionOfOrder } from "./parties.js";
 import { moveDishesToStation, type StationMover } from "./station-move.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { withStationDishes } from "./station-closing.js";
@@ -339,59 +336,6 @@ describe("station movement checks bill editing authority", () => {
     ).toEqual(result);
     expect(frozen()).toEqual(before);
   });
-  it.each([false, true])(
-    "refuses a reserved recalled parent through either authority (kitchen: %s)",
-    async (kitchen) => {
-      const p = await fixture();
-      await inTx(venue, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
-      const recalled = await inTx(venue, async (tx) =>
-        recallToDraft(tx, venue.cfg, p.partyId, p.lineId, {
-          submissionId: randomUUID(),
-          expectedPartyRevision: (await partyRevisionOfOrder(tx, p.tabId))!.revision,
-          operatorId: venue.operatorId,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        }),
-      );
-      const before = frozen();
-      await expect(move(p, recalled.edit, { kitchen })).rejects.toMatchObject({
-        code: "draft.out_of_date",
-        params: {
-          billId: p.tabId,
-          draftId: recalled.edit.draftId,
-          revision: recalled.edit.draftRevision,
-          edit: recalled.edit,
-        },
-      });
-      expect(frozen()).toEqual(before);
-    },
-  );
-  it.each([false, true])(
-    "refuses the extra of a reserved recalled parent (kitchen: %s)",
-    async (kitchen) => {
-      const p = await fixture();
-      await inTx(venue, async (tx) => {
-        await tx
-          .update(workingOrderLines)
-          .set({ parentLineId: p.lineId })
-          .where(eq(workingOrderLines.id, p.extraId));
-        await setChangesAfterSending(tx, "held-or-waiting");
-      });
-      const recalled = await inTx(venue, async (tx) =>
-        recallToDraft(tx, venue.cfg, p.partyId, p.lineId, {
-          submissionId: randomUUID(),
-          expectedPartyRevision: (await partyRevisionOfOrder(tx, p.tabId))!.revision,
-          operatorId: venue.operatorId,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        }),
-      );
-      const before = frozen();
-      await expect(move(p, recalled.edit, { kitchen, lineId: p.extraId })).rejects.toMatchObject({
-        code: "draft.out_of_date",
-        params: { billId: p.tabId, edit: recalled.edit },
-      });
-      expect(frozen()).toEqual(before);
-    },
-  );
   it("till route uses its session actor despite a forged body owner and kitchen authority", async () => {
     const p = await fixture(),
       owned = await save(p, venue.adminId),

@@ -6,12 +6,10 @@ import { parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { splitBill, transferItems } from "./bill-actions.js";
 import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 
-import { placeGroupedRound, submitGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import {
   readDrafts,
   saveDraft,
@@ -144,17 +142,6 @@ async function transfer(p: Fixture, expectedEdits: BillEditExpected[], quantity?
     ),
   );
 }
-async function recall(p: Fixture) {
-  const ask = {
-    ...(await command(p)),
-    expectedEdit: await edit(p.tabId),
-    submissionId: randomUUID(),
-  };
-  return inTx(venue, async (tx) => {
-    await setChangesAfterSending(tx, "held-or-waiting");
-    return recallToDraft(tx, venue.cfg, p.partyId, p.dish.id, ask);
-  });
-}
 
 describe("splitting a bill requires its current editor before creating a destination", () => {
   it("refuses a colleague without creating a bill or editor state", async () => {
@@ -278,70 +265,6 @@ describe("transferring dishes compares both bills including an empty destination
       )[0],
     ).toMatchObject({ quantity: 1000, unitPriceGross: 1800, lineTotal: 1800 });
   });
-});
-
-describe("direct financial moves cannot mutate a reserved recalled family", () => {
-  it.each(["split", "transfer"] as const)(
-    "%s still moves a different sent dish while keeping the recalled source intact",
-    async (action) => {
-      const p = await fixture();
-      await recall(p);
-      const ask = await command(p);
-      await inTx(venue, (tx) =>
-        submitGroups(tx, venue.cfg, p.partyId, {
-          ...ask,
-          submissionId: randomUUID(),
-          groups: [
-            { release: "fire", lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] },
-          ],
-        }),
-      );
-      const dishes = await venue.db
-        .select()
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, p.tabId));
-      const sent = dishes.find((dish) => dish.id !== p.dish.id)!;
-      const before = await edit(p.tabId);
-      const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
-      const target = { ...p, dish: sent };
-      const destination = action === "split" ? (await split(target, before)).billId : p.otherId;
-      if (action === "transfer") await transfer(target, await edits(p));
-      expect(await edit(p.tabId)).toEqual(before);
-      expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
-      expect(
-        (
-          await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, p.dish.id))
-        )[0],
-      ).toEqual(p.dish);
-      expect(
-        (
-          await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, sent.id))
-        )[0],
-      ).toMatchObject({
-        workingOrderId: destination,
-        quantity: 1000,
-        unitPriceGross: 300,
-        lineTotal: 300,
-      });
-    },
-  );
-  for (const action of ["split", "transfer"] as const)
-    it.each(["whole", "partial"] as const)(
-      `${action} refuses a %s recalled source without changing charges or reservations`,
-      async (part) => {
-        const p = await fixture(),
-          recalled = await recall(p),
-          expected = await edits(p);
-        await refused(
-          () =>
-            action === "split"
-              ? split(p, recalled.edit, part === "partial" ? "1" : undefined)
-              : transfer(p, expected, part === "partial" ? "1" : undefined),
-          "draft.out_of_date",
-          stale(recalled.edit),
-        );
-      },
-    );
 });
 
 describe("split and transfer HTTP contracts", () => {

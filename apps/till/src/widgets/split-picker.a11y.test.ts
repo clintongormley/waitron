@@ -89,7 +89,7 @@ function source(
       hasPayments: false,
       receiptAvailable: false,
     },
-    groups: pickGroups(DISHES, keyOf, balance, new Set()),
+    groups: pickGroups(DISHES, keyOf, balance),
     held: over.held ?? null,
     ownUnsent: over.ownUnsent ?? false,
     refundPending: false,

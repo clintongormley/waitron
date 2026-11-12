@@ -46,7 +46,7 @@ const kitchenItems = (billId: string) =>
     .where(eq(workingOrderLines.workingOrderId, billId));
 
 describe("changing a sent dish that has been served", () => {
-  it("is refused, as Recall refuses it, and the kitchen is asked for nothing", async () => {
+  it("is refused after Recall is retired, and the kitchen is asked for nothing", async () => {
     const billId = await tabWith(venue, "Steak");
     await inTx(venue, (tx) => fireAll(tx, venue.cfg, billId));
     // What a till that read the bill before the dish was served holds.
@@ -54,7 +54,7 @@ describe("changing a sent dish that has been served", () => {
     const before = await kitchenItems(billId);
     await inTx(venue, (tx) => serveLine(tx, venue.cfg, billId, 1));
 
-    // Control: Recall refuses the served dish.
+    // Recall is absent even for a served dish.
     const [line] = await venue.db
       .select()
       .from(workingOrderLines)
@@ -71,7 +71,7 @@ describe("changing a sent dish that has been served", () => {
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
       },
     );
-    expect(recall.status).toBe(400);
+    expect(recall.status).toBe(404);
 
     const change = await send(
       venue.app,

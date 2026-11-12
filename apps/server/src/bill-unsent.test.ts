@@ -5,20 +5,12 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  orderDraftLines,
-  orderDraftRecalledLines,
-  orderDrafts,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { orderDraftLines, orderDrafts, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-
-import type { Draft } from "./order-drafts.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import { previewBillPayment, type BillPaymentAsk } from "./testing/bill-payment-fixture.js";
 import {
@@ -31,7 +23,6 @@ import {
   paymentRows,
   provisionBillVenue,
   fiscalRecordCount,
-  partyRevisionOf,
   seatedWith,
   send,
   statusOf,
@@ -143,13 +134,9 @@ describe("payment reservations and previously received money", () => {
   });
 
   it.each(["bill", "whole"] as const)(
-    "refuses draft save and Recall while a %s reader reservation runs",
+    "refuses draft save while a %s reader reservation runs",
     async (kind) => {
       const p = await seatedWith(venue, "Tarta");
-      const [line] = await venue.db
-        .select()
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, p.tabId));
       const release = venue.card.holdNextCollect();
       const calls = venue.card.collectCalls.length;
       const pending =
@@ -167,19 +154,6 @@ describe("payment reservations and previously received money", () => {
       try {
         await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
         await expect(unsent(p.tabId)).rejects.toMatchObject({ code: "order.payment_in_flight" });
-        const recalled = await send(
-          venue.app,
-          venue.cookie,
-          "POST",
-          `/api/parties/${p.partyId}/lines/${line!.id}/recall`,
-          {
-            submissionId: randomUUID(),
-            expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
-            expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),
-          },
-        );
-        expect(recalled.status).toBe(409);
-        expect(recalled.json).toMatchObject({ code: "order.payment_in_flight" });
       } finally {
         release();
         const paid = await pending;
@@ -232,66 +206,6 @@ describe("payment reservations and previously received money", () => {
     );
     expect(after).toMatchObject({ total: "5.00" });
     expect(fiscalRecordCount(venue, billId)).toBe(1);
-  });
-
-  it("issues after the last recalled draft is submitted, after its reference is removed", async () => {
-    const p = await seatedWith(venue, "Tarta");
-    const paid = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${p.tabId}/payments`,
-      {
-        ...ask("contribution", "cash"),
-        submissionId: randomUUID(),
-        applied: "5.00",
-        tip: "0.00",
-      },
-    );
-    expect(paid.status).toBe(200);
-    const [line] = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
-    const recalled = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${p.partyId}/lines/${line!.id}/recall`,
-      {
-        submissionId: randomUUID(),
-        expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),
-      },
-    );
-    expect(recalled.status).toBe(200);
-    const draft = (recalled.json as unknown as { draft: Draft }).draft;
-    await venue.db
-      .update(workingOrderLines)
-      .set({ unitPriceGross: 500 })
-      .where(eq(workingOrderLines.id, line!.id));
-    const sent = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${p.partyId}/drafts/${draft.id}/submit`,
-      {
-        submissionId: randomUUID(),
-        expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
-        draftRevision: draft.revision,
-        groups: [{ lineIds: [draft.lines[0]!.id], release: "fire" }],
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),
-      },
-    );
-    expect(sent.status).toBe(200);
-    expect(
-      await venue.db
-        .select()
-        .from(orderDraftRecalledLines)
-        .where(eq(orderDraftRecalledLines.draftId, draft.id)),
-    ).toEqual([]);
-    expect(await statusOf(venue, p.tabId)).toBe("settled");
-    expect(fiscalRecordCount(venue, p.tabId)).toBe(1);
   });
 
   it.each(["empty save", "discard"] as const)(
@@ -423,7 +337,7 @@ function ask(kind: BillPaymentAsk["kind"], method: "cash" | "card"): BillPayment
 }
 
 describe("unsent dishes block new payments on their own bill", () => {
-  it("refuses each bill's own fresh plus recalled dishes without owner details", async () => {
+  it("refuses each bill's own fresh dishes without owner details", async () => {
     const billId = await tabWith(venue, "Tarta");
     const ana = await unsent(billId, venue.operatorId, "1.25");
     const [colleague] = await venue.db.insert(persons).values({ displayName: "Zoë" }).returning();
@@ -437,15 +351,6 @@ describe("unsent dishes block new payments on their own bill", () => {
       });
     });
     await unsent(otherBillId, colleague!.id, "2.5");
-    const [source] = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, billId));
-    await venue.db.insert(orderDraftRecalledLines).values({
-      draftId: ana.id,
-      sourceLineId: source!.id,
-      position: 1,
-    });
     await venue.db
       .update(orderDraftLines)
       .set({

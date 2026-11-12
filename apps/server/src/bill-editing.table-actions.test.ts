@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  orderDraftLines,
-  orderDraftRecalledLines,
-  parties,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { orderDraftLines, parties, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -32,7 +26,6 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { openTillSession } from "./testing/session-device.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { recallToDraft } from "./draft-recall.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
@@ -519,7 +512,7 @@ describe("table composition compares every affected bill before moving anything"
     });
   });
   it.each(actions)(
-    "%s preserves recalled identity, price and allergy ticks during relocation",
+    "%s preserves draft identity, price and allergy ticks during relocation",
     async (action) => {
       const from = await party(),
         into = await party();
@@ -545,19 +538,12 @@ describe("table composition compares every affected bill before moving anything"
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, from.tabId));
       const [partyRow] = await venue.db.select().from(parties).where(eq(parties.id, from.partyId));
-      const recalled = await inTx(venue, (tx) =>
-        recallToDraft(tx, venue.cfg, from.partyId, dish!.id, {
-          expectedPartyRevision: partyRow!.revision,
-          operatorId: venue.operatorId,
-          submissionId: randomUUID(),
-          expectedEdit: blank(from.tabId),
-        }),
-      );
+      const saved = await save(from.partyId, from.tabId);
       await inTx(venue, async (tx) => {
         const allergy = await VENUE_SERVICE.savePartyAllergy(
           tx,
           from.partyId,
-          recalled.revision,
+          partyRow!.revision,
           { answer: "allergies", guests: [{ who: "Blue coat", allergens: { milk: {} } }] },
           venue.operatorId,
         );
@@ -565,16 +551,9 @@ describe("table composition compares every affected bill before moving anything"
           { guestId: allergy.guests[0]!.id, workingLineId: dish!.id },
         ]);
       });
-      const sources = await venue.db
-        .select()
-        .from(orderDraftRecalledLines)
-        .orderBy(orderDraftRecalledLines.id);
       const charges = await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id);
       const allergy = await inTx(venue, (tx) => VENUE_SERVICE.readPartyAllergy(tx, from.partyId));
       await request(action, from, into, await edits(from.partyId, into.partyId));
-      expect(
-        await venue.db.select().from(orderDraftRecalledLines).orderBy(orderDraftRecalledLines.id),
-      ).toEqual(sources);
       expect(await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id)).toEqual(
         charges,
       );
@@ -586,7 +565,7 @@ describe("table composition compares every affected bill before moving anything"
       );
       expect(movedAllergy.ticks).toEqual(allergy.ticks);
       expect(await inTx(venue, (tx) => readBillEditState(tx, from.tabId))).toEqual({
-        ...recalled.edit,
+        ...saved.edit,
         editorVersion: 2,
         draftRevision: 1,
       });

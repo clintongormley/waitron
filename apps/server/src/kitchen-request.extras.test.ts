@@ -305,7 +305,10 @@ describe("A773 waiter request: extras", () => {
         firedAt: null,
       });
       vi.setSystemTime(new Date(EDIT_AT));
-      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1).extras });
+      await edit(tx, venue, 1, {
+        portionLineNos: [],
+        extras: line(venue, "burger", "1", 1).extras,
+      });
       const chips = (await items(tx, venue.party.tabId)).find(
         (row) => row.productId === venue.products.chips,
       );
@@ -333,7 +336,10 @@ describe("A773 waiter request: extras", () => {
         firedAt: null,
       });
       vi.setSystemTime(new Date(EDIT_AT));
-      await edit(tx, venue, 1, { extras: line(venue, "water", "1", 1, 1).extras });
+      await edit(tx, venue, 1, {
+        portionLineNos: [],
+        extras: line(venue, "water", "1", 1, 1).extras,
+      });
       const rows = await items(tx, venue.party.tabId);
       expect(rows.find((row) => row.productId === venue.products.onionRings)).toMatchObject({
         requestedAt: EDIT_AT,

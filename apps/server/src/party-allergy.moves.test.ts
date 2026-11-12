@@ -9,14 +9,8 @@ import {
   setAllergyLineTicks,
   writePartyAllergy,
 } from "@waitron/venue-service";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { mergeBills, transferItems } from "./testing/bill-action-fixture.js";
-import { recallToDraft } from "./draft-recall.js";
-import { splitDraft } from "./order-drafts.js";
-import { readBillEditState } from "./bill-editing.js";
-import { readPartyAllergyView } from "./party-allergy.js";
-import { randomUUID } from "node:crypto";
 import {
   OPERATOR,
   commandFor,
@@ -188,68 +182,6 @@ it.each([
   expect(result.answer).toBe(wanted);
   expect(result.guests.map((g) => g.who)).toEqual(names);
   expect(await read(b.partyId)).toMatchObject({ answer: null, guests: [], ticks: [] });
-});
-
-it("splitting one of two recalled dishes keeps both source assignments and their consideration", async () => {
-  const a = await party();
-  await order(v, a.tabId, "Burger", "Flan");
-  const state = await save(a.partyId, "Window seat");
-  const first = await dish(a.tabId, "Burger"),
-    second = await dish(a.tabId, "Flan");
-  await inTx(v, (tx) =>
-    setAllergyLineTicks(
-      tx,
-      a.partyId,
-      [first, second].map((line) => ({
-        guestId: state.guests[0]!.id,
-        workingLineId: line.id,
-      })),
-    ),
-  );
-  try {
-    await inTx(v, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
-    let recalled;
-    for (const line of [first, second]) {
-      const command = await commandFor(v, a.partyId);
-      recalled = await inTx(v, async (tx) =>
-        recallToDraft(tx, v.cfg, a.partyId, line.id, {
-          ...command,
-          submissionId: randomUUID(),
-          expectedEdit: await readBillEditState(tx, a.tabId),
-        }),
-      );
-    }
-    const before = await read(a.partyId);
-    const chosen = recalled!.draft.lines.find((line) => line.sourceLineId === first.id)!;
-    const command = await commandFor(v, a.partyId);
-    const result = await inTx(v, async (tx) =>
-      splitDraft(tx, v.cfg, a.partyId, recalled!.draft.id, {
-        ...command,
-        submissionId: randomUUID(),
-        expectedEdit: await readBillEditState(tx, a.tabId),
-        lineIds: [chosen.id],
-      }),
-    );
-    expect((await read(a.partyId)).ticks).toEqual(before.ticks);
-    const view = await inTx(v, (tx) => readPartyAllergyView(tx, v.cfg, a.partyId));
-    expect(view.dishes).toHaveLength(2);
-    expect(view.dishes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          line: { kind: "working", id: first.id },
-          billId: result.billId,
-          offeredBefore: true,
-        }),
-        expect.objectContaining({
-          line: { kind: "working", id: second.id },
-          billId: a.tabId,
-          offeredBefore: true,
-        }),
-      ]),
-    );
-  } finally {
-    await inTx(v, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
-  }
 });
 
 it("whole dish ticks survive a same-party bill split, transfer and merge", async () => {

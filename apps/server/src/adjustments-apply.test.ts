@@ -3,12 +3,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import {
-  recallLines,
-  updateHeldOrder,
-  updateOrderLine,
-  placeOrder,
-} from "./testing/order-writer-fixture.js";
+import { updateHeldOrder, updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -1254,7 +1249,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
         venue.cfg,
         billId,
         lineNo,
-        { quantity },
+        { portionLineNos: [], quantity },
         await readOrderRevision(tx, billId),
         venue.staffId,
       ),
@@ -1404,7 +1399,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
         venue.cfg,
         billId,
         1,
-        { quantity: "2", makeAt: null },
+        { portionLineNos: [], quantity: "2", makeAt: null },
         await readOrderRevision(tx, billId),
         venue.staffId,
       ),
@@ -1450,22 +1445,6 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       ["Bottle", "1.000", "27.00", "30.00", "27.00"],
       ["Bottle", "1.000", "30.00", null, "30.00"],
     ]);
-  });
-
-  it("holds the Burger added to a comped one recalled from the kitchen", async () => {
-    const { billId } = await bill([{ name: "Burger" }]);
-    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
-    await inTx(venue, (tx) => recallLines(tx, venue.cfg, billId, [1]));
-
-    await raise(billId, 1, "2");
-
-    expect(await priced(billId)).toEqual([
-      ["Burger", "1.000", "0.00", "12.00", "0.00"],
-      ["Burger", "1.000", "12.00", null, "12.00"],
-    ]);
-    // It waits with the recalled Burger, in the group that Burger was fired in.
-    expect(await kitchenOf(billId, 2)).toEqual({ group: "fired", firedAt: null });
-    expect((await placeOf(billId, 2)).groupId).toBe((await placeOf(billId, 1)).groupId);
   });
 
   /** Bind line `lineNo` to a portion of a cohort of its own, as the portion writers do; a line the
@@ -1606,6 +1585,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
           billId,
           1,
           {
+            portionLineNos: [],
             quantity: "2",
             extras: [
               { listId: venue.pizzaExtras, picks: [{ productId: venue.olivesId, quantity: 1 }] },
@@ -2972,9 +2952,6 @@ describe("an extra on its own (B11d)", () => {
   it("records the stage of the dish the extra belongs to, not one of its own", async () => {
     const dish = await bill([{ name: "Pizza", olives: 1 }]);
     const extra = await bill([{ name: "Pizza", olives: 1 }]);
-    for (const { billId } of [dish, extra]) {
-      await inTx(venue, (tx) => recallLines(tx, venue.cfg, billId, [1]));
-    }
 
     await adjust(dish.billId, { ...(await todayLine(venue, dish.billId, 1)), action: "comp" });
     await adjust(extra.billId, { ...(await todayLine(venue, extra.billId, 2)), action: "comp" });
@@ -2982,7 +2959,7 @@ describe("an extra on its own (B11d)", () => {
     const [dishStage, extraStage] = await Promise.all(
       [dish, extra].map(async ({ billId }) => (await recordedOn(billId))[0]!.stage),
     );
-    expect(dishStage).toBe("unsent");
+    expect(dishStage).toBe("fired");
     expect(extraStage).toBe(dishStage);
   });
 

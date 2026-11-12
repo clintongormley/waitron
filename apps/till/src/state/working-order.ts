@@ -25,13 +25,7 @@ import { lineGross, takesExtras } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
 import type { EndedPeriod } from "./late-send.js";
-import type {
-  KitchenNoteSnapshot,
-  HeldExtra,
-  TillCourse,
-  TillProduct,
-  RecalledDraftLine,
-} from "../api/client.js";
+import type { KitchenNoteSnapshot, HeldExtra, TillCourse, TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 import type { Place, placeFor } from "./draft-place.js";
 
@@ -73,9 +67,6 @@ export interface LineSelection {
 }
 
 export interface OrderLine {
-  source?: RecalledDraftLine["source"];
-  /** Explicit picker intent; frozen source snapshots never imply a new selection. */
-  sourceSelection?: LineSelection;
   place?: Place;
   draftLineId?: string;
   workingOrderLineId?: string;
@@ -237,7 +228,7 @@ export class WorkingOrderStore {
   #revision = 0;
   #sending = false;
   /** An operation holding the sending lock without submitting the order. */
-  busyAction?: "split" | "cancel" | "recall";
+  busyAction?: "split" | "cancel";
   #editLock: object | null = null;
   #loadGeneration = 0;
   #kitchenNote: string | null = null;
@@ -475,37 +466,7 @@ export class WorkingOrderStore {
 
   #markDirty(): void {
     this.#dirty = true;
-    for (const line of this.#lines) if (line.source === undefined) delete line.notOfferedExtras;
-  }
-
-  refreshRecalledLine(line: OrderLine, snapshot: OrderLine, savedSelection?: LineSelection): void {
-    if (
-      !this.#lines.includes(line) ||
-      snapshot.source === undefined ||
-      line.source?.line.id !== snapshot.source.line.id
-    )
-      return;
-    line.source = snapshot.source;
-    line.product = snapshot.product;
-    const pending = { ...line.sourceSelection };
-    if (pending.options === savedSelection?.options) {
-      delete pending.options;
-      delete pending.optionSnapshots;
-      delete line.options;
-      if (snapshot.optionSnapshots === undefined) delete line.optionSnapshots;
-      else line.optionSnapshots = snapshot.optionSnapshots;
-    }
-    if (pending.extras === savedSelection?.extras) {
-      delete pending.extras;
-      if (snapshot.extras === undefined) delete line.extras;
-      else line.extras = snapshot.extras;
-      if (snapshot.notOfferedExtras === undefined) delete line.notOfferedExtras;
-      else line.notOfferedExtras = snapshot.notOfferedExtras;
-    }
-    if (pending.options === undefined && pending.extras === undefined) delete line.sourceSelection;
-    else line.sourceSelection = pending;
-    this.#invalidatePricing();
-    this.emit("changed");
+    for (const line of this.#lines) delete line.notOfferedExtras;
   }
 
   appendLines(lines: readonly OrderLine[]): void {
@@ -572,39 +533,9 @@ export class WorkingOrderStore {
     delete line.options;
     delete line.optionSnapshots;
     applySelection(line, selection);
-    if (line.source !== undefined) {
-      line.sourceSelection = {
-        ...selection,
-        options: selection.options ?? [],
-        extras: selection.extras ?? [],
-      };
-      delete line.notOfferedExtras;
-    }
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
-  }
-
-  /** Omitted kinds keep their recorded choices: a recalled dish can outlive its offered lists. */
-  patchRecalledLineModifiers(index: number, selection: LineSelection): void {
-    if (this.#refusesEdits) return;
-    const line = this.#lines[index];
-    if (
-      line?.source === undefined ||
-      (selection.options === undefined && selection.extras === undefined)
-    )
-      return;
-    if (selection.options !== undefined) {
-      delete line.options;
-      delete line.optionSnapshots;
-    }
-    if (selection.extras !== undefined) {
-      delete line.extras;
-      delete line.notOfferedExtras;
-    }
-    applySelection(line, selection);
-    line.sourceSelection = { ...line.sourceSelection, ...selection };
-    this.#changedLines();
   }
 
   /** Validate the whole line before changing it, so a refused total cannot save only its note. */
@@ -626,17 +557,11 @@ export class WorkingOrderStore {
     const change = compareDecimal(decimal(update.quantity), decimal(line.quantity));
     if (change > 0 && this.#refusesSelection(line.product)) return false;
     const candidate: OrderLine = { ...line, quantity: update.quantity };
-    if (line.source === undefined || update.selection.extras !== undefined) {
-      delete candidate.extras;
-      delete candidate.notOfferedExtras;
-    }
-    if (line.source === undefined || update.selection.options !== undefined) {
-      delete candidate.options;
-      delete candidate.optionSnapshots;
-    }
+    delete candidate.extras;
+    delete candidate.notOfferedExtras;
+    delete candidate.options;
+    delete candidate.optionSnapshots;
     applySelection(candidate, update.selection);
-    if (line.source !== undefined)
-      candidate.sourceSelection = { ...line.sourceSelection, ...update.selection };
     const note = update.note.trim();
     if (note === "") delete candidate.note;
     else candidate.note = note;

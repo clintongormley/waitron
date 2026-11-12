@@ -3,7 +3,6 @@ import {
   billEditStates,
   nowIso,
   orderDraftLines,
-  orderDraftRecalledLines,
   orderDrafts,
   workingOrders,
   type Transaction,
@@ -41,12 +40,7 @@ export async function closeBillDraft(
     .from(orderDraftLines)
     .where(eq(orderDraftLines.draftId, edit.draftId))
     .limit(1);
-  const [source] = await tx
-    .select({ id: orderDraftRecalledLines.id })
-    .from(orderDraftRecalledLines)
-    .where(eq(orderDraftRecalledLines.draftId, edit.draftId))
-    .limit(1);
-  if (fresh !== undefined || source !== undefined) throw invalid("lines");
+  if (fresh !== undefined) throw invalid("lines");
   await tx
     .update(orderDrafts)
     .set({ state, revision: edit.draftRevision! + 1, updatedAt: nowIso() })

@@ -406,6 +406,7 @@ it("quantity-only open-order edit retains deleted course without repricing saved
   const res = await v.request(`/api/working-orders/${v.tabId}/lines/1`, "PUT", {
     revision: order!.revision,
     quantity: "2",
+    portionLineNos: [],
   });
   expect(res.status).toBe(200);
   // A sent portion is not raised: the rise is a second portion at the saved price (A803 D30).
@@ -540,6 +541,7 @@ it("quantity added to a fired dish keeps its deleted course on the new portion",
   const res = await v.request(`/api/working-orders/${v.tabId}/lines/1`, "PUT", {
     revision: order!.revision,
     quantity: "2",
+    portionLineNos: [],
   });
   expect(res.status).toBe(200);
   const rows = await v.db

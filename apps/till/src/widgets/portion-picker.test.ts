@@ -68,7 +68,7 @@ function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Pick
       lines,
       paid === null ? null : (paidQuantities(paid).get(row.lineNo) ?? null),
     );
-  return pickRows(pickGroups(lines, keyOf, paid, new Set()), picks);
+  return pickRows(pickGroups(lines, keyOf, paid), picks);
 }
 
 const BEERS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];

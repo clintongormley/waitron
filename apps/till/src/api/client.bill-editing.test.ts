@@ -132,7 +132,7 @@ describe("direct line editing observation", () => {
     async (expectedEdit) => {
       const result = { revision: 8, party: { id: "party", revision: 9 } };
       const fetch = vi.fn(async () => Response.json(result));
-      const patch = { note: "no salt", quantity: "2" };
+      const patch = { portionLineNos: [], note: "no salt", quantity: "2" };
       expect(
         await new TillApi("", fetch).updateOrderLine("bill-2", 3, patch, 7, expectedEdit),
       ).toEqual(result);

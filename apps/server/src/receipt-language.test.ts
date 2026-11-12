@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -1627,12 +1628,13 @@ describe("a sale files in the receipt language saved on its order", () => {
       expect(await filed(venue, billId)).toEqual(expected);
     });
 
-    it("files a bill a line edit leaves paid", async () => {
+    it("files a bill a partial Cancel item leaves paid", async () => {
       const venue = await barcelonaVenue();
       const billId = await groupedBillWith(venue, "Tarta", "Caña");
       const line = (quantity: string) =>
         revisionOfOrder(venue, billId).then(async (revision) =>
           send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/lines/2`, {
+            portionLineNos: [],
             revision,
             quantity,
             expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
@@ -1641,7 +1643,9 @@ describe("a sale files in the receipt language saved on its order", () => {
       expect((await line("2")).status).toBe(200);
       expect((await cash(venue, billId, "21.00")).status).toBe(200);
 
-      expect((await line("1")).status).toBe(200);
+      expect((await cancelItemHttp(venue.db, venue.app, venue.cookie, billId, 2, "1")).status).toBe(
+        200,
+      );
 
       expect(await statusOf(venue, billId)).toBe("settled");
       expect(await filed(venue, billId)).toEqual(expected);

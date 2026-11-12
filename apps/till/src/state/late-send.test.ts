@@ -83,16 +83,10 @@ describe("endedPeriodOf", () => {
     expect(endedPeriodOf(line("missing"), index([toast]))).toBeUndefined();
   });
 
-  it("does not mark a stored or recalled line", () => {
+  it("does not mark a stored line", () => {
     const offers = index([toast]);
     expect(
       endedPeriodOf(line("toast-breakfast", { workingOrderLineId: "wol-1" }), offers),
-    ).toBeUndefined();
-    expect(
-      endedPeriodOf(
-        line("toast-breakfast", { source: {} as NonNullable<OrderLine["source"]> }),
-        offers,
-      ),
     ).toBeUndefined();
   });
 });
@@ -157,13 +151,10 @@ describe("refusedLines", () => {
     expect(refusedLines([toastLine, beerLine, eggLine], refusal)).toEqual([toastLine, eggLine]);
   });
 
-  it("leaves out a stored line and a recalled line sharing a fresh late dish's offer id", () => {
+  it("leaves out a stored line sharing a fresh late dish's offer id", () => {
     const stored = line("toast-breakfast", { workingOrderLineId: "wol-1" });
-    const recalled = line("toast-breakfast", {
-      source: { kind: "line" } as unknown as OrderLine["source"],
-    });
     const fresh = line("toast-breakfast");
-    const result = refusedLines([stored, recalled, fresh], refusal);
+    const result = refusedLines([stored, fresh], refusal);
     expect(result).toHaveLength(1);
     expect(result[0]).toBe(fresh);
   });
@@ -185,10 +176,7 @@ describe("lateSendAsked", () => {
   it("lists the request's new lines the refusal names, under every menu it names", () => {
     const toastLine = line("toast-breakfast");
     const beerLine = line("beer-lunch");
-    const recalled = line("toast-breakfast", {
-      source: { kind: "line" } as unknown as OrderLine["source"],
-    });
-    const asked = lateSendAsked(ended(["toast-breakfast"]), [recalled, beerLine, toastLine]);
+    const asked = lateSendAsked(ended(["toast-breakfast"]), [beerLine, toastLine]);
     expect(asked?.periods).toEqual(menus);
     expect(asked?.listed).toHaveLength(1);
     expect(asked?.listed[0]).toBe(toastLine);

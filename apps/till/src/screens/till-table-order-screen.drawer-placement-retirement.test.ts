@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import {
@@ -20,7 +19,7 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 it.each(["detailed", "fallback"] as const)(
-  "%s held dishes use Recall instead of the drawer's direct group Move and Split",
+  "%s held dishes keep direct group Move and Split out of the drawer",
   async (read) => {
     const { el } = await mount({
       orderId: "wo-4",
@@ -44,32 +43,23 @@ it.each(["detailed", "fallback"] as const)(
               reminder: null,
             }),
     });
-    const recalls: CustomEvent[] = [];
     const direct: CustomEvent[] = [];
-    el.addEventListener("recall-lines", (event) => recalls.push(event as CustomEvent));
     for (const type of ["move-group-line", "split-group-line"]) {
       el.addEventListener(type, (event) => direct.push(event as CustomEvent));
     }
     await openTableMenu(el);
     expect(el.shadowRoot!.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-recall-line]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-move-dialog]")).toBeNull();
     await closeTableMenu(el);
     if (read === "fallback") {
       const fallback = el.shadowRoot!.querySelector('[data-sent-fallback-line="stored-dish"]')!;
       expect(fallback.textContent).toContain("Recorded dish");
       expect(fallback.querySelector("button, wt-button, wt-row-actions")).toBeNull();
-      expect(recalls).toEqual([]);
       expect(direct).toEqual([]);
       return;
     }
     await openSentDish(el, storedDish.id, "held");
     await openSentMore(el);
-    const recall = el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-recall]")!;
-    expect(recall.checkVisibility()).toBe(true);
-    await userEvent.click(recall);
-    expect(recalls.map((event) => event.detail)).toEqual([{ lineNos: [1] }]);
-    expect(recalls[0]!.bubbles && recalls[0]!.composed).toBe(true);
     expect(direct).toEqual([]);
   },
 );

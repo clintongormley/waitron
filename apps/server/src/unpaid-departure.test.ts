@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
@@ -57,7 +58,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { cancelBody, giveAway } from "./testing/cancel-line.js";
+import { giveAway } from "./testing/cancel-line.js";
 import {
   BASIC_ACTIONS,
   revokedDeviceSessionCookie,
@@ -1416,13 +1417,7 @@ describe("what is refused", () => {
     });
     await expectNothingWritten(party.partyId, party.tabId);
 
-    const cancelled = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/adjustments`,
-      await cancelBody(venue.db, party.tabId, 2),
-    );
+    const cancelled = await cancelItemHttp(venue.db, venue.app, venue.cookie, party.tabId, 2);
     expect(cancelled.status).toBe(200);
 
     const recorded = await depart(party.partyId, {
@@ -1436,29 +1431,6 @@ describe("what is refused", () => {
       { id: expect.any(String), total: 3000, settledAt: null },
     ]);
     expect(await departuresOf(party.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
-  });
-
-  it("refuses a bill holding a dish recalled from the kitchen, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Red wine bottle", "Caña");
-    const recalled = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/lines/recall`,
-      { lineNos: [2], expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)) },
-    );
-    expect(recalled.status).toBe(200);
-
-    const answer = await depart(party.partyId, {
-      expectedPartyRevision: revisionOf(party.partyId),
-      reason: REASON,
-    });
-
-    expect(answer).toMatchObject({
-      status: 409,
-      json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
-    });
-    await expectNothingWritten(party.partyId, party.tabId);
   });
 
   it("refuses a presented bill with no invoice yet holding a dish whose group is still held, and writes nothing", async () => {
@@ -1740,35 +1712,6 @@ describe("A773 requested lifecycle", () => {
       });
       await expectNothingWritten(party.partyId, party.tabId);
     });
-  });
-
-  it("with no station waiting, still refuses a dish served whole and then recalled to held", async () => {
-    const party = await seatedWith(venue, "Red wine bottle");
-    const line = await onlyLine(party.tabId);
-    await serve(party.partyId, line.id, "1");
-    const recalled = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/lines/recall`,
-      {
-        lineNos: [line.lineNo],
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
-      },
-    );
-    expect(recalled.status).toBe(200);
-    expect(await kitchenTimes(party.tabId)).toEqual([{ requestedAt: null, firedAt: null }]);
-
-    const answer = await depart(party.partyId, {
-      expectedPartyRevision: revisionOf(party.partyId),
-      reason: REASON,
-    });
-
-    expect(answer).toMatchObject({
-      status: 409,
-      json: { code: "unpaid_departure.unfired_dishes", params: { workingOrderId: party.tabId } },
-    });
-    await expectNothingWritten(party.partyId, party.tabId);
   });
 });
 

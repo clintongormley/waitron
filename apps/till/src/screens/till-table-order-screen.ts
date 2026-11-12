@@ -157,7 +157,7 @@ import type {
   SplitSources,
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
-import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
+import { heldGroupIds } from "../state/held-groups.js";
 import type { DraftGroup } from "../state/draft-groups.js";
 import { newOrderByProduct, newOrderDishes, newOrderItems } from "../state/new-order-count.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
@@ -224,7 +224,6 @@ export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
 
 /** Group `lineIndexes` refer to `sent`, which may be only part of `store.lines`. */
 export interface SubmitDraftDetail {
-  /** Fresh offers only; recalled rows are identified by `sent` and the saved draft. */
   lines: GroupLine[];
   groups: (DraftGroup & Pick<SubmitGroup, "joinGroupId" | "afterGroupId">)[];
   joinGroupId?: string;
@@ -265,11 +264,6 @@ type TakeOverAsked = Pick<OtherDraft, "id" | "revision"> & {
   ownerName: string | null;
   billId?: string;
 };
-
-export interface SplitDraftSourceDetail {
-  store: WorkingOrderStore;
-  line: OrderLine;
-}
 
 /** A dish the table's offers no longer hold has no name to show, so it reads as not offered. */
 function shownName(product: TillProduct): string {
@@ -383,7 +377,6 @@ interface SplitInputs {
   drafts: readonly PartyDraft[];
   personId: string;
   allergy: PartyAllergyRead["snapshot"] | null;
-  recalled: ReadonlySet<string>;
 }
 
 function sameSplitInputs(a: SplitInputs, b: SplitInputs): boolean {
@@ -392,8 +385,7 @@ function sameSplitInputs(a: SplitInputs, b: SplitInputs): boolean {
     a.bills === b.bills &&
     a.drafts === b.drafts &&
     a.personId === b.personId &&
-    a.allergy === b.allergy &&
-    samePicks(a.recalled, b.recalled)
+    a.allergy === b.allergy
   );
 }
 
@@ -404,16 +396,10 @@ interface DishSources {
   lines: readonly TabLine[];
   balance: BillBalance | null;
   allergy: PartyAllergyRead["snapshot"] | null;
-  recalled: ReadonlySet<string>;
 }
 
 function sameSources(a: DishSources, b: DishSources): boolean {
-  return (
-    a.lines === b.lines &&
-    a.balance === b.balance &&
-    a.allergy === b.allergy &&
-    samePicks(a.recalled, b.recalled)
-  );
+  return a.lines === b.lines && a.balance === b.balance && a.allergy === b.allergy;
 }
 
 /** The key that groups a bill's dishes as the screen lists them. Portions also differ by what the
@@ -641,11 +627,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #draftAllergyMark(line: OrderLine): TemplateResult | typeof nothing {
-    const id = line.source?.line.id ?? line.draftLineId;
+    const id = line.draftLineId;
     return id === undefined
       ? nothing
       : allergyMark(this.#allergy()?.snapshot ?? null, {
-          kind: line.source ? "working" : "draft",
+          kind: "draft",
           id,
         });
   }
@@ -1526,15 +1512,12 @@ export class TillTableOrderScreen extends LitElement {
     billId: string | undefined;
     visit: number;
   };
-  /** A row whose Mark served, its undo, or a grouped row's Recall asks how many; `count` is what
-   * is chosen so far. A grouped row's `members` are its portions by line number, and `count`
-   * counts portions; `recall` holds the same portions as Sent slices. */
+  /** A grouped row's `members` are its portions by line number; `count` counts portions. */
   @state() private servePending: {
     row: CurrentOrderRow;
     undo: boolean;
     count: Decimal;
     members?: readonly CurrentOrderRow[];
-    recall?: readonly SentSlice[];
   } | null = null;
 
   #serveAuthority?: {
@@ -2664,25 +2647,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  #canRecall(line: TabLine): boolean {
-    const served = (row: CurrentOrderRow) =>
-      row.lineId === line.id && compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
-    if (
-      this.currentOrders?.ungrouped.some(served) ||
-      this.currentOrders?.groups.some((group) => group.rows.some(served))
-    )
-      return false;
-    return (
-      this.#stationsAllowChange(line) &&
-      !this.#isChild(line) &&
-      line.servedAt === null &&
-      !isStarted(line) &&
-      (this.#shownBill === undefined || this.#shownBill.status === "open") &&
-      !this.lines.some((extra) => extra.parentLineNo === line.lineNo && isStarted(extra)) &&
-      (line.sentAt !== null || inHeldGroup(line, this.#heldGroupIds!))
-    );
-  }
-
   /** Built from {@link lines} as they are when read, not at the last redraw: a press can land
    * between a new `lines` and the redraw that shows it. */
   #linesIndexed?: LinesIndex;
@@ -2769,10 +2733,8 @@ export class TillTableOrderScreen extends LitElement {
     const lines = members.map((member) => this.#sentOrderLine(member));
     if (lines.some((line) => line === undefined)) return;
     const paidDishes = this.#paidDishes();
-    const recalled = this.#recalledLineIds();
     const editable = (line: TabLine) =>
       !paidDishes.has(line.lineNo) &&
-      !recalled.has(line.id) &&
       this.#liveProduct(line) !== undefined &&
       this.#stationsAllowChange(line);
     return (lines as TabLine[]).every(editable) ? (lines as TabLine[]) : undefined;
@@ -2889,16 +2851,6 @@ export class TillTableOrderScreen extends LitElement {
     >
       ${t("table.discount_bill")}
     </wt-button>`;
-  }
-
-  #recallLines(lineNos: number[]): void {
-    this.dispatchEvent(
-      new CustomEvent("recall-lines", {
-        detail: { lineNos },
-        bubbles: true,
-        composed: true,
-      }),
-    );
   }
 
   #courseName(courseId: string | null, retainedCourse?: TillCourse): string {
@@ -3311,36 +3263,6 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #recalledIndexed?: {
-    store: WorkingOrderStore | null;
-    epoch: number;
-    others: readonly OtherDraft[];
-    ids: Set<string>;
-  };
-
-  /** The bill lines recalled into this person's draft or another person's. Kept only while the
-   * draft is the watched one, whose every change moves {@link #draftEpoch} as it happens. */
-  #recalledLineIds(): Set<string> {
-    const store = this.#draftStore;
-    const indexed = this.#recalledIndexed;
-    if (
-      indexed?.store === store &&
-      indexed.epoch === this.#draftEpoch &&
-      indexed.others === this.otherDrafts
-    )
-      return indexed.ids;
-    const ids = new Set(
-      [...(store?.lines ?? []), ...this.otherDrafts.flatMap((draft) => draft.lines)].flatMap(
-        (line) => (line.source === undefined ? [] : [line.source.line.id]),
-      ),
-    );
-    this.#recalledIndexed =
-      this.#watchedDraft?.store === store
-        ? { store, epoch: this.#draftEpoch, others: this.otherDrafts, ids }
-        : undefined;
-    return ids;
-  }
-
   #sentFallback(): TemplateResult | typeof nothing {
     const { groups } = this.#dishGroupsFor(this.#dishSources());
     if (groups.length === 0) return nothing;
@@ -3586,15 +3508,6 @@ export class TillTableOrderScreen extends LitElement {
     return line?.id === slice.row.lineId && line.parentLineNo == null ? line : undefined;
   }
 
-  #canRecallSent(slice: SentSlice): boolean {
-    const line = this.#sentOrderLine(slice);
-    return (
-      line !== undefined &&
-      this.#canRecall(line) &&
-      (slice.row.kitchen === null || slice.row.kitchen.state === "queued")
-    );
-  }
-
   #canMoveSent(slice: SentSlice): boolean {
     const store = this.#draftStore;
     const locked = store instanceof DraftStore ? store.compositionLocked : store?.editsLocked;
@@ -3645,7 +3558,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #actOnSentLine(
     pending: typeof this.sentLinePending,
-    action: "fire" | "recall" | "station" | "void" | "comp",
+    action: "fire" | "station" | "void" | "comp",
     asked = false,
   ): void {
     if (
@@ -3666,7 +3579,6 @@ export class TillTableOrderScreen extends LitElement {
       members === undefined ||
       slice === undefined ||
       (action === "fire" && !this.#canFireSent(slice)) ||
-      (action === "recall" && !members.every((member) => this.#canRecallSent(member))) ||
       (action === "station" && !members.every((member) => this.#canMoveSent(member))) ||
       (action === "void" && !this.#canVoidSent(slice)) ||
       (action === "comp" && members.some((member) => this.#sentOrderLine(member) === undefined))
@@ -3679,10 +3591,7 @@ export class TillTableOrderScreen extends LitElement {
     const lineIds =
       members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {};
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
-    else if (action === "recall") {
-      if (members.length > 1) this.#requestRecall(members);
-      else this.#recallLines([slice.row.lineNo]);
-    } else if (action === "comp") {
+    else if (action === "comp") {
       const line = this.#sentOrderLine(slice)!;
       const priced = (target: AdjustTarget) =>
         compareDecimal(decimal(target.total), decimal("0")) > 0;
@@ -3725,16 +3634,14 @@ export class TillTableOrderScreen extends LitElement {
     const slice = members?.[0];
     if (members === undefined || slice === undefined) return nothing;
     const fire = this.#canFireSent(slice);
-    const recall = members.every((member) => this.#canRecallSent(member));
     const station = members.every((member) => this.#canMoveSent(member));
     const unserve =
       slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));
-    if (!fire && !recall && !station && !unserve && !canVoid && !comp) return nothing;
+    if (!fire && !station && !unserve && !canVoid && !comp) return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
     return html`<wt-row-actions label=${t("shell.more")}>
       ${fire ? html`<wt-button variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
-      ${recall ? html`<wt-button variant="secondary" data-sent-line-recall ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "recall")}>${t("table.recall_line")}</wt-button>` : nothing}
       ${station ? html`<wt-button variant="secondary" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
       ${comp ? html`<wt-button variant="secondary" data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
       ${canVoid ? html`<wt-button variant=${disabled ? "secondary" : "danger"} data-sent-line-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
@@ -4329,9 +4236,7 @@ export class TillTableOrderScreen extends LitElement {
                     ? t("table.split_group_line")
                     : draft.busyAction === "cancel"
                       ? t("adjust.cancel_title")
-                      : draft.busyAction === "recall"
-                        ? t("table.recall_line")
-                        : t("table.round_sending")
+                      : t("table.round_sending")
               }
             </p>`
           : nothing
@@ -4589,7 +4494,7 @@ export class TillTableOrderScreen extends LitElement {
       Number(line.quantity) > 1;
     const isFlagged = flagged(line);
     const tools = [
-      ...(isFlagged && line.source === undefined ? [this.#flagChoice(store, line, index)] : []),
+      ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
       this.#draftRoutingWarning(store, line, index, true),
     ];
     if (store.editsLocked)
@@ -4658,7 +4563,7 @@ export class TillTableOrderScreen extends LitElement {
               ${tools}
             </div>`
       }
-      ${isFlagged && line.source === undefined ? html`<span slot=${`after-${index}`} data-flag-warning aria-hidden="true">⚠</span>` : nothing}
+      ${isFlagged ? html`<span slot=${`after-${index}`} data-flag-warning aria-hidden="true">⚠</span>` : nothing}
       ${this.#draftRoutingWarning(store, line, index)}`;
   }
 
@@ -4728,8 +4633,7 @@ export class TillTableOrderScreen extends LitElement {
       Number(line.quantity) <= 1
     )
       return;
-    if (line.source === undefined) store.splitLine(index);
-    else this.#dispatch("split-draft-source", { store, line } satisfies SplitDraftSourceDetail);
+    store.splitLine(index);
   }
 
   #foldDraftFamily(store: WorkingOrderStore, line: OrderLine): void {
@@ -4818,8 +4722,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #draftSendable(line: OrderLine): boolean {
     return (
-      (line.source !== undefined || !flagged(line)) &&
-      (this.#routingRows.get(line) === undefined || line.makeAt !== undefined)
+      !flagged(line) && (this.#routingRows.get(line) === undefined || line.makeAt !== undefined)
     );
   }
 
@@ -4846,19 +4749,13 @@ export class TillTableOrderScreen extends LitElement {
     const sent = indexes.map((index) => lines[index]!);
     const positions = new Map(indexes.map((index, position) => [index, position]));
     const detail: SubmitDraftDetail = {
-      lines: sent.flatMap((line) =>
-        line.source !== undefined
-          ? []
-          : [
-              {
-                ...toWireProductIdentity(line.product),
-                quantity: line.quantity,
-                ...toWireLineExtras(line),
-                ...toWireModifiers(line),
-                ...(line.courseId === undefined ? {} : { courseId: line.courseId }),
-              },
-            ],
-      ),
+      lines: sent.map((line) => ({
+        ...toWireProductIdentity(line.product),
+        quantity: line.quantity,
+        ...toWireLineExtras(line),
+        ...toWireModifiers(line),
+        ...(line.courseId === undefined ? {} : { courseId: line.courseId }),
+      })),
       groups: groups.map(({ indexes, ...group }) => ({
         ...group,
         lineIndexes: indexes.map((index) => positions.get(index)!),
@@ -5451,18 +5348,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#sendServe(row, undo, most);
   }
 
-  #requestRecall(members: readonly SentSlice[]): void {
-    if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
-    this.#takeServeAuthority();
-    this.#openServeDialog({
-      row: members[0]!.row,
-      undo: false,
-      count: decimal(String(members.length)),
-      members: members.map((member) => member.row),
-      recall: members,
-    });
-  }
-
   /** Remembers what the count dialog's answer may act on: this api, party, bill and visit. */
   #takeServeAuthority(): void {
     this.#serveAuthority = {
@@ -5501,23 +5386,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchServe();
     const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
     if (dialog) dialog.open = true;
-  }
-
-  /** Recalls the first `count` portions, only while every portion can still be recalled. */
-  #sendRecall(members: readonly SentSlice[], count: Decimal): void {
-    if (!this.#spendServeAuthority() || this.currentOrders === null) return;
-    const slices = this.#sentSlices(this.currentOrders);
-    const found = members.map((member) =>
-      findSlice(slices, member.kind, member.row.workingOrderId, member.row.lineId),
-    );
-    const n = Number.parseInt(trimQuantity(count), 10);
-    if (
-      found.some((slice) => slice === undefined || !this.#canRecallSent(slice)) ||
-      n < 1 ||
-      n > members.length
-    )
-      return;
-    this.#recallLines(found.slice(0, n).map((slice) => slice!.row.lineNo));
   }
 
   #sendServe(
@@ -5595,8 +5463,7 @@ export class TillTableOrderScreen extends LitElement {
     this.servePending = null;
     this.#watchServe();
     this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.closeAfter("saved");
-    if (pending.recall !== undefined) this.#sendRecall(pending.recall, pending.count);
-    else this.#sendServe(pending.row, pending.undo, pending.count, pending.members);
+    this.#sendServe(pending.row, pending.undo, pending.count, pending.members);
   }
 
   /** Always present, driven by {@link servePending}, so an Escape close flows back through
@@ -5609,13 +5476,7 @@ export class TillTableOrderScreen extends LitElement {
       class="serve-dialog"
       data-serve-dialog
       .open=${pending !== null}
-      .heading=${t(
-        pending?.recall !== undefined
-          ? "table.recall_line"
-          : pending?.undo === true
-            ? "table.unserve"
-            : "table.serve",
-      )}
+      .heading=${t(pending?.undo === true ? "table.unserve" : "table.serve")}
       .beforeClose=${this.#serveScope ? this.#beforeServeClose : undefined}
       @wt-close=${(event: Event) => this.#closeServe(event)}
     >
@@ -5661,11 +5522,9 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
         <wt-button variant="primary" data-serve-confirm @click=${() => this.#confirmServe()}>
           ${
-            pending?.recall !== undefined
-              ? t("table.recall_n").replace("{n}", String(count))
-              : pending?.undo === true
-                ? t("table.unserve_n").replace("{n}", String(count))
-                : countText(count, "table.serve_n", "table.serve_n_one")
+            pending?.undo === true
+              ? t("table.unserve_n").replace("{n}", String(count))
+              : countText(count, "table.serve_n", "table.serve_n_one")
           }
         </wt-button>
       </div>
@@ -6307,7 +6166,6 @@ export class TillTableOrderScreen extends LitElement {
       drafts: this.partyDrafts,
       personId: this.personId,
       allergy: this.#allergy()?.snapshot ?? null,
-      recalled: this.#recalledLineIds(),
     };
     if (this.#splitRows !== undefined && sameSplitInputs(this.#splitRows.inputs, inputs))
       return this.#splitRows.sources;
@@ -6316,13 +6174,11 @@ export class TillTableOrderScreen extends LitElement {
       this.bills,
       this.partyDrafts,
       this.personId,
-      inputs.recalled,
       (lines, balance) =>
         fallbackPortionKeys({
           lines,
           balance,
           allergy: inputs.allergy,
-          recalled: inputs.recalled,
         }),
     );
     this.#splitRows = { inputs, sources };
@@ -6983,19 +6839,13 @@ export class TillTableOrderScreen extends LitElement {
       lines: this.lines,
       balance: this.#balanceShown(),
       allergy: this.#allergy()?.snapshot ?? null,
-      recalled: this.#recalledLineIds(),
     };
   }
 
   #dishGroupsFor(sources: DishSources): PickGroups {
     const grouped = this.#dishGroups;
     if (grouped !== undefined && sameSources(grouped.sources, sources)) return grouped.groups;
-    const groups = pickGroups(
-      sources.lines,
-      fallbackPortionKeys(sources),
-      sources.balance,
-      sources.recalled,
-    );
+    const groups = pickGroups(sources.lines, fallbackPortionKeys(sources), sources.balance);
     this.#dishGroups = { sources, groups };
     return groups;
   }
@@ -7007,9 +6857,6 @@ export class TillTableOrderScreen extends LitElement {
     return pickRows(this.#dishGroupsFor(sources), picks);
   }
 
-  /** A re-read can pay, recall or regroup picked dishes; the picks follow what is drawn now. A
-   * recall into this person's draft changes the draft store in place, so the recalled dishes are
-   * compared by id rather than by a changed property. */
   #tidyMovePicks(): void {
     const drawn = this.#moveDishesDrawn;
     if (this.actionStep !== "move-dishes" || drawn === undefined || this.moveDishesPicks.size === 0)

@@ -5,13 +5,11 @@ import { parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
 import { placeGroups, submitGroups, type SubmitGroupsInput } from "./order-groups.js";
-import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
+import { readDrafts, saveDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditState } from "./order-drafts.js";
-import { recallToDraft } from "./draft-recall.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -261,55 +259,5 @@ describe("submitted groups retain original ownership observations", () => {
       });
       expect(await frozen(true)).toEqual(before);
     }
-  });
-  it("does not let direct placement move a reserved source, but its owning draft can resend it", async () => {
-    const p = await fixture(),
-      ask = await command(p);
-    await inTx(venue, (tx) => submitGroups(tx, venue.cfg, p.partyId, ask));
-    const [source] = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
-    const recallAsk = await command(p);
-    await inTx(venue, async (tx) => {
-      await setChangesAfterSending(tx, "held-or-waiting");
-      await recallToDraft(tx, venue.cfg, p.partyId, source!.id, recallAsk);
-    });
-    const current = await edit(p.tabId),
-      direct = await command(p);
-    await refused(
-      () =>
-        inTx(venue, (tx) =>
-          placeGroups(tx, venue.cfg, p.partyId, {
-            ...direct,
-            groups: [{ release: "fire", lines: [], existingLineIds: [source!.id] }],
-          }),
-        ),
-      "draft.out_of_date",
-      stale(current),
-    );
-    const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
-    const sent = await inTx(venue, (tx) =>
-      submitDraft(tx, venue.cfg, p.partyId, current.draftId!, {
-        ...direct,
-        expectedEdit: current,
-        draftRevision: current.draftRevision!,
-        groups: [{ release: "fire", lineIds: drafts[0]!.lines.map((l) => l.id) }],
-      }),
-    );
-    expect(sent.draft).toBeNull();
-    expect(sent.edit).toEqual({
-      billId: p.tabId,
-      editorId: null,
-      editorName: null,
-      editorVersion: 2,
-      draftId: null,
-      draftRevision: null,
-    });
-    const [after] = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.id, source!.id));
-    expect(after).toEqual({ ...source, groupId: sent.groups[0]!.id, sentAt: expect.any(String) });
   });
 });

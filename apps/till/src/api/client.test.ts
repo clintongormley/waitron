@@ -2471,36 +2471,6 @@ describe("TillApi", () => {
     });
   });
 
-  it("recallLines POSTs line numbers and an explicit counter observation to /lines/recall", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(
-      new TillApi("", fetchStub).recallLines("wo-1", [2, 3], null),
-    ).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/wo-1/lines/recall",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lineNos: [2, 3], expectedEdit: null }),
-      }),
-    );
-  });
-
-  it("recallLines surfaces { code } for a line the kitchen has already started", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "ticket.already_started" } }), {
-        status: 409,
-      }),
-    );
-
-    await expect(
-      new TillApi("", fetchStub).recallLines("wo-1", [2, 3], null),
-    ).rejects.toMatchObject({ code: "ticket.already_started" });
-  });
-
   describe("adjustments (service plan Task 11)", () => {
     const ask = {
       expectedEdit: null,
@@ -2606,7 +2576,7 @@ describe("TillApi", () => {
       new TillApi("", fetchStub).updateOrderLine(
         "ord-1",
         3,
-        { quantity: "2", note: null, extras: [] },
+        { portionLineNos: [], quantity: "2", note: null, extras: [] },
         7,
         null,
       ),
@@ -2617,6 +2587,7 @@ describe("TillApi", () => {
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
+          portionLineNos: [],
           quantity: "2",
           note: null,
           extras: [],

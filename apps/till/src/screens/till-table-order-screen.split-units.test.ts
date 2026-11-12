@@ -5,37 +5,6 @@ import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { beer, flan, ham, mount, showView, store } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { OrderLine } from "../state/working-order.js";
-
-const source: NonNullable<OrderLine["source"]> = {
-  line: {
-    changesAfterSending: null,
-    id: "sent-beer",
-    name: "Recorded beer",
-    productId: "beer",
-    parentProductId: null,
-    menuItemId: "offer-beer",
-    lineNo: 1,
-    parentLineNo: null,
-    quantity: "3.000",
-    priceQuantity: "1.000",
-    unitPrecision: 0,
-    unitPriceGross: "3.00",
-    listUnitPriceGross: "3.00",
-    servedAt: null,
-    courseId: null,
-    sentAt: null,
-    firedAt: null,
-    state: null,
-    stationId: null,
-    movable: true,
-    groupId: "held",
-    note: null,
-    listId: null,
-  },
-  extras: [],
-  netAmount: "9.00",
-};
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -172,43 +141,6 @@ it("A803: offers no split for a 200 ml line in a measure unit with no decimals",
   );
 });
 
-it("a recalled line asks the server to split its source without copying priced references locally", async () => {
-  const { el, draft } = await draftWithUnits();
-  draft.lines[0]!.source = source;
-  const onSplit = vi.fn();
-  el.addEventListener("split-draft-source", onSplit);
-  await userEvent.click(split(el)!);
-  expect(onSplit).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({
-      detail: { store: draft, line: draft.lines[0] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  expect(draft.lines).toHaveLength(1);
-  expect(draft.lines[0]!.quantity).toBe("3");
-  expect(draft.lines[0]!.source).toBe(source);
-});
-
-it.each(["sending", "locked", "group-command"] as const)(
-  "does not ask to split a recalled source after %s begins",
-  async (busy) => {
-    const { el, draft } = await draftWithUnits();
-    const line = draft.lines[0]!;
-    line.source = source;
-    const onSplit = vi.fn();
-    el.addEventListener("split-draft-source", onSplit);
-    const control = split(el)!;
-    if (busy === "sending") draft.sending = true;
-    else if (busy === "locked") draft.lockEdits();
-    else el.groupCommandBusy = true;
-    control.click();
-    expect(onSplit).not.toHaveBeenCalled();
-    expect(draft.lines).toEqual([line]);
-    expect(line.quantity).toBe("3");
-  },
-);
-
 it("folds the expanded family's header into one priced line, retaining its saved identity", async () => {
   const { el, draft } = await expandedUnits();
   draft.lines[0]!.draftLineId = "saved-first";
@@ -247,7 +179,6 @@ it.each([
   "station",
   "course",
   "remove",
-  "source",
   "price",
   "unit",
   "options",
@@ -263,7 +194,6 @@ it.each([
   else if (change === "station") draft.lines[1]!.makeAt = "bar";
   else if (change === "course") draft.lines[1]!.courseId = "mains";
   else if (change === "remove") draft.removeLine(1);
-  else if (change === "source") draft.lines[1]!.source = source;
   else if (change === "price") draft.lines[1]!.product = { ...beer, unitPrice: "4.00" };
   else if (change === "unit") {
     for (const line of draft.lines) line.product = ham;
@@ -274,11 +204,16 @@ it.each([
     ];
   else if (change === "variant") draft.lines[1]!.product = { ...beer, variantId: "large" };
   else draft.lines[1]!.quantity = "1.5";
-  const before = draft.lines.map((line) => [line.quantity, line.note, line.place, line.source]);
+  const before = draft.lines.map((line) => [
+    line.quantity,
+    line.note,
+    line.place,
+    line.draftLineId,
+  ]);
   header!.click();
-  expect(draft.lines.map((line) => [line.quantity, line.note, line.place, line.source])).toEqual(
-    before,
-  );
+  expect(
+    draft.lines.map((line) => [line.quantity, line.note, line.place, line.draftLineId]),
+  ).toEqual(before);
   el.requestUpdate();
   await el.updateComplete;
   expect(fold(el)).toBeNull();

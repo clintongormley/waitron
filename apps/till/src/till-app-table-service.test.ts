@@ -1,3 +1,5 @@
+import { userEvent } from "vitest/browser";
+import type { TillCancelItemDialog } from "./widgets/cancel-item-dialog.js";
 import { balanceOf, cash, takenOf } from "../test/bill-pay-app.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
@@ -7,6 +9,7 @@ import {
   floorPartyBills,
   adjustmentStubs,
   cancelThroughDialog,
+  cancellationStubs,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -23,7 +26,6 @@ import { formatMoney } from "@waitron/shared";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
-import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import type { TillSentOrders } from "./widgets/sent-orders.js";
 import { row } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
@@ -286,9 +288,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     markServed: vi.fn().mockResolvedValue({ revision: 4 }),
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
-    recallLines: vi.fn().mockResolvedValue(undefined),
-    recallToDraft: vi.fn().mockRejectedValue({ code: "server.internal" }),
     ...adjustmentStubs(),
+    ...cancellationStubs("wo-7"),
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
@@ -1130,16 +1131,7 @@ describe("till-app table ordering: a handheld's order screen with no table opene
     ["serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] }, "markServed"],
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
     ["send-lines", { lineNos: [1] }, "sendLines"],
-    ["recall-lines", { lineNos: [1] }, "recallLines"],
-    ["recall-lines", { lineNos: [1] }, "recallToDraft"],
-    [
-      "adjust",
-      {
-        kind: "cancel",
-        target: { lineId: "line-1", name: "Café", quantity: "1", total: "1.50", unitTotal: null },
-      },
-      "listAdjustmentReasons",
-    ],
+    ["cancel-item", { lineId: "line-1" }, "getCancellation"],
     [
       "change-line",
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
@@ -1186,7 +1178,6 @@ describe("till-app table ordering: refused and failed table actions", () => {
       },
       "submitDraft",
     ],
-    ["recall-lines", { lineNos: [1] }, "recallToDraft"],
     [
       "change-line",
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
@@ -1277,7 +1268,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       await flush(el);
     });
 
-    const dialog = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+    const dialog = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
     const message = dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>(
       "wt-form-actions",
     )!.error;
@@ -1603,6 +1594,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     const { el } = await mountApp({
       listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
       getTabLines: vi.fn().mockResolvedValue({ lines: [burgerLine], revision: 7 }),
+      ...cancellationStubs("wo-7", "2"),
       ...overrides,
     });
     const screen = await toTableOrder(el);
@@ -1611,7 +1603,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
   /** The app's cancel dialog, or null when none is open. */
   const cancelDialog = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillAdjustmentDialog>("till-adjustment-dialog");
+    el.shadowRoot!.querySelector<TillCancelItemDialog>("till-cancel-item-dialog");
 
   it("applies the retained line-edit command with its opening revision and shows the note at the same price", async () => {
     const getTabLines = vi
@@ -3061,14 +3053,16 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
   };
 
-  it("cancels one of a line as a cancel adjustment with the quantity", async () => {
-    const { el, screen } = await openBurgerTab();
+  it("cancels one of a line through Cancel item with the quantity", async () => {
+    const cancelItem = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el, screen } = await openBurgerTab({ cancelItem });
 
     await cancelThroughDialog(el, screen, "line-5", settle(el), "1");
 
-    expect(api.applyAdjustment).toHaveBeenCalledWith(
-      "wo-7",
-      expect.objectContaining({ lineId: "line-5", action: "cancel", quantity: "1" }),
+    expect(cancelItem).toHaveBeenCalledWith(
+      "v-2",
+      "line-5",
+      expect.objectContaining({ outcome: "remove_charge", quantity: "1" }),
       expect.anything(),
     );
     expect(api.updateOrderLine).not.toHaveBeenCalled();
@@ -3076,14 +3070,22 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
   it("says so under the quantity when the quantity to cancel is refused", async () => {
     const { el, screen } = await openBurgerTab({
-      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.quantity_invalid" }),
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment.quantity_invalid" }),
     });
 
     await cancelThroughDialog(el, screen, "line-5", settle(el), "1");
 
     expect(
-      cancelDialog(el)!.shadowRoot!.querySelector('[data-error-for="quantity"]')!.textContent,
+      cancelDialog(el)!
+        .shadowRoot!.querySelector('wt-number-stepper[name="quantity"]')!
+        .shadowRoot!.querySelector("[data-error]")?.textContent,
     ).toBe(codeMessage("adjustment.quantity_invalid"));
+    const quantity = cancelDialog(el)!.shadowRoot!.querySelector("wt-number-stepper")!;
+    await quantity.updateComplete;
+    await userEvent.fill(quantity.shadowRoot!.querySelector("input")!, "2");
+    await settle(el)();
+    await quantity.updateComplete;
+    expect(quantity.shadowRoot!.querySelector("[data-error]")).toBeNull();
   });
 });
 

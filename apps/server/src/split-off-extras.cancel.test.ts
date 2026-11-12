@@ -1,6 +1,5 @@
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { recallLines } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
@@ -184,43 +183,6 @@ describe("cancelling and recalling split-off extras", () => {
     });
   });
 
-  it("recalls a burger and chips at their own stations", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [dish(venue, "burger")]);
-      const output = await actionOutput(tx, venue, () =>
-        recallLines(tx, venue.cfg, venue.party.tabId, [1]),
-      );
-      expect(output.grill).toHaveLength(1);
-      expect(output.grill[0]).toContain("RECALLED");
-      expect(output.fryer).toHaveLength(1);
-      expect(output.fryer[0]).toContain("RECALLED");
-      expect(output.fryerNotices).toEqual([
-        expect.objectContaining({ kind: "recalled", lineName: "CHIPS" }),
-      ]);
-      expect((await records(tx, venue.party.tabId)).map((item) => item.firedAt)).toEqual([
-        null,
-        null,
-      ]);
-    });
-  });
-
-  it("refuses recall when the chips have started, naming their record", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [dish(venue, "burger")]);
-      const child = (await lines(tx, venue.party.tabId)).find((line) => line.parentId !== null)!;
-      const item = (await records(tx, venue.party.tabId)).find((row) => row.lineId === child.id)!;
-      await tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, item.id));
-      const before = await records(tx, venue.party.tabId);
-      await expect(recallLines(tx, venue.cfg, venue.party.tabId, [1])).rejects.toMatchObject({
-        code: "ticket.already_started",
-        params: { ticketItemId: item.id },
-      });
-      expect(await records(tx, venue.party.tabId)).toEqual(before);
-    });
-  });
-
   it("voids fired chips on a water with no dish record", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -247,20 +209,6 @@ describe("cancelling and recalling split-off extras", () => {
       expect(output.fryer).toHaveLength(1);
       expect(output.fryer[0]).toContain("2 x CHIPS");
       expect((await records(tx, venue.party.tabId))[0]?.quantity).toBe(2000);
-    });
-  });
-
-  it("recalls only the chips record on water without a dish record", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [dish(venue, "water")]);
-      const output = await actionOutput(tx, venue, () =>
-        recallLines(tx, venue.cfg, venue.party.tabId, [1]),
-      );
-      expect(output.grill).toEqual([]);
-      expect(output.fryer).toHaveLength(1);
-      expect(output.fryer[0]).toContain("RECALLED");
-      expect((await records(tx, venue.party.tabId))[0]?.firedAt).toBeNull();
     });
   });
 });

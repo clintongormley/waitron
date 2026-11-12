@@ -5,7 +5,6 @@ import { billPayments, parties, workingOrderLines, workingOrders } from "@waitro
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   saveDraft,
@@ -13,11 +12,9 @@ import {
   type BillEditExpected,
   type BillEditState,
 } from "./order-drafts.js";
-import { recallToDraft } from "./draft-recall.js";
 import { createPartyBill, partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound, abandonHeldOrder, parkOrder } from "./working-order.js";
-import { fireAll } from "./testing/serve-line.js";
 import { inTx, provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;
@@ -293,32 +290,6 @@ it("abandon refuses its editor's fresh outbox rather than stranding it on an aba
   await expect(run(p, "abandon", owned.edit)).rejects.toMatchObject({
     code: "bill.unsent_dishes",
     params: { billId: p.id },
-  });
-  expect(frozen()).toEqual(before);
-});
-
-it("abandon refuses a reserved recalled family with the current draft facts", async () => {
-  const p = await fixture();
-  await inTx(venue, async (tx) => {
-    await setChangesAfterSending(tx, "held-or-waiting");
-    await fireAll(tx, venue.cfg, p.id);
-    const [line] = await tx
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, p.id));
-    const party = await partyRevisionOfOrder(tx, p.id);
-    await recallToDraft(tx, venue.cfg, p.partyId!, line!.id, {
-      operatorId: venue.operatorId,
-      expectedEdit: await readBillEditState(tx, p.id),
-      expectedPartyRevision: party!.revision,
-      submissionId: randomUUID(),
-    });
-  });
-  const current = await edit(p.id),
-    before = frozen();
-  await expect(run(p, "abandon", current)).rejects.toMatchObject({
-    code: "draft.out_of_date",
-    params: stale(current),
   });
   expect(frozen()).toEqual(before);
 });

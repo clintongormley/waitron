@@ -29,14 +29,7 @@ import { routeProductTo } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { submitGroups, fireGroup } from "./order-groups.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
-import { submitDraft } from "./order-drafts.js";
-import { recallToDraft } from "./draft-recall.js";
-import {
-  recallLines,
-  sendLines,
-  splitLinesWithinOrder,
-  splitUnitsWithinOrder,
-} from "./working-order.js";
+import { splitLinesWithinOrder, splitUnitsWithinOrder } from "./working-order.js";
 import { moveDishesToStation } from "./station-move.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -165,15 +158,6 @@ async function copies(p: Sent) {
   );
   return tickets.map((ticket) => ({ ticket, copy: rows.get(ticket.id) }));
 }
-async function resend(p: Sent) {
-  const lineNos = (await portionLines(p)).map((line) => line.lineNo);
-  await inTx(v, async (tx) =>
-    sendLines(tx, v.cfg, p.tabId, lineNos, {
-      operatorId: OPERATOR,
-      expectedEdit: await readBillEditState(tx, p.tabId),
-    }),
-  );
-}
 async function notices(id: string) {
   return inTx(v, (tx) => VENUE_SERVICE.listStationNotices(tx, id));
 }
@@ -218,43 +202,6 @@ describe("A669 lifecycle", () => {
           .map((notice) => notice.quantity)
           .sort(),
       ).toEqual(kind === "units" ? ["1.000", "1.000", "1.000"] : ["1.000", "2.000"]);
-    },
-  );
-  it.each([false, true])(
-    "legacy recall preserves the original and sends its current correction on resend (remove %s)",
-    async (remove) => {
-      const p = await sent();
-      const lineNos = (await portionLines(p)).map((line) => line.lineNo);
-      await inTx(v, async (tx) =>
-        recallLines(tx, v.cfg, p.tabId, lineNos, {
-          operatorId: OPERATOR,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        }),
-      );
-      await edit(p, remove);
-      expect(
-        (await notices(stationId)).filter((notice) => notice.kind.startsWith("allergy_")),
-      ).toEqual([]);
-      const before = await v.db.select().from(printJobs);
-      await resend(p);
-      expect((await copies(p)).map((row) => row.copy)).toEqual(
-        Array.from({ length: 3 }, () => ({
-          originalBlock: original,
-          currentBlock: remove ? null : current,
-        })),
-      );
-      expect(
-        (await notices(stationId))
-          .filter((notice) => notice.kind.startsWith("allergy_"))
-          .map(({ kind, allergyBlock }) => ({ kind, allergyBlock })),
-      ).toEqual([
-        {
-          kind: remove ? "allergy_removed" : "allergy_changed",
-          allergyBlock: remove ? null : current,
-        },
-      ]);
-      const after = await v.db.select().from(printJobs);
-      expect(after.slice(0, before.length)).toEqual(before);
     },
   );
   it("rerouting unchanged instructions adds no allergy notice and a later edit reaches only the new cook", async () => {
@@ -496,42 +443,5 @@ describe("A669 lifecycle", () => {
     expect((await copies(p)).map((row) => row.copy)).toEqual(
       Array.from({ length: 3 }, () => ({ originalBlock: original, currentBlock: current })),
     );
-  });
-  it("recall to draft creates a fresh original on resend and preserves old print payloads", async () => {
-    const p = await sent();
-    let result: Awaited<ReturnType<typeof recallToDraft>> | undefined;
-    for (const line of await portionLines(p)) {
-      const revision = await revisionOf(v, p.partyId);
-      result = await inTx(v, async (tx) =>
-        recallToDraft(tx, v.cfg, p.partyId, line.id, {
-          submissionId: randomUUID(),
-          expectedPartyRevision: revision,
-          operatorId: OPERATOR,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        }),
-      );
-    }
-    await edit(p);
-    expect(
-      (await notices(stationId)).filter((notice) => notice.kind.startsWith("allergy_")),
-    ).toEqual([]);
-    const before = await v.db.select().from(printJobs);
-    const nextRevision = await revisionOf(v, p.partyId);
-    await inTx(v, async (tx) =>
-      submitDraft(tx, v.cfg, p.partyId, result!.draft.id, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: nextRevision,
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-        draftRevision: result!.draft.revision,
-        groups: [{ release: "fire", lineIds: result!.draft.lines.map((line) => line.id) }],
-      }),
-    );
-    const rows = await copies(p);
-    expect(rows.map((row) => row.copy)).toEqual(
-      Array.from({ length: 3 }, () => ({ originalBlock: current, currentBlock: current })),
-    );
-    expect(rows[0]!.ticket.id).not.toBe(p.ticket.id);
-    expect((await v.db.select().from(printJobs)).slice(0, before.length)).toEqual(before);
   });
 });

@@ -181,7 +181,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/parties/:id/groups/move, /groups/split-line, /groups/fire-line | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
  * | GET  /api/parties/:id/split-sources                     | party                  | refuses GET /api/parties/:id/split-sources           |
- * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
  * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
  * | GET /api/working-orders/:id/lines/:lineId/cancellation; POST /api/working-orders/:id/lines/:lineId/cancel-item | bill, current profile inside the transaction | line-cancel-api.test.ts: "checks Counter take-orders, admission and zone for %s before acting" |
  * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
@@ -194,7 +193,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/working-orders/:id/lines/move-station         | order                  | refuses POST .../lines/move-station                  |
  * | PUT  /api/working-orders/:id/lines/:lineNo              | order                  | refuses PUT .../lines/:lineNo                        |
  * | PATCH /api/working-orders/:id/lines/:lineNo/course      | order                  | refuses PATCH .../lines/:lineNo/course               |
- * | POST /api/working-orders/:id/lines/send, /recall        | order                  | refuses POST .../lines/<send|recall>                 |
+ * | POST /api/working-orders/:id/lines/send        | order                  | refuses POST .../lines/send                 |
  * | POST /api/working-orders/:id/department-transfers         | order source zone       | department-transfer-api.test.ts: refuses a source zone outside the sender profile |
  * | POST /api/department-transfers/:id/withdraw               | request's source tab    | department-transfer-api.test.ts: refuses withdrawal outside the sender zone |
  * | POST /api/department-transfers/:id/accept                 | body destination zone   | department-transfer-api.test.ts: refuses a receiving zone outside the designated profile |
@@ -1150,17 +1149,6 @@ const ROUTES: readonly Row[] = [
     deliTableZone,
   ]),
   [
-    "POST /api/parties/:id/lines/:lineId/recall",
-    "POST",
-    (x) => `/api/parties/${x.deliParty}/lines/${id}/recall`,
-    (x) => ({
-      submissionId: randomUUID(),
-      expectedPartyRevision: 0,
-      expectedEdit: { billId: x.deliOrder, editorVersion: 0, draftId: null, draftRevision: null },
-    }),
-    deliTableZone,
-  ],
-  [
     "POST /api/parties/:id/drafts/:did/discard",
     "POST",
     (x) => `/api/parties/${x.deliParty}/drafts/${id}/discard`,
@@ -1235,7 +1223,7 @@ const ROUTES: readonly Row[] = [
     () => ({}),
     deliTableZone,
   ],
-  ...(["send", "recall"] as const).map((verb): Row => [
+  ...(["send"] as const).map((verb): Row => [
     `POST /api/working-orders/:id/lines/${verb}`,
     "POST",
     (x) => `/api/working-orders/${x.deliTab}/lines/${verb}`,
@@ -1396,7 +1384,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/working-orders/:id/adjustments",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/adjustments`,
-    () => adjustment(),
+    () => ({ ...adjustment(), action: "comp" }),
     deliOrderZone,
   ],
   [

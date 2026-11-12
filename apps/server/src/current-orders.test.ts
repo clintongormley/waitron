@@ -2,7 +2,6 @@ import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { recallLines } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { sql } from "drizzle-orm";
@@ -1515,14 +1514,13 @@ describe("readCurrentOrders (spec §4)", () => {
     });
   });
 
-  it("shows a served row fully served, and a recalled one no longer released", async () => {
+  it("shows a served row fully served beside released work", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const starters = await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
     await serveGroup(v, s.partyId, starters.id);
     const mains = await group(v, s.partyId, "fire", [line(v, "steak")]);
     const steak = (await linesByName(s.partyId)).find((l) => l.name === "steak")!;
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [steak.lineNo]));
 
     const read = await currentOrders(s.partyId);
 
@@ -1543,10 +1541,10 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(read.groups[1]).toMatchObject({ id: mains.id, state: "fired" });
     expect(read.groups[1]!.rows[0]).toMatchObject({
       lineId: steak.id,
-      released: false,
+      released: true,
       kitchen: {
         state: "queued",
-        firedAt: null,
+        firedAt: expect.any(String),
         stationId: expect.any(String),
         movable: true,
       },

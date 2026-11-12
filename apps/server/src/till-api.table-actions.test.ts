@@ -1968,21 +1968,20 @@ describe("A803 split: the panel's read", () => {
       expect(taken.status, JSON.stringify(taken.json)).toBe(200);
 
       const { ana, second, octopusBill } = await twoBillsOnTwoTables();
-      const [octopus] = venue.db.all<{ id: string }>(
-        sql`select id from working_order_lines where working_order_id = ${octopusBill}`,
-      );
-      const recalled = await send(
+      const savedDraft = await send(
         venue.app,
         venue.cookie,
-        "POST",
-        `/api/parties/${ana.partyId}/lines/${octopus!.id}/recall`,
+        "PUT",
+        `/api/parties/${ana.partyId}/drafts`,
         {
-          submissionId: randomUUID(),
-          expectedPartyRevision: revisionOf(ana.partyId),
+          billId: octopusBill,
+          draftId: null,
+          revision: 0,
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, octopusBill)),
+          lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }],
         },
       );
-      expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
+      expect(savedDraft.status, JSON.stringify(savedDraft.json)).toBe(200);
 
       const refused = await pressNaming(ana.partyId, second, octopusBill, blank(octopusBill));
       expect(refused.status, JSON.stringify(refused.json)).toBe(409);
@@ -2060,22 +2059,21 @@ describe("A803 split: the panel's read", () => {
 
     it("an order sent on a bill moves it too, so rows from before are refused whatever edit state the press carries", async () => {
       const { ana, second, octopusBill } = await twoBillsOnTwoTables();
-      const [octopus] = venue.db.all<{ id: string }>(
-        sql`select id from working_order_lines where working_order_id = ${octopusBill}`,
-      );
-      const recalled = await send(
+      const savedDraft = await send(
         venue.app,
         venue.cookie,
-        "POST",
-        `/api/parties/${ana.partyId}/lines/${octopus!.id}/recall`,
+        "PUT",
+        `/api/parties/${ana.partyId}/drafts`,
         {
-          submissionId: randomUUID(),
-          expectedPartyRevision: revisionOf(ana.partyId),
+          billId: octopusBill,
+          draftId: null,
+          revision: 0,
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, octopusBill)),
+          lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }],
         },
       );
-      expect(recalled.status, JSON.stringify(recalled.json)).toBe(200);
-      const draft = recalled.json.draft as {
+      expect(savedDraft.status, JSON.stringify(savedDraft.json)).toBe(200);
+      const draft = savedDraft.json.draft as {
         id: string;
         revision: number;
         lines: { id: string }[];

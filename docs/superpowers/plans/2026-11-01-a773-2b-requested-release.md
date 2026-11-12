@@ -1,5 +1,8 @@
 # A773-2 PR B: the waiter's request, the pass's release — task plan, cut into four pull requests
 
+**2026-11-11:** Recall and its saved source rows are retired by
+[R3-owner](2026-11-11-r3-owner-retire-recall.md). The Recall paths below describe the earlier build.
+
 **Goal.** When a waiter fires dishes, each station's part follows that station's setting "Waits for
 the pass": a station that does not wait gets its part at once, as today; a station that waits gets
 it only when a pass that sees it presses Fire. A group reads ready only when every station's part

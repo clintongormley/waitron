@@ -1,8 +1,4 @@
-import { readBillEditState } from "./bill-editing.js";
-import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -16,7 +12,8 @@ import {
   STARTER_REASON_NAMES as expected,
 } from "@waitron/adjustments";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { lineIdOf, rowsOf } from "./testing/adjustment-venue.js";
+import { rowsOf } from "./testing/adjustment-venue.js";
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import "./errors.js";
 
 // A venue straight out of provisioning, with no reason added by anyone: its till can still cancel.
@@ -89,26 +86,14 @@ describe("a newly set-up venue's till", () => {
     const reasonId = (listed.json as unknown as { id: string }[])[0]!.id;
 
     const billId = await tabWith(venue, "House salad", "Caña");
-    const [order] = await inTx(venue, (tx) =>
-      tx
-        .select({ revision: workingOrders.revision })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, billId)),
-    );
-    const cancelled = await send(
+    const cancelled = await cancelItemHttp(
+      venue.db,
       venue.app,
       venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      {
-        expectedEdit: await readBillEditState(venue.db, billId),
-        submissionId: randomUUID(),
-        expectedRevision: order!.revision,
-        lineId: await lineIdOf(venue, billId, 1),
-        reasonId,
-        action: "cancel",
-        note: null,
-      },
+      billId,
+      1,
+      undefined,
+      { reasonId },
     );
 
     expect(cancelled.status).toBe(200);

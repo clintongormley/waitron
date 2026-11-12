@@ -630,7 +630,7 @@ declare module "@waitron/shared" {
     /**
      * Record unpaid departure found a bill it would invoice — open, or presented with no invoice
      * yet — holding a dish the kitchen is not making: never sent, held in its group or by its
-     * kitchen item, recalled from the kitchen, or waiting for the pass and not served whole. Staff
+     * kitchen item, or waiting for the pass and not served whole. Staff
      * cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
@@ -1001,15 +1001,6 @@ declare module "@waitron/shared" {
     "ticket.invalid_transition": { ticketItemId: string };
     /** A ticket-item bump named an item that does not exist. */
     "ticket_item.not_found": { ticketItemId: string };
-    /**
-     * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
-     * refuses a line that already holds a ticket item before any of its writes), a re-course of a
-     * line that is fired or waiting for the pass (`setLineCourse`), and, when a station's choice of
-     * changes after sending refuses it, a recall (`recallToDraft`, `recallLines`), or a change or
-     * quantity rise in an edit (`applyLineEdits`), of a dish with work there; and, whatever the
-     * stations allow, a whole-order save (`updateHeldOrder`) that leaves out or lowers such a dish.
-     * It names the order, not a ticket item.
-     */
     "ticket.already_fired": { workingOrderId: string };
     /**
      * `handOver` (through `handOverOrder`) found an order that was never fired to the kitchen.

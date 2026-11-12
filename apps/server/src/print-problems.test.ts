@@ -1,4 +1,3 @@
-import { recallLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -1091,35 +1090,6 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     ]);
     await setJob(reprint!.id, { status: "done" });
     expect(await problemsOf(table4.partyId)).toEqual([]);
-  });
-
-  it("does not reprint under HOLD a line recalled from a fired group whose HOLD ticket was queued", async () => {
-    const v = await holdingVenue();
-    const table4 = await seated(v, "Table 4");
-    const { groups } = await submit(v, table4.partyId, [
-      { release: "hold", lines: [line(v, "burger"), line(v, "fish")] },
-    ]);
-    await inTx(async (tx) =>
-      fireGroup(tx, v.cfg, table4.partyId, groups[0]!.id, await command(table4.partyId)),
-    );
-    const fish = await lineNoOf(table4.tabId, "fish");
-    await inTx((tx) => recallLines(tx, v.cfg, table4.tabId, [fish]));
-    const before = (await jobsAt(v.kitchenPrinterId)).length;
-
-    await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
-
-    const reprints = (await jobsAt(v.kitchenPrinterId)).slice(before).map((job) => job.lines);
-    expect(reprints).toEqual([
-      [
-        REPRINTED,
-        "Kitchen",
-        "Table 4",
-        expect.any(String),
-        TIME,
-        "GROUP 1",
-        `1 x ${DISHES.burger.kitchen}`,
-      ],
-    ]);
   });
 
   it("follows the held dishes when their bill is merged into another table's, and clears by that bill's reprint", async () => {

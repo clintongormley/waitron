@@ -55,18 +55,14 @@ export interface PickGroups {
 }
 
 /**
- * The bill's dishes as Move dishes… offers them. A dish recalled into a draft is left out, and a
- * dish with any quantity paid makes its row paid.
+ * The bill's dishes as Move dishes… offers them. A dish with any quantity paid makes its row paid.
  */
 export function pickGroups(
   lines: readonly TabLine[],
   keyOf: (dish: TabLine) => string | null,
   balance: BillBalance | null,
-  recalled: ReadonlySet<string>,
 ): PickGroups {
-  const dishes = lines.filter(
-    (row) => (row.parentLineNo ?? null) === null && !recalled.has(row.id),
-  );
+  const dishes = lines.filter((row) => (row.parentLineNo ?? null) === null);
   const extras = new Map<number, TabLine[]>();
   for (const row of lines) {
     const parent = row.parentLineNo ?? null;
@@ -166,7 +162,7 @@ export function toggleRow(row: PickRow, picks: Picks): Picks {
  * the one drawn first), and counts handed to one row add up. The rows then take their counts in
  * the order they are drawn, each its first members and never more than its limit over the picks
  * already placed: together they keep within the floor the rows' limits work out, and a row left
- * short could not take one more. An id in no row now (gone, or recalled into a draft) is dropped,
+ * short could not take one more. An id in no row now is dropped,
  * and its row's count stays, taken from the members left.
  */
 export function tidyPicks(before: readonly PickRow[], bill: PickGroups, picks: Picks): Picks {

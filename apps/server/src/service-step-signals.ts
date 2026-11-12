@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, not, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   lineServiceCancellations,
   orderDrafts,
@@ -9,7 +9,6 @@ import {
 } from "@waitron/db";
 import type { TableSignal } from "@waitron/shared";
 import { readStepCompletions, readTableStepRules } from "@waitron/venue-service";
-import { isRecalledDish } from "./draft-source.js";
 import { onShownBill } from "./order-groups.js";
 import { partyFamilies } from "./parties.js";
 import {
@@ -115,7 +114,6 @@ export async function readStepFacts(
         // The NULL-parent index range includes historical top-level dishes.
         isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
-        not(isRecalledDish(tx)),
       ),
     );
   const dishes = new Map<string, DishServing[]>();
