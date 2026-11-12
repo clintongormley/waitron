@@ -4145,12 +4145,8 @@ jobs:
                | if length > 0 then error(join("; ")) else empty end)
           '
 
-      # While no needed job sets a `name:`, its API entries are named by its id: `lint`, a matrix's
-      # `test-heavy (1)`, a reusable workflow's `image / smoke` (or `image` when skipped). A completed
-      # conclusion other than `success` or `skipped` fails at once; anything not yet settled (the
-      # call failing, a number of jobs read that differs from the API's `total_count`, a needed job
-      # absent or still running) is retried a bounded number of times, then fails. A delayed status
-      # can use final needs success plus every step completed for this exact run, attempt and head.
+      # Only an absent server-probe may trust needs skipped: its ordinary-run condition is false.
+      # Other missing jobs require API evidence because needs can hide a never-acquired runner.
       # Steps alone cannot establish the result: the runner publishes it after the final step.
       - name: Fail unless GitHub's jobs API reports every needed job succeeded or skipped
         if: always()
@@ -4203,13 +4199,17 @@ jobs:
                | {id: $id,
                   jobs: [$jobs[] | select(.name == $id or (.name | startswith("\($id) (") or startswith("\($id) / ")))
                          | if finished($needs[$id]) then . + {status: "completed", conclusion: "success", from_steps: true} else . end]}]
-            | {lines: [.[] | if (.jobs | length) == 0 then "\(.id): not in the jobs API"
+            | {lines: [.[] | if (.jobs | length) == 0 then
+                               if .id == "server-probe" and $needs[.id].result == "skipped"
+                               then "\(.id): skipped (needs; absent from jobs API)"
+                               else "\(.id): not in the jobs API" end
                              else (.jobs[] | "\(.name): \(if .from_steps then "success (final needs and completed steps; run \(.run_id), attempt \(.run_attempt), \(.head_sha))" elif .status == "completed" then .conclusion else .status end)") end],
                bad: [($needs | to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key),
                      (.[].jobs[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped") | .name)],
                duplicate: [([.[].jobs] | add | (group_by(.name)[] | select(length > 1) | .[0].name),
                             (map(select(.id | type == "number")) | group_by(.id)[] | select(length > 1) | .[0].name))],
-               missing: [.[] | select((.jobs | length) == 0) | .id],
+               missing: [.[] | select((.jobs | length) == 0
+                                      and (.id != "server-probe" or $needs[.id].result != "skipped")) | .id],
                pending: [.[].jobs[] | select(.status != "completed") | .name],
                read: ($jobs | length),
                total: $pages[0].total_count,

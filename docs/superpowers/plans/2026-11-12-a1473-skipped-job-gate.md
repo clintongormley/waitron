@@ -3,20 +3,21 @@
 **Request:** Watcher, Lane I `questions.md`, 2026-11-12 15:23:
 “New small fix, before the drill: the final ci gate failed #2935 (run 43229439512) after 21 polls with "no job in the jobs API for: server-probe", though its needs result says skipped; GitHub's jobs API omitted the skipped record (an earlier run had it). Make the gate accept the saved needs result "skipped" when the API has no record for it, with a test, one small PR.”
 
-**Finish line:** ordinary CI can finish when a needed job is absent from the
+**Finish line:** ordinary CI can finish when `server-probe` is absent from the
 complete jobs inventory and its saved `needs` result is exactly `skipped`.
 An API record, when present, still receives every existing check. Missing
 successful jobs still wait and fail; failed or cancelled jobs still fail.
-The exception trusts `needs` alone for an absent skipped job. If a job that
-never acquired a runner is both reported skipped and omitted from the API,
-this gate cannot detect that cancellation. The watcher must settle whether
-to accept this general rule or limit the exception to `server-probe`.
+Every other missing job still waits and fails, even when saved as skipped.
+`server-probe` runs only on an explicit manual probe; its ordinary-run
+condition is false.
 
 **Reuse and scope:** keep the existing shell/jq gate, paging, retry limits,
 selected-coverage checks and `runCrossCheck` test harness. No new collector,
 workflow, API request, routing change or controller change. This does not
 complete A1473's publication or overflow drill. Codex wrote this plan; the
-watcher requested the fix, but has not yet cleared this plan. Claude's
+watcher requested the fix and cleared the server-probe-only scope in Lane I
+`questions.md`, 2026-11-12 15:32: “Take the Claude read's narrower route: the
+absent-record exception applies to server-probe only”. Claude's
 109-second read accepted the approach subject to the scope decision above;
 its report is Lane I `receipts/firing-20261112-1524/plan-review.md`.
 
@@ -31,8 +32,8 @@ record is optional, rather than always present.
 **Build and verification:**
 - [ ] Add a shell case with successful lint plus absent skipped server-probe;
   observe the gate fail for the missing job before implementing the exception.
-- [ ] After watcher clearance, filter the existing `missing` list by the
-  agreed scope and print why that absence passes. Leave verdict ordering
+- [ ] Filter the existing `missing` list by the
+  cleared server-probe-only scope and print why that absence passes. Leave verdict ordering
   and present-record checks unchanged.
 - [ ] Check incomplete inventory still refuses with absent skipped jobs.
   Reuse existing bad API conclusion, missing success, bad-needs and
@@ -42,5 +43,5 @@ record is optional, rather than always present.
   exception removed; green PR CI alone cannot prove an API omission occurred.
   Land before the staged overflow drill.
 
-**Expected size:** production +8/-5 lines; tests +30/-0, no new test support;
+**Expected size:** production +8/-5 lines; tests about +50/-0, no new test support;
 documentation about 65 lines including this plan. One small PR.

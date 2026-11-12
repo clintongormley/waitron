@@ -1462,14 +1462,15 @@ fails: on 2026-10-06,
 
 How the second step reads the API. While no needed job sets a `name:`, a needed job's entries are
 named by its id (`lint`), by its id and a matrix value (`test-heavy (1)`), or, for a job that calls
-a reusable workflow, by its id and the inner job (`image / smoke`; plain `image` when it was
-skipped); GitHub names a job by its `name:` when one is set (on 2026-10-06,
+a reusable workflow, by its id and the inner job (`image / smoke`; plain `image` when a
+skipped caller has an API record); GitHub names a job by its `name:` when one is set (on 2026-10-06,
 `gh api "repos/clintongormley/waitron/actions/runs/37435810196/attempts/1/jobs?per_page=100"`, a
 `licence.yml` run, listed its two jobs as `Every commit is signed off` and
 `LICENSE is unmodified Elastic License 2.0`), so the guard below fails if a needed job sets one.
 A completed entry with any other conclusion fails at once. It tries again at thirty-second
 intervals, twenty-one tries in all, when the API call fails, the number of jobs read differs from
-its `total_count`, a needed job has no entry, or an entry is not yet completed and lacks the combined evidence below, and fails when the
+its `total_count`, a needed job other than the skipped `server-probe` has no entry, or an entry
+is not yet completed and lacks the combined evidence below, and fails when the
 tries run out, so an API it cannot read fails the check rather than passing it. The step has a
 twelve-minute limit (`timeout-minutes: 12`) inside a fifteen-minute job, so a call that hangs fails
 the check when the step limit is reached. The step carries its own limit because GitHub's runner marks a timed-out step
@@ -1500,8 +1501,16 @@ second step only when its own `needs` result is `success` and its API record sup
 - A successful `Set up job` first and exactly one successful `Complete job` last. Every step has
   a nonblank name, an increasing positive integer number, and a `success` or `skipped` conclusion.
 
+An absent `server-probe` passes on the first complete inventory when its saved `needs` result is
+exactly `skipped`. Its condition selects only an explicit manual probe, so ordinary runs skip it.
+Every other missing job still waits and fails, including one saved as skipped; a present
+`server-probe` record still receives the ordinary API checks. Run `43229439512`, job
+`131230224765`, exhausted 21 polls on 12 November 2026 because GitHub omitted that skipped
+probe. The executable shell cases in `scripts/ci-workflow.test.mjs` cover the omission, the
+job-name/result limits and an incomplete inventory.
+
 The check still reads every API page and every matching physical job, including each matrix shard
-and reusable-workflow child. A missing job, incomplete page count or unfinished evidence waits
+and reusable-workflow child. Any other missing job, incomplete page count or unfinished evidence waits
 within the existing limit, then fails. Duplicate matching job names or ids wait for an unambiguous answer within the same limit, then fail. Final API failures and
 unknown conclusions fail even if `needs` says success. Failed, cancelled or unknown `needs`
 results also fail. An unfinished record from an older attempt cannot use this substitute; a

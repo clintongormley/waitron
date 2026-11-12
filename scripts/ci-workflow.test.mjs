@@ -2953,6 +2953,46 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
   );
 
   it(
+    "accepts an absent server-probe only when needs says skipped",
+    () => {
+      const skipped = runCrossCheck(
+        { lint: { result: "success" }, "server-probe": { result: "skipped" } },
+        [page([apiJob("lint", "success")])],
+      );
+      expect(skipped.status, skipped.output).toBe(0);
+      expect(skipped.calls).toBe(1);
+      expect(skipped.output).toBe(
+        "lint: success\nserver-probe: skipped (needs; absent from jobs API)\n",
+      );
+
+      for (const [id, result] of [
+        ["lint", "skipped"],
+        ["server-probe", "success"],
+      ]) {
+        const missing = runCrossCheck({ [id]: { result } }, [page([])]);
+        expect(missing.status, missing.output).not.toBe(0);
+        expect(missing.calls).toBe(3);
+        expect(missing.output).toContain(`no job in the jobs API for: ${id}`);
+      }
+    },
+    THREE_RUNS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "requires a complete inventory even when server-probe was skipped and omitted",
+    () => {
+      const short = runCrossCheck(
+        { lint: { result: "success" }, "server-probe": { result: "skipped" } },
+        [page([apiJob("lint", "success")], 2)],
+      );
+      expect(short.status, short.output).not.toBe(0);
+      expect(short.calls).toBe(3);
+      expect(short.output).toContain("read 1 of 2 jobs");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
     "fails at once on a job GitHub never gave a runner, though `needs` says it succeeded",
     () => {
       const never = { name: "test-ui", status: "completed", conclusion: "cancelled", runner_id: 0 };
