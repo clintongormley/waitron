@@ -1,14 +1,7 @@
 import { formatMoney } from "@waitron/shared";
 import type { BillUnsent } from "../api/client.js";
 import { billUnsentText } from "../state/bill-unsent.js";
-import {
-  clockBehindOf,
-  clockBehindText,
-  clockReadingOf,
-  clockUnusableText,
-  currentLocale,
-  t,
-} from "../i18n/t.js";
+import { clockReadingOf, clockUnusableText, currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { isTakePaymentRefusal } from "../state/bill-payment.js";
 import { recoveryRefusalText } from "./recovery-refusal.js";
@@ -27,9 +20,6 @@ export interface PayRefusal {
   /** A `clock.unusable`'s reading of the box's clock. */
   clockAt?: string;
   offsetMinutes?: number;
-  /** A `clock.behind_chain`'s latest record. */
-  lastRecordAt?: string;
-  lastRecordOffsetMinutes?: number;
   /** A `sale.charged_not_recorded`'s cause. */
   reason?: string;
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
@@ -83,17 +73,11 @@ export function refusalText(
     if (reading !== undefined)
       return clockUnusableText(reading.clockAt, reading.offsetMinutes, checkTime);
   }
-  if (refusal.code === "clock.behind_chain") {
-    const behind = clockBehindOf(refusal);
-    if (behind !== undefined) return clockBehindText(behind, { checkTime });
-  }
   if (refusal.code === "clock.unconfirmed") return t("sale.clock_unconfirmed");
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_unconfirmed")
     return t(billPayment ? "bill_pay.charged_clock_unconfirmed" : "sale.charged_clock_unconfirmed");
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "disk_full")
     return t("sale.charged_disk_full");
-  if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_behind_chain")
-    return t(billPayment ? "bill_pay.charged_clock_behind" : "sale.charged_clock_behind");
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_unusable")
     return t(billPayment ? "bill_pay.charged_clock_unusable" : "sale.charged_clock_unusable");
   if (refusal.code === "device.forbidden_action" && refusal.action === "pay")

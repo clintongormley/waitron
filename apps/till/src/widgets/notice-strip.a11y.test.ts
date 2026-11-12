@@ -28,7 +28,7 @@ const UNSENT: StaffNotice = {
   params: { count: 3, held: 0 },
 };
 
-const BEHIND: StaffNotice = { ...DISK, key: "behind", code: "clock.behind_chain" };
+const UNUSABLE: StaffNotice = { ...DISK, key: "unusable", code: "clock.unusable" };
 const EXPIRED: StaffNotice = { ...SPACE, key: "drawer", code: "print_job.drawer_expired" };
 
 describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (theme) => {
@@ -73,9 +73,9 @@ describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (
   });
 
   it.each([
-    ["Check the time alone", [BEHIND]],
-    ["Check the time first, open", [BEHIND, DISK]],
-    ["Check the time second, open", [DISK, BEHIND]],
+    ["Check the time alone", [UNUSABLE]],
+    ["Check the time first, open", [UNUSABLE, DISK]],
+    ["Check the time second, open", [DISK, UNUSABLE]],
   ])("has no violations with %s", async (_state, notices) => {
     const { el, host } = await mountWidget<TillNoticeStrip>(
       "till-notice-strip",

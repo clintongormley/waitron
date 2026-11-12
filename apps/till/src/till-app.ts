@@ -91,9 +91,6 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
-  type ClockBehind,
-  clockBehindOf,
-  clockBehindText,
   clockReadingOf,
   clockUnusableText,
   countText,
@@ -733,7 +730,6 @@ const TABLE_REFUSALS = new Set([
   "bill.refund_in_progress",
   "working_order.not_open",
   "storage.disk_full",
-  "clock.behind_chain",
   "clock.unconfirmed",
   "menu_period.ended",
   "station.no_default",
@@ -1046,7 +1042,6 @@ const ACTIONABLE_REFUSALS = new Set([
   "department.operation_description_required",
   "sale.department_missing",
   "storage.disk_full",
-  "clock.behind_chain",
   "clock.unconfirmed",
   "menu_period.ended",
   "station.no_default",
@@ -1141,7 +1136,6 @@ function discardError(error: unknown): CounterError {
     code === "order.payment_in_flight" ||
     code === "bill.refund_in_progress" ||
     code === "storage.disk_full" ||
-    code === "clock.behind_chain" ||
     code === "clock.unconfirmed" ||
     code === "draft.out_of_date"
     ? { code }
@@ -1607,7 +1601,6 @@ type CounterError =
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
   | { overLimit: string }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
-  | { clockBehind: ClockBehind }
   | { unsentBill: BillUnsent }
   | { takenOver: string; unsent?: true }
   /** Renaming a bill refused because another person's unsent dishes hold it: their name. */
@@ -1789,7 +1782,6 @@ function errorText(
       error.clockUnusable.offsetMinutes,
       checkTime,
     );
-  if ("clockBehind" in error) return clockBehindText(error.clockBehind, { checkTime });
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -1925,14 +1917,12 @@ function saleRefusalOf(
       | "sale.disk_full_manual_card"
       | "sale.chain_handed_over_manual_card"
       | "sale.charged_disk_full"
-      | "sale.charged_clock_behind"
       | "sale.charged_clock_unusable"
       | "sale.charged_clock_unconfirmed"
       | "sale.clock_unconfirmed"
     >
   | { code: string; recoveryUrl?: string; manualCard?: true }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
-  | { clockBehind: ClockBehind }
   | undefined {
   const recovery = recoveryRefusalOf(error);
   if (recovery !== undefined)
@@ -1943,8 +1933,6 @@ function saleRefusalOf(
         reason?: unknown;
         clockAt?: unknown;
         offsetMinutes?: unknown;
-        lastRecordAt?: unknown;
-        lastRecordOffsetMinutes?: unknown;
       }
     | undefined;
   switch (refusal?.code) {
@@ -1959,20 +1947,14 @@ function saleRefusalOf(
     case "sale.charged_not_recorded":
       return refusal.reason === "disk_full"
         ? "sale.charged_disk_full"
-        : refusal.reason === "clock_behind_chain"
-          ? "sale.charged_clock_behind"
-          : refusal.reason === "clock_unusable"
-            ? "sale.charged_clock_unusable"
-            : refusal.reason === "clock_unconfirmed"
-              ? "sale.charged_clock_unconfirmed"
-              : { code: "sale.charged_not_recorded" };
+        : refusal.reason === "clock_unusable"
+          ? "sale.charged_clock_unusable"
+          : refusal.reason === "clock_unconfirmed"
+            ? "sale.charged_clock_unconfirmed"
+            : { code: "sale.charged_not_recorded" };
     case "clock.unusable": {
       const reading = clockReadingOf(refusal);
       return reading === undefined ? { code: "clock.unusable" } : { clockUnusable: reading };
-    }
-    case "clock.behind_chain": {
-      const behind = clockBehindOf(refusal);
-      return behind === undefined ? { code: "clock.behind_chain" } : { clockBehind: behind };
     }
     case "clock.unconfirmed":
       return "sale.clock_unconfirmed";
@@ -3483,8 +3465,7 @@ export class TillApp extends LitElement {
     | { overLimit: string }
     | { code: string }
     | { unsentBill: BillUnsent }
-    | { clockUnusable: { clockAt: string; offsetMinutes: number } }
-    | { clockBehind: ClockBehind };
+    | { clockUnusable: { clockAt: string; offsetMinutes: number } };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */

@@ -852,10 +852,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Can't be recorded: the server's clock is wrong. Tell a manager.",
     es: "No se puede registrar: la hora del servidor es incorrecta. Avisa al encargado.",
   },
-  "clock.behind_chain": {
-    en: "Can't be recorded: the server's clock reads earlier than its last sale. Tell a manager.",
-    es: "No se puede registrar: la hora del servidor es anterior a la última venta. Avisa al encargado.",
-  },
   "clock.unconfirmed": {
     en: "Can't be recorded: the server is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",
     es: "No se puede registrar: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en la parte superior de la pantalla.",

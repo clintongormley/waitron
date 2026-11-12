@@ -1563,26 +1563,16 @@ export const en = {
     "Payment not recorded: the server's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
   "sale.clock_unusable_check":
     "Payment not recorded: the server's clock is wrong (it reads {date}). Use “Check the time” at the top of the screen. If you already charged a card on the terminal, refund it there.",
-  "sale.clock_behind_chain":
-    "Payment not recorded: the server's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open; tell a manager. If you already charged on another card machine, don't charge again: record it once this is fixed.",
-  "sale.clock_behind_chain_check":
-    "Payment not recorded: the server's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open. Use “Check the time” at the top of the screen. If you already charged on another card machine, don't charge again: record it once this is fixed.",
-  "sale.charged_clock_behind":
-    "Card charged, but the payment is not recorded: the server's clock reads earlier than its last sale. Don't charge again. Once it is fixed, try this payment again: it is recorded without charging again.",
   "sale.charged_clock_unusable":
     "Card charged, but the payment is not recorded: the server's clock is wrong. Don't charge again. Once it is fixed, try this payment again: it is recorded without charging again.",
   "sale.clock_unconfirmed":
     "Payment not recorded: the server is waiting for its time to be confirmed. The order stays open. Use “Check the time” at the top of the screen.",
   "sale.charged_clock_unconfirmed":
     "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, try this payment again: it is recorded without charging again.",
-  "bill_pay.charged_clock_behind":
-    "Card charged, but the payment is not recorded: the server's clock reads earlier than its last sale. Don't charge again. Once it is fixed, the payment is recorded automatically.",
   "bill_pay.charged_clock_unconfirmed":
     "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, the payment is recorded automatically.",
   "bill_pay.charged_clock_unusable":
     "Card charged, but the payment is not recorded: the server's clock is wrong. Don't charge again. Once it is fixed, the payment is recorded automatically.",
-  "collect.clock_behind_chain":
-    "Can't be recorded: the server's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). Tell a manager. If you already charged on another card machine, don't charge again: record it once this is fixed.",
   "take_payment.not_permitted": "You do not have permission to take payments",
   "reprint.error": "Could not reprint the receipt, try again",
   "reprint_language.title": "Reprint receipt",
@@ -2000,8 +1990,6 @@ export const en = {
   "staff_notice.clock.unusable": "Sales can't be recorded: the server's clock is wrong",
   "staff_notice.storage.space_low": "The server is nearly out of space",
   "staff_notice.clock.check_time": "The server's time needs checking",
-  "staff_notice.clock.behind_chain":
-    "Payments stopped: the server's clock reads earlier than its last sale",
   "staff_notice.clock.unconfirmed":
     "Payments wait: the server is waiting for devices to connect and agree with its time ({agreed} of 2 so far)",
   "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
@@ -3614,26 +3602,16 @@ export const es: Record<StringKey, string> = {
     "Pago no registrado: la hora del servidor es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.clock_unusable_check":
     "Pago no registrado: la hora del servidor es incorrecta (marca {date}). Usa «Comprobar la hora» arriba. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
-  "sale.clock_behind_chain":
-    "Pago no registrado: la hora del servidor ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto; avisa al encargado. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
-  "sale.clock_behind_chain_check":
-    "Pago no registrado: la hora del servidor ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto. Usa «Comprobar la hora» arriba. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
-  "sale.charged_clock_behind":
-    "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, vuelve a intentar este pago: se registra sin cobrar otra vez.",
   "sale.charged_clock_unusable":
     "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es incorrecta. No vuelvas a cobrar. Cuando se arregle, vuelve a intentar este pago: se registra sin cobrar otra vez.",
   "sale.clock_unconfirmed":
     "Cobro no registrado: el servidor espera a que se confirme su hora. El pedido sigue abierto. Usa «Comprobar la hora» en la parte superior de la pantalla.",
   "sale.charged_clock_unconfirmed":
     "Tarjeta cobrada, pero el cobro no está registrado: el servidor espera a que se confirme su hora. No cobres otra vez. Cuando esté confirmada, vuelve a intentar este cobro: se registra sin cobrar otra vez.",
-  "bill_pay.charged_clock_behind":
-    "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, el pago se registra automáticamente.",
   "bill_pay.charged_clock_unconfirmed":
     "Cobrado con tarjeta, pero el pago no se ha registrado: el servidor espera a que se confirme su hora. No vuelvas a cobrar. Cuando esté confirmada, el pago se registra automáticamente.",
   "bill_pay.charged_clock_unusable":
     "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es incorrecta. No vuelvas a cobrar. Cuando se arregle, el pago se registra automáticamente.",
-  "collect.clock_behind_chain":
-    "No se puede registrar: la hora del servidor ({clockAt}) es anterior a la última venta ({lastRecordAt}). Avisa al encargado. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
   "take_payment.not_permitted": "No tienes permiso para cobrar",
   "reprint.error": "No se pudo reimprimir el recibo, inténtalo de nuevo",
   "reprint_language.title": "Reimprimir recibo",
@@ -4046,8 +4024,6 @@ export const es: Record<StringKey, string> = {
     "No se pueden registrar ventas: la hora del servidor es incorrecta",
   "staff_notice.storage.space_low": "Queda poco espacio en el servidor",
   "staff_notice.clock.check_time": "Hay que comprobar la hora del servidor",
-  "staff_notice.clock.behind_chain":
-    "No se puede cobrar: la hora del servidor es anterior a la última venta",
   "staff_notice.clock.unconfirmed":
     "Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora ({agreed} de 2 por ahora)",
   "staff_notice.fiscal.records_unsent": "{n} ventas sin enviar a Hacienda",

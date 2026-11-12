@@ -689,27 +689,8 @@ describe("till-bill-pay-dialog: moving between steps", () => {
 });
 
 describe("till-bill-pay-dialog: refusals and answers", () => {
-  it("names the missing payment during a clock stop, without denying an issued invoice", async () => {
-    setLocale("en-GB");
-    const el = await mount({
-      refusal: {
-        code: "clock.behind_chain",
-        clockAt: "2025-03-14T08:12:00.000Z",
-        offsetMinutes: 60,
-        lastRecordAt: "2026-10-18T21:40:00.000Z",
-        lastRecordOffsetMinutes: 120,
-      },
-    });
-    expect(actions(el).error).toContain("Payment not recorded:");
-    expect(actions(el).error).toContain("14/03/2025\u00a009:12");
-    expect(actions(el).error).toContain("18/10/2026\u00a023:40");
-    expect(actions(el).error).not.toContain("Sale not recorded");
-  });
-
   it.each([
-    ["en-GB", "clock_behind_chain", "bill_pay.charged_clock_behind"],
     ["en-GB", "clock_unusable", "bill_pay.charged_clock_unusable"],
-    ["es", "clock_behind_chain", "bill_pay.charged_clock_behind"],
     ["es", "clock_unusable", "bill_pay.charged_clock_unusable"],
   ] as const)(
     "keeps a charged bill card on automatic recovery in %s for %s",

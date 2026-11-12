@@ -10723,8 +10723,6 @@ describe("till-app: recording an unpaid departure", () => {
   });
 
   it.each([
-    ["en-GB", "clock.behind_chain"],
-    ["es-ES", "clock.behind_chain"],
     ["en-GB", "clock.unconfirmed"],
     ["es-ES", "clock.unconfirmed"],
   ])(

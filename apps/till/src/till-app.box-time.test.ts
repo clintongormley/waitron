@@ -5,12 +5,12 @@ import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { emit, mountEquipmentApp, signIn } from "../test/equipment-app.js";
 import { NFC_EQUIPMENT } from "../test/equipment-nfc.js";
 
-const BEHIND: StaffNotice = {
+const UNUSABLE: StaffNotice = {
   owner: "fiscal",
-  key: "clock.behind_chain",
-  code: "clock.behind_chain",
+  key: "clock.unusable",
+  code: "clock.unusable",
   severity: "error",
-  params: {},
+  params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
 };
 const MARKER: StaffNotice = {
   owner: "box-clock",
@@ -52,7 +52,7 @@ async function mounted(first: DeviceEquipmentRead) {
     listApprovers: vi.fn().mockResolvedValue([]),
   });
   await signIn(el);
-  await vi.waitFor(() => expect(strip(el)?.notices).toEqual([BEHIND]));
+  await vi.waitFor(() => expect(strip(el)?.notices).toEqual([UNUSABLE]));
   await settle(el);
   return { el, getDeviceEquipment, boxClockConfirm };
 }
@@ -61,18 +61,18 @@ describe("the till's Check the time", () => {
   afterEach(cleanupWidgets);
 
   it("offers it on the strip while the box sends the marker, which is drawn as no line", async () => {
-    const { el } = await mounted(read([MARKER, BEHIND]));
+    const { el } = await mounted(read([MARKER, UNUSABLE]));
     expect(strip(el)!.checkTimeOffered).toBe(true);
   });
 
   it("does not offer it without the marker", async () => {
-    const { el } = await mounted(read([BEHIND]));
+    const { el } = await mounted(read([UNUSABLE]));
     expect(strip(el)!.checkTimeOffered).toBe(false);
     expect(dialog(el)).toBeNull();
   });
 
   it("drops the offer on logging out", async () => {
-    const { el } = await mounted(read([MARKER, BEHIND]));
+    const { el } = await mounted(read([MARKER, UNUSABLE]));
     expect(strip(el)!.checkTimeOffered).toBe(true);
     emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
@@ -80,8 +80,11 @@ describe("the till's Check the time", () => {
   });
 
   it("keeps the offer through a read that could not reach the box's clock", async () => {
-    const { el, getDeviceEquipment } = await mounted(read([MARKER, BEHIND]));
-    getDeviceEquipment.mockResolvedValue({ ...read([BEHIND]), noticesUnavailable: ["box-clock"] });
+    const { el, getDeviceEquipment } = await mounted(read([MARKER, UNUSABLE]));
+    getDeviceEquipment.mockResolvedValue({
+      ...read([UNUSABLE]),
+      noticesUnavailable: ["box-clock"],
+    });
     emit(el.shadowRoot!.querySelector("till-shell")!, "open-equipment");
     await vi.waitFor(() => expect(getDeviceEquipment.mock.calls.length).toBeGreaterThan(1));
     await settle(el);
@@ -89,7 +92,7 @@ describe("the till's Check the time", () => {
   });
 
   it("opens the dialog on till-check-time and reads the equipment again at once after a success", async () => {
-    const { el, getDeviceEquipment, boxClockConfirm } = await mounted(read([MARKER, BEHIND]));
+    const { el, getDeviceEquipment, boxClockConfirm } = await mounted(read([MARKER, UNUSABLE]));
     strip(el)!.dispatchEvent(new CustomEvent("till-check-time", { bubbles: true, composed: true }));
     await settle(el);
     const opened = dialog(el)!;

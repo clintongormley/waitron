@@ -2016,11 +2016,11 @@ describe("till-app: a save the server refuses", () => {
   });
 
   it.each(["en-GB", "es-ES"])(
-    "says a save refused for a clock behind the last sale can't be recorded (%s)",
+    "says a save refused while the start's time is unconfirmed can't be recorded (%s)",
     async (locale) => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), locale }),
-        saveDraft: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+        saveDraft: vi.fn().mockRejectedValue({ code: "clock.unconfirmed", status: 409 }),
       });
       expect(currentLocale()).toBe(locale);
       await openTable(el);
@@ -2028,7 +2028,7 @@ describe("till-app: a save the server refuses", () => {
 
       await back(el);
 
-      expect(banner(el)!.textContent).toContain(codeMessage("clock.behind_chain", locale));
+      expect(banner(el)!.textContent).toContain(codeMessage("clock.unconfirmed", locale));
       expect(banner(el)!.textContent).not.toContain(codeMessage("server.internal", locale));
     },
   );
@@ -3107,11 +3107,11 @@ describe("till-app: sending the draft", () => {
   });
 
   it.each(["en-GB", "es-ES"])(
-    "says a save refused for a clock behind the last sale can't be recorded, and sends nothing (%s)",
+    "says a save refused while the start's time is unconfirmed can't be recorded, and sends nothing (%s)",
     async (locale) => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), locale }),
-        saveDraft: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+        saveDraft: vi.fn().mockRejectedValue({ code: "clock.unconfirmed", status: 409 }),
       });
       expect(currentLocale()).toBe(locale);
       await openTable(el);
@@ -3120,7 +3120,7 @@ describe("till-app: sending the draft", () => {
       await act(el, "fire-all");
 
       expect(api.submitDraft).not.toHaveBeenCalled();
-      expect(banner(el)!.textContent).toContain(codeMessage("clock.behind_chain", locale));
+      expect(banner(el)!.textContent).toContain(codeMessage("clock.unconfirmed", locale));
       expect(banner(el)!.textContent).not.toContain(codeMessage("server.internal", locale));
     },
   );

@@ -2239,39 +2239,12 @@ describe("till-app: a bill payment's refusals and retries", () => {
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full"));
   });
 
-  it("a cash contribution refused for a clock behind the last sale shows both times", async () => {
-    setLocale("en-GB");
-    const takeBillPayment = vi.fn().mockRejectedValue({
-      code: "clock.behind_chain",
-      clockAt: "2025-03-14T08:12:00.000Z",
-      offsetMinutes: 60,
-      lastRecordAt: "2026-10-18T21:40:00.000Z",
-      lastRecordOffsetMinutes: 120,
-      status: 409,
-    });
-    const { el } = await mountApp({ takeBillPayment });
-    await openTable(el);
-    await openDialog(el, "contribution");
-    await type(el, "amount", "40");
-    await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
-
-    expect(inDialog(el, "wt-form-actions")!.error).toBe(
-      t("sale.clock_behind_chain")
-        .replace("{clockAt}", "14/03/2025\u00a009:12")
-        .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
-    );
-  });
-
   it("points a cash contribution's clock refusal at Check the time while the box offers it", async () => {
     setLocale("en-GB");
     const takeBillPayment = vi.fn().mockRejectedValue({
-      code: "clock.behind_chain",
-      clockAt: "2025-03-14T08:12:00.000Z",
+      code: "clock.unusable",
+      clockAt: "2001-01-01T11:00:00.000Z",
       offsetMinutes: 60,
-      lastRecordAt: "2026-10-18T21:40:00.000Z",
-      lastRecordOffsetMinutes: 120,
       status: 409,
     });
     const marker = {
@@ -2294,9 +2267,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(inDialog(el, "wt-form-actions")!.error).toBe(
-      t("sale.clock_behind_chain_check")
-        .replace("{clockAt}", "14/03/2025\u00a009:12")
-        .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
+      t("sale.clock_unusable_check").replace("{date}", "01/01/2001"),
     );
   });
 
@@ -5790,7 +5761,6 @@ describe("till-app: a bill payment on the card reader", () => {
   });
 
   it.each([
-    ["clock_behind_chain", "bill_pay.charged_clock_behind"],
     ["clock_unusable", "bill_pay.charged_clock_unusable"],
     ["clock_unconfirmed", "bill_pay.charged_clock_unconfirmed"],
   ] as const)(

@@ -106,17 +106,17 @@ describe("the box's check-the-time marker", () => {
     severity: "error",
     params: {},
   };
-  const behind: StaffNotice = {
+  const unusable: StaffNotice = {
     owner: "fiscal",
-    key: "clock.behind_chain",
-    code: "clock.behind_chain",
+    key: "clock.unusable",
+    code: "clock.unusable",
     severity: "error",
     params: {},
   };
 
   it("is offered, and left out of the notices shown, when the read carries it", () => {
-    const withMarker = read({ notices: [marker, behind] });
-    expect(nextNotices([], withMarker)).toEqual([behind]);
+    const withMarker = read({ notices: [marker, unusable] });
+    expect(nextNotices([], withMarker)).toEqual([unusable]);
     expect(checkTimeOffered(withMarker, false)).toBe(true);
   });
 
@@ -137,19 +137,19 @@ describe("the box's check-the-time marker", () => {
   });
 
   it("is not offered when the read does not carry it, and the notices are as before", () => {
-    const without = read({ notices: [behind] });
-    expect(nextNotices([], without)).toEqual([behind]);
+    const without = read({ notices: [unusable] });
+    expect(nextNotices([], without)).toEqual([unusable]);
     expect(checkTimeOffered(without, false)).toBe(false);
     expect(checkTimeOffered(read(), false)).toBe(false);
   });
 
   it("keeps the earlier answer while a read names the box's clock owner unavailable", () => {
-    const blind = read({ notices: [behind], noticesUnavailable: ["box-clock"] });
+    const blind = read({ notices: [unusable], noticesUnavailable: ["box-clock"] });
     expect(checkTimeOffered(blind, true)).toBe(true);
     expect(checkTimeOffered(blind, false)).toBe(false);
-    expect(checkTimeOffered(read({ notices: [behind] }), true)).toBe(false);
+    expect(checkTimeOffered(read({ notices: [unusable] }), true)).toBe(false);
     expect(
-      checkTimeOffered(read({ notices: [behind], noticesUnavailable: ["fiscal"] }), true),
+      checkTimeOffered(read({ notices: [unusable], noticesUnavailable: ["fiscal"] }), true),
     ).toBe(false);
   });
 

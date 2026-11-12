@@ -339,7 +339,6 @@ function deps(db: Database): TillApiDeps {
     db,
     // Only the clock check: every sale this suite makes is refused before it reaches filing.
     backend: {
-      clockBehindLatestRecord: async () => null,
       refuseWhileClockBehind: async () => {},
       refuseNewIssuance: async () => {},
     } as Partial<FiscalBackend> as FiscalBackend,

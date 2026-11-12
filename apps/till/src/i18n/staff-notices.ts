@@ -10,7 +10,6 @@ const FIXED = {
   // waiter at a stopped till has no step of their own (2026-10-28, A1127 Q4).
   "storage.disk_full": "staff_notice.storage.disk_full",
   "clock.unusable": "staff_notice.clock.unusable",
-  "clock.behind_chain": "staff_notice.clock.behind_chain",
   "storage.space_low": "staff_notice.storage.space_low",
   "clock.check_time": "staff_notice.clock.check_time",
 } as const;
@@ -20,11 +19,7 @@ function unknownText(): { main: string; hint: string } {
 }
 
 /** The clock stops a person at a till can lift with "Check the time" while the box offers it. */
-const CHECKABLE: ReadonlySet<string> = new Set([
-  "clock.unusable",
-  "clock.behind_chain",
-  "clock.unconfirmed",
-]);
+const CHECKABLE: ReadonlySet<string> = new Set(["clock.unusable", "clock.unconfirmed"]);
 
 /** Whether `notice` is a clock stop whose hint is "Check the time" while `checkTime` is set. */
 export function checksTime(notice: Pick<StaffNotice, "code">, checkTime: boolean): boolean {

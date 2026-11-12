@@ -7731,8 +7731,6 @@ describe("till-app", () => {
   );
 
   it.each([
-    ["en-GB", "clock.behind_chain"],
-    ["es-ES", "clock.behind_chain"],
     ["en-GB", "clock.unconfirmed"],
     ["es-ES", "clock.unconfirmed"],
   ])(
@@ -8508,8 +8506,6 @@ describe("till-app", () => {
   });
 
   it.each([
-    ["en-GB", "clock.behind_chain"],
-    ["es-ES", "clock.behind_chain"],
     ["en-GB", "clock.unconfirmed"],
     ["es-ES", "clock.unconfirmed"],
   ])(
@@ -10770,46 +10766,6 @@ describe("till-app", () => {
       expect(text).not.toContain(codeMessage("sale.charged_not_recorded"));
     });
 
-    const clockBehind = {
-      code: "clock.behind_chain",
-      clockAt: "2025-03-14T08:12:00.000Z",
-      offsetMinutes: 60,
-      lastRecordAt: "2026-10-18T21:40:00.000Z",
-      lastRecordOffsetMinutes: 120,
-      status: 409,
-    };
-    const clockBehindSentence = () =>
-      t("sale.clock_behind_chain")
-        .replace("{clockAt}", "14/03/2025\u00a009:12")
-        .replace("{lastRecordAt}", "18/10/2026\u00a023:40");
-
-    it("a cash sale refused for a clock behind the last sale shows both times, each in its own offset", async () => {
-      expect(currentLocale()).toBe("es-ES");
-      const text = await payCash(clockBehind);
-      expect(text).toContain(clockBehindSentence());
-      expect(text).not.toContain(codeMessage("clock.behind_chain"));
-    });
-
-    it("a reader card pay refused for a clock behind the last sale shows both times", async () => {
-      const text = await payReader(clockBehind);
-      expect(text).toContain(clockBehindSentence());
-    });
-
-    it.each([
-      [{ lastRecordAt: undefined }],
-      [{ lastRecordAt: "not a time" }],
-      [{ lastRecordOffsetMinutes: Number.NaN }],
-      [{ clockAt: "not a time" }],
-      [{ offsetMinutes: "60" }],
-    ])(
-      "a clock behind the last sale without a usable reading (%o) shows the code table's sentence",
-      async (broken) => {
-        const text = await payCash({ ...clockBehind, ...broken });
-        expect(text).toContain(codeMessage("clock.behind_chain"));
-        expect(text).not.toContain(t("sale.clock_behind_chain").slice(0, 20));
-      },
-    );
-
     it("a charged card stopped by an unusable clock says to recover without charging again", async () => {
       const text = await payReader({
         code: "sale.charged_not_recorded",
@@ -10818,18 +10774,6 @@ describe("till-app", () => {
         status: 507,
       });
       expect(text).toContain(t("sale.charged_clock_unusable"));
-    });
-
-    it("a card charged as the clock stop begins says not to charge again, and to retry the payment once fixed", async () => {
-      const text = await payReader({
-        code: "sale.charged_not_recorded",
-        workingOrderId: "wo-1",
-        reason: "clock_behind_chain",
-        status: 507,
-      });
-      expect(text).toContain(t("sale.charged_clock_behind"));
-      expect(text).not.toContain(t("sale.charged_disk_full"));
-      expect(text).not.toContain(codeMessage("sale.charged_not_recorded"));
     });
   });
 
@@ -12024,12 +11968,12 @@ describe("till-app", () => {
     });
 
     it.each(["en-GB", "es-ES"])(
-      "place-order refused for a clock behind the last sale says it can't be recorded (%s)",
+      "place-order refused while the start's time is unconfirmed says it can't be recorded (%s)",
       async (locale) => {
         const { el } = await mountApp({
           zonePolicy: { serviceMode: "ticket_then_pay" },
           getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", locale }),
-          placeOrder: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+          placeOrder: vi.fn().mockRejectedValue({ code: "clock.unconfirmed", status: 409 }),
         });
         const c = await toCounter(el);
         expect(currentLocale()).toBe(locale);
@@ -12040,7 +11984,7 @@ describe("till-app", () => {
         await flush(el);
 
         const shown = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
-        expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+        expect(shown).toBe(codeMessage("clock.unconfirmed", locale));
         expect(shown).not.toBe(codeMessage("server.internal", locale));
       },
     );
@@ -12474,27 +12418,6 @@ describe("till-app", () => {
             { method: "cash", amount: "30.00" },
           ),
         ).toBe(t("sale.clock_unusable").replace("{date}", "01/01/2001"));
-      });
-
-      it("a payment refused for a clock behind the last sale shows both times", async () => {
-        expect(currentLocale()).toBe("es-ES");
-        expect(
-          await findBillRefused(
-            {
-              code: "clock.behind_chain",
-              clockAt: "2025-03-14T08:12:00.000Z",
-              offsetMinutes: 60,
-              lastRecordAt: "2026-10-18T21:40:00.000Z",
-              lastRecordOffsetMinutes: 120,
-              status: 409,
-            },
-            { method: "cash", amount: "30.00" },
-          ),
-        ).toBe(
-          t("collect.clock_behind_chain")
-            .replace("{clockAt}", "14/03/2025\u00a009:12")
-            .replace("{lastRecordAt}", "18/10/2026\u00a023:40"),
-        );
       });
     });
     it("A773 Find a bill ignores a collection answer from a replaced API", async () => {
