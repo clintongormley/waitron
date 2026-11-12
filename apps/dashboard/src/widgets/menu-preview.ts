@@ -100,6 +100,7 @@ const PRODUCT_FIELDS: Record<ProductChangeField, StringKey> = {
   diet: "menu_preview.field_diet",
   vat: "menu_preview.field_vat",
   ordering: "menu_preview.field_ordering",
+  set_lunch: "menu_preview.field_set_lunch",
   variants: "menu_preview.field_variants",
   extras: "menu_preview.field_extras",
   options: "menu_preview.field_options",

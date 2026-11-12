@@ -1612,6 +1612,36 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
+  it("publishes the lunch marker and reports its change while ordinary offers stay unmarked", async () => {
+    const f = await menusFixture(fx.db);
+    const before = await build(f.dinner);
+    const itemId = await app((tx) => offerOf(tx, f.dinner, f.burger));
+    expect(before.offers[itemId]).not.toHaveProperty("setLunch");
+    await app((tx) => updateProduct(tx, f.burger, { setLunch: true }));
+    const after = await build(f.dinner);
+    expect(after.offers[itemId]).toHaveProperty("setLunch", true);
+    expect(diffMenuDocuments(before, after)[0]!.targets.after).toContainEqual(
+      expect.objectContaining({
+        kind: "product",
+        productId: f.burger,
+        field: { kind: "set_lunch" },
+      }),
+    );
+    expect(changeBodies(diffMenuDocuments(before, after))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.burger,
+        name: "Burger",
+        fields: ["set_lunch"],
+        source: "shared_product",
+      },
+    ]);
+    await app((tx) => updateProduct(tx, f.burger, { setLunch: false }));
+    const cleared = await build(f.dinner);
+    expect(cleared.offers[itemId]).not.toHaveProperty("setLunch");
+    expect(diffMenuDocuments(before, cleared)).toEqual([]);
+  });
+
   it("names a change to the dish's ordering as the product's ordering", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);

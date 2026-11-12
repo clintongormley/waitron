@@ -1080,7 +1080,9 @@ tests. Media still validates required image names and translates its refusal to
 records the owner’s extras, later-choice and course-send decisions. The [build plan](../superpowers/plans/2026-11-12-a1515-set-lunch-build.md)
 was reviewed by Claude and cleared by the watcher at 22:04 on 12 November. The owner’s table-service 10% decision removes
 the adviser wait for that scope; takeaway/delivery remain with S10 and Lane L.
-Implementation has not started. Most Spanish restaurants sell a fixed-price
+The product editor can mark a set lunch and publish that marker. Later choices on the same
+lunch, independent course sending and lunch bill/receipt presentation remain unbuilt.
+Most Spanish restaurants sell a fixed-price
 lunch menu. Waitron has no way to sell one: the demo's "Set lunch" is an ordinary menu whose dishes
 each carry their own price, sold, printed and taxed one by one. The catalogue design names this
 "bundles" and leaves it undesigned (`docs/superpowers/specs/2026-09-30-catalogue-menus-routing-design.md`,

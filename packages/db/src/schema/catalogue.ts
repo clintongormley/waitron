@@ -50,6 +50,7 @@ export const products = table(
     parentId: id("parent_id"),
     // A variant's position among its parent's variants; unused with no parent.
     variantOrder: count("variant_order").notNull().default(0),
+    setLunch: flag("set_lunch").notNull().default(false),
     // The main reporting category; null is Uncategorised, and on a variant means its parent's.
     /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),

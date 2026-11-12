@@ -137,6 +137,7 @@ export interface CreateProductInput {
   available?: boolean;
   /** Omitted leaves it `public`. */
   ordering?: ProductOrdering;
+  setLunch?: boolean;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
   dietaryDeclarations?: DietaryLabel[];
@@ -169,6 +170,7 @@ export interface UpdateProductInput {
   available?: boolean;
   /** Who may order the product on its own. */
   ordering?: ProductOrdering;
+  setLunch?: boolean;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
   dietaryDeclarations?: DietaryLabel[] | null;
@@ -191,6 +193,7 @@ const PRODUCT_BASE_COLUMNS = {
   name: products.name,
   customerName: products.customerName,
   ordering: products.ordering,
+  setLunch: products.setLunch,
   pricingUnit: effective.pricingUnit,
   unitPrice: effective.unitPrice,
   vatClass: effective.vatClass,
@@ -562,6 +565,7 @@ async function offerRowsOn(
           customerName: products.customerName,
           kitchenName: products.kitchenName,
           ordering: products.ordering,
+          setLunch: products.setLunch,
           available: products.available,
           ...offerLineColumns,
         })
@@ -656,6 +660,7 @@ async function offersOn(
       customerName: row.customerName,
       kitchenName: row.kitchenName,
       ordering: row.ordering,
+      ...(row.setLunch ? { setLunch: true as const } : {}),
       ...offerLineValues(row),
       offeredModifiers: offeredByItem.get(row.id) ?? [],
       variants: variantsByItem.get(row.id) ?? [],
@@ -972,6 +977,7 @@ async function insertProduct(
     active: input.active ?? true,
     available: input.available ?? true,
     ordering: input.ordering ?? "public",
+    setLunch: input.setLunch === undefined ? false : input.setLunch,
     manualAllergens: allergens,
     allergens: publishedAllergens(allergens),
     dietOverride,

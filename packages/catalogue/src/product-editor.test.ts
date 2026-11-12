@@ -82,6 +82,31 @@ beforeEach(async () => {
   };
 });
 
+it("saves a set lunch and clears its setting through the same editor", async () => {
+  const lunch = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(
+      tx,
+      null,
+      catalogueId,
+      { ...input, name: "House lunch", unitPrice: "18.00", variants: [], setLunch: true },
+      "en",
+    ),
+  );
+  expect(lunch).toHaveProperty("setLunch", true);
+  expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, lunch.id))).toHaveProperty(
+    "setLunch",
+    true,
+  );
+  const ordinary = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, lunch.id, catalogueId, { ...lunch, setLunch: false }, "en"),
+  );
+  expect(ordinary).toHaveProperty("setLunch", false);
+  expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, lunch.id))).toHaveProperty(
+    "setLunch",
+    false,
+  );
+});
+
 it("round-trips cereal and nut kinds through the editor and stored published declaration", async () => {
   const allergens = {
     gluten: { kinds: ["wheat", "barley"] },
@@ -168,6 +193,7 @@ it("saves and reads the canonical editor shape with independent content and vari
   );
   expect(saved).toEqual({
     ...input,
+    setLunch: false,
     id: saved.id,
     parentId: null,
     inherited: null,
@@ -664,6 +690,7 @@ describe("a variant's own page", () => {
       customerName: { en: "Small coffee" },
       kitchenName: "SM",
       ordering: "public",
+      setLunch: false,
       active: true,
       available: true,
       description: null,

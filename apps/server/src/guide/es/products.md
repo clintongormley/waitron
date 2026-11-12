@@ -30,6 +30,11 @@ Venta empieza cerrada, con los ajustes actuales en su línea de resumen. La list
 muestra este ajuste en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
 elige por él.
 
+En **Venta**, activa **Menú por precio fijo** para marcar un menú de precio fijo. Añade sus
+opciones como extras: indica cero como precio de los platos incluidos y el precio del suplemento
+para los platos con recargo. Decide cuándo se ofrece mediante el período de la carta. Usa estos
+menús para el servicio de mesa.
+
 Elige la miniatura marcada con un lápiz junto a Nombre para cambiar la imagen o el color. El cuadrado
 muestra el cambio de color antes de guardar. Cierra el panel con Escape para volver a la miniatura.
 

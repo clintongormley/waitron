@@ -30,6 +30,10 @@ here. Selling starts closed, with the current settings on its summary line. The 
 this setting in its **Standalone** column; the **Standalone ordering by** filter in **Filters** picks
 by it.
 
+In **Selling**, turn on **Set lunch** to mark a fixed-price lunch product. Attach its choices as
+extras, with an explicit zero price for included dishes and the supplement price for premium
+choices. Set its availability through the menu's service period. Use set lunch for table service.
+
 Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
 a colour change before you save. Close the panel with Escape to return to the thumbnail.
 

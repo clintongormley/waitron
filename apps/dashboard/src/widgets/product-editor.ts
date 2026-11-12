@@ -114,7 +114,7 @@ const SECTION_FIELDS = {
   nutrition: ["allergens"],
   descriptors: ["customer-name-", "description-"],
   price: ["tax", "unit", "unit-price"],
-  selling: ["ordering", "available"],
+  selling: ["ordering", "available", "set-lunch"],
   modifiers: ["modifier"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
@@ -139,6 +139,7 @@ const SERVER_FIELDS: Record<string, string> = {
   color: "product-color",
   active: "active",
   ordering: "ordering",
+  setLunch: "set-lunch",
   courseId: "product-course",
 };
 
@@ -191,6 +192,7 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   color: "product-color",
   modifiers: "modifier",
   ordering: "ordering",
+  setLunch: "set-lunch",
   courseId: "product-course",
 };
 
@@ -205,6 +207,7 @@ function emptyDraft(defaultVatClass: VatClass = "general"): ProductEditorDraft {
     unitPrice: "0.00",
     active: true,
     available: true,
+    setLunch: false,
     ordering: "public",
     vatClass: defaultVatClass,
     variants: [],
@@ -935,6 +938,7 @@ export class ProductEditor extends LitElement {
 
   private comparisonValue(draft: ProductEditorDraft): ProductEditorDraft {
     const value = this.submissionValue(draft);
+    value.setLunch = value.setLunch === true;
     value.allergens = nutritionAllergensForComparison(value.allergens);
     value.unitPrice = comparablePrice(value.unitPrice);
     value.variants = value.variants.map((variant) => ({
@@ -1411,7 +1415,7 @@ export class ProductEditor extends LitElement {
       >
       <div class="group">
         ${switchField(this.fields(), "available", t("editor.available"), this.draft.available, (value) => this.change("available", value))}
-        ${this.inherited ? nothing : this.renderOrdering()}
+        ${this.inherited ? nothing : html`${this.renderOrdering()}${switchField(this.fields(), "set-lunch", t("editor.set_lunch"), this.draft.setLunch === true, (value) => this.change("setLunch", value))}`}
       </div>
     </wt-disclosure>`;
   }
