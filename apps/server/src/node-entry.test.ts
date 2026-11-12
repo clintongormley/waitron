@@ -1725,6 +1725,45 @@ setInterval(() => {}, 1000);`;
   );
 
   it(
+    "a box that lost its own record reaches a page whose only choice is Retry a normal boot",
+    async () => {
+      const stateDir = await tempDir("wt-entry-state-");
+      const venueDir = join(await tempDir("wt-entry-venue-"), "venue");
+      for (let start = 0; start < 3; start += 1) {
+        await expect(
+          runEntry(
+            deps({
+              stateDir,
+              venueDir,
+              readRecoveryState,
+              writeRecoveryState,
+              withRecoveryLock: undefined,
+              startServer: vi.fn<StartServer>(() =>
+                Promise.reject(new AppError("node.state_missing", {})),
+              ),
+            }),
+          ),
+        ).rejects.toMatchObject({ code: "node.state_missing" });
+      }
+      expect(await readRecoveryState(stateDir)).toMatchObject({
+        level: "recovery",
+        lastErrorCode: "node.state_missing",
+      });
+      const page = await recoveryPage(stateDir, venueDir);
+      const choices = (html: string) =>
+        [...html.matchAll(/<form[^>]*action="([^"]*)"[^>]*>|<button[^>]*>([^<]*)<\/button>/g)].map(
+          (match) => match[1] ?? match[2],
+        );
+      expect(choices(page.english)).toEqual(["/recovery-api/retry", "Retry a normal boot"]);
+      expect(choices(page.spanish)).toEqual([
+        "/recovery-api/retry",
+        "Reintentar un arranque normal",
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a holder with no holder file: each refusal counts, and the page names no particular program",
     async () => {
       const stateDir = await tempDir("wt-entry-state-");

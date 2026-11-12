@@ -44,6 +44,7 @@ export type { MirrorConnection } from "./mirror-link.js";
 export {
   deleteNodeModeOtherThanTx,
   readNodeMode,
+  readNodeModeRow,
   setNodeMode,
   setNodeModeTx,
   setPrimaryRoleTx,

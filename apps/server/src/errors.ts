@@ -161,6 +161,12 @@ declare module "@waitron/shared" {
     "node.not_found": { id: string };
     "node.read_only": Record<string, never>;
     "node.spare": Record<string, never>;
+    /**
+     * This box's node.db holds no mode row for it, yet the held chart names it something other than
+     * the serving primary: it may be a spare that lost its node.db, so it refuses to start rather
+     * than sell beside the main box.
+     */
+    "node.state_missing": Record<string, never>;
     /** A change carrying the dashboard's sign-in cookie was sent by a page other than the box's
      * own (`Origin` or `Sec-Fetch-Site`), so it was not run. */
     "management.origin_refused": Record<string, never>;
