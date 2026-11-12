@@ -42,7 +42,7 @@ export const invoiceCorrections = table(
     correctiveSaleId: id("corrective_sale_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     endedAt: tsString("ended_at"),
-    // Plain ids, as on bill refunds: no key yet. Null while open, and on a filing by the background pass.
+    // Plain ids, as on bill refunds: no key yet. Null while open.
     endedBy: id("ended_by"),
   },
   (t) => [

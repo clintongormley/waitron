@@ -646,14 +646,15 @@ declare module "@waitron/shared" {
     "submission.id_reused": { submissionId: string };
     "invoice_correction.not_settled": { saleId: string };
     "invoice_correction.not_cash": { saleId: string };
-    /** The cash a correction's cash request asks for is more than the invoice's cash payments hold. */
+    /** The cash a correction's cash request asks for is more than the invoice's cash payments still
+     * hold for the sale, tips not counted. */
     "invoice_correction.cash_short": { correctionId: string; cashLeft: string; amount: string };
     /** The invoice already has a correction that is still open. */
     "invoice_correction.already_open": { saleId: string; correctionId: string };
     /** The invoice's payments hold less money still refundable than the correction would give back. */
     "invoice_correction.money_short": { saleId: string; moneyLeft: string; gross: string };
     "invoice_correction.not_found": { correctionId: string };
-    /** The refund names a correction of another invoice, or one that has ended. */
+    /** The correction belongs to another invoice, or has ended. */
     "invoice_correction.not_open": {
       correctionId: string;
       state: "open" | "filed" | "discarded" | "closed";

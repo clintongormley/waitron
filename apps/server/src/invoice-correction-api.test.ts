@@ -173,7 +173,7 @@ const ZONE_REFUSED = () => ({
 });
 
 describe("POST /api/transactions/:saleId/corrections/preview", () => {
-  it("answers the split and the cash still refundable, and refuses malformed line ids", async () => {
+  it("answers the split and the money still refundable, and refuses malformed line ids", async () => {
     const saleId = await sold(["10.00"]);
     expect(await preview(saleId, { gross: "5.00" })).toMatchObject({
       status: 200,

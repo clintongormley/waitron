@@ -88,8 +88,8 @@ const ZERO = decimal("0.00");
 
 /**
  * The checks both the preview and Open run, in order, so the preview refuses what Open refuses
- * with the same code. Answers what correcting `selection.gross` would file and the money still
- * refundable over every payment on the invoice.
+ * about the invoice with the same code. Answers what correcting `selection.gross` would file and
+ * the money still refundable over every payment on the invoice.
  */
 export async function checkCorrectionOpenable(
   tx: Transaction,
@@ -144,9 +144,9 @@ export async function previewInvoiceCorrection(
 }
 
 /**
- * Opens a correction of `request.gross` off a paid invoice: every check a filing would make runs
- * now, and nothing is filed and no money moves. A repeat of the same submission answers the first
- * correction and changes nothing.
+ * Opens a correction of `request.gross` off a paid invoice once `checkCorrectionOpenable` and the
+ * reason and split checks pass; nothing is filed and no money moves. A repeat of the same
+ * submission answers the first correction and changes nothing.
  */
 export async function openInvoiceCorrection(
   tx: Transaction,
@@ -273,7 +273,7 @@ export async function fileCorrectionIn(
   cfg: DeviceRequestConfig,
   correctionId: string,
   authz: RecordCorrectionInput["authz"],
-  endedBy: string | null,
+  endedBy: string,
   expectedSplit?: readonly SplitLine[],
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
