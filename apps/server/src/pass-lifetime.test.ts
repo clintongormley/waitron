@@ -2,13 +2,27 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  kitchenStations,
+  parties,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard } from "./pass-card.js";
 import { boardCards, boardItems, EVERY } from "./testing/pass-board-probe.js";
-import { advanceTicketItem, handOverOrder, markServed, unmarkServed } from "./working-order.js";
+import {
+  advanceTicketItem,
+  handOverOrder,
+  listStationQueue,
+  markServed,
+  unmarkServed,
+} from "./working-order.js";
+import { openDishCount } from "./station-closing.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import {
   commandFor,
   counterOrder,
@@ -325,5 +339,74 @@ describe("A773 lifetime", () => {
         lineTotal,
       })),
     );
+  });
+});
+
+describe("a dish the waiter serves leaves the station's screen, as it leaves the pass", () => {
+  async function sentAndServed(options: {
+    quantity: string;
+    served: string;
+    waitsForPass: boolean;
+  }) {
+    const v = await setupPartyVenue(suite.db);
+    if (options.waitsForPass)
+      await inTx(v, async (tx) => {
+        const stations = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
+        await setStationsWaitForPass(
+          tx,
+          true,
+          stations.map((station) => station.id),
+        );
+      });
+    const party = await seatWithNoAllergies(v, await v.table("Served table"));
+    const group = {
+      lines: [{ menuItemId: v.item("Burger"), quantity: options.quantity }],
+      release: "fire" as const,
+    };
+    await inTx(v, (tx) => placeGroupedRound(tx, v.cfg, party, group, OPERATOR));
+    const [item, ...others] = await inTx(v, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    );
+    expect(others).toEqual([]);
+    const command = { ...(await commandFor(v, party.partyId)), submissionId: randomUUID() };
+    await inTx(v, (tx) =>
+      markServed(
+        tx,
+        v.cfg,
+        party.partyId,
+        [{ lineId: item!.workingOrderLineId, quantity: options.served }],
+        command,
+      ),
+    );
+    const queue = await inTx(v, (tx) => listStationQueue(tx, item!.stationId));
+    return {
+      station: queue.flatMap((order) =>
+        order.items.map(({ name, phase, quantity }) => ({ name, phase, quantity })),
+      ),
+      pass: counts(await inTx(v, (tx) => readScopedPassBoard(tx, EVERY))),
+      openDishes: await inTx(v, (tx) => openDishCount(tx, item!.stationId)),
+      itemId: item!.id,
+    };
+  }
+
+  it("takes a dish the cook never touched off the station when it is served", async () => {
+    const read = await sentAndServed({ quantity: "1", served: "1", waitsForPass: false });
+    expect(read.pass).toEqual([]);
+    expect(read.openDishes).toBe(0);
+    expect(read.station).toEqual([]);
+  });
+
+  it("takes a dish still waiting for the pass off the station when it is served", async () => {
+    const read = await sentAndServed({ quantity: "1", served: "1", waitsForPass: true });
+    expect(read.pass).toEqual([]);
+    expect(read.openDishes).toBe(0);
+    expect(read.station).toEqual([]);
+  });
+
+  it("keeps a part-served dish on the station with only what is left, as the pass does", async () => {
+    const read = await sentAndServed({ quantity: "3", served: "1", waitsForPass: false });
+    expect(read.pass).toEqual([{ id: read.itemId, qty: "2.000" }]);
+    expect(read.openDishes).toBe(1);
+    expect(read.station).toEqual([{ name: "BURG", phase: "waiting", quantity: "2.000" }]);
   });
 });

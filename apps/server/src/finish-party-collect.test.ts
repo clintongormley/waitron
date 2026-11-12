@@ -991,11 +991,11 @@ async function closedAt(partyId: string) {
 }
 
 describe("a finished table's paid food leaves the kitchen screens (A1344)", () => {
-  it("takes a served, paid bill's card off the station when the table finishes", async () => {
+  it("a served, paid bill's card is off the station once served, and the bill is collected when the table finishes", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const billId = t.billIds[0]!;
     await serveAll(t, billId);
-    expect(await cardsFor(billId)).toHaveLength(1);
+    expect(await cardsFor(billId)).toEqual([]);
 
     expect(await post(t.partyId, await bodyFor(t))).toEqual({
       status: 200,
@@ -1022,13 +1022,13 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
     for (const billId of t.billIds) expect(await cardsFor(billId)).toEqual([]);
   });
 
-  it("keeps a combined table's cards until the surviving table finishes, then takes them all", async () => {
+  it("a combined table's served cards are off the station, and every bill is collected when the surviving table finishes", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const other = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     await serveAll(t, t.billIds[0]!);
     await serveAll(other, other.billIds[0]!);
     await combine(t, other);
-    expect(await cardsFor(other.billIds[0]!)).toHaveLength(1);
+    expect(await cardsFor(other.billIds[0]!)).toEqual([]);
 
     expect(await post(t.partyId, await bodyFor(t))).toMatchObject({ status: 200 });
 
@@ -1059,7 +1059,7 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
     expect((await billRow(billId)).collectedAt).toBe(collected);
   });
 
-  it("keeps a paid bill's card while the table cannot finish for an unpaid one", async () => {
+  it("leaves a paid bill uncollected while the table cannot finish for an unpaid one", async () => {
     const t = await table([{ name: "Burger" }, { name: "Burger" }], "fire", [[2]], ["12.00", null]);
     await serveAll(t, t.billIds[0]!);
 
@@ -1067,7 +1067,7 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
       body: { error: { code: "party.bill_outstanding" } },
     });
 
-    expect(await cardsFor(t.billIds[0]!)).toHaveLength(1);
+    expect(await cardsFor(t.billIds[0]!)).toEqual([]);
     expect((await billRow(t.billIds[0]!)).collectedAt).toBeNull();
   });
 

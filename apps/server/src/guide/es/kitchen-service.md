@@ -235,7 +235,9 @@ terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pe
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
-Cuando se cierra una mesa, sus platos pagados desaparecen solos de las pantallas de cocina.
+Cuando se cierra una mesa, sus platos pagados desaparecen solos de las pantallas de cocina. Un
+plato que el camarero marca como servido desaparece enseguida de la pantalla de cocina de su
+estación, igual que del pase.
 
 Cuando una tarjeta tiene un plato que se empezó sin esperar al pase y su grupo tiene platos para el
 pase, la tarjeta muestra debajo de sus platos **Sale con** y los nombres de las estaciones de esos

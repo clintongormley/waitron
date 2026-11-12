@@ -208,7 +208,8 @@ Each card carries its order's kitchen note and any printing problem. On a till, 
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
 that nobody signs in on shows neither.
 
-When a table is finished, its paid dishes leave the kitchen screens by themselves.
+When a table is finished, its paid dishes leave the kitchen screens by themselves. A dish the
+waiter marks served leaves its station's kitchen screen straight away, as it leaves the pass.
 
 When a card has a dish that started without waiting for the pass, and its group has dishes for the
 pass, the card shows, under its dishes, **Goes with** and the names of those dishes' stations, such

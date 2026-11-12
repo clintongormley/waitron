@@ -8056,6 +8056,7 @@ function onStationQueues(stationIds: readonly string[]): SQL | undefined {
     eq(ticketItems.madeHere, false),
     ne(workingOrders.status, "abandoned"),
     isNull(workingOrders.collectedAt),
+    gt(firedQuantity, workingOrderLines.servedQuantity),
   );
 }
 
@@ -8102,7 +8103,7 @@ export async function listStationQueues(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       optionSnapshots: workingOrderLines.optionSnapshots,
-      quantity: firedQuantity,
+      quantity: sql<number>`${firedQuantity} - ${workingOrderLines.servedQuantity}`,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
