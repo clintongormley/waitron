@@ -308,6 +308,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "mirror.bucket_stream_active": "shell.adopt.bucket_stream_active",
   "mirror.standby_name_taken": "shell.adopt.standby_name_taken",
   "mirror.spare_already_joined": "shell.adopt.spare_already_joined",
+  "mirror.standby_series_unsupported": "shell.adopt.standby_series_unsupported",
 };
 
 /** A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language. */
@@ -323,12 +324,6 @@ function adoptErrorWords(code: string, params: Record<string, unknown> | undefin
         primaryAt: clockReading(primaryAt),
         standbyAt: clockReading(standbyAt),
       });
-  if (code === "module.operation_invalid")
-    return say(
-      params?.module === "fiscal-verifactu"
-        ? "shell.adopt.verifactu_unsupported"
-        : "shell.adopt.generic",
-    );
   return say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
 }
 

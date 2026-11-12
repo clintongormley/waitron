@@ -107,8 +107,8 @@ function isIsoTime(value: unknown): value is string {
  * A refusal from the main box is passed on only when it is on this short list, and each is rebuilt
  * here so nothing the main box wrote travels on: `password.invalid`,
  * `mirror.bucket_stream_active`, `mirror.standby_name_taken` and `mirror.spare_already_joined`
- * with no parameters; `module.operation_invalid` with `{ module }` only when it names a module in
- * `ALL_MODULES`; `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are ISO
+ * with no parameters; `mirror.standby_series_unsupported` with `{ module }` only when it names a
+ * module in `ALL_MODULES`; `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are ISO
  * times. Every other code, and any of these whose parameters fail their check, is
  * `mirror.bundle_fetch_failed`.
  */
@@ -123,7 +123,7 @@ async function refusalFrom(response: Response): Promise<AppError> {
   const { code } = error;
   const params = isRecord(error.params) ? error.params : {};
   if (isRelayedBare(code)) return new AppError(code, {});
-  if (code === "module.operation_invalid") {
+  if (code === "mirror.standby_series_unsupported") {
     const named = ALL_MODULES.find((module) => module.name === params.module);
     if (named !== undefined) return new AppError(code, { module: named.name });
   }

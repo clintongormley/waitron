@@ -2044,9 +2044,13 @@ describe("setup-app", () => {
       ],
     ] as const)("shows the Veri*Factu refusal and Back (%s)", async (locale, sentence) => {
       try {
-        const { el, connect, control } = await refusedJoin("module.operation_invalid", locale, {
-          module: "fiscal-verifactu",
-        });
+        const { el, connect, control } = await refusedJoin(
+          "mirror.standby_series_unsupported",
+          locale,
+          {
+            module: "fiscal-verifactu",
+          },
+        );
         expect(await bottomOf(connect)).toBe(sentence);
         await backLeadsToRole(el, control);
       } finally {
@@ -2054,9 +2058,9 @@ describe("setup-app", () => {
       }
     });
 
-    it("shows the generic join failure for a refused operation of another module", async () => {
+    it("shows the generic join failure for a refused module operation, whichever module it names", async () => {
       const { connect } = await refusedJoin("module.operation_invalid", "en-GB", {
-        module: "bookings",
+        module: "fiscal-verifactu",
       });
       expect(await bottomOf(connect)).toBe(
         "Couldn't connect to the primary. Check the address and login, then try again.",

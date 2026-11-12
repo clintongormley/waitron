@@ -1280,7 +1280,8 @@ all historical papers and never authenticates an operation.
 
 An adoption file cannot carry the live authentication that an allocated standby needs. When an
 independently prepared module owns series at activation, the public adopter refuses before its
-first local write, and the setup route returns `409 module.operation_invalid`. The pending worker
+first local write, and the setup route returns `409 module.operation_invalid` (since 2026-11-12,
+`409 mirror.standby_series_unsupported`). The pending worker
 logs that refusal and keeps the complete adoption file. A booted pending mirror returns only its
 pending status, with no ambient viewer session, sealed node key or selling identity created by
 that step. A disabled allocation module does not prevent adoption.

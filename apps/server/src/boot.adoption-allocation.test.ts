@@ -139,7 +139,11 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
           .filter((line) => line.event.startsWith("adoption."))
           .map(({ level, event, code }) => ({ level, event, code })),
       ).toEqual([
-        { level: "error", event: "adoption.establish_failed", code: "module.operation_invalid" },
+        {
+          level: "error",
+          event: "adoption.establish_failed",
+          code: "mirror.standby_series_unsupported",
+        },
       ]);
     });
     const response = await fetch(`http://127.0.0.1:${httpPort()}/api/box/status`);

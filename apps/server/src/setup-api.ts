@@ -286,14 +286,14 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
 /**
  * The adopt route's contract. `mirror.bundle_fetch_failed` is 502, not a client fault: the request
  * was well-formed, but the mirror's upstream — the primary it was pointed at — failed.
- * `password.invalid` is the primary's refusal of the login, and the four `mirror.*` refusals at 409
- * are the main box's own refusals of the join, each relayed by `fetchMirrorBundle`, as is its
- * `module.operation_invalid`, which keeps `{ module }` only for a module in `ALL_MODULES`.
+ * `password.invalid` is the primary's refusal of the login. `mirror.vault_not_empty` and
+ * `mirror.primary_unconfirmed` are this box's own refusals; the other `mirror.*` codes at 409 are
+ * the main box's refusals of the join, each relayed by `fetchMirrorBundle`, and this box raises
+ * `mirror.standby_series_unsupported` itself as well for a bundle naming such a module.
  * The two ring refusals, `credentials.key_invalid` and `credentials.key_ring_version_collision`,
  * are left unlisted (400, the setup screen's generic words): only a faulty main box raises them.
  */
 const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
-  "module.operation_invalid": 409,
   "setup.request_invalid": 400,
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
@@ -303,6 +303,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_name_taken": 409,
   "mirror.spare_already_joined": 409,
   "mirror.clocks_apart": 409,
+  "mirror.standby_series_unsupported": 409,
   "password.invalid": 401,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,

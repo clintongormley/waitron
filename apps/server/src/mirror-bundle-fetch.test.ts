@@ -298,14 +298,14 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && error.params).toEqual({});
   });
 
-  it("passes on module.operation_invalid with a known module's name, and nothing else", async () => {
+  it("passes on mirror.standby_series_unsupported with a known module's name, and nothing else", async () => {
     const error = await refusalFor({
       error: {
-        code: "module.operation_invalid",
+        code: "mirror.standby_series_unsupported",
         params: { module: "fiscal-verifactu", detail: "https://primary.internal" },
       },
     });
-    expect(isAppError(error) && error.code).toBe("module.operation_invalid");
+    expect(isAppError(error) && error.code).toBe("mirror.standby_series_unsupported");
     expect(isAppError(error) && error.params).toEqual({ module: "fiscal-verifactu" });
   });
 
@@ -313,8 +313,10 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     ["naming an unknown module", { module: "https://primary.internal" }],
     ["naming no module", {}],
     ["whose module is not text", { module: 7 }],
-  ])("does not pass on module.operation_invalid %s", async (_shape, params) => {
-    const error = await refusalFor({ error: { code: "module.operation_invalid", params } });
+  ])("does not pass on mirror.standby_series_unsupported %s", async (_shape, params) => {
+    const error = await refusalFor({
+      error: { code: "mirror.standby_series_unsupported", params },
+    });
     expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
     expect(isAppError(error) && error.params).toEqual({});
   });

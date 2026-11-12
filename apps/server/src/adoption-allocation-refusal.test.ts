@@ -157,7 +157,7 @@ it("refuses allocation-dependent adoption before its first local write or handov
       },
     }),
   ).rejects.toMatchObject({
-    code: "module.operation_invalid",
+    code: "mirror.standby_series_unsupported",
     params: { module: "fiscal-verifactu" },
   });
   expect(reachedFirstWrite).toBe(false);
@@ -200,7 +200,7 @@ it("the setup route returns an allocation refusal and does not restart", async (
   });
   expect(response.status).toBe(409);
   expect(await response.json()).toEqual({
-    error: { code: "module.operation_invalid", params: { module: "fiscal-verifactu" } },
+    error: { code: "mirror.standby_series_unsupported", params: { module: "fiscal-verifactu" } },
   });
   expect(restarts).toBe(0);
   expect(await suite.db.select().from(deployment)).toEqual([]);
@@ -245,12 +245,12 @@ it("a pending allocated adoption refuses without creating a selling identity and
     {
       level: "error",
       event: "adoption.establish_failed",
-      fields: { code: "module.operation_invalid" },
+      fields: { code: "mirror.standby_series_unsupported" },
     },
     {
       level: "error",
       event: "adoption.establish_failed",
-      fields: { code: "module.operation_invalid" },
+      fields: { code: "mirror.standby_series_unsupported" },
     },
   ]);
 });
@@ -260,7 +260,7 @@ it.each([
   ["mirror.bucket_stream_active", {}],
   ["mirror.standby_name_taken", {}],
   ["mirror.spare_already_joined", {}],
-  ["module.operation_invalid", { module: "fiscal-verifactu" }],
+  ["mirror.standby_series_unsupported", { module: "fiscal-verifactu" }],
   [
     "mirror.clocks_apart",
     { primaryAt: "2026-11-10T12:00:00.000Z", standbyAt: "2026-11-10T12:05:00.000Z" },

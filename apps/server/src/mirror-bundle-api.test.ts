@@ -80,6 +80,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 const pause = vi.hoisted(() => ({
   beforeModuleConfigRead: undefined as (() => Promise<void>) | undefined,
   beforeChartMint: undefined as (() => Promise<void>) | undefined,
+  moduleConfigReads: 0,
 }));
 
 vi.mock("./module-config.js", async (importOriginal) => {
@@ -87,6 +88,7 @@ vi.mock("./module-config.js", async (importOriginal) => {
   return {
     ...actual,
     readModuleConfig: async (stateDir: string) => {
+      pause.moduleConfigReads += 1;
       const hook = pause.beforeModuleConfigRead;
       pause.beforeModuleConfigRead = undefined;
       await hook?.();
@@ -463,6 +465,21 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       ]);
     },
   );
+
+  it("reads modules.json once for a join", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated);
+    pause.moduleConfigReads = 0;
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(200);
+    expect(pause.moduleConfigReads).toBe(1);
+  });
 
   it("appends the standby to the membership document with its contactUrl, term bumped, signed by the primary", async () => {
     const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
@@ -1406,11 +1423,14 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: { code: "module.operation_invalid", params: { module: "fiscal-verifactu" } },
+        error: {
+          code: "mirror.standby_series_unsupported",
+          params: { module: "fiscal-verifactu" },
+        },
       });
       expect(warnings).toEqual([
         {
-          event: "module.operation_invalid",
+          event: "mirror.standby_series_unsupported",
           fields: { module: "fiscal-verifactu", requestId: "req-veri-factu" },
         },
       ]);

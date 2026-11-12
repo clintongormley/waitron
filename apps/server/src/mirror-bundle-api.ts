@@ -92,6 +92,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.bucket_stream_active": 409,
   "mirror.standby_name_taken": 409,
   "mirror.clocks_apart": 409,
+  "mirror.standby_series_unsupported": 409,
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
@@ -158,13 +159,11 @@ export function mountMirrorBundleApi(
         const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
         await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
         await refuseBeforeReserving(deps, held, standby.nodeId, standbyAt);
-        // A Veri*Factu venue's spare refuses the bundle after the fetch, so refuse it here first
-        // (D12). Answered 409 here only: the same code for a malformed operation stays 400.
-        const veriFactu = await veriFactuRefusal(deps);
-        if (veriFactu !== null) {
-          log("warn", veriFactu.code, { ...veriFactu.params, requestId: c.get("requestId") });
-          return c.json({ error: { code: veriFactu.code, params: veriFactu.params } }, 409);
-        }
+        // modules.json is read fresh, not from boot, as the operator may have edited it since. The
+        // spare would refuse the bundle for the same modules after the fetch, so the join is
+        // refused here first (D12).
+        const moduleConfig = await readModuleConfig(deps.stateDir);
+        assertAdoptionModules(enabledModules(ALL_MODULES, moduleConfig));
 
         const store = mintPairStoreKey();
         // node.db's lock is taken before venue.db's and held to the link write, so no other link
@@ -186,6 +185,7 @@ export function mountMirrorBundleApi(
             standby,
             accountKey: deps.accountKey,
             moduleOperations,
+            moduleConfig,
             primaryPrivateKey: signingKey,
           });
           // Before the response, so no bundle is handed out for a node the chart omits: a till
@@ -292,16 +292,6 @@ async function refuseBeforeReserving(
   )
     throw new AppError("mirror.standby_name_taken", {});
   if (held !== null) refuseUnverifiableChart(held.body.nodes, held.body.revoked ?? []);
-}
-
-async function veriFactuRefusal(deps: MirrorBundleApiDeps): Promise<AppError | null> {
-  try {
-    assertAdoptionModules(enabledModules(ALL_MODULES, await readModuleConfig(deps.stateDir)));
-    return null;
-  } catch (error) {
-    if (error instanceof AppError && error.code === "module.operation_invalid") return error;
-    throw error;
-  }
 }
 
 /** The designated main box's own stored keys, which it trusts the held chart against. */

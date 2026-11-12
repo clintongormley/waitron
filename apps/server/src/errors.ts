@@ -1375,6 +1375,13 @@ declare module "@waitron/shared" {
     "mirror.standby_name_taken": Record<string, never>;
     /** The two boxes' clocks, both given as ISO times, are 10 minutes or more apart. */
     "mirror.clocks_apart": { primaryAt: string; standbyAt: string };
+    /**
+     * The venue enables `module`, whose standby series are allocated only at activation under
+     * authority a join does not carry, so this version cannot add a spare to the venue. The main
+     * box refuses the join before reserving anything, a spare refuses a bundle naming such a
+     * module before writing anything, and an adoption left pending refuses to finish.
+     */
+    "mirror.standby_series_unsupported": { module: string };
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;
