@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { NodeDatabase } from "@waitron/db";
-import { readHandoverOperation } from "@waitron/node-db";
+import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import type { Logger } from "./logger.js";
 import { mountSpa } from "./spa-api.js";
 
@@ -21,8 +21,12 @@ export function mountHandoverPage(
       return next();
     const match = /^\/handover\/([^/]+)\/?$/.exec(path);
     if (match === null || match[1]!.length > 64) return c.notFound();
-    const operation = await readHandoverOperation(deps.node, deps.nodeId, match[1]!);
-    if (operation?.role !== "destination") return c.notFound();
+    if (match[1] === "emergency") {
+      if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror") return c.notFound();
+    } else {
+      const operation = await readHandoverOperation(deps.node, deps.nodeId, match[1]!);
+      if (operation?.role !== "destination") return c.notFound();
+    }
     if (path.endsWith("/")) return c.redirect(path.slice(0, -1), 302);
     return next();
   });

@@ -300,6 +300,11 @@ describe("the spare's handover duty in a full start", () => {
     const page = await fetch(origin + "/handover/" + OP, { headers: { accept: "text/html" } });
     expect(page.status).toBe(200);
     expect(await page.text()).toContain("Handover fixture");
+    const emergency = await fetch(origin + "/handover/emergency", {
+      headers: { accept: "text/html" },
+    });
+    expect(emergency.status).toBe(200);
+    expect(await emergency.text()).toContain("Handover fixture");
     const asset = await fetch(origin + "/handover/assets/app.js");
     expect(asset.status).toBe(200);
     expect(await asset.text()).toBe('document.body.dataset.handover = "loaded";');
@@ -375,7 +380,7 @@ describe("the spare's handover duty in a full start", () => {
           {
             hostname: "127.0.0.1",
             port: httpPort(),
-            path: "/api/node/handover/" + OP + "/" + step,
+            path: "/api/node/handover/" + (step === "preview" ? "emergency" : OP) + "/" + step,
             method: "POST",
             ca: tls.caCertPem,
             servername: "localhost",
@@ -401,7 +406,7 @@ describe("the spare's handover duty in a full start", () => {
         status: 401,
         body: { error: { code: "password.invalid" } },
       });
-    for (const step of ["preparation", "activate"])
+    for (const step of ["preparation", "activate", "preview"])
       expect(await send(step)).toMatchObject({
         status: 429,
         body: { error: { code: "password.throttled" } },

@@ -125,11 +125,11 @@ function service(origin = "https://spare.example") {
     },
     log,
   );
-  const post = async (body: unknown = request, https = true) => {
+  const post = async (body: unknown = request, https = true, step = "declare") => {
     const socket = new TLSSocket(new Socket());
     sockets.push(socket);
     const response = await app.request(
-      `${origin}/api/node/handover/emergency/declare`,
+      `${origin}/api/node/handover/emergency/${step}`,
       {
         method: "POST",
         headers: { "content-type": "application/json", origin },
@@ -139,19 +139,78 @@ function service(origin = "https://spare.example") {
     );
     return {
       status: response.status,
-      body: (await response.json()) as {
+      cache: response.headers.get("cache-control"),
+      body: (response.headers.get("content-type")?.includes("application/json")
+        ? await response.json()
+        : {}) as {
+        sourceNodeId?: string;
+        destinationNodeId?: string;
+        sourceServersUrl?: string;
+        copy?: { identifier: string; lastChangeAtMs: number | null };
+        operation?: { operationId: string; reason: string; declaredAtMs: number } | null;
         declaration?: {
           body: {
             binding: unknown;
             lastCopy: { identifier: string; lastChangeAtMs: number | null };
           };
         };
-        error?: { code: string };
+        error?: { code: string; params?: { operationId?: string } };
       },
     };
   };
   return { post, emergency, log };
 }
+
+it("previews the checked spare copy without recording a declaration", async () => {
+  const s = service();
+  const before = placed.node.all(sql`select * from node_handover_events`);
+  const answer = await s.post({ signIn: request.signIn }, true, "preview");
+  expect(answer.status).toBe(200);
+  expect(answer.cache).toBe("no-store");
+  expect(answer.body).toEqual({
+    sourceNodeId: primary.nodeId,
+    destinationNodeId: standby.nodeId,
+    sourceServersUrl: "https://main.example/manage/servers",
+    copy: {
+      source: "mirror-copy",
+      identifier: expect.stringMatching(/^[a-f0-9]{64}$/),
+      lastChangeAtMs: null,
+    },
+    operation: null,
+  });
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+  expect(placed.node.all(sql`select * from node_handover_events`)).toEqual(before);
+});
+
+it.each([
+  [{ email: ADMIN_EMAIL, password: "wrong" }, true, "password.invalid"],
+  [request.signIn, false, "authorization.not_permitted"],
+])("protects preview before exposing the copy or saved reason %#", async (signIn, https, code) => {
+  const s = service();
+  expect((await s.post()).status).toBe(200);
+  const answer = await s.post({ signIn }, https, "preview");
+  expect(answer.body.error?.code).toBe(code);
+  expect(answer.body.operation).toBeUndefined();
+  expect(answer.body.copy).toBeUndefined();
+});
+
+it("previews a saved declaration after restart and refuses changed activity", async () => {
+  expect((await service().post()).status).toBe(200);
+  const before = placed.node.all(sql`select * from node_handover_events`);
+  const restarted = service();
+  const answer = await restarted.post({ signIn: request.signIn }, true, "preview");
+  expect(answer.status).toBe(200);
+  expect(answer.body.operation).toEqual({
+    operationId: OPERATION,
+    reason: request.reason,
+    declaredAtMs: Date.now(),
+  });
+  expect(placed.node.all(sql`select * from node_handover_events`)).toEqual(before);
+  await seedWorkingOrder(placed.venue, { openedAt: "2026-10-16T12:00:00Z" });
+  expect((await restarted.post({ signIn: request.signIn }, true, "preview")).body.error?.code).toBe(
+    "handover.copy_mismatch",
+  );
+});
 
 it("records a signed declaration before answering, then replays without asking the source", async () => {
   const s = service();
@@ -298,13 +357,11 @@ it("replays its saved binding after the held chart changes", async () => {
   expect(external.calls).toBe(1);
 });
 
-it("requires a new process to recheck the copy, and refuses changed activity", async () => {
+it("activation rechecks a saved declaration after restart, and refuses changed activity", async () => {
   const first = await service().post();
   const restarted = service();
   const operation = (await readHandoverOperation(placed.node, standby.nodeId, OPERATION))!;
-  await expect(restarted.emergency.assertMayActivate(operation)).rejects.toMatchObject({
-    code: "handover.copy_mismatch",
-  });
+  await expect(restarted.emergency.assertMayActivate(operation)).resolves.toBeUndefined();
   expect(await restarted.post()).toEqual(first);
   await expect(restarted.emergency.assertMayActivate(operation)).resolves.toBeUndefined();
   await seedWorkingOrder(placed.venue, { openedAt: "2026-10-16T12:00:00Z" });
@@ -341,7 +398,22 @@ it.each(["prepared", "copy_accepted"] as const)(
     await beginHandover({ node: placed.node, nodeId: standby.nodeId }, binding, "destination");
     if (state === "copy_accepted")
       await advanceHandover({ node: placed.node, nodeId: standby.nodeId }, oldId, state, {});
-    const answer = await service().post();
+    const s = service();
+    const preview = await s.post({ signIn: request.signIn }, true, "preview");
+    if (state === "prepared") {
+      expect(preview.status).toBe(200);
+      expect(preview.body.operation).toEqual({
+        operationId: oldId,
+        reason: null,
+        declaredAtMs: null,
+      });
+    } else {
+      expect(preview.body.error).toMatchObject({
+        code: "handover.controlled_unresolved",
+        params: { operationId: oldId },
+      });
+    }
+    const answer = await s.post();
     if (state === "prepared") {
       expect(answer.status).toBe(200);
       expect((await readHandoverOperation(placed.node, standby.nodeId, oldId))?.state).toBe(

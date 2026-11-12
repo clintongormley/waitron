@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { beforeAll, afterAll, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { NODE_MIGRATIONS } from "@waitron/node-db";
+import { NODE_MIGRATIONS, setNodeModeTx } from "@waitron/node-db";
 import { beginHandover } from "./handover-store.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { mountSpa } from "./spa-api.js";
@@ -30,6 +30,7 @@ afterAll(async () => {
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 async function build(mirror = false) {
+  if (mirror) await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "mirror"));
   await beginHandover(
     { node: suite.node, nodeId: NODE },
     {
@@ -76,4 +77,19 @@ it("redirects the trailing slash to the canonical page so relative assets resolv
   const answer = await app.request(`/handover/${OP}/`, { headers: { Accept: "text/html" } });
   expect(answer.status).toBe(302);
   expect(answer.headers.get("location")).toBe(`/handover/${OP}`);
+});
+
+it("serves the literal emergency page only on a mirror, before operation lookup", async () => {
+  const app = await build(true);
+  const answer = await app.request("/handover/emergency", { headers: { Accept: "text/html" } });
+  expect(answer.status).toBe(200);
+  expect(await answer.text()).toContain("./assets/app-123.js");
+  const slash = await app.request("/handover/emergency/");
+  expect(slash.status).toBe(302);
+  expect(slash.headers.get("location")).toBe("/handover/emergency");
+  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "primary"));
+  expect((await app.request("/handover/emergency")).status).toBe(404);
+  expect((await app.request(`/handover/${OP}`, { headers: { Accept: "text/html" } })).status).toBe(
+    200,
+  );
 });

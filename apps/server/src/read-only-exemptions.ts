@@ -101,6 +101,13 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "own-origin HTTPS, fresh password and authenticator code when enrolled for `node.promote`, three shutdown and uncertainty statements, checked copy and transport silence (`handover-emergency-api.ts`)",
   },
+  {
+    method: "POST",
+    path: "/api/node/handover/emergency/preview",
+    boxes: ["mirror"],
+    authenticates:
+      "HTTPS and the sign-in of a person holding `node.promote`, by email, password and authenticator code when enrolled; answers the checked copy and saved declaration without writing one (`handover-emergency-api.ts`)",
+  },
 ];
 
 export function pathMatches(rowPath: string, requestPath: string): boolean {

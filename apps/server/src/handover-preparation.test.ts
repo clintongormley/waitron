@@ -421,6 +421,46 @@ async function promoteWith(
 const standbyAllocations = async () =>
   (await suite.db.select().from(fiscalAllocations)).filter((row) => row.nodeId === standby.nodeId);
 
+it("releases the sign-in write lock before the emergency activation callback", async () => {
+  let holdingLock = false;
+  let signInHeldLock = false;
+  const original = suite.db.withWriteLock;
+  const lock = vi.spyOn(suite.db, "withWriteLock").mockImplementation((run) =>
+    original(async () => {
+      holdingLock = true;
+      try {
+        return await run();
+      } finally {
+        holdingLock = false;
+      }
+    }),
+  );
+  try {
+    await service().withPromotion(
+      { binding, input: null },
+      credentials,
+      handoverPromotionContext({ scenario: "emergency" }),
+      async () => {
+        expect(holdingLock).toBe(false);
+        await withTransaction(suite.db, (tx) =>
+          tx
+            .update(persons)
+            .set({ displayName: "Activation checked" })
+            .where(eq(persons.id, ADMIN)),
+        );
+      },
+      async () => {
+        signInHeldLock = holdingLock;
+      },
+    );
+  } finally {
+    lock.mockRestore();
+  }
+  expect(signInHeldLock).toBe(true);
+  const [person] = await suite.db.select().from(persons).where(eq(persons.id, ADMIN));
+  expect(person!.displayName).toBe("Activation checked");
+});
+
 describe("handoverPromotionContext", () => {
   const row = (scenario: "controlled" | "emergency") => ({ scenario });
   it("a controlled operation says the old box relinquished", () => {

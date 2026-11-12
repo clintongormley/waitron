@@ -124,7 +124,7 @@ function parse(raw: unknown) {
   };
 }
 
-/** The mark dies with the process; after a restart the declaration must check this copy again. */
+/** The mark dies with the process; activation checks the saved copy again after a restart. */
 export function mountHandoverEmergencyApi(
   app: Hono,
   deps: Deps,
@@ -161,9 +161,8 @@ export function mountHandoverEmergencyApi(
       return;
     throw new AppError("handover.source_still_answering", {});
   }
-  async function declare(raw: unknown) {
-    const request = parse(raw);
-    const credentials = await signInCredentials(deps.db, request.signIn);
+  async function authenticate(signIn: unknown) {
+    const credentials = await signInCredentials(deps.db, signIn);
     if (
       typeof credentials.password !== "string" ||
       (credentials.totp !== undefined && typeof credentials.totp !== "string")
@@ -176,7 +175,7 @@ export function mountHandoverEmergencyApi(
     };
     // End the sign-in transaction before checking the copy or the network. Only a passing check
     // reaches the separate node transaction, so neither slow operation holds a write lock.
-    const actor = await handoverSignInAttempt(throttle, credentials, () =>
+    return handoverSignInAttempt(throttle, credentials, () =>
       inTurn(deps.db, personId, async () => {
         const secret = await checkManagerPassword(deps.db, { personId }, password);
         return withTransaction(deps.db, async (tx) => {
@@ -204,6 +203,71 @@ export function mountHandoverEmergencyApi(
         });
       }),
     );
+  }
+  async function declarationFor(operationId: string): Promise<Declaration> {
+    const envelope = JSON.parse(
+      await readHandoverEnvelope(deps, operationId, "emergency_declared"),
+    ) as SignedHandoverEnvelope<Declaration>;
+    return envelope.body;
+  }
+  async function compareCopy(declaration: Declaration): Promise<EmergencyCopy> {
+    const copy = await checkEmergencyCopy(deps);
+    if (!isDeepStrictEqual(copy, declaration.lastCopy))
+      throw new AppError("handover.copy_mismatch", {});
+    return copy;
+  }
+  async function mirrorSource() {
+    if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror")
+      throw new AppError("node.read_only", {});
+    const held = await readNodeMembership(deps.db);
+    assertHeldDocumentReadable(held);
+    const sourceNodeId = held === null ? undefined : servingPrimaryNodeId(held);
+    if (sourceNodeId === undefined || sourceNodeId === deps.nodeId)
+      throw new AppError("handover.source_not_established", {});
+    return { sourceNodeId, source: held!.body.nodes.find((node) => node.nodeId === sourceNodeId)! };
+  }
+  async function preview(raw: unknown) {
+    if (!isRecord(raw)) refuseRequest("body");
+    await authenticate(raw.signIn);
+    const { sourceNodeId, source } = await mirrorSource();
+    const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
+    if (
+      operation !== null &&
+      (operation.role !== "destination" ||
+        (operation.scenario === "controlled" && operation.state !== "prepared"))
+    )
+      throw new AppError("handover.controlled_unresolved", { operationId: operation.operationId });
+    const declaration =
+      operation?.scenario === "emergency" ? await declarationFor(operation.operationId) : null;
+    const copy =
+      declaration === null ? await checkEmergencyCopy(deps) : await compareCopy(declaration);
+    await sourceSilent(sourceNodeId, declaration !== null);
+    return {
+      sourceNodeId,
+      destinationNodeId: deps.nodeId,
+      sourceServersUrl: new URL("/manage/servers", source.contactUrl).href,
+      copy,
+      operation:
+        operation === null
+          ? null
+          : {
+              operationId: operation.operationId,
+              reason: declaration?.reason ?? null,
+              declaredAtMs: declaration?.declaredAtMs ?? null,
+            },
+    };
+  }
+  app.post("/api/node/handover/emergency/preview", (c) =>
+    boundary(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      requireNodeOperationHttps(c);
+      const body = await readJsonBody<unknown>(c);
+      return c.json(await inTurn(deps.node, "handover-emergency", () => preview(body)));
+    }),
+  );
+  async function declare(raw: unknown) {
+    const request = parse(raw);
+    const actor = await authenticate(request.signIn);
     const stored = await readHandoverOperation(deps.node, deps.nodeId, request.operationId);
     if (stored !== null) {
       if (stored.scenario !== "emergency" || stored.role !== "destination")
@@ -230,19 +294,12 @@ export function mountHandoverEmergencyApi(
       )
         refuseRequest("operationId");
       if (!checked.has(request.operationId) && !ACTIVATED_OR_LATER.includes(stored.state)) {
-        if (!isDeepStrictEqual(await checkEmergencyCopy(deps), old.lastCopy))
-          throw new AppError("handover.copy_mismatch", {});
+        await compareCopy(old);
         checked.add(request.operationId);
       }
       return { declaration };
     }
-    if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror")
-      throw new AppError("node.read_only", {});
-    const held = await readNodeMembership(deps.db);
-    assertHeldDocumentReadable(held);
-    const sourceNodeId = held === null ? undefined : servingPrimaryNodeId(held);
-    if (sourceNodeId === undefined || sourceNodeId === deps.nodeId)
-      throw new AppError("handover.source_not_established", {});
+    const { sourceNodeId } = await mirrorSource();
     const binding = await currentBinding(
       deps,
       "emergency",
@@ -309,7 +366,10 @@ export function mountHandoverEmergencyApi(
   );
   return {
     async assertMayActivate(operation) {
-      if (!checked.has(operation.operationId)) throw new AppError("handover.copy_mismatch", {});
+      if (!checked.has(operation.operationId)) {
+        await compareCopy(await declarationFor(operation.operationId));
+        checked.add(operation.operationId);
+      }
       await sourceSilent(operation.sourceNodeId, true);
     },
   };
