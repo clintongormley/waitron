@@ -1934,6 +1934,23 @@ test.each([
   },
 );
 
+test("does not start watching its footer actions' message again once the layout settles", async () => {
+  const el = (await mount(`<wt-dialog heading="Add printer">
+    Printer settings
+    ${SAVE_OR_CANCEL}
+  </wt-dialog>`)) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const actions = el.querySelector("wt-form-actions")!;
+  actions.error = LONG_REFUSAL;
+  const message = (await formMessageOf(actions))!;
+  for (let at = 0; at < 3; at++) await frame();
+  const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+  onTestFinished(() => observe.mockRestore());
+  for (let at = 0; at < 5; at++) await frame();
+  expect(observe.mock.calls.filter(([target]) => target === message)).toHaveLength(0);
+});
+
 const nativeOf = (el: HTMLElement) => el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
 
 test.each([
