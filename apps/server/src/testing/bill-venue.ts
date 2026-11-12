@@ -510,12 +510,14 @@ async function seatedWithRelease(
   return { partyId, tabId: seated.json.tabId as string, tableId, revision: row!.revision };
 }
 
-/** Park and place a Tarta order, optionally seed its invoice, then move it through the route. */
+/** Park and place a Tarta order, optionally seed its invoice, run `beforeMove` on the sent order,
+ * then move it through the route. */
 export async function placedCounterBillMovedTo(
   venue: BillVenue,
   zoneId: string,
   party: { partyId: string; tableId: string },
   issued = false,
+  beforeMove?: (id: string) => Promise<void>,
 ): Promise<string> {
   const id = randomUUID();
   const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -533,6 +535,7 @@ export async function placedCounterBillMovedTo(
       venue.operatorId,
     );
   await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
+  if (beforeMove !== undefined) await beforeMove(id);
   const [row] = venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${party.partyId}`,
   );

@@ -641,9 +641,10 @@ async function refundOverrideToCheck(
 }
 
 /**
- * Give money back from one bill payment of an open bill, needing `sale.refund` from the operator or
- * the override. A payment gives back up to its net applied money; its tip comes back only with the
- * whole of what is left of it; an item payment only whole, which frees its lines.
+ * Give money back from one bill payment of a bill with no invoice yet (open, sent or presented),
+ * needing `sale.refund` from the operator or the override. A payment gives back up to its net
+ * applied money; its tip comes back only with the whole of what is left of it; an item payment only
+ * whole, which frees its lines.
  *
  * Keyed by `submissionId` across the whole bill (design §5.1): the same refund again answers the
  * first and writes nothing, except that a card refund still pending is resumed; the id with another
