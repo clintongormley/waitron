@@ -1987,6 +1987,8 @@ export const en = {
   "staff_notice.more_label": "{n} more notices",
   "staff_notice.more_label_one": "1 more notice",
   "staff_notice.list": "Notices",
+  "about.title": "About Waitron",
+  "about.title_version": "About Waitron · {version}",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -3948,6 +3950,8 @@ export const es: Record<StringKey, string> = {
   "staff_notice.more_label": "{n} avisos más",
   "staff_notice.more_label_one": "1 aviso más",
   "staff_notice.list": "Avisos",
+  "about.title": "Acerca de Waitron",
+  "about.title_version": "Acerca de Waitron · {version}",
 };
 
 // `en` is its own catalogue, so an explicit English request resolves directly rather than through
