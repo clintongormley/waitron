@@ -1696,6 +1696,34 @@ describe("settled-tender refund scheduled recovery", () => {
     ]);
     expect(provider.refundCalls).toEqual([]);
   });
+  it("raises one unresolved alert after an hour when recording the provider's answer keeps failing", async () => {
+    const { refund, provider } = await abandoned();
+    vi.spyOn(provider, "lookupRefund").mockImplementation(async (q) => ({
+      kind: "match",
+      outcome: "completed",
+      providerRefundRef: q.refundId,
+      providerStatus: "succeeded",
+    }));
+    const refusal = new Error("attendance unavailable");
+    deps.attendance = async () => {
+      throw refusal;
+    };
+    at(60 * 60_000 + 1);
+    await expect(recoverTenderRefunds(deps)).rejects.toMatchObject({ errors: [refusal] });
+    expect(await store.db.select().from(incidents)).toMatchObject([
+      {
+        code: "payment.tender_refund_unresolved",
+        severity: "warning",
+        params: { refundId: refund.id, saleId: refund.saleId, amount: "2.00", pendingSince: AT },
+      },
+    ]);
+    expect(await row(refund.id)).toMatchObject({ state: "pending" });
+    at(90 * 60_000);
+    await expect(recoverTenderRefunds(deps)).rejects.toMatchObject({ errors: [refusal] });
+    expect(await store.db.select().from(incidents)).toHaveLength(1);
+    expect(await row(refund.id)).toMatchObject({ state: "pending" });
+    expect(provider.refundCalls).toEqual([]);
+  });
 });
 
 it("does not raise an unresolved incident for an old refund settled by this recovery pass", async () => {

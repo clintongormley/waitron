@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { billPaymentRefunds, incidents, tenderRefunds, tenders, sales } from "@waitron/db";
+import { billPaymentRefunds, tenderRefunds, tenders, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
@@ -50,7 +50,7 @@ async function target() {
   const [payment] = await v.db.select().from(payments).where(eq(payments.saleId, sale!.id));
   return { id, sale: sale!, tender: tender!, payment: payment! };
 }
-async function retained(sent = false, createdAt?: string) {
+async function retained(sent = false) {
   const t = await target();
   const [refund] = await v.db
     .insert(tenderRefunds)
@@ -73,7 +73,6 @@ async function retained(sent = false, createdAt?: string) {
       state: "pending",
       sentAt: sent ? "2026-10-14T23:29:00.000Z" : null,
       sendCount: sent ? 1 : 0,
-      ...(createdAt === undefined ? {} : { createdAt }),
     })
     .returning();
   return { ...t, refund: refund! };
@@ -598,38 +597,5 @@ describe("settled tender recovery while the start's time is unconfirmed", () => 
 
     const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
     expect(row!.state).toBe("completed");
-  });
-});
-describe("settled tender recovery when recording the outcome throws", () => {
-  it("still raises the unresolved alert after an hour and rejects with the attempt's error", async () => {
-    const t = await retained(true, "2026-10-14T23:28:00.000Z");
-    vi.spyOn(v.card, "lookupRefund").mockResolvedValue({
-      kind: "match",
-      providerRefundRef: randomUUID(),
-      outcome: "completed",
-      providerStatus: "completed",
-    });
-    const refusal = new Error("recording refused");
-    const deps = {
-      ...v.deps,
-      attendance: async () => {
-        throw refusal;
-      },
-    };
-    v.set("2026-10-15T01:31:00.000Z");
-
-    const failure = await recoverTenderRefunds(deps).then(
-      () => null,
-      (error: unknown) => error,
-    );
-
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect(new Set((failure as AggregateError).errors)).toEqual(new Set([refusal]));
-    const raised = (await v.db.select().from(incidents)).filter(
-      (incident) => (incident.params as { refundId?: string }).refundId === t.refund.id,
-    );
-    expect(raised).toMatchObject([{ code: "payment.tender_refund_unresolved" }]);
-    const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
-    expect(row!.state).toBe("pending");
   });
 });
