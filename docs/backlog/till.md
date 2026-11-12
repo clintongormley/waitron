@@ -1827,15 +1827,14 @@ Left open by A1382, which changed only `device.forbidden_action`. By code:
   `invoice_delivery.email_unavailable`, `sale.correction_unsupported`, `reader.not_found`,
   `reader.provider_disconnected`, `device.forbidden_station`,
   `device.pairing_closed`, `reader.payment_in_progress`, `sale.department_missing`,
-  `department.operation_description_required`, `sale.charged_not_recorded`, `clock.unusable`,
-  `clock.behind_chain`.
+  `department.operation_description_required`, `sale.charged_not_recorded`, `clock.unusable`.
 - `apps/till/src/i18n/strings.ts`: `venue.time_zone_confirm`, `tender_refund.storage`,
   `station.printer_down`,
   `device.join_refused_hint`, `card.pending_check`, `adjust.no_reasons`, `sale.clock_unusable`,
-  `sale.clock_behind_chain`, `bill_pay.reader_not_held_unknown`, `bill_pay.card_pending`,
+  `bill_pay.reader_not_held_unknown`, `bill_pay.card_pending`,
   `bill_pay.pending_where`, `bill_refund.pending`, `sale.refused`, `place.refused`.
 - `apps/till/src/i18n/staff-notices.ts`, whose hint `staff_notice.tell_manager` also shows on these
-  notices: `clock.unusable`, `clock.behind_chain`, `storage.space_low`, `clock.check_time`,
+  notices: `clock.unusable`, `storage.space_low`, `clock.check_time`,
   `fiscal.records_unsent` with a held record, and a notice the till has no words for.
 
 Not listed: the owner's full-disk strip (`storage.disk_full` in `staff-notices.ts`) and the till's

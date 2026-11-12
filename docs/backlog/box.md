@@ -2020,17 +2020,15 @@ also needs its separately versioned archive contract. Full-history work under th
 resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
 See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).
 
-## The adviser's file is comma-separated in both languages
+## The accountant's file is comma-separated in both languages
 
-The file for the adviser (`apps/server/src/misdated-sales-csv.ts`) joins its cells with `,` whatever
-the venue's language, and writes a Spanish amount with a decimal comma inside a quoted cell
-(`12,30`). LibreOffice set to es-ES opened the Spanish file in columns (A1088 visual check,
-2026-10-25). A spreadsheet set to expect `;` may open it in one column;
-Excel is not installed on the machine that checked, so Excel in Spain is untested. The working-time
-export (`apps/server/src/attendance-export-csv.ts`) also joins with `,` in every language. The accountant's
-file of deferred payments (`apps/server/src/deferred-payment-export.ts`, A275) is written the
-same way, through the same `csvCell` and `amountCell`. Whether the `es` file should use `;` is the
-owner's decision.
+The accountant's file of deferred payments (`apps/server/src/deferred-payment-export.ts`, A275) joins
+its cells with `,` whatever the venue's language, and writes a Spanish amount with a decimal comma
+inside a quoted cell (`12,30`). The working-time export (`apps/server/src/attendance-export-csv.ts`)
+also joins with `,` in every language. LibreOffice set to es-ES opened a Spanish file written this
+way in columns (A1088 visual check, 2026-10-25, on a file A1420 PR 6 deleted). A spreadsheet set to
+expect `;` may open it in one column; Excel is not installed on the machine that checked, so Excel
+in Spain is untested. Whether the `es` file should use `;` is the owner's decision.
 
 Two smaller points from the same check, in LibreOffice:
 
@@ -2046,11 +2044,9 @@ Left open by A1088.
 ## A device's or an administrator's time is self-reported.
 
 Whatever their browser sends counts:
-  a scripted request can send any time, and "nobody types a time" is true of the screen only. In
-  slice 9 that can lift a stop, never set the clock. What limits it: devices must be enrolled and
-  come from two different network addresses; an administrator must be signed in and, outside
-  development, not on the box;
-  every confirmation is kept with its proof; the sales listed as dated wrongly go to the owner.
+  a scripted request can send any time, and "nobody types a time" is true of the screen only.
+  What limits it: devices must be enrolled and come from two different network addresses; an
+  administrator must be signed in and, outside development, not on the box.
   Slice 9b (#2331) changed what such a time can do: an administrator's time, and during a stop
   found at start-up a till's time confirmed by the staff member signed in on it, can now SET the
   box's clock, while two devices alone no longer can, and slice 9b alerts and emails every step it
@@ -2138,10 +2134,7 @@ migrations ([design](../superpowers/specs/2026-11-02-rationalisation/README.md))
 
 Slice 9 kept the shipped append-only table rather than
   rebuild or drop it; the backup check still checks its links to `nodes` and
-  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). First
-  move its latest-record query-plan case (`clock-stop-restarts.test.ts`, "reads the latest record
-  through the time index…") into `clock-behind.test.ts`, and update the pointer in
-  `docs/developers/conventions-data.md`. Left open by A798-B slice 9 (#2025).
+  `registros_facturacion` (`packages/fiscal-verifactu/src/backup-verification-history.ts`). Left open by A798-B slice 9 (#2025).
 
 ## The bell's printer check reads every print job.
 
