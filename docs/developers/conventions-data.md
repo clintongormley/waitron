@@ -3438,6 +3438,7 @@ lock, not that every writer of the file takes it.
 | `apps/server/src/boot.ts` | the server | locks up to five times in turn: placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`, with a node identity and an existing `node.db`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase`; the staged restore takes `lockRestoreTarget` just after its start-again check, before it makes a working folder or changes anything, and its placement (`writeValidated`) shares that hold. `runEntry` then takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws (on a box that waits for its peers, `startServer` returns as soon as the waiting start is listening, before the wait ends; see the backlog's _The waiting start's loose ends_). The ahead check's opens and the server's opens during its start share that hold |
+| `apps/server/src/upgrade-checks.ts` and the shared `upgrade-schema-check.ts` | one contained candidate check per process; not wired to an installed upgrade command yet | after the read-only first-setup checks, holds `lockVenueDatabase` across the ahead/deployment checks, migrations and data readers; every temporary database open shares it and closes before the outer hold is released. The shared ahead helper is also the ordinary entry's preflight |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
 | `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated`; and the setup-mode server before it stages a restore (`boot.ts`): `refuseIfArchiveSourceLive` for `/setup-api/restore` and `/setup-api/cloud-recovery/restore`, `prepareStreamRestore` for `/setup-api/restore-bucket` | each opens validation's private archive database or the prepared download (`stream-restore-XXXXXX`), never the destination venue folder; archive validation owns and disposes its private directory. In `waitron-restore` these run under the restore command's own hold on the destination venue folder (`restore-command.ts`, `resolveRestoreTarget`), taken after the start-again check and before the first-setup check and kept until the command exits, so a server holding the folder refuses the command before it downloads or decrypts anything, and `writeValidated`'s take shares that hold |
 | `apps/server/src/reset-request.ts` (`runStagedReset`) | the container entrypoint, when the setup wizard has staged a reset, before the server starts | takes `lockVenueDatabase` before its first check and holds it through the wipe; its `openVenueDatabase` for the check shares that hold, and it releases before `runEntry` locks again |
@@ -5050,7 +5051,13 @@ and a differently named probe at an injected cap of two. The same-name ordinary/
 control still sends before the wait. Run them with
 `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.probe.gate.test.ts`.
 
-## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
+## Boot, the contained upgrade data checker and the bucket rebuild carry an ahead-of-image check
+
+**2026-11-12 (A950 3a):** the dormant upgrade data checker is a third caller. It shares
+`upgrade-schema-check.ts`'s preflight with the ordinary entry, which re-exports it. It checks the
+venue before applying packaged migrations. No installed command invokes that library yet;
+full host readiness, the mandatory test sale and activation remain later slices. The original
+boot/bucket caller receipts below predate this addition.
 
 **2026-11-11 (A1308-fl5b):** staged restores now retry from their retained source and remove
 unfinished database files before each marked retry. Neither restore path reads the destination
@@ -5937,6 +5944,9 @@ reads the built schema rather than trying an offending insert, and matches a uni
 so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:
 `scripts/journal-monotonic.test.ts`, which bites only on a set with more than one entry. A drizzle
 bump starts with `grep -rn 'dialect.js'`.
+
+**2026-11-12 update:** the historical boot/bucket-only statement below now has the dormant A950
+upgrade data checker as a third caller; see the current ahead-of-image section above.
 
 ### The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door.
 

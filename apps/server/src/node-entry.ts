@@ -20,15 +20,14 @@ import { codeOf } from "@waitron/server-kit";
 import {
   isVenueHolderFresh,
   lockVenueDatabase,
-  openVenueDatabase,
   readVenueHolder,
   resolveLogDir,
   setVenueHolderIdentity,
   type VenueHolder,
   type VenueLock,
 } from "@waitron/db";
-import { manifestSets } from "@waitron/migrations";
-import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
+import { assertNotAhead } from "./upgrade-schema-check.js";
+export { assertNotAhead } from "./upgrade-schema-check.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
@@ -84,7 +83,7 @@ export interface EntryDeps {
   venueDir: string;
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
   runStagedReset?: (deps: StagedResetDeps) => Promise<boolean>;
-  /** Defaults to the real `assertNotAhead` below, never a no-op: it is a guard, and a no-op default
+  /** Defaults to the shared `assertNotAhead`, never a no-op: it is a guard, and a no-op default
    *  is lost silently by any caller that forgets the dependency. */
   assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
   /** Defaults to the real `clearReplacedDatabases` (restore.ts), never a no-op, for the same reason. */
@@ -246,25 +245,6 @@ function argumentsRefused(args: readonly string[]): string {
       "  docker compose run --rm --entrypoint node app /app/<command>.js <arguments>",
     ].join("\n"),
   );
-}
-
-/**
- * Refuse a venue database carrying migrations this image does not ship.
- *
- * Judging a database nothing has migrated yet is safe because the comparison runs in one direction
- * only: `unknownHashes` (`packages/provisioning/src/schema-ahead.ts`) reports hashes the database
- * carries and the image has no file for, so an ordinary upgrade is not refused. A set whose journal
- * table does not exist is skipped, so a virgin venue directory passes.
- *
- * Closed in a `finally` because `startServer` opens the same directory for the life of the process.
- */
-export async function assertNotAhead(venueDir: string, migrationsRoot: string): Promise<void> {
-  const store = await openVenueDatabase(venueDir);
-  try {
-    await assertDatabaseNotAhead(store, manifestSets(), migrationsRoot);
-  } finally {
-    await store.close();
-  }
 }
 
 /**

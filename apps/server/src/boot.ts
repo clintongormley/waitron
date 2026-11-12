@@ -849,7 +849,7 @@ function startListening(
  * and a leaf-less box keeps plain HTTP. Every trading bind goes through here so none can fall back to
  * plain HTTP and break phones that already trust the leaf. The setup bind uses the secrets it has
  * just ensured instead. */
-function startTradingListener(
+export function startTradingListener(
   config: ServerConfig,
   app: Hono,
   now: () => Date,

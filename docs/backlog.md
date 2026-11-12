@@ -100,7 +100,7 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
 
-- [A950. Automatic upgrades with rollback](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order): go-live (owner, 2026-11-09); copy/restore, the host adapter and runtime bootstrap are dormant. Readiness with a copy-sale, trial and activation with restart ownership remain in the [approved first group](superpowers/plans/2026-11-09-a950-shorter-upgrades.md).
+- [A950. Automatic upgrades with rollback](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order): go-live (owner, 2026-11-09); copy/restore, the host adapter, runtime bootstrap and contained data checks are dormant. Host readiness with a copy-sale, trial and activation with restart ownership remain in the [approved first group](superpowers/plans/2026-11-09-a950-shorter-upgrades.md).
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).

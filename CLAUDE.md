@@ -664,7 +664,7 @@ called weaker than its name, the topic file lists what it does not see.
   entries. Start a drizzle bump with `grep -rn 'dialect.js'`.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
-- **Only boot and bucket rebuild call `assertNotAhead` (a handover's compare refuses such a copy itself); `waitron.sh install <ref>`
+- **Only boot, bucket rebuild and the contained upgrade data checker call `assertNotAhead` (a handover's compare refuses such a copy itself); `waitron.sh install <ref>`
   is a one-way door.** `assertNotAhead` throws `provisioning.database_ahead`; other migrating paths
   do not carry that check. Their list: [conventions-data.md](docs/developers/conventions-data.md).
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into
