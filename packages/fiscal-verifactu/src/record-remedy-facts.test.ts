@@ -6,6 +6,7 @@ import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain, readChainHead } from "./chain.js";
@@ -613,7 +614,7 @@ it.each(
   },
 );
 
-describe("a fix never changes the invoice's amounts", () => {
+describe("a fix never changes the invoice's amounts or what a line is", () => {
   const twelveTen = [
     {
       Impuesto: "01",
@@ -624,9 +625,18 @@ describe("a fix never changes the invoice's amounts", () => {
       CuotaRepercutida: "2.10",
     },
   ] as const;
+  const exemptLine = {
+    Impuesto: "01",
+    ClaveRegimen: "01",
+    OperacionExenta: "E1",
+    BaseImponibleOimporteNoSujeto: "5.00",
+  } as const;
 
-  /** Points `send` at a refused €12.10 invoice filed at 21% (10.00 + 2.10). */
-  async function targetRefusedTwelveTenInvoice() {
+  /** Points `send` at a refused invoice filed with `lines` (by default €12.10 at 21%: 10.00 + 2.10). */
+  async function targetRefusedInvoice(
+    lines: readonly DetalleDesgloseInput[] = twelveTen,
+    total = "12.10",
+  ) {
     const saleId = await seedSale(suite.db, node, 2);
     await withTransaction(suite.db, async (tx) => {
       const pending = altaFor(node, saleId, 2, 2, "preproduction");
@@ -634,9 +644,9 @@ describe("a fix never changes the invoice's amounts", () => {
         ...pending,
         input: {
           ...pending.input,
-          Desglose: [...twelveTen],
+          Desglose: [...lines],
           CuotaTotal: "2.10",
-          ImporteTotal: "12.10",
+          ImporteTotal: total,
         },
       });
       await tx
@@ -663,7 +673,7 @@ describe("a fix never changes the invoice's amounts", () => {
   }
 
   it("refuses a €12.10 invoice filed at 21% (10.00 + 2.10) re-filed at 10% (11.00 + 1.10)", async () => {
-    await targetRefusedTwelveTenInvoice();
+    await targetRefusedInvoice();
     const before = await snapshot();
     const res = await send({
       breakdown: [
@@ -687,7 +697,7 @@ describe("a fix never changes the invoice's amounts", () => {
   });
 
   it("accepts a fix restating the stored 12.10 total as 12.1", async () => {
-    await targetRefusedTwelveTenInvoice();
+    await targetRefusedInvoice();
     const row = await storedFix(
       await send({ total: "12.1", description: "Corrected restaurant service" }),
     );
@@ -791,7 +801,7 @@ describe("a fix never changes the invoice's amounts", () => {
   });
 
   it("accepts a fix of the same invoice that changes only its description", async () => {
-    await targetRefusedTwelveTenInvoice();
+    await targetRefusedInvoice();
     const row = await storedFix(await send({ description: "Corrected restaurant service" }));
     expect(row).toMatchObject({
       descripcionOperacion: "Corrected restaurant service",
@@ -799,5 +809,95 @@ describe("a fix never changes the invoice's amounts", () => {
       cuotaTotal: "2.10",
       importeTotal: "12.10",
     });
+  });
+
+  const taxed = twelveTen[0];
+  const notSubjectLine = {
+    Impuesto: "01",
+    ClaveRegimen: "01",
+    CalificacionOperacion: "N1",
+    BaseImponibleOimporteNoSujeto: "2.00",
+  } as const;
+  const filed = [taxed, exemptLine, notSubjectLine];
+  it.each([
+    {
+      lines: [{ ...taxed, Impuesto: "03" }, exemptLine, notSubjectLine],
+      field: "taxType",
+      line: 0,
+    },
+    {
+      lines: [{ ...taxed, ClaveRegimen: "05" }, exemptLine, notSubjectLine],
+      field: "regime",
+      line: 0,
+    },
+    {
+      lines: [taxed, exemptLine, { ...notSubjectLine, CalificacionOperacion: "N2" }],
+      field: "operationClass",
+      line: 2,
+    },
+    {
+      lines: [taxed, { ...exemptLine, OperacionExenta: "E6" }, notSubjectLine],
+      field: "exemption",
+      line: 1,
+    },
+    {
+      lines: [
+        taxed,
+        exemptLine,
+        { ...notSubjectLine, CalificacionOperacion: undefined, OperacionExenta: "E1" },
+      ],
+      field: "operationClass",
+      line: 2,
+    },
+    {
+      lines: [
+        { ...taxed, CalificacionOperacion: undefined, OperacionExenta: "E1" },
+        exemptLine,
+        notSubjectLine,
+      ],
+      field: "operationClass",
+      line: 0,
+    },
+  ])(
+    "refuses a fix that changes what a line is, amounts equal, without a write: %j",
+    async ({ lines, field, line }) => {
+      await targetRefusedInvoice(filed, "19.10");
+      const before = await snapshot();
+      const res = await send({ breakdown: lines, description: "Corrected restaurant service" });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: {
+          code: "fiscal.remedy_class_changed",
+          params: { registroId: body.registroId, field, line },
+        },
+      });
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it("accepts a fix that omits the IVA tax type the invoice filed as 01", async () => {
+    await targetRefusedInvoice();
+    const row = await storedFix(
+      await send({
+        breakdown: [{ ...taxed, Impuesto: undefined }],
+        description: "Corrected restaurant service",
+      }),
+    );
+    expect(row).toMatchObject({ descripcionOperacion: "Corrected restaurant service" });
+    expect(row?.desglose).toEqual([{ ...taxed, Impuesto: undefined }]);
+    expect((row?.desglose as Record<string, string>[])[0]).not.toHaveProperty("Impuesto");
+  });
+
+  it("accepts a fix that states IVA as 01 on a line filed without a tax type", async () => {
+    const filed = (await snapshot()).records[0]!.desglose as Record<string, string>[];
+    expect(filed[0]).not.toHaveProperty("Impuesto");
+    const row = await storedFix(
+      await send({
+        breakdown: [{ ...filed[0], Impuesto: "01" }],
+        description: "Corrected restaurant service",
+      }),
+    );
+    expect(row).toMatchObject({ descripcionOperacion: "Corrected restaurant service" });
+    expect(row?.desglose).toEqual([{ ...filed[0], Impuesto: "01" }]);
   });
 });

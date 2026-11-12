@@ -3335,6 +3335,8 @@ confirmation. it is confirmed." and "all of this is already established"):
 
 Consequence (owner, 2026-11-11 14:12, option A): a correction record (subsanación) for a refused
 invoice never changes its amounts — the VAT rate, the base, the VAT or the total.
+_2026-11-11 19:11 (owner, "Yes"): nor what a line is — its tax type, regime, taxed or not-subject
+class or exemption reason (`fiscal.remedy_class_changed`; A1481 in `docs/backlog/fiscal.md`)._
 
 **Proposed interim treatment:** preserve the rejected record and response, show the invoice as
 unresolved, and require an explicit corrective action. D2 proposes continuing later submissions
