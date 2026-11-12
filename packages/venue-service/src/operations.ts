@@ -387,20 +387,13 @@ export async function configureZone(
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: input.departmentId });
   }
-  const [existing] = await tx
-    .select({ zoneId: zoneServicePolicies.zoneId })
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.zoneId, input.zoneId));
   await tx
-    .insert(zoneServicePolicies)
-    .values({
-      zoneId: input.zoneId,
+    .update(floorZones)
+    .set({
       departmentId: input.departmentId,
+      ...(input.orderStart === undefined ? {} : { orderStart: input.orderStart }),
     })
-    .onConflictDoUpdate({
-      target: [zoneServicePolicies.zoneId],
-      set: { departmentId: input.departmentId },
-    });
+    .where(and(eq(floorZones.id, input.zoneId), eq(floorZones.active, true)));
   // A zone cell may name only its department's periods.
   await tx
     .delete(routingCellPeriods)
@@ -416,23 +409,8 @@ export async function configureZone(
         ),
       ),
     );
-  if (input.orderStart === undefined && existing !== undefined) {
-    await tx
-      .insert(zoneSalePolicies)
-      .values({ zoneId: input.zoneId })
-      .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
-    return;
-  }
-  await tx
-    .insert(zoneSalePolicies)
-    .values({ zoneId: input.zoneId, orderStart: input.orderStart ?? null })
-    .onConflictDoUpdate({
-      target: zoneSalePolicies.zoneId,
-      set: { orderStart: input.orderStart ?? null },
-    });
 }
 
-/** Create the floor zone and its service assignment in the caller's one write transaction. */
 export async function createServiceZone(
   tx: Transaction,
   input: {
@@ -455,6 +433,8 @@ export async function createServiceZone(
       .values({
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
+        departmentId: input.departmentId,
+        orderStart: input.orderStart ?? null,
       })
       .returning({ id: floorZones.id });
     zoneId = zone!.id;
@@ -469,11 +449,6 @@ export async function createServiceZone(
     }
     throw error;
   }
-  await configureZone(tx, {
-    zoneId,
-    departmentId: input.departmentId,
-    orderStart: input.orderStart,
-  });
   return { id: zoneId };
 }
 

@@ -105,6 +105,81 @@ const suite = useVenueDb({
 });
 
 describe("order flow from sale policies", () => {
+  it("moves a zone's department without resetting overrides, and clears only an explicit order start", async () => {
+    await seedLocation("Move zone row rules");
+    await scoped(async (tx) => {
+      const source = await createDepartment(tx, { name: "Source" });
+      const target = await createDepartment(tx, { name: "Target" });
+      const zone = await createServiceZone(tx, {
+        name: "Terrace",
+        departmentId: source.id,
+        orderStart: "table",
+      });
+      await tx
+        .update(floorZones)
+        .set({ paidWhen: "ticket_then_pay", collectionNumber: "numbered" })
+        .where(eq(floorZones.id, zone.id));
+      const read = () =>
+        tx
+          .select({
+            departmentId: floorZones.departmentId,
+            orderStart: floorZones.orderStart,
+            paidWhen: floorZones.paidWhen,
+            collectionNumber: floorZones.collectionNumber,
+          })
+          .from(floorZones)
+          .where(eq(floorZones.id, zone.id));
+      await configureZone(tx, { zoneId: zone.id, departmentId: target.id });
+      expect(await read()).toEqual([
+        {
+          departmentId: target.id,
+          orderStart: "table",
+          paidWhen: "ticket_then_pay",
+          collectionNumber: "numbered",
+        },
+      ]);
+      await configureZone(tx, { zoneId: zone.id, departmentId: target.id, orderStart: null });
+      expect(await read()).toEqual([
+        {
+          departmentId: target.id,
+          orderStart: null,
+          paidWhen: "ticket_then_pay",
+          collectionNumber: "numbered",
+        },
+      ]);
+    });
+  });
+
+  it("a new zone carries its department and order start", async () => {
+    await seedLocation("Zone row rules");
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, { name: "Restaurant" });
+      const zone = await createServiceZone(tx, {
+        name: "Terrace",
+        departmentId: department.id,
+        orderStart: "table",
+      });
+      expect(
+        await tx
+          .select({
+            departmentId: floorZones.departmentId,
+            orderStart: floorZones.orderStart,
+            paidWhen: floorZones.paidWhen,
+            collectionNumber: floorZones.collectionNumber,
+          })
+          .from(floorZones)
+          .where(eq(floorZones.id, zone.id)),
+      ).toEqual([
+        {
+          departmentId: department.id,
+          orderStart: "table",
+          paidWhen: null,
+          collectionNumber: null,
+        },
+      ]);
+    });
+  });
+
   it("creates a counter department without reading an obsolete style input", async () => {
     await seedLocation("Retired create input");
     await scoped(async (tx) => {
