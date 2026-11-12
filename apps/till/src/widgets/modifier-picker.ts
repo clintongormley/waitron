@@ -847,6 +847,13 @@ export class TillModifierPicker extends LitElement {
                     ></wt-combobox>`
               }
               ${
+                !this.inline &&
+                (this.product.variants?.length ?? 0) > 0 &&
+                this.#variants.length === 0
+                  ? html`<p class="refusal" role="alert">${t("modifier.no_compatible_size")}</p>`
+                  : nothing
+              }
+              ${
                 this.#variants.length === 0
                   ? nothing
                   : html`<fieldset class="group">

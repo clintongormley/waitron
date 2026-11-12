@@ -348,6 +348,10 @@ it("keeps Add disabled if a filter chosen during weighing excludes every size", 
   )! as import("../widgets/modifier-picker.js").TillModifierPicker;
   await picker.updateComplete;
   expect(picker.shadowRoot!.querySelector(".confirm")!.hasAttribute("disabled")).toBe(true);
+  expect(picker.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+  expect(picker.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+    t("modifier.no_compatible_size"),
+  );
   picker.confirm();
   expect(el.store.lines).toHaveLength(0);
 });

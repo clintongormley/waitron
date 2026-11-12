@@ -501,6 +501,8 @@ export const en = {
   "modifier.edit": "Modifiers",
   "modifier.save": "Save",
   "modifier.variant": "Variant",
+  "modifier.no_compatible_size":
+    "No size matches the active allergen filter. Cancel to change the filter.",
   "modifier.remove_extras_question":
     "These preselected extras do not match the allergen filter. Remove them?",
   "modifier.remove_extras_continue": "Remove extras and continue",
@@ -2497,6 +2499,8 @@ export const es: Record<StringKey, string> = {
   "modifier.edit": "Modificadores",
   "modifier.save": "Guardar",
   "modifier.variant": "Variante",
+  "modifier.no_compatible_size":
+    "Ningún tamaño cumple el filtro de alérgenos activo. Cancela para cambiar el filtro.",
   "modifier.remove_extras_question":
     "Estos extras preseleccionados no cumplen el filtro de alérgenos. ¿Quieres quitarlos?",
   "modifier.remove_extras_continue": "Quitar extras y continuar",
