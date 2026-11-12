@@ -18,4 +18,4 @@ Drafted by a separate Sol-high invocation; shortened and checked by the Codex dr
 
 **Validation.** Run the two new suites, existing helper/chrome guards, table behavioral/axe/arrangement/head-and-cells/lifecycle suites and four changed dashboard suites. Inspect Products and Structure via `wa-wt demo waitron-feat-d-icon-button`, EN/ES × light/dark × 1280/390: hover/focus tooltips above sticky headings, trailing bounds, selection/Done, busy state and chooser focus return. Read actual viewport width; restore viewport/locale/pointer; keep captures local. Normal pre-push hook and current-head scoped CI during finish-branch follow.
 
-**Forecast, added/removed lines:** production +110–140/−45–60 (including demo); tests +300–350/−25–40; test support 0/0; docs including plan +55–75/−30–45. Total about 665–850 changed lines. No new helper or infrastructure.
+**Forecast, added/removed lines:** production +110–140/−45–60 (including demo); tests +300–350/−25–40; test support 0/0; docs including plan +55–75/−30–45. Total about 565–710 changed lines. No new helper or infrastructure.
