@@ -5783,7 +5783,9 @@ top bar — the sign-in and join screens, the kitchen display and kiosk mode, wh
 — holds it at the top right, above the content. The kitchen display's and kiosk mode's corner
 holds an ⓘ after the Help switch and before Theme, a ghost `wt-button` named "About Waitron"
 (`about.title`), drawn as the basket's ⓘ; it opens `/legal/declaration` in the shell's guide sheet, as More's About Waitron does on a till or
-a handheld.
+a handheld. The sign-in and join screens' corner starts with the same ⓘ
+(`till-about-button`), which opens the declaration in a sheet of its own, since those screens are
+drawn outside the shell.
 
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card header,
 the till's sign-in and join screens and the kitchen display's and kiosk mode's corner, and in the
