@@ -416,6 +416,31 @@ it("a Painted in chip in a clickable row follows its link and opens no period di
   }
 });
 
+it("at 390px a wrapping period name keeps its swatch as wide as a short name's", async () => {
+  const previous = [window.innerWidth, window.innerHeight];
+  await page.viewport(390, 844);
+  try {
+    const el = await mount();
+    const grid = await loaded(el);
+    const long = cell(grid, "period:p2", "period")!;
+    const swatch = long.querySelector<HTMLElement>("[part~=swatch]")!.getBoundingClientRect();
+    const short = cell(grid, "period:p1", "period")!
+      .querySelector<HTMLElement>("[part~=swatch]")!
+      .getBoundingClientRect();
+    expect(
+      long.querySelector<HTMLElement>("[part~=name]")!.getBoundingClientRect().height,
+    ).toBeGreaterThan(short.height);
+    expect(swatch.width).toBeCloseTo(
+      parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-4")),
+      1,
+    );
+    expect(swatch.width).toBeCloseTo(short.width, 1);
+    expect(swatch.height).toBeCloseTo(short.height, 1);
+  } finally {
+    await page.viewport(previous[0]!, previous[1]!);
+  }
+});
+
 it("a venue viewer sees the list and its links but no Add and no actions column", async () => {
   const el = await mount(answering(), true);
   const grid = await loaded(el);
@@ -562,8 +587,10 @@ it.each(
         },
         { periodId: "p2", seasons: [], specialDays: [] },
       ];
-      // The Periods window: an unsized, so wide, modal.
+      // Match the Periods window’s wide, medium-height frame.
       const frame = document.createElement("wt-modal") as WtModal;
+      frame.size = "wide";
+      frame.height = "medium";
       frame.open = true;
       applyTokens(frame);
       document.body.append(frame);

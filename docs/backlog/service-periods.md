@@ -484,17 +484,8 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
 
 ## Bundle: Period dialogs
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
-  name that wraps shrinks to 14.4 px wide (the others are 16 px); at 1280 px the window is full
-  height with about 300 px blank above Close, because it is the unsized `wt-modal`. Both measured
-  on the demo venue (`~/waitron-campaign/a719-look-report.md`, C2 and C4). Left open by A719.
-- **A painter opened from a Painted in chip in the Periods window does not return to the window
-  when it closes**, so a manager loses their place — left open by A506-11, #1694.
-- **The period delete dialog can keep Delete greyed out** after a refusal for a changed business-day
-  start, when the Periods window's list is taken out of the document during its re-read and comes back
-  (`period-delete-dialog.ts`; found by reading, not tried) — left open by A506-11, #1694.
 - **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
   updates; the server still refuses a delete sent with an old clock revision — left open by
   A506-11, #1694.

@@ -14,3 +14,7 @@ Some holidays depend on the island or part of a province where your venue stands
 
 Changing the screen language keeps your chosen area. To change which holidays apply, change the area itself.
 Review public holidays after changing the venue’s city. Choosing another holiday area replaces your previous choice.
+
+## Check where a period is used {#periods}
+
+Open **Periods** from Calendar. In **Painted in**, choose a season or special day to check its timetable.

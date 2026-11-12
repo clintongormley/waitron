@@ -379,6 +379,8 @@ export class PeriodDialog extends LitElement {
       links
         ? html`<a
             class="chip"
+            data-own-click
+            data-painted-in
             href=${href}
             data-tint=${tint || nothing}
             ?data-special-day=${special}
