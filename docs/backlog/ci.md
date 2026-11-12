@@ -423,8 +423,10 @@ every interaction, flush, geometry and accessibility assertion. The shared axe h
 Dashboard packing uses refreshed complete-run file durations. Measure the current-head
 coverage-on whole jobs before claiming a speed gain or the four-minute goal; any
 remaining product-editor, product-list or menu cut still needs a demonstrated cause.
-The till’s warm-cache `cpu-features` rebuild remains the next diagnostic target;
-find why it compiles despite a cache hit before choosing a fix.
+The 12 November diagnosis traced the warm-cache rebuild to a cache writer without
+compiler tools. The root pnpm setting now skips the optional `cpu-features` and
+`ssh2` native builds. Keep the coverage-on whole-job comparison and the observed
+35-second archiver wait open; removing compilation alone does not measure a speed gain.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.

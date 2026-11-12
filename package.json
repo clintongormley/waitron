@@ -49,6 +49,10 @@
       "@esbuild-kit/core-utils>esbuild": "^0.25.0",
       "archiver-utils>glob": "^14.0.3",
       "minimatch@>=7 <11.0.1": "11.0.1"
-    }
+    },
+    "neverBuiltDependencies": [
+      "cpu-features",
+      "ssh2"
+    ]
   }
 }
