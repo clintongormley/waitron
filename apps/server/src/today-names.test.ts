@@ -382,7 +382,7 @@ describe("a group renamed for today, where saved names stay", () => {
       await labelOf(table.c4!),
       await labelOf(table.c5!),
     ];
-    expect((await partyRow(v, guests.partyId)).tableNames.toSorted()).toEqual(saved.toSorted());
+    expect((await partyRow(v, guests.partyId)).tableNames?.slice().sort()).toEqual(saved.sort());
     const page = await inTx(v, (tx) =>
       listOrders(tx, {
         status: "all",
