@@ -593,7 +593,7 @@ describe("the till's station day", () => {
     });
     const authorizers = await call("GET", "/api/service-day/authorizers", undefined, staffCookie);
     expect(authorizers.status).toBe(200);
-    expect(authorizers.json).toEqual([{ personId: manager, displayName: "Administradora" }]);
+    expect(authorizers.json).toEqual([{ personId: manager, displayName: "Administrator" }]);
   });
   it.each([
     ["GET", "/api/service-day/authorizers"],
@@ -866,7 +866,7 @@ describe("the kitchen display's station day", () => {
         { id: bar, name: "Bar", isDefault: true },
         { id: pastry, name: "Pastry", isDefault: false },
       ],
-      authorizers: [{ personId: manager, displayName: "Administradora" }],
+      authorizers: [{ personId: manager, displayName: "Administrator" }],
     });
   });
   it.each([undefined, null])(
