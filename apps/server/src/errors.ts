@@ -1406,6 +1406,8 @@ declare module "@waitron/shared" {
     /** Start the copy again was asked while the copy is refused because another box was found
      * writing this venue's copy to the same bucket (`pointer_changed`, `pointer_newer_term`). */
     "backup.stream_held_by_another_box": Record<string, never>;
+    /** Bucket settings were saved on a box holding a pair link: the venue copies to its standby. */
+    "backup.spare_stream_active": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
      * artifact), or a recovery pack's bucket or archives page is drawn

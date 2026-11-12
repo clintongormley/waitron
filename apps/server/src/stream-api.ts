@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import {
   credentialRevision,
   deleteCredential,
@@ -8,6 +8,7 @@ import {
   type KeyRing,
 } from "@waitron/credentials";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
+import { readPairLink } from "@waitron/node-db";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
@@ -37,6 +38,9 @@ import "./errors.js";
 
 export interface StreamApiDeps {
   db: Database;
+  node: NodeDatabase;
+  /** This box; Save is refused while its pair link exists. */
+  nodeId: string;
   ring: KeyRing;
   stream: Pick<StreamHost, "reload" | "status">;
   /** The venue the stream writes under; Save stores it with the settings. */
@@ -94,6 +98,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.not_primary": 409,
   "backup.reload_in_progress": 409,
   "backup.stream_held_by_another_box": 409,
+  "backup.spare_stream_active": 409,
   "backup.stream_test_failed": 422,
   "backup.stream_not_configured": 409,
   "backup.archive_namespace_overlap": 400,
@@ -243,6 +248,9 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       await authorize(c);
       guardPrimary();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
+      if ((await readPairLink(deps.node, deps.nodeId)) !== null) {
+        throw new AppError("backup.spare_stream_active", {});
+      }
       await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
       await refuseArchiveOverlap(bucket);

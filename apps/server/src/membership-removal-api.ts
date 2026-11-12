@@ -5,7 +5,12 @@ import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
-import { clearRemovedMachine, listServers, removeUnjoinedStandby } from "./membership-removal.js";
+import {
+  clearRemovedMachine,
+  listServers,
+  removeUnjoinedStandby,
+  unlinkRemovedStandby,
+} from "./membership-removal.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
@@ -14,6 +19,7 @@ export interface MembershipRemovalApiDeps {
   node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
+  reloadStream: () => Promise<void>;
   /** The Servers screen shows it so a joining spare's person can compare it; null without one. */
   authorityFingerprint: () => Promise<string | null>;
 }
@@ -73,6 +79,10 @@ export function mountMembershipRemovalApi(
       const result = await removeUnjoinedStandby(
         { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId, personId },
+      );
+      await unlinkRemovedStandby(
+        { node: deps.node, nodeId: deps.nodeId, log, reloadStream: deps.reloadStream },
+        targetNodeId,
       );
       return c.json(result);
     }),

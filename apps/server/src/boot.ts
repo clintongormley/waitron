@@ -3538,6 +3538,7 @@ async function bootServer(
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
+  const backupTurns = createTurns();
   mountMembershipRemovalApi(
     app,
     {
@@ -3545,6 +3546,7 @@ async function bootServer(
       node: store.node,
       ring,
       nodeId: tradingContext.nodeId,
+      reloadStream: () => backupTurns(() => streamHost.reload()),
       // `/ca.crt` serves no authority when the operator supplies the certificate files.
       authorityFingerprint: () =>
         config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),
@@ -3628,7 +3630,6 @@ async function bootServer(
     log,
   );
 
-  const backupTurns = createTurns();
   mountBackupApi(
     app,
     {
@@ -3668,6 +3669,8 @@ async function bootServer(
     app,
     {
       db,
+      node: store.node,
+      nodeId: config.node.nodeId,
       ring,
       stream: streamHost,
       venueId,

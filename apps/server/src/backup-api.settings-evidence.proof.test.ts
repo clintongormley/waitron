@@ -480,6 +480,8 @@ describe("GET /api/backup/settings-evidence proofs", () => {
         app,
         {
           db: suite.db,
+          node: suite.node,
+          nodeId: "00000000-0000-0000-0000-000000000000",
           ring: RING,
           stream: { reload: async () => {}, status: () => ({ state: "off" }) },
           venueId: VENUE,

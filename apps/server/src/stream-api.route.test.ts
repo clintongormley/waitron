@@ -3,14 +3,16 @@ import { createCipheriv, randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi, type Mock } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { nodes, setNodePublicKey, withTransaction } from "@waitron/db";
+import { nodes, setNodePublicKey, withNodeTransaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   deleteCredential,
+  deletePairLinkTx,
   loadKeyRing,
   putCredential,
   tenantCredentials,
   tryGetCredential,
+  writePairLinkTx,
   type KeyRing,
 } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -197,6 +199,8 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
   };
   const deps: StreamApiDeps = {
     db: suite.db,
+    node: suite.node,
+    nodeId,
     ring: RING,
     stream,
     venueId: VENUE_ID,
@@ -796,6 +800,34 @@ describe("stream settings routes", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
     expect(deps.probe).not.toHaveBeenCalled();
+  });
+
+  it("refuses bucket settings while a pair link exists, saving nothing", async () => {
+    await clearBucket();
+    await withNodeTransaction(suite.node, (tx) =>
+      writePairLinkTx(tx, RING, nodeId, {
+        role: "streams",
+        state: "pending",
+        peerNodeId: "00000000-0000-4000-8000-0000000000aa",
+        peerPublicKey: "pub",
+        storeUrl: "https://box-7777.waitron.local:7443",
+        venueId: VENUE_ID,
+        accessKeyId: "spare-access-key",
+        secretAccessKey: "spare-secret-key",
+      }),
+    );
+    try {
+      const { app, deps, reload } = harness({}, "recovery-key-one-strong");
+      const cookie = await login(app);
+      const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.spare_stream_active" } });
+      expect(deps.probe).not.toHaveBeenCalled();
+      expect(reload).not.toHaveBeenCalled();
+      expect(await storedBucket()).toBeNull();
+    } finally {
+      await withNodeTransaction(suite.node, (tx) => deletePairLinkTx(tx, nodeId));
+    }
   });
 
   it("switching off removes the bucket and stops streaming", async () => {

@@ -274,6 +274,14 @@ it("has English and Spanish copy for the two refusals that keep variants out of 
   }
 });
 
+it("has English and Spanish copy for a bucket Save refused while the venue has a standby", () => {
+  const code = "backup.spare_stream_active";
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  expect(codeMessage(code, "en")).toContain("choose Remove on its row under Servers");
+  expect(codeMessage(code, "es")).toContain("elige Retirar en su fila de Servidores");
+});
+
 // The bucket-copy routes' status map (`STATUS` in apps/server/src/stream-api.ts). Its fallback tag,
 // `backup.stream_failed`, is a log tag only: the error boundary answers an error that is not an
 // application error as `server.internal` (packages/server-kit/src/error-boundary.ts).

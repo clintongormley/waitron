@@ -1573,6 +1573,8 @@ describe("backup admin routes", () => {
       app,
       {
         db: suite.db,
+        node: suite.node,
+        nodeId: "00000000-0000-0000-0000-000000000000",
         ring: RING,
         stream: { reload: async () => {}, status: () => ({ state: "off" }) },
         venueId: "c0000000-0000-4000-8000-000000000002",
@@ -1756,6 +1758,8 @@ describe("backup admin routes", () => {
           app,
           {
             db: suite.db,
+            node: suite.node,
+            nodeId: "00000000-0000-0000-0000-000000000000",
             ring: RING,
             stream: { reload: async () => {}, status: () => ({ state: "off" }) },
             venueId: VENUE,
