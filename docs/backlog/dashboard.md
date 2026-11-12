@@ -59,7 +59,7 @@ forecast. `fiscal.remedy` is Admin by default and assignable (owner 2026-11-09).
 landed. The [build plan](../superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with
 test-fixture preparation is ready: ordinary server, package and device-profile fixtures use
 the shared helpers. SQL constraint, trigger and pinned-hash probes retain their direct writes
-until PR11; access/job-role behavior remains to be built.
+until PR11. Legacy raw SQL role reads remain for PR11; access/job-role behavior is unbuilt.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 

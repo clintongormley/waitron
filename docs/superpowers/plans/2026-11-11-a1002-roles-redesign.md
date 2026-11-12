@@ -694,7 +694,7 @@ so the helper has its own test.
 ### Task 5.2–5.4: People codemod (three tasks)
 
 **5.2:** `apps/server/src/[a-l]*` tests. **5.3:** `apps/server/src/[m-z]*` tests and
-`apps/server/src/testing/`. **5.4:** packages that depend on `@waitron/identity` (core,
+`apps/server/src/testing/` and `apps/server/test/`. **5.4:** packages that depend on `@waitron/identity` (core,
 fiscal-verifactu, workforce, workforce-es, staffing, venue-service, layouts, media, bookings,
 adjustments, provisioning, identity). `db`, `fiscal`, `catalogue`, `country-es` do not depend on
 identity (`fiscal` cannot: identity → module → fiscal) and keep `role:` until PR 11.

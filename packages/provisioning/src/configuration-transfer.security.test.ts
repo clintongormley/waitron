@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { builtInRoleForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
@@ -163,9 +163,15 @@ it.each(["missing-table", "unknown-column"])(
 
 it("imports staff without their source login credentials and preserves the target owner", async () => {
   await seed();
-  const ownerBefore = (
-    await suite.db.execute(sql`select * from persons where email = 'target@example.test'`)
-  ).rows;
+  const administrators = async () => {
+    const admins = [];
+    for (const person of (await suite.db.execute<{ id: string }>(sql`select * from persons`))
+      .rows) {
+      if ((await builtInRoleForTest(suite.db, person.id)) === "admin") admins.push(person);
+    }
+    return admins;
+  };
+  const ownerBefore = await administrators();
   await withTransaction(suite.db, (tx) =>
     seedPersons(tx, {
       id: "old-target-staff",
@@ -206,9 +212,7 @@ it("imports staff without their source login credentials and preserves the targe
   await withTransaction(suite.db, (tx) =>
     importConfigurationTables(tx, bundle, [transfer([{ name: "persons" }])], bundle.modules),
   );
-  expect(
-    (await suite.db.execute(sql`select * from persons where email = 'target@example.test'`)).rows,
-  ).toEqual(ownerBefore);
+  expect(await administrators()).toEqual(ownerBefore);
   const imported = (
     await suite.db.execute(sql`select id, display_name, pin_hash, password_hash,
     totp_secret, email, email_verified_at, google_subject, pending_email, status

@@ -701,8 +701,15 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
 
-    const seeded = await suite.db.execute<{ email: string | null }>(sql`
-      select email from persons`);
+    const seeded = { rows: [] as { email: string | null }[] };
+    for (const person of (
+      await suite.db.execute<{ id: string; email: string | null }>(
+        sql`select id, email from persons`,
+      )
+    ).rows) {
+      if ((await builtInRoleForTest(suite.db, person.id)) === "admin")
+        seeded.rows.push({ email: person.email });
+    }
     expect(seeded.rows[0]?.email).toBe("owner@x.com");
   });
 
