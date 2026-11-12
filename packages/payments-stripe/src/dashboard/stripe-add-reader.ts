@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, FormFeedback, bottomMessage, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -33,7 +33,7 @@ export class StripeAddReader extends LitElement {
 
   @state() private name = "";
   @state() private reference = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** A refusal that names no field, shown above Save until the next press. */
   @state() private refusal = "";
   /** A refusal naming the Reader ID, shown under it until that field changes or Save is pressed. */
@@ -80,7 +80,7 @@ export class StripeAddReader extends LitElement {
     this.#leave = undefined;
     this.name = "";
     this.reference = "";
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusal = "";
     this.refusedReference = "";
     this.busy = false;
@@ -115,7 +115,7 @@ export class StripeAddReader extends LitElement {
   }
 
   #fieldErrors(): { name: string; reference: string } {
-    if (!this.attempted) return { name: "", reference: "" };
+    if (!this.#feedback.attempted) return { name: "", reference: "" };
     return {
       name: this.name.trim() === "" ? t("payments.stripe.reader_name_required") : "",
       reference: this.reference.trim() === "" ? t("payments.stripe.reader_id_required") : "",
@@ -131,7 +131,7 @@ export class StripeAddReader extends LitElement {
     if (code === "reader.reference_unknown" && field === "reference") {
       if (this.reference !== reference) return;
       this.refusedReference = t("payments.stripe.reader_id_unknown");
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
     } else {
       this.refusal = codeMessage(code);
     }
@@ -143,13 +143,12 @@ export class StripeAddReader extends LitElement {
     const scope = this.#scope;
     const submitted = this.#value();
     const added = this.onAdded;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = "";
     this.refusedReference = "";
     const errors = this.#fieldErrors();
     if (errors.name !== "" || errors.reference !== "") {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!);
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.busy = true;
@@ -223,12 +222,10 @@ export class StripeAddReader extends LitElement {
         ></wt-input>
         <wt-form-actions
           slot="footer"
-          .error=${[
+          .error=${bottomMessage(
             this.refusal,
             blocked || this.refusedReference !== "" ? t("payments.stripe.fix_fields") : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          )}
         >
           <wt-button slot="cancel" data-test="cancel" @click=${() => this.#cancel(opening)}
             >${t("payments.stripe.cancel")}</wt-button

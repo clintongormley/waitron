@@ -68,8 +68,8 @@ callers stay unchanged. No till/setup.
 Run separately from the checkout root, requiring reported test counts:
 
 ```sh
-pnpm --filter @waitron/payments-stripe test --project browser src/dashboard/stripe-connect-form src/dashboard/stripe-add-reader
-pnpm --filter @waitron/payments-sumup test --project browser src/dashboard/sumup-connect-form src/dashboard/sumup-add-reader
+pnpm --filter @waitron/payments-stripe exec vitest run --project browser src/dashboard/stripe-connect-form src/dashboard/stripe-add-reader
+pnpm --filter @waitron/payments-sumup exec vitest run --project browser src/dashboard/sumup-connect-form src/dashboard/sumup-add-reader
 ```
 
 **Completion/size:** inspect structural reuse and identical wording, gates and operations;

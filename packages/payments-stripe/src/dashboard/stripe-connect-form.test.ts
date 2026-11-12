@@ -245,6 +245,21 @@ describe("stripe-connect-form", () => {
     expect(connectDisabled(el)).toBe(false);
   });
 
+  it("forgets a failed press when the same form is removed and reopened", async () => {
+    const { el, host } = await mountWidget<StripeConnectForm>("stripe-connect-form", {});
+    await connect(el);
+    expect(fieldError(el, "secret-key")).toBe(t("payments.stripe.secret_key_required"));
+    expect(connectDisabled(el)).toBe(true);
+
+    el.remove();
+    host.append(el);
+    await el.updateComplete;
+
+    expect(fieldError(el, "secret-key")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(connectDisabled(el)).toBe(false);
+  });
+
   it("on an invalid press marks the key, says so above Connect, focuses the key and disables Connect", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
