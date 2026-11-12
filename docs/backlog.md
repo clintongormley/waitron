@@ -2074,7 +2074,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **A1398-2. Finish the four-minute target for dashboard and till jobs.** Selected draft autosave waits advance without sleeping, the menu test's loading wait polls sooner, static editor layout fixtures use a shorter disclosure animation, and the product-list layout tests, Menus structure matrix and printer pick-up-role matrix no longer save unused PNGs. Till shard 2’s tests, shard 5’s install and the remaining dashboard costs still need measurement before another cut. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
+- **A1398-2. Finish the four-minute target for dashboard and till jobs.** Selected draft autosave waits advance without sleeping, the menu test's loading wait polls sooner, static editor layout fixtures use a shorter disclosure animation, and the product-list layout tests, Menus structure matrix and printer pick-up-role matrix no longer save unused PNGs. Dashboard packing uses refreshed complete-run file durations; the remaining whole-job costs still need current-head measurement before another cut. The till’s warm-cache `cpu-features` rebuild is the next diagnostic target. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
 
 - **One repeated-run rig, then each named test** (bundle of 7, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
 
