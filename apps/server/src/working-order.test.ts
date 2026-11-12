@@ -10195,7 +10195,7 @@ describe("pricing a recorded order distinguishes sold out from archived", () => 
     },
   );
 
-  it("prices the same line while both are available, and once it was sent", async () => {
+  it("prices an active recorded variant and keeps it payable after its parent is archived once sent", async () => {
     const { orderId, productId } = await variantOrder();
     await expect(
       withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
@@ -10203,7 +10203,7 @@ describe("pricing a recorded order distinguishes sold out from archived", () => 
 
     await db.execute(sql`update working_order_lines set sent_at = ${nowIso()}
       where working_order_id = ${orderId}`);
-    await db.execute(sql`update products set available = 0 where id = ${productId}`);
+    await db.execute(sql`update products set active = 0 where id = ${productId}`);
     await expect(
       withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
     ).resolves.toMatchObject({ gross: { total: "3.20" } });

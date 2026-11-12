@@ -2016,11 +2016,11 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await preparationTicketCount(id)).toBe(1);
   });
 
-  it("recovers a lost capture whose product has since sold out: the card was charged, so it files", async () => {
+  it("recovers a lost capture whose product has since been archived: the card was charged, so it files", async () => {
     const { cfg, coffee } = await setupVenue();
     const { deps } = integratedDeps(suite.db);
     const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
-    suite.db.run(sql`update products set available = 0 where id = ${coffee.id}`);
+    suite.db.run(sql`update products set active = 0 where id = ${coffee.id}`);
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 

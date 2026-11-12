@@ -274,7 +274,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect((await providerRowOf(cardPayment.id))?.saleId).not.toBeNull();
   });
 
-  it("files the invoice a capture completes even when a line never sent has since sold out", async () => {
+  it("files the invoice a capture completes even when a line never sent has since been archived", async () => {
     const billId = await tabWithDishes("Paella");
     await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, billId, [
@@ -282,7 +282,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       ]),
     );
     const card = await heldCard(billId, "38.00");
-    venue.db.run(sql`update products set available = 0 where name = 'Caña'`);
+    venue.db.run(sql`update products set active = 0 where name = 'Caña'`);
     try {
       card.release();
       const paid = await card.answer;
@@ -290,7 +290,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       expect(paid.json).toMatchObject({ outcome: "received", invoice: { total: "38.00" } });
       expect(fiscalRecordCount(venue, billId)).toBe(1);
     } finally {
-      venue.db.run(sql`update products set available = 1 where name = 'Caña'`);
+      venue.db.run(sql`update products set active = 1 where name = 'Caña'`);
     }
   });
 

@@ -131,7 +131,7 @@ it("degrades a knock overtaken by another knock or by Pair to the generic try-ag
   expect(codeMessage("device.join_stale", "es")).toBe("Algo salió mal, inténtalo de nuevo");
 });
 
-it("tells staff a card payment is running on the order, and that a dish has sold out, in both languages", () => {
+it("tells staff about a card payment and an unavailable item in both languages", () => {
   expect(codeMessage("order.payment_in_flight", "en")).toBe(
     "A card payment for this order is in progress. Wait for it to finish before changing the order",
   );
@@ -139,10 +139,10 @@ it("tells staff a card payment is running on the order, and that a dish has sold
     "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
   );
   expect(codeMessage("product.unavailable", "en")).toBe(
-    "An item on this order has sold out. Remove it and try again",
+    "An item on this order is no longer available. Remove it and try again",
   );
   expect(codeMessage("product.unavailable", "es")).toBe(
-    "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",
+    "Un artículo de este pedido ya no está disponible. Quítalo e inténtalo de nuevo",
   );
 });
 
