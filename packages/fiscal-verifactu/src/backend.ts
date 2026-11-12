@@ -328,9 +328,6 @@ export class VerifactuBackend implements FiscalBackend {
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: tenant.legalName,
-      // "F2" (factura simplificada) when no recipient is named, "F1" (factura completa) when one
-      // is. `packages/core`'s `record-sale.ts` passes `counterparty: null`, so every sale it files
-      // today is an F2.
       TipoFactura: sale.counterparty === null ? "F2" : "F1",
       Destinatarios: destinatarios,
       DescripcionOperacion: sale.descriptionOfOperation,

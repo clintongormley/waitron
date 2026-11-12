@@ -114,15 +114,20 @@ async function correct(saleId: string) {
   });
 }
 
-function payPart(party: { tabId: string }, amount: string): Promise<Answer> {
+function payPart(
+  party: { tabId: string },
+  amount: string,
+  method: "cash" | "card" = "cash",
+): Promise<Answer> {
+  const tender =
+    method === "cash" ? { method, tendered: amount } : { method, entry: "reader" as const };
   return inTx(t.venue, (tx) => readBillEditState(tx, party.tabId)).then((expectedEdit) =>
     send(t.venue.app, t.venue.cookie, "POST", `/api/working-orders/${party.tabId}/payments`, {
       submissionId: randomUUID(),
       expectedEdit,
       kind: "contribution",
       amount,
-      method: "cash",
-      tendered: amount,
+      ...tender,
       applied: amount,
       tip: "0.00",
     }),
@@ -271,10 +276,54 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
     expect((await t.close(staleRequest)).workingOrderId).toBe(stale.tabId);
   });
 
-  it("a bill with any earlier payment, even a part", async () => {
+  it("a bill holding an earlier payment, even a part, but not one whose only card was declined", async () => {
     const party = await seatedWith(t.venue, "House salad");
     const paid = await payPart(party, "5.00");
     expect(paid.status).toBe(200);
+    const declinedParty = await seatedWith(t.venue, "House salad");
+    t.venue.card.failNextCollect();
+    const declined = await payPart(declinedParty, "5.00", "card");
+    expect(declined.status).toBe(200);
+    expect(declined.json).toMatchObject({
+      outcome: "declined",
+      payment: { state: "failed" },
+      balance: { received: "0.00", reserved: "0.00" },
+    });
+
+    const error = await refusedWithNothingWritten(async () =>
+      t.close(await t.requestFor(party.tabId, "12.00", party.partyId)),
+    );
+
+    expect(error).toMatchObject(ineligible(party.tabId, "prior_payment"));
+    const served = await t.close(
+      await t.requestFor(declinedParty.tabId, "12.00", declinedParty.partyId),
+    );
+    expect(served.workingOrderId).toBe(declinedParty.tabId);
+  });
+
+  it("a bill whose payment was given back in full", async () => {
+    const party = await seatedWith(t.venue, "House salad");
+    const paid = await payPart(party, "5.00");
+    expect(paid.status).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const refunded = await send(
+      t.venue.app,
+      t.venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: "Customer requested it",
+        override: { personId: t.venue.adminId, pin: "1234" },
+      },
+    );
+    expect(refunded.status).toBe(200);
+    expect(refunded.json).toMatchObject({
+      refund: { appliedAmount: "5.00", state: "completed" },
+      balance: { received: "0.00" },
+    });
 
     const error = await refusedWithNothingWritten(async () =>
       t.close(await t.requestFor(party.tabId, "12.00", party.partyId)),
