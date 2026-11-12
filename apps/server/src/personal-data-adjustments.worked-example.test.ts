@@ -161,7 +161,7 @@ async function startPreparing(venue: AdjustmentVenue, lineId: string): Promise<v
       .select({ id: ticketItems.id })
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, lineId));
-    await advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing");
+    await advanceTicketItem(tx, ticket!.id, "preparing");
   });
 }
 

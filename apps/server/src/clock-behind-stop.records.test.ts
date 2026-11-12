@@ -222,7 +222,7 @@ it.each(["discount", "cancel", "started cancel"] as const)(
           sql`select id from ticket_items where working_order_line_id = ${line!.id}`,
         );
         expect(item).toBeDefined();
-        await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+        await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
       }
       const [bill] = venue.db.all<{ revision: number }>(
         sql`select revision from working_orders where id = ${party.tabId}`,

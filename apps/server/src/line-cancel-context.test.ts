@@ -175,8 +175,8 @@ describe("cancellation confirmation context", () => {
     async (state) => {
       const order = await fixture();
       await inTx(venue, async (tx) => {
-        await advanceTicketItem(tx, venue.cfg, order.extraTicket, "preparing");
-        if (state === "ready") await advanceTicketItem(tx, venue.cfg, order.extraTicket, "ready");
+        await advanceTicketItem(tx, order.extraTicket, "preparing");
+        if (state === "ready") await advanceTicketItem(tx, order.extraTicket, "ready");
       });
       expect(await read(order)).toMatchObject({
         stage: "started",
@@ -222,7 +222,7 @@ describe("cancellation confirmation context", () => {
 
   it("treats a preparing dish as started while its extra still waits", async () => {
     const order = await fixture();
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, order.parentTicket, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, order.parentTicket, "preparing"));
     expect(await read(order)).toMatchObject({
       stage: "started",
       components: [
@@ -275,7 +275,7 @@ describe("cancellation confirmation context", () => {
     const order = await fixture();
     const expected = await read(order);
     const before = await snapshot(order);
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, order.extraTicket, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, order.extraTicket, "preparing"));
     const advanced = await snapshot(order);
     expect(advanced.bill).toEqual(before.bill);
     expect(advanced.party).toEqual(before.party);
@@ -311,7 +311,7 @@ describe("cancellation confirmation context", () => {
     await inTx(venue, async (tx) => {
       switch (change) {
         case "parent_state":
-          await advanceTicketItem(tx, venue.cfg, order.parentTicket, "preparing");
+          await advanceTicketItem(tx, order.parentTicket, "preparing");
           break;
         case "extra_quantity":
           await tx

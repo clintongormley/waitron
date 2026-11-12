@@ -193,7 +193,7 @@ async function snapshot(order: Fixture) {
 }
 async function startExtra(order: Fixture) {
   const ticket = order.tickets.find((row) => row.workingOrderLineId === order.extra!.id)!;
-  await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket.id, "preparing"));
+  await inTx(venue, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
 }
 
 describe("Cancel item service command", () => {
@@ -217,7 +217,7 @@ describe("Cancel item service command", () => {
         .select()
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, line!.id));
-      await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+      await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
       const ask = {
         admission: testTradingAdmission(),
         expectedEdit: null,
@@ -964,7 +964,7 @@ describe("Cancel item service command", () => {
 
   it("allows only the whole active weighed dish", async () => {
     const order = await fixture("fire", "Ham", "1.250");
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, order.tickets[0]!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, order.tickets[0]!.id, "preparing"));
     const before = await snapshot(order);
     await expect(cancel(order, await askFor(order, "keep_charge", "0.250"))).rejects.toMatchObject({
       code: "adjustment.quantity_invalid",

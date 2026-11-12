@@ -741,8 +741,8 @@ describe("A773 pass display policy", () => {
           expectedContext: toFire!.releaseContext,
         },
       );
-      await advanceTicketItem(tx, f.v.cfg, burger, "preparing");
-      await advanceTicketItem(tx, f.v.cfg, burger, "ready");
+      await advanceTicketItem(tx, burger, "preparing");
+      await advanceTicketItem(tx, burger, "ready");
     });
     const readyPair = await both();
     expect(readyPair.before.board.inProgress).toHaveLength(1);

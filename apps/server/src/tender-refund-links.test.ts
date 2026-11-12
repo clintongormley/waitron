@@ -318,7 +318,7 @@ describe("a refund names the cancels it pays back", () => {
           .select({ id: ticketItems.id })
           .from(ticketItems)
           .where(eq(ticketItems.workingOrderLineId, b.lineIds[0]!));
-        await advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing");
+        await advanceTicketItem(tx, ticket!.id, "preparing");
       });
       const early = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
       const [row] = await venue.db.select().from(adjustments).where(eq(adjustments.id, early));

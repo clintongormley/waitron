@@ -242,7 +242,7 @@ describe("readTenderBlock", () => {
         amount: "1.00",
         tipAmount: "0.00",
       });
-      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+      return readTenderBlock(tx, saleId, workingOrderId);
     });
     expect(block).toEqual({ method: "cash", change: "1.00" });
   });
@@ -257,7 +257,7 @@ describe("readTenderBlock", () => {
           card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
         },
       );
-      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+      return readTenderBlock(tx, saleId, workingOrderId);
     });
     expect(block).toEqual({
       method: "card",
@@ -278,7 +278,7 @@ describe("readTenderBlock", () => {
           card: { scheme: "VISA", last4: "5838", entryMode: "chip", authCode: null },
         },
       );
-      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+      return readTenderBlock(tx, saleId, workingOrderId);
     });
     expect(block).toMatchObject({ method: "card", charged: "1.50", tip: "0.50" });
   });
@@ -290,7 +290,7 @@ describe("readTenderBlock", () => {
         { method: "card", amount: "1.00", tipAmount: "0.00" },
         { provider: "manual", externalRef: "4471" },
       );
-      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+      return readTenderBlock(tx, saleId, workingOrderId);
     });
     expect(block).toEqual({
       method: "card",
@@ -307,7 +307,7 @@ describe("readTenderBlock", () => {
         { method: "card", amount: "1.00", tipAmount: "0.00" },
         { provider: "stripe" },
       );
-      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+      return readTenderBlock(tx, saleId, workingOrderId);
     });
     expect(block).toEqual({ method: "card", charged: "1.00", tip: "0.00", reference: null });
   });
@@ -320,7 +320,7 @@ describe("readTenderBlock", () => {
         amount: "1.00",
         tipAmount: "0.00",
       });
-      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+      return readTenderBlock(tx, saleId, workingOrderId);
     });
     expect(block).toEqual({
       method: "card",
@@ -337,7 +337,7 @@ describe("readTenderBlock", () => {
         amount: "1.00",
         tipAmount: "0.00",
       });
-      return readTenderBlock(tx, cfg, saleId, workingOrderId);
+      return readTenderBlock(tx, saleId, workingOrderId);
     });
     expect(block).toEqual({ method: "transfer" });
   });
@@ -390,7 +390,7 @@ describe("readTenderBlock", () => {
         .where(eq(tenders.saleId, saleId))
         .orderBy(sql`rowid`);
       return {
-        block: await readTenderBlock(tx, cfg, saleId, workingOrderId),
+        block: await readTenderBlock(tx, saleId, workingOrderId),
         written: rows.map((row) => row.id),
       };
     });

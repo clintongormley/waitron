@@ -454,7 +454,7 @@ describe("splitting a line the kitchen has", () => {
       ]),
     );
     const [line] = await linesWithTickets(tabId);
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, line!.ticketId!, "preparing"));
 
     const { billId: checkId } = await asApp(cfg, (tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
@@ -480,7 +480,7 @@ describe("splitting a line the kitchen has", () => {
     const printed = await printedBy(printerId);
     expect(printed).toHaveLength(1);
 
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, line!.ticketId!, "preparing"));
     const { billId: checkId } = await asApp(cfg, (tx) =>
       splitPartyBill(tx, cfg, from, [{ lineNo: 1 }]),
     );

@@ -967,8 +967,8 @@ describe("GET /api/orders/counter-waiting", () => {
       sql`select id from ticket_items where working_order_id = ${id}`,
     );
     await inTx(venue, async (tx) => {
-      await advanceTicketItem(tx, venue.cfg, item!.id, "preparing");
-      await advanceTicketItem(tx, venue.cfg, item!.id, "ready");
+      await advanceTicketItem(tx, item!.id, "preparing");
+      await advanceTicketItem(tx, item!.id, "ready");
     });
 
     expect((await waitingRow(id))?.counts).toEqual({ ...oneDish, ready: 1 });

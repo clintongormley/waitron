@@ -102,7 +102,7 @@ async function startedFixture() {
     .select()
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderLineId, p.extra.id));
-  await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, extra!.id, "preparing"));
+  await inTx(venue, (tx) => advanceTicketItem(tx, extra!.id, "preparing"));
   return p;
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -967,7 +967,7 @@ describe("the public cancellation read and command", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, p.extra.id));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
     const before = await frozen();
     const refused = await post(p, body);
     expect(refused.status).toBe(409);
@@ -1418,7 +1418,7 @@ describe("the public cancellation read and command", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, p.parent.id));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
     const body = await bodyFor(p, {
       outcome: "keep_charge",
       approver: { personId: venue.managerId, pin: "9999" },
@@ -1439,7 +1439,7 @@ describe("the public cancellation read and command", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, p.parent.id));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
     const body = await bodyFor(p, { outcome: "keep_charge" });
     const app = new Hono();
     mountTillApi(

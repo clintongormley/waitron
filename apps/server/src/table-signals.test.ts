@@ -112,8 +112,8 @@ async function makeReady(v: PartyVenue, billId: string, name: string): Promise<v
         ),
       );
     for (const item of items) {
-      if (item.state === "queued") await advanceTicketItem(tx, v.cfg, item.id, "preparing");
-      if (item.state !== "ready") await advanceTicketItem(tx, v.cfg, item.id, "ready");
+      if (item.state === "queued") await advanceTicketItem(tx, item.id, "preparing");
+      if (item.state !== "ready") await advanceTicketItem(tx, item.id, "ready");
     }
   });
 }

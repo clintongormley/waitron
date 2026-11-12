@@ -458,8 +458,8 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, lines[0]!.id)),
     );
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "preparing"));
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "ready"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, item!.id, "ready"));
 
     row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 2 });
@@ -510,8 +510,8 @@ describe("listTablesWithState — A773 no dispatch state", () => {
         .where(eq(ticketItems.workingOrderId, tabId)),
     );
     for (const item of items) {
-      await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "preparing"));
-      await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item.id, "ready"));
+      await asApp(cfg, (tx) => advanceTicketItem(tx, item.id, "preparing"));
+      await asApp(cfg, (tx) => advanceTicketItem(tx, item.id, "ready"));
     }
     row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });

@@ -321,7 +321,7 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect(family.map((row) => row.name)).toEqual(["Burger", "Cheese"]);
     const [binding] = bindings([first!]);
     const [ticket] = kitchenOf([first!]);
-    await inTx(v, (tx) => advanceTicketItem(tx, v.cfg, ticket!.id, "preparing"));
+    await inTx(v, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
     const kitchen = kitchenOf(family.map((row) => row.id));
     expect(kitchen.map((item) => [item.lineId, item.state])).toEqual([[first, "preparing"]]);
     const revisions = [revisionOf(p.bill1), revisionOf(p.bill2)];
@@ -510,7 +510,7 @@ describe("A803 move dishes: the moves that succeed", () => {
       .select({ id: ticketItems.id })
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, burger!));
-    await inTx(v, (tx) => advanceTicketItem(tx, v.cfg, ticket!.id, "preparing"));
+    await inTx(v, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
     const [bill] = await v.db
       .select({ revision: workingOrders.revision })
       .from(workingOrders)

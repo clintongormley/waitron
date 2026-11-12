@@ -387,11 +387,9 @@ export function receiptQr(
 /** Read the persisted amounts and manual terminal reference; card identity belongs on the slip. */
 export async function readTenderBlock(
   tx: Transaction,
-  cfg: TradingContext,
   saleId: SaleId,
   workingOrderId: string | null,
 ): Promise<TenderBlock> {
-  void cfg;
   const [row] = await tx
     .select({
       method: tenders.method,
@@ -907,7 +905,7 @@ export async function readSettledTicket(
   }
   /* v8 ignore stop */
 
-  const tender = await readTenderBlock(tx, cfg, brandSaleId(issued.saleId), workingOrderId);
+  const tender = await readTenderBlock(tx, brandSaleId(issued.saleId), workingOrderId);
   const billTenders = await readBillTenderLines(tx, brandSaleId(issued.saleId));
 
   return {
@@ -1072,7 +1070,7 @@ async function fileImmediateSale(
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
 
   // After both writes above, so a manual acquirer reference is visible.
-  const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId);
+  const tenderBlock = await readTenderBlock(tx, saleId, workingOrderId);
 
   // `FiscalRecordRef` is regime-opaque, so the "A/1" is read back from the sale row and its series.
   const ticket: TillSaleResult = {
@@ -1838,7 +1836,7 @@ async function finalizeCapture(
         );
       }
 
-      const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
+      const tenderBlock = await readTenderBlock(tx, saleId, req.id);
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
@@ -1994,7 +1992,7 @@ async function finalizeRecovery(
         );
       }
 
-      const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
+      const tenderBlock = await readTenderBlock(tx, saleId, req.id);
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),

@@ -70,7 +70,7 @@ function receiptGrosses(
 export async function readTransactionReceipt(
   backend: FiscalBackend,
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   saleId: string,
 ): Promise<TillSaleResult> {
   const scope = await resolveTransactionScope(tx, saleId);
@@ -173,7 +173,7 @@ export async function readTransactionReceipt(
     total: centsToDecimal(sale.total),
     vatBreakdown: sale.vatBreakdown,
     ...lines,
-    tender: await readTenderBlock(tx, cfg, brandSaleId(saleId), sale.workingOrderId),
+    tender: await readTenderBlock(tx, brandSaleId(saleId), sale.workingOrderId),
     ...(payments.length === 0 ? {} : { payments }),
     ...receiptQr(backend, filed?.verificationUrl),
   };

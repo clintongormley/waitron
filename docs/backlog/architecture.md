@@ -1154,7 +1154,7 @@ the helper's constant status is not evidence of the write.
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: 5f-ii, 5g and 5h of A1308's slice 5.
+  slices. Still open: 5g and 5h of A1308's slice 5.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue`, `seedVenueSettings`, `seedBusinessDay` and `seedWorkingOrder`.
@@ -1170,9 +1170,7 @@ the helper's constant status is not evidence of the write.
 
   What the landed slices left, by owner:
 
-  - **S18:** S18e, held by A1308 (above). `till-sale.ts` and `working-order.ts` still
-    discard a `cfg` parameter with `void cfg;`. Removing them edits files on the
-    invoice path, which the owner lands (S18b). Two test helpers still hand out a node value
+  - **S18:** S18e, held by A1308 (above). Two test helpers still hand out a node value
     holding the venue row's id, because test files read it from there: `hour-recovery-host.ts`'s
     `node` and `staged-hour-crash.ts`'s (an assertion in
     `restore-emergency-crash.e2e.test.ts`) (S18f).
@@ -1525,9 +1523,11 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
   `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
   constant (the theme colour is literal in three places).
-- **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test
-  helpers, and production functions (`apps/server/src/working-order.ts` holds several) that take
-  `cfg` and discard it. Left open by SQLite slice 1 (#490 and the preparation tasks).
+- **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
+  `void cfg;` (`git grep -n 'void cfg;' apps/server/src`); `setLineCourse` and
+  `readTransactionReceipt` retain `_cfg` in their signatures, among others
+  (`git grep -n '_cfg:' apps/server/src`). Left open by SQLite slice 1
+  (#490 and the preparation tasks) and A1308 5f-ii's five-function scope.
 - `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) **is now
   called only by its own tests; delete it with its cases**: nothing else calls it, because the built
   Task 6 works out the default itself, and only the demo-data plan's Task 6 sketch still names it.

@@ -602,7 +602,7 @@ describe("unpaid departure stops kitchen work", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, lines[1]!.id));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, extra!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, extra!.id, "preparing"));
     await inTx(venue, async (tx) => {
       const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
       const [bill] = await tx
@@ -986,7 +986,7 @@ describe("unpaid departure stops kitchen work", () => {
           .select()
           .from(ticketItems)
           .where(eq(ticketItems.workingOrderLineId, line!.id));
-        await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing"));
+        await inTx(venue, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
       }
       const before = new Set((await jobs()).map((job) => job.id));
 

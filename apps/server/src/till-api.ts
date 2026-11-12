@@ -1201,7 +1201,6 @@ function mountCourseReady(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "prepare-orders" });
       const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
@@ -1209,7 +1208,6 @@ function mountCourseReady(app: Hono, deps: TillApiDeps, log: Logger): void {
         await checkZones(tx, session, [{ orderId }]);
         await bumpCourseReady(
           tx,
-          cfg,
           orderId,
           courseId,
           { personId },
@@ -2265,7 +2263,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "prepare-orders" });
-      const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("ticket_item.not_found", { ticketItemId: id });
       const body = await readJsonBody<{ to?: string; stationId?: unknown }>(c);
@@ -2284,7 +2281,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         }
         await advanceTicketItem(
           tx,
-          cfg,
           id,
           to,
           deps.attendance === undefined
@@ -2301,7 +2297,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/orders/:id/stations/:sid/advance", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "prepare-orders" });
-      const cfg = requestCfg(deps.cfg, session);
       const orderId = c.req.param("id");
       const stationId = c.req.param("sid");
       const body = await readJsonBody<{ to?: string }>(c);
@@ -2314,7 +2309,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await withTransaction(deps.db, async (tx) => {
         await advanceTicket(
           tx,
-          cfg,
           orderId,
           stationId,
           to,

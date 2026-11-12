@@ -414,7 +414,7 @@ async function halfPaidParty(started: boolean) {
     const [item] = venue.db.all<{ id: string }>(sql`
       select t.id from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
       where l.working_order_id = ${tabId} and l.line_no = 1`);
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
   }
   return tabId;
 }
