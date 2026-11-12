@@ -25,6 +25,16 @@ export function esbuildArgs(entry, outfile) {
   ];
 }
 
+const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+/** Unset or empty, as `isUnset` reads a setting, is not a release. */
+export function releaseDefine(env) {
+  const value = env.WAITRON_RELEASE_VERSION;
+  if (value === undefined || value === "") return "null";
+  if (!RELEASE_VERSION.test(value)) throw new Error(`Not a release version: ${value}`);
+  return JSON.stringify({ version: value });
+}
+
 export function parsePairs(argv) {
   if (argv.length === 0) throw new Error(USAGE);
   return argv.map((pair) => {
@@ -36,10 +46,25 @@ export function parsePairs(argv) {
 
 export function bundle(
   pairs,
-  { run = execFileSync, writeNotices = noticeForBundle, release, backupVerificationRuntime } = {},
+  {
+    run = execFileSync,
+    writeNotices = noticeForBundle,
+    release,
+    backupVerificationRuntime,
+    releaseVersion,
+  } = {},
 ) {
+  const releaseLiteral =
+    releaseVersion === undefined
+      ? undefined
+      : releaseDefine({ WAITRON_RELEASE_VERSION: releaseVersion ?? undefined });
   for (const { entry, outfile } of pairs) {
     const args = esbuildArgs(entry, outfile);
+    if (releaseLiteral !== undefined) {
+      args.push("--define:__WAITRON_RELEASE__=__waitronRelease");
+      const banner = args.findIndex((arg) => arg.startsWith("--banner:js="));
+      args[banner] += `\nconst __waitronRelease = Object.freeze(${releaseLiteral});`;
+    }
     if (release !== undefined) {
       const literal = JSON.stringify(release);
       args.push("--define:__WAITRON_HOUR_RELEASE__=__waitronHourReleaseProvenance");
@@ -77,6 +102,7 @@ if (isMainScript(import.meta.url)) {
     const pairs = parsePairs(process.argv.slice(2));
     const release = readBuildHourRelease();
     bundle(pairs, {
+      releaseVersion: process.env.WAITRON_RELEASE_VERSION ?? null,
       release,
       backupVerificationRuntime: readBuildBackupVerificationRuntime({ release }),
     });

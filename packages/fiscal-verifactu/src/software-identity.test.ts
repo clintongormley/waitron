@@ -57,6 +57,15 @@ describe("softwareVersion", () => {
     expect(softwareVersion()).toBe("0.0.0-dev");
   });
 
+  it("names a release build by its release version", () => {
+    expect(softwareVersion(null, { bundled: true, version: "1.2.3" })).toBe("1.2.3");
+    expect(softwareVersion(COMMIT, { bundled: true, version: "1.2.3" })).toBe("1.2.3");
+  });
+
+  it("names a bundle with no release version by its commit", () => {
+    expect(softwareVersion(COMMIT, { bundled: true, version: null })).toBe(`0.0.0-dev+${COMMIT}`);
+  });
+
   it("reads the bundle's stamp itself", async () => {
     vi.stubGlobal("__WAITRON_HOUR_RELEASE__", { sourceCommit: COMMIT });
     vi.resetModules();

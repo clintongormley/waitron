@@ -1,7 +1,7 @@
 // Weaker than its name for 1.b) and 1.c). For 1.b) the test registers the node under
 // `WAITRON_ID_SISTEMA` itself, so it does not check the code a real setup registers. For 1.c) the
-// record and the declaration both take `softwareVersion()`, so they cannot disagree until A940
-// slice 4 gives the build a release version.
+// second case stands in a bundle stamped `1.2.3` and checks the recorded sale's version against the
+// declaration prepared for `1.2.3`; it does not build a bundle or read a committed `v1.2.3.md`.
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { expect, it, onTestFinished, vi } from "vitest";
@@ -84,4 +84,52 @@ it("says what a recorded sale's software block says", async () => {
     "1.h": record.NombreRazon,
     "1.i": record.NIF,
   });
+});
+
+it("records the release version the declaration prepared for that release names", async () => {
+  vi.stubGlobal("__WAITRON_RELEASE__", { version: "1.2.3" });
+  vi.stubEnv("WAITRON_PRODUCER_NAME", producer.name);
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", producer.taxId);
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", producer.address);
+  onTestFinished(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+  const { nodeId, seriesId } = await seedTenantWithSif(pg.db, {
+    idSistemaInformatico: WAITRON_ID_SISTEMA,
+  });
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "preproduction",
+    clock: steadyClock,
+    db: pg.db,
+    resolveClient: staticResolver(fakeClient),
+    identity: runningIdentity("preproduction"),
+  });
+  const { saleId } = await withTransaction(pg.db, (tx) =>
+    recordSale(tx, backend, saleInput({ nodeId, seriesId })),
+  );
+  const [row] = await pg.db
+    .select({ sistemaInformatico: registrosFacturacion.sistemaInformatico })
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.saleId, saleId));
+  const record = row!.sistemaInformatico as SistemaInformatico;
+
+  const read = (name: string) =>
+    readFileSync(new URL(`../../declarations/${name}`, import.meta.url), "utf8");
+  const items = declarationItems(
+    fillProducer(
+      prepareDeclarationSource({
+        template: read("template.md"),
+        functions: read("functions.md"),
+        version: "1.2.3",
+        libraryVersion: "0.0.0",
+        date: "2026-10-22",
+        place: "Elche",
+      }),
+      producer,
+    ),
+  );
+
+  expect(items.get("1.c")).toBe("1.2.3");
+  expect(record.Version).toBe(items.get("1.c"));
 });

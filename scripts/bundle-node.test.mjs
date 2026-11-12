@@ -14,7 +14,13 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { BUNDLE_EXTERNALS, bundle, esbuildArgs, parsePairs } from "./bundle-node.mjs";
+import {
+  BUNDLE_EXTERNALS,
+  bundle,
+  esbuildArgs,
+  parsePairs,
+  releaseDefine,
+} from "./bundle-node.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BANNER =
@@ -116,6 +122,49 @@ describe("the shared node bundle command", () => {
     }
   });
 
+  it.each([[{}], [{ WAITRON_RELEASE_VERSION: "" }]])(
+    "stamps no release when the build setting is %j",
+    (env) => {
+      expect(releaseDefine(env)).toBe("null");
+    },
+  );
+
+  it("stamps a release version from the build setting", () => {
+    expect(releaseDefine({ WAITRON_RELEASE_VERSION: "1.2.3" })).toBe('{"version":"1.2.3"}');
+  });
+
+  it.each([["1.2.3-rc1"], ["v1.2.3"], ["01.2.3"]])("refuses the release version %s", (value) => {
+    expect(() => releaseDefine({ WAITRON_RELEASE_VERSION: value })).toThrow(
+      `Not a release version: ${value}`,
+    );
+  });
+
+  it.each([
+    [null, "null"],
+    ["1.2.3", '{"version":"1.2.3"}'],
+  ])("stamps a bundle given the release version %j", (releaseVersion, literal) => {
+    const calls = [];
+    bundle(parsePairs(["a.ts=dist/a.js"]), {
+      run: (_command, args) => calls.push(args),
+      writeNotices: () => {},
+      releaseVersion,
+    });
+    expect(calls[0]).toContain("--define:__WAITRON_RELEASE__=__waitronRelease");
+    expect(calls[0].find((arg) => arg.startsWith("--banner:js="))).toContain(
+      `\nconst __waitronRelease = Object.freeze(${literal});`,
+    );
+  });
+
+  it("leaves a bundle given no release version unstamped", () => {
+    const calls = [];
+    bundle(parsePairs(["a.ts=dist/a.js"]), {
+      run: (_command, args) => calls.push(args),
+      writeNotices: () => {},
+    });
+    expect(calls[0].some((arg) => arg.includes("__WAITRON_RELEASE__"))).toBe(false);
+    expect(calls[0].some((arg) => arg.includes("__waitronRelease"))).toBe(false);
+  });
+
   it("prints its usage and exits 1 when run with no pairs", () => {
     const result = spawnSync(process.execPath, [join(ROOT, "scripts/bundle-node.mjs")], {
       encoding: "utf8",
@@ -182,6 +231,74 @@ export const provenance = {
       );
       expect(loaded.status, loaded.stderr).toBe(0);
       expect(JSON.parse(loaded.stdout)).toEqual({ hour: null, runtime: null });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 40_000);
+
+  it.each([
+    [{ WAITRON_RELEASE_VERSION: "1.2.3" }, { version: "1.2.3" }],
+    [{}, null],
+  ])(
+    "stamps a real bundle from the command line's build setting %j",
+    (setting, stamp) => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-bundle-release-"));
+      try {
+        writeFileSync(
+          join(dir, "entry.ts"),
+          'console.log(JSON.stringify(typeof __WAITRON_RELEASE__ === "undefined" ? "unstamped" : __WAITRON_RELEASE__));\n',
+        );
+        const inherited = { ...process.env };
+        delete inherited.WAITRON_RELEASE_VERSION;
+        const built = spawnSync(
+          process.execPath,
+          [plainBundleCommand(dir), "entry.ts=dist/out.mjs"],
+          {
+            cwd: dir,
+            encoding: "utf8",
+            timeout: 20_000,
+            env: {
+              ...inherited,
+              ...setting,
+              PATH: `${join(ROOT, "apps/server/node_modules/.bin")}${delimiter}${process.env.PATH}`,
+            },
+          },
+        );
+        expect(built.status, built.stderr).toBe(0);
+        const loaded = spawnSync(process.execPath, [join(dir, "dist/out.mjs")], {
+          encoding: "utf8",
+          timeout: 10_000,
+        });
+        expect(loaded.status, loaded.stderr).toBe(0);
+        expect(JSON.parse(loaded.stdout)).toEqual(stamp);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it("refuses a malformed release version on the command line before bundling", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-bundle-release-"));
+    try {
+      writeFileSync(join(dir, "entry.ts"), "export {};\n");
+      const built = spawnSync(
+        process.execPath,
+        [plainBundleCommand(dir), "entry.ts=dist/out.mjs"],
+        {
+          cwd: dir,
+          encoding: "utf8",
+          timeout: 20_000,
+          env: {
+            ...process.env,
+            WAITRON_RELEASE_VERSION: "v1.2.3",
+            PATH: `${join(ROOT, "apps/server/node_modules/.bin")}${delimiter}${process.env.PATH}`,
+          },
+        },
+      );
+      expect(built.status).toBe(1);
+      expect(built.stderr).toContain("Not a release version: v1.2.3");
+      expect(existsSync(join(dir, "dist/out.mjs"))).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

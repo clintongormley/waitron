@@ -275,6 +275,7 @@ export { classifyTimeZone, classifySavedTimeZone, timeZoneOffsetMinutes } from "
 export type { SavedTimeZone } from "./time-zone.js";
 export { zoneDateFormatter, zoneNameFormatter, zoneOffsetFormatter } from "./zone-formatters.js";
 export { isUnset } from "./env-value.js";
+export { builtRelease, type BuiltRelease } from "./built-release.js";
 export { readSoftwareProducer } from "./software-producer.js";
 export type { PricingUnit } from "./menu-document/pricing-unit.js";
 export {
