@@ -495,6 +495,21 @@ describe("opening a generation", () => {
     expect(h.events.some((event) => event.endsWith("opened.json"))).toBe(false);
   });
 
+  it("refuses a folder holding another stream, without opening a generation", async () => {
+    const h = await harness({ streamId: "another-stream" });
+    await writePointer(
+      h.store,
+      VENUE,
+      pointerFrom("node-b", 1, "gen-1-node-b-20260923T110000Z"),
+      null,
+    );
+    await h.supervisor.start();
+    await vi.waitFor(() => expect(h.supervisor.status().state).toBe("refused"));
+    expect(h.supervisor.status().reason).toBe("folder_in_use");
+    expect(h.litestream.replicas()).toHaveLength(0);
+    expect(h.events.some((event) => event.endsWith("opened.json"))).toBe(false);
+  });
+
   it("names a bucket that fails the safe-write check once, and waits instead of opening", async () => {
     const h = await harness();
     h.store.honoursConditions = false;

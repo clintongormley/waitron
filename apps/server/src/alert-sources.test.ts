@@ -498,6 +498,9 @@ describe("backupAlertSource and the bucket copy", () => {
     expect(
       await codesAndSince(stream({ state: "refused", reason: "config_unsafe", stateSince: since })),
     ).toEqual([["backup.stream_settings_unusable", since]]);
+    expect(
+      await codesAndSince(stream({ state: "refused", reason: "folder_in_use", stateSince: since })),
+    ).toEqual([["backup.stream_settings_unusable", since]]);
   });
 
   it("raises backup.stream_stopped, naming the reason, for a refusal it has no wording for", async () => {

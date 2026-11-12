@@ -27,14 +27,18 @@ function text(value: unknown): value is string {
   return typeof value === "string" && value !== "" && !CONTROL_CHARACTER.test(value);
 }
 
-function refuse(reason: "not_found" | "encoding" | "shape"): never {
+function refuse(reason: "not_found" | "encoding" | "shape" | "version"): never {
   throw new AppError("backup.stream_kit_invalid", { reason });
 }
 
 /** Accepts the bare token or the downloaded file, whose explanatory lines surround it. */
 export function parseRecoveryKit(input: string): RecoveryKit {
   const token = input.split(/\s+/).find((part) => part.startsWith(KIT_PREFIX));
-  if (token === undefined) refuse("not_found");
+  if (token === undefined) {
+    if (input.split(/\s+/).some((part) => part.startsWith("WAITRON-RECOVERY-KIT-1:")))
+      refuse("version");
+    refuse("not_found");
+  }
   let raw: unknown;
   try {
     raw = JSON.parse(Buffer.from(token.slice(KIT_PREFIX.length), "base64url").toString("utf8"));

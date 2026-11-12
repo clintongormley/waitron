@@ -167,6 +167,28 @@ it("persists new keys before sending dual signatures and reuses them after a los
     ).toBe(true);
 });
 
+it("refuses a replacement for another Cloud venue without changing the held venue or connection", async () => {
+  const f = await fixture();
+  const heldId = randomUUID();
+  let stored: string = heldId;
+  const connection = createCloudConnection({
+    ...f.options,
+    environment: "test",
+    readVenueId: async () => stored,
+    recordVenueId: async (id) => {
+      stored = id;
+    },
+  });
+  const client = createCloudReplacement({ ...f.options, connection });
+  await client.prepare();
+  f.setMode("complete");
+  await expect(client.check()).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+  expect(stored).toBe(heldId);
+  await expect(stat(join(f.stateDir, "cloud/connection.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
 it("refuses a saved replacement file made group-readable after creation", async () => {
   const f = await fixture();
   const client = createCloudReplacement({ ...f.options, connection: f.connection });

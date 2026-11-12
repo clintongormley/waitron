@@ -685,6 +685,29 @@ describe("stream-settings-panel: once set up", () => {
 
   it.each([
     [
+      "en-GB",
+      "Stopped — this bucket folder holds another copy. Choose a different prefix in Change bucket.",
+    ],
+    [
+      "es-ES",
+      "Detenida: esta carpeta del bucket contiene otra copia. Elige otro prefijo en Cambiar de bucket.",
+    ],
+  ])("explains an occupied bucket folder in %s", async (locale, message) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    try {
+      const { el } = await mount(
+        stubApi({}, withStatus({ ...STREAMING, state: "refused", reason: "folder_in_use" })),
+      );
+      expect(text(el, "[data-test=stream-state]")).toBe(message);
+      expect(q(el, "[data-test=restart]")).toBeNull();
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it.each([
+    [
       "set up but not started",
       { state: "off", reason: "no_membership", stateSince: STREAMING.stateSince },
     ],

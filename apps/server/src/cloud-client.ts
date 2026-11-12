@@ -210,7 +210,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         value.version !== 2 ||
         value.origin !== options.origin ||
         (value.venueId !== "" && !uuid(value.venueId)) ||
-        (venueId !== null && value.venueId !== "" && value.venueId !== venueId) ||
+        (value.venueId !== "" && value.venueId !== venueId) ||
         value.environment !== options.environment ||
         (value.remoteAccessEnabled !== undefined &&
           typeof value.remoteAccessEnabled !== "boolean") ||
@@ -246,8 +246,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   async function save(state: SavedCloudState) {
     const venueId = state.view?.registration?.venueId;
     if (venueId) {
-      // The database reaches a standby with the venue; the pairing file belongs to this box.
-      if ((await options.readVenueId()) !== venueId) await options.recordVenueId(venueId);
+      const heldId = await options.readVenueId();
+      if (heldId !== null && heldId !== venueId) throw new AppError("cloud.binding_conflict", {});
+      if (heldId === null) await options.recordVenueId(venueId);
       state.venueId = venueId;
     }
     await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
@@ -258,9 +259,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     return {
       state: "awaiting_cloud",
       requestId: state.requestId,
-      venueId: state.venueId,
       environment: state.environment,
       ...state.view,
+      venueId: state.venueId,
       code: state.view?.state === "complete" ? "" : state.code,
       openCloudUrl: `${options.origin}/connect#request=${state.requestId}`,
       ...(state.view?.registration

@@ -4344,6 +4344,11 @@ describe("restore from my bucket", () => {
     ],
     [
       "backup.stream_kit_invalid",
+      { reason: "version" },
+      "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
+    ],
+    [
+      "backup.stream_kit_invalid",
       { reason: "encoding" },
       "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
     ],
@@ -4472,6 +4477,31 @@ describe("restore from my bucket", () => {
         disabled: boolean;
       };
       expect(button.disabled).toBe(false);
+    }
+  });
+
+  it("explains an old bucket code in Spanish", async () => {
+    const previous = currentLocale();
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          restoreFromBucket: vi.fn().mockRejectedValue({
+            code: "backup.stream_kit_invalid",
+            params: { reason: "version" },
+            status: 400,
+          }),
+        }),
+      );
+      setLocale("es-ES");
+      bucketRequest(el);
+      await flush(el);
+      await flush(el);
+      const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+      expect(screen.errorMessage).toBe(
+        "Este código de recuperación del bucket se hizo antes de esta versión de Waitron y no se puede usar. Elige un paquete de recuperación más reciente o restaura una copia de seguridad de archivo.",
+      );
+    } finally {
+      setLocale(previous);
     }
   });
 

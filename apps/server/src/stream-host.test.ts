@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadKeyRing,
+  deleteCredential,
   putCredential,
   sealNodeSigningKeyTx,
   writePairLinkTx,
@@ -16,6 +17,7 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import {
   CORE_MIGRATIONS,
   createVenueSettings,
+  ensureStreamId,
   VENUE_SETTINGS,
   readNodeMembership,
   withNodeTransaction,
@@ -967,27 +969,44 @@ describe("the live copy's wiring", () => {
         expect(litestream.children).toHaveLength(0);
       });
 
-      it("streams at this node's term and signs the pointer with this node's membership key", async () => {
-        const store = new SwitchableStore(() => new Date());
-        const litestream = new FakeLitestream();
-        const rt = runtime({ spawn: litestream.spawn, store });
-        try {
-          await rt.start();
-          await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
-          const generation = generationOf(rt.status());
-          expect(generation).toMatch(/^gen-0-node-a-\d{8}T\d{6}Z$/);
-          store.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
-          await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), { timeout: 10_000 });
-          const pointer = await readPointer(store, "c0000000-0000-4000-8000-000000000002");
-          expect(verifyPointer(pointer!.pointer, keys.publicKey)).toBe(true);
-          expect(pointer!.pointer.body).toMatchObject({
-            streamId: "c0000000-0000-4000-8000-000000000002",
-            nodeId: NODE_ID,
-          });
-        } finally {
-          await rt.stop();
-        }
-      });
+      it.each(["", "another/"])(
+        "streams at this node's term and signs the pointer with this node's membership key at prefix %s",
+        async (prefix) => {
+          if (prefix)
+            await withTransaction(db, async (tx) => {
+              await deleteCredential(tx, { purpose: STREAM_PURPOSE });
+              await ensureStreamId(tx);
+              await putCredential(tx, RING, {
+                purpose: STREAM_PURPOSE,
+                value: { ...SETTINGS, prefix },
+              });
+            });
+          const store = new SwitchableStore(() => new Date());
+          const litestream = new FakeLitestream();
+          const rt = runtime({ spawn: litestream.spawn, store });
+          try {
+            await rt.start();
+            await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+            const generation = generationOf(rt.status());
+            expect(generation).toMatch(/^gen-0-node-a-\d{8}T\d{6}Z$/);
+            expect(await readFile(litestream.running()!.args[2]!, "utf8")).toContain(
+              `s3://venue-copies/${prefix}${generation}`,
+            );
+            store.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
+            await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), {
+              timeout: 10_000,
+            });
+            const pointer = await readPointer(store, "c0000000-0000-4000-8000-000000000002");
+            expect(verifyPointer(pointer!.pointer, keys.publicKey)).toBe(true);
+            expect(pointer!.pointer.body).toMatchObject({
+              streamId: "c0000000-0000-4000-8000-000000000002",
+              nodeId: NODE_ID,
+            });
+          } finally {
+            await rt.stop();
+          }
+        },
+      );
 
       // The old supervisor's pointer write is held in flight through the reload and lands just after
       // the next supervisor has read the pointer, so the next one's conditional write is refused.

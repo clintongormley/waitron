@@ -483,6 +483,14 @@ export class StreamSupervisor {
         return generation;
       } catch (error) {
         if (signal.aborted) throw error;
+        if (
+          isAppError(error) &&
+          hasCode(error, "backup.stream_pointer_invalid") &&
+          error.params.reason === "other_venue"
+        ) {
+          this.#refuse("folder_in_use");
+          return null;
+        }
         this.#deps.log("warn", "stream.open_failed", failureFields(error));
         await this.#stopChild();
         await moving.catch(() => undefined);

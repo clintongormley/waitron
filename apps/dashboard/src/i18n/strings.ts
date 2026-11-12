@@ -2309,6 +2309,8 @@ export const en = {
   "stream.state.paused": "Paused — the bucket cannot be reached",
   "stream.state.another_server": "Stopped — another server is writing to this bucket",
   "stream.state.unusable": "Stopped — the bucket settings cannot be used",
+  "stream.state.folder_in_use":
+    "Stopped — this bucket folder holds another copy. Choose a different prefix in Change bucket.",
   "stream.state.not_running": "Not running",
   "stream.status.lag": "Changes not yet in the bucket",
   "stream.status.lag_none": "None",
@@ -6494,6 +6496,8 @@ export const es: Record<StringKey, string> = {
   "stream.state.paused": "En pausa: no se puede acceder al bucket",
   "stream.state.another_server": "Detenida: otro servidor está escribiendo en este bucket",
   "stream.state.unusable": "Detenida: los ajustes del bucket no se pueden usar",
+  "stream.state.folder_in_use":
+    "Detenida: esta carpeta del bucket contiene otra copia. Elige otro prefijo en Cambiar de bucket.",
   "stream.state.not_running": "No está en marcha",
   "stream.status.lag": "Cambios que aún no están en el bucket",
   "stream.status.lag_none": "Ninguno",

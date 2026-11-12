@@ -147,6 +147,8 @@ export const shellEn = {
     "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
   "shell.bucket.kit_invalid":
     "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
+  "shell.bucket.kit_old_version":
+    "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
   "shell.bucket.key_does_not_open":
     "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
   "shell.bucket.other_version":
@@ -370,6 +372,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Este kit de recuperación está incompleto o dañado; quizá se cortó al copiarlo. Elige tu paquete de recuperación o el archivo del kit tal como se guardó, o pega el kit completo.",
   "shell.bucket.kit_invalid":
     "Esto no es un kit de recuperación de Waitron. Elige tu paquete de recuperación o el archivo del kit, o pega el kit completo.",
+  "shell.bucket.kit_old_version":
+    "Este código de recuperación del bucket se hizo antes de esta versión de Waitron y no se puede usar. Elige un paquete de recuperación más reciente o restaura una copia de seguridad de archivo.",
   "shell.bucket.key_does_not_open":
     "La clave de recuperación de este kit no abre la copia más reciente. Si se cambió la clave de recuperación, usa el último paquete de recuperación o el último kit.",
   "shell.bucket.other_version":

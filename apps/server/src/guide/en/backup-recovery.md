@@ -4,6 +4,8 @@ Keep the previous recovery pack when you change the recovery key. Until the new 
 
 Scheduled backups and the bucket copy each use the folder you choose, with no extra venue folder. Choose separate folders for scheduled backups and the bucket copy. Neither folder can be inside the other.
 
+Use a bucket-copy folder that holds no other stream's copy. If Waitron says the folder is already in use, choose **Change bucket** and enter a different prefix.
+
 You can share an archive folder between boxes: each box removes only its own backups. After a restore, choose a new folder if you want to keep all previous copies, because the restored box can still remove them. Waitron leaves other boxes’ archives and files it does not recognise alone; manage those files yourself when you need more room.
 
 ## When first setup was interrupted {#interrupted-setup}

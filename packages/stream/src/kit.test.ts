@@ -178,5 +178,5 @@ it("refuses a version-one kit by its prefix", () => {
       "WAITRON-RECOVERY-KIT-1:" +
         Buffer.from(JSON.stringify({ ...KIT, version: 1 })).toString("base64url"),
     ),
-  ).toEqual({ code: "backup.stream_kit_invalid", params: { reason: "not_found" } });
+  ).toEqual({ code: "backup.stream_kit_invalid", params: { reason: "version" } });
 });

@@ -102,6 +102,7 @@ const EXPLAINED_REFUSALS: ReadonlySet<string | null> = new Set([
   "pointer_changed",
   "pointer_newer_term",
   "config_unsafe",
+  "folder_in_use",
 ]);
 const STOPPED_BY_ITSELF: ReadonlySet<string | null> = new Set([
   "supervisor_failed",
@@ -125,6 +126,7 @@ function stateKey(status: StreamStatusView): StringKey {
     case "paused":
       return "stream.state.paused";
     case "refused":
+      if (status.reason === "folder_in_use") return "stream.state.folder_in_use";
       return status.reason === "pointer_changed" || status.reason === "pointer_newer_term"
         ? "stream.state.another_server"
         : "stream.state.unusable";

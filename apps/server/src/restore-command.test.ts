@@ -772,6 +772,24 @@ describe("waitron-restore restore --from-bucket", () => {
     expect(await readdir(dir)).toEqual(["kit.txt"]);
   });
 
+  it("names an old bucket code and restores nothing", async () => {
+    const { dir, kitPath } = await kitFile("WAITRON-RECOVERY-KIT-1:old-code");
+    const out: string[] = [];
+    const restoreStream = vi.fn(async () => {});
+    const code = await runRestore({
+      argv: ["restore", "--from-bucket", kitPath],
+      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+      out: (line) => out.push(line),
+      restoreStream,
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      "restore failed: backup.stream_kit_invalid — this bucket recovery code was made before this version of Waitron and cannot be used; choose a newer recovery pack, or restore an archive backup",
+    ]);
+    expect(restoreStream).not.toHaveBeenCalled();
+    expect(await readdir(dir)).toEqual(["kit.txt"]);
+  });
+
   it("names the kit path it cannot read", async () => {
     const out: string[] = [];
     const code = await runRestore({

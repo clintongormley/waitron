@@ -625,6 +625,7 @@ describe("stream settings routes", () => {
 
   it("keeps the document's stream id when settings are removed and saved at a different prefix", async () => {
     await clearBucket();
+    await withTransaction(suite.db, (tx) => saveVenueFields(tx, { streamId: null }, null));
     const { app } = harness();
     const cookie = await login(app);
     const saved = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });

@@ -222,6 +222,47 @@ it("recovers a committed completion with a lost reply and refuses overlapping lo
     await f.close();
   }
 });
+
+it.each(["view", "registration"] as const)(
+  "refuses another venue's %s without changing the binding",
+  async (field) => {
+    const f = await fixture();
+    try {
+      const client = createCloudConnection(f.options);
+      await client.start();
+      f.approve();
+      const approved = await client.check();
+      const path = join(f.stateDir, "cloud/connection.json");
+      const before = await readFile(path, "utf8");
+      f.patchReply(
+        field === "view"
+          ? { venueId: "" }
+          : {
+              registration: {
+                venueId: randomUUID(),
+                installationId: f.installationId,
+                organisationId: f.organisationId,
+                legalBusinessId: f.legalBusinessId,
+              },
+            },
+      );
+      await expect(
+        client.complete(
+          {
+            requestId: approved.requestId!,
+            organisationId: f.organisationId,
+            legalBusinessId: f.legalBusinessId,
+          },
+          async () => {},
+        ),
+      ).rejects.toMatchObject({ code: "cloud.unavailable" });
+      expect(await f.options.readVenueId()).toBe(f.venueId);
+      expect(await readFile(path, "utf8")).toBe(before);
+    } finally {
+      await f.close();
+    }
+  },
+);
 it("rejects oversized replies and redirects", async () => {
   for (const kind of ["oversized", "redirect"] as const) {
     const f = await fixture();
@@ -328,7 +369,8 @@ it("records Cloud's id before the pairing file and keeps the empty request bindi
       organisationId: f.organisationId,
       legalBusinessId: f.legalBusinessId,
     };
-    await client.complete(choice, async () => {});
+    const completed = await client.complete(choice, async () => {});
+    expect(completed.venueId).toBe(f.venueId);
     expect(stored).toBe(f.venueId);
     expect(fileAtRecord).toMatchObject({ venueId: "", view: { state: "awaiting_local" } });
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
@@ -379,6 +421,19 @@ it("recovers the pairing file after the venue id was committed but its file save
       stored = id;
     };
     const restarted = createCloudConnection(options);
+    const before = await readFile(path, "utf8");
+    f.patchReply({
+      registration: {
+        venueId: randomUUID(),
+        installationId: f.installationId,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      },
+    });
+    await expect(restarted.check()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(stored).toBe(f.venueId);
+    expect(await readFile(path, "utf8")).toBe(before);
+    f.patchReply({});
     expect((await restarted.check()).state).toBe("complete");
     expect(JSON.parse(await readFile(path, "utf8")).venueId).toBe(f.venueId);
     expect(f.requests.at(-1)![5]).toBe("");
@@ -402,6 +457,39 @@ it("treats a version-one connection file as not connected for status, refresh, r
     });
     expect((await client.start()).requestId).not.toBe(saved.requestId);
     expect(JSON.parse(await readFile(path, "utf8")).version).toBe(2);
+  } finally {
+    await f.close();
+  }
+});
+
+it("refuses a completed pairing file when the database no longer holds its Cloud id", async () => {
+  const f = await fixture();
+  try {
+    const client = createCloudConnection(f.options);
+    await client.start();
+    f.approve();
+    const approved = await client.check();
+    await client.complete(
+      {
+        requestId: approved.requestId!,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      },
+      async () => {},
+    );
+    const path = join(f.stateDir, "cloud/connection.json");
+    const before = await readFile(path, "utf8");
+    let stored: string | null = null;
+    const restarted = createCloudConnection({
+      ...f.options,
+      readVenueId: async () => stored,
+      recordVenueId: async (id) => {
+        stored = id;
+      },
+    });
+    await expect(restarted.check()).rejects.toMatchObject({ code: "cloud.state_invalid" });
+    expect(stored).toBeNull();
+    expect(await readFile(path, "utf8")).toBe(before);
   } finally {
     await f.close();
   }
