@@ -573,6 +573,7 @@ export async function listOrderStaff(tx: Transaction): Promise<Person[]> {
 }
 
 export interface OrderLine {
+  sentAt: string | null;
   sentNutrition: LineNutrition | null;
   lineNo: number;
   name: string;
@@ -796,6 +797,7 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
   const lines = stored.map((line) => ({ ...line, sentNutrition: saved.get(line.id) ?? null }));
   return foldIdenticalPortions(lines).map((line) => ({
     sentNutrition: line.sentNutrition,
+    sentAt: line.sentAt,
     lineNo: line.lineNo,
     name: line.name,
     variantName: line.variantName,
@@ -907,6 +909,7 @@ async function readSaleLines(tx: Transaction, saleId: string): Promise<OrderLine
     .orderBy(saleLines.lineNo);
   return rows.map((line) => ({
     sentNutrition: null,
+    sentAt: null,
     lineNo: line.lineNo,
     name: line.name,
     variantName: line.variantName,

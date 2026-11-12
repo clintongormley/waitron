@@ -13,6 +13,7 @@ import {
   sales,
   ticketItems,
   workingLinePortions,
+  workingLineContexts,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -885,6 +886,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
 
   it("keeps recorded dish and extra declarations apart, comparing their values when folding", async () => {
     const { billId } = await seed(burgersWithCheese("4"));
+    await inTx(venue, (tx) => fireAll(tx, venue.cfg, billId));
     const milk = {
       allergens: { milk: {}, eggs: {} },
       dietaryDeclarations: ["vegetarian", "halal"],
@@ -922,6 +924,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
       venue,
       async (tx) => (await readOrderDetail(tx, billId, "all", false)).lines,
     );
+    expect(lines[0]!.sentAt).toEqual(expect.any(String));
     expect(lines.map((line) => [line.name, String(line.quantity), line.sentNutrition])).toEqual([
       ["Burger", "2.000", milk],
       ["Cheese", "2.000", cheese],
@@ -934,12 +937,17 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
 
   it("distinguishes a missing capture from unreviewed and reviewed-empty recorded declarations", async () => {
     const { billId, portions } = await seed(croquettes("3"));
-    await inTx(venue, (tx) =>
-      VENUE_SERVICE.recordSentLineNutrition(tx, [
+    await inTx(venue, async (tx) => {
+      await fireAll(tx, venue.cfg, billId);
+      await tx
+        .update(workingLineContexts)
+        .set({ sentNutrition: null })
+        .where(eq(workingLineContexts.workingOrderLineId, portions[0]!.lineId));
+      await VENUE_SERVICE.recordSentLineNutrition(tx, [
         { lineId: portions[1]!.lineId, nutrition: { allergens: null, dietaryDeclarations: [] } },
         { lineId: portions[2]!.lineId, nutrition: { allergens: {}, dietaryDeclarations: [] } },
-      ]),
-    );
+      ]);
+    });
     const lines = await inTx(
       venue,
       async (tx) => (await readOrderDetail(tx, billId, "all", false)).lines,
@@ -948,6 +956,45 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
       null,
       { allergens: null, dietaryDeclarations: [] },
       { allergens: {}, dietaryDeclarations: [] },
+    ]);
+  });
+
+  it("keeps portions apart when only their recorded grain type or diet differs", async () => {
+    const { billId, portions } = await seed(croquettes("3"));
+    await inTx(venue, async (tx) => {
+      await fireAll(tx, venue.cfg, billId);
+      await VENUE_SERVICE.recordSentLineNutrition(tx, [
+        {
+          lineId: portions[0]!.lineId,
+          nutrition: {
+            allergens: { gluten: { kinds: ["wheat"] } },
+            dietaryDeclarations: ["vegan"],
+          },
+        },
+        {
+          lineId: portions[1]!.lineId,
+          nutrition: { allergens: { gluten: { kinds: ["rye"] } }, dietaryDeclarations: ["vegan"] },
+        },
+        {
+          lineId: portions[2]!.lineId,
+          nutrition: { allergens: { gluten: { kinds: ["wheat"] } }, dietaryDeclarations: [] },
+        },
+      ]);
+    });
+    const lines = await inTx(
+      venue,
+      async (tx) => (await readOrderDetail(tx, billId, "all", false)).lines,
+    );
+    expect(
+      lines.map((line) => [
+        String(line.quantity),
+        line.sentNutrition?.allergens?.gluten?.kinds,
+        line.sentNutrition?.dietaryDeclarations,
+      ]),
+    ).toEqual([
+      ["1.000", ["wheat"], ["vegan"]],
+      ["1.000", ["rye"], ["vegan"]],
+      ["1.000", ["wheat"], []],
     ]);
   });
 

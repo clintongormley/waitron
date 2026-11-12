@@ -2366,6 +2366,7 @@ export interface OrderDetailDto {
     total: string;
     listUnitPrice: string | null;
     creditedTo: string | null;
+    sentAt: string | null;
     sentNutrition: { allergens: AllergenDeclaration; dietaryDeclarations: string[] } | null;
   }[];
   invoices: {

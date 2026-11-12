@@ -42,6 +42,7 @@ const detail: OrderDetailDto = {
       listUnitPrice: "12.00",
       creditedTo: "Ana",
       sentNutrition: null,
+      sentAt: "2026-09-30T12:00:00Z",
     },
   ],
   invoices: [
@@ -185,9 +186,30 @@ it.each(["en-GB", "es-ES"])(
     expect(nutrition[2]).toContain(t("editor.diet.vegan"));
     expect(nutrition[3]).toContain(t("orders.detail.sent_not_recorded"));
     expect(nutrition[3]).not.toContain(t("orders.detail.recorded_when_sent"));
+    const body = el
+      .shadowRoot!.querySelector("wt-dialog")!
+      .shadowRoot!.querySelector<HTMLElement>(".body")!;
+    await vi.waitFor(() =>
+      expect(body.tabIndex).toBe(body.scrollHeight > body.clientHeight ? 0 : -1),
+    );
     await expectNoA11yViolations(host);
   },
 );
+
+it("keeps the historical declaration block off an unsent line", async () => {
+  const api = {
+    getOrder: vi
+      .fn()
+      .mockResolvedValue({ ...detail, lines: [{ ...detail.lines[0]!, sentAt: null }] }),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  expect(el.shadowRoot!.querySelector("[data-sent-nutrition]")).toBeNull();
+});
 
 it("names a transfer closure as still to be paid, with no card and no tip", async () => {
   setLocale("en-GB");
