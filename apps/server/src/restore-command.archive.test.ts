@@ -147,7 +147,7 @@ beforeAll(async () => {
       idSistemaInformatico: "W1",
       numeroInstalacion: "1",
     });
-    const [person] = await seedPersons(tx, { displayName: "Ana", pinHash: hashPin("1234") });
+    const [person] = await seedPersons(tx, { displayName: "Anna", pinHash: hashPin("1234") });
     personId = person!.id;
   });
   await stampDeployment(suite.db, "preproduction");
