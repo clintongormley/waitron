@@ -284,7 +284,8 @@ export async function fileCorrectionIn(
   cfg: DeviceRequestConfig,
   correctionId: string,
   authz: RecordCorrectionInput["authz"],
-  endedBy: string,
+  /** Null when filed automatically, with nobody asking. */
+  endedBy: string | null,
   expectedSplit?: readonly SplitLine[],
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
@@ -427,7 +428,7 @@ async function openCorrection(tx: Transaction, correctionId: string) {
  * What filing `selection` off the sale would file, or the refusal it meets and whether that refusal
  * is one in `NEVER_FILEABLE`, which Close may end the correction over.
  */
-async function previewOrRefusal(
+export async function previewOrRefusal(
   tx: Transaction,
   backend: FiscalBackend,
   cfg: Pick<DeviceRequestConfig, "nodeId">,

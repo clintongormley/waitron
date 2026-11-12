@@ -692,6 +692,14 @@ declare module "@waitron/shared" {
       moneyBack: string;
       completedSince: string;
     };
+    /** An incident: a correction's money all went back, but filing its corrective automatically on
+     * the opening approval was refused with the code `refusal`; the payment check's alert. */
+    "invoice_correction.filing_refused": {
+      correctionId: string;
+      saleId: string;
+      amount: string;
+      refusal: string;
+    };
     /** The bill cannot be closed as a deferred payment: it is not one whole, positive bill. */
     "deferred_close.ineligible": {
       workingOrderId: string;

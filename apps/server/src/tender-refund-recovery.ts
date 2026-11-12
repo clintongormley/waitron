@@ -30,17 +30,18 @@ export async function recoverTenderRefunds(
   const reading = deps.clock.now();
   const now = reading.instant;
   const instant = now.toISOString();
-  // A paused pass still sweeps: an alert moves no money and files no record.
-  const sweep = async (): Promise<unknown[]> => {
+  // A paused pass still sweeps for alerts, but files nothing: the clock or the seat that paused the
+  // refunds would refuse the filing too.
+  const sweep = async (fileSettled: boolean): Promise<unknown[]> => {
     try {
-      await sweepInvoiceCorrections(deps, now);
+      await sweepInvoiceCorrections(deps, now, { fileSettled });
       return [];
     } catch (error) {
       return [error];
     }
   };
   if (await refundsPaused(deps, reading)) {
-    const failed = await sweep();
+    const failed = await sweep(false);
     if (failed.length > 0) throw new AggregateError(failed, FAILED);
     const [summary] = await deps.db
       .select({ pending: sql<number>`count(*)` })
@@ -115,7 +116,7 @@ export async function recoverTenderRefunds(
     ...results.flatMap((result) =>
       result.status === "rejected" ? [result.reason as unknown] : result.value,
     ),
-    ...(await sweep()),
+    ...(await sweep(true)),
   ];
   if (errors.length > 0) throw new AggregateError(errors, FAILED);
   const [summary] = await deps.db

@@ -1077,6 +1077,15 @@ Record correction once all the money is back, until PR 2 files it automatically.
 gave money back over an hour ago and is still open raises `invoice_correction.unfinished`, a warning
 among the tax-filing alerts.
 
+**2026-11-12, as built in PR 2:** once a correction's money is all back, Waitron files the
+corrective itself on the approval given at opening, under the till that opened it: at the till
+when its card refund goes through, or in the background check (about once a minute) when the card
+company confirms it later. The refund is recorded first and is never undone. A refused filing
+raises `invoice_correction.filing_refused`, an error among the tax-filing alerts, once per ticket;
+the check tries again each minute only while the refusal could clear, not once the approver is
+suspended or has lost the right to correct invoices, or the invoice can no longer be corrected
+(decision 14 of the [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md)).
+
 ### A444: a full invoice shows only the date it was created (owner, 2026-11-12)
 
 The owner, 2026-11-12, about 11:00 in the watcher's window: "I think we should use the creation

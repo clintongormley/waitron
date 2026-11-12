@@ -5,6 +5,7 @@ import { sales, tenderRefunds, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { previewCorrectionAmounts } from "@waitron/core";
+import { endSession, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -92,7 +93,7 @@ async function open(saleId: SaleId, gross: string) {
   );
 }
 
-async function cash(correctionId: string, amount: string) {
+async function cash(correctionId: string, amount: string, sessionId = v.operator.sessionId) {
   return inTx(v, (tx) =>
     giveCorrectionCash(
       tx,
@@ -102,7 +103,7 @@ async function cash(correctionId: string, amount: string) {
       parseCorrectionCash({ submissionId: randomUUID(), amount }),
       {
         personId: v.adminId,
-        authz: { sessionId: v.operator.sessionId },
+        authz: { sessionId },
         authorization: { authorizedBy: v.adminId, permission: "sale.refund", viaOverride: false },
       },
     ),
@@ -115,6 +116,7 @@ async function cardRefund(
   t: { saleId: SaleId; cardTenderId: string },
   amount: string,
   correctionId?: string,
+  operator = v.operator,
 ) {
   const submissionId = randomUUID();
   return refundSettledTender(
@@ -131,7 +133,7 @@ async function cardRefund(
         ? {}
         : { invoiceCorrection: { id: correctionId, requestId: submissionId } }),
     },
-    v.operator,
+    operator,
   );
 }
 
@@ -187,29 +189,46 @@ describe("a correction's connected card legs", () => {
     ).resolves.toMatchObject({ gross: "24.20", moneyRefundable: "24.20" });
   });
 
-  it("records a connected card last leg confirmed by the background pass and files nothing", async () => {
+  it("files when the background pass confirms a card leg, with nobody signed in", async () => {
     const t = await cashAndReader();
     const { correction } = await open(t.saleId, "24.20");
-    await cash(correction.id, "14.20");
+    const session = await inTx(v, (tx) =>
+      loginWithPin(tx, { deviceId: v.deviceId, personId: v.adminId, pin: "1234" }),
+    );
+    const opener = { ...v.operator, sessionId: session.id };
+    await cash(correction.id, "14.20", opener.sessionId);
     loseNextAnswer();
-    const leg = await cardRefund(t, "10.00", correction.id);
+    const leg = await cardRefund(t, "10.00", correction.id, opener);
     expect(leg.state).toBe("pending");
     expect(await read(correction.id)).toMatchObject({ pending: "10.00", fileNow: null });
+    expect(await inTx(v, (tx) => endSession(tx, session.token))).toBe(true);
     const before = salesCount();
+
+    // Control: a pass while the card company still answers pending files nothing.
+    await recoverTenderRefunds(v.deps);
+    expect(await read(correction.id)).toMatchObject({ state: "open", pending: "10.00" });
+    expect(salesCount()).toBe(before);
 
     expect(await confirmedByThePass(leg.id)).toMatchObject({ state: "completed" });
 
-    expect(salesCount()).toBe(before);
-    const split = await splitOf(t.saleId, "24.20");
-    expect(await read(correction.id)).toMatchObject({
-      state: "open",
+    expect(salesCount()).toBe(before + 1);
+    const filed = await read(correction.id);
+    expect(filed).toMatchObject({
+      state: "filed",
       moneyBack: "24.20",
       pending: "0.00",
       left: "0.00",
-      fileNow: { gross: "24.20", vatBreakdown: split },
+      fileNow: null,
     });
-    await expect(fileNow(correction.id, split)).resolves.toMatchObject({ state: "filed" });
-    expect(salesCount()).toBe(before + 1);
+    const [corrective] = await v.db
+      .select()
+      .from(sales)
+      .where(eq(sales.id, filed.correctiveSaleId!));
+    expect(corrective).toMatchObject({
+      correctsSaleId: t.saleId,
+      total: -2420,
+      authorizedBy: v.adminId,
+    });
   });
 
   it("files for the money back when a card leg failed", async () => {

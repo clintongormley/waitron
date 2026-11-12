@@ -6,6 +6,7 @@ import type { PinAttempts } from "@waitron/identity";
 import { payments, recordManualRefund } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import type { BillRefundDeps } from "./bill-refunds.js";
+import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
 import { enqueueTenderRefundDrawer } from "./receipt-print.js";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
@@ -128,7 +129,22 @@ export async function beginSettledTenderRefund(
   );
 }
 
+/** Gives a payment's money back; once a leg of a correction completes, files that correction if
+ * its money is now all back (`fileCorrectionAutomatically`), never undoing the refund. */
 export async function refundSettledTender(
+  deps: TenderRefundDeps,
+  cfg: DeviceRequestConfig,
+  saleId: string,
+  request: TenderRefundRequest,
+  operator: { personId: string; sessionId: string; attempts: PinAttempts },
+): Promise<TenderRefundView> {
+  const refund = await settleTenderRefund(deps, cfg, saleId, request, operator);
+  if (refund.state === "completed" && request.invoiceCorrection !== undefined)
+    await fileCorrectionAutomatically(deps, request.invoiceCorrection.id);
+  return refund;
+}
+
+async function settleTenderRefund(
   deps: TenderRefundDeps,
   cfg: DeviceRequestConfig,
   saleId: string,
