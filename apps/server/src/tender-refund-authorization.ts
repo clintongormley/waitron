@@ -69,10 +69,8 @@ async function refundTenderKind(
       : "reader-card";
 }
 
-// The command body shares its authorization's transaction. The earlier PIN verdict grants no
-// authority: session, profile, source zones and permission are read again after queued writes.
-// `body` is handed that verdict so a second check of the same PIN in its transaction need not
-// derive the key again.
+// The body must call authorizeRefund before writing. PIN derivation runs ahead of the write lock;
+// the session, device, zones and permission decision belong to the command's transaction.
 export async function withTenderRefundAuthorization<T>(
   db: Database,
   cfg: DeviceRequestConfig,
@@ -81,7 +79,7 @@ export async function withTenderRefundAuthorization<T>(
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
   body: (
     tx: Transaction,
-    authorization: Authorization,
+    authorizeRefund: (cancelledBy?: string) => Promise<Authorization>,
     checked: SecretCheck | undefined,
   ) => Promise<T>,
 ): Promise<T> {
@@ -124,29 +122,58 @@ export async function withTenderRefundAuthorization<T>(
         throw new AppError("tender.refund_unavailable", { tenderId: request.tenderId });
       assertTakesTender(device, kind);
       const override = withCheck(request.override, checked);
-      let authorization = await authorize(
+      return body(
         tx,
-        { sessionId: operator.sessionId, permission: "sale.refund", override },
-        operator.attempts,
+        async (cancelledBy) => {
+          let authorization: Authorization;
+          try {
+            authorization = await authorize(
+              tx,
+              { sessionId: operator.sessionId, permission: "sale.refund", override },
+              operator.attempts,
+            );
+          } catch (error) {
+            if (
+              error instanceof AppError &&
+              error.code === "authorization.not_permitted" &&
+              request.override === undefined &&
+              kind !== "hand-keyed-card" &&
+              cancelledBy !== undefined
+            )
+              return {
+                authorizedBy: cancelledBy,
+                permission: "sale.refund",
+                viaOverride: cancelledBy !== operator.personId,
+              };
+            throw error;
+          }
+          if (kind === "hand-keyed-card") {
+            if (request.manualConfirmed !== true) throw invalid("manualConfirmed");
+            if (!authorization.viaOverride) {
+              if (override === undefined)
+                throw new AppError("tender.manual_refund_pin_required", {
+                  tenderId: request.tenderId,
+                });
+              const confirmer = await verifyThrottledCredential(
+                tx,
+                override.personId,
+                override.pin,
+                operator.attempts,
+                override.checked,
+              );
+              if (!roleHasPermission(confirmer.role, "sale.refund"))
+                throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
+              authorization = {
+                ...authorization,
+                authorizedBy: override.personId,
+                viaOverride: true,
+              };
+            }
+          }
+          return authorization;
+        },
+        checked,
       );
-      if (kind === "hand-keyed-card") {
-        if (request.manualConfirmed !== true) throw invalid("manualConfirmed");
-        if (!authorization.viaOverride) {
-          if (override === undefined)
-            throw new AppError("tender.manual_refund_pin_required", { tenderId: request.tenderId });
-          const confirmer = await verifyThrottledCredential(
-            tx,
-            override.personId,
-            override.pin,
-            operator.attempts,
-            override.checked,
-          );
-          if (!roleHasPermission(confirmer.role, "sale.refund"))
-            throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
-          authorization = { ...authorization, authorizedBy: override.personId, viaOverride: true };
-        }
-      }
-      return body(tx, authorization, checked);
     }),
   );
 }

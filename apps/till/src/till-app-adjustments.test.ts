@@ -3714,7 +3714,7 @@ describe("till-app: service cancellation consent", () => {
       });
     });
 
-    it("sends no cancellation ids when the amount is raised above the filled total", async () => {
+    it("keeps cancellation ids when the amount is raised above the filled total", async () => {
       const { el } = await mountApp(linkedMethods());
       await openTable4(el);
       await cancelAndRefundOne(el);
@@ -3722,10 +3722,10 @@ describe("till-app: service cancellation consent", () => {
       expect(api.refundTransaction).toHaveBeenCalledOnce();
       const sent = vi.mocked(api.refundTransaction).mock.calls[0]![1];
       expect(sent).toMatchObject({ appliedAmount: "3.35", reason: "Not served" });
-      expect(sent).not.toHaveProperty("cancellationIds");
+      expect(sent.cancellationIds).toEqual([cancelId]);
     });
 
-    it("sends no cancellation ids with a tip", async () => {
+    it("keeps cancellation ids with a tip", async () => {
       const whole = { ...consent("settled"), saleId: "own-sale" };
       const methods = linkedMethods({ getCancellation: vi.fn().mockResolvedValue(whole) });
       const { el } = await mountApp(methods);
@@ -3744,7 +3744,7 @@ describe("till-app: service cancellation consent", () => {
       await sendRefund(el, { tipAmount: "2.00" });
       const sent = vi.mocked(api.refundTransaction).mock.calls[0]![1];
       expect(sent).toMatchObject({ appliedAmount: "30.00", tipAmount: "2.00" });
-      expect(sent).not.toHaveProperty("cancellationIds");
+      expect(sent.cancellationIds).toEqual([cancelId]);
     });
 
     it("sends the cancellation ids for an amount at or below the filled total", async () => {
@@ -3936,7 +3936,7 @@ describe("till-app: service cancellation consent", () => {
       expect(sent).not.toHaveProperty("cancellationIds");
     });
 
-    describe("a carried approval", () => {
+    describe("server-held cancellation approval", () => {
       const marta = [{ personId: "m-1", displayName: "Marta" }];
       const refundPrompt = (el: TillApp) =>
         el.shadowRoot!.querySelector(
@@ -3974,7 +3974,7 @@ describe("till-app: service cancellation consent", () => {
       }
       const sent = () => vi.mocked(api.refundTransaction).mock.calls.map((call) => call[1]);
 
-      it("sends the cancel's approver once and never stores it", async () => {
+      it("sends no cancellation PIN with the refund and stores none", async () => {
         let answer!: (view: typeof refunded) => void;
         const refundTransaction = vi.fn(
           () =>
@@ -3991,9 +3991,9 @@ describe("till-app: service cancellation consent", () => {
             appliedAmount: "3.34",
             tipAmount: "0.00",
             cancellationIds: [cancelId],
-            override: { personId: "m-1", pin: "7777" },
           }),
         ]);
+        expect(sent()[0]).not.toHaveProperty("override");
         expect(refundPrompt(el)).toBeNull();
         expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
         expect(
@@ -4014,7 +4014,7 @@ describe("till-app: service cancellation consent", () => {
           pinMethods({
             refundTransaction: vi
               .fn()
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockRejectedValueOnce({ code: "tender.refund_exceeds_cancelled" })
               .mockResolvedValue(refunded),
           }),
         );
@@ -4023,7 +4023,7 @@ describe("till-app: service cancellation consent", () => {
         await sendRefund(el, { appliedAmount: "3.35" });
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
         expect(sent()[0]).not.toHaveProperty("override");
-        expect(sent()[0]).not.toHaveProperty("cancellationIds");
+        expect(sent()[0]?.cancellationIds).toEqual([cancelId]);
         await pinPad(el, "1234");
         await expect.poll(() => sent()).toHaveLength(2);
         expect(sent()[1]).toMatchObject({
@@ -4039,7 +4039,7 @@ describe("till-app: service cancellation consent", () => {
             getCancellation: vi.fn().mockResolvedValue(whole),
             refundTransaction: vi
               .fn()
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockRejectedValueOnce({ code: "tender.refund_exceeds_cancelled" })
               .mockResolvedValue(refunded),
           }),
         );
@@ -4055,11 +4055,12 @@ describe("till-app: service cancellation consent", () => {
         expect(sent()[1]).toMatchObject({ override: { personId: "m-1", pin: "1234" } });
       });
 
-      it("shows the lock-out in the PIN prompt on a carried pin.throttled", async () => {
+      it("shows the lock-out in the PIN prompt after a fresh PIN is throttled", async () => {
         const { el } = await mountApp(
           pinMethods({
             refundTransaction: vi
               .fn()
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
               .mockRejectedValueOnce({ code: "pin.throttled" })
               .mockResolvedValue(refunded),
           }),
@@ -4067,14 +4068,15 @@ describe("till-app: service cancellation consent", () => {
         await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el);
-        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        expect(sent()[0]).not.toHaveProperty("override");
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
+        await pinPad(el, "1234");
         await expect
           .poll(() => (refundPrompt(el) as TillSupervisorOverrideDialog).error)
           .toBe("pin.throttled");
       });
 
-      it("opens the PIN prompt when the carried approver may no longer refund", async () => {
+      it("opens the PIN prompt when saved cancellation approval does not cover the refund", async () => {
         const { el } = await mountApp(
           pinMethods({
             refundTransaction: vi
@@ -4086,7 +4088,7 @@ describe("till-app: service cancellation consent", () => {
         await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el);
-        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        expect(sent()[0]).not.toHaveProperty("override");
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
         expect((refundPrompt(el) as TillSupervisorOverrideDialog).error).toBeNull();
         await pinPad(el, "1234");
@@ -4097,11 +4099,12 @@ describe("till-app: service cancellation consent", () => {
         });
       });
 
-      it("opens the PIN prompt on a carried pin.invalid", async () => {
+      it("keeps a fresh wrong-PIN refusal in the prompt until corrected", async () => {
         const { el } = await mountApp(
           pinMethods({
             refundTransaction: vi
               .fn()
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
               .mockRejectedValueOnce({ code: "pin.invalid" })
               .mockResolvedValue(refunded),
           }),
@@ -4109,11 +4112,14 @@ describe("till-app: service cancellation consent", () => {
         await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el);
-        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        expect(sent()[0]).not.toHaveProperty("override");
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        await pinPad(el, "1234");
-        await expect.poll(() => sent()).toHaveLength(2);
-        expect(sent()[1]).toMatchObject({
+        await pinPad(el, "1111");
+        expect((refundPrompt(el) as TillSupervisorOverrideDialog).error).toBe("pin.invalid");
+        emit(refundPrompt(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
+        await flush(el);
+        await expect.poll(() => sent()).toHaveLength(3);
+        expect(sent()[2]).toMatchObject({
           appliedAmount: "3.34",
           cancellationIds: [cancelId],
           override: { personId: "m-1", pin: "1234" },
@@ -4133,7 +4139,7 @@ describe("till-app: service cancellation consent", () => {
         await openTable4(el);
         await cancelWithPin(el);
         await sendRefund(el, { appliedAmount: "3.00" });
-        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "7777" } });
+        expect(sent()[0]).not.toHaveProperty("override");
         await expect.poll(() => refundForm(el)).toBeNull();
         emit(ticket(el)!, "tender-refund-open");
         await flush(el);
@@ -4143,7 +4149,7 @@ describe("till-app: service cancellation consent", () => {
         expect(sent()[1]).not.toHaveProperty("override");
       });
 
-      it("never carries a PIN to a card keyed on a separate terminal", async () => {
+      it("requires a fresh PIN for a card keyed on a separate terminal", async () => {
         const keyed = { ...cash, method: "card", manual: true, last4: "4401" };
         const { el } = await mountApp(
           pinMethods({
@@ -4167,7 +4173,7 @@ describe("till-app: service cancellation consent", () => {
         expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "1234" } });
       });
 
-      it("drops it when the refund closes", async () => {
+      it("opens an unrelated refund without cancellation IDs after closing", async () => {
         const { el } = await mountApp(
           pinMethods({
             refundTransaction: vi

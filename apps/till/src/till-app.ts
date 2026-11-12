@@ -206,7 +206,6 @@ import "./screens/till-device-chooser.js";
 import "./screens/till-pass-screen.js";
 import "./widgets/supervisor-override-dialog.js";
 import type { OverrideConfirmDetail } from "./widgets/supervisor-override-dialog.js";
-import { CarriedApproval, type CarriedApprover } from "./state/carried-approval.js";
 import "./widgets/adjustment-dialog.js";
 import "./widgets/cancel-item-dialog.js";
 import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
@@ -259,7 +258,6 @@ import {
   TenderRefundAttempts,
   TenderRefundSession,
   TenderRefundAttemptError,
-  tenderRefundAmount,
   type SavedTenderRefund,
   type TenderRefundAsk,
   type TenderRefundScope,
@@ -1224,8 +1222,6 @@ interface RefundFill {
   cancellationIds: string[];
   /** The cancel's Void reasons, so the refund does not read them again. */
   reasons?: AdjustmentReason[];
-  /** The PIN the cancel was approved with, when it needed one. */
-  approval?: CarriedApproval;
 }
 
 interface FinishingTable {
@@ -3717,7 +3713,6 @@ export class TillApp extends LitElement {
     visit: number;
     tab: BuiltInScreen | undefined;
     receipts: (FinishingTable["receipts"][number] & { fill: RefundFill })[];
-    approval?: CarriedApproval;
     busy: boolean;
     refusal: string;
   } | null = null;
@@ -8440,9 +8435,7 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** A refund that completed keeps the carried approval for the other sales it was given for. */
-  #closeTenderRefund(completed = false): void {
-    if (!completed) this.tenderRefunding?.fill?.approval?.clear();
+  #closeTenderRefund(): void {
     this.tenderRefunding = null;
   }
 
@@ -8511,23 +8504,10 @@ export class TillApp extends LitElement {
       this.tenderRefunding = { ...this.tenderRefunding!, reasons, reasonsLoading: false };
   }
 
-  /** Whether the fill covers this refund: no tip, and at most the dishes' total. */
-  #fillCovers(ask: TenderRefundAsk, fill: RefundFill | undefined): fill is RefundFill {
-    const applied = tenderRefundAmount(ask.appliedAmount);
-    const tip = tenderRefundAmount(ask.tipAmount);
-    return (
-      fill !== undefined &&
-      applied !== null &&
-      tip !== null &&
-      compareDecimal(decimal(tip), decimal("0")) === 0 &&
-      compareDecimal(decimal(applied), decimal(fill.target)) <= 0
-    );
-  }
-
   #linkedAsk(ask: TenderRefundAsk, fill: RefundFill | undefined): TenderRefundAsk {
     const rest: TenderRefundAsk = { ...ask };
     delete rest.cancellationIds;
-    if (!this.#fillCovers(ask, fill) || fill.cancellationIds.length === 0) return rest;
+    if (fill === undefined || fill.cancellationIds.length === 0) return rest;
     return { ...rest, cancellationIds: [...fill.cancellationIds] };
   }
 
@@ -8569,22 +8549,14 @@ export class TillApp extends LitElement {
       busy: true,
       refusal: null,
     };
-    // A card keyed on a separate terminal never takes a carried PIN: there the PIN confirms the
-    // terminal refund was done.
     if (tender.manual) await this.#askTenderRefundApprover();
-    else {
-      const carried = this.#fillCovers(ask, open.fill)
-        ? open.fill.approval?.take(open.saleId)
-        : undefined;
-      await this.#runTenderRefund("submit", carried, undefined, carried !== undefined);
-    }
+    else await this.#runTenderRefund("submit");
   }
 
   async #runTenderRefund(
     action: "submit" | "status" | "retry" | "inspect",
     override?: TenderRefundRequest["override"],
     refundId?: string,
-    carried = false,
   ): Promise<void> {
     const open = this.tenderRefunding;
     if (!open || !this.isConnected || this.drill?.kind !== "ticket") return;
@@ -8608,7 +8580,6 @@ export class TillApp extends LitElement {
       try {
         let result: TenderRefundView;
         if (action === "submit") {
-          open.fill?.approval?.markSent(open.saleId);
           result = await open.session.submit(open.saleId, open.ask!, override);
         } else if (action === "inspect") result = await api.getTenderRefund(refundId!, {});
         else if (open.attempt !== null || open.session.read(open.saleId) !== null)
@@ -8634,7 +8605,7 @@ export class TillApp extends LitElement {
           this.shadowRoot!.querySelector<TillTenderRefundDialog>(
             "till-tender-refund-dialog",
           )!.closeSaved();
-          this.#closeTenderRefund(true);
+          this.#closeTenderRefund();
           this.refundableTenders = [];
           await this.updateComplete;
           if (
@@ -8653,7 +8624,6 @@ export class TillApp extends LitElement {
             attempt: open.session.read(open.saleId),
           };
       } catch (error) {
-        if (carried) open.fill?.approval?.clear();
         if (!current()) return;
         const refusal =
           error instanceof TenderRefundAttemptError
@@ -8671,20 +8641,13 @@ export class TillApp extends LitElement {
         }
         this.tenderRefunding = { ...this.tenderRefunding!, busy: false, attempt, refusal };
         if (
-          (override === undefined || carried) &&
+          override === undefined &&
           (refusal.code === "authorization.not_permitted" ||
             refusal.code === "tender.manual_refund_pin_required" ||
-            (carried && APPROVER_REFUSALS.has(refusal.code)))
+            refusal.code === "tender.refund_exceeds_cancelled")
         ) {
           this.tenderRefunding = { ...this.tenderRefunding, busy: true };
           await this.#askTenderRefundApprover();
-          // The waiter typed no PIN, so only a lock-out is worth showing in the prompt.
-          if (
-            refusal.code === "pin.throttled" &&
-            this.tenderRefunding?.visit === open.visit &&
-            this.tenderRefunding.approvers !== undefined
-          )
-            this.tenderRefunding = { ...this.tenderRefunding, pinError: refusal.code };
         } else if (APPROVER_REFUSALS.has(refusal.code))
           this.tenderRefunding = { ...this.tenderRefunding, pinError: refusal.code };
         else this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
@@ -14682,7 +14645,7 @@ export class TillApp extends LitElement {
       else await this.#rereadAmounts(open.billId, open.visit);
       if (choice.outcome === "refund" && this.#cancellationCurrent(open)) {
         await this.updateComplete;
-        const fill = this.#cancelRefundFill(open, choice, answer.refundLinks ?? [], approver);
+        const fill = this.#cancelRefundFill(open, choice, answer.refundLinks ?? []);
         // Kitchen cancellation is committed before entering the independently retried refund flow.
         this.#requestLeave(() =>
           this.#openHistoricalReceipt(
@@ -14714,7 +14677,6 @@ export class TillApp extends LitElement {
     open: CancellingItem,
     choice: CancelItemChoice,
     links: RefundLink[],
-    approver: CarriedApprover | undefined,
   ): RefundFill | undefined {
     const value = choice.consent.refundValue;
     const ids = open.lineIds ?? [open.lineId];
@@ -14729,9 +14691,6 @@ export class TillApp extends LitElement {
         .filter((link) => link.lineId === open.lineId)
         .map((link) => link.adjustmentId),
       ...(open.reasons === undefined ? {} : { reasons: open.reasons }),
-      ...(approver === undefined
-        ? {}
-        : { approval: new CarriedApproval(approver, [open.consent.saleId!]) }),
     };
   }
 
@@ -17547,10 +17506,6 @@ export class TillApp extends LitElement {
       const handedOff = open.command!.cancellations.filter((row) => row.refundHandoff);
       const selected = new Set(handedOff.map((row) => row.lineId));
       const ticked = open.receipts.filter((row) => selected.has(row.lineId));
-      const approval =
-        approver === undefined
-          ? undefined
-          : new CarriedApproval(approver, new Set(ticked.map((row) => row.saleId)));
       const receipts = ticked
         .filter((row, index) => ticked.findIndex((other) => other.saleId === row.saleId) === index)
         .map((row) => ({
@@ -17560,7 +17515,6 @@ export class TillApp extends LitElement {
             ticked.filter((other) => other.saleId === row.saleId),
             handedOff,
             answer.refundLinks ?? [],
-            approval,
           ),
         }));
       await this.#onTableClosed(asked.partyId, asked.visit, asked.sent);
@@ -17577,12 +17531,11 @@ export class TillApp extends LitElement {
           visit: this.#orderVisit,
           tab: this.activeTabKey,
           receipts,
-          ...(approval === undefined ? {} : { approval }),
           busy: false,
           refusal: "",
         };
         if (receipts.length === 1) await this.#openFinishRefund(receipts[0]!);
-      } else approval?.clear();
+      }
     } catch (error) {
       if (!this.#finishCurrent(asked) || this.finishingTable?.composition !== asked) return;
       const code = (error as { code?: string })?.code ?? "server.internal";
@@ -17657,7 +17610,6 @@ export class TillApp extends LitElement {
     lines: FinishingTable["receipts"],
     cancellations: FinishTableResolution["cancellations"],
     links: RefundLink[],
-    approval: CarriedApproval | undefined,
   ): RefundFill {
     return {
       target: toScale(
@@ -17675,7 +17627,6 @@ export class TillApp extends LitElement {
         links.filter((link) => link.lineId === row.lineId).map((link) => link.adjustmentId),
       ),
       ...(open.reasons === null ? {} : { reasons: open.reasons }),
-      ...(approval === undefined ? {} : { approval }),
     };
   }
 
@@ -17684,7 +17635,6 @@ export class TillApp extends LitElement {
   }
 
   #closeFinishRefunds(): void {
-    this.finishRefunds?.approval?.clear();
     this.finishRefunds = null;
   }
 

@@ -73,7 +73,7 @@ export async function beginSettledTenderRefund(
     saleId,
     request,
     operator,
-    async (tx, authorization) => {
+    async (tx, authorize) => {
       await requireEconomicWrite(tx, cfg, deps.admission);
       const reading = deps.clock.now();
       const createdAt = reading.instant.toISOString();
@@ -84,8 +84,7 @@ export async function beginSettledTenderRefund(
         request,
         {
           requestedBy: operator.personId,
-          authorizedBy: authorization.authorizedBy,
-          viaOverride: authorization.viaOverride,
+          authorize,
         },
         createdAt,
       );
@@ -104,7 +103,7 @@ export async function beginSettledTenderRefund(
             await recordManualRefund(tx, {
               paymentRef: capture.paymentRef,
               amount: centsToDecimal(reserved.appliedAmount + reserved.tipAmount),
-              authorizedBy: authorization.authorizedBy,
+              authorizedBy: reserved.authorizedBy,
             });
           } else {
             const provider = await deps.refundProviderFor?.(capture.provider);
@@ -118,7 +117,10 @@ export async function beginSettledTenderRefund(
           }
         },
         openDrawer: (reserved) =>
-          enqueueTenderRefundDrawer(tx, cfg, reserved.id, operator.personId, authorization),
+          enqueueTenderRefundDrawer(tx, cfg, reserved.id, operator.personId, {
+            authorizedBy: reserved.authorizedBy,
+            viaOverride: reserved.authorizedBy !== operator.personId,
+          }),
       });
       if (refund.state === "pending") claimConnected?.(refund.id);
       return toTenderRefundView(refund);

@@ -217,12 +217,11 @@ ya rellenada. El pago queda elegido cuando solo uno se puede devolver en este di
 importe es el total de los platos, la propina es 0,00, el motivo es el que diste al cancelar y los
 platos aparecen debajo.
 
-Si alguien introdujo su PIN para la cancelación, ese PIN sirve también para esta devolución, una
-vez por recibo, así que nadie tiene que volver a escribirlo. Vale mientras no devuelvas más del
-total de los platos ni propina. Si subes el importe o añades propina, se vuelve a pedir el PIN, y
-las entradas de esos platos en el informe no muestran la devolución. Si cierras la ventana sin
-devolver, el PIN también se pide la próxima vez. Una tarjeta registrada desde un datáfono aparte
-siempre pide el PIN, porque allí confirma que la devolución en el datáfono se ha hecho.
+No necesitas otro PIN para devolver hasta el valor pendiente de los platos cancelados, sin
+propina. Si subes el importe o añades propina, necesitas permiso para devolver o una nueva
+aprobación con PIN. La devolución sigue contando para los platos cancelados, hasta su valor.
+Una tarjeta registrada desde un datáfono aparte siempre pide un PIN nuevo para confirmar que la
+devolución en el datáfono se ha hecho.
 
 Cuando el pago elegido tiene menos que el total de los platos, el importe es lo que tiene, y una
 línea como **Quedan 2,00 € por devolver de otro pago** indica lo que falta. Cuenta desde el

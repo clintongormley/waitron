@@ -206,7 +206,8 @@ async function reserve(t: Target, req = request(t.tenderId), config = cfg, op = 
     t.saleId,
     req,
     op,
-    async (tx, authorization) => {
+    async (tx, authorize) => {
+      const authorization = await authorize();
       const held = await reserveTenderRefund(
         tx,
         config,
@@ -524,7 +525,8 @@ describe("settled-tender refund authorization before reservation", () => {
         t.saleId,
         request(t.tenderId),
         operator(),
-        async (tx, authorization) => {
+        async (tx, authorize) => {
+          const authorization = await authorize();
           await reserveTenderRefund(
             tx,
             cfg,
