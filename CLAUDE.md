@@ -385,6 +385,9 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
+- **Observe commits through SQLite, never by opening and closing its live `-shm` file.** Cost: the observer dropped SQLite's locks and an outside reader truncated the mapping, killing the server with SIGBUS.
+  Guards: the held-reader and two-store checkpoint cases in `packages/store/src/connections.test.ts` and `packages/store/src/index.test.ts`, weaker than the rule: those paths only. [Receipt](docs/developers/conventions-data.md#read-live-sqlite-state-through-sqlite).
+
 - **Validate a saved time zone as stored; normalize new input separately.** Cost: a padded name
   admitted duties while repair refused it. Guards: `packages/shared/src/time-zone.test.ts` and
   `apps/server/src/boot.zone-admission.test.ts` (the latter covers named duties only).

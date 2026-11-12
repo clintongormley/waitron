@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { closeSync, openSync, readSync, statSync } from "node:fs";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { asDiskFull } from "./disk-full.js";
 
@@ -65,39 +64,6 @@ const totalChanges = (connection: DatabaseSync): number => {
   return (counter.get() as { n: number }).n;
 };
 
-export type WalMark =
-  { size: bigint; mtimeNs: bigint; commitHeader: string } | "absent" | "unreadable";
-
-export const walMark = (path: string): WalMark => {
-  try {
-    const stat = statSync(path, { bigint: true, throwIfNoEntry: false });
-    if (stat === undefined) return "absent";
-    const fd = openSync(`${path.slice(0, -4)}-shm`, "r");
-    try {
-      // A reused WAL can keep its size, timestamp and WAL header across successive commits.
-      const header = Buffer.alloc(48);
-      const length = readSync(fd, header, 0, header.length, 0);
-      if (length !== header.length) return "unreadable";
-      return {
-        size: stat.size,
-        mtimeNs: stat.mtimeNs,
-        commitHeader: header.toString("hex"),
-      };
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    return "unreadable";
-  }
-};
-
-export const sameWal = (a: WalMark, b: WalMark): boolean =>
-  a === "unreadable" || b === "unreadable"
-    ? false
-    : a === "absent" || b === "absent"
-      ? a === b
-      : a.size === b.size && a.mtimeNs === b.mtimeNs && a.commitHeader === b.commitHeader;
-
 /**
  * The connections one database file is opened on, and the rule deciding where a statement goes.
  *
@@ -114,6 +80,8 @@ export interface Connections {
   /**
    * Opened read-only, so it sees committed rows only and cannot write to the database FILE. It can
    * still write a TEMPORARY table, which SQLite keeps outside that file — see `./index.ts`.
+   * Callers must finish each read statement; this is not enforced here. A partial iterator
+   * pins an old database version and can hide commits from the observer.
    */
   readonly read: DatabaseSync;
   /**
@@ -140,11 +108,7 @@ export interface Connections {
   /** The failure {@link Connections.noteEnded} recorded, if any. */
   endedBy: () => { error: unknown } | undefined;
   clearEnded: () => void;
-  /**
-   * Registers `listener` for the commits the store reports; returns the unsubscribe. See
-   * `StoreHandle.onCommit` in `./index.ts` for which commits those are. The first listener
-   * registered while none is takes the side file as it is now as the comparison point.
-   */
+  /** Registers a listener for committed row changes; the first takes the observer's baseline. */
   onCommit: (listener: CommitListener) => () => void;
   /**
    * The writer's count of changed rows, taken before a transaction or a statement outside one;
@@ -152,27 +116,9 @@ export interface Connections {
    * listener, registered after a null mark, does not hear of that commit.
    */
   changeMark: () => number | null;
-  /**
-   * Call once the work `mark` was taken before has committed, and not after a rollback: the count
-   * does not go back down when rows are rolled back. `commit` and `release` do not move it (both
-   * measured on `node:sqlite`, Node v26.7.0, 2026-09-25).
-   *
-   * Tells every listener, if the count moved since `mark`, unless the file's side file is
-   * unchanged since the last commit reported: such a commit (an UPDATE to the value a row already
-   * holds) wrote nothing a copy of the file could show. The commit is already durable, so a
-   * listener that throws, or returns a promise that rejects, is skipped rather than allowed to
-   * reach the caller, who would otherwise be told a committed write failed.
-   *
-   * Size and modification time can stay equal while a reused side file is overwritten; its
-   * shared-memory commit header distinguishes those writes. A commit that changes the side file but no row (DDL)
-   * is not reported and does not move the comparison either, so a
-   * same-value update right after one IS reported.
-   */
+  /** Call only after a commit: the row counter also includes writes that were rolled back. */
   reportIfChanged: (mark: number | null) => void;
-  /**
-   * Takes the side file as it is now as the comparison point: for the store's own checkpoint,
-   * which changes the file without a commit.
-   */
+  /** Resets the observer's baseline after the store checkpoints the file. */
   sideFileReset: () => void;
   /** Registers `listener` for the full disks {@link Connections.refusal} reports; returns the unsubscribe. */
   onDiskFull: (listener: DiskFullListener) => () => void;
@@ -220,9 +166,22 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
   const running = new Set<symbol>();
   const listeners = new Set<CommitListener>();
   const diskFullListeners = new Set<DiskFullListener>();
-  const location = write.location();
-  const walPath = location === null ? null : `${location}-wal`;
-  let lastWal: WalMark = "unreadable";
+  // SQLite does not advance data_version for a connection's own commits; observe the writer
+  // through the other connection, without opening and closing SQLite's lock-bearing files.
+  const version =
+    write.location() === null || read === write ? undefined : read.prepare("pragma data_version");
+  const dataVersion = (): number | undefined => {
+    // An explicit read transaction can hold an older snapshot, so its version cannot rule
+    // out a later commit.
+    if (version === undefined) return undefined;
+    try {
+      if (read.isTransaction) return undefined;
+      return (version.get() as { data_version: number }).data_version;
+    } catch {
+      return undefined;
+    }
+  };
+  let lastVersion: number | undefined;
   let ended: { error: unknown } | undefined;
   const insideBody = () => {
     const token = context.getStore();
@@ -256,7 +215,7 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
       ended = undefined;
     },
     onCommit: (listener) => {
-      if (listeners.size === 0 && walPath !== null) lastWal = walMark(walPath);
+      if (listeners.size === 0) lastVersion = dataVersion();
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
@@ -264,14 +223,14 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
     },
     changeMark: () => (listeners.size === 0 ? null : totalChanges(write)),
     sideFileReset: () => {
-      if (walPath !== null) lastWal = walMark(walPath);
+      lastVersion = dataVersion();
     },
     reportIfChanged: (mark) => {
       if (mark === null || totalChanges(write) === mark) return;
-      if (walPath !== null) {
-        const wal = walMark(walPath);
-        if (sameWal(wal, lastWal)) return;
-        lastWal = wal;
+      if (version !== undefined) {
+        const current = dataVersion();
+        if (current !== undefined && current === lastVersion) return;
+        lastVersion = current;
       }
       callEach(listeners);
     },

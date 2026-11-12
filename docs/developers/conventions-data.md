@@ -31,6 +31,30 @@ Plain writes, aliases, re-exports and indirect file-system access escape it.
 The venue-holder heartbeat deliberately stays unflushed. `writeDurableHostJson`
 keeps its exclusive temporary names and linked-parent refusal.
 
+## Read live SQLite state through SQLite
+
+If your process holds SQLite connections, inspect their live state through SQLite too.
+Closing a separate raw descriptor for a file can release the engine's locks on that file.
+For commit notifications, compare `PRAGMA data_version` on the store's read connection:
+SQLite does not change a connection's version for that connection's own writes.
+Keep the row-change count as well, so reads and schema-only changes do not send notifications.
+
+The 12 November 2026 SIGBUS reproduction held a read transaction, subscribed to store commits,
+and asked another process to checkpoint. The checkpoint returned `busy: 0` instead of `busy: 1`.
+In Cloud's translation proof, a native trace then caught its snapshot reader shortening
+`venue.db-shm` from 32768 to 3 bytes in SQLite's `unixLockSharedMemory`; the server's next read
+ended with SIGBUS. Keeping the raw descriptors open made that baseline exit 0, but owning
+those descriptors across multiple stores would add another lifecycle. The detector instead
+uses the existing SQLite reader. The cross-process cases in `connections.test.ts` and
+`index.test.ts` check the held reader, commits through the writer, and two stores sharing a file.
+Run `pnpm --filter @waitron/store exec vitest run src/connections.test.ts src/index.test.ts`.
+
+| Source | Exact words | What you should do |
+| --- | --- | --- |
+| [SQLite corruption guide, §2.2](https://www.sqlite.org/howtocorrupt.html#posix_advisory_locks_canceled_by_a_separate_thread_doing_close_) | “cancel all POSIX advisory locks on the same file” | Avoid raw open/read/close access beside your process's SQLite connections. |
+| [SQLite WAL format, §1.3](https://www.sqlite.org/walformat.html#the_wal_index_or_shm_file) | “the first client to connect to a quiescent database will normally truncate the shm file” | Preserve SQLite's locks so another client does not mistake a live mapping for an unused one. |
+| [SQLite `data_version`](https://www.sqlite.org/pragma.html#pragma_data_version) | “unchanged for commits made on the same database connection” | Observe the write connection through the separate read connection. |
+
 **Naming and error codes**
 
 ## Error codes name the DOMAIN CONCEPT, never the throwing package

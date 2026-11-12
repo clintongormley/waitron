@@ -1,5 +1,5 @@
 import { AsyncResource } from "node:async_hooks";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
@@ -1048,8 +1048,6 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(6);
   });
 
-  // The fold-back changes the side file without a commit; compared with the file as it was at the
-  // last report, a same-value update right after it would read as a change.
   it("does not tell listeners about a same-value update right after the side file was folded back", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
@@ -1062,7 +1060,6 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(2);
   });
 
-  // Stated at `reportIfChanged` in ./connections.ts: the side file is only looked at once rows have moved.
   it("still tells listeners about a same-value update right after a commit that changed only the schema", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
@@ -1086,3 +1083,46 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(0);
   });
 });
+
+it("keeps another store's commits and held reader protected after one store closes", async () => {
+  const { store: first, directory } = await open();
+  const second = await openVenueStore({ directory, venueSchema, nodeSchema });
+  const path = join(directory, "venue.db");
+  const reader = new DatabaseSync(path, { readOnly: true });
+  try {
+    second.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    first.venue.onCommit(() => {});
+    const heard: true[] = [];
+    second.venue.onCommit(() => heard.push(true));
+    second.venue.run(sql`insert into sales (id, total) values (1, 10)`);
+    expect(heard).toHaveLength(1);
+    reader.exec("begin");
+    expect(reader.prepare("select id, total from sales").all()).toEqual([{ id: 1, total: 10 }]);
+    await first.close();
+    second.venue.run(sql`insert into sales (id, total) values (2, 20)`);
+    expect(heard).toHaveLength(2);
+    const child = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(process.argv[1]);
+      try { console.log(JSON.stringify(db.prepare("pragma wal_checkpoint(truncate)").get())); }
+      finally { db.close(); }
+    `,
+        path,
+      ],
+      { encoding: "utf8", timeout: 10000 },
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout).busy).toBe(1);
+    expect(reader.prepare("select id, total from sales").all()).toEqual([{ id: 1, total: 10 }]);
+  } finally {
+    reader.close();
+    await second.close();
+    await first.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 15000);

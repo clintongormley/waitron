@@ -1,9 +1,10 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { connectionPair, isReadOnlyRefusal, sameWal, settle, walMark } from "./connections.js";
+import { connectionPair, isReadOnlyRefusal, settle } from "./connections.js";
 
 /**
  * Two `:memory:` handles are two separate databases, unlike production's pair over one file, so
@@ -266,66 +267,7 @@ describe("isReadOnlyRefusal", () => {
   });
 });
 
-describe("the side file's mark", () => {
-  const directory = () => {
-    const path = mkdtempSync(join(tmpdir(), "waitron-wal-mark-"));
-    writeFileSync(join(path, "venue.db-shm"), Buffer.alloc(48));
-    return path;
-  };
-
-  it("reads a missing side file as absent, and two absent readings as the same", () => {
-    const path = join(directory(), "venue.db-wal");
-    expect(walMark(path)).toBe("absent");
-    expect(sameWal(walMark(path), walMark(path))).toBe(true);
-  });
-
-  it("reads a side file that appeared, or changed size, as changed", () => {
-    const path = join(directory(), "venue.db-wal");
-    const absent = walMark(path);
-    writeFileSync(path, "a");
-    const first = walMark(path);
-    expect(sameWal(absent, first)).toBe(false);
-    expect(sameWal(first, absent)).toBe(false);
-    expect(sameWal(first, walMark(path))).toBe(true);
-    writeFileSync(path, "ab");
-    expect(sameWal(first, walMark(path))).toBe(false);
-  });
-
-  it("sees another commit inside a reused WAL even when size, time and WAL header are unchanged", () => {
-    const folder = directory();
-    const path = join(folder, "venue.db-wal");
-    const header = Buffer.alloc(48);
-    writeFileSync(path, Buffer.alloc(32));
-    const before = walMark(path);
-    header.writeUInt32LE(1, 8);
-    writeFileSync(join(folder, "venue.db-shm"), header);
-    const after = walMark(path);
-    if (typeof before === "string" || typeof after === "string") {
-      throw new Error("Expected two readable side-file marks");
-    }
-    expect(after.size).toBe(before.size);
-    expect(sameWal(before, { ...after, mtimeNs: before.mtimeNs })).toBe(false);
-  });
-
-  it.each([0, 47])(
-    "reports an incomplete shared-memory header of %i bytes as unreadable",
-    (size) => {
-      const folder = directory();
-      const path = join(folder, "venue.db-wal");
-      writeFileSync(path, Buffer.alloc(32));
-      writeFileSync(join(folder, "venue.db-shm"), Buffer.alloc(size));
-      expect(walMark(path)).toBe("unreadable");
-    },
-  );
-
-  // A reading that failed says nothing, so the commit is reported rather than lost.
-  it("never reads a side file it could not examine as unchanged", () => {
-    // Longer than a file name may be, so the lookup is refused rather than answered "missing".
-    const path = join(directory(), `${"x".repeat(300)}-wal`);
-    expect(walMark(path)).toBe("unreadable");
-    expect(sameWal(walMark(path), walMark(path))).toBe(false);
-  });
-
+describe("commit observations", () => {
   it("tells listeners on a pair with no file behind it without looking for a side file", () => {
     const write = new DatabaseSync(":memory:");
     write.exec("create table t (id integer primary key)");
@@ -361,4 +303,71 @@ describe("the side file's mark", () => {
     expect(prepare).toHaveBeenCalledOnce();
     write.close();
   });
+});
+
+it("keeps an active SQLite reader protected from another process's checkpoint when subscribing", () => {
+  const directory = mkdtempSync(join(tmpdir(), "waitron-reader-lock-"));
+  const path = join(directory, "venue.db");
+  const write = new DatabaseSync(path);
+  const read = new DatabaseSync(path, { readOnly: true });
+  const connections = connectionPair(write, read);
+  try {
+    write.exec("pragma journal_mode = wal; create table t (id); insert into t values (1)");
+    read.exec("begin");
+    expect(read.prepare("select * from t").all()).toEqual([{ id: 1 }]);
+    write.exec("insert into t values (2)");
+    let heard = 0;
+    connections.onCommit(() => {
+      heard += 1;
+    });
+    const mark = connections.changeMark();
+    write.exec("insert into t values (3)");
+    connections.reportIfChanged(mark);
+    expect(heard).toBe(1);
+    const child = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(process.argv[1]);
+      try { console.log(JSON.stringify(db.prepare("pragma wal_checkpoint(truncate)").get())); }
+      finally { db.close(); }
+    `,
+        path,
+      ],
+      { encoding: "utf8", timeout: 10000 },
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout).busy).toBe(1);
+  } finally {
+    read.close();
+    write.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 15000);
+
+it("keeps an unavailable observer from replacing a committed write's notification", () => {
+  const directory = mkdtempSync(join(tmpdir(), "waitron-observer-refusal-"));
+  const path = join(directory, "venue.db");
+  const write = new DatabaseSync(path);
+  write.exec("pragma journal_mode = wal; create table t (id)");
+  const read = new DatabaseSync(path, { readOnly: true });
+  const connections = connectionPair(write, read);
+  let heard = 0;
+  connections.onCommit(() => {
+    heard += 1;
+  });
+  read.close();
+  try {
+    const mark = connections.changeMark();
+    write.exec("insert into t values (1)");
+    expect(() => connections.reportIfChanged(mark)).not.toThrow();
+    expect(heard).toBe(1);
+    expect(write.prepare("select * from t").all()).toEqual([{ id: 1 }]);
+  } finally {
+    write.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
