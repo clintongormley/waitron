@@ -78,3 +78,22 @@ it("keeps a whitespace-only name quiet and disables Copy", async () => {
   expect(input.error).toBe("");
   expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
 });
+
+it("focuses Name after Copy is pressed with an already-used name", async () => {
+  const { el: form } = await mountWidget<MenuCopyDialog>("dashboard-menu-copy-dialog", {
+    open: true,
+    menu: { id: "lunch", name: "Lunch" },
+    menus: [{ id: "dinner", name: "Dinner", active: true, version: 1 }],
+    api: { duplicateCatalogue: vi.fn() },
+  });
+  const input = form.shadowRoot!.querySelector("wt-input")!;
+  await input.updateComplete;
+  const native = input.shadowRoot!.querySelector("input")!;
+  await userEvent.fill(page.elementLocator(native), "Dinner");
+  const copy = form.shadowRoot!.querySelector<HTMLElement>("[data-test=copy]")!;
+  copy.focus();
+  expect(form.shadowRoot!.activeElement).toBe(copy);
+  await userEvent.click(page.elementLocator(copy));
+  await vi.waitFor(() => expect(input.shadowRoot!.activeElement).toBe(native));
+  expect(input.error).toBe(t("menus.name_taken"));
+});

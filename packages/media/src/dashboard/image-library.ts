@@ -3,9 +3,10 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  bottomMessage,
   ContentLanguageController,
   currentContentLanguages,
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   draftScopeFor,
   saveActionState,
@@ -551,7 +552,7 @@ export class ImageLibrary extends LitElement {
   @state() private reloading = false;
   #replacementUrl?: string;
   #baseline?: ImageDraft;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   #suggestion: { language: string; name: string } | null = null;
   /** The last save's refusal, until Save is pressed again or, for a field's, that field changes. */
   @state() private refusal: { field: string; code: string } | null = null;
@@ -718,7 +719,7 @@ export class ImageLibrary extends LitElement {
       file: null,
       framing: { ...(image?.framing ?? DEFAULT_FRAMING) },
     };
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusal = null;
     this.duplicateImage = null;
     this.#baseline = this.#draft();
@@ -853,24 +854,20 @@ export class ImageLibrary extends LitElement {
       ["file", ""],
       ...this.#languages().map((language) => [`name-${language}`, ""] as const),
     ]);
-    if (!this.attempted) return errors;
+    if (!this.#feedback.attempted) return errors;
     if (editor.image === null && editor.file === null) errors.set("file", t("image.file_required"));
     if (!editor.names[config.defaultLanguage]?.trim())
       errors.set(`name-${config.defaultLanguage}`, t("image.required"));
     return errors;
   }
-  async #focusFirstInvalid(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.shadowRoot!.querySelector("wt-modal")!);
-  }
   async #save(): Promise<void> {
     const editor = this.editor;
     if (editor === null || this.busy || this.framingOpen || saveActionState(this.#scope).unchanged)
       return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = null;
     if ([...this.#checked().values()].some(Boolean)) {
-      void this.#focusFirstInvalid();
+      void this.#feedback.focus(this.shadowRoot!.querySelector("wt-modal")!);
       return;
     }
     this.busy = true;
@@ -928,7 +925,7 @@ export class ImageLibrary extends LitElement {
         }),
       );
     }
-    if (this.refusal) void this.#focusFirstInvalid();
+    if (this.refusal) void this.#feedback.focus(this.shadowRoot!.querySelector("wt-modal")!);
     else await this.#load();
   }
   async #inspectDeletion(image: LibraryImage): Promise<void> {
@@ -1081,12 +1078,10 @@ export class ImageLibrary extends LitElement {
       errors.set(refusal.field, codeMessage(refusal.code));
     const fileError = errors.get("file") ?? "";
     const marked = [...errors.values()].some(Boolean);
-    const bottom = [
-      ...(refusal && !refusedField
-        ? [`${t("image.save_error")} ${codeMessage(refusal.code)}`]
-        : []),
-      ...(marked ? [t("image.fix_fields")] : []),
-    ].join(" ");
+    const bottom = bottomMessage(
+      refusal && !refusedField ? `${t("image.save_error")} ${codeMessage(refusal.code)}` : null,
+      marked ? t("image.fix_fields") : null,
+    );
     const preview = editor.image ? liveMediaImage(editor.image.filename, "square") : null;
     return html`<wt-modal
       size="standard"

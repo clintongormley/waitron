@@ -7,8 +7,9 @@ import type {
 } from "@waitron/dashboard-modules";
 import {
   baseStyles,
+  bottomMessage,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
@@ -83,7 +84,7 @@ export class AttendanceExportDialog extends LitElement {
   };
   @state() private options: AttendanceExportOptions | null = null;
   @state() private busy = false;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private readError = "";
   @state() private actionError = "";
   @state() private refusals: Record<string, string> = {};
@@ -129,7 +130,7 @@ export class AttendanceExportDialog extends LitElement {
     this.refusals = {};
     this.actionError = "";
     this.readError = "";
-    this.attempted = false;
+    this.#feedback.reset();
   }
   override disconnectedCallback(): void {
     this.#release();
@@ -254,12 +255,11 @@ export class AttendanceExportDialog extends LitElement {
       (this.mode === "manager" && !this.options.canExportAll)
     )
       return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusals = {};
     this.actionError = "";
     if (Object.keys(this.#errors()).length) {
-      await this.updateComplete;
-      focusFirstInvalid(this.shadowRoot!);
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const sent = { ...this.draft };
@@ -305,21 +305,19 @@ export class AttendanceExportDialog extends LitElement {
     }
   }
   override render() {
-    const ownErrors = this.attempted ? this.#errors() : {};
+    const ownErrors = this.#feedback.attempted ? this.#errors() : {};
     const errors = { ...ownErrors, ...this.refusals };
     const ready =
       !!this.scopeKey &&
       !!this.request &&
       this.options?.available &&
       (this.mode === "own" || this.options.canExportAll);
-    const bottom = [
+    const bottom = bottomMessage(
       this.actionError,
       this.readError,
       Object.keys(errors).length ? t("form.fix_fields") : "",
       this.options && !this.options.available ? t("attendance_export.unavailable") : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    );
     const dialog = () => this.shadowRoot!.querySelector<WtDialog>("wt-dialog");
     return html`<wt-dialog
       .open=${this.open}

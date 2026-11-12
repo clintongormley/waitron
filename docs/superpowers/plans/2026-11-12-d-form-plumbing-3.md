@@ -1,6 +1,6 @@
 # D-form-plumbing, slice 3: dashboard and image-library feedback
 
-Drafted by separate GPT-6.1 Sol, high effort; revised by the driver after Claude's approach and sole fixes read. Awaiting watcher build clearance; no owner design approval claimed.
+Drafted by separate GPT-6.1 Sol, high effort; revised by the driver after Claude's approach and sole fixes read. Cleared by the watcher at 20:30 on 12 November 2026; no owner design approval claimed.
 
 **Ask/finish line:** continue [shared form plumbing](../../backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form), with no visible change. Menu copy, attendance export and the image-library editor reuse unchanged `FormFeedback` and `bottomMessage` from `@waitron/ui`. The image library advances the cross-package part of the ask. Remaining forms stay open. Inventory is source-read evidence, not run proof.
 
@@ -26,4 +26,6 @@ Use `bottomMessage` directly with the existing ordered conditional messages; do 
 
 Caller suites own invalid-field/footer/focus, refusal edit/retry, reopen, drafts and save-state behavior. Media already asserts mixed general/field message order and file/default-language focus. Add one standalone menu-copy test: enter an already-used name, focus Copy, press, assert Name receives focus. Do not expand its screenshot matrix. This new assertion records existing behavior: pass it before the refactor and again afterwards. Any product change needs red/green first. No dependency retesting or extra visual matrix; normal hook, scoped CI and finish-branch follow.
 
-**Docs/size:** narrow `docs/backlog/dashboard.md`; retain remaining work. No Forms-contract/guide changes; request watcher agreement for unchanged guide text. Slice two was cleared at 18:01 on 12 November (its plan records it); no earlier clearance covers this batch. Forecast production +55/−75, tests +25/−0, docs about 75 changed including this plan, support 0; about 230 overall, no generated files. Material growth returns to the watcher under RUNNER.
+**Docs/size:** narrow `docs/backlog/dashboard.md`; retain remaining work. No Forms-contract/guide changes; watcher cleared unchanged guide text at 20:30 because no staff step changes. Slice two was cleared at 18:01 on 12 November (its plan records it); no earlier clearance covers this batch. Forecast production +55/−75, tests +25/−0, docs about 75 changed including this plan, support 0; about 230 overall, no generated files. Material growth returns to the watcher under RUNNER.
+
+Watcher clearance, `~/waitron-campaign-d/questions.md`, 2026-11-12 20:30: “Cleared on Claude's approach read and fixes read, as narrowed: build the corrected plan (about 230 lines, no visible change).” Claude reports: `~/waitron-campaign-d/receipts/form-plumbing-3/{plan-review,plan-fixes-review}.md`.

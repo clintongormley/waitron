@@ -91,7 +91,7 @@ printer keys.
 ## The form plumbing is hand-written per form
 
 Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
-plumbing in the remaining dashboard editors, the image library, Stripe and SumUp forms,
+plumbing in the remaining dashboard editors, Stripe and SumUp forms,
 Voids and comps (`packages/adjustments`),
 Departments and zones, and the till's forms onto `FormFeedback` in `@waitron/ui`. Inventory each
 later batch before migrating it; leave single-job forms local. Preserve each form's field mapping
