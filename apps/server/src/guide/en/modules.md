@@ -11,7 +11,7 @@ check reader status and unfinished payments on **Card payments**.
 
 The **Enabled**, **Disabled** and **All** filters show a module's state separately from its
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
-to see all optional modules. The five other optional modules cannot be switched yet.
+to see all optional modules. The other optional modules cannot be switched yet.
 
 ## Turn a card provider on or off {#provider-state}
 

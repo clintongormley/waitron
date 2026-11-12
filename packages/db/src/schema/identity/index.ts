@@ -1,7 +1,3 @@
-// The Drizzle snapshot is built from THIS file's exports. Every name is written out explicitly —
-// never `export *`, and never a core table: a core table re-exported here lands in this set's
-// snapshot as a duplicate CREATE TABLE. `packages/identity/src/schema-ownership.test.ts` enforces
-// this.
 export { persons, personStatus, personRole } from "./persons.js";
 export { totpEnrollments } from "./totp-enrollments.js";
 export { recoveryCodes } from "./recovery-codes.js";

@@ -5,11 +5,9 @@ export function modulesClient(overrides: Partial<DashboardApi> = {}): DashboardA
   return {
     liveData: new LiveData(),
     listModules: vi.fn().mockResolvedValue([
-      { id: "workforce", category: "module", enabled: true },
       { id: "workforce-es", category: "module", enabled: false },
       { id: "payments", category: "module", enabled: true },
       { id: "bookings", category: "module", enabled: false },
-      { id: "staffing", category: "module", enabled: true },
       { id: "sumup", category: "card-provider", enabled: true },
       { id: "stripe", category: "card-provider", enabled: true },
     ]),

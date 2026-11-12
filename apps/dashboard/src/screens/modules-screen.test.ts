@@ -35,11 +35,11 @@ function change(el: ModulesScreen, name: string, value: string) {
 }
 it("opens Enabled, and Add discovers Disabled without changing the independent category", async () => {
   const el = await mount();
-  expect(rows(el)).toHaveLength(5);
+  expect(rows(el)).toHaveLength(3);
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  expect(table.shadowRoot!.querySelector("[data-test=configure-workforce]")).toBeNull();
+  expect(table.shadowRoot!.querySelector("[data-test=configure-payments]")).toBeNull();
   expect(table.shadowRoot!.querySelectorAll("wt-row-actions")).toHaveLength(2);
-  expect(rows(el).join()).toContain("Workforce");
+  expect(rows(el).join()).toContain("Card payments");
   expect(rows(el).join()).not.toContain("Bookings");
   change(el, "category", "card-providers");
   await el.updateComplete;

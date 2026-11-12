@@ -324,7 +324,7 @@ for (const [enabled, spain] of [
     const disabled = new Set([
       "fiscal-none",
       ...(spain ? [] : ["workforce-es"]),
-      ...(enabled ? [] : ["workforce", "staffing"]),
+      ...(enabled ? [] : ["workforce"]),
     ]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
@@ -339,7 +339,7 @@ for (const [enabled, spain] of [
         ? spain
           ? "carries the enabled paid-break policy through real boot"
           : "clocks through the real login and all four writes without workforce-es"
-        : "signs in normally without workforce tables and serves no clock routes",
+        : "refuses a start that switches mandatory workforce off",
       async () => {
         beforeServerStarts();
         const venue = await createClockVenue(suite.db, () => new Date(), modules);
@@ -393,7 +393,7 @@ for (const [enabled, spain] of [
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const requestedPort = await occupiedPort();
-          server = await startServer({
+          const starting = startServer({
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_HTTP_PORT: String(requestedPort),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -403,7 +403,25 @@ for (const [enabled, spain] of [
             WAITRON_NODE_ID: venue.cfg.nodeId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
+          }).then((started) => {
+            server = started;
+            return started;
           });
+          if (!enabled) {
+            await expect(starting).rejects.toMatchObject({
+              code: "module.mandatory_not_disableable",
+              params: { module: "workforce" },
+            });
+            expect(
+              suite.db.all(
+                sql.raw(
+                  "select name from sqlite_schema where type='table' and name='time_entries'",
+                ),
+              ),
+            ).toEqual([]);
+            return;
+          }
+          await starting;
           const port = await listeningPort();
           await awaitListening(port);
           const origin = `http://127.0.0.1:${port}`;
@@ -479,14 +497,6 @@ for (const [enabled, spain] of [
               expect(await planned.json()).toContainEqual(
                 expect.objectContaining({ personId: venue.personId, workedMinutes: 400 }),
               );
-            }
-          } else {
-            for (const path of ["state", "in", "out", "break-start", "break-end"]) {
-              const response = await fetch(`${origin}/api/clock/${path}`, {
-                method: path === "state" ? "GET" : "POST",
-                headers: { cookie },
-              });
-              expect(response.status, path).toBe(404);
             }
           }
         } finally {

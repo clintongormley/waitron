@@ -768,8 +768,8 @@ describe("strict backup compatibility", () => {
 });
 
 describe("a module whose tables live in another module's set", () => {
-  /** Adds staffing with no set of its own; its host `extra` classifies `shifts`. */
-  function addStaffing(): void {
+  /** Adds a synthetic module with no set of its own; its host `extra` classifies `shifts`. */
+  function addHostedModule(): void {
     const at = modules.findIndex((m) => m.name === "extra");
     const extra = modules[at]!;
     modules[at] = {
@@ -780,7 +780,7 @@ describe("a module whose tables live in another module's set", () => {
       ],
     };
     modules.push({
-      ...module("staffing", ["shifts"]),
+      ...module("hosted", ["shifts"]),
       migrations: undefined,
       tablesIn: "extra",
       classification: undefined,
@@ -788,7 +788,7 @@ describe("a module whose tables live in another module's set", () => {
   }
 
   it("has its tables checked as part of its host's set", async () => {
-    addStaffing();
+    addHostedModule();
     bindTarget();
     expect(target.modules.map((m) => m.name)).toEqual(["core", "extra"]);
     await expect(run()).resolves.toBe("invalid");
@@ -802,22 +802,22 @@ describe("a module whose tables live in another module's set", () => {
   });
 
   it.each([true, false])("accepts a modules.json that sets it to %s", async (enabled) => {
-    addStaffing();
+    addHostedModule();
     bindTarget();
     execute("create table shifts (id text)");
-    setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: enabled } }));
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { hosted: enabled } }));
     await expect(run()).resolves.toBe("passed");
   });
 
   it("still covers its tables when modules.json switches it off", async () => {
-    addStaffing();
+    addHostedModule();
     bindTarget();
-    setEntry("secrets/modules.json", JSON.stringify({ modules: { staffing: false } }));
+    setEntry("secrets/modules.json", JSON.stringify({ modules: { hosted: false } }));
     await expect(run()).resolves.toBe("invalid");
   });
 
   it("still refuses an override naming a module nobody supplied", async () => {
-    addStaffing();
+    addHostedModule();
     bindTarget();
     execute("create table shifts (id text)");
     setEntry("secrets/modules.json", JSON.stringify({ modules: { ghost: true } }));

@@ -42,12 +42,7 @@ vi.mock("@hono/node-server", async () => {
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 for (const enabled of [true, false]) {
   describe(`attendance response real boot workforce=${enabled}`, () => {
-    const disabled = new Set([
-      "fiscal-none",
-      "workforce-es",
-      "staffing",
-      ...(enabled ? [] : ["workforce"]),
-    ]);
+    const disabled = new Set(["fiscal-none", "workforce-es", ...(enabled ? [] : ["workforce"])]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -138,7 +133,7 @@ for (const enabled of [true, false]) {
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
-          server = await startServer({
+          const starting = startServer({
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_HTTP_PORT: String(port),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -148,7 +143,25 @@ for (const enabled of [true, false]) {
             WAITRON_NODE_ID: mode === "setup" ? undefined : venue.cfg.nodeId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
+          }).then((started) => {
+            server = started;
+            return started;
           });
+          if (!enabled) {
+            await expect(starting).rejects.toMatchObject({
+              code: "module.mandatory_not_disableable",
+              params: { module: "workforce" },
+            });
+            expect(
+              statements.filter((q) =>
+                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|shifts|roster_versions)\b/i.test(
+                  q,
+                ),
+              ),
+            ).toEqual([]);
+            return;
+          }
+          await starting;
           await awaitListening(httpPort());
           if (mode === "setup") tls = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
           const origin = `${mode === "setup" ? "https" : "http"}://127.0.0.1:${httpPort()}`;
@@ -247,14 +260,6 @@ for (const enabled of [true, false]) {
                 expect(await response.json()).toMatchObject({ error: { code: "node.read_only" } });
             }
           }
-          if (!enabled)
-            expect(
-              statements.filter((q) =>
-                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|shifts|roster_versions)\b/i.test(
-                  q,
-                ),
-              ),
-            ).toEqual([]);
         } finally {
           await server?.close();
           await tls?.close();

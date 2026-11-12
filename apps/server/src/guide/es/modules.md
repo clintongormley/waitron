@@ -11,7 +11,7 @@ consulta el estado de los lectores y los pagos pendientes en **Pagos con tarjeta
 
 Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de un módulo por separado
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
-Elige **Todas las categorías** para ver todos los módulos opcionales. Los otros cinco módulos opcionales aún no se pueden habilitar ni deshabilitar.
+Elige **Todas las categorías** para ver todos los módulos opcionales. Los otros módulos opcionales aún no se pueden habilitar ni deshabilitar.
 
 ## Activar o desactivar un proveedor de tarjetas {#provider-state}
 

@@ -278,8 +278,7 @@ folder, or the restore's `venue.db.incoming` file and `.venue.db-replaced-*` fol
 trading), and the append-only check and the 10-second watch read the same list
 (`appendOnlyTables`). A module switched off after its tables exist keeps those tables, but no start
 re-installs or checks their triggers. From `packages/composition/src/modules.ts` and each module's
-classification, read 2026-10-11 and not measured on a box: `time_entries` (workforce, `toggleable`,
-the legal working-time record), `payment_resolutions` (payments, `toggleable`), and
+classification, read 2026-11-12 and not measured on a box: `payment_resolutions` (payments, `toggleable`), and
 `registros_facturacion`, `filing_cases` and `filing_case_events` (fiscal-verifactu,
 `provision-only`) on a box later moved to `fiscal-none`. The alternative is to check every known
 module's tables that exist; its cost is a box that refuses to start after a release marks an

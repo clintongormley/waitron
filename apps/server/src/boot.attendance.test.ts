@@ -68,12 +68,7 @@ const gate = () => {
 
 for (const enabled of [true, false]) {
   describe(`attendance boot with workforce ${enabled ? "enabled" : "never migrated"}`, () => {
-    const disabled = new Set([
-      "fiscal-none",
-      "workforce-es",
-      "staffing",
-      ...(enabled ? [] : ["workforce"]),
-    ]);
+    const disabled = new Set(["fiscal-none", "workforce-es", ...(enabled ? [] : ["workforce"])]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -118,7 +113,7 @@ for (const enabled of [true, false]) {
     it(
       enabled
         ? "starts both real duties, catches up, captures a real login and reopens with retained discovery progress"
-        : "starts neither duty and makes no workforce SQL query on a real login",
+        : "refuses disabled workforce before starting duties or making workforce SQL queries",
       async () => {
         const f = await prepared();
         let server: StartedServer | undefined;
@@ -174,6 +169,26 @@ for (const enabled of [true, false]) {
             (server) => ({ server, error: null }),
             (error: unknown) => ({ server: undefined, error }),
           );
+          server = started.server;
+          if (!enabled) {
+            expect(started.error).toMatchObject({
+              code: "module.mandatory_not_disableable",
+              params: { module: "workforce" },
+            });
+            expect(loopSpy).not.toHaveBeenCalled();
+            expect(mailSpy).not.toHaveBeenCalled();
+            expect(discoverSpy).not.toHaveBeenCalled();
+            expect(
+              statements.filter((query) =>
+                /\b(?:from|join|into|update)\s+["\x60[]?(?:attendance_\w*|time_entries|shifts|roster_versions)\b/i.test(
+                  query,
+                ),
+              ),
+            ).toEqual([]);
+            expect(sender).not.toHaveBeenCalled();
+            expect(sendSpy).not.toHaveBeenCalled();
+            return;
+          }
           expect(started.error).toBeNull();
           server = started.server!;
           await awaitListening(httpPort());
@@ -182,7 +197,7 @@ for (const enabled of [true, false]) {
           });
           expect(catalogue.status).toBe(200);
           const moduleRows = (await catalogue.json()) as { id: string; enabled: boolean }[];
-          expect(moduleRows.find((row) => row.id === "workforce")?.enabled).toBe(enabled);
+          expect(moduleRows.find((row) => row.id === "workforce")).toBeUndefined();
           expect(loopSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           expect(mailSpy).toHaveBeenCalledTimes(1);
           expect(
@@ -273,15 +288,6 @@ for (const enabled of [true, false]) {
               }),
             ).toEqual(before);
             expect(sender).toHaveBeenCalledTimes(1);
-          } else {
-            const accesses = statements.filter((query) =>
-              /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|shifts|roster_versions)\b/i.test(
-                query,
-              ),
-            );
-            expect(accesses).toEqual([]);
-            expect(sender).not.toHaveBeenCalled();
-            expect(sendSpy).not.toHaveBeenCalled();
           }
         } finally {
           await server?.close();
