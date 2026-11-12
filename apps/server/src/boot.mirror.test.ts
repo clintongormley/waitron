@@ -45,6 +45,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
 import { peerCertificate, writeTlsSet } from "./testing/box-tls.js";
 import { connect as connectTcp } from "node:net";
+import { boxHostnameFor } from "./box-name.js";
 import { get } from "node:https";
 
 vi.mock("@hono/node-server", async () => {
@@ -185,6 +186,14 @@ function accepts(port: number): Promise<boolean> {
     });
     socket.on("error", () => resolve(false));
   });
+}
+
+/** The store's listener serves a leaf naming this box under `BOX_TLS`'s authority, whose own leaf
+ * names only the venue: so the start's leaf repair reached the listener. */
+async function expectStoreServesOwnName(port: number) {
+  const ownName = boxHostnameFor(TILL_ENV.WAITRON_NODE_ID);
+  const served = await peerCertificate({ port, ca: BOX_TLS.caCertPem, servername: ownName });
+  expect(served?.checkHost(ownName)).toBe(ownName);
 }
 
 function running(pid: number): boolean {
@@ -755,7 +764,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("a spare's full start runs its store on loopback with the pair's key, and stops it on close", async () => {
+  it("a spare's full start runs its store on loopback with the pair's key, serves the leaf the start repaired, and stops it on close", async () => {
     const fake = await fakeVersitygw();
     const removePair = await servePair("mirror");
     const [httpPortNumber, loopbackPort, storePort] = await freePorts(3);
@@ -775,6 +784,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         pid = await expectStoreRan(fake.dir, STATE_ROOT, loopbackPort!);
         expect(running(pid)).toBe(true);
         expect(await accepts(storePort!)).toBe(true);
+        await expectStoreServesOwnName(storePort!);
       } finally {
         await server.close();
       }
@@ -894,7 +904,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     await expect(fetch(`${base}/health`)).rejects.toThrow();
   }, 60_000);
 
-  it("a box still joining runs its store with the pair's key, and stops it on close", async () => {
+  it("a box still joining runs its store with the pair's key, serves the leaf the start repaired, and stops it on close", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-store-"));
     writeFileSync(
       join(stateDir, "modules.json"),
@@ -932,6 +942,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         pid = await expectStoreRan(fake.dir, stateDir, loopbackPort!);
         expect(running(pid)).toBe(true);
         expect(await accepts(storePort!)).toBe(true);
+        await expectStoreServesOwnName(storePort!);
       } finally {
         await server.close();
       }

@@ -1795,7 +1795,8 @@ async function bootServer(
   };
   // Only a spare whose pair link serves its main box runs the store that box streams to, behind a
   // listener admitting that box's client certificate alone. Each stop is registered on
-  // `undoOnFailure` here, so the caller registers neither.
+  // `undoOnFailure` here, so the caller registers neither. Called after `checkLeaf`: the listener
+  // reads the leaf once, when it starts.
   const ownNodeId = config.node.nodeId;
   const startServedStore = async (): Promise<{ stop(): Promise<void> } | undefined> => {
     const link = await readPairLink(store.node, ownNodeId);
@@ -1845,8 +1846,8 @@ async function bootServer(
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
     undoOnFailure.push(() => finishWorker.catch(() => {}));
-    const latchStore = await startServedStore();
     await checkLeaf();
+    const latchStore = await startServedStore();
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
@@ -2218,7 +2219,6 @@ async function bootServer(
   // whose node_id the venue's sales carry; `config.node.nodeId` stays the node's own identity for
   // every WRITE path.
   let dataNodeId: string = config.node.nodeId;
-  let spareStore: { stop(): Promise<void> } | undefined;
   if (isMirror) {
     const loaded = await readMirrorLink(store.node, config.node.nodeId);
     if (loaded === null) {
@@ -2228,7 +2228,6 @@ async function bootServer(
       });
     }
     dataNodeId = loaded.originNodeId;
-    spareStore = await startServedStore();
   }
 
   // `makeFiscalBackend` cross-checks `filingModule` against the enabled fiscal module, so a node
@@ -2286,6 +2285,7 @@ async function bootServer(
     return context;
   });
   if (!fenced) await checkLeaf();
+  const spareStore = isMirror ? await startServedStore() : undefined;
   if (context.savedZone.kind !== "valid") {
     tradingAdmission.repairOnly(context.savedZone.kind);
     app.use("*", zoneRepairGate(tradingAdmission));
@@ -4222,7 +4222,7 @@ async function bootServer(
     backupSupervisor,
     handoverDestinationDuty,
     chartPost,
-    ...(spareStore === undefined ? {} : { spareStore }),
+    spareStore,
   });
   const started = makeStartedServer(
     server,
