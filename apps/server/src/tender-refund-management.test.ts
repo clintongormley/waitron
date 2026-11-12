@@ -176,7 +176,7 @@ async function pending(method: "cash" | "card" = "card", manual = false) {
   });
   return { ...t, id: created.json.id as string };
 }
-async function unsent(locationId = venue.cfg.locationId as string) {
+async function unsent() {
   const t = await target("card"),
     id = randomUUID();
   const [capture] = await store.db.select().from(payments).where(eq(payments.saleId, t.saleId));

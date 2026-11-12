@@ -40,7 +40,7 @@ async function routeCategory(_locationId: string, categoryId: string, zoneId?: s
     ]);
 }
 
-async function seedZone(locationId: string): Promise<string> {
+async function seedZone(): Promise<string> {
   const [zone] = await suite.db
     .insert(floorZones)
     .values({ name: "Terrace" })
@@ -70,7 +70,7 @@ it("folder summaries count routing cells in the subtree and deletion removes the
       })
     ).status,
   ).toBe(200);
-  await routeCategory(v.locationId, child, await seedZone(v.locationId));
+  await routeCategory(v.locationId, child, await seedZone());
   const summary = await send(
     app,
     "GET",
@@ -110,7 +110,7 @@ it("moving a category's contents up removes only its own routing rules, which it
     ).status,
   ).toBe(200);
   await routeCategory(v.locationId, parent);
-  await routeCategory(v.locationId, child, await seedZone(v.locationId));
+  await routeCategory(v.locationId, child, await seedZone());
   const summary = await send(
     app,
     "GET",

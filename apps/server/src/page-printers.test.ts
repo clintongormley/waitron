@@ -82,12 +82,12 @@ async function venue() {
   });
   const venueId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
-  const agentOne = await agent(venueId, "Back office agent");
-  const agentTwo = await agent(venueId, "Re-paired agent");
+  const agentOne = await agent("Back office agent");
+  const agentTwo = await agent("Re-paired agent");
   return { locationId: venueId, nodeId, agentOne, agentTwo };
 }
 
-async function agent(locationId: string, name: string): Promise<string> {
+async function agent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({ name, tokenHash: "scrypt$fixture" })

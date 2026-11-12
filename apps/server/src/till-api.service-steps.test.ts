@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { nowIso, parties, partyTables, venueLocationId, withTransaction } from "@waitron/db";
+import { nowIso, parties, partyTables, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
@@ -35,7 +35,6 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     tipsEnabled: false,

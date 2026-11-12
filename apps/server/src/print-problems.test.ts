@@ -10,7 +10,6 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -107,14 +106,12 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurante",
   });
-  const locationId = await venueLocationId(db);
   const kitchenStationId = await seedKitchenStation(db, {
     name: "Kitchen",
   });
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

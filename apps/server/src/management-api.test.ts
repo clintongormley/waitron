@@ -181,7 +181,6 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
 function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -3583,7 +3582,7 @@ describe("retired table writes", () => {
     );
     const rows = () =>
       suite.db.all(sql`
-      select * from dining_tables where location_id = ${venueId} order by id`);
+      select * from dining_tables order by id`);
     const before = rows();
     const response = await req(
       path.replace(":id", id),

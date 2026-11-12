@@ -116,7 +116,7 @@ it("keeps retained draft, group, course and ready station history through manage
     },
     () => {},
   );
-  mountCatalogueApi(app, { db: v.db, venueCfg: v.cfg }, () => {});
+  mountCatalogueApi(app, { db: v.db }, () => {});
   const login = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },

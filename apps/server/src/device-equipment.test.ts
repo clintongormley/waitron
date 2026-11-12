@@ -108,7 +108,6 @@ async function seedProfile(): Promise<string> {
 }
 
 async function seedPrinter(
-  venue: Venue,
   name: string,
   opts: { portable?: boolean; hasCashDrawer?: boolean } = {},
 ): Promise<string> {
@@ -264,8 +263,8 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   it("a newly accepted device starts on Use default and takes its profile's free portable defaults", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
-    const bar = await seedPrinter(venue, "Bar");
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const bar = await seedPrinter("Bar");
     const reader = await seedReader("Reader");
     await printerLists(profile, {
       receiptPrinterIds: [handheld, bar],
@@ -292,8 +291,8 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   it("a device on Use default prints its receipt and slip on the profile's defaults", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const bar = await seedPrinter(venue, "Bar");
-    const counter = await seedPrinter(venue, "Counter");
+    const bar = await seedPrinter("Bar");
+    const counter = await seedPrinter("Counter");
     await printerLists(profile, {
       receiptPrinterIds: [counter, bar],
       receiptPrinterDefaultId: bar,
@@ -319,10 +318,10 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   async function switchable(venue: Venue) {
     const from = await seedProfile();
     const to = await seedProfile();
-    const bar = await seedPrinter(venue, "Bar");
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
-    const spare = await seedPrinter(venue, "Spare", { portable: true });
-    const held = await seedPrinter(venue, "Held", { portable: true });
+    const bar = await seedPrinter("Bar");
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const spare = await seedPrinter("Spare", { portable: true });
+    const held = await seedPrinter("Held", { portable: true });
     const r1 = await seedReader("R1");
     const r2 = await seedReader("R2");
     await printerLists(from, { receiptPrinterIds: [bar], paymentSlipPrinterIds: [handheld] });
@@ -422,8 +421,8 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   it("renaming a device keeps its reader, its printer choices and its holds, and takes nothing", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
-    const bar = await seedPrinter(venue, "Bar");
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const bar = await seedPrinter("Bar");
     const listed = await seedReader("Listed");
     const unlisted = await seedReader("Unlisted");
     const a = await enrol(venue, "Caja", profile);
@@ -456,7 +455,7 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   it("revoke, another device takes it, re-enable: the device comes back holding nothing taken meanwhile", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
     const reader = await seedReader("Reader");
     await printerLists(profile, {
       receiptPrinterIds: [handheld],
@@ -510,7 +509,7 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   it("revoke then re-enable with nothing taken meanwhile: the device holds its kept choices again", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
     const reader = await seedReader("Reader");
     await printerLists(profile, { receiptPrinterIds: [handheld] });
     await readerList(profile, [reader], null);
@@ -542,7 +541,7 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
   it("a sign-in, a sign-out and an ended session leave holder rows and explicit choices unchanged", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
     const reader = await seedReader("Reader");
     await printerLists(profile, { receiptPrinterIds: [handheld] });
     await readerList(profile, [reader], null);
@@ -583,9 +582,9 @@ describe("readDeviceEquipment", () => {
   it("offers the listed printers in list order, leaving out those switched off", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const here = await seedPrinter(venue, "Aquí", { hasCashDrawer: true });
-    const counter = await seedPrinter(venue, "Mostrador");
-    const off = await seedPrinter(venue, "Apagada");
+    const here = await seedPrinter("Aquí", { hasCashDrawer: true });
+    const counter = await seedPrinter("Mostrador");
+    const off = await seedPrinter("Apagada");
     await printerLists(profile, {
       receiptPrinterIds: [counter, off, here],
       cashDrawerPrinterIds: [here],
@@ -615,7 +614,7 @@ describe("readDeviceEquipment", () => {
       .values({ provider: "stripe", providerRef: `tmr_${randomUUID()}`, name: "Terminal" })
       .returning({ id: cardReaders.id });
     await readerList(profile, [sumup, stripe!.id], sumup);
-    const bar = await seedPrinter(venue, "Bar");
+    const bar = await seedPrinter("Bar");
     await printerLists(profile, { receiptPrinterIds: [bar] });
     const a = await enrol(venue, "Caja A", profile);
 
@@ -641,7 +640,7 @@ describe("readDeviceEquipment", () => {
   it("reads a profile-default printer that was switched off as the default, unavailable printer", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const bar = await seedPrinter(venue, "Bar");
+    const bar = await seedPrinter("Bar");
     await printerLists(profile, { receiptPrinterIds: [bar], receiptPrinterDefaultId: bar });
     const a = await enrol(venue, "Caja A", profile);
     await suite.db.update(printers).set({ active: false }).where(eq(printers.id, bar));
@@ -662,7 +661,7 @@ describe("readDeviceEquipment", () => {
   it("reads a portable default printer another device holds as resolving to nothing", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
     await printerLists(profile, {
       receiptPrinterIds: [handheld],
       receiptPrinterDefaultId: handheld,
@@ -685,7 +684,7 @@ describe("readDeviceEquipment", () => {
   it("reads a portable default printer another device holds, then switched off, as resolving to nothing with no choices", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
     await printerLists(profile, {
       receiptPrinterIds: [handheld],
       receiptPrinterDefaultId: handheld,
@@ -743,8 +742,8 @@ describe("readDeviceEquipment", () => {
   it("takes nine reads for one device's equipment and six for the devices list of two", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
-    const drawer = await seedPrinter(venue, "Cajón", { hasCashDrawer: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const drawer = await seedPrinter("Cajón", { hasCashDrawer: true });
     const reader = await seedReader("Lector");
     await printerLists(profile, {
       receiptPrinterIds: [handheld],
@@ -782,9 +781,9 @@ describe("readDeviceEquipment", () => {
   it("names the holder device and its signed-in person; null person when nobody is signed in", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
-    const bar = await seedPrinter(venue, "Bar");
-    const drawer = await seedPrinter(venue, "Cajón", { hasCashDrawer: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const bar = await seedPrinter("Bar");
+    const drawer = await seedPrinter("Cajón", { hasCashDrawer: true });
     const reader = await seedReader("Lector");
     await printerLists(profile, {
       receiptPrinterIds: [handheld, bar],
@@ -876,7 +875,7 @@ describe("printer pick-up sets", () => {
   it("an empty set still requires the profile to offer the printer for a pick-up role", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const printer = await seedPrinter(venue, "Unlisted");
+    const printer = await seedPrinter("Unlisted");
     const a = await enrol(venue, "A", profile);
     await suite.db.update(printers).set({ pickupRoles: [] }).where(eq(printers.id, printer));
     const pickup = () =>
@@ -904,7 +903,7 @@ describe("printer pick-up sets", () => {
   it("a disabled slip-only printer names the slip field", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const printer = await seedPrinter(venue, "Slip");
+    const printer = await seedPrinter("Slip");
     await printerLists(profile, { paymentSlipPrinterIds: [printer] });
     const a = await enrol(venue, "A", profile);
     await suite.db
@@ -930,7 +929,7 @@ describe("printer pick-up sets", () => {
   it("an empty pick-up set refuses a deleted printer", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const printer = await seedPrinter(venue, "Handheld", { portable: true });
+    const printer = await seedPrinter("Handheld", { portable: true });
     await printerLists(profile, { receiptPrinterIds: [printer] });
     const a = await enrol(venue, "A", profile);
     const pickUp = () =>
@@ -957,8 +956,8 @@ describe("printer pick-up sets", () => {
   it("takes both roles from the prior holder, and rolls back both devices on a later role refusal", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
-    const bar = await seedPrinter(venue, "Bar");
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const bar = await seedPrinter("Bar");
     await printerLists(profile, {
       receiptPrinterIds: [handheld, bar],
       paymentSlipPrinterIds: [handheld, bar],
@@ -998,7 +997,7 @@ describe("printer pick-up sets", () => {
   it("an empty pick-up set leaves choices alone but still refuses a disabled printer", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
-    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    const handheld = await seedPrinter("Handheld", { portable: true });
     await printerLists(profile, {
       receiptPrinterIds: [handheld],
       paymentSlipPrinterIds: [handheld],

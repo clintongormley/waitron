@@ -79,7 +79,6 @@ beforeEach(async () => {
   profileId = device.profileId;
   cfg = {
     nodeId,
-    locationId: placeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en-GB",
     tipsEnabled: true,

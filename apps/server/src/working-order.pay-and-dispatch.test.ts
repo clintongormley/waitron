@@ -3018,11 +3018,7 @@ describe("markCollected (the counter handover)", () => {
 
 /** Insert an active dining table in `zoneId` under `cfg`'s location and return its id — the `openTab`
  *  → `addTabRound` entry point. */
-async function addTable(
-  tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
-  zoneId: string,
-): Promise<string> {
+async function addTable(tx: Transaction, zoneId: string): Promise<string> {
   // Through the table, not a raw `insert`: BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused
   // `NOT NULL constraint failed: dining_tables.id`.
@@ -3084,7 +3080,7 @@ describe("coursing editing verbs — setLineCourse racing selected line release"
         const other = await createCourse(tx, { name: "Other", displayOrder: 10 });
         await setProductCourse(tx, coffee.id, original.id);
         const tables = await offerProducts(tx, cfg, { zone: "tables" });
-        const tableId = await addTable(tx, cfg, tables.zoneId);
+        const tableId = await addTable(tx, tables.zoneId);
         const { tabId } = await openPartyTab(tx, cfg, { tableId });
         await addTabRound(
           tx,

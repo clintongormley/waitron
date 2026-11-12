@@ -8,7 +8,6 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -104,12 +103,10 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     });
-    const locationId = await venueLocationId(suite.db);
     const nodeId = await seedNode(suite.db);
     const cfg: OriginConfig = {
       origin: jobOrigin("dashboard"),
       nodeId: brandNodeId(nodeId),
-      locationId: locationId,
       locale: LOCALE,
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,

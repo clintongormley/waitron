@@ -165,7 +165,7 @@ async function profile(name: string, formFactor: "till" | "kds" = "till"): Promi
   return row!.id;
 }
 
-async function station(venue: Venue, name: string): Promise<string> {
+async function station(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(kitchenStations)
     .values({ name })
@@ -173,7 +173,7 @@ async function station(venue: Venue, name: string): Promise<string> {
   return row!.id;
 }
 
-async function printer(venue: Venue, name: string, portable = false): Promise<string> {
+async function printer(name: string, portable = false): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
@@ -277,9 +277,9 @@ async function seed() {
   const cfg = venue.cfg;
   const tills = await profile("Tills");
   const waiters = await profile("Waiters");
-  const grill = await station(venue, "Grill");
-  const bar = await station(venue, "Bar");
-  const fryer = await station(venue, "Fryer");
+  const grill = await station("Grill");
+  const bar = await station("Bar");
+  const fryer = await station("Fryer");
 
   const barTill = (
     await enrolDeviceForTest(suite.db, cfg, {
@@ -296,9 +296,9 @@ async function seed() {
     })
   ).deviceId;
 
-  const handheldP = await printer(venue, "Handheld P", true);
-  const counterP = await printer(venue, "Counter P");
-  const passP = await printer(venue, "Pass P", true);
+  const handheldP = await printer("Handheld P", true);
+  const counterP = await printer("Counter P");
+  const passP = await printer("Pass P", true);
   await suite.db
     .update(devices)
     .set({

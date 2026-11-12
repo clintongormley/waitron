@@ -2,13 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  pagePrinters,
-  stationPrinters,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, pagePrinters, stationPrinters, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -59,10 +53,8 @@ beforeEach(async () => {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta",
   });
-  const venueId = await venueLocationId(suite.db);
   cfg = {
     nodeId: brandNodeId(randomUUID()),
-    locationId: venueId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

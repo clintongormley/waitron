@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 
@@ -56,9 +56,7 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
     city: "Madrid",
     province: "Madrid",
   });
-  const venueId = await venueLocationId(suite.db);
   const cfg: TradingContext = {
-    locationId: venueId,
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",
     tipsEnabled: false,

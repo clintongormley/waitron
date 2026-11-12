@@ -2,13 +2,7 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  ticketItems,
-  venueLocationId,
-  withTransaction,
-  workingOrderLines,
-  type Database,
-} from "@waitron/db";
+import { ticketItems, withTransaction, workingOrderLines, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -64,12 +58,10 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
     operationDescription: "Retail",
   });
   await seedLegacySellingUnits(db);
-  const locationId = await venueLocationId(db);
   const kitchen = await seedKitchenStation(db, {});
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
-    locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

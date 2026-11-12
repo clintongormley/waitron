@@ -98,10 +98,7 @@ async function location(name: string): Promise<string> {
 }
 
 let hostCounter = 20;
-async function pagePrinter(
-  locationId: string,
-  extra: Partial<typeof pagePrinters.$inferInsert> = {},
-): Promise<string> {
+async function pagePrinter(extra: Partial<typeof pagePrinters.$inferInsert> = {}): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
@@ -311,7 +308,7 @@ describe("readInvoiceDeliveries", () => {
   it.each(cases)("reads a %s original that is %s", async (medium, status) => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     const delivery = await attempt(v, saleId, medium, status, office);
 
     const result = await read(saleId);
@@ -400,7 +397,7 @@ describe("readInvoiceDeliveries", () => {
     ] as const)("shows an A4 that is %s with a stored hold as held by %s", async (status, hold) => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       const delivery = await heldA4(v, saleId, status, office);
 
       const result = await read(saleId);
@@ -431,7 +428,7 @@ describe("readInvoiceDeliveries", () => {
     it("offers no retry, no A4 and no paper for a held A4, which may still print", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       await receiptJob(saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
       await heldA4(v, saleId, "sending", office);
 
@@ -450,7 +447,7 @@ describe("readInvoiceDeliveries", () => {
   it("dates an attempt the agent itself reported uncertain by its report", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     const delivery = await reserve(saleId, "a4", office);
     await report(await claim(v, delivery), { status: "unknown", failureCode: "printer_aborted" });
 
@@ -467,7 +464,7 @@ describe("readInvoiceDeliveries", () => {
   it("keeps an expired attempt dated by its expiry after a late failure report", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     const delivery = await reserve(saleId, "a4", office);
     const held = await claim(v, delivery);
     await expire();
@@ -488,7 +485,7 @@ describe("readInvoiceDeliveries", () => {
   it("offers A4 as the original when the invoice has no attempt yet", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
 
     expect(await read(saleId)).toEqual({
       current: null,
@@ -507,7 +504,7 @@ describe("readInvoiceDeliveries", () => {
   it("offers exactly the printers its caller offers, in their order", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    await pagePrinter(v.locationId, { name: "Not offered" });
+    await pagePrinter({ name: "Not offered" });
     const offered: OfferedPrinter[] = [
       { id: randomUUID(), name: "Bar receipts", kind: "receipt" },
       a4(randomUUID(), "Upstairs office"),
@@ -522,7 +519,7 @@ describe("readInvoiceDeliveries", () => {
   it("offers no print, and no A4 retry, when its caller offers no printer", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const used = await pagePrinter(v.locationId, { name: "Old office" });
+    const used = await pagePrinter({ name: "Old office" });
     await attempt(v, saleId, "a4", "failed", used);
 
     const result = await read(saleId, true, async () => []);
@@ -539,7 +536,7 @@ describe("readInvoiceDeliveries", () => {
   it("offers an A4 retry only when an A4 printer is among the offered printers", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     await attempt(v, saleId, "a4", "failed", office);
     const receipts: OfferedPrinter = { id: randomUUID(), name: "Bar receipts", kind: "receipt" };
 
@@ -555,7 +552,7 @@ describe("readInvoiceDeliveries", () => {
   it("offers nothing to print while an attempt is active, whatever is offered", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     await attempt(v, saleId, "a4", "queued", office);
 
     expect((await read(saleId, true, async () => [a4(office)]))!.actions.print).toBeNull();
@@ -565,8 +562,8 @@ describe("readInvoiceDeliveries", () => {
     it("is the printer of the original that was sent, not of a newer duplicate on another printer", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
-      const upstairs = await pagePrinter(v.locationId, {
+      const office = await pagePrinter();
+      const upstairs = await pagePrinter({
         name: "Upstairs",
       });
       await attempt(v, saleId, "a4", "sent", office);
@@ -582,7 +579,7 @@ describe("readInvoiceDeliveries", () => {
     it("is the printer of a printed receipt original no row tracks, over a newer failed A4 original", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       await attempt(v, saleId, "a4", "failed", office);
       const jobId = await receiptJob(saleId, { status: "done" });
 
@@ -592,8 +589,8 @@ describe("readInvoiceDeliveries", () => {
     it("is the newest original attempt's printer while none was sent", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
-      const upstairs = await pagePrinter(v.locationId, {
+      const office = await pagePrinter();
+      const upstairs = await pagePrinter({
         name: "Upstairs",
       });
       await attempt(v, saleId, "a4", "failed", office);
@@ -605,7 +602,7 @@ describe("readInvoiceDeliveries", () => {
     it("is null when the newest original attempt was an email, and the receipt job's printer for paper", async () => {
       const v = await venue();
       const emailed = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       await attempt(v, emailed, "a4", "failed", office);
       await attempt(v, emailed, "email", "failed");
       const printed = await invoice(v.nodeId);
@@ -619,7 +616,7 @@ describe("readInvoiceDeliveries", () => {
   it("offers duplicates only once an original has completed, even after a failed duplicate", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     await attempt(v, saleId, "email", "sent");
     const duplicate = await attempt(v, saleId, "a4", "failed", office);
 
@@ -643,7 +640,7 @@ describe("readInvoiceDeliveries", () => {
   it("does not offer the receipt switch for a queued A4 duplicate", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     await attempt(v, saleId, "receipt", "sent");
     const duplicate = await attempt(v, saleId, "a4", "queued", office);
 
@@ -661,7 +658,7 @@ describe("readInvoiceDeliveries", () => {
   it("lists every attempt newest first, with its staff member and a late success", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     const first = await reserve(saleId, "a4", office);
     const held = await claim(v, first);
     await expire();
@@ -767,7 +764,7 @@ describe("readInvoiceDeliveries", () => {
     it("counts a printed one as the completed original", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       const delivered = "2026-10-12T10:00:30.000Z";
       const jobId = await receiptJob(saleId, { status: "done", deliveredAt: delivered });
       const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
@@ -803,7 +800,7 @@ describe("readInvoiceDeliveries", () => {
     it("lists it after the delivery rows that came later", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       await receiptJob(saleId, { status: "done" });
       const duplicate = await attempt(v, saleId, "a4", "sent", office);
 
@@ -822,7 +819,7 @@ describe("readInvoiceDeliveries", () => {
     ] as const)("reads a %s one as in flight and offers nothing", async (_, set, status) => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      await pagePrinter(v.locationId);
+      await pagePrinter();
       await receiptJob(saleId, set);
 
       const result = await read(saleId);
@@ -855,7 +852,7 @@ describe("readInvoiceDeliveries", () => {
     it("blocks new attempts while one is in flight beside a delivery row", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       await attempt(v, saleId, "a4", "failed", office);
       await receiptJob(saleId);
 
@@ -885,7 +882,7 @@ describe("readInvoiceDeliveries", () => {
   it("offers no receipt retry when the original's printer was deleted", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     const delivery = await attempt(v, saleId, "receipt", "failed");
     const [job] = await suite.db
       .select()
@@ -946,7 +943,7 @@ describe("readInvoiceDeliveries", () => {
     it("offers the switch to paper for a queued A4 original while that receipt can be resent", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       await attempt(v, saleId, "receipt", "failed");
       const a4 = await attempt(v, saleId, "a4", "queued", office);
 
@@ -961,7 +958,7 @@ describe("readInvoiceDeliveries", () => {
     it("offers no switch to paper once that receipt's printer was deleted", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const office = await pagePrinter(v.locationId);
+      const office = await pagePrinter();
       const receipt = await attempt(v, saleId, "receipt", "failed");
       await deleteReceiptPrinter(receipt.printJobId!);
       const a4 = await attempt(v, saleId, "a4", "queued", office);
@@ -980,7 +977,7 @@ describe("readInvoiceDeliveries", () => {
     it("offers a receipt retry when the failed A4 original cannot be retried on A4", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      const old = await pagePrinter(v.locationId, { name: "Old office" });
+      const old = await pagePrinter({ name: "Old office" });
       await attempt(v, saleId, "receipt", "failed");
       await attempt(v, saleId, "a4", "failed", old);
 
@@ -1015,7 +1012,7 @@ describe("readInvoiceDeliveries", () => {
   it("answers null for a simplified invoice, whatever it printed", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId, false);
-    await pagePrinter(v.locationId);
+    await pagePrinter();
     await receiptJob(saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
 
     expect(await read(saleId)).toBeNull();
@@ -1066,7 +1063,7 @@ describe("readInvoiceDeliveries", () => {
 
   it("reads several sales at once exactly as it reads each one", async () => {
     const v = await venue();
-    const office = await pagePrinter(v.locationId);
+    const office = await pagePrinter();
     const terraceNode = await seedNode(suite.db);
     const failedA4 = await invoice(v.nodeId);
     await attempt(v, failedA4, "a4", "failed", office);

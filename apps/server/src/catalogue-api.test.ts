@@ -664,7 +664,6 @@ beforeEach(async () => {
 function venueCfg(): TradingContext {
   return {
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -1413,7 +1412,7 @@ describe("mountCatalogueApi — catalogues", () => {
 
 describe("mountCatalogueApi — the venue's menus", () => {
   beforeEach(async () => {
-    await suite.db.execute(sql`update locations set catalogue_id = null`);
+    await suite.db.execute(sql`update catalogues set is_default = 0`);
   });
 
   const defaultPath = () => "/management-api/venue/default-catalogue";
@@ -1426,7 +1425,7 @@ describe("mountCatalogueApi — the venue's menus", () => {
     const res = await send(app, "PUT", defaultPath(), { body: { catalogueId: day } });
     expect(res.status).toBe(204);
     const rows = await suite.db.execute<{ catalogue_id: string }>(
-      sql`select catalogue_id from locations`,
+      sql`select id as catalogue_id from catalogues where is_default = 1`,
     );
     expect(rows.rows).toEqual([{ catalogue_id: day }]);
   });

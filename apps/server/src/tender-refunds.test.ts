@@ -12,7 +12,6 @@ import {
   devices,
   drawerOpens,
   invoiceSeries,
-  venueLocationId,
   printers,
   printJobs,
   saleSettlements,
@@ -80,7 +79,6 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, {
     capabilities: [
@@ -93,7 +91,6 @@ beforeEach(async () => {
   profileId = device.profileId;
   cfg = {
     nodeId,
-    locationId: placeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en-GB",
     tipsEnabled: true,

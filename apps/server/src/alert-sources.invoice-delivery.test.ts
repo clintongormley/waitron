@@ -184,7 +184,7 @@ async function heldA4(v: Venue, saleId: string, hold: A4HoldCode, pagePrinterId 
   return claim;
 }
 
-async function secondPrinter(v: Venue): Promise<string> {
+async function secondPrinter(): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
@@ -593,7 +593,7 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
 
   it("keeps the unclaimed wording for a queued A4 on a printer other than the held one", async () => {
     const v = await venue();
-    const upstairs = await secondPrinter(v);
+    const upstairs = await secondPrinter();
     await heldA4(v, (await invoice(v)).saleId, "paper_out", upstairs);
     const queued = await invoice(v);
     await attempt(v, queued.saleId, "a4", "queued");

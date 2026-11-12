@@ -198,7 +198,7 @@ async function enqueue(printerId: string, payload: Uint8Array): Promise<string> 
   });
 }
 
-async function seedStation(tenant: Tenant, name: string): Promise<string> {
+async function seedStation(name: string): Promise<string> {
   // Through the table definition: `id` and `created_at` are `$defaultFn` generators a raw insert
   // never reaches.
   const [row] = await suite.db
@@ -220,7 +220,7 @@ async function agentActive(agentId: string): Promise<boolean> {
 
 /** `joinAndAccept` mints only human-enrolled agents (`node_id` null), so a self-enrolled one is
  * inserted directly. `node_id` is unique, so each call needs a fresh one. */
-async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
+async function seedNodeAgent(nodeId: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({
@@ -484,7 +484,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   it("the agents list carries node provenance", async () => {
     const app = mountApp();
     const someNode = randomUUID();
-    const id = await seedNodeAgent(tenantA, someNode);
+    const id = await seedNodeAgent(someNode);
     const res = await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie });
     expect(res.status).toBe(200);
     const rows = (await res.json()) as Array<{ id: string; nodeId: string | null }>;
@@ -497,7 +497,7 @@ describe("Station ↔ printer mapping routes (hardware.manage)", () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Mapping agent");
     const printerId = await createPrinter(app, agent.agentId, "Mapping printer");
-    const stationId = await seedStation(tenantA, `Cocina ${randomUUID()}`);
+    const stationId = await seedStation(`Cocina ${randomUUID()}`);
     const at = `/management-api/stations/${stationId}/printers/${printerId}`;
     const byStation = `/management-api/stations/${stationId}/printers`;
     const byPrinter = `/management-api/printers/${printerId}/stations`;
@@ -534,7 +534,7 @@ describe("Station ↔ printer mapping routes (hardware.manage)", () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Miss agent");
     const printerId = await createPrinter(app, agent.agentId, "Miss printer");
-    const stationId = await seedStation(tenantA, `Barra ${randomUUID()}`);
+    const stationId = await seedStation(`Barra ${randomUUID()}`);
 
     const noStation = await send(
       app,
@@ -568,7 +568,7 @@ describe("Station ↔ printer mapping routes (hardware.manage)", () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Gate agent");
     const printerId = await createPrinter(app, agent.agentId, "Gate printer");
-    const stationId = await seedStation(tenantA, `Plancha ${randomUUID()}`);
+    const stationId = await seedStation(`Plancha ${randomUUID()}`);
     const at = `/management-api/stations/${stationId}/printers/${printerId}`;
 
     const unauth = await send(app, "GET", `/management-api/stations/${stationId}/printers`);
@@ -867,8 +867,8 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const grill = await createPrinter(app, agent.agentId, "Grill printer");
     const bar = await createPrinter(app, agent.agentId, "Bar printer");
     const suffix = randomUUID();
-    const zeta = await seedStation(tenantA, `Zeta ${suffix}`);
-    const alpha = await seedStation(tenantA, `Alpha ${suffix}`);
+    const zeta = await seedStation(`Zeta ${suffix}`);
+    const alpha = await seedStation(`Alpha ${suffix}`);
     await suite.db.insert(stationPrinters).values([
       { stationId: zeta, printerId: grill },
       { stationId: alpha, printerId: grill },
@@ -895,8 +895,8 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const app = mountApp();
     const agent = await joinAndAccept(app, "Deleted station agent");
     const printer = await createPrinter(app, agent.agentId, "Pass printer");
-    const live = await seedStation(tenantA, `Live ${randomUUID()}`);
-    const deleted = await seedStation(tenantA, `Deleted ${randomUUID()}`);
+    const live = await seedStation(`Live ${randomUUID()}`);
+    const deleted = await seedStation(`Deleted ${randomUUID()}`);
     await suite.db.insert(stationPrinters).values([
       { stationId: live, printerId: printer },
       { stationId: deleted, printerId: printer },
@@ -1109,7 +1109,7 @@ describe("station printer selection replacement", () => {
     const agent = await joinAndAccept(app, `Set agent ${randomUUID()}`);
     const old = await createPrinter(app, agent.agentId, `Old ${randomUUID()}`);
     const next = await createPrinter(app, agent.agentId, `Next ${randomUUID()}`);
-    const stationId = await seedStation(tenantA, `Set ${randomUUID()}`);
+    const stationId = await seedStation(`Set ${randomUUID()}`);
     await suite.db.insert(stationPrinters).values({ stationId, printerId: old });
     const path = `/management-api/stations/${stationId}/printers`;
     const mappings = () =>
@@ -1119,7 +1119,7 @@ describe("station printer selection replacement", () => {
 
   it("replaces the entire set, shares a printer with another station, repeats and clears", async () => {
     const f = await fixture();
-    const second = await seedStation(tenantA, `Other ${randomUUID()}`);
+    const second = await seedStation(`Other ${randomUUID()}`);
     await suite.db.insert(stationPrinters).values({ stationId: second, printerId: f.next });
     const save = (printerIds: string[]) =>
       send(f.app, "PUT", f.path, { cookie: managerCookie, body: { printerIds } });
@@ -1254,7 +1254,7 @@ describe("printer delete routes (hardware.manage)", () => {
       .where(eq(printers.id, printerId))
       .returning({ name: printers.name });
     const stationName = `Grill ${randomUUID()}`;
-    const stationId = await seedStation(tenantA, stationName);
+    const stationId = await seedStation(stationName);
     await suite.db.insert(stationPrinters).values({ stationId, printerId });
     const profileName = `Waiters ${randomUUID()}`;
     const [profile] = await suite.db
@@ -1464,7 +1464,7 @@ describe("printer delete routes (hardware.manage)", () => {
 
     async function deletedPrinterCalls(app: Hono) {
       const p = await linkedPrinter(app);
-      const otherStation = await seedStation(tenantA, `Fryer ${randomUUID()}`);
+      const otherStation = await seedStation(`Fryer ${randomUUID()}`);
       await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, p.jobId));
       const deleted = await send(app, "DELETE", `/management-api/printers/${p.printerId}`, {
         cookie: managerCookie,

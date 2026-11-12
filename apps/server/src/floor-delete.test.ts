@@ -59,7 +59,7 @@ useVenueDb({
 const NOW = new Date("2026-10-11T12:00:00Z");
 const seatFor = () => floorDeletionFor([BOOKINGS_TABLE_REMOVAL]);
 
-async function zone(name: string, locationId = v.cfg.locationId as string) {
+async function zone(name: string) {
   const id = randomUUID();
   await inTx(v, (tx) => tx.insert(floorZones).values({ id, name: `${name} ${id}` }));
   return id;

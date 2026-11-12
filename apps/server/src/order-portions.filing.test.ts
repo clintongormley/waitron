@@ -1,3 +1,4 @@
+import { readDefaultCatalogueId } from "@waitron/catalogue";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,6 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
-  readVenue,
   orderPortions,
   products,
   saleLinePortions,
@@ -81,7 +81,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ids = await inTx(venue, async (tx) => {
-      const catalogueId = (await readVenue(tx)).defaultCatalogueId!;
+      const catalogueId = (await readDefaultCatalogueId(tx))!;
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {

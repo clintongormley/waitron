@@ -55,7 +55,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ids = await inTx(venue, async (tx) => {
-      const catalogueId = await readDefaultCatalogueId(tx)!;
+      const catalogueId = (await readDefaultCatalogueId(tx))!;
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {

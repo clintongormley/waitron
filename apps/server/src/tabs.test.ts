@@ -21,7 +21,6 @@ import {
   parties,
   withTransaction,
   workingOrderLines,
-  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -117,12 +116,10 @@ async function setupVenue(): Promise<Seeded> {
     operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
-  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

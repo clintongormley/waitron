@@ -327,7 +327,6 @@ async function jobsOn(printerId: string) {
     .select({
       id: printJobs.id,
       kind: printJobs.kind,
-      locationId: printJobs.locationId,
       payload: printJobs.payload,
     })
     .from(printJobs)
@@ -472,7 +471,6 @@ describe("POST /management-api/reports/categories/print", () => {
     expect(jobs).toHaveLength(before + 1);
     const job = jobs.find((j) => j.id === body.jobId)!;
     expect(job.kind).toBe("document");
-    expect(job.locationId).toBe(locationId);
     // CLAUDE.md §5: a document job never carries a drawer pulse.
     expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
     const lines = printedLines(new Uint8Array(job.payload));

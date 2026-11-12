@@ -9,7 +9,6 @@ import {
   kitchenCourses,
   kitchenStations,
   products,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -54,11 +53,9 @@ async function setupVenue(): Promise<TradingContext> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

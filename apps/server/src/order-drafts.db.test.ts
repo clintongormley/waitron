@@ -28,7 +28,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -124,13 +123,11 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurante",
   });
-  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

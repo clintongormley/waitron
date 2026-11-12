@@ -24,7 +24,6 @@ import { CASA_DELGADO_ES } from "./testing/data.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
-import type { TradingContext } from "../../src/trading-context.js";
 
 const LOCALE: SeedLocale = "en";
 const TRADING_NAMES = { restaurant: "Front Bar", deli: "Back Deli" };

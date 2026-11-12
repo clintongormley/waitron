@@ -160,7 +160,7 @@ const printBody = (requestKey: string = randomUUID(), printerId: string = office
 
 let hostCounter = 30;
 /** Another A4 printer, at the venue's location unless `locationId` names another. */
-async function extraOffice(name: string, locationId: string = venue.cfg.locationId) {
+async function extraOffice(name: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
       .insert(pagePrinters)

@@ -83,7 +83,7 @@ const suite = useVenueDb({
       .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(locationId, nodeId);
+    cfg = makeCfg(nodeId);
 
     // Through the verbs rather than direct inserts, so the course FK and the active/assignment
     // filters are real.
@@ -124,10 +124,9 @@ function collect(
 }
 
 /** `seriesId` is unused (no fiscal write on the coursing/fire path), so it carries a fresh uuid. */
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

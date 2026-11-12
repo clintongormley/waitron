@@ -87,7 +87,7 @@ const suite = useVenueDb({
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     staffMember = { id: person!.id };
-    cfg = makeCfg(await venueLocationId(db), nodeId);
+    cfg = makeCfg(nodeId);
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Menu" });
       const drinksCategory = await createCategory(tx, { name: "Drinks" });
@@ -115,11 +115,10 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): OriginConfig {
+function makeCfg(nodeId: string): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -210,7 +209,7 @@ async function setupTabApp(
 }
 
 /** The suite shares one database, and an earlier case may already have seeded the default station. */
-async function kitchenStation(config: OriginConfig): Promise<string> {
+async function kitchenStation(): Promise<string> {
   const [existing] = await suite.db
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
@@ -230,7 +229,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     ticket: { id: string; quantity: number | null };
   }> {
     const { app, tabA, cookie } = await setupTabApp("1");
-    const stationId = await kitchenStation(cfg);
+    const stationId = await kitchenStation();
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, { zone: "tables" }),
     );
@@ -391,7 +390,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
     await withTransaction(suite.db, (tx) =>
       writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, staffMember.id),
     );
-    await kitchenStation(cfg);
+    await kitchenStation();
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, { zone: "tables" }),
     );

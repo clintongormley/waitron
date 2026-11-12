@@ -195,10 +195,9 @@ function nextTaxId(): string {
   return nifWithControlLetter(60_000_000 + taxIdCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -246,7 +245,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
   );
 
   const venueId = await venueLocationId(suite.db);
-  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Drinks" });
@@ -2090,7 +2089,7 @@ describe("a record with no device prints nothing", () => {
 });
 
 describe("the device's invoice printer", () => {
-  async function officePrinter(cfg: DeviceRequestConfig, active = true): Promise<string> {
+  async function officePrinter(active = true): Promise<string> {
     const [row] = await suite.db
       .insert(pagePrinters)
       .values({
@@ -2121,7 +2120,7 @@ describe("the device's invoice printer", () => {
 
   it("resolves the profile's default A4 printer", async () => {
     const { cfg } = await setupVenue();
-    const office = await officePrinter(cfg);
+    const office = await officePrinter();
     await withTransaction(suite.db, async (tx) =>
       listInvoicePrinter(tx, {
         profileId: await profileOf(cfg),
@@ -2135,7 +2134,7 @@ describe("the device's invoice printer", () => {
 
   it("resolves the device's own receipt-printer choice over the profile's default", async () => {
     const { cfg } = await setupVenue();
-    const office = await officePrinter(cfg);
+    const office = await officePrinter();
     const receipt = await makePrinter();
     await withTransaction(suite.db, async (tx) => {
       const profileId = await profileOf(cfg);
@@ -2152,7 +2151,7 @@ describe("the device's invoice printer", () => {
 
   it("resolves none when the profile lists no invoice printer, or the origin is not a device", async () => {
     const { cfg } = await setupVenue();
-    await officePrinter(cfg);
+    await officePrinter();
 
     expect(await resolve(cfg.origin)).toBeUndefined();
     expect(await resolve(jobOrigin("operator_script"))).toBeUndefined();
@@ -2160,8 +2159,8 @@ describe("the device's invoice printer", () => {
 
   it("resolves none for a switched-off choice, never falling back to the profile's default", async () => {
     const { cfg } = await setupVenue();
-    const office = await officePrinter(cfg);
-    const old = await officePrinter(cfg, false);
+    const office = await officePrinter();
+    const old = await officePrinter(false);
     await withTransaction(suite.db, async (tx) => {
       const profileId = await profileOf(cfg);
       await listInvoicePrinter(tx, { profileId, pagePrinterId: office, isDefault: true });

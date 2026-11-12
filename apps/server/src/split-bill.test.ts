@@ -205,7 +205,6 @@ describe("splitBill", () => {
           nodeId: workingOrders.nodeId,
           source: workingOrders.source,
           deviceId: workingOrders.deviceId,
-          locationId: workingOrders.locationId,
         })
         .from(workingOrders)
         .where(eq(workingOrders.id, checkId));
@@ -231,12 +230,10 @@ describe("splitBill", () => {
 
     expect(state.check?.status).toBe("open");
     expect(state.check?.label).toBe("T1");
-    // Opened on the splitting device's node and location (createOpenOrder stamps them from cfg).
     expect(state.check?.nodeId).toBe(cfg.nodeId);
     expect(state.check).toMatchObject({
       source: "device",
       deviceId: cfg.origin.deviceId,
-      locationId: cfg.locationId,
     });
     expect(state.checkLines).toEqual([{ productId: hamId, quantity: 300 }]);
     expect(state.originLines).toEqual([{ lineNo: 1, productId: waterId, quantity: 3000 }]);

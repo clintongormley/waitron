@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { diningTables, venueLocationId, withTransaction } from "@waitron/db";
+import { diningTables, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -36,7 +36,6 @@ it("deletes through the real core seat when the optional bookings table was neve
     operationDescription: "Hospitality",
   });
   const cfg: TradingContext = {
-    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(randomUUID()),
     locale: "en-GB",
     tipsEnabled: false,

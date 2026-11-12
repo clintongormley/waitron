@@ -46,7 +46,7 @@ const suite = useVenueDb({
       .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(locationId, nodeId);
+    cfg = makeCfg(nodeId);
     TABLE_ID = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, {
         label: "T1",
@@ -63,10 +63,9 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

@@ -40,7 +40,6 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   ({ deviceId } = await seedDevice(db));
   const [series] = await db
@@ -52,7 +51,6 @@ beforeEach(async () => {
   orderId = order.id;
   cfg = {
     nodeId,
-    locationId: placeId,
     locale: "en-GB",
     tipsEnabled: true,
     simplifiedInvoiceLimit: null,
@@ -577,7 +575,6 @@ describe("cash refund balance without the optional payments module", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Meals",
     });
-    cfg = { ...cfg, locationId: await venueLocationId(db) };
     const nodeId = await seedNode(db);
     const device = await seedDevice(db);
     const [series] = await db

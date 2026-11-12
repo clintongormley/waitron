@@ -236,7 +236,6 @@ describe("the running server's dark pass screen alert", () => {
     const pass = await kitchenScreenDevice(
       suite.db,
       {
-        locationId: venue.cfg.locationId,
         deviceProfileId: await profile(suite.db, "kds"),
         label: "Pass",
         tokenHash: "hash",

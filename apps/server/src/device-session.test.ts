@@ -11,7 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError, isAppError } from "@waitron/shared";
 import { hashDeviceToken, hashSecret } from "@waitron/identity";
-import { deviceProfiles, devices, withTransaction, venueLocationId } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -94,11 +94,9 @@ async function setupStation(): Promise<{ cfg: TradingContext; stationId: string 
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const locationId = await venueLocationId(admin);
   const nodeId = await seedNode(admin);
   const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

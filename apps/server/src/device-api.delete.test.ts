@@ -581,11 +581,10 @@ describe("a deleted device", () => {
     expect(accepted.status).toBe(200);
 
     const named = await suite.db
-      .select({ id: devices.id, locationId: devices.locationId })
+      .select({ id: devices.id })
       .from(devices)
       .where(eq(devices.label, "Bar"));
     expect(named.map((row) => row.id).sort()).toEqual([deviceId, joinId].sort());
-    expect(new Set(named.map((row) => row.locationId))).toEqual(new Set([venue.cfg.locationId]));
     await expectStillDeleted(deviceId);
   });
 

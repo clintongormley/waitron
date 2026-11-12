@@ -3,13 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  floorZones,
-  deviceProfiles,
-  venueLocationId,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { floorZones, deviceProfiles, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -65,7 +59,6 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Retail",
   });
-  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, {});
   const [person] = await db
     .insert(persons)
@@ -74,7 +67,6 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
-    locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

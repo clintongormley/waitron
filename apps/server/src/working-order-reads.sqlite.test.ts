@@ -8,7 +8,6 @@ import {
   partyTables,
   ticketItems,
   withTransaction,
-  venueLocationId,
   workingOrderLines,
   workingOrders,
   type Database,
@@ -49,7 +48,6 @@ beforeAll(async () => {
     invoiceLocales: [LOCALE],
     operationDescription: "In-store sales",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   [{ id: stationId }] = await db
     .insert(kitchenStations)
@@ -103,7 +101,6 @@ beforeAll(async () => {
 
   cfg = {
     nodeId,
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

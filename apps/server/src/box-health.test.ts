@@ -85,7 +85,7 @@ async function seedSales(issued: { id: string; at: string; corrects?: string }[]
   }
 }
 
-async function seedPrinter(locationId: string, name: string, over: object = {}): Promise<string> {
+async function seedPrinter(name: string, over: object = {}): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({ name, transport: "network_tcp", host: "10.0.0.1", ...over })
@@ -166,17 +166,17 @@ describe("collectBoxHealth", () => {
 
   it("lists only printers that are switched on and not deleted", async () => {
     const location = await seedLocation();
-    const active = await seedPrinter(location, "Bar");
-    await seedPrinter(location, "Off", { active: false });
-    await seedPrinter(location, "Gone", { active: true, deletedAt: "2026-10-01T00:00:00.000Z" });
+    const active = await seedPrinter("Bar");
+    await seedPrinter("Off", { active: false });
+    await seedPrinter("Gone", { active: true, deletedAt: "2026-10-01T00:00:00.000Z" });
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.printers).toEqual([{ id: active, name: "Bar" }]);
   });
 
   it("lists printers by name", async () => {
     const location = await seedLocation();
-    const second = await seedPrinter(location, "Kitchen");
-    const first = await seedPrinter(location, "Bar");
+    const second = await seedPrinter("Kitchen");
+    const first = await seedPrinter("Bar");
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.printers).toEqual([
       { id: first, name: "Bar" },

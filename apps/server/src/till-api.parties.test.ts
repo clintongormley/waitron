@@ -191,7 +191,7 @@ describe("POST /api/tables/:id/seat", () => {
     expect(tab!.partyId).toBe(seated.partyId);
   });
 
-  it("opens the tab as the device that seated it, at the venue's location", async () => {
+  it("opens the tab as the device that seated it", async () => {
     const deviceId = await seedSessionDevice(suite.db);
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
@@ -211,12 +211,11 @@ describe("POST /api/tables/:id/seat", () => {
         .select({
           source: workingOrders.source,
           deviceId: workingOrders.deviceId,
-          locationId: workingOrders.locationId,
         })
         .from(workingOrders)
         .where(eq(workingOrders.id, tabId)),
     );
-    expect(tab).toEqual({ source: "device", deviceId, locationId: cfg.locationId });
+    expect(tab).toEqual({ source: "device", deviceId });
   });
 
   it("seats without a guest count, absent or null", async () => {

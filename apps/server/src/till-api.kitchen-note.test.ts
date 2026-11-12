@@ -9,7 +9,6 @@ import {
   parties,
   partyTables,
   serviceCommands,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -54,7 +53,6 @@ beforeEach(async () => {
     operationDescription: "Hospitality",
   });
   cfg = {
-    locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
     tipsEnabled: false,

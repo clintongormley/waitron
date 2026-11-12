@@ -98,8 +98,8 @@ async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const agentOne = await agent(locationId, "Back office agent");
-  const agentTwo = await agent(locationId, "Re-paired agent");
+  const agentOne = await agent("Back office agent");
+  const agentTwo = await agent("Re-paired agent");
   const state = { now: at(0), reads: 0 };
   const app = new Hono();
   mountPrintApi(
@@ -140,7 +140,7 @@ async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents
   };
 }
 
-async function agent(locationId: string, name: string): Promise<string> {
+async function agent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({ name, tokenHash: hashDeviceToken(SECRET) })

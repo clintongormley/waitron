@@ -13,7 +13,6 @@ import {
   floorZones,
   parties,
   partyTables,
-  venueLocationId,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -69,12 +68,10 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
     operationDescription: "Venta en establecimiento",
     timeZone,
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -240,8 +237,8 @@ describe("zone CRUD", () => {
     await db.execute(sql`create trigger test_zone_key_clash before update on floor_zones
       when new.name = 'Trigger collision'
       begin
-        insert into floor_zones (id, location_id, name, created_at)
-        values (old.id, old.location_id, 'Another zone', old.created_at);
+        insert into floor_zones (id, name, created_at)
+        values (old.id, 'Another zone', old.created_at);
       end`);
     try {
       await expect(
@@ -264,15 +261,15 @@ describe("zone CRUD", () => {
     await db.execute(sql`create trigger test_zone_name_clash before update on floor_zones
       when new.name = old.name
       begin
-        insert into floor_zones (id, location_id, name, created_at)
-        values ('name-clash-control', old.location_id, old.name, old.created_at);
+        insert into floor_zones (id, name, created_at)
+        values ('name-clash-control', old.name, old.created_at);
       end`);
     try {
       await expect(
         asApp(cfg, (tx) => updateZone(tx, existing.id, { displayOrder: 4 })),
       ).rejects.toMatchObject({
         errcode: 2067,
-        message: "UNIQUE constraint failed: floor_zones.location_id, floor_zones.name",
+        message: "UNIQUE constraint failed: floor_zones.name",
       });
     } finally {
       await db.execute(sql`drop trigger test_zone_name_clash`);
@@ -389,13 +386,11 @@ async function setupTabVenue(): Promise<{
     operationDescription: "Venta en establecimiento",
   });
   await seedLegacySellingUnits(db);
-  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { name: "Kitchen" });
   const nodeId = await seedNode(db);
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

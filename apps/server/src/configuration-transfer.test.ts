@@ -640,7 +640,6 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const sourceVenueId = await venueLocationId(suite.db);
     const [agent] = await suite.db
       .insert(printAgents)
       .values({ name: "Back office", tokenHash: "hash" })
@@ -748,7 +747,6 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     const sourcePagePrinterId = "56565656-aaaa-aaaa-aaaa-565656565656";
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(pagePrinters).values({
@@ -822,7 +820,6 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const uploaded = await uploadImage(
         tx,
@@ -2347,7 +2344,6 @@ it("transfers a station's rest of the order switch", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
       name: "Pass",
@@ -2382,7 +2378,6 @@ it("transfers each station's MOVED slips choice, print, don't print, or never se
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       { name: "Moved print", printMovedSlips: true },
@@ -2420,7 +2415,6 @@ it("transfers a station's colour", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
       name: "Cocktail bar",
@@ -2455,7 +2449,6 @@ it("transfers each station's ticket grouping and held printing", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       {
@@ -2548,7 +2541,6 @@ it("transfers each station's bump mode", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       { name: "Grill", bumpMode: "ticket" },
@@ -2590,7 +2582,6 @@ it("transfers each station's ready warning time", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx
       .insert(kitchenStations)
@@ -2717,7 +2708,6 @@ it("transfers each station's changes after sending", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       { name: "Grill", changesAfterSending: "never" },
@@ -2801,7 +2791,6 @@ it("A773 station policy: transfers each station's pass waiting", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       { name: "Grill", waitsForPass: true },
@@ -2843,7 +2832,6 @@ it("A773 station policy: a copy without waits_for_pass imports every station not
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values([
       { name: "Grill", waitsForPass: true },
@@ -2912,7 +2900,6 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(kitchenStations).values([
       { name: "Desserts", colour: "orange", warmAfterMinutes: 7 },
@@ -3297,7 +3284,6 @@ it("transfers a printer on two stations in configuration export", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const stations = await tx
       .insert(kitchenStations)
@@ -3357,7 +3343,6 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(printers).values({
       name: "Slip pickup",
@@ -3475,7 +3460,6 @@ it("leaves a table's clearing state behind", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(diningTables).values({
       zoneId: (
@@ -3682,7 +3666,6 @@ it("leaves out a print agent's setup page address and port, so the import links 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(printAgents).values({
       name: "Bar agent",
@@ -4427,7 +4410,7 @@ it("leaves behind every row a chain of keys leads to a left-behind row, matching
 
 /** Hold `profileId` by a disabled device only, then delete it through the real path, which retires
  * the row rather than removing it. */
-async function retireProfile(locationId: string, profileId: string): Promise<void> {
+async function retireProfile(profileId: string): Promise<void> {
   await seedDevice(suite.db, { profileId });
   await suite.db
     .update(devices)
@@ -4458,7 +4441,7 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
     .insert(deviceProfiles)
     .values({ name: "Old till", formFactor: "till" })
     .returning({ id: deviceProfiles.id });
-  await retireProfile(venueId, retired!.id);
+  await retireProfile(retired!.id);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4508,7 +4491,7 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
     }
     return { live: live!.id, retired: retired!.id };
   });
-  await retireProfile(venueId, original.retired);
+  await retireProfile(original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4584,7 +4567,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     }
     return { live: live!.id, retired: retired!.id };
   });
-  await retireProfile(venueId, original.retired);
+  await retireProfile(original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4672,7 +4655,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     });
     return { till: till!.id, wall: wall!.id, retired: retired!.id };
   });
-  await retireProfile(venueId, original.retired);
+  await retireProfile(original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -4801,7 +4784,7 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
     }
     return { admin: admin!.id, mia: mia!.id, live: live!.id, retired: retired!.id };
   });
-  await retireProfile(venueId, original.retired);
+  await retireProfile(original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -5088,7 +5071,6 @@ it("carries each station's own late flags to the importing venue", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   const [station] = await suite.db
     .insert(kitchenStations)
     .values({
@@ -5138,7 +5120,6 @@ it.each([
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({
     name: "Invalid imported timing",
     warmAfterMinutes: 3,
@@ -5185,7 +5166,6 @@ it("refuses an imported ready warning of 0 before writing anything", async () =>
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({ name: "Invalid imported ready warning" });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -5229,7 +5209,6 @@ it("imports a station row with no ready warning as 3", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({
     name: "Older file station",
     readyWarningAfterMinutes: 8,
@@ -5278,7 +5257,6 @@ it("refuses an imported minute that is not a whole number", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   await suite.db.insert(kitchenStations).values({ name: "Fractional imported timing" });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -5990,7 +5968,6 @@ describe("special days in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const [department] = await tx
         .insert(departments)
@@ -6094,7 +6071,6 @@ describe("special days in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     await withTransaction(suite.db, (tx) => tx.insert(kitchenStations).values({ name: "Pass" }));
     const { cfg, stations } = await named(suite.db, {
       locationId: await venueLocationId(suite.db),
@@ -6826,7 +6802,6 @@ describe("a deleted printer in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     const ids = await withTransaction(suite.db, async (tx) => {
       const [live, disabled, old] = await tx
         .insert(printers)
@@ -8095,7 +8070,6 @@ describe("A773 pass display policy", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
     const deviceId = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)

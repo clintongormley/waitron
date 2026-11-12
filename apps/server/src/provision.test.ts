@@ -436,7 +436,6 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    const venueId = await venueLocationId(db);
     const zoneId = randomUUID();
     await withTransaction(db, async (tx) => {
       await tx.insert(floorZones).values({ id: zoneId, name: "Terrace" });
@@ -492,7 +491,6 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    const venueId = await venueLocationId(db);
     await withTransaction(db, async (tx) => {
       await tx
         .insert(kitchenStations)
@@ -592,7 +590,6 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    const venueId = await venueLocationId(db);
     await withTransaction(db, async (tx) => {
       const [bar] = await tx
         .insert(kitchenStations)

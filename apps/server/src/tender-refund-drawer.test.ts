@@ -13,7 +13,6 @@ import {
   sales,
   tenderRefunds,
   tenders,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -35,13 +34,11 @@ let receiptId: string;
 beforeEach(async () => {
   const db = store.db;
   await seedVenue(db, { name: "Returns", invoiceLocales: ["en"], operationDescription: "Meals" });
-  const placeId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: ["take-cash", "open-cash-drawer"] });
   profileId = device.profileId;
   cfg = {
     nodeId,
-    locationId: placeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en",
     tipsEnabled: true,

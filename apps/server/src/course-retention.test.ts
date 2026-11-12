@@ -77,7 +77,6 @@ async function setup() {
   const nodeId = await seedNode(db);
   const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
-    locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

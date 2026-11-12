@@ -136,10 +136,9 @@ function venueRequest(nif: string): VenueRequest {
   };
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -175,7 +174,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(db);
-  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   await withTransaction(db, (tx) =>
     registerSif(tx, {
       nodeId: cfg.nodeId,

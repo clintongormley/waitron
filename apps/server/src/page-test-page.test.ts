@@ -91,8 +91,8 @@ async function venue(opts: { render?: Render } = {}) {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const agentOne = await agent(locationId, "Back office agent");
-  const agentTwo = await agent(locationId, "Other agent");
+  const agentOne = await agent("Back office agent");
+  const agentTwo = await agent("Other agent");
   const cookies = await withTransaction(suite.db, async (tx) => {
     const [manager] = await tx
       .insert(persons)
@@ -144,7 +144,7 @@ async function venue(opts: { render?: Render } = {}) {
   };
 }
 
-async function agent(locationId: string, name: string): Promise<string> {
+async function agent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({ name, tokenHash: hashDeviceToken(SECRET) })

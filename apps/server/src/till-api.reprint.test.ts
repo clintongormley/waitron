@@ -56,7 +56,7 @@ const suite = useVenueDb({
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(locationId, nodeId);
+    cfg = makeCfg(nodeId);
 
     // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
@@ -75,10 +75,9 @@ const suite = useVenueDb({
   },
 });
 
-function makeCfg(locationId: string, nodeId: string): TradingContext {
+function makeCfg(nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

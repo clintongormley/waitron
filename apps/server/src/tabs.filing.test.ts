@@ -70,10 +70,9 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -123,7 +122,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   );
 
   const venueId = await venueLocationId(db);
-  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue, venueId));
+  const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   const { available, counter, tables } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });

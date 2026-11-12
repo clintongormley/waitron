@@ -1,7 +1,7 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_TIME_ZONE, withTransaction, venueLocationId } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -36,11 +36,9 @@ async function setupVenue(): Promise<TradingContext> {
     operationDescription: "In-store sales",
     timeZone: DEFAULT_TIME_ZONE,
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
-    locationId: locationId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,

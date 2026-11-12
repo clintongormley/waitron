@@ -11,7 +11,6 @@ import {
   openVenueDatabase,
   printAgents,
   products,
-  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,

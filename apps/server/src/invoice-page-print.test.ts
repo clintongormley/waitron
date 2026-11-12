@@ -57,8 +57,8 @@ async function venue() {
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
   const locationId = await location("Bar");
   const nodeId = await seedNode(suite.db);
-  const agentOne = await agent(locationId, "Back office agent");
-  const agentTwo = await agent(locationId, "Re-paired agent");
+  const agentOne = await agent("Back office agent");
+  const agentTwo = await agent("Re-paired agent");
   return { locationId, nodeId, agentOne, agentTwo };
 }
 
@@ -71,7 +71,7 @@ async function location(name: string): Promise<string> {
   return venueLocationId(suite.db);
 }
 
-async function agent(locationId: string, name: string): Promise<string> {
+async function agent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({ name, tokenHash: "scrypt$fixture" })
