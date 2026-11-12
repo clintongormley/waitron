@@ -118,7 +118,7 @@ describe("computeDailyClose", () => {
       { saleId: sale },
       { method: "transfer", amount: "65.00", settledAt: at },
     );
-    const otherDevice = await seedVenueDevice(suite.db, venue.locationId);
+    const otherDevice = await seedVenueDevice(suite.db);
     const direct = await seedRefundableSale(
       suite.db,
       { ...venue, deviceId: otherDevice },

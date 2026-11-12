@@ -11,6 +11,7 @@ import {
   deleteSection,
   readMenuHome,
   createCatalogue,
+  setVenueDefaultCatalogue,
   createCategory,
   createExtraList,
   addProductToMenu,
@@ -511,7 +512,7 @@ describe("configuration transfer archive", () => {
 });
 
 describe("configuration transfer database path", () => {
-  it("exports the venue setup fields exactly and carries languages and holiday area at the top level", async () => {
+  it("exports venue fields and restores languages, holiday area and a non-starter default menu", async () => {
     const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -528,6 +529,11 @@ describe("configuration transfer database path", () => {
         null,
       ),
     );
+    const chosen = await withTransaction(suite.db, async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Evening menu" });
+      await setVenueDefaultCatalogue(tx, menu.id);
+      return menu;
+    });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -549,6 +555,12 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
     });
+    const defaults = await targetSuite.db
+      .select({ id: catalogues.id, name: catalogues.name })
+      .from(catalogues)
+      .where(eq(catalogues.isDefault, true));
+    expect(defaults).toEqual([{ id: expect.any(String), name: "Evening menu" }]);
+    expect(defaults[0]!.id).not.toBe(chosen.id);
     expect((await readVenueSettings(targetSuite.db)).doc).toMatchObject({
       contentLanguages: ["es", "en"],
       defaultContentLanguage: "es",
