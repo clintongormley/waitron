@@ -361,6 +361,7 @@ export class BoxStatusScreen extends LitElement {
     (error) => {
       this.network = null;
       this.networkState = codeOf(error) === "box_host.unavailable" ? "unavailable" : "failed";
+      if (this.networkState === "unavailable") this.#networkQueries.release("getBoxNetwork");
     },
   );
   readonly #alertQueries = new DashboardQueries(

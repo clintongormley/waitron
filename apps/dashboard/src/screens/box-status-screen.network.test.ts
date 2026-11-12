@@ -47,13 +47,11 @@ it.each(["en", "es"])(
     setLocale(locale);
     const el = await mount(
       api(
-        vi
-          .fn()
-          .mockResolvedValue({
-            ...observation,
-            wired: { connected: true, address: null },
-            wifi: { connectedSsidHex: null, savedSsidHex: null },
-          }),
+        vi.fn().mockResolvedValue({
+          ...observation,
+          wired: { connected: true, address: null },
+          wifi: { connectedSsidHex: null, savedSsidHex: null },
+        }),
       ),
     );
     await vi.waitFor(() =>
@@ -98,7 +96,16 @@ it("hides the card when the box cannot report its network", async () => {
   const read = vi
     .fn()
     .mockRejectedValue({ code: "box_host.unavailable", params: { reason: "unsupported" } });
-  const el = await mount(api(read));
+  const client = api(read);
+  const el = await mount(client);
   await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
   await vi.waitFor(() => expect(card(el)).toBeNull());
+  client.liveData.refresh();
+  await new Promise<void>(queueMicrotask);
+  expect(read).toHaveBeenCalledOnce();
+  const host = el.parentElement!;
+  el.remove();
+  read.mockResolvedValue(observation);
+  host.append(el);
+  await vi.waitFor(() => expect(card(el)?.textContent).toContain("192.0.2.8"));
 });

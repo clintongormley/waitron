@@ -73,10 +73,11 @@ problem.
 
 ## Check the network {#network}
 
-On an installed Waitron box, **Network** shows the wired connection and its address,
+When your box can report its network, **Network** shows the wired connection and its address,
 the current Wi-Fi name and the saved Wi-Fi name. Use it to check which network the
 box is using. The card refreshes about once a minute; you cannot change the network here.
-If a read fails, wait for the next automatic attempt.
+If a read fails, wait for the next automatic attempt. If the card is missing, reopen
+**Box status** to ask the box again.
 
 ## Try the waiting records again {#retry-now}
 

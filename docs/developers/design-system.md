@@ -6324,7 +6324,8 @@ alert list. Its one staged input is the note in its note dialog, which takes its
   Current Wi-Fi and Saved Wi-Fi. It reads `/api/box/network` once a minute even with a live
   connection, with the first read active and later reads passive. It hides for
   `box_host.unavailable`; other failures replace its old observation with a read-failed
-  notice until a successful read. Its read state is separate from health and alert failures.
+  notice until a successful read. When unavailable, it releases the read; reopening the page
+  asks again. Its read state is separate from health and alert failures.
   Null addresses and saved names say they were not reported; disconnected connections
   say Not connected. Names are decoded as UTF-8 and rendered as text. Its guide link opens
   the page's `network` section. It offers no network changes.
