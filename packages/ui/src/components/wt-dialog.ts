@@ -121,6 +121,7 @@ export class WtDialog extends LitElement {
       }
 
       .footer {
+        position: relative;
         min-height: 0;
         display: flex;
         flex-direction: column;

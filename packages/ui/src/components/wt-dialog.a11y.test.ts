@@ -36,6 +36,38 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
+  test("keeps footer contrast separate from clipped body text", async () => {
+    // #2910: separate clipped grid text from the footer in a stacked shadow-dialog scan.
+    const wrapper = await mountThemed("<div></div>", theme);
+    const root = wrapper.attachShadow({ mode: "open" });
+    root.innerHTML = `<wt-dialog heading="Edit printer">
+      <div style="display: grid">
+        <div data-filler style="height: 1000px"></div>
+        <section><h3>Used by</h3><p>Kitchen</p></section>
+        <div style="height: 1000px"></div>
+      </div>
+      <div slot="footer" style="width: 100%"><wt-button variant="danger">Delete printer</wt-button></div>
+    </wt-dialog><wt-dialog id="above" heading="Calibration">Print a test page</wt-dialog>`;
+    const el = root.querySelector("wt-dialog")! as Openable;
+    el.open = true;
+    await el.updateComplete;
+    const footerButton = el.querySelector("wt-button")!;
+    await footerButton.updateComplete;
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const heading = el.querySelector("h3")!;
+    const button = footerButton.shadowRoot!.querySelector("button")!;
+    const filler = el.querySelector<HTMLElement>("[data-filler]")!;
+    filler.style.height = `${filler.getBoundingClientRect().height + button.getBoundingClientRect().top - heading.getBoundingClientRect().top + 2}px`;
+    const h = heading.getBoundingClientRect();
+    const b = button.getBoundingClientRect();
+    expect(h.top).toBeGreaterThan(body.getBoundingClientRect().bottom);
+    expect(h.left < b.right && h.right > b.left && h.top < b.bottom && h.bottom > b.top).toBe(true);
+    const above = root.querySelector("#above")! as Openable;
+    above.open = true;
+    await above.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("open, with the footer actions' message in the footer, above the buttons", async () => {
     const el = (await mountThemed(
       `<wt-dialog heading="Add passkey">
