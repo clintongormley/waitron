@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { SetupApi } from "../api/client.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
@@ -58,6 +59,46 @@ function controlOf(el: SetupRestoreBucketScreen, field: "kit" | "environment"): 
   )!;
 }
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
+
+it("names the old bucket code when Review backup refuses it", async () => {
+  const previous = currentLocale();
+  setLocale("en-GB");
+  try {
+    const api = new SetupApi("", async () =>
+      Response.json(
+        {
+          error: {
+            code: "backup.stream_kit_invalid",
+            params: { reason: "version" },
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+      api,
+    });
+    paste(el, "WAITRON-RECOVERY-KIT-1:old");
+    await el.updateComplete;
+    const copy = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "setup-recovery-copy",
+    )!;
+    await copy.updateComplete;
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(fieldMessages(el)).toContain(
+        "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
+      ),
+    );
+    paste(el, "different kit");
+    await el.updateComplete;
+    expect(fieldMessages(el)).not.toContain(
+      "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
+    );
+  } finally {
+    setLocale(previous);
+  }
+});
 
 /** The kit and environment are shared fields, whose invalid marking is inside their own shadow roots,
  * where a `[aria-invalid=true]` query of the screen cannot see it. */

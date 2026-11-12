@@ -4,7 +4,7 @@ Conserva el paquete de recuperación anterior cuando cambies la clave de recuper
 
 Las copias programadas y la copia en el bucket usan cada una la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
 
-Usa una carpeta para la copia del bucket que no contenga la copia de otro flujo. Si Waitron dice que la carpeta ya está en uso, elige **Cambiar de bucket** e introduce otro prefijo.
+Usa una carpeta para la copia del bucket que no contenga la copia de otro flujo. Cuando Waitron diga «esta carpeta del bucket contiene otra copia», elige **Cambiar de bucket** e introduce otro prefijo.
 
 Puedes compartir una carpeta de copias entre servidores: cada servidor elimina solo sus propias copias. Tras una restauración, elige una carpeta nueva si quieres conservar todas las copias anteriores, porque el servidor restaurado puede seguir eliminándolas. Waitron deja intactas las copias de otros servidores y los archivos que no reconoce; gestiona esos archivos cuando necesites más espacio.
 

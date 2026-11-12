@@ -250,6 +250,10 @@ unrecognised, and a completed pairing file filling a database with no Cloud id. 
 one gathered fix pass: stop opening with `folder_in_use`, explain choosing another prefix in both
 languages, refuse the old kit with reason `version`, and refuse a nonempty file id absent from the
 database. The empty-file/database-committed interrupted save still recovers. Test/Save keep their
-existing probes. Replacement also refuses an already-held different Cloud id. Added deletion
-controls cover reply/view binding, interrupted recovery, first stream save and the configured prefix.
+existing probes.
 Changed test checks: the old-kit case now expects `version` instead of `not_found`, under this clearance.
+
+Other accepted review corrections, implemented by the driver within the existing plan: replacement
+refuses an already-held different Cloud id; status projects the effective id while signing the
+original request binding. Added deletion controls cover reply/view binding, interrupted recovery,
+first stream save and the configured prefix. These are not additional claims about the 19:56 clearance.
