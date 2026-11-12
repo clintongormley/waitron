@@ -181,3 +181,11 @@ new course column or stored open/chosen/not-taken state. “Payment must never b
 choice still open.” A guest who never chooses coffee can pay the same lunch price, with nothing
 sent for that choice. The watcher also cleared: “The bounded kitchen context (lunch reference
 plus earlier dishes, clearly labelled) is fine.” The corrected plan still needs watcher clearance.
+
+
+## 12 November 2026, 22:04: plan cleared; kitchen reference only
+
+The watcher cleared the plan with the open-choice payment case, kitchen slips showing only
+that course’s dishes and the lunch reference, and three hours as a point for a look rather than
+a ceiling. This replaces the 21:52 earlier-dish context direction. Growth beyond 1.5 times a
+pull request’s forecast still requires a deviation question. No further plan read was requested.
