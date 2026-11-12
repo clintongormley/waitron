@@ -110,6 +110,13 @@ async function startMainBox(
     let raw = "";
     req.on("data", (chunk: Buffer) => (raw += chunk.toString()));
     req.on("end", () => {
+      // A real box refuses the start's chart request, which sends no credential, like this.
+      if (req.url === "/management-api/membership") {
+        res.statusCode = 401;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ error: { code: "password.invalid", params: {} } }));
+        return;
+      }
       if (req.url === "/api/node/membership") {
         charts.push(raw);
         chartPostClosed = new Promise((resolve) => req.socket.once("close", () => resolve()));
