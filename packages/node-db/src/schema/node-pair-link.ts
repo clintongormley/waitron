@@ -21,6 +21,8 @@ export const nodePairLink = table(
     storeUrl: label("store_url").notNull(),
     venueId: label("venue_id").notNull(),
     accessKeyId: label("access_key_id").notNull(),
+    // Sealed rather than hashed: the main box signs each store request with the plain secret, and
+    // the spare's store needs the plain secret to check that signature.
     secretCiphertext: binary("secret_ciphertext").notNull(),
     secretIv: binary("secret_iv").notNull(),
     secretAuthTag: binary("secret_auth_tag").notNull(),

@@ -198,10 +198,11 @@ controls remain open; no provider work is authorised.
   primary's join refusals (`mirror.standby_removed` for a removed or cleared id,
   `mirror.membership_full` for a full chart) and the mint's size refusals; (v) a receiver whose
   held chart predates a removal accepts the removed machine's charts until it learns of the
-  removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather than the primary's
-  reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx answer into that
-  code except a refused login, which it relays as `password.invalid` (C95) — this predates A63,
-  and `mirror.standby_removed` has the same gap; (vii) if A61's removal ever mis-classifies a live
+  removal; (vi) a joining standby refused for a removed id (`mirror.standby_removed`) or a full chart
+  (`mirror.membership_full`) sees `mirror.bundle_fetch_failed` rather than the primary's reason,
+  because `apps/server/src/mirror-bundle-fetch.ts` passes on only a refused login
+  (`password.invalid`) and the codes in `JOIN_REFUSALS` (`apps/server/src/mirror-bundle-api.ts`),
+  and turns every other refusal into that code (C95); (vii) if A61's removal ever mis-classifies a live
   standby that an operator later promotes, the old primary refuses the new primary's charts
   (`signer_removed`) and keeps selling; the refusal is logged at warn and raises no alert. No adopt
   can finish today (`finish-adoption.ts`), so no such standby exists yet.
@@ -394,8 +395,9 @@ that slice 3 has to restore:
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
   wizard still offers the option. The primary accepts the join without a relay, and the joining
-  server then waits, since nothing copies the restaurant's data to it until 3b-6. Its role, connect and refusal
-  wording now points to restore instead of promising a restart or suggesting another attempt.
+  server then waits, since nothing copies the restaurant's data to it until 3b-6. Its role and connect
+  wording says joining is not finished and points to restore; each refusal's wording says what
+  happened and either what to fix before pressing Connect again or to choose Back.
   Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.

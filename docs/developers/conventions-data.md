@@ -980,7 +980,10 @@ records the removal of the old matrix and the restrictions still awaiting indivi
 
 Real code does write them, legitimately: the setup-mode provision route reaches `tenants`,
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
-`node_mode`, `node_mirror_link`, `node_primary_key`, `node_recovery_key` and `node_signing_key`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
+`node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`, `node_recovery_key` and
+`node_signing_key`, writing this box's rows and deleting any an abandoned earlier attempt left in
+those six `node.db` tables under another node id; the main box's joining route
+(`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
 `waitron-credentials rotate` reach `node_signing_key`, and the rotation also reaches `node_pair_link`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
@@ -1521,7 +1524,8 @@ without `applyMigrations` (`runMigrations` called directly) is invisible to it.
 
 `venue.db` holds every table but `node.db`'s, and a primary streams it whole to the owner's bucket once
 one is set up. `node.db`, beside it, holds what a box must remember about itself — its mode and
-singleton role (`node_mode`), its link to the main box (`node_mirror_link`), the main box's key it
+singleton role (`node_mode`), its link to the main box (`node_mirror_link`), its link to the other box of its pair — the spare's
+store address and the store's access key, its secret sealed (`node_pair_link`) — the main box's key it
 pinned when it joined (`node_primary_key`), its recovery-key check (`node_recovery_key`), its
 sealed signing key (`node_signing_key`), and its handover records: each handover operation it
 takes part in (`node_handover_operations`), what it decided and received during them
