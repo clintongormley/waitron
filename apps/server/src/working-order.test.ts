@@ -1443,8 +1443,8 @@ describe("listHeldOrders", () => {
         line(done),
       ]);
       const items = await courseItemsFor(tx, tabId);
-      await advanceTicketItem(tx, cfg, byLine(items, done).id, "preparing");
-      await advanceTicketItem(tx, cfg, byLine(items, done).id, "ready");
+      await advanceTicketItem(tx, byLine(items, done).id, "preparing");
+      await advanceTicketItem(tx, byLine(items, done).id, "ready");
       return tabId;
     });
 
@@ -2494,7 +2494,7 @@ describe("updateHeldOrder", () => {
           .where(eq(ticketItems.workingOrderId, seeded.tabId));
       if (state === "preparing") {
         const [item] = await itemsOf();
-        await withTransaction(db, (tx) => advanceTicketItem(tx, cfg, item!.id, "preparing"));
+        await withTransaction(db, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
       }
       const before = await linesOf();
       const firedBefore = await itemsOf();
@@ -5057,19 +5057,19 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(items.map((i) => i.state)).toEqual(["queued", "queued"]);
 
       // Per-line bump: item[0] walks queued → preparing → ready.
-      await advanceTicketItem(tx, cfg, items[0]!.id, "preparing");
-      await advanceTicketItem(tx, cfg, items[0]!.id, "ready");
+      await advanceTicketItem(tx, items[0]!.id, "preparing");
+      await advanceTicketItem(tx, items[0]!.id, "ready");
 
       // Backwards (ready → preparing) is refused via the empty `returning` — the state predicate no
       // longer matches — naming the offending ticket item.
-      await expect(advanceTicketItem(tx, cfg, items[0]!.id, "preparing")).rejects.toMatchObject({
+      await expect(advanceTicketItem(tx, items[0]!.id, "preparing")).rejects.toMatchObject({
         code: "ticket.invalid_transition",
         params: { ticketItemId: items[0]!.id },
       });
 
       // Whole-ticket bump advances only the still-queued item[1] (item[0], already `ready`, is left
       // alone — it is no longer at the `queued` predecessor).
-      await advanceTicket(tx, cfg, orderId, kitchenStation.id, "preparing");
+      await advanceTicket(tx, orderId, kitchenStation.id, "preparing");
 
       const queue = await listStationQueue(tx, kitchenStation.id);
       const group = queue.find((g) => g.orderId === orderId)!;
@@ -5078,7 +5078,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 
       // A second whole-ticket bump to `ready` advances the now-preparing item[1]; item[0] (already
       // `ready`) is skipped — the bulk UPDATE matches only the `preparing` predecessor.
-      await advanceTicket(tx, cfg, orderId, kitchenStation.id, "ready");
+      await advanceTicket(tx, orderId, kitchenStation.id, "ready");
       const readied = await listStationQueue(tx, kitchenStation.id);
       expect(readied.find((g) => g.orderId === orderId)!.items.map((i) => i.state)).toEqual([
         "ready",
@@ -5097,18 +5097,18 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 
       // Skipping preparing (queued → ready) matches no row — `ready`'s only legal predecessor is
       // `preparing` — so the empty `returning` refuses it.
-      await expect(advanceTicketItem(tx, cfg, item!.id, "ready")).rejects.toMatchObject({
+      await expect(advanceTicketItem(tx, item!.id, "ready")).rejects.toMatchObject({
         code: "ticket.invalid_transition",
         params: { ticketItemId: item!.id },
       });
       // No state legally advances INTO queued — refused before any query.
-      await expect(advanceTicketItem(tx, cfg, item!.id, "queued")).rejects.toMatchObject({
+      await expect(advanceTicketItem(tx, item!.id, "queued")).rejects.toMatchObject({
         code: "management.request_invalid",
         params: { field: "to" },
       });
       // An absent id matches no row and is refused as an unknown item.
       const missing = randomUUID();
-      await expect(advanceTicketItem(tx, cfg, missing, "preparing")).rejects.toMatchObject({
+      await expect(advanceTicketItem(tx, missing, "preparing")).rejects.toMatchObject({
         code: "ticket_item.not_found",
         params: { ticketItemId: missing },
       });
@@ -5129,14 +5129,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // A garbage `to` — not a key of TICKET_TRANSITIONS. The till route casts `body.to as TicketState`
       // with no route-level screen, so this is reachable at runtime despite the narrower static type.
       await expect(
-        advanceTicketItem(tx, cfg, item!.id, "garbage" as unknown as TicketState),
+        advanceTicketItem(tx, item!.id, "garbage" as unknown as TicketState),
       ).rejects.toMatchObject({
         code: "management.request_invalid",
         params: { field: "to" },
       });
       // A missing `to` — an absent JSON field reaches here as `undefined` the same way.
       await expect(
-        advanceTicketItem(tx, cfg, item!.id, undefined as unknown as TicketState),
+        advanceTicketItem(tx, item!.id, undefined as unknown as TicketState),
       ).rejects.toMatchObject({
         code: "management.request_invalid",
         params: { field: "to" },
@@ -5683,7 +5683,7 @@ describe("waiter line release / hold-and-fire", () => {
 
       // A held item cannot advance — the kitchen must not bump food it has not been told to start.
       await expect(
-        advanceTicketItem(tx, cfg, byLine(items, steak).id, "preparing"),
+        advanceTicketItem(tx, byLine(items, steak).id, "preparing"),
       ).rejects.toMatchObject({ code: "ticket.item_held" });
 
       await fireProductLine(tx, cfg, orderId, steak);
@@ -5691,7 +5691,7 @@ describe("waiter line release / hold-and-fire", () => {
       expect(byLine(afterFire, steak).firedAt).not.toBeNull();
       expect(byLine(afterFire, sibling).firedAt).toBeNull();
 
-      await advanceTicketItem(tx, cfg, byLine(afterFire, steak).id, "preparing");
+      await advanceTicketItem(tx, byLine(afterFire, steak).id, "preparing");
       const advanced = await courseItemsFor(tx, orderId);
       expect(byLine(advanced, steak).state).toBe("preparing");
     });
@@ -5821,7 +5821,7 @@ describe("waiter line release / hold-and-fire", () => {
       expect(byLine(before, main).firedAt).toBeNull(); // Mains held
 
       // Whole-ticket bump to preparing: the fired starter advances; the held main is skipped.
-      await advanceTicket(tx, cfg, orderId, kitchenStation.id, "preparing");
+      await advanceTicket(tx, orderId, kitchenStation.id, "preparing");
 
       const after = await courseItemsFor(tx, orderId);
       expect(byLine(after, starter).state).toBe("preparing"); // fired item advanced
@@ -6757,7 +6757,7 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
       expect(items.every((i) => i.firedAt !== null)).toBe(true);
 
       // One set-based bump plates the whole course ready — both stations' items reach `ready`.
-      await bumpCourseReady(tx, cfg, orderId, courseId);
+      await bumpCourseReady(tx, orderId, courseId);
       items = await courseItemsFor(tx, orderId);
       expect(items.every((i) => i.state === "ready")).toBe(true);
     });
@@ -6777,14 +6777,14 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
 
       // Mains is HELD (later course, fired_at null). bumpCourseReady on it advances NOTHING — the
       // `fired_at IS NOT NULL` predicate skips held items.
-      await bumpCourseReady(tx, cfg, orderId, mainCourse.id);
+      await bumpCourseReady(tx, orderId, mainCourse.id);
       let items = await courseItemsFor(tx, orderId);
       expect(byLine(items, main).state).toBe("queued"); // held → skipped
       expect(byLine(items, main).firedAt).toBeNull(); // and still held
 
       // Starters IS fired, so bumping it plates its item straight to `ready` (queued → ready in one step)
       // — the OTHER answer, so the held-skip above is a real measurement, not "nothing ever advances".
-      await bumpCourseReady(tx, cfg, orderId, starterCourse.id);
+      await bumpCourseReady(tx, orderId, starterCourse.id);
       items = await courseItemsFor(tx, orderId);
       expect(byLine(items, starter).state).toBe("ready");
 
@@ -6799,7 +6799,7 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
     await withTransaction(db, async (tx) => {
       const { orderId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
       const before = await courseItemsFor(tx, orderId);
-      await bumpCourseReady(tx, cfg, orderId, randomUUID());
+      await bumpCourseReady(tx, orderId, randomUUID());
       expect(await courseItemsFor(tx, orderId)).toEqual(before);
       expect(before.every((i) => i.state === "queued")).toBe(true);
     });
@@ -6809,7 +6809,7 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
-      await bumpCourseReady(tx, cfg, orderId, courseId);
+      await bumpCourseReady(tx, orderId, courseId);
       const read = () =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId));
       const readied = await read();
@@ -6820,7 +6820,7 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
         .set({ readyAt: "2026-10-20T12:00:00.000Z" })
         .where(eq(ticketItems.workingOrderId, orderId));
       const first = await read();
-      await bumpCourseReady(tx, cfg, orderId, courseId);
+      await bumpCourseReady(tx, orderId, courseId);
       expect(await read()).toEqual(first);
     });
   });

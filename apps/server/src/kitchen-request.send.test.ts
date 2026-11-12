@@ -414,11 +414,11 @@ describe("A773 waiter request: send", () => {
     });
     expect(kitchenPhase(item)).toBe("requested");
     const refused = await captureError(() =>
-      withTransaction(db, (tx) => advanceTicketItem(tx, venue.cfg, item.id, "preparing")),
+      withTransaction(db, (tx) => advanceTicketItem(tx, item.id, "preparing")),
     );
     expect(refused).toMatchObject({ code: "ticket.item_held" });
     await withTransaction(db, async (tx) => {
-      await advanceTicket(tx, venue.cfg, venue.party.tabId, venue.stations.grill, "preparing");
+      await advanceTicket(tx, venue.party.tabId, venue.stations.grill, "preparing");
       expect(await items(tx, venue.party.tabId)).toEqual([item]);
       await bumpGroupReady(tx, venue.party.partyId, groupId, {
         operatorId: OPERATOR,

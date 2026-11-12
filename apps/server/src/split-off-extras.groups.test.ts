@@ -77,15 +77,15 @@ describe("groups with split-off extras", () => {
       const items = await records(tx, first.tabId);
       const grill = items.find((item) => item.stationId === v.stations.grill)!;
       const fryer = items.find((item) => item.stationId === v.stations.fryer)!;
-      await advanceTicketItem(tx, v.cfg, grill.id, "preparing");
-      await advanceTicketItem(tx, v.cfg, grill.id, "ready");
+      await advanceTicketItem(tx, grill.id, "preparing");
+      await advanceTicketItem(tx, grill.id, "ready");
       expect(
         (await listOrderGroups(tx, v.party.partyId)).groups.find(
           (group) => group.id === first.groups[0]!.id,
         )?.ready,
       ).toBeUndefined();
-      await advanceTicketItem(tx, v.cfg, fryer.id, "preparing");
-      await advanceTicketItem(tx, v.cfg, fryer.id, "ready");
+      await advanceTicketItem(tx, fryer.id, "preparing");
+      await advanceTicketItem(tx, fryer.id, "ready");
       expect(
         (await listOrderGroups(tx, v.party.partyId)).groups.find(
           (group) => group.id === first.groups[0]!.id,
@@ -194,8 +194,8 @@ describe("groups with split-off extras", () => {
       const fryer = (await records(tx, placed.tabId)).find(
         (item) => item.stationId === v.stations.fryer,
       )!;
-      await advanceTicketItem(tx, v.cfg, fryer.id, "preparing");
-      await advanceTicketItem(tx, v.cfg, fryer.id, "ready");
+      await advanceTicketItem(tx, fryer.id, "preparing");
+      await advanceTicketItem(tx, fryer.id, "ready");
       const [stamped] = await tx
         .select({ readyAt: ticketItems.readyAt })
         .from(ticketItems)

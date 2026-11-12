@@ -1621,7 +1621,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
     );
     const ticket = await ticketOfLine(tabId, 1);
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
 
     await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1));
 
@@ -2073,7 +2073,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("raising a started line through the whole-order save leaves it preparing and sends the extra one and the new dish", async () => {
     const { cfg, tabId, ticket, lineId, coffeeOffer, waterOffer } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
 
     await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
@@ -2105,7 +2105,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("raising a started line through the one-line edit leaves it preparing and sends the extra one", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
 
     await asApp(cfg, async (tx) =>
       updateOrderLine(
@@ -2132,7 +2132,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("at a Not allowed station, refuses raising a started line as fired, changing nothing", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never", [ticket.stationId]));
     const before = await linesOf(tabId);
 
@@ -2157,7 +2157,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("refuses raising a started line with a note and lowering its count through Change dish", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
     const before = await linesOf(tabId);
 
     for (const [patch, refusal] of [
@@ -2196,7 +2196,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("refuses a change to a started line, and its removal, changing nothing", async () => {
     const { cfg, tabId, ticket, waterOffer } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
     const before = await linesOf(tabId);
 
     await expect(
@@ -2261,7 +2261,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("a started line is refused as started at a While held and at a Not allowed station", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
     for (const value of ["held", "never"] as const) {
       await asApp(cfg, (tx) => setChangesAfterSending(tx, value));
       const before = await linesOf(tabId);
@@ -2383,7 +2383,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("at a Not allowed station the whole-order save still refuses to remove a started dish", async () => {
     const { cfg, tabId, ticket, waterOffer } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+    await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const before = await linesOf(tabId);
 
@@ -2879,7 +2879,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     it("raising a started row of two to three leaves both preparing and sends one new dish", async () => {
       const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
       for (const ticket of tickets) {
-        await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
+        await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
       }
 
       await editRow(cfg, tabId, { quantity: "3", portionLineNos: [2] });
@@ -2916,7 +2916,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     it("refuses a change to a row whose second dish is started, changing nothing", async () => {
       const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
-      await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, tickets[1]!.id, "preparing"));
+      await asApp(cfg, (tx) => advanceTicketItem(tx, tickets[1]!.id, "preparing"));
       const before = await linesOf(tabId);
 
       await expect(

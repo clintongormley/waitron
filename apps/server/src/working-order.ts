@@ -1633,12 +1633,7 @@ export async function openTab(
  * This working order is an open bill of a party, else `tab.not_open`; answers its revision. A counter
  * order is not.
  */
-export async function assertPartyBillOpen(
-  tx: Transaction,
-  cfg: TradingContext,
-  tabId: string,
-): Promise<number> {
-  void cfg;
+export async function assertPartyBillOpen(tx: Transaction, tabId: string): Promise<number> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
@@ -2549,7 +2544,7 @@ export async function sendLines(
     }
   }
   const routing = routingOnce(tx, new Date());
-  await assertPartyBillOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, tabId);
   await requireOrderBillEditor(tx, tabId, authority);
   const namedLines =
     lineNos.length === 0
@@ -2658,13 +2653,11 @@ async function releasedCourses(
  */
 export async function bumpCourseReady(
   tx: Transaction,
-  cfg: TradingContext,
   orderId: string,
   courseId: string,
   firer?: Firer,
   attendance?: OrderAttendance,
 ): Promise<void> {
-  void cfg;
   const changed = await tx
     .update(ticketItems)
     .set(advanceSet("ready"))
@@ -2710,7 +2703,7 @@ export async function addTabRound(
   lines: TabRoundLine[],
   stamp: { groupId?: string; creditedTo?: string } & OrderEditAuthority,
 ): Promise<void> {
-  await assertPartyBillOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, tabId);
   await requireOrderBillEditor(tx, tabId, stamp);
   const round = await priceTabRound(tx, cfg, tabId, lines, "checked");
   const appendedLines = await insertTabRound(
@@ -2771,7 +2764,7 @@ export async function priceTabRound(
   bill: "check" | "checked" = "check",
   lateSend?: LateSendConfirmation,
 ): Promise<PricedTabRound> {
-  if (bill === "check") await assertPartyBillOpen(tx, cfg, tabId);
+  if (bill === "check") await assertPartyBillOpen(tx, tabId);
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
@@ -3336,7 +3329,7 @@ export async function setLineCourse(
   authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
-  await assertPartyBillOpen(tx, cfg, tabId);
+  await assertPartyBillOpen(tx, tabId);
   await requireOrderBillEditor(tx, tabId, authority);
   if (courseId !== null) {
     await requireLiveCourse(tx, courseId);
@@ -7597,12 +7590,10 @@ export function advanceSet(to: Exclude<TicketState, "queued">) {
  *  `ticket.item_held`, and a skip, repeat or backwards move `ticket.invalid_transition`. */
 export async function advanceTicketItem(
   tx: Transaction,
-  cfg: TradingContext,
   itemId: string,
   to: TicketState,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
-  void cfg;
   // Own string keys only: `hasOwn` converts its key, so ["preparing"] would otherwise match, and an
   // inherited name such as "__proto__" is not a transition.
   if (typeof to !== "string" || !Object.hasOwn(TICKET_TRANSITIONS, to)) {
@@ -7642,13 +7633,11 @@ export async function advanceTicketItem(
 /** Advance the fired items of one order at one station; held items are skipped. */
 export async function advanceTicket(
   tx: Transaction,
-  cfg: TradingContext,
   orderId: string,
   stationId: string,
   to: Exclude<TicketState, "queued">,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
-  void cfg;
   const changed = await tx
     .update(ticketItems)
     .set(advanceSet(to))

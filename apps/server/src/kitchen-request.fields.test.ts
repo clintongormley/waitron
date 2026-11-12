@@ -104,9 +104,9 @@ async function requestedBurgerAndReadyWater(tx: Transaction, venue: Venue) {
   await setStationsWaitForPass(tx, true, [venue.stations.grill]);
   await place(tx, venue, "fire", [dish(venue, "burger"), dish(venue, "water")]);
   const water = await lineOf(tx, venue, "water");
-  await advanceTicketItem(tx, venue.cfg, water.itemId!, "preparing");
+  await advanceTicketItem(tx, water.itemId!, "preparing");
   vi.setSystemTime(new Date(LATER));
-  await advanceTicketItem(tx, venue.cfg, water.itemId!, "ready");
+  await advanceTicketItem(tx, water.itemId!, "ready");
   return { burger: await lineOf(tx, venue, "burger"), water };
 }
 

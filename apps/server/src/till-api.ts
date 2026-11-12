@@ -1208,7 +1208,6 @@ function mountCourseReady(app: Hono, deps: TillApiDeps, log: Logger): void {
         await checkZones(tx, session, [{ orderId }]);
         await bumpCourseReady(
           tx,
-          cfg,
           orderId,
           courseId,
           { personId },
@@ -2283,7 +2282,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         }
         await advanceTicketItem(
           tx,
-          cfg,
           id,
           to,
           deps.attendance === undefined
@@ -2313,7 +2311,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await withTransaction(deps.db, async (tx) => {
         await advanceTicket(
           tx,
-          cfg,
           orderId,
           stationId,
           to,

@@ -290,7 +290,7 @@ describe("finishing paid food service", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, p.lines[1]!.id));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
     const before = await snapshot(p);
     expect(await post(p, body)).toMatchObject({
       status: 409,
@@ -559,8 +559,8 @@ describe("A773 requested lifecycle", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, lines[3]!.id));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, bread!.id, "preparing"));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, bread!.id, "ready"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, bread!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, bread!.id, "ready"));
     await payWorkingOrder(
       {
         admission: testTradingAdmission(),

@@ -359,8 +359,8 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderId, tabId));
     for (const item of items) {
-      await advanceTicketItem(tx, cfg, item.id, "preparing");
-      await advanceTicketItem(tx, cfg, item.id, "ready");
+      await advanceTicketItem(tx, item.id, "preparing");
+      await advanceTicketItem(tx, item.id, "ready");
     }
     // The order-level customer-handover marker, set before the pay files.
     await tx

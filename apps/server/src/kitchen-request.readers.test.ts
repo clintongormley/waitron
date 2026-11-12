@@ -97,8 +97,8 @@ async function fireNow(tx: Transaction, venue: Venue, lineInputs: ReturnType<typ
 }
 
 async function toReady(tx: Transaction, venue: Venue, itemId: string) {
-  await advanceTicketItem(tx, venue.cfg, itemId, "preparing");
-  await advanceTicketItem(tx, venue.cfg, itemId, "ready");
+  await advanceTicketItem(tx, itemId, "preparing");
+  await advanceTicketItem(tx, itemId, "ready");
 }
 
 async function counts(tx: Transaction, venue: Venue) {

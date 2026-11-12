@@ -79,7 +79,7 @@ async function request(
       .from(ticketItems)
       .where(inArray(ticketItems.workingOrderLineId, p.row.lineIds ?? [p.row.lineId]));
     for (const ticket of tickets)
-      await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket.id, "preparing"));
+      await inTx(venue, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
   }
   const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, p.billId));
   return {

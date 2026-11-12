@@ -419,7 +419,7 @@ describe("A803 portion lifecycle: cancellations", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, first!.lineId));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
     const [bill] = await venue.db
       .select({ revision: workingOrders.revision })
       .from(workingOrders)
@@ -624,7 +624,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
       .select()
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, first!.lineId));
-    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing"));
+    await inTx(venue, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
     const total = await inTx(venue, (tx) => storedOrderTotal(tx, p.billId));
 
     const command = { ...(await ask(p)), expectedEdits: await bothEdits(p) };

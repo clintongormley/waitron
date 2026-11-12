@@ -66,8 +66,8 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
                 tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
               );
               await inTx(v, async (tx) => {
-                await advanceTicketItem(tx, v.cfg, item!.id, "preparing");
-                await advanceTicketItem(tx, v.cfg, item!.id, "ready");
+                await advanceTicketItem(tx, item!.id, "preparing");
+                await advanceTicketItem(tx, item!.id, "ready");
               });
               return { v, item: item! };
             })();
@@ -125,8 +125,8 @@ async function tableWork(quantity = "1", shape?: "grouped") {
     tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
   );
   await inTx(v, async (tx) => {
-    await advanceTicketItem(tx, v.cfg, item!.id, "preparing");
-    await advanceTicketItem(tx, v.cfg, item!.id, "ready");
+    await advanceTicketItem(tx, item!.id, "preparing");
+    await advanceTicketItem(tx, item!.id, "ready");
   });
   return { v, party, item: item! };
 }
@@ -224,8 +224,8 @@ describe("A773 lifetime", () => {
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
     );
     await inTx(v, async (tx) => {
-      await advanceTicketItem(tx, v.cfg, item!.id, "preparing");
-      await advanceTicketItem(tx, v.cfg, item!.id, "ready");
+      await advanceTicketItem(tx, item!.id, "preparing");
+      await advanceTicketItem(tx, item!.id, "ready");
     });
     const expected = [{ id: item!.id, qty: "1.000" }];
     expect(await boards(v)).toEqual({ screen: expected, monitor: expected });

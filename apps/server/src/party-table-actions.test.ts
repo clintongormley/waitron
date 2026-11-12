@@ -2779,7 +2779,7 @@ describe("A803 split", () => {
       const preparing = (await kitchenRows(b1)).find(
         (item) => item.workingOrderLineId === topped.id,
       )!;
-      await act((tx) => advanceTicketItem(tx, v.cfg, preparing.id, "preparing"));
+      await act((tx) => advanceTicketItem(tx, preparing.id, "preparing"));
       await act((tx) => serveLine(tx, v.cfg, b1, cake.lineNo));
       const leftAsItWas = (line: Awaited<ReturnType<typeof lineRows>>[number]) => ({
         ...line,

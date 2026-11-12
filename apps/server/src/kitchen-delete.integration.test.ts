@@ -187,13 +187,13 @@ it("keeps retained draft, group, course and ready station history through manage
     }),
   );
   const [preparingTicket] = await v.db.select().from(ticketItems);
-  await inTx(v, (tx) => advanceTicketItem(tx, v.cfg, preparingTicket!.id, "preparing"));
+  await inTx(v, (tx) => advanceTicketItem(tx, preparingTicket!.id, "preparing"));
   const preparing = await remove("stations", station.id);
   expect(preparing.status).toBe(409);
   expect(await preparing.json()).toEqual({
     error: { code: "station.work_in_progress", params: { stationId: station.id, count: 1 } },
   });
-  await inTx(v, (tx) => bumpCourseReady(tx, v.cfg, submitted.tabId, course.id));
+  await inTx(v, (tx) => bumpCourseReady(tx, submitted.tabId, course.id));
   const history = async () => ({
     tickets: await v.db.select().from(ticketItems),
     lines: await v.db.select().from(workingOrderLines),
@@ -376,7 +376,7 @@ it("refuses a queued station delete after another writer sends preparing food", 
     await release.promise;
     await addTabRound(tx, v.cfg, seated.tabId, [{ menuItemId: v.item("Flan"), quantity: "1" }]);
     const [item] = await tx.select().from(ticketItems);
-    await advanceTicketItem(tx, v.cfg, item!.id, "preparing");
+    await advanceTicketItem(tx, item!.id, "preparing");
   });
   await entered.promise;
   const asked = deferred();

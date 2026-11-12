@@ -104,7 +104,7 @@ describe("releasing split-off extras", () => {
       expect(fired.items).toHaveLength(2);
       expect(fired.items.every((item) => item.firedAt !== null)).toBe(true);
       expect((await fryerTickets(tx, venue)).join("\n")).toContain("CHIPS");
-      await bumpCourseReady(tx, venue.cfg, venue.party.tabId, courseId);
+      await bumpCourseReady(tx, venue.party.tabId, courseId);
       expect((await rows(tx, venue.party.tabId)).items.map((item) => item.state)).toEqual([
         "ready",
         "ready",

@@ -672,7 +672,7 @@ async function kitchenItems(billId: string) {
 
 function advance(itemId: string, ...states: ("preparing" | "ready")[]) {
   return inTx(venue, async (tx) => {
-    for (const state of states) await advanceTicketItem(tx, venue.cfg, itemId, state);
+    for (const state of states) await advanceTicketItem(tx, itemId, state);
   });
 }
 

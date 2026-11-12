@@ -708,7 +708,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         if (item !== undefined && !(await worksStation(tx, screen, item.stationId))) {
           throw new AppError("device.forbidden_station", { stationId: item.stationId });
         }
-        await advanceTicketItem(tx, cfg, id, to);
+        await advanceTicketItem(tx, id, to);
       });
       return c.body(null, 204);
     }),

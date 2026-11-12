@@ -113,7 +113,7 @@ async function prepare(action: Action) {
         expectedPartyRevision: await partyRevision(tx, party.partyId),
         operatorId: v.operatorId,
       });
-    if (action.endsWith("-away")) await bumpCourseReady(tx, v.cfg, party.tabId, courseId);
+    if (action.endsWith("-away")) await bumpCourseReady(tx, party.tabId, courseId);
     if (action === "unserved")
       await markServed(tx, v.cfg, party.partyId, [{ lineId: line!.id, quantity: "1" }], {
         submissionId: newId(),
@@ -126,7 +126,7 @@ async function prepare(action: Action) {
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderLineId, line!.id));
   if (action === "ticket-ready" || action === "station-ready")
-    await withTransaction(suite.db, (tx) => advanceTicketItem(tx, v.cfg, ticket!.id, "preparing"));
+    await withTransaction(suite.db, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
   if (action === "hand-over") {
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },

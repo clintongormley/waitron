@@ -66,7 +66,7 @@ export function mountDeviceLevers(
       await withTransaction(deps.db, async (tx) => {
         const zoneId = await orderZone(tx, orderId);
         await VENUE_SERVICE.assertPassScreenZone(tx, device.deviceId, zoneId);
-        await bumpCourseReady(tx, cfg, orderId, courseId, { deviceId: device.deviceId });
+        await bumpCourseReady(tx, orderId, courseId, { deviceId: device.deviceId });
       });
       return c.body(null, 200);
     }),

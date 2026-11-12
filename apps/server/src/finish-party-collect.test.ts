@@ -794,8 +794,8 @@ describe("a bill sent to the counter waits there until handed over", () => {
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderId, billId));
     await inTx(venue, async (tx) => {
-      await advanceTicketItem(tx, venue.cfg, item!.id, "preparing");
-      await advanceTicketItem(tx, venue.cfg, item!.id, "ready");
+      await advanceTicketItem(tx, item!.id, "preparing");
+      await advanceTicketItem(tx, item!.id, "ready");
     });
     await pay(billId, "12.00");
     const label = (await billRow(billId)).label;

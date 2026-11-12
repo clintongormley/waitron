@@ -2363,31 +2363,27 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
     // Skipping `preparing` (queued → ready) matches no row — `ready`'s only legal predecessor is
     // `preparing` — so the empty `returning` refuses it, naming the offending item.
-    await expect(
-      asTenant((tx) => advanceTicketItem(tx, cfg, item!, "ready")),
-    ).rejects.toMatchObject({
+    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "ready"))).rejects.toMatchObject({
       code: "ticket.invalid_transition",
       params: { ticketItemId: item },
     });
     expect(await ticketStateOf(id)).toBe("queued"); // the refused skip changed nothing
 
     // The forward walk, one legal step at a time — the timestamps are stamped as it goes.
-    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
     expect(await ticketStateOf(id)).toBe("preparing");
-    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "ready"));
+    await asTenant((tx) => advanceTicketItem(tx, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
 
     // A repeat (ready → ready) and a backwards move (ready → preparing) both match no row now.
     for (const to of ["ready", "preparing"] as const) {
-      await expect(asTenant((tx) => advanceTicketItem(tx, cfg, item!, to))).rejects.toMatchObject({
+      await expect(asTenant((tx) => advanceTicketItem(tx, item!, to))).rejects.toMatchObject({
         code: "ticket.invalid_transition",
         params: { ticketItemId: item },
       });
     }
     // No kitchen state advances INTO `queued` — refused before any query (reaching queued is a fire's job).
-    await expect(
-      asTenant((tx) => advanceTicketItem(tx, cfg, item!, "queued")),
-    ).rejects.toMatchObject({
+    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "queued"))).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "to" },
     });
@@ -2418,12 +2414,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // Push item[0] all the way to `ready` first, so the whole-ticket bump must SKIP it (it is no longer
     // at the `queued` predecessor).
     await asTenant(async (tx) => {
-      await advanceTicketItem(tx, cfg, items[0]!, "preparing");
-      await advanceTicketItem(tx, cfg, items[0]!, "ready");
+      await advanceTicketItem(tx, items[0]!, "preparing");
+      await advanceTicketItem(tx, items[0]!, "ready");
     });
 
     // Whole-ticket bump to `preparing`: only the still-queued item[1] advances; item[0] (ready) is untouched.
-    await asTenant((tx) => advanceTicket(tx, cfg, id, station, "preparing"));
+    await asTenant((tx) => advanceTicket(tx, id, station, "preparing"));
 
     const queue = await asTenant((tx) => listStationQueue(tx, station));
     const group = queue.find((g) => g.orderId === id)!;
@@ -2477,7 +2473,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
     // Advancing order 1's line keeps it on the queue (a `preparing`/`ready` line stays until collected).
     const [item1] = await ticketItemIdsFor(id1);
-    await asTenant((tx) => advanceTicketItem(tx, cfg, item1!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, item1!, "preparing"));
     expect(
       (await asTenant((tx) => listStationQueue(tx, station))).find((g) => g.orderId === id1)
         ?.items[0]?.state,
@@ -2905,8 +2901,8 @@ describe("markCollected (the counter handover)", () => {
 
     // Walk the line all the way to `ready` — a ready line STAYS on the queue until the order collects.
     const [item] = await ticketItemIdsFor(id);
-    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
-    await asTenant((tx) => advanceTicketItem(tx, cfg, item!, "ready"));
+    await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
     const readyQueue = await asTenant((tx) => listStationQueue(tx, station));
     // Still listed — a ready-but-uncollected order lingers — and
