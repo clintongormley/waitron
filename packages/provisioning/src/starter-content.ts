@@ -18,3 +18,9 @@ export const STARTER_PROFILE_NAMES = {
 export const STARTER_JOB_ROLE_NAMES = {
   Team: { es: "Equipo" },
 } as const satisfies StaffNames;
+
+export const DEMO_JOB_ROLE_NAMES = {
+  Waiter: { es: "Camarero" },
+  Kitchen: { es: "Cocina" },
+  "Manager on duty": { es: "Encargado de turno" },
+} as const;

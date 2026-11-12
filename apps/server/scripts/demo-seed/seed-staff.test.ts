@@ -1,4 +1,4 @@
-import { DEMO_JOB_ROLE_NAMES } from "../../src/starter-content.js";
+import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 /** The staff seed, end to end. */
 
 import { describe, expect, it } from "vitest";

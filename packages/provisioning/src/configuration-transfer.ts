@@ -1,3 +1,4 @@
+import { createStarterStaffRole } from "@waitron/staffing";
 import {
   exportSettingsDocuments,
   checkImportedSettings,
@@ -6,7 +7,7 @@ import {
 } from "./settings-transfer.js";
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   AppError,
   businessDayAt,
@@ -762,6 +763,17 @@ export async function importConfigurationTables(
     .select({ id: persons.id })
     .from(persons)
     .where(eq(persons.role, "admin"));
+  const [starterRole] = await tx
+    .select({ name: staffRoles.name })
+    .from(staffRoles)
+    .innerJoin(personStaffRoles, eq(personStaffRoles.staffRoleId, staffRoles.id))
+    .where(
+      inArray(
+        personStaffRoles.personId,
+        administrators.map((admin) => admin.id),
+      ),
+    )
+    .limit(1);
   const incoming = checkedRows(bundle, modules);
   const incomingStations =
     incoming.find(([declaration]) => declaration.name === "kitchen_stations")?.[1] ?? [];
@@ -905,30 +917,46 @@ export async function importConfigurationTables(
       `);
     }
   }
-  const importedRoles = await tx.select().from(staffRoles);
-  const exportingRoles = (bundle.tables.person_staff_roles ?? [])
-    .filter((row) => row.person_id === bundle.sourceOperatorId)
-    .map((row) => idMap.get(String(row.staff_role_id))!);
-  const administratorRoles =
-    exportingRoles.length > 0
-      ? exportingRoles
-      : importedRoles.filter((role) => role.hiddenAt === null).map((role) => role.id);
-  for (const admin of administrators) {
-    for (const staffRoleId of administratorRoles) {
-      await tx.insert(personStaffRoles).values({ personId: admin.id, staffRoleId });
+  if (bundle.tables.person_staff_roles !== undefined) {
+    const importedRoles = await tx
+      .select()
+      .from(staffRoles)
+      .where(
+        inArray(
+          staffRoles.id,
+          (bundle.tables.staff_roles ?? []).map((row) => idMap.get(String(row.id))!),
+        ),
+      );
+    const exportingRoles = (bundle.tables.person_staff_roles ?? [])
+      .filter((row) => row.person_id === bundle.sourceOperatorId)
+      .map((row) => idMap.get(String(row.staff_role_id))!);
+    const administratorRoles =
+      exportingRoles.length > 0
+        ? exportingRoles
+        : importedRoles.filter((role) => role.hiddenAt === null).map((role) => role.id);
+    const roleNames = new Map(importedRoles.map((role) => [role.id, role.name]));
+    if (administratorRoles.length === 0 && administrators.length > 0) {
+      const name = starterRole?.name ?? "Team";
+      const id = await createStarterStaffRole(tx, name);
+      administratorRoles.push(id);
+      roleNames.set(id, name);
     }
-  }
-  const roleNames = new Map(importedRoles.map((role) => [role.id, role.name]));
-  for (const membership of await tx.select().from(personStaffRoles)) {
-    await recordActivity(tx, {
-      kind: "job_role.member_added",
-      subjectId: membership.personId,
-      personId: null,
-      data: {
-        staffRoleId: membership.staffRoleId,
-        name: roleNames.get(membership.staffRoleId)!,
-      },
-    });
+    for (const admin of administrators) {
+      for (const staffRoleId of administratorRoles) {
+        await tx.insert(personStaffRoles).values({ personId: admin.id, staffRoleId });
+      }
+    }
+    for (const membership of await tx.select().from(personStaffRoles)) {
+      await recordActivity(tx, {
+        kind: "job_role.member_added",
+        subjectId: membership.personId,
+        personId: null,
+        data: {
+          staffRoleId: membership.staffRoleId,
+          name: roleNames.get(membership.staffRoleId)!,
+        },
+      });
+    }
   }
   const { privacyNoticeUrl, privacyEmail } = bundle.privacyContact;
   await savePrivacyContact(tx, {

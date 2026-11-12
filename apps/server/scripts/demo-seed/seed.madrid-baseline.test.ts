@@ -1,5 +1,5 @@
 import { STARTER_JOB_ROLE_NAMES } from "@waitron/provisioning";
-import { DEMO_JOB_ROLE_NAMES } from "../../src/starter-content.js";
+import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import { madridWithFoldedTables } from "./testing/madrid-folded-tables.js";
 import { madridWithDocument } from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";

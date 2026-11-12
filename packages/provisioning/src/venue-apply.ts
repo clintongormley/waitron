@@ -184,6 +184,7 @@ export async function applyVenue(
     let nodeId = "";
     let reusingVenue = false;
     let createdAdministrator: string | undefined;
+    let starterJob: { id: string; name: string } | undefined;
     const seeded: SeedReport[] = [];
     const seriesIds: string[] = [];
 
@@ -246,12 +247,7 @@ export async function applyVenue(
             createdAdministrator = created!.id;
             const staffRoleId = await createStarterStaffRole(tx, action.jobRoleName);
             await tx.insert(personStaffRoles).values({ personId: created!.id, staffRoleId });
-            await recordActivity(tx, {
-              kind: "job_role.member_added",
-              subjectId: created!.id,
-              personId: null,
-              data: { staffRoleId, name: action.jobRoleName },
-            });
+            starterJob = { id: staffRoleId, name: action.jobRoleName };
           }
           break;
         }
@@ -501,6 +497,24 @@ export async function applyVenue(
     }
     const result = { nodeId, seriesIds, seeded };
     await deps.beforeCommit?.(tx, result);
+    if (createdAdministrator !== undefined && starterJob !== undefined) {
+      const [held] = await tx
+        .select()
+        .from(personStaffRoles)
+        .where(
+          and(
+            eq(personStaffRoles.personId, createdAdministrator),
+            eq(personStaffRoles.staffRoleId, starterJob.id),
+          ),
+        );
+      if (held)
+        await recordActivity(tx, {
+          kind: "job_role.member_added",
+          subjectId: createdAdministrator,
+          personId: null,
+          data: { staffRoleId: starterJob.id, name: starterJob.name },
+        });
+    }
     for (const [name] of prepared) moduleOperationFor(prepared, name, nodeId, "setup");
     return result;
   };

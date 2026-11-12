@@ -2,7 +2,7 @@
 
 import { personStaffRoles, staffRoles } from "@waitron/db";
 import { starterName } from "@waitron/country-packs";
-import { DEMO_JOB_ROLE_NAMES } from "../../src/starter-content.js";
+import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import type { SeedLocale } from "./locale.js";
 import type { Transaction } from "@waitron/db";
 import { hashPassword, hashPin, persons } from "@waitron/identity";

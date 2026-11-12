@@ -2089,7 +2089,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
   const importedHolder = await targetSuite.db.execute<{ person_id: string; staff_role_id: string }>(
     sql`select person_id, staff_role_id from person_staff_roles where person_id = (select id from persons where display_name = 'Holder')`,
   );
-  expect(baseline).toHaveLength(3);
+  expect(baseline).toHaveLength(2);
   expect(baseline.filter((row) => row.subjectId === importedHolder.rows[0]!.person_id)).toEqual([
     expect.objectContaining({
       personId: null,
@@ -8250,8 +8250,9 @@ it.each([true, false])(
   },
 );
 
-for (const hasRoles of [true, false]) {
-  it(`after an import the administrator holds ${hasRoles ? "the exporting administrator's job roles" : "every imported visible job role when the source administrator held none"}`, async () => {
+for (const mode of [true, false, "empty"] as const) {
+  const hasRoles = mode === true;
+  it(`after an import the administrator holds ${mode === "empty" ? "the starter Team when the source has no job roles" : hasRoles ? "the exporting administrator's job roles" : "every imported visible job role when the source administrator held none"}`, async () => {
     const source = await applyVenue(planVenue(venue("B24681390"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -8261,7 +8262,8 @@ for (const hasRoles of [true, false]) {
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`delete from person_staff_roles`);
       await tx.execute(sql`delete from staff_roles`);
-      await tx.execute(sql`insert into staff_roles (id, name, hidden_at) values
+      if (mode !== "empty")
+        await tx.execute(sql`insert into staff_roles (id, name, hidden_at) values
         ('source-waiter', 'Waiter', null), ('source-kitchen', 'Kitchen', null),
         ('source-hidden', 'Retired', '2026-11-01T00:00:00Z')`);
       if (hasRoles)
@@ -8290,7 +8292,13 @@ for (const hasRoles of [true, false]) {
     }>(sql`select r.id, r.name from staff_roles r
       join person_staff_roles h on h.staff_role_id = r.id join persons p on p.id = h.person_id
       where p.role = 'admin' order by r.name`);
-    expect(held.map((r) => r.name)).toEqual(hasRoles ? ["Waiter"] : ["Kitchen", "Waiter"]);
+    expect(held.map((r) => r.name)).toEqual(
+      mode === "empty"
+        ? [STARTER_JOB_ROLE_NAMES.Team.es]
+        : hasRoles
+          ? ["Waiter"]
+          : ["Kitchen", "Waiter"],
+    );
     expect(held.every((r) => !r.id.startsWith("source-"))).toBe(true);
     const targetAdmin = targetSuite.db.all<{ id: string }>(
       sql`select id from persons where role = 'admin'`,
@@ -8299,6 +8307,7 @@ for (const hasRoles of [true, false]) {
       .select()
       .from(activityLog)
       .where(eq(activityLog.kind, "job_role.member_added"));
+    expect(baseline.filter((row) => row.subjectId === targetAdmin)).toHaveLength(held.length);
     for (const role of held)
       expect(baseline).toContainEqual(
         expect.objectContaining({
