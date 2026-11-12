@@ -12,6 +12,7 @@ import {
   createProduct,
   getOptionList,
   setProductVariants,
+  updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -227,4 +228,22 @@ it("rechecks take-orders after the signed-in device's profile changes", async ()
   const answer = await send(app, cookie, "PUT", path(), { available: false });
   expect(answer.status).toBe(403);
   expect(answer.json.code).toBe("device.forbidden_action");
+});
+
+it("refuses a choice added to the stored list after the menu was published", async () => {
+  const stored = await withTransaction(suite.db, async (tx) => {
+    const { id, ...current } = await getOptionList(tx, listId);
+    return updateOptionList(
+      tx,
+      id,
+      { ...current, labels: [...current.labels, { name: "New choice" }] },
+      "es",
+    );
+  });
+  const unpublished = stored.labels.at(-1)!;
+  const answer = await send(app, cookie, "PUT", optionPath().replace(labelId, unpublished.id), {
+    available: false,
+  });
+  expect(answer).toMatchObject({ status: 404, json: { code: "options.not_found" } });
+  expect(await withTransaction(suite.db, (tx) => getOptionList(tx, listId))).toEqual(stored);
 });

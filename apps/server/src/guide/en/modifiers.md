@@ -69,6 +69,9 @@ While your preferred option is sold out, the first available option is preselect
 Put the preferred option back on sale to use it again. Deleting it leaves the first available
 option preselected. An extras entry is either preselected or not; there is no starting quantity to set.
 
+To make the replacement choice your preferred option while the old preference is sold out, first
+put the old preference back on sale and save. Then choose the new default and save again.
+
 ## Attach a list to a product {#attach}
 
 Open the product in **Products** and use its **Modifiers** section. It starts open when the product

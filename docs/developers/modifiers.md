@@ -66,6 +66,8 @@ default still belongs to the list and the submitted default is the effective fal
 the stored or submitted labels, the stored preference is kept. Removing it or choosing another
 available label uses the parser's result. Of what the parser
 returns, only a list with no available label, which only an inactive list may be, has no default.
+To replace a sold-out preference with its displayed fallback, restore the preference and save,
+then select the new default in a second save.
 Configuration transfer copies rows without going through that parser, so a stored null default is
 still possible, and a reader of `defaultLabelId` has to accept one.
 

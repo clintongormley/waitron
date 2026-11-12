@@ -86,7 +86,7 @@ it.each(["light", "dark"] as Theme[])(
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
       theme === "dark"
-        ? "Vuelve a poner otra opción a la venta antes de marcar esta como agotada."
+        ? t("product_info.last_choice")
         : "Put another choice back on sale before marking this one sold out.",
     );
     await expectNoA11yViolations(host);

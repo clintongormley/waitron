@@ -1168,6 +1168,8 @@ is built by the proposal. It distinguishes the narrower measured cases from thes
   is manual, never a next-day reset. A running-down quantity (“only 5 left”) stays parked.
   [Delivery 2](../superpowers/plans/2026-11-12-a1516-modifier-availability.md) keeps stored defaults
   and the stored active list's last-choice refusal; older published versions may contain fewer choices.
+  To make the displayed fallback the new preference while the saved preference is sold out, restore
+  the saved preference and save first, then select the new default and save again.
 
 - **Allergen choices (A1517, owner 2026-11-11, “As recommended”).** Hide unchecked dishes while
   excluding allergens, then extend filtering to extras/options; print live declarations on every

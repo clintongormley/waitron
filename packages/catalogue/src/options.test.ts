@@ -232,6 +232,35 @@ describe("option list CRUD", () => {
     expect(saved.labels.find((label) => label.id === preferred)!.available).toBe(true);
   });
 
+  it("keeps the preferred default when a save also withdraws the current fallback", async () => {
+    const created = await run((tx) =>
+      createOptionList(
+        tx,
+        { name: "Cooking", labels: [{ name: "Preferred" }, { name: "First" }, { name: "Second" }] },
+        "en",
+      ),
+    );
+    const preferred = created.labels[0]!.id;
+    await run((tx) => setOptionLabelAvailability(tx, created.id, preferred, false));
+    const { id, ...opened } = await run((tx) => getOptionList(tx, created.id));
+    const saved = await run((tx) =>
+      updateOptionList(
+        tx,
+        id,
+        {
+          ...opened,
+          defaultLabelId: opened.labels[2]!.id,
+          labels: opened.labels.map((label, index) =>
+            index === 1 ? { ...label, available: false } : label,
+          ),
+        },
+        "en",
+      ),
+    );
+    expect(saved.defaultLabelId).toBe(preferred);
+    expect(saved.labels.map((label) => label.available)).toEqual([false, false, true]);
+  });
+
   it("keeps an explicit choice of another available default", async () => {
     const { id, ...body } = await run((tx) => createOptionList(tx, cookedList(), "en"));
     const chosen = body.labels[1]!.id;

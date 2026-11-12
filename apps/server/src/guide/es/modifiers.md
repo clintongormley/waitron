@@ -77,6 +77,10 @@ disponible. Vuelve a poner la preferida a la venta para usarla de nuevo. Si la e
 preseleccionada la primera opción disponible. Un elemento de extras está preseleccionado o no: no hay una cantidad
 inicial que fijar.
 
+Si quieres que la opción de sustitución sea la preferida mientras la anterior está agotada,
+primero vuelve a poner la preferida anterior a la venta y guarda. Después elige la nueva opción
+predeterminada y vuelve a guardar.
+
 ## Asigna una lista a un producto {#attach}
 
 Abre el producto en **Productos** y usa su sección **Modificadores**. Empieza abierta cuando el
