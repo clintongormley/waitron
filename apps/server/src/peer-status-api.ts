@@ -25,6 +25,8 @@ export interface PeerStatusApiDeps {
   node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
+  /** Set only by the latch start: never inferred from a missing chart, which a lost venue.db also has. */
+  joining?: boolean;
 }
 
 export type PeerQueryPurpose = "status" | "indicator" | "final-copy";
@@ -60,6 +62,8 @@ export interface PeerStatusBody {
   /** The operation the query names, open or closed. */
   requestedOperation: PeerOperationStatus | null;
   nonce: string;
+  /** A spare still in its latch start: it cannot sell or file, so a start check sets it aside. */
+  joining?: true;
 }
 
 const STATUS = {
@@ -153,6 +157,7 @@ export function mountPeerStatusApi(app: Hono, deps: PeerStatusApiDeps, log: Logg
         openOperation: operationStatus(open),
         requestedOperation: operationStatus(requested),
         nonce: query.nonce,
+        ...(deps.joining === true ? { joining: true as const } : {}),
       };
       return c.json(await signAsThisBox(deps, "status", body as unknown as CanonicalValue), 200);
     }),

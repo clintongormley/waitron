@@ -831,6 +831,82 @@ describe("checkPeersAtStart — what each peer answered", () => {
   });
 });
 
+describe("checkPeersAtStart — a spare still joining (D19)", () => {
+  const joining = (
+    heldMembership: SignedMembershipDocument | null,
+    openOperation: PeerOperationStatus | null = null,
+  ): PeerStatusBody => ({ ...status(heldMembership, openOperation), joining: true });
+  const THREE = chart(3, [
+    [SELF, "serving-primary", OWN_ORIGIN],
+    [SPARE, "serving-secondary"],
+    ["m3", "serving-secondary"],
+  ]);
+
+  it("a counted peer answering joining is set aside: with no other counted box, the box proceeds", async () => {
+    const onAnswers = vi.fn();
+    const d = deps({ answers: { [SPARE]: joining(null) }, onAnswers });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(onAnswers.mock.calls[0]![0]).toEqual([
+      { nodeId: SPARE, answer: "J", counted: false, byOperation: false },
+    ]);
+  });
+
+  it("a joining peer and another counted peer that is silent: the box waits", async () => {
+    const d = deps({
+      held: THREE,
+      joinedIds: [SPARE, "m3"],
+      answers: { [SPARE]: joining(null), m3: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("control: a joining peer and another counted peer answering =: the box proceeds", async () => {
+    const d = deps({
+      held: THREE,
+      joinedIds: [SPARE, "m3"],
+      answers: { [SPARE]: joining(null), m3: status(THREE) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("a joining answer that holds the same chart is still set aside, never counted as agreement", async () => {
+    const d = deps({
+      held: THREE,
+      joinedIds: [SPARE, "m3"],
+      answers: { [SPARE]: joining(THREE), m3: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a joining answer whose chart or operation fences this box is still F", async () => {
+    const byChart = deps({ answers: { [SPARE]: joining(NEWER_FENCING) } });
+    expect(await checkPeersAtStart(byChart)).toBe("superseded");
+    const byOperation = deps({
+      answers: { [SPARE]: joining(null, operation("controlled", "copy_accepted")) },
+    });
+    expect(await checkPeersAtStart(byOperation)).toBe("superseded");
+  });
+
+  it("a joining answer with another part this box cannot read is silence, not set aside", async () => {
+    const d = deps({
+      answers: { [SPARE]: { ...joining(null), restriction: "x" as never } },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a joining field that is not true is an unreadable part, so the answer is silence", async () => {
+    const onAnswers = vi.fn();
+    const d = deps({
+      answers: { [SPARE]: { ...status(SAME), joining: "yes" as never } },
+      onAnswers,
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+    expect(onAnswers.mock.calls[0]![0]).toEqual([
+      { nodeId: SPARE, answer: "S", counted: true, byOperation: false, why: "unreadable_part" },
+    ]);
+  });
+});
+
 describe("boxRefusal", () => {
   it("reads the code and params of a box's refusal", () => {
     expect(
@@ -1183,6 +1259,44 @@ describe("askPeerStatus", () => {
   it("an answer echoing a different nonce is null", async () => {
     const { fetchFn } = answerWith(() => sign(body("z".repeat(32))));
     expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it.each<[string, (nonce: string) => unknown]>([
+    [
+      "forged",
+      (nonce) => {
+        const signed = sign(body(nonce)) as { body: Record<string, unknown> };
+        return { ...signed, body: { ...signed.body, heldMembership: null, joining: true } };
+      },
+    ],
+    ["unsigned", (nonce) => ({ ...body(nonce), heldMembership: null, joining: true })],
+    [
+      "signed by an unknown key",
+      (nonce) =>
+        sign(
+          { ...body(nonce), heldMembership: null, joining: true },
+          SPARE,
+          strangerKeys.privateKey,
+        ),
+    ],
+  ])(
+    "a joining answer that does not verify (%s) is silence: the box waits",
+    async (_label, make) => {
+      const { fetchFn } = answerWith((q) => make(q.nonce));
+      const onAnswers = vi.fn();
+      const check = deps({ ask: ask(fetchFn), onAnswers });
+      expect(await checkPeersAtStart(check)).toBe("wait");
+      expect(onAnswers.mock.calls[0]![0]).toEqual([
+        { nodeId: SPARE, answer: "S", counted: true, byOperation: false, why: "no_answer" },
+      ]);
+    },
+  );
+
+  it("control: the same joining answer, signed by the box asked, is set aside and the box proceeds", async () => {
+    const { fetchFn } = answerWith((q) =>
+      sign({ ...body(q.nonce), heldMembership: null, joining: true }),
+    );
+    expect(await checkPeersAtStart(deps({ ask: ask(fetchFn) }))).toBe("proceed");
   });
 
   it("a signed answer with a malformed chart is passed on whole, for the check to judge", async () => {

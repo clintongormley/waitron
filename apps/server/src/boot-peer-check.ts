@@ -58,7 +58,8 @@ export interface CheckPeersDeps {
   onAnswers?: (answers: readonly PeerAnswer[]) => void;
 }
 
-export type Answer = "F" | "N" | "=" | "S";
+/** `J`: a spare still joining, set aside — neither agreement nor silence. */
+export type Answer = "F" | "N" | "=" | "S" | "J";
 
 export interface PeerAnswer {
   nodeId: string;
@@ -213,6 +214,7 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
     // A part this box cannot read may report a takeover, so it cannot clear a wait. Nor can no
     // chart, or one this box cannot trust: neither vouches that no handover happened.
     if (!partsReadable(status)) return silent("unreadable_part");
+    if (status.joining === true) return { ...of("J"), counted: false };
     if (verdict === undefined) return silent("no_chart");
     if (verdict.accepted) return of(chart.body.term === newest ? "N" : "=");
     return verdict.reason === "invalid" ? silent("untrusted_chart") : of("=");
@@ -332,7 +334,8 @@ function partsReadable(status: PeerStatusBody): boolean {
   return (
     isOperationStatus(status.openOperation) &&
     isOperationStatus(status.requestedOperation) &&
-    isRestriction(status.restriction)
+    isRestriction(status.restriction) &&
+    (status.joining === undefined || status.joining === true)
   );
 }
 

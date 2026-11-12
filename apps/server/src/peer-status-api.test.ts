@@ -66,7 +66,10 @@ describe("POST /api/node/peer-status", () => {
     app: Hono;
   }
 
-  async function boxes(peerStanding: NodeStanding = "serving-secondary"): Promise<Boxes> {
+  async function boxes(
+    peerStanding: NodeStanding = "serving-secondary",
+    joining?: boolean,
+  ): Promise<Boxes> {
     const db = suite.db;
     await seedVenue(db, {
       name: "Main room",
@@ -90,7 +93,17 @@ describe("POST /api/node/peer-status", () => {
     );
     await writeNodeMembership(db, held);
     const app = new Hono();
-    mountPeerStatusApi(app, { db, node: suite.node, ring: RING, nodeId: self }, () => {});
+    mountPeerStatusApi(
+      app,
+      {
+        db,
+        node: suite.node,
+        ring: RING,
+        nodeId: self,
+        ...(joining === undefined ? {} : { joining }),
+      },
+      () => {},
+    );
     return { db, self, peer, selfKey, peerKey, held, app };
   }
 
@@ -134,6 +147,33 @@ describe("POST /api/node/peer-status", () => {
       },
     });
   });
+
+  it("the latch start's answer says it is joining, inside the signature", async () => {
+    const { app, self, peer, peerKey, selfKey } = await boxes("serving-secondary", true);
+    const response = await ask(app, query({ nodeId: peer, privateKey: peerKey }));
+    expect(response.status).toBe(200);
+    const answer = (await response.json()) as SignedHandoverEnvelope<PeerStatusBody>;
+    const selfPublic = nodeSigningPublicKey(selfKey);
+    const keyOf = (id: string) => (id === self ? selfPublic : undefined);
+    const verified = verifyEnvelope<PeerStatusBody>(answer, "status", keyOf);
+    expect(verified).toMatchObject({ valid: true, body: { joining: true, nonce: NONCE } });
+    const withoutJoining: Partial<PeerStatusBody> = { ...answer.body };
+    delete withoutJoining.joining;
+    expect(verifyEnvelope({ ...answer, body: withoutJoining }, "status", keyOf)).toEqual({
+      valid: false,
+      reason: "bad_signature",
+    });
+  });
+
+  it.each([undefined, false])(
+    "control: a full start's answer carries no joining field (joining %s)",
+    async (joining) => {
+      const { app, peer, peerKey } = await boxes("serving-secondary", joining);
+      const response = await ask(app, query({ nodeId: peer, privateKey: peerKey }));
+      const answer = (await response.json()) as SignedHandoverEnvelope<PeerStatusBody>;
+      expect(Object.keys(answer.body)).not.toContain("joining");
+    },
+  );
 
   it("answers the restriction and the open operation this box holds", async () => {
     const { app, self, peer, peerKey } = await boxes();

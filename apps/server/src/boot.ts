@@ -1860,7 +1860,11 @@ async function bootServer(
   if (pendingAdoption !== null) {
     spare = true;
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
-    mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
+    mountPeerStatusApi(
+      app,
+      { db, node: store.node, ring, nodeId: config.node.nodeId, joining: true },
+      log,
+    );
     mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
     const finishWorker = runFinishAdoption({
       ownerDb: db,
