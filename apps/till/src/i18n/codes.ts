@@ -530,8 +530,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La persona que lo ha aprobado no tiene permiso para hacerlo. Elige a alguien que pueda",
   },
   "bill.refund_in_progress": {
-    en: "A card refund on this bill is still waiting for the card provider. The bill cannot be changed until it finishes",
-    es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. No se puede cambiar la cuenta hasta que termine",
+    en: "A card refund on this bill is still waiting for the card provider. Until it finishes, this bill cannot take payments or refunds, and what it charges cannot be changed",
+    es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe",
   },
   "reader.not_found": {
     en: "This device has no card reader it can use. Ask a manager to check its card reader on the Card payments screen",

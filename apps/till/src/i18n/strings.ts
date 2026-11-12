@@ -828,7 +828,7 @@ export const en = {
   "card.declined": "Card declined",
   "card.no_answer": "The card reader did not answer",
   "card.pending_check":
-    "Waitron is checking the payment. This order stays locked until the result is known. If it stays unresolved, ask a manager to check Card payments.",
+    "Waitron is checking the payment. Until the result is known, what this order charges cannot be changed. If it stays unresolved, ask a manager to check Card payments.",
   "card.insufficient_funds": "Card declined: not enough funds",
   "card.expired": "Card declined: card expired",
   "card.wrong_pin": "Card declined: wrong PIN",
@@ -1824,7 +1824,7 @@ export const en = {
   "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
   "bill_refund.pending":
-    "The card refund of {amount} is waiting for the card provider. This bill cannot be changed until it finishes. If it does not finish, a manager can follow it on the dashboard's Card payments screen.",
+    "The card refund of {amount} is waiting for the card provider. Until it finishes, this bill cannot take payments or refunds, and what it charges cannot be changed; sending and firing dishes still works. If it does not finish, a manager can follow it on the dashboard's Card payments screen.",
   "bill_refund.failed": "The card refund of {amount} did not go through, so nothing was refunded.",
   // Said after a table action was refused because another device changed the party first.
   "party.changed": "Another device changed table {table}, so it has been reloaded.",
@@ -2801,7 +2801,7 @@ export const es: Record<StringKey, string> = {
   "card.declined": "Tarjeta rechazada",
   "card.no_answer": "El lector de tarjetas no ha respondido",
   "card.pending_check":
-    "Waitron está comprobando el pago. El pedido sigue bloqueado hasta conocer el resultado. Si no se resuelve, pide a un encargado que lo consulte en Pagos con tarjeta.",
+    "Waitron está comprobando el pago. Hasta conocer el resultado, no se puede cambiar el importe del pedido. Si no se resuelve, pide a un encargado que lo consulte en Pagos con tarjeta.",
   "card.insufficient_funds": "Tarjeta rechazada: fondos insuficientes",
   "card.expired": "Tarjeta rechazada: tarjeta caducada",
   "card.wrong_pin": "Tarjeta rechazada: PIN incorrecto",
@@ -3780,7 +3780,7 @@ export const es: Record<StringKey, string> = {
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",
   "bill_refund.pending":
-    "La devolución de {amount} con tarjeta está esperando al proveedor de pagos. No se puede cambiar esta cuenta hasta que termine. Si no termina, un responsable puede seguirla en la pantalla Pagos con tarjeta del panel de gestión.",
+    "La devolución de {amount} con tarjeta está esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe; enviar y marchar platos sigue funcionando. Si no termina, un responsable puede seguirla en la pantalla Pagos con tarjeta del panel de gestión.",
   "bill_refund.failed":
     "La devolución de {amount} con tarjeta no se completó, así que no se ha devuelto nada.",
   "party.changed": "Otro dispositivo ha cambiado la mesa {table}, así que se ha vuelto a cargar.",
