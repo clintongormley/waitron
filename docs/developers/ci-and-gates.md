@@ -1022,17 +1022,20 @@ whole-file shards at about 746 s while they spent 448 to 1,240 s mutating (shard
 outcomes did not change between runs, so it had nothing to learn from.
 
 Same-file mutation time varies a lot from run to run (shard 4: 448 s and 768 s; shard 8: 1,170 and
-824), which is why the table takes each file's median over the reports given. Summing the table
+824), which is why the table takes each file's median over the reports given. Summing the table then
 built from both runs over each of those whole-file shards' files, the mutation phase measured in
-either run was 0.70 to 1.24 times the estimate, at most about 211 s off. The table packs the ten
-whole-file shards at about 902 estimated seconds each. At 1.24 times that, the worst ratio of those
-two runs to a table built from their own reports, a shard would mutate for about 1,120 s; with the
-up to 166 s a job of those runs spent before mutating, that is about 21 minutes of its 25. At seven
-whole-file shards (ten in all), dispatched run 42344158863 had whole-file shards 4, 8, 9 and 10
-cancelled at the 25-minute limit.
+either run was 0.70 to 1.24 times the estimate, at most about 211 s off. The table now in the
+repository was built from nightly runs 43159064593 and 42963449689 and packs the ten whole-file
+shards at about 980 estimated seconds each. Nobody has yet compared those runs' measured mutation
+times with this table's estimates. If the worst ratio from runs 42356693258 and 42351739804 (1.24
+times the estimate) still held, a shard would spend about 1,215 s mutating; with the up to 166 s
+their jobs spent before mutating, that is about 23 minutes of its 25. At seven whole-file shards
+(ten in all), dispatched run 42344158863 had whole-file shards 4, 8, 9 and 10 cancelled at the
+25-minute limit.
 
-**Refreshing the table.** When a db shard drifts towards its limit, or after a change like A1309's
-that removes timed-out mutants:
+**Refreshing the table.** When a db shard drifts towards its limit, after `packages/db` gains files
+(a file the table does not name is weighed by its bytes), or after a change like A1309's that removes timed-out
+mutants:
 
 ```bash
 gh run download <nightly run> -p 'mutation-report-db-shard-*' -D <scratch dir>

@@ -122,7 +122,7 @@ hook, or how tests are scheduled. What named guards miss:
   `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
 - **`mutation-db`'s whole files are packed by the committed `packages/db/mutation-costs.json`, not
   by bytes.** Refresh it with `scripts/mutation-costs.mjs` from a nightly run's reports when a shard
-  nears its 25-minute limit. Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`,
+  nears its 25-minute limit or `packages/db` gains files. Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`,
   weaker than their name.
   [Receipt](docs/developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 - **Every CI test job should finish in about 4 minutes** (owner, 2026-10-09 and 2026-10-11).
