@@ -13,9 +13,7 @@ import {
 import { floorZones } from "./schema/floor-zones.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { venueLocationId } from "./venue.js";
 
-let LOCATION: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const LONG = "cccccccc-0000-4000-8000-000000000001";
 const COUNTER_3 = "cccccccc-0000-4000-8000-000000000003";
@@ -37,7 +35,6 @@ async function seedJoinedToday(db: Db): Promise<void> {
     invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
-  LOCATION = await venueLocationId(db);
   await db.insert(floorZones).values({ id: ZONE, name: "Bar" });
   await db.insert(diningTables).values([
     { id: LONG, zoneId: ZONE, label: "Long table" },
