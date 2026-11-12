@@ -3500,6 +3500,8 @@ and a limit the task texts left open. The task texts are left as written.
 
 ### Slice 10 — Return batch: evidence, and the exchange both scenarios use
 
+**2026-11-12:** Superseded by [A1342's existing return path](2026-11-09-a1342-return-records.md) and the [later returned-fact/reset decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10); Task 10.6 remains with A1342.
+
 **FISCAL**. The owner lands it. Waits for Slice 9's PASS. A fresh-context review of this slice's
 tasks, against A947 §7.1 as amended, runs before its first implementer (topology §5.2, risk 2).
 Until Slice 11 lands, a batch that carries records M2 lacks leaves the operation at
@@ -3666,6 +3668,8 @@ it to M1 as a `return-receipt` envelope and records it. Test
 ---
 
 ### Slice 11 — Return batch: originals M2 never saw
+
+**2026-11-12:** Superseded by [A1342's existing return path](2026-11-09-a1342-return-records.md) and the [later returned-fact/reset decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10).
 
 **FISCAL — LOUD.** The owner lands it. It adds a store of returned tax records and a second filing
 path. It **does not** write `registros_facturacion`, never recomputes a huella and never builds a
