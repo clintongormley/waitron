@@ -24,6 +24,11 @@ AEAT now explicitly separate the B2B rules' entry into force from mandatory appl
 6 October 2027 or 2028, according to the issuer's threshold. This note sends no enquiry and
 changes neither S4 nor the earlier dated owner decision.
 
+**2026-11-12, A444:** The owner chose the creation date, pending the adviser's answer to S4: a
+full invoice shows only the date it was created, the same date AEAT receives, with no separate
+operation date. This replaces the meal-completion proposal above and A444 is closed.
+[Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
+
 **Owner, 2026-10-22 (what has been sent):** The [shortened list (2026-10-09)](#the-shortened-list-2026-10-09) went to the adviser about a week before this note, around 2026-10-15. That date is the owner's estimate, not a recorded one. Everything added after the shortened list, from [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31)(d) and [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) onward, is the next batch. The owner will send it later. No lane sends questions.
 
 **2026-10-17, A664:** You adopted the [revised proposal](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review) for specialist review. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) awaits the relevant fiscal/commercial, labour and privacy decisions. You will send it; no enquiry has been sent by this campaign. The historical Word copies have not been changed.
@@ -89,6 +94,10 @@ On **2026-10-05 at 15:35** (A231), the owner provisionally chose **the date the 
 **Implementation update, 2026-10-05:** A231’s branch now snapshots the service-start calendar day at issuance and shows it on paper and the till when it differs from the saved issue day. The [implementation checkpoints](../superpowers/plans/2026-10-03-full-invoices-at-till.md) record the database, renderer and replay tests. F1 issuance remains disabled; physical paper checks and your confirmation of the provisional rule are still outstanding. This dated update supersedes the implementation-status sentence above.
 
 > **A231, fecha de operación:** para una comida que comienza antes de medianoche y cuya factura completa se expide después, ¿es correcto usar la fecha en que se abrió la cuenta, al sentar la mesa o registrar el primer pedido? Proponemos guardar esa fecha al expedir la factura e imprimirla solo si difiere de la fecha de expedición. Es una regla provisional del propietario, pendiente de su confirmación.
+
+**2026-11-12:** The two A231 notes above are superseded. The owner chose the creation date: a
+full invoice shows only the date it was created, with no separate operation date, pending the
+adviser's answer to S4. [Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
 
 On **2026-10-04** (W41s prevention and offline recovery): **Q5(f) and Q33–Q40 revised; Q41
 added** for issued invoices missing from a restored backup. The current formulations below
@@ -343,6 +352,9 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
   operation date of a full invoice for a meal past midnight (we would use the day it ends, by
   analogy to V1476-13) and the rate across a VAT change (LIVA 90.Dos). May we use the issue date
   as the devengo date, given they almost always coincide?
+  _2026-11-12:_ pending your answer, the owner chose the creation date: a full invoice shows only
+  the date it was created, the same date AEAT receives, with no separate operation date.
+  [Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
 - **S5. Short payment and cash rounding.** Is accepting less at the till as payment in full, after
   the meal but before the ticket is issued, a discount under LIVA 78.Tres.2º, given AEAT reads
   "simultáneamente" as at devengo? On rounding a cash total up to 5 cents: do the extra cents go
@@ -455,6 +467,9 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
 > el día en que termina, por analogía con la V1476-13) y el tipo aplicable si cambia el tipo de IVA
 > (art. 90.Dos LIVA). ¿Podemos tomar la fecha de expedición como fecha de devengo, ya que casi siempre
 > coinciden?
+> _12-11-2026:_ a la espera de su respuesta, el propietario ha optado por la fecha de expedición: la
+> factura completa muestra solo la fecha en que se crea, la misma que recibe la AEAT, sin una fecha
+> de operación aparte.
 >
 > **S5. Pago inferior y redondeo en efectivo.** Aceptar en caja un importe menor como pago total, tras
 > la comida pero antes de expedir la factura, ¿es un descuento del art. 78.Tres.2º LIVA, si la AEAT

@@ -8,31 +8,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Fiscal records, invoices and the asesor". This file holds
 their full text.
 
-## A444. A full invoice for a meal past midnight should carry the day the meal ends
-
-A231's provisional rule uses the day the bill was opened. On 27 October the owner approved
-the meal-end date with no staff date choice or confirmation, then clarified about 12:00 CET:
-**when the bill closes**, at the earliest qualifying whole/final balance payment acceptance,
-first completed-meal F1 issuance commit, accepted settling edit or accepted unpaid departure.
-Bill requested never captures, even when fully served; its signal/replay behavior remains. The
-[implementation design](../superpowers/specs/2026-10-27-a444-meal-completion-date-design.md) and
-[plan](../superpowers/plans/2026-10-27-a444-meal-completion-date.md) retain the accepted close instant/day
-through provider waits, lost answers and restart, separately from actual issue day. Fully served
-Bill requested 27 Oct 23:50, payment accepted and F1 committed 28 Oct 00:05 means operation/issue
-28 Oct with no differing date printed; payment accepted 27 Oct 23:55 before a 28 Oct charge wait
-keeps operation 27 Oct. The owner granted the exact H2 scope recorded in the design/plan: trusted
-completion day through core/fiscal input, AltaInput.FechaOperacion, new nullable registro field
-and migration, both row mappings and saved-day consultation periods including cancellation's
-original period. The grant excludes hash/chain/allocation/numbering, library alta builders,
-registerSif/restoreFiscal, shipped migrations, historical facts and protected tests; later expansion
-still stops. Implementation remains open, waiting for A739 integration. This docs revision
-authorizes no build or fiscal landing. No mandatory
-extra Bill requested action is introduced. The unrecorded physical-end limit is explicit; the restaurant
-analogy remains [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) for the adviser.
-Service-complete qualification, resumption invalidation, S3/A447 advance payments, F2/F3 and
-counter limits remain as designed. Earlier issued dates stay saved; the eventual fiscal PR is for
-the owner to land.
-
 ## Structured B2B invoices before the applicable 2027 or 2028 date
 
 The [27 October source check](../compliance/research/2026-10-27-a948-operation-date-and-b2b.md#b2b-delivery-the-rules-exist-their-mandatory-application-is-later)
@@ -119,7 +94,7 @@ plan's Mutation section lists them). Decide whether it joins the mutation-tested
 New invoice dates and record offsets use the writing node's saved venue zone; the
 [coverage ledger](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md#task-20-coverage-ledger)
 records the qualification. The 15 October observations below describe the earlier process-zone
-behavior. Wider A166 and A444 remain open.
+behavior. Wider A166 remains open.
 
 Found during A693's test-only fix (2026-10-15). In an installed disposable copy,
 `transactional-series.test.ts` issued real walk-up invoices with the venue's stored
@@ -156,7 +131,7 @@ remain. The [startup redesign](../superpowers/specs/2026-10-20-a696-startup-zone
 proposes repair-only authenticated serving followed by restart, and identifies A166's country-pack
 dependency. The dropped post-capture state, resume action
 and reporting consequence remain only in the historical guided proposal and decision below.
-A444's operation/service-date decision stays separate. The audit also found a
+The audit also found a
 source-only F2 presentation gap: `readReceiptIssuer` supplies the stored offset only for a named
 recipient, leaving ordinary receipt views to their runtime zone. The approved behavior includes
 consistent ordinary receipt and till dates; passing the saved offset remains a proposed mechanism.
@@ -267,7 +242,6 @@ series, taxpayer domicile, filed receipt data and replay, original/duplicate pri
 status and retry, staff handover confirmation, invoice lookup, and reporting. Paper and till
 omit the venue address when an F1 shows its filed taxpayer domicile; phone/email and the
 F2/absent-domicile controls remain. Automatic F1 credit/refund/cancellation is refused.
-The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
 
 The owner approved the historical-export fixture's current artifact
 refusal, including its could-not-open operator advice; provenance, HTTP400/domain-error,
@@ -285,7 +259,7 @@ zone setting creates no separate public issuance route. Zero-total F1 counter re
 the same refusal. A saved F1 choice still permits the bill to grow above the simplified ceiling;
 the existing recipient checks and F1 series selection remain in place.
 
-**Next action:** complete A444, the physical 58/80 mm paper and QR checks, the asesor's
+**Next action:** complete the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
 Future structured B2B integration has its own entry above. F3 conversion, F1's
 R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
@@ -1095,6 +1069,21 @@ are in [the note](../superpowers/plans/2026-11-12-a802-correction-primitives.md)
 Refund a payment ([reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md), decision 13), and
 Open does not check the corrective series, which the last cash step does.
 
+### A444: a full invoice shows only the date it was created (owner, 2026-11-12)
+
+The owner, 2026-11-12, about 11:00 in the watcher's window: "I think we should use the creation
+date. That way our invoices and AEAT and our reports will all use the same dates and times."
+Asked whether lane L should switch to the creation date everywhere and park what it built until
+the adviser answers, the owner answered "yes" (11:10). This replaces the 27 October rule ("the
+meal ends when the bill closes") until the adviser answers
+[S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09). No invoice, full or
+simplified, carries a separate operation date: paper, the till, the A4/email document and the
+accountant export show the creation date, which is the only date AEAT receives. This also answers
+"Can a simplified invoice carry an operation date different from its issue date?", left open by
+A663 Part 2: no. The work built for the bill-close date stays parked on
+`feat/a444-fiscal-operation-day` and `feat/a444-close-day-capture`.
+[Plan](../superpowers/plans/2026-11-12-a444-creation-date-only.md).
+
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
 A fix re-sends the same invoice, so `applyCorrectedRecordFacts` refuses a changed rate, base, VAT or
@@ -1139,6 +1128,7 @@ assertions remain outside the change. See the [implementation plan](../superpowe
   simplified-invoice ceiling.
   2026-11-12, A555: Counter bills paid through the shared Pay window have issued full invoices
   since #2725, and the owner chose to keep that; see [the A555 decision](#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12).
+  2026-11-12: A444 is closed by the creation-date decision above.
 
 - **Backup access is independent of a retained setup's password (A731; owner, 2026-10-15).**
   Authenticate the selected backup with its own named node key, plus the archive key or source
@@ -1207,7 +1197,8 @@ check against a second clock, and dropped the installation code from the sheet; 
   Receipt: `~/waitron-campaign-e/questions.md`, **WATCHER 2026-10-15 ~05:12**, “OWNER ANSWER
   to A696 question 1”; [spec decision](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
   That answer alone grants no repair permission or build approval; the later 17:20 scope
-  decision is recorded below. A696 stays open and A444 stays separate.
+  decision is recorded below. A696 stays open and A444 stays separate. (2026-11-12: A444 is
+  closed by the creation-date decision above.)
 - **A696, owner decision 2026-10-15 17:20: include restricted guided zone repair.** Only an
   invalid or missing saved zone is eligible. A manager confirms the named zone, the captured
   payment resumes without another charge, and new issuance uses the recovery instant and its
@@ -1435,15 +1426,6 @@ difference only when the upgrade's own marker names that same new producer; othe
 refusing. What a preproduction box does before A993 (it trades on, the new producer on the same
 chain) is settled as built: the owner does not mind, since such a box can be reset.
 [Design](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
-
-## Can a simplified invoice carry an operation date different from its issue date?
-
-Left open by A663 Part 2. If it can,
-art. 7.1.c requires that date on the receipt. The document builder already prints one on a
-simplified receipt, in captioned rows, whenever the receipt's data
-carries one (`apps/server/src/receipt-document.ts`, A754), but no sale has one: the only writer of
-a sale's operation date writes none without a customer tax identity
-(`packages/core/src/record-sale.ts:284-286`). Check, then record the date on such a sale if needed.
 
 ## Retire the historical allocation formats from `fiscal-verifactu`
 

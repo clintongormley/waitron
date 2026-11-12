@@ -240,14 +240,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **One owner session with a real certificate against AEAT** (bundle of 3, 3 important, size S, needs a third party). Holds A1270, A888, A679. [Detail](backlog/fiscal.md#bundle-one-owner-session-with-a-real-certificate-against-aeat)
 
-- **A444. A full invoice for a meal past midnight should carry the day the meal ends.** Automatic bill-close dating excludes Bill requested and staff date choice. Exact H2 scope approved; build waits for A739 integration. Fiscal: the owner lands it.
-  [Detail](backlog/fiscal.md#a444-a-full-invoice-for-a-meal-past-midnight-should-carry-the-day-the-meal-ends).
 - **Structured B2B invoices before the applicable 2027 or 2028 date.** Establish the issuer's threshold and recipient scope, then build structured exchange and required reporting. Current paper/email qualification stays separate.
   [Detail](backlog/fiscal.md#structured-b2b-invoices-before-the-applicable-2027-or-2028-date).
-
-- **Can a simplified invoice carry an operation date different from its issue date?** — left open by A663 Part 2.
-  If it can, art. 7.1.c requires that date on the receipt. Check, then record the date on such a sale if needed.
-  [Detail](backlog/fiscal.md#can-a-simplified-invoice-carry-an-operation-date-different-from-its-issue-date).
 
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid.** Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a445-a-free-item-on-a-bill-with-mixed-vat-rates-should-take-a-share-of-the-price-paid).
@@ -284,7 +278,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
 
 - **A231/A948. Full invoices at the till** — table bill payments, per-bill unpaid departures and, since #2725, Counter bills paid through the shared Pay window issue F1; direct `POST /api/sales`, `POST /api/pay`, unissued collection, closing a counter bill by transfer and zero-total counter bills still refuse it.
-  **Next action:** complete A444, physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
+  **Next action:** complete physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
   An unpaid departure that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 

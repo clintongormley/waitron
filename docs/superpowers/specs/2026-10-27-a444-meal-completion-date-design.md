@@ -1,5 +1,8 @@
 # A444: date a completed meal by its end
 
+> **Status, 2026-11-12: not built; superseded.** The owner chose the creation date instead: a full
+> invoice shows only the date it was created. [Decision](../../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
+
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
 > Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
