@@ -794,7 +794,8 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
               : [],
       )
       .join("\n");
-    expect(text).toMatch(/^Pedido 0$/mu);
+    expect(text).not.toMatch(/^Pedido 0$/mu);
+    expect(text).toMatch(/^Fecha /mu);
     expect(text).not.toContain("Comanda");
     expect(text).not.toContain("Data");
     expect(text).toMatch(/^2 CA-rac CA Torrada$/mu);
