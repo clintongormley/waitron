@@ -18,7 +18,7 @@ import {
   type TillZoneMenu,
 } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { WtTextarea } from "@waitron/ui";
+import { currentContentLanguages, setContentLanguages, type WtTextarea } from "@waitron/ui";
 
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
@@ -334,6 +334,50 @@ describe("till-modifier-picker", () => {
       formatMoney("5.00", currentLocale()),
     );
   });
+
+  for (const [locale, expected] of [
+    ["es-ES", "Ensalada · 1,00 rac"],
+    ["en-GB", "Ensalada · 1.00 srv"],
+  ] as const)
+    it(`writes a portion with the ${locale} decimal mark`, async () => {
+      const prior = currentLocale();
+      const priorLanguages = currentContentLanguages();
+      setLocale(locale);
+      setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+      try {
+        const portioned = {
+          ...extrasList,
+          maxPicks: null,
+          items: [
+            {
+              ...offeredItem("p-salad", "Ensalada", "5.00", 3),
+              portion: "1.00",
+              unit: {
+                id: "unit-serving",
+                staffName: "Serving",
+                staffAbbreviation: "sv",
+                name: { es: "Ración", en: "Serving" },
+                abbreviation: { es: "rac", en: "srv" },
+                precision: 2,
+                hardwareUnit: null,
+              },
+            },
+          ],
+        } satisfies OfferedModifier;
+        const { picker } = await openPicker(
+          { ...burger, offeredModifiers: [portioned] },
+          "Burger",
+          new WorkingOrderStore(),
+        );
+        expect(picker.shadowRoot!.querySelector(".option-name")!.textContent!.trim()).toBe(
+          expected,
+        );
+      } finally {
+        cleanupWidgets();
+        setContentLanguages(priorLanguages);
+        setLocale(prior);
+      }
+    });
 
   it("registers as a custom element", () => {
     expect(customElements.get("till-modifier-picker")).toBe(TillModifierPicker);

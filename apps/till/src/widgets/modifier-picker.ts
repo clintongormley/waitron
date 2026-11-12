@@ -3,7 +3,13 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles, draftScopeFor, focusFirstInvalid, saveActionState } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  formatDecimalInput,
+  saveActionState,
+} from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type {
@@ -1071,7 +1077,7 @@ export class TillModifierPicker extends LitElement {
   #extraName(item: OfferedExtraItem): string {
     if (item.portion === undefined || item.unit === undefined) return item.name;
     const places = Math.max(item.unit.precision, quantityPlaces(item.portion));
-    const amount = toScale(decimal(item.portion), places);
+    const amount = formatDecimalInput(toScale(decimal(item.portion), places), currentLocale());
     const unit = unitPresentation(
       item.unit,
       currentLocale(),
