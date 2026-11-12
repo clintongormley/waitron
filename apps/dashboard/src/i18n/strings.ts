@@ -2,7 +2,8 @@ export const en = {
   "handover_warning.unconfirmed":
     "An emergency handover is recorded. Its return remains unconfirmed. Check the handover dates.",
   "handover_warning.loading": "Checking handover status…",
-  "handover_warning.unavailable": "Handover status could not be checked. Try Refresh.",
+  "handover_warning.unavailable":
+    "Handover status could not be checked. Try Refresh handover status.",
   "handover_warning.permission": "Checking handover status requires Report viewing permission.",
   "handover_warning.check": "Check handover intervals",
   "handover_warning.refresh": "Refresh handover status",
@@ -3915,7 +3916,8 @@ export const es: Record<StringKey, string> = {
   "handover_warning.unconfirmed":
     "Hay un traspaso de emergencia registrado. Su devolución sigue sin confirmar. Comprueba las fechas del traspaso.",
   "handover_warning.loading": "Comprobando el estado del traspaso…",
-  "handover_warning.unavailable": "No se pudo comprobar el estado del traspaso. Pulsa Actualizar.",
+  "handover_warning.unavailable":
+    "No se pudo comprobar el estado del traspaso. Pulsa Actualizar el estado del traspaso.",
   "handover_warning.permission":
     "Para comprobar el estado del traspaso necesitas permiso para ver informes.",
   "handover_warning.check": "Comprobar los intervalos del traspaso",
