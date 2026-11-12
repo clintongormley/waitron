@@ -288,7 +288,7 @@ describe("direct economic orchestration before startup admission", () => {
               expectedEdits: [
                 await readBillEditState(tx, id),
                 await readBillEditState(tx, fromBillId),
-              ],
+              ].sort((a, b) => a.billId.localeCompare(b.billId)),
             });
           if (operation === "adjustment") return applyAdjustment(tx, venue.cfg, command, "en-GB");
           if (operation === "departure")
