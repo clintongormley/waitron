@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "75a25b13-2b0b-4e5d-a14a-8575d4f44534",
+  "id": "6d236174-0396-4b10-af19-75200c669ba6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5794,6 +5794,121 @@
           "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "invoice_corrections": {
+      "name": "invoice_corrections",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "original_sale_id": {
+          "name": "original_sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corrective_sale_id": {
+          "name": "corrective_sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tender_refund_id": {
+          "name": "tender_refund_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "submission_id": {
+          "name": "submission_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invoice_corrections_submission_idx": {
+          "name": "invoice_corrections_submission_idx",
+          "columns": [
+            "original_sale_id",
+            "submission_id"
+          ],
+          "isUnique": false
+        },
+        "invoice_corrections_tender_refund_key": {
+          "name": "invoice_corrections_tender_refund_key",
+          "columns": [
+            "tender_refund_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "invoice_corrections_original_sale_fk": {
+          "name": "invoice_corrections_original_sale_fk",
+          "tableFrom": "invoice_corrections",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "original_sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_corrections_corrective_sale_fk": {
+          "name": "invoice_corrections_corrective_sale_fk",
+          "tableFrom": "invoice_corrections",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "corrective_sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_corrections_tender_refund_fk": {
+          "name": "invoice_corrections_tender_refund_fk",
+          "tableFrom": "invoice_corrections",
+          "tableTo": "tender_refunds",
+          "columnsFrom": [
+            "tender_refund_id"
           ],
           "columnsTo": [
             "id"
