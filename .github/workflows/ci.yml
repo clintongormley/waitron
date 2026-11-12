@@ -4145,8 +4145,7 @@ jobs:
                | if length > 0 then error(join("; ")) else empty end)
           '
 
-      # Only an absent server-probe may trust needs skipped: its ordinary-run condition is false.
-      # Other missing jobs require API evidence because needs can hide a never-acquired runner.
+      # An absent record may trust exact needs skipped; present records receive every API check.
       - name: Fail unless GitHub's jobs API reports every needed job succeeded or skipped
         if: always()
         timeout-minutes: 12
@@ -4199,7 +4198,7 @@ jobs:
                   jobs: [$jobs[] | select(.name == $id or (.name | startswith("\($id) (") or startswith("\($id) / ")))
                          | if finished($needs[$id]) then . + {status: "completed", conclusion: "success", from_steps: true} else . end]}]
             | {lines: [.[] | if (.jobs | length) == 0 then
-                               if .id == "server-probe" and $needs[.id].result == "skipped"
+                               if $needs[.id].result == "skipped"
                                then "\(.id): skipped (needs; absent from jobs API)"
                                else "\(.id): not in the jobs API" end
                              else (.jobs[] | "\(.name): \(if .from_steps then "success (final needs and completed steps; run \(.run_id), attempt \(.run_attempt), \(.head_sha))" elif .status == "completed" then .conclusion else .status end)") end],
@@ -4208,7 +4207,7 @@ jobs:
                duplicate: [([.[].jobs] | add | (group_by(.name)[] | select(length > 1) | .[0].name),
                             (map(select(.id | type == "number")) | group_by(.id)[] | select(length > 1) | .[0].name))],
                missing: [.[] | select((.jobs | length) == 0
-                                      and (.id != "server-probe" or $needs[.id].result != "skipped")) | .id],
+                                      and $needs[.id].result != "skipped") | .id],
                pending: [.[].jobs[] | select(.status != "completed") | .name],
                read: ($jobs | length),
                total: $pages[0].total_count,

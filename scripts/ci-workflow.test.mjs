@@ -2953,20 +2953,25 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
   );
 
   it(
-    "accepts an absent server-probe only when needs says skipped",
+    "accepts an absent needed job only when needs says skipped",
     () => {
       const skipped = runCrossCheck(
-        { lint: { result: "success" }, "server-probe": { result: "skipped" } },
+        {
+          lint: { result: "success" },
+          "test-till-merge": { result: "skipped" },
+          typecheck: { result: "skipped" },
+          "server-probe": { result: "skipped" },
+        },
         [page([apiJob("lint", "success")])],
       );
       expect(skipped.status, skipped.output).toBe(0);
       expect(skipped.calls).toBe(1);
       expect(skipped.output).toBe(
-        "lint: success\nserver-probe: skipped (needs; absent from jobs API)\n",
+        "lint: success\ntest-till-merge: skipped (needs; absent from jobs API)\ntypecheck: skipped (needs; absent from jobs API)\nserver-probe: skipped (needs; absent from jobs API)\n",
       );
 
       for (const [id, result] of [
-        ["lint", "skipped"],
+        ["lint", "success"],
         ["server-probe", "success"],
       ]) {
         const missing = runCrossCheck({ [id]: { result } }, [page([])]);
@@ -2979,10 +2984,10 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
   );
 
   it(
-    "requires a complete inventory even when server-probe was skipped and omitted",
+    "requires a complete inventory even when a needed job was skipped and omitted",
     () => {
       const short = runCrossCheck(
-        { lint: { result: "success" }, "server-probe": { result: "skipped" } },
+        { lint: { result: "success" }, "test-till-merge": { result: "skipped" } },
         [page([apiJob("lint", "success")], 2)],
       );
       expect(short.status, short.output).not.toBe(0);
@@ -2990,6 +2995,24 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       expect(short.output).toContain("read 1 of 2 jobs");
     },
     ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses absent failed needs and recorded failures even when needs says skipped",
+    () => {
+      const absentFailure = runCrossCheck({ lint: { result: "failure" } }, [page([])]);
+      expect(absentFailure.status, absentFailure.output).not.toBe(0);
+      expect(absentFailure.calls).toBe(1);
+      expect(absentFailure.output).toContain("not succeeded or skipped: lint");
+
+      const recordedFailure = runCrossCheck({ lint: { result: "skipped" } }, [
+        page([apiJob("lint", "failure")]),
+      ]);
+      expect(recordedFailure.status, recordedFailure.output).not.toBe(0);
+      expect(recordedFailure.calls).toBe(1);
+      expect(recordedFailure.output).toContain("not succeeded or skipped: lint");
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
   );
 
   it(
