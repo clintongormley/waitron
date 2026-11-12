@@ -204,8 +204,6 @@ screen is designed.
 
 ## Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review)
 
-A unit with no enabled text has an empty label; the tile and basket-refresh price templates
-still append a slash. Render those empty-label cases before choosing their display.
 Legacy unit maps cover English and Spanish only. The default Kitchen title remains
 English when the tab shell is shown in a synthetic Spanish probe; check whether any
 real kitchen session shows that bar before widening the standard-tab translation.
@@ -879,16 +877,6 @@ Matching displayed section names is included (A461). Every `/api/menu-state` rea
 per zone it polls (the counter's, and the open table's while its order shows), and each read also
 reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token check is one SHA-256 of the token on every read, with nothing
 remembered between reads.
-
-## A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English abbreviation
-
-- **A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English
-  abbreviation** (observed during A333, 2026-10-08). On the real Spanish-seeded till, the salad
-  picker reads `1.00 rac`; its queued receipt reads `1.000 rac`, and its queued kitchen ticket
-  reads `1.000 srv`. **Next action:** trace the portion formatting and kitchen-unit language
-  choice in `apps/till/src/widgets/modifier-picker.ts`, `apps/server/src/receipt-lines.ts` and
-  `apps/server/src/kitchen-print.ts`; establish the intended kitchen wording, then test-first
-  localize the affected quantities. No change to those renderers in A333.
 
 ## Reopening the picker on a line whose dish has VARIANTS _and_ at least one offered list loses the variant, and says it saved
 
@@ -2160,20 +2148,6 @@ Printer identity is separate from the till route inventory.
   review, 2026-10-21).** The venue logo follows the same path, so such a till keeps an old logo too
   (A841 slice 8b).
   [Detail](till.md#a-cash-register-on-the-floor-plan-with-no-counter-zone-misses-a-theme-change-a841-slice-5s-review-2026-10-21)
-
-## Bundle: How a unit and its quantity read
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Remaining till unit and tab edges, OPEN, unqueued (A379/A385 run-it review).** A unit with no
-  enabled text has an empty label; the tile and basket-refresh price templates still append a slash.
-  Render those empty-label cases before choosing their display.
-  [Detail](till.md#remaining-till-unit-and-tab-edges-open-unqueued-a379a385-run-it-review)
-- **A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English
-  abbreviation** (observed during A333, 2026-10-08). On the real Spanish-seeded till, the salad
-  picker reads `1.00 rac`; its queued receipt reads `1.000 rac`, and its queued kitchen ticket
-  reads `1.000 srv`.
-  [Detail](till.md#a-custom-unit-extra-still-shows-a-dot-in-spanish-and-its-kitchen-unit-can-use-the-english-abbreviation)
 
 ## Bundle: Small till and floor wording fixes
 

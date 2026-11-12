@@ -974,8 +974,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
 
-- **How a unit and its quantity read** (bundle of 2, 1 important, size S). [Detail](backlog/till.md#bundle-how-a-unit-and-its-quantity-read)
-
 - **On the till, opening a section from lower on the screen leaves the page scrolled**, so the
   breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
   `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected). Left
