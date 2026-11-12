@@ -131,6 +131,15 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-record-departure]")).toBeNull();
   });
 
+  it.each([
+    partyBill("wo-2", 2, "0.00"),
+    partyBill("wo-2", 2, "18.00", { status: "placed", amountDue: "0.00" }),
+  ])("keeps a zero-due bill out of unpaid departure and leaves Pay available", async (zero) => {
+    const el = await mountScreen({ bills: [zero] });
+    expect(item(el, "[data-record-departure]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet], till-tender-pay")).not.toBeNull();
+  });
+
   it("draws exactly one ⋮, named Table actions, and no Table actions button", async () => {
     const el = await mountScreen();
 

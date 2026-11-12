@@ -6638,7 +6638,9 @@ export class TillTableOrderScreen extends LitElement {
               ...(shown.status !== "open" ? [] : [moveDishes, merge]),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
-              owing(shown) && !shown.leftUnpaid
+              owing(shown) &&
+              !shown.leftUnpaid &&
+              compareDecimal(decimal(shown.amountDue ?? shown.outstanding), decimal("0")) > 0
                 ? action("left-unpaid", "departure.record", () =>
                     this.#dispatch("record-unpaid-departure", {
                       workingOrderId: shown.workingOrderId,

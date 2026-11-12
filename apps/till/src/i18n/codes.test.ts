@@ -469,16 +469,16 @@ it("says in both languages that a bill presented, paid or discarded is no longer
 it("says what to do about each refusal of an unpaid departure, in both languages", () => {
   const cases = {
     "unpaid_departure.unfired_dishes": {
-      en: "A bill on this table holds items the kitchen is not making: not sent, on hold, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
-      es: "Una cuenta de esta mesa tiene artículos que cocina no está preparando: sin enviar, en espera, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
+      en: "This bill holds items the kitchen is not making: not sent, on hold, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
+      es: "Esta cuenta tiene artículos que cocina no está preparando: sin enviar, en espera, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
     },
     "unpaid_departure.bill_holds_payment": {
-      en: "A bill on this table already holds a payment, even if it was refunded, so it cannot be left unpaid. Take the rest of that bill as a payment first",
-      es: "Una cuenta de esta mesa ya tiene un pago, aunque se haya devuelto, así que no se puede dejar sin pagar. Cobra primero lo que queda de esa cuenta",
+      en: "This bill already holds a payment, even if it was refunded, so it cannot be left unpaid. Take the rest of that bill as a payment first",
+      es: "Esta cuenta ya tiene un pago, aunque se haya devuelto, así que no se puede dejar sin pagar. Cobra primero lo que queda de esa cuenta",
     },
     "unpaid_departure.nothing_outstanding": {
-      en: "Nothing is left to pay at this table. Finish the table instead",
-      es: "No queda nada por pagar en esta mesa. Cierra la mesa",
+      en: "There is nothing to record as unpaid for this bill. Check that you chose the right bill",
+      es: "No hay nada que registrar sin pagar en esta cuenta. Comprueba que has elegido la cuenta correcta",
     },
   };
   for (const [code, text] of Object.entries(cases)) {

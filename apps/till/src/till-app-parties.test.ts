@@ -10394,13 +10394,6 @@ describe("till-app: recording an unpaid departure", () => {
     state: "closed",
     departures: [
       { id: "ud-1", workingOrderId: "wo-4", saleId: "s-4", invoiceNumber: "F-4", amount: "14.00" },
-      {
-        id: "ud-2",
-        workingOrderId: "wo-check",
-        saleId: "s-5",
-        invoiceNumber: "F-5",
-        amount: "30.00",
-      },
     ],
   };
   const dialog = (el: TillApp) =>
@@ -10410,7 +10403,6 @@ describe("till-app: recording an unpaid departure", () => {
       "till-supervisor-override-dialog[data-departure-approval]",
     );
 
-  /** Finish is refused for an unpaid bill, and the refusal's Record unpaid departure is pressed. */
   async function openDeparture(
     overrides: Record<string, unknown> = {},
     props: Partial<TillApp> = {},
@@ -10921,6 +10913,16 @@ describe("till-app: recording an unpaid departure", () => {
       name: "4 · Bill 1 · Clint",
       outstanding: "14.00",
     });
+  });
+
+  it("does not open unpaid departure for the selected fully credited bill", async () => {
+    const { el } = await openDeparture({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, status: "placed", amountDue: "0.00" }, checkBill]),
+    });
+    expect(dialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
   });
 
   it("leaves out of the dialog a bill with nothing left to pay", async () => {

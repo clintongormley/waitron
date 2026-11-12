@@ -17881,6 +17881,7 @@ export class TillApp extends LitElement {
       bill === undefined ||
       bill.leftUnpaid ||
       !owing(bill) ||
+      compareDecimal(decimal(bill.amountDue ?? bill.outstanding), decimal("0")) <= 0 ||
       this.activeTabId !== workingOrderId
     )
       return;
