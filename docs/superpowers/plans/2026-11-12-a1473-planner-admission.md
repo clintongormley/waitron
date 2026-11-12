@@ -1,5 +1,7 @@
 # CI-plan-wait: PR planning on the server, with automatic hosted rescue
 
+> **Build status, 12 November 2026.** Recovery PR1 landed as [#2924](https://github.com/clintongormley/waitron/pull/2924), with passing current-head CI and an owned trusted-main health invocation. The guest qualification then failed `gh: command not found` (run43178143472/job131047298616). The watcher cleared bounded gh setup only for the server planning job at09:14, without changing the shared guest image, and cleared the old hosted-planner root-guard replacement at09:28. PR2 keeps activation held until tool/history/API checks and the owned unavailable-label drill pass; no wait improvement is claimed from local expression tests.
+
 **Authority.** The watcher chose server planning at 06:47, narrowed it to PRs at 07:00 and cleared these two PRs with corrections at 07:23 on 2026-11-12 (Lane I questions.md). Claude read the draft (174 s) and revision (232 s). No owner design approval or implementation is claimed. Mutation caps are dropped; held A1473 publication work is separate.
 
 **Finish line.** Same-repository PR `changes` jobs use existing `changes-1` guests on attempt 1. Later attempts, forks and non-PR planners remain hosted; downstream routing is unchanged. Retain mode, selected-head and hosted-attempt gates. Placement uses the existing snapshot only when `serverWaiting == 0 && serverRunning < slots`, without arithmetic in workflow expressions; absent/zero capacity selects hosted. Add no expiry, reservation or collector. Placement cannot depend on its own output.
