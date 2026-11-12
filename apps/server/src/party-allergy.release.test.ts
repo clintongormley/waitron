@@ -325,7 +325,7 @@ describe("A669 release matrix", () => {
     });
     expect(frozen()).toEqual(before);
   });
-  it("sold-out work on a later bill rolls back the whole group and allergy patch", async () => {
+  it("archived work on a later bill rolls back the whole group and allergy patch", async () => {
     const p = await fixture(false, true);
     const ask = await command(p, {
       party: {
@@ -341,7 +341,7 @@ describe("A669 release matrix", () => {
     ).toBe(p.otherBill);
     await v.db
       .update(products)
-      .set({ available: false })
+      .set({ active: false })
       .where(eq(products.id, v.productId("Burger")));
     const before = frozen();
     try {
@@ -350,7 +350,7 @@ describe("A669 release matrix", () => {
     } finally {
       await v.db
         .update(products)
-        .set({ available: true })
+        .set({ active: true })
         .where(eq(products.id, v.productId("Burger")));
     }
   });

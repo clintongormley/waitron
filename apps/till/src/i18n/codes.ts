@@ -678,8 +678,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este plato o tamaño ya no se ofrece aquí. Cierra esta ventana y elige otro plato o tamaño.",
   },
   "product.unavailable": {
-    en: "An item on this order has sold out. Remove it and try again",
-    es: "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",
+    en: "An item on this order is no longer available. Remove it and try again",
+    es: "Un artículo de este pedido ya no está disponible. Quítalo e inténtalo de nuevo",
   },
   "product.not_sold_separately": {
     en: "An item on this order can only be added as an extra to another dish. Remove it and try again",

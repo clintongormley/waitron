@@ -15196,7 +15196,6 @@ export class TillApp extends LitElement {
       busy: false,
       preview: onField ? null : now.preview,
     };
-    // The invoice a change would issue refuses a dish sold out before it was sent.
     if (
       (isBillMoneyRefusal(error) || refusal === "product.unavailable") &&
       !this.#hasLeftAdjusted(open)

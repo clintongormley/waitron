@@ -1065,6 +1065,8 @@ export function screenNote(value: unknown): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
+const productActive = sql<number>`(${products.active} and (${parentProducts.id} is null or ${parentProducts.active}))`;
+
 /** A line's product can be sold now: Active and Available, and so is its parent for a variant. */
 export const productSellable = sql<number>`(${products.active} and ${products.available}
   and (${parentProducts.id} is null or (${parentProducts.active} and ${parentProducts.available})))`;
@@ -1129,7 +1131,7 @@ async function readLockedLinesForIssuance(
       ...storedLineColumns,
       ...portionColumns,
       sentAt: workingOrderLines.sentAt,
-      sellable: productSellable,
+      active: productActive,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
@@ -1142,9 +1144,8 @@ async function readLockedLinesForIssuance(
   return {
     lines: stored.map((line, i) => ({
       ...line,
-      // A sent line is committed work, payable whatever its product's availability now.
       payable:
-        line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.sellable),
+        line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.active),
     })),
     grouped: groupedByPortion(rows, stored),
   };
@@ -1304,17 +1305,7 @@ export async function readStoredOrder(
   };
 }
 
-/**
- * A persisted order's gross lines to issue an invoice from: each line's stored gross unit price and
- * stored VAT class, which `issueMoment` rates on the day the invoice is issued, with bound portions
- * grouped as {@link readLockedLines} groups them. Returns each row's working-order identity for
- * `issuancePass`, and refuses a lineless order.
- *
- * A line never sent whose product cannot be sold now is refused `product.unavailable`:
- * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
- * availability. Each working line is judged on its own, before grouping. `refuseUnsentUnavailable: false` is for a payment the card network has already
- * captured, which is filed as it stands.
- */
+/** `refuseUnsentUnavailable: false` keeps already-captured money recordable after archival. */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
@@ -2348,12 +2339,6 @@ async function heldNoRouteLines(
   };
 }
 
-/**
- * Refuse `product.unavailable` for the first of these dish lines, or their extras children, whose
- * product cannot be sold now. A caller passes the lines it is about to send that have no fired
- * ticket item — never fired or held — so a sold-out dish is never sent to the kitchen
- * again, whether or not the line was stamped sent before.
- */
 export async function assertSendable(tx: Transaction, lineIds: readonly string[]): Promise<void> {
   if (lineIds.length === 0) return;
   const [refused] = await tx
@@ -2367,7 +2352,7 @@ export async function assertSendable(tx: Transaction, lineIds: readonly string[]
           inArray(workingOrderLines.id, [...lineIds]),
           inArray(workingOrderLines.parentLineId, [...lineIds]),
         ),
-        sql`not ${productSellable}`,
+        sql`not ${productActive}`,
       ),
     )
     .orderBy(workingOrderLines.lineNo)
@@ -2434,8 +2419,6 @@ async function releaseHeld(
     firedNow,
   );
   const noRoute = await heldNoRouteLines(tx, orderId, noRouteScope, routing);
-  // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
-  // order's held work is committed.
   await finishRelease(
     tx,
     cfg,
@@ -2460,7 +2443,7 @@ async function finishRelease(
   requested: FiredItem[],
   noRoute: { zoneId: string | null; lines: { id: string; courseId: string | null }[] },
   at: string,
-  refuseSoldOut: boolean,
+  refuseArchived: boolean,
   fire?: { heldPaper: ReadonlySet<string> },
   routing = routingOnce(tx, new Date(at)),
   rerouted: Rerouted = new Map(),
@@ -2470,7 +2453,7 @@ async function finishRelease(
     ...requested.map((item) => item.workingOrderLineId),
     ...noRoute.lines.map((line) => line.id),
   ];
-  if (refuseSoldOut) await assertSendable(tx, released);
+  if (refuseArchived) await assertSendable(tx, released);
   await stampSent(tx, orderId, released, at);
   const extras = await insertSplitExtras(
     tx,
@@ -5914,7 +5897,6 @@ async function applyLineEdits(
     }
     if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
     if (action === "change") {
-      // The changed line goes to the kitchen again, which a sold-out dish never does.
       resent.push(parent.productId!, ...extras.kept.map(({ child }) => child.productId!));
     }
     const quantity =

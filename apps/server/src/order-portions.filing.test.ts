@@ -525,7 +525,7 @@ describe("A803 portions: filing a bill of portions", () => {
     expect(portions).toHaveLength(1);
   });
 
-  it("A803 portions: an off-sale portion not yet sent refuses the issuance, though the first of its row was sent", async () => {
+  it("A803 portions: an archived portion not yet sent refuses the issuance, though the first of its row was sent", async () => {
     const { billId, portions } = await seed(sweets("2"));
     await inTx(venue, (tx) =>
       tx
@@ -534,7 +534,7 @@ describe("A803 portions: filing a bill of portions", () => {
         .where(eq(workingOrderLines.id, portions[0]!.lineId)),
     );
     await inTx(venue, (tx) =>
-      tx.update(products).set({ available: false }).where(eq(products.id, ids.sweet)),
+      tx.update(products).set({ active: false }).where(eq(products.id, ids.sweet)),
     );
     try {
       await expect(
@@ -547,7 +547,7 @@ describe("A803 portions: filing a bill of portions", () => {
       ).rejects.toMatchObject({ code: "product.unavailable" });
     } finally {
       await inTx(venue, (tx) =>
-        tx.update(products).set({ available: true }).where(eq(products.id, ids.sweet)),
+        tx.update(products).set({ active: true }).where(eq(products.id, ids.sweet)),
       );
     }
   });
@@ -590,7 +590,7 @@ describe("A803 portions: filing a bill of portions", () => {
     const { billId } = await seed(sweets("2"));
     const linksBefore = await inTx(venue, (tx) => tx.select().from(saleLinePortions));
     await inTx(venue, (tx) =>
-      tx.update(products).set({ available: false }).where(eq(products.id, ids.sweet)),
+      tx.update(products).set({ active: false }).where(eq(products.id, ids.sweet)),
     );
     try {
       await expect(
@@ -603,7 +603,7 @@ describe("A803 portions: filing a bill of portions", () => {
       ).rejects.toMatchObject({ code: "product.unavailable" });
     } finally {
       await inTx(venue, (tx) =>
-        tx.update(products).set({ available: true }).where(eq(products.id, ids.sweet)),
+        tx.update(products).set({ active: true }).where(eq(products.id, ids.sweet)),
       );
     }
 

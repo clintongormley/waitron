@@ -218,7 +218,7 @@ describe("A773 waiter request: release", () => {
     });
   });
 
-  it("requests a held burger fired on its own at a waiting Grill and prints nothing", async () => {
+  it("requests a sold-out held burger fired on its own at a waiting Grill and prints nothing", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -231,6 +231,7 @@ describe("A773 waiter request: release", () => {
       expect(await allergyCopies(tx, burger!.id)).toEqual([]);
       const revision = await orderRevision(tx, venue.party.tabId);
       const before = await jobCounts(tx, venue);
+      await tx.execute(sql`update products set available = 0 where id = ${venue.products.burger}`);
       vi.setSystemTime(new Date(LATER));
       await fireHeldLine(tx, venue.cfg, venue.party.partyId, burger!.lineId, {
         operatorId: OPERATOR,
@@ -252,7 +253,7 @@ describe("A773 waiter request: release", () => {
     });
   });
 
-  it("refuses a held group whose sold-out burger would be requested at a waiting Grill, writing nothing", async () => {
+  it("refuses a held group whose archived burger would be requested at a waiting Grill, writing nothing", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     const placed = await withTransaction(db, async (tx) => {
@@ -262,7 +263,7 @@ describe("A773 waiter request: release", () => {
         groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
       });
     });
-    await db.run(sql`update products set available = 0 where id = ${venue.products.burger}`);
+    await db.run(sql`update products set active = 0 where id = ${venue.products.burger}`);
     const snapshot = () =>
       withTransaction(db, async (tx) => {
         const rows = await items(tx, venue.party.tabId);

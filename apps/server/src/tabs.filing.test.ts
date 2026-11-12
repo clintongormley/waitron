@@ -488,14 +488,8 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
   });
 });
 
-/**
- * Review Focus 6 of the menus plan (spec sections 11.3 and 11.7 examples 4 and 5, and 10.7 example
- * 5), as the owner restated it on 2026-09-26: a line that was sent stays payable however its
- * product's availability changes, through a split and with a line that makes no kitchen work; one that was never
- * sent does not; and the split's two Burgers are one on each check.
- */
-describe("a sent line is payable whatever its availability; an unsent one is not", () => {
-  it("pays two checks' fired Burgers and a served bottle after both sell out, and blocks the held Burger until it is removed", async () => {
+describe("a sent line is payable after archival; an archived unsent one is not", () => {
+  it("pays two checks' fired Burgers and a served bottle after archival, and blocks the held Burger until it is removed", async () => {
     const { cfg, tables } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     const { burgerId, beerId, offers, courseId } = await withTransaction(suite.db, async (tx) => {
@@ -549,9 +543,8 @@ describe("a sent line is payable whatever its availability; an unsent one is not
       ]);
     });
 
-    // Both products sell out.
     await suite.db.execute(sql`
-      update products set available = 0 where id in (${burgerId}, ${beerId})`);
+      update products set active = 0 where id in (${burgerId}, ${beerId})`);
 
     // One of the two fired Burgers goes to a check of its own, which pays.
     const { billId: checkId } = await withTransaction(suite.db, (tx) =>

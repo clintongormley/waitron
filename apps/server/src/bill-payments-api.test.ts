@@ -3208,7 +3208,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     expect(fiscalRecordCount(billId)).toBe(1);
   });
 
-  it("refuses product.unavailable, changing nothing, for a void that would issue the invoice while an unsent line's product is off sale", async () => {
+  it("refuses product.unavailable, changing nothing, for a void that would issue the invoice while an unsent line's product is archived", async () => {
     const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
     const steakId = venue.productIds.get("Steak")!;
@@ -3227,7 +3227,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       null,
     ]);
 
-    suite.db.run(sql`update products set available = 0 where id = ${steakId}`);
+    suite.db.run(sql`update products set active = 0 where id = ${steakId}`);
     try {
       const refused = await request("POST", path, body);
 
@@ -3241,7 +3241,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       expect(await saleOf(billId)).toEqual([]);
       expect(fiscalRecordCount(billId)).toBe(0);
     } finally {
-      suite.db.run(sql`update products set available = 1 where id = ${steakId}`);
+      suite.db.run(sql`update products set active = 1 where id = ${steakId}`);
     }
   });
 });

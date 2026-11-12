@@ -449,7 +449,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.empty_basket": 400,
   "sale.charged_not_recorded": 507,
   "product.variant_required": 400,
-  // A line never sent whose product sold out, refused at send and at pay.
   "product.unavailable": 409,
   "product.not_sold_separately": 409,
   // A confirmation from the kitchen settles it, so it is a conflict rather than a bad request.
