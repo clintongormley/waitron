@@ -659,6 +659,8 @@ declare module "@waitron/shared" {
     };
     /** The refund would give back more than the correction has left; what it has left. */
     "invoice_correction.leg_too_large": { correctionId: string; left: string };
+    /** None of the correction's refunds has given money back yet, so there is nothing to file. */
+    "invoice_correction.nothing_back": { correctionId: string };
     /** The split the till showed is no longer what this correction would file; the fresh one. */
     "invoice_correction.split_changed": {
       saleId: string;

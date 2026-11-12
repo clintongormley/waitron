@@ -7,11 +7,9 @@ import {
   type RecordCorrectionInput,
 } from "@waitron/core";
 import {
-  invoiceCorrectionRefunds,
   invoiceCorrections,
   readLiveSeriesIdTx,
   saleSettlements,
-  tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
@@ -31,7 +29,11 @@ import {
   type SaleId,
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
-import { readCorrectionMoney, refuseWhileCorrectionOpen } from "./invoice-correction-legs.js";
+import {
+  readCorrectionLegs,
+  readCorrectionMoney,
+  refuseWhileCorrectionOpen,
+} from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
@@ -232,13 +234,10 @@ export async function readInvoiceCorrection(
     .from(invoiceCorrections)
     .where(eq(invoiceCorrections.id, correctionId));
   if (row === undefined) throw new AppError("invoice_correction.not_found", { correctionId });
-  const { completed: back, pending } = await readCorrectionMoney(tx, correctionId);
-  const legs = await tx
-    .select({ refund: tenderRefunds })
-    .from(invoiceCorrectionRefunds)
-    .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
-    .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
-    .orderBy(invoiceCorrectionRefunds.createdAt, invoiceCorrectionRefunds.id);
+  const {
+    refunds,
+    money: { completed: back, pending },
+  } = await readCorrectionLegs(tx, correctionId);
   return {
     id: row.id,
     saleId: row.originalSaleId,
@@ -250,7 +249,7 @@ export async function readInvoiceCorrection(
     reason: row.reason,
     openedAt: row.createdAt,
     correctiveSaleId: row.correctiveSaleId,
-    legs: legs.map(({ refund }) => toTenderRefundView(refund)),
+    legs: refunds.map(toTenderRefundView),
     fileNow:
       row.state !== "open" || pending > 0 || back === 0
         ? null
@@ -262,18 +261,29 @@ export async function readInvoiceCorrection(
 }
 
 /**
- * Files `correction`'s R5 for `gross`, after the filing checks run again, and marks the correction
- * filed. The one place a correction's R5 is filed.
+ * Files the R5 of the open correction `correctionId` for the money its refunds have given back,
+ * after the filing checks run again, and marks the correction filed. The one place a correction's
+ * R5 is filed.
  */
 export async function fileCorrectionIn(
   tx: Transaction,
   deps: InvoiceCorrectionDeps,
   cfg: DeviceRequestConfig,
-  correction: typeof invoiceCorrections.$inferSelect,
-  gross: Decimal,
+  correctionId: string,
   authz: RecordCorrectionInput["authz"],
   endedBy: string | null,
 ): Promise<SaleId> {
+  const [correction] = await tx
+    .select()
+    .from(invoiceCorrections)
+    .where(eq(invoiceCorrections.id, correctionId));
+  if (correction === undefined)
+    throw new AppError("invoice_correction.not_found", { correctionId });
+  if (correction.state !== "open")
+    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  const { completed } = await readCorrectionMoney(tx, correctionId);
+  if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
+  const gross = centsToDecimal(completed);
   const saleId = correction.originalSaleId as SaleId;
   const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
     gross,
@@ -301,15 +311,18 @@ export async function fileCorrectionIn(
     clock,
   });
 
-  await tx
+  const filed = await tx
     .update(invoiceCorrections)
     .set({
       state: "filed",
       correctiveSaleId,
-      endedAt: deps.clock.now().instant.toISOString(),
+      endedAt: clock.now().instant.toISOString(),
       endedBy,
     })
-    .where(eq(invoiceCorrections.id, correction.id));
+    .where(and(eq(invoiceCorrections.id, correctionId), eq(invoiceCorrections.state, "open")))
+    .returning({ id: invoiceCorrections.id });
+  if (filed.length !== 1)
+    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
   return correctiveSaleId;
 }
 

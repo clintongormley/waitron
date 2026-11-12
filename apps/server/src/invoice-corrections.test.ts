@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { adjustmentReasons, invoiceCorrections, saleLines, sales } from "@waitron/db";
+import {
+  adjustmentReasons,
+  invoiceCorrections,
+  saleLines,
+  sales,
+  tenderRefunds,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { createProduct } from "@waitron/catalogue";
@@ -441,6 +447,12 @@ describe("openInvoiceCorrection", () => {
       legs: [{ state: "completed", appliedAmount: "4.00" }],
       fileNow: { gross: "4.00", vatBreakdown: [{ rate: "21.00", base: "3.31", tax: "0.69" }] },
     });
+    expect(
+      await venue.db
+        .select({ reason: tenderRefunds.reason })
+        .from(tenderRefunds)
+        .where(eq(tenderRefunds.saleId, saleId)),
+    ).toEqual([{ reason: correction.reason }]);
   });
 
   it("reads a filing refusal as what filing now would answer", async () => {
@@ -476,15 +488,13 @@ async function correctionRow(correctionId: string) {
   return row!;
 }
 
-async function fileAll(correctionId: string, gross: string) {
-  const row = await correctionRow(correctionId);
+async function fileAll(correctionId: string, backend = venue.backend) {
   return inTx(venue, (tx) =>
     fileCorrectionIn(
       tx,
-      deps(),
+      { ...deps(), backend },
       venue.cfg,
-      row,
-      decimal(gross),
+      correctionId,
       { sessionId: managerSessionId },
       managerId,
     ),
@@ -492,14 +502,15 @@ async function fileAll(correctionId: string, gross: string) {
 }
 
 describe("fileCorrectionIn", () => {
-  it("files a correction's R5 for its amount and marks it filed", async () => {
+  it("files a correction's R5 for the money its refunds gave back and marks it filed", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const before = await original(saleId);
-    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
-    await giveBack(saleId, "6.05", correction.id);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "8.00" });
+    await giveBack(saleId, "4.00", correction.id);
+    await giveBack(saleId, "2.05", correction.id);
     const was = counts();
 
-    const correctiveSaleId = await fileAll(correction.id, "6.05");
+    const correctiveSaleId = await fileAll(correction.id);
 
     expect(counts()).toEqual({ ...was, invoices: was.invoices + 1 });
     const [corrective] = await venue.db.select().from(sales).where(eq(sales.id, correctiveSaleId));
@@ -515,6 +526,43 @@ describe("fileCorrectionIn", () => {
       endedBy: managerId,
     });
     expect(await original(saleId)).toEqual(before);
+  });
+
+  it("refuses a correction already filed, filing nothing more", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await giveBack(saleId, "6.05", correction.id);
+    await fileAll(correction.id);
+    let checks = 0;
+    const counting = Object.create(venue.backend, {
+      checkIntegrity: {
+        value: (...args: Parameters<typeof venue.backend.checkIntegrity>) => {
+          checks += 1;
+          return venue.backend.checkIntegrity(...args);
+        },
+      },
+    }) as typeof venue.backend;
+
+    await refusedWithNothingWritten(() => fileAll(correction.id, counting), {
+      code: "invoice_correction.not_open",
+      params: { correctionId: correction.id, state: "filed" },
+    });
+    expect(checks).toBe(0);
+  });
+
+  it("refuses a correction with no money back, and files once some is back", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+
+    await refusedWithNothingWritten(() => fileAll(correction.id), {
+      code: "invoice_correction.nothing_back",
+      params: { correctionId: correction.id },
+    });
+
+    await giveBack(saleId, "1.00", correction.id);
+    const correctiveSaleId = await fileAll(correction.id);
+    const [corrective] = await venue.db.select().from(sales).where(eq(sales.id, correctiveSaleId));
+    expect(corrective).toMatchObject({ total: -100 });
   });
 });
 
@@ -557,7 +605,7 @@ describe("a correction's legs", () => {
     });
 
     await giveBack(saleId, "6.05", correction.id);
-    await fileAll(correction.id, "6.05");
+    await fileAll(correction.id);
 
     await expect(ordinary(randomUUID(), "1.00")).resolves.toMatchObject({ replayed: false });
   });
@@ -573,7 +621,7 @@ describe("a correction's legs", () => {
     });
 
     await giveBack(other, "6.05", correction.id);
-    await fileAll(correction.id, "6.05");
+    await fileAll(correction.id);
     await refusedWithNothingWritten(() => giveBack(other, "1.00", correction.id), {
       code: "invoice_correction.not_open",
       params: { correctionId: correction.id, state: "filed" },
@@ -600,7 +648,7 @@ describe("a correction's leg refuses", () => {
     const saleId = await soldForCash("Rib steak", []);
     const [sale] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
     await payFor(sale!.workingOrderId!, ["12.10"], "1.00");
-    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "12.10" });
     await refusedWithNothingWritten(
       () =>
         inTx(venue, async (tx) => {

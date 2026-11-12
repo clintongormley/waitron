@@ -9,46 +9,55 @@ import { AppError, centsToDecimal } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import "./errors.js";
 
-/** The money a correction's refunds have given back and still hold pending, in cents; failed
- * refunds count nothing. */
-export async function readCorrectionMoney(
-  tx: Transaction,
-  correctionId: string,
-): Promise<{
+export interface CorrectionMoney {
   completed: number;
   pending: number;
   pendingRefundId: string | null;
   firstCompletedAt: string | null;
-}> {
-  const legs = await tx
-    .select({
-      id: tenderRefunds.id,
-      state: tenderRefunds.state,
-      cents: tenderRefunds.appliedAmount,
-      completedAt: tenderRefunds.completedAt,
-    })
-    .from(invoiceCorrectionRefunds)
-    .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
-    .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
-    .orderBy(asc(invoiceCorrectionRefunds.createdAt), asc(invoiceCorrectionRefunds.id));
-  let completed = 0,
-    pending = 0;
-  let pendingRefundId: string | null = null,
-    firstCompletedAt: string | null = null;
-  for (const leg of legs) {
+}
+
+/** A correction's refunds, oldest link first, and the money they have given back and still hold
+ * pending, in cents; failed refunds count nothing. */
+export async function readCorrectionLegs(
+  tx: Transaction,
+  correctionId: string,
+): Promise<{ refunds: (typeof tenderRefunds.$inferSelect)[]; money: CorrectionMoney }> {
+  const refunds = (
+    await tx
+      .select({ refund: tenderRefunds })
+      .from(invoiceCorrectionRefunds)
+      .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
+      .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
+      .orderBy(asc(invoiceCorrectionRefunds.createdAt), asc(invoiceCorrectionRefunds.id))
+  ).map(({ refund }) => refund);
+  const money: CorrectionMoney = {
+    completed: 0,
+    pending: 0,
+    pendingRefundId: null,
+    firstCompletedAt: null,
+  };
+  for (const leg of refunds) {
     if (leg.state === "completed") {
-      completed += leg.cents;
+      money.completed += leg.appliedAmount;
       if (
         leg.completedAt !== null &&
-        (firstCompletedAt === null || leg.completedAt < firstCompletedAt)
+        (money.firstCompletedAt === null || leg.completedAt < money.firstCompletedAt)
       )
-        firstCompletedAt = leg.completedAt;
+        money.firstCompletedAt = leg.completedAt;
     } else if (leg.state === "pending") {
-      pending += leg.cents;
-      pendingRefundId ??= leg.id;
+      money.pending += leg.appliedAmount;
+      money.pendingRefundId ??= leg.id;
     }
   }
-  return { completed, pending, pendingRefundId, firstCompletedAt };
+  return { refunds, money };
+}
+
+/** The money a correction's refunds have given back and still hold pending, in cents. */
+export async function readCorrectionMoney(
+  tx: Transaction,
+  correctionId: string,
+): Promise<CorrectionMoney> {
+  return (await readCorrectionLegs(tx, correctionId)).money;
 }
 
 /**
