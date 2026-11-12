@@ -236,6 +236,22 @@ it("a failed receipt read after the close is a load failure; nothing is sent aga
   expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("deferred_close.ticket_unread"));
 });
 
+it("a failed receipt read after a close that finished the party still says so on the floor", async () => {
+  const api = deferredApi({
+    closeDeferred: vi.fn().mockResolvedValue(closedAs("closed")),
+    getFiledTicket: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openClosing(el);
+  await confirm(el);
+  await flush(el, 8);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(floor(el)).not.toBeNull();
+  expect(tableOrder(el)).toBeNull();
+  expect(documents(el)).toBeNull();
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("deferred_close.ticket_unread"));
+});
+
 it("returns to the floor when the close finished the party; stays on the table when it did not", async () => {
   const finished = deferredApi({ closeDeferred: vi.fn().mockResolvedValue(closedAs("closed")) });
   const { el } = await mountWidget<TillApp>("till-app", { api: finished });

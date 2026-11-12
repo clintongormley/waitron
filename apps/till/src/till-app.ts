@@ -11367,6 +11367,7 @@ export class TillApp extends LitElement {
     this.deferredClosing = null;
     const { api, party, live } = send;
     const { billId, visit } = open;
+    let unread = false;
     try {
       const ticket = await api.getFiledTicket(billId);
       if (send.same()) {
@@ -11378,11 +11379,14 @@ export class TillApp extends LitElement {
       }
     } catch {
       // The bill is closed: nothing is sent again.
-      if (live()) this.errorKey = "deferred_close.ticket_unread";
+      unread = live();
+      if (unread) this.errorKey = "deferred_close.ticket_unread";
     }
-    if (result.party.state === "closed" && party !== null)
+    if (result.party.state === "closed" && party !== null) {
       await this.#onTableClosed(party.id, visit, send.sent);
-    else if (live()) await this.#loadPartyBills();
+      // Returning to the floor can clear the screen's error.
+      if (unread && send.same()) this.errorKey = "deferred_close.ticket_unread";
+    } else if (live()) await this.#loadPartyBills();
   }
 
   /**
