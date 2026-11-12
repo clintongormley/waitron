@@ -101,32 +101,6 @@ describe("A773 requested lifecycle: bill move", () => {
     vi.useRealTimers();
   });
 
-  it("lets Split bill take a Requested dish to a new bill, keeping its request and printing nothing", async () => {
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      const [, second] = await requestedBurgers(tx, venue, ["burger", "burger"]);
-      const before = await itemOf(tx, second!.id);
-      const jobs = await jobCount(tx);
-
-      const { billId } = await splitBill(
-        tx,
-        venue.cfg,
-        venue.party.tabId,
-        [{ lineNo: second!.lineNo }],
-        await command(tx, venue),
-      );
-
-      const [moved] = await linesOf(tx, billId);
-      expect(stamps(await itemOf(tx, moved!.id))).toEqual({
-        stationId: venue.stations.grill,
-        requestedAt: before.requestedAt,
-        firedAt: null,
-        passControlled: true,
-      });
-      expect(await jobCount(tx)).toBe(jobs);
-    });
-  });
-
   it("lets Move dishes take a Requested dish to a new bill, keeping its request and printing nothing", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {

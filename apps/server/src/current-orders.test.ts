@@ -1208,13 +1208,14 @@ describe("readCurrentOrders (spec §4)", () => {
     const mains = await inTx((tx) => createCourse(tx, { name: "Mains", displayOrder: 2 }));
     const desserts = await inTx((tx) => createCourse(tx, { name: "Desserts", displayOrder: 3 }));
     const held = await groupedGroup(v, s, "hold", [
-      { ...line(v, "steak", "2"), courseId: mains.id },
+      { ...line(v, "steak"), courseId: mains.id },
+      { ...line(v, "steak"), courseId: mains.id },
       { ...line(v, "flan"), courseId: desserts.id },
       line(v, "water"),
     ]);
     const steak = (await linesByName(s.partyId)).find((row) => row.name === "steak")!;
     await inTx(async (tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: steak.lineNo, quantity: "1" }], {
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: steak.lineNo }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),
@@ -1628,11 +1629,13 @@ describe("an abandoned bill", () => {
   it("neither holds up nor dates the reminder, and its rows are not shown", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const starters = await groupedGroup(v, s, "fire", [line(v, "croquetas", "2")]);
+    const starters = await groupedGroup(v, s, "fire", [line(v, "croquetas"), line(v, "croquetas")]);
     const desserts = await group(v, s.partyId, "hold", [line(v, "flan")]);
-    const [croq] = (await linesByName(s.partyId)).filter((l) => l.name === "croquetas");
+    const [croq, moved] = (await linesByName(s.partyId))
+      .filter((l) => l.name === "croquetas")
+      .sort((a, b) => a.lineNo - b.lineNo);
     const { billId: checkId } = await inTx(async (tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croq!.lineNo, quantity: "1" }], {
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: moved!.lineNo }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),

@@ -44,6 +44,7 @@ import {
   abandonHeldOrder,
   advanceTicketItem,
   markServed,
+  splitLinesWithinOrder,
 } from "./working-order.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -1699,20 +1700,19 @@ describe("What a cancel records for refunds", () => {
       preparationStarted: true,
     });
     const newBillId = await inTx(venue, async (tx) => {
+      const part = (
+        await splitLinesWithinOrder(tx, venue.cfg, order.billId, [
+          { lineNo: order.parent.lineNo, quantity: "2" },
+        ])
+      ).get(order.parent.id)!;
       const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
-      const split = await splitBill(
-        tx,
-        venue.cfg,
-        order.billId,
-        [{ lineNo: order.parent.lineNo, quantity: "2" }],
-        {
-          admission: testTradingAdmission(),
-          partyId: order.partyId,
-          expectedPartyRevision: party!.revision,
-          operatorId: venue.staffId,
-          expectedEdit: await readBillEditState(tx, order.billId),
-        },
-      );
+      const split = await splitBill(tx, venue.cfg, order.billId, [{ lineNo: part.lineNo }], {
+        admission: testTradingAdmission(),
+        partyId: order.partyId,
+        expectedPartyRevision: party!.revision,
+        operatorId: venue.staffId,
+        expectedEdit: await readBillEditState(tx, order.billId),
+      });
       return split.billId;
     });
     const [line] = await inTx(venue, (tx) =>

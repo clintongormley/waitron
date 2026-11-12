@@ -13,7 +13,7 @@ import {
 import type { BillEditExpected } from "../order-drafts.js";
 import type { TradingAdmission } from "../trading-admission.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
-import type { OrderAttendance } from "../working-order.js";
+import { splitLinesWithinOrder, type OrderAttendance } from "../working-order.js";
 export * from "../bill-actions.js";
 
 export async function observedBillActionBody(
@@ -87,6 +87,37 @@ async function wholeDishIds(
     }
     return row.id;
   });
+}
+
+/**
+ * Cuts each entry's part off its line inside the bill, as a part discount or a move to another
+ * course group does, and names the row each part now is, so the parts can move as whole dishes.
+ */
+export async function cutParts(
+  tx: Transaction,
+  cfg: TradingContext,
+  billId: string,
+  transfers: Transfers,
+): Promise<{ lineNo: number }[]> {
+  const lines = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, billId));
+  const byLineNo = new Map(lines.map((row) => [row.lineNo, row]));
+  const isPart = (entry: Transfers[number]): entry is { lineNo: number; quantity: string } =>
+    entry.quantity !== undefined &&
+    decimalToThousandths(decimal(entry.quantity)) !== byLineNo.get(entry.lineNo)?.quantity;
+  const parts = transfers.filter(isPart);
+  const cut = parts.length ? await splitLinesWithinOrder(tx, cfg, billId, parts) : new Map();
+  return transfers.map((entry) =>
+    isPart(entry)
+      ? { lineNo: cut.get(byLineNo.get(entry.lineNo)!.id)!.lineNo }
+      : { lineNo: entry.lineNo },
+  );
 }
 
 /** Moves whole dishes to a new bill, through Move dishes. */

@@ -38,7 +38,7 @@ import {
 import { listStationNotices, writePartyAllergy } from "@waitron/venue-service";
 import { applyAdjustment, previewAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { mergeCheckedBills } from "./bill-actions.js";
-import { transferItems } from "./testing/bill-action-fixture.js";
+import { cutParts } from "./testing/bill-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -124,6 +124,15 @@ function roundOf(lines: RoundLine[]): TabRoundLine[] {
           ],
         }),
   }));
+}
+
+/** Split bill of these items onto a new bill, a part first cut off its line inside the bill. */
+async function splitCut(
+  tx: Transaction,
+  billId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<{ billId: string }> {
+  return splitPartyBill(tx, venue.cfg, billId, await cutParts(tx, venue.cfg, billId, transfers));
 }
 
 async function seated(tx: Transaction): Promise<{ billId: string; partyId: string }> {
@@ -1513,7 +1522,7 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
     await adjust(grouped.billId, crew({ lineId: line! }));
     await adjust(portions.billId, crew(rowOf(row)));
     const groupedB = await inTx(venue, (tx) =>
-      splitPartyBill(tx, venue.cfg, grouped.billId, [{ lineNo: 1, quantity: "2" }]),
+      splitCut(tx, grouped.billId, [{ lineNo: 1, quantity: "2" }]),
     );
     const portionsB = await inTx(venue, (tx) =>
       splitPartyBill(tx, venue.cfg, portions.billId, [{ lineNo: 1 }, { lineNo: 2 }]),
@@ -1534,9 +1543,7 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
     const row = await dishesNamed(portions.billId, "Burger");
     await adjust(grouped.billId, crew({ lineId: line! }));
     await adjust(portions.billId, crew(rowOf(row)));
-    await inTx(venue, (tx) =>
-      splitPartyBill(tx, venue.cfg, grouped.billId, [{ lineNo: 1, quantity: "2" }]),
-    );
+    await inTx(venue, (tx) => splitCut(tx, grouped.billId, [{ lineNo: 1, quantity: "2" }]));
     await inTx(venue, (tx) =>
       splitPartyBill(tx, venue.cfg, portions.billId, [{ lineNo: 1 }, { lineNo: 2 }]),
     );
@@ -1805,9 +1812,7 @@ describe("A803 portions: approval differences no single line can show", () => {
     };
     await adjust(grouped.billId, wholeBill);
     await adjust(portions.billId, wholeBill);
-    await inTx(venue, (tx) =>
-      splitPartyBill(tx, venue.cfg, grouped.billId, [{ lineNo: 1, quantity: "2" }]),
-    );
+    await inTx(venue, (tx) => splitCut(tx, grouped.billId, [{ lineNo: 1, quantity: "2" }]));
     await inTx(venue, (tx) =>
       splitPartyBill(tx, venue.cfg, portions.billId, [{ lineNo: 1 }, { lineNo: 2 }]),
     );
@@ -1883,9 +1888,7 @@ describe("A803 portions: approval differences no single line can show", () => {
       [grouped, [{ lineNo: 1, quantity: "1" }]],
       [portions, [{ lineNo: 3 }]],
     ] as const) {
-      const other = await inTx(venue, (tx) =>
-        splitPartyBill(tx, venue.cfg, bill.billId, [...transfers]),
-      );
+      const other = await inTx(venue, (tx) => splitCut(tx, bill.billId, [...transfers]));
       await inTx(venue, async (tx) => {
         const expectedEdits = [];
         for (const id of [bill.billId, other.billId].sort())
@@ -2291,50 +2294,6 @@ describe("A803 portions: what a comp or discount took follows each line it is sp
 
   const takenFromThree = "Burger 10.80 off 3.60 of 3.000";
 
-  it("A803 portions: Split bill moving 2 of an unbound line of three carries its row to the part moved", async () => {
-    const bill = await groupedBill(burgers("3"));
-    await tenOffThreeBurgers(bill);
-    const other = await inTx(venue, (tx) =>
-      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 1, quantity: "2" }]),
-    );
-
-    expect(await takenAcross([bill.billId, other.billId])).toEqual([
-      `B1 ${takenFromThree}`,
-      `B2 ${takenFromThree}`,
-    ]);
-  });
-
-  it("A803 portions: Transfer items of part of a line carries its row to the part moved", async () => {
-    const bill = await groupedBill(burgers("3"));
-    await tenOffThreeBurgers(bill);
-    const other = await inTx(venue, (tx) =>
-      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 2 }]),
-    );
-    await inTx(venue, async (tx) => {
-      const expectedEdits = [];
-      for (const id of [bill.billId, other.billId].sort())
-        expectedEdits.push(await readBillEditState(tx, id));
-      await transferItems(
-        tx,
-        venue.cfg,
-        bill.billId,
-        other.billId,
-        [{ lineNo: 1, quantity: "1" }],
-        {
-          partyId: bill.partyId,
-          expectedPartyRevision: await partyRevision(tx, bill.partyId),
-          operatorId: venue.managerId,
-          expectedEdits,
-        },
-      );
-    });
-
-    expect(await takenAcross([bill.billId, other.billId])).toEqual([
-      `B1 ${takenFromThree}`,
-      `B2 ${takenFromThree}`,
-    ]);
-  });
-
   /** Three burgers as one unbound line waiting in a held group, 10% off. */
   async function heldThree(): Promise<Bill & { line: string }> {
     const bill = await inTx(venue, async (tx) => {
@@ -2425,10 +2384,10 @@ describe("A803 portions: what a comp or discount took follows each line it is sp
     const bill = await groupedBill(burgers("3"));
     await tenOffThreeBurgers(bill);
     const second = await inTx(venue, (tx) =>
-      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 1, quantity: "1" }]),
+      splitCut(tx, bill.billId, [{ lineNo: 1, quantity: "1" }]),
     );
     const third = await inTx(venue, (tx) =>
-      splitPartyBill(tx, venue.cfg, bill.billId, [{ lineNo: 1, quantity: "1" }]),
+      splitCut(tx, bill.billId, [{ lineNo: 1, quantity: "1" }]),
     );
     const billIds = [bill.billId, second.billId, third.billId];
 

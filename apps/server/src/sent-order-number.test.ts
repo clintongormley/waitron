@@ -5,7 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { parties, products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
+import { cutParts, mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
@@ -178,7 +178,16 @@ async function transfer(
   transfers: { lineNo: number; quantity?: string }[],
 ) {
   const command = await commandFor(v, partyId);
-  await inTx(v, (tx) => transferItems(tx, v.cfg, fromBillId, toBillId, transfers, command));
+  await inTx(v, async (tx) =>
+    transferItems(
+      tx,
+      v.cfg,
+      fromBillId,
+      toBillId,
+      await cutParts(tx, v.cfg, fromBillId, transfers),
+      command,
+    ),
+  );
 }
 
 /** Changes the note on the bill's line of `name`, as the till's line edit does. */
@@ -266,12 +275,15 @@ describe("the order number a moved dish was sent under", () => {
     const n28 = await numberOf(b28);
     const command = await commandFor(v, partyId);
 
-    const { billId: b29 } = await inTx(v, (tx) =>
+    const { billId: b29 } = await inTx(v, async (tx) =>
       splitBill(
         tx,
         v.cfg,
         b28,
-        [{ lineNo: lineOf(b28, "Burger") }, { lineNo: lineOf(b28, "Paella"), quantity: "1" }],
+        await cutParts(tx, v.cfg, b28, [
+          { lineNo: lineOf(b28, "Burger") },
+          { lineNo: lineOf(b28, "Paella"), quantity: "1" },
+        ]),
         command,
       ),
     );
