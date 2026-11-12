@@ -1,8 +1,8 @@
 # Lane D: provider form feedback batch
 
-**Draft, 12 November 2026.** Separate Sol-high author; Claude approach read complete (136 seconds).
-Driver applied its text corrections; watcher clearance is pending before build.
-No owner approval claimed. Only this plan written; no implementation or tests run. The report is
+**12 November 2026.** Separate Sol-high author; Claude approach read complete (136 seconds).
+Driver applied its text corrections. The watcher cleared this four-form scope at 23:05 in
+Lane D questions.md, inside the backlog ask; no owner approval of the design is claimed. The report is
 `receipts/form-plumbing-provider/plan-review.md` in Lane D.
 
 **Original queue ask, verbatim:** "every form assembles its bottom message, waits for the render, calls focusFirstInvalid and remembers the first press and which refusals the person has since changed, in several shapes. Make one helper that the dashboard's forms use, in a package the module screens and the image library can reach (@waitron/ui or similar, never apps/dashboard, which packages/media cannot import), and move the forms onto it. Behaviour stays as design-system.md → Forms says; no visible change."
