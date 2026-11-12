@@ -20,6 +20,7 @@ import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
+import { receiptDateTime } from "./receipt-dates.js";
 
 type Reply =
   | "accepted"
@@ -216,7 +217,9 @@ describe("invoice SMTP transport", () => {
         expect(textPart(message)).toBe(duplicate ? `${caption} — ${labels.duplicate}` : caption);
         expect(message).toContain("filename=receipt.pdf");
         const pdf = (await attachmentText(message)).replace(/\s+/g, " ");
-        expect(pdf).toContain(`${labels.simplifiedInvoice} S/1`);
+        expect(pdf).toContain(
+          `S/1 ${receiptDateTime(document.result.issuedAt, locale, document.result.issuedOffsetMinutes)}`,
+        );
         expect(pdf).toContain(total);
         expect(pdf.includes(labels.duplicate)).toBe(duplicate);
         expect(pdf).not.toContain(fixture.result.recipient!.taxId);
@@ -406,8 +409,8 @@ describe("invoice SMTP transport", () => {
   );
 
   it.each([
-    ["es-ES", "Factura FF/1", "Fecha de operación"],
-    ["eu-ES", "Faktura FF/1", "Eragiketaren data"],
+    ["es-ES", "Factura FF/1", "Base imponible"],
+    ["eu-ES", "Faktura FF/1", "Zerga-oinarria"],
   ] as const)(
     "words a %s invoice's subject and page in its own language and its goods in the names' language",
     async (invoiceLocale, subject, fixedWords) => {

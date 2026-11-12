@@ -1000,7 +1000,6 @@ export type TenderBlock =
 export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
-  operationDate?: string;
   invoiceType?: "F1" | "F2";
   recipient?: {
     taxId: string;

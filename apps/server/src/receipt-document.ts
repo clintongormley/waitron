@@ -28,7 +28,7 @@ import {
   type FiledLine,
   type GroupDiscount,
 } from "./receipt-figures.js";
-import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
+import { receiptDateTime, receiptDateTimeNumeric } from "./receipt-dates.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -236,7 +236,7 @@ export function buildReceiptDocument({
 
   if (result.orderLabel !== null || result.orderNumber !== 0)
     row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
-  if (simplified && result.operationDate === undefined) {
+  if (simplified) {
     const date =
       paperWidth === "58mm"
         ? receiptDateTimeNumeric(result.issuedAt, locale, result.issuedOffsetMinutes)
@@ -244,17 +244,8 @@ export function buildReceiptDocument({
     // Two spaces at least, or the invoice number running into the date reads as one figure.
     row(result.invoiceNumber, date, 0, undefined, 2);
   } else {
-    if (simplified) {
-      const heading =
-        paperWidth === "58mm" ? label.simplifiedInvoiceShort : label.simplifiedInvoice;
-      row(heading, result.invoiceNumber);
-    } else {
-      row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
-    }
+    row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
     row(label.date, receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes));
-    if (result.operationDate !== undefined) {
-      row(label.operationDate, receiptDay(result.operationDate, locale));
-    }
   }
   rule();
   if (!simplified && result.recipient) {

@@ -257,7 +257,7 @@ describe("stored invoice document projection", () => {
     }
   });
 
-  it("replays a paid discounted bill with its saved grouping, operation date and payment", async () => {
+  it("replays a paid discounted bill with its saved grouping and payment", async () => {
     const { billId } = await billWith(venue, [
       { name: "Burger" },
       { name: "Ham", quantity: "0.250" },
@@ -329,7 +329,6 @@ describe("stored invoice document projection", () => {
     const document = await read(venue.backend, saleId);
     expect(document.result).toMatchObject({
       orderNumber: order!.orderNumber,
-      operationDate: "2026-10-06",
       total: "16.80",
       lines: [
         {

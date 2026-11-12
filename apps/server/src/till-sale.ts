@@ -331,7 +331,6 @@ export interface BillTenderRefund {
 export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: import("@waitron/fiscal").FiledInvoiceEvidence;
   issuedOffsetMinutes?: number;
-  operationDate?: string;
   invoiceType?: "F1" | "F2";
   issuer?: { venueName: string; nif: string; domicile?: string };
   recipient?: {

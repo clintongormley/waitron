@@ -26,7 +26,6 @@ export interface AccountantInvoice {
   invoiceNumber: string;
   invoiceType: "F1" | "F2" | "corrective";
   issueDate: string;
-  operationDate: string | null;
   customerName: string | null;
   customerTaxId: string | null;
   customerIdentifierType: string | null;
@@ -94,7 +93,6 @@ export async function renderAccountantWorkbook(
         invoice.invoiceNumber,
         invoice.invoiceType === "corrective" ? words.corrective : invoice.invoiceType,
         invoice.issueDate,
-        invoice.operationDate,
         invoice.customerName,
         invoice.customerTaxId,
         invoice.customerIdentifierType === null
@@ -185,7 +183,6 @@ export async function listAccountantExport(
       code: invoiceSeries.code,
       number: sales.invoiceNumber,
       issueDate: civilDate,
-      operationDate: sales.operationDate,
       customerName: sales.counterpartyLegalName,
       customerTaxId: sales.counterpartyTaxId,
       customerIdentifierType: sales.counterpartyIdentifierType,

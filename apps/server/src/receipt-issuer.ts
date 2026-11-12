@@ -14,12 +14,7 @@ export async function readReceiptIssuer(
   Partial<
     Pick<
       TillSaleResult,
-      | "issuer"
-      | "recipient"
-      | "invoiceType"
-      | "operationDate"
-      | "issuedOffsetMinutes"
-      | "invoiceEvidence"
+      "issuer" | "recipient" | "invoiceType" | "issuedOffsetMinutes" | "invoiceEvidence"
     >
   >
 > {
@@ -27,8 +22,6 @@ export async function readReceiptIssuer(
   const [sale] = await tx
     .select({
       domicile: sales.taxpayerDomicile,
-      operationDate: sales.operationDate,
-      issuedAt: sales.issuedAt,
       issuedOffsetMinutes: sales.issuedOffsetMinutes,
       recipientTaxId: sales.counterpartyTaxId,
       identifierType: sales.counterpartyIdentifierType,
@@ -42,20 +35,9 @@ export async function readReceiptIssuer(
   const issueOffset = sale === undefined ? {} : { issuedOffsetMinutes: sale.issuedOffsetMinutes };
   if (!filed?.issuer) return issueOffset;
   const invoiceEvidence = await backend.invoiceEvidenceFor?.(tx, saleId);
-  const issueDay =
-    sale === undefined
-      ? undefined
-      : new Date(new Date(sale.issuedAt).getTime() + sale.issuedOffsetMinutes * 60_000)
-          .toISOString()
-          .slice(0, 10);
   return {
     ...issueOffset,
     ...(invoiceEvidence === undefined ? {} : { invoiceEvidence }),
-    ...(sale?.recipientTaxId != null &&
-    sale.operationDate !== null &&
-    sale.operationDate !== issueDay
-      ? { operationDate: sale.operationDate }
-      : {}),
     invoiceType:
       sale?.recipientTaxId === null || sale === undefined ? ("F2" as const) : ("F1" as const),
     ...(sale?.recipientTaxId !== null &&

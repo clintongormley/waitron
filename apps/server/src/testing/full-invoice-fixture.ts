@@ -11,7 +11,6 @@ export const FULL_INVOICE_DOCUMENT_FIXTURE: ReceiptDocumentInput = {
     invoiceNumber: "FF/1",
     issuedAt: "2026-08-17T22:34:00.000Z",
     issuedOffsetMinutes: 120,
-    operationDate: "2026-08-17",
     issuer: {
       venueName: "Charcutería La Buena SL",
       nif: "B12345678",

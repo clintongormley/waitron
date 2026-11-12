@@ -300,7 +300,8 @@ lines; Task 6 does not edit `transfer-close-fixture.ts`, which #2797 changes.
 ## Open questions (each with a default the build follows unless told otherwise)
 
 1. **Totals only**: no VAT per rate, no operation date (A444 may give a meal past midnight one), no
-   customer country or identifier type. Default: the columns in the example.
+   customer country or identifier type. (2026-11-12: A444 instead removed the operation date;
+   no invoice carries one.) Default: the columns in the example.
 2. **No void or replacement-invoice columns** until a route writes them (A556 for replacements);
    that change adds its column here. Default: left out.
 3. **No range limit**, as the other report ranges. Default: none.

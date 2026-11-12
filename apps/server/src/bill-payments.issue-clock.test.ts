@@ -297,12 +297,9 @@ describe("the invoice at full payment", () => {
     },
   );
 
-  it.each([
-    ["2026-10-06T21:50:00Z", "2026-10-06"],
-    ["2026-10-06T22:05:00Z", undefined],
-  ])(
-    "retains the full-invoice service date from bill opening %s across replay",
-    async (openedAt, expected) => {
+  it.each(["2026-10-06T21:50:00Z", "2026-10-06T22:05:00Z"])(
+    "a full invoice from a bill opened at %s keeps only its issue time across replay",
+    async (openedAt) => {
       const billId = await tabWith("Beer");
       await inTx((tx) =>
         tx.update(workingOrders).set({ openedAt }).where(eq(workingOrders.id, billId)),
@@ -349,8 +346,7 @@ describe("the invoice at full payment", () => {
         const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
         for (const invoice of [completed.invoice!, replay]) {
           expect(invoice.issuedAt).toBe("2026-10-06T22:10:00.000Z");
-          if (expected === undefined) expect(invoice).not.toHaveProperty("operationDate");
-          else expect(invoice).toMatchObject({ operationDate: expected });
+          expect(invoice).not.toHaveProperty("operationDate");
         }
         expect(replay.invoiceNumber).toBe(completed.invoice!.invoiceNumber);
       } finally {

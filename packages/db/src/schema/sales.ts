@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
-  day,
   enumCheck,
   enumType,
   id,
@@ -83,7 +82,6 @@ export const sales = table(
     // something formats it in local time. The offset travels in its own column.
     issuedAt: tsString("issued_at").notNull(),
     issuedOffsetMinutes: count("issued_offset_minutes").notNull(),
-    operationDate: day("operation_date"),
     total: money("total").notNull(),
     // The filed per-rate VAT breakdown — the SAME value handed to the fiscal record, stored here
     // queryably so reporting never re-derives a breakdown that could disagree with what was filed.

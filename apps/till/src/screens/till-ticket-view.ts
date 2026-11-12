@@ -1239,19 +1239,6 @@ export class TillTicketView extends LitElement {
             <span class="meta-label">${labels.date}</span>
             <span>${issueDate(r.issuedAt, format, r.issuedOffsetMinutes)}</span>
           </div>
-          ${
-            r.invoiceType === "F1" && r.operationDate !== undefined
-              ? html`<div class="meta-row" data-test="operation-date">
-                  <span class="meta-label">${labels.operationDate}</span>
-                  <span
-                    >${new Intl.DateTimeFormat(format, {
-                      dateStyle: "medium",
-                      timeZone: "UTC",
-                    }).format(new Date(`${r.operationDate}T00:00:00Z`))}</span
-                  >
-                </div>`
-              : nothing
-          }
           <div class="meta-row order-group">
             <span>${orderGroup}</span>
           </div>

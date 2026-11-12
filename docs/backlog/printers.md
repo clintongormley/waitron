@@ -365,8 +365,8 @@ dish's own discount under it and the whole-bill discount once per rate at the en
 into line with the printed receipt; A661 (#1745), which changed that file, has landed. It does
 not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a), nor
 paper's header rows (A754): on every sale it shows captioned invoice-number and date rows, the
-date in words, with the table and order on a line beneath them, and an operation date only on a
-full invoice; it does pad the hour to two digits as paper does.
+date in words, with the table and order on a line beneath them; it does pad the hour to two
+digits as paper does.
 
 ## On an A4 full invoice, a caption and its amount can split across pages
 
@@ -784,16 +784,13 @@ Hardware and inbox checks to complete in the owner session.
 - **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number remains.
 
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
-  «Pedido N» on the right (the order alone on the right when there is no table). Then:
+  «Pedido N» on the right (the order alone on the right when there is no table); a printed
+  document with no table and order number 0 has no such row (A790). Then:
   - **A simplified receipt** puts its number on the left and the date and time on the right, with
     no captions: the date in words on 80 mm paper and on an A4 page (`18 ago 2026, 11:21`), in
-    numbers on 58 mm paper (`18/08/2026 11:21`). When the receipt carries an operation date it
-    prints captioned rows instead — «Factura simplificada» and the number, «Fecha» and the date in
-    words, «Fecha de operación» and the day — with the heading shortened to «Fra. simplificada» on
-    58 mm paper.
+    numbers on 58 mm paper (`18/08/2026 11:21`).
   - **A full invoice**, on every paper, prints «FACTURA» and its number on one row and «Fecha» and
-    the date in words on the next, never merged, then «Fecha de operación» only when it differs
-    from the issue day.
+    the date in words on the next, never merged.
   - **A long invoice number on 58 mm paper (owner, 2026-10-19, left as built).** A number longer
     than 12 characters (a restored series such as `T-S123456/123`) puts the date on its own line
     under the number; an emergency-length number (31 characters) wraps inside itself with the date

@@ -120,18 +120,12 @@ export async function readTransactionReceipt(
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
   const payments = await readBillTenderLines(tx, brandSaleId(saleId));
   const issuer: Partial<
-    Pick<
-      TillSaleResult,
-      "issuer" | "recipient" | "invoiceType" | "issuedOffsetMinutes" | "operationDate"
-    >
+    Pick<TillSaleResult, "issuer" | "recipient" | "invoiceType" | "issuedOffsetMinutes">
   > = await readReceiptIssuer(backend, tx, brandSaleId(saleId));
   const taxpayer = issuer.issuer === undefined ? await readTenant(tx) : null;
   const groupId =
     sale.workingOrderId ??
     (scope.workingOrderIds.length === 1 ? scope.workingOrderIds[0] : undefined);
-  const issueDay = new Date(new Date(sale.issuedAt).getTime() + sale.issuedOffsetMinutes * 60000)
-    .toISOString()
-    .slice(0, 10);
   return {
     ...(groupId === undefined
       ? { orderLabel: null, orderNumber: 0 }
@@ -163,9 +157,6 @@ export async function readTransactionReceipt(
           },
         }),
     issuedOffsetMinutes: sale.issuedOffsetMinutes,
-    ...(sale.operationDate !== null && sale.operationDate !== issueDay
-      ? { operationDate: sale.operationDate }
-      : {}),
     locale: sale.locale,
     namesLocale: sale.invoiceLocales[0]!,
     invoiceNumber: formatInvoiceNumber(issued.code, sale.invoiceNumber),

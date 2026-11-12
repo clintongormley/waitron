@@ -649,7 +649,6 @@ it.each([false, true])(
       counterpartyCountryCode: "ES",
       counterpartyAddress: "Frozen address",
       taxpayerDomicile: "Frozen issuer domicile",
-      operationDate: "2026-10-01",
     });
     if (paid)
       await inTx(venue, async (tx) => {
@@ -680,7 +679,6 @@ it.each([false, true])(
         countryCode: "ES",
         address: "Frozen address",
       },
-      operationDate: "2026-10-01",
       issuedOffsetMinutes: 120,
       total: "12.10",
       qr: `https://stored.test/${sale.id}`,

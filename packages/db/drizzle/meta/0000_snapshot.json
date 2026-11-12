@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "31a5945a-e071-4d6d-b2af-f967ecff97f1",
+  "id": "2be26b98-8894-4651-bd42-8d851bfc396b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8600,13 +8600,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "operation_date": {
-          "name": "operation_date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "total": {

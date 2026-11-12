@@ -76,6 +76,8 @@ The same purpose must travel through setup review/API/CLI, configuration transfe
 
 **Owner update, 2026-10-05 at 15:35:** the owner chose the date the bill was opened, when the table was seated or the first order was placed, as the operation date for A231. Snapshot it at issuance and show it only when it differs from the issue date. This replaces the implementation wait for the asesor's date choice above and in open question 5 below. It is a provisional owner rule awaiting asesor confirmation, not an adviser answer. The [implementation plan](../plans/2026-10-03-full-invoices-at-till.md) records the remaining build and test work.
 
+**2026-11-12, A444:** superseded: the owner chose the creation date, so a full invoice shows only the date it was created and no operation date. [Decision](../../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
+
 This recommendation is conditional for a Spanish business recipient if the mandatory B2B electronic-invoice regime applies when the feature is deployed. The owner and asesor must confirm the effective date and required delivery format under art. 8 bis/RD 238/2026 before enabling such sales. A consumer retains the paper option under art. 63.3. Email PDF and A4 can follow as separate delivery work after their legal and transport behavior is designed.
 
 ## What reports count

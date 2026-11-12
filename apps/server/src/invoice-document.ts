@@ -131,9 +131,6 @@ async function readDocument(
   const authored = department?.receipt ?? null;
   const receipt = resolveReceiptTrim(authored, venue, sale.locale, current.locale);
   const payments = await readBillTenderLines(tx, brandSaleId(saleId));
-  const issueDay = new Date(new Date(sale.issuedAt).getTime() + sale.issuedOffsetMinutes * 60_000)
-    .toISOString()
-    .slice(0, 10);
   const guests = await readReceiptGuests(tx, saleId);
   return {
     surface: "a4",
@@ -171,9 +168,6 @@ async function readDocument(
       invoiceNumber: formatInvoiceNumber(issued.code, sale.invoiceNumber),
       issuedAt: new Date(sale.issuedAt).toISOString(),
       issuedOffsetMinutes: sale.issuedOffsetMinutes,
-      ...(sale.operationDate !== null && sale.operationDate !== issueDay
-        ? { operationDate: sale.operationDate }
-        : {}),
       total: centsToDecimal(sale.total),
       vatBreakdown: sale.vatBreakdown,
       ...lines,

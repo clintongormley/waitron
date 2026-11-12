@@ -1,5 +1,10 @@
 # A948: the meal's operation date and business-invoice delivery
 
+> **2026-11-12, A444:** the operation-date rule below is superseded. The owner chose the creation
+> date instead: a full invoice shows only the date it was created, and Waitron no longer saves an
+> operation date. The B2B delivery research is unaffected.
+> [Decision](../../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
+
 > **27 October, owner answers about 07:45 and 12:00 CET:** the meal-end date is approved, with
 > **no staff date choice or confirmation**. The later answer defines meal end as **when the bill
 > closes**: earliest qualifying whole/final balance payment acceptance, first completed-meal F1

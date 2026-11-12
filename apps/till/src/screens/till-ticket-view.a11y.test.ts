@@ -298,20 +298,17 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it.each(["en-GB", "es-ES"])(
-    "has no violations with the saved F1 operation date in %s",
-    async (locale) => {
-      const { host } = await mountWidget<TillTicketView>(
-        "till-ticket-view",
-        {
-          issuer,
-          result: { ...result, locale, invoiceType: "F1", operationDate: "2026-08-04" },
-        },
-        theme,
-      );
-      await expectNoA11yViolations(host);
-    },
-  );
+  it.each(["en-GB", "es-ES"])("has no violations on an F1 in %s", async (locale) => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        issuer,
+        result: { ...result, locale, invoiceType: "F1" },
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 
   it.each([
     undefined,

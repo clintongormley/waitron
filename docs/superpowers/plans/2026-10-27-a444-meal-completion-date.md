@@ -1,5 +1,8 @@
 # A444 Meal Completion Date Implementation Plan
 
+> **Status, 2026-11-12: not built; superseded.** The owner chose the creation date instead: a full
+> invoice shows only the date it was created. [Decision](../../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans, inline by the driver. Read the TDD skill before writing any implementation or test. Checkboxes record execution, not documentation progress. Do not dispatch agents for these tasks.
 
 **Goal:** Give future completed-meal F1 invoices the saved venue calendar day of meal end,
