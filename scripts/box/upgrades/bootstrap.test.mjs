@@ -24,6 +24,7 @@ for (const [name, source] of Object.entries({
   sha256sum:
     '#!/bin/sh\nIFS= read -r expected\nprintf "%s\\n" "$expected" > "$WT_HASH_LOG"\n[ "${WT_BAD_SUM:-0}" = 0 ] && [ "${expected%% *}" = 982aa24dd8be4c889c6a8ab337ddff3b0896645b20f4239356e80552c16277ee ]\n',
   sync: "#!/bin/sh\nexit 0\n",
+  tar: '#!/bin/sh\nprintf "%s\\n" "$*" > "$WT_TAR_LOG"\nexec /usr/bin/tar "$@"\n',
 })) {
   writeFileSync(join(bin, name), source);
   chmodSync(join(bin, name), 0o755);
@@ -48,6 +49,7 @@ function install(knobs = {}) {
       WT_ARCHIVE: archive,
       WT_FETCH_LOG: join(folder, "fetch.log"),
       WT_HASH_LOG: join(folder, "hash.log"),
+      WT_TAR_LOG: join(folder, "tar.log"),
       ...knobs,
     },
   });
@@ -61,6 +63,7 @@ it("installs a checksum-verified pinned host Node with its bundled licence notic
   expect(
     execFileSync(join(r.host, "node-v26.7.0", "bin", "node"), [], { encoding: "utf8" }).trim(),
   ).toBe("v26.7.0");
+  expect(readFileSync(join(r.folder, "tar.log"), "utf8")).toContain("--no-same-owner");
   expect(readFileSync(join(r.host, "node-v26.7.0", "LICENSE"), "utf8")).toBe(
     "fixture licence notices",
   );

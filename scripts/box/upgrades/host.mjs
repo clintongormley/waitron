@@ -3,10 +3,14 @@ import { dirname, join } from "node:path";
 import { recoverUpgrade, upgradeStatus, writeFileDurable } from "./transaction.mjs";
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { promisify } from "node:util";
+import { parseEnv, promisify } from "node:util";
 
 const execute = promisify(execFile);
-const command = (file, args) => execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
+const command = (file, args, input) => {
+  const result = execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
+  if (input !== undefined) result.child.stdin.end(input);
+  return result;
+};
 
 export async function stopUpgradeWriters({ run = command, compose }) {
   const id = (await run("docker", [...compose, "ps", "-a", "-q", "app"])).stdout.trim();
@@ -59,9 +63,9 @@ export async function createUpgradeHost({
     "-f",
     join(boxDirectory, "compose.yml"),
   ];
-  const config = JSON.parse(
-    (await run("docker", [...compose, "config", "--format", "json"])).stdout,
-  );
+  const config = await composeConfig(boxDirectory, run);
+  const rawCandidate = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
+  const candidateConfig = await composeConfig(boxDirectory, run, rawCandidate);
   const paths = [];
   for (const key of COPIED_VOLUMES) {
     const name = config.volumes[key].name;
@@ -77,18 +81,34 @@ export async function createUpgradeHost({
     const [volume] = JSON.parse((await run("docker", ["volume", "inspect", name])).stdout);
     paths.push(volume.Mountpoint);
   }
-  const pins = (images, config) => pinImages(boxDirectory, images, config);
+  const pins = (images, raw) => pinImages(boxDirectory, images, raw);
   const idOf = async (image) =>
     (await run("docker", ["image", "inspect", image, "--format", "{{.Id}}"])).stdout.trim();
   const old = {};
   for (const [key, service] of Object.entries(config.services)) {
     const container = (await run("docker", [...compose, "ps", "-a", "-q", key])).stdout.trim();
     if (service.profiles?.length && !container) continue;
+    if (container) {
+      const files = (
+        await run("docker", [
+          "inspect",
+          container,
+          "--format",
+          '{{index .Config.Labels "com.docker.compose.project.config_files"}}',
+        ])
+      ).stdout
+        .trim()
+        .split(",");
+      if (
+        files.length !== 1 ||
+        (await fs.realpath(files[0])) !== (await fs.realpath(join(boxDirectory, "compose.yml")))
+      )
+        throw new Error("upgrade requires the installed single Compose file");
+    }
     old[key] = container
       ? (await run("docker", ["inspect", container, "--format", "{{.Image}}"])).stdout.trim()
       : await idOf(service.image);
   }
-  await pins(old, config);
   paths.push(join(boxDirectory, "compose.yml"));
   try {
     await fs.access(join(boxDirectory, ".env"));
@@ -102,44 +122,52 @@ export async function createUpgradeHost({
     paths,
     host: {
       async prepareImages() {
-        for (const [key, id] of Object.entries(old)) {
-          const tag = `waitron-upgrade-old-${key}:${id.replace("sha256:", "")}`;
-          await run("docker", ["image", "tag", id, tag]);
-          tags.push(tag);
-        }
-        const next = {};
-        for (const key of Object.keys(old)) {
-          const service = candidate.services[key];
-          if (key === "tunnel" && service.image === config.services[key].image) {
-            next[key] = old[key];
-          } else {
-            await run("docker", ["pull", service.image]);
-            next[key] = await idOf(service.image);
+        try {
+          for (const [key, id] of Object.entries(old)) {
+            const tag = `waitron-upgrade-old-${key}:${id.replace("sha256:", "")}`;
+            await run("docker", ["image", "tag", id, tag]);
+            tags.push(tag);
           }
-          const tag = `waitron-upgrade-candidate-${key}:${next[key].replace("sha256:", "")}`;
-          await run("docker", ["image", "tag", next[key], tag]);
-          tags.push(tag);
+          const next = {};
+          for (const [key, service] of Object.entries(candidateConfig.services)) {
+            if (service.profiles?.length && old[key] === undefined) continue;
+            if (key === "tunnel" && service.image === config.services[key]?.image) {
+              next[key] = old[key];
+            } else {
+              await run("docker", ["pull", service.image]);
+              next[key] = await idOf(service.image);
+            }
+            const tag = `waitron-upgrade-candidate-${key}:${next[key].replace("sha256:", "")}`;
+            await run("docker", ["image", "tag", next[key], tag]);
+            tags.push(tag);
+          }
+          await assertCopyRoom(paths, dirname(directory), { run });
+          pinnedCompose(rawCandidate, next);
+          return { old, candidate: next };
+        } catch (error) {
+          for (const tag of tags) await removeImageTag(tag, run);
+          throw error;
         }
-        await assertCopyRoom(paths, dirname(directory), { run });
-        await writeFileDurable(join(directory, "candidate-compose.json"), candidate);
-        return { old, candidate: next };
       },
       async stop() {
+        await writeFileDurable(join(directory, "candidate-compose.json"), {
+          compose: rawCandidate,
+        });
         await stopUpgradeWriters({ compose, run });
         releaseState ??= await holdUpgradeState(paths[0]);
       },
       async installCandidate(images) {
-        await pins(images, candidate);
+        await pins(images, rawCandidate);
       },
       checkCandidate,
       async resume(images) {
         await pins(images);
         releaseState?.();
         releaseState = undefined;
-        await run("docker", [...compose, "up", "-d", "--pull", "never", "--remove-orphans"]);
+        await reopenImages(compose, images, run);
       },
       async cleanup() {
-        for (const tag of tags) await run("docker", ["image", "rm", tag]);
+        for (const tag of tags) await removeImageTag(tag, run);
         await discardAttempt(directory);
       },
     },
@@ -207,7 +235,8 @@ export async function recoverInstalledUpgrade({
           try {
             candidate = JSON.parse(
               await fs.readFile(join(directory, "candidate-compose.json"), "utf8"),
-            );
+            ).compose;
+            if (typeof candidate !== "string") throw new Error("invalid candidate Compose");
           } catch {
             throw new Error("saved candidate Compose is missing or unreadable");
           }
@@ -218,7 +247,7 @@ export async function recoverInstalledUpgrade({
           if (offline) return false;
           releaseState?.();
           releaseState = undefined;
-          await run("docker", [...compose, "up", "-d", "--pull", "never", "--remove-orphans"]);
+          await reopenImages(compose, images, run);
         },
         async cleanup(images) {
           for (const [kind, services] of Object.entries(images))
@@ -227,10 +256,10 @@ export async function recoverInstalledUpgrade({
               try {
                 await run("docker", ["image", "inspect", tag]);
               } catch (error) {
-                if (error.code === 1) continue;
+                if (error.code === 1 && /No such image/.test(error.stderr)) continue;
                 throw error;
               }
-              await run("docker", ["image", "rm", tag]);
+              await removeImageTag(tag, run);
             }
         },
       },
@@ -261,34 +290,29 @@ export async function holdUpgradeState(stateDirectory) {
     for (const lock of locks.splice(0).reverse()) lock.close();
   };
   try {
-    await fs.mkdir(join(stateDirectory, "venue"), { recursive: true });
+    const owner = await fs.stat(stateDirectory);
+    const created = await fs.mkdir(join(stateDirectory, "venue"), {
+      recursive: true,
+      mode: owner.mode & 0o777,
+    });
+    if (created) await fs.chown(created, owner.uid, owner.gid);
     for (const name of ["recovery.lock", "venue/venue.lock"]) {
-      const lock = new DatabaseSync(join(stateDirectory, name));
+      const path = join(stateDirectory, name);
+      try {
+        const file = await fs.open(path, "ax", 0o600);
+        try {
+          await file.chown(owner.uid, owner.gid);
+        } finally {
+          await file.close();
+        }
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      }
+      const lock = new DatabaseSync(path);
       locks.push(lock);
       lock.exec("pragma busy_timeout = 0; begin immediate");
     }
-    const venue = join(stateDirectory, "venue", "venue.db");
-    try {
-      await fs.access(venue);
-      const db = new DatabaseSync(venue, { readOnly: true });
-      try {
-        const table = db
-          .prepare("select name from sqlite_master where type = 'table' and name = 'nodes'")
-          .get();
-        if (table && db.prepare("select count(*) as total from nodes").get().total > 1)
-          throw new Error("paired upgrades are not available");
-      } finally {
-        db.close();
-      }
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
-    try {
-      await fs.access(join(stateDirectory, "tls", "joined.json"));
-      throw new Error("paired upgrades are not available");
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
+    await assertSingleBox(stateDirectory);
     return release;
   } catch (error) {
     release();
@@ -296,11 +320,159 @@ export async function holdUpgradeState(stateDirectory) {
   }
 }
 
-async function pinImages(boxDirectory, images, config) {
-  config ??= JSON.parse(await fs.readFile(join(boxDirectory, "compose.yml"), "utf8"));
-  const services = { ...config.services };
-  for (const [key, image] of Object.entries(images)) services[key] = { ...services[key], image };
-  await writeFileDurable(join(boxDirectory, "compose.yml"), { ...config, services });
+const hasTable = (db, name) =>
+  db.prepare("select name from sqlite_master where type = 'table' and name = ?").get(name) !==
+  undefined;
+
+async function assertSingleBox(stateDirectory) {
+  let nodeId;
+  try {
+    nodeId = parseEnv(
+      await fs.readFile(join(stateDirectory, "trading.env"), "utf8"),
+    ).WAITRON_NODE_ID;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  let sole = false;
+  try {
+    await fs.access(join(stateDirectory, "venue", "venue.db"));
+    const db = new DatabaseSync(join(stateDirectory, "venue", "venue.db"), { readOnly: true });
+    try {
+      const row = hasTable(db, "node_membership")
+        ? db.prepare("select document from node_membership where id = 1").get()
+        : undefined;
+      if (row) {
+        const entries = JSON.parse(row.document).body?.nodes;
+        if (!Array.isArray(entries)) throw new Error("saved membership is unreadable");
+        const active = entries.filter((entry) => entry.standing !== "evicted");
+        sole =
+          active.length === 1 &&
+          active[0].nodeId === nodeId &&
+          active[0].standing === "serving-primary";
+        if (!sole) throw new Error("paired upgrades are not available");
+      } else if (
+        hasTable(db, "nodes") &&
+        db.prepare("select count(*) as total from nodes").get().total > 1
+      ) {
+        throw new Error("paired upgrades are not available");
+      }
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (nodeId) {
+    try {
+      const path = join(stateDirectory, "venue", "node.db");
+      await fs.access(path);
+      const node = new DatabaseSync(path, { readOnly: true });
+      try {
+        const role = hasTable(node, "node_mode")
+          ? node.prepare("select mode, singleton_role from node_mode where node_id = ?").get(nodeId)
+          : undefined;
+        if (role && (role.mode !== "primary" || role.singleton_role !== "primary"))
+          throw new Error("paired upgrades are not available");
+      } finally {
+        node.close();
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  if (!sole) {
+    try {
+      await fs.access(join(stateDirectory, "tls", "joined.json"));
+      throw new Error("paired upgrades are not available");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+}
+
+async function pinImages(boxDirectory, images, raw) {
+  raw ??= await fs.readFile(join(boxDirectory, "compose.yml"), "utf8");
+  await writeFileDurable(join(boxDirectory, "compose.yml"), pinnedCompose(raw, images));
+}
+
+// The shipped block layout is checked against real Compose; other YAML layouts fail before install.
+function pinnedCompose(raw, images) {
+  if (raw.trimStart().startsWith("{")) {
+    const config = JSON.parse(raw);
+    for (const [key, image] of Object.entries(images)) {
+      if (config.services[key] === undefined)
+        throw new Error("selected service is missing from Compose");
+      config.services[key].image = image;
+    }
+    return JSON.stringify(config) + "\n";
+  }
+  let section;
+  let service;
+  const found = new Set();
+  const lines = raw.split("\n").map((line) => {
+    const top = /^(\S[^:]*):/.exec(line);
+    if (top) {
+      section = top[1];
+      service = undefined;
+    }
+    const next = /^ {2}([A-Za-z0-9_-]+):\s*(?:#.*)?$/.exec(line);
+    if (section === "services" && next) service = next[1];
+    if (section === "services" && images[service] !== undefined && /^ {4}image:/.test(line)) {
+      found.add(service);
+      return `    image: ${JSON.stringify(images[service])}`;
+    }
+    return line;
+  });
+  if (Object.keys(images).some((key) => !found.has(key)))
+    throw new Error("unsupported Compose image layout");
+  return lines.join("\n");
+}
+
+async function composeConfig(boxDirectory, run, input) {
+  const file = input === undefined ? join(boxDirectory, "compose.yml") : "-";
+  return JSON.parse(
+    (
+      await run(
+        "docker",
+        [
+          "compose",
+          "--project-directory",
+          boxDirectory,
+          "--profile",
+          "staff-tunnel",
+          "-f",
+          file,
+          "config",
+          "--format",
+          "json",
+        ],
+        input,
+      )
+    ).stdout,
+  );
+}
+
+async function reopenImages(compose, images, run) {
+  await run("docker", [
+    ...compose,
+    ...(images.tunnel === undefined ? [] : ["--profile", "staff-tunnel"]),
+    "up",
+    "-d",
+    "--pull",
+    "never",
+    "--remove-orphans",
+    "--wait",
+    "--wait-timeout",
+    "60",
+  ]);
+}
+
+async function removeImageTag(tag, run) {
+  try {
+    await run("docker", ["image", "rm", tag]);
+  } catch (error) {
+    if (error.code !== 1 || !/is using its referenced image/.test(error.stderr)) throw error;
+  }
 }
 
 export async function assertCopyRoom(paths, directory, { run = command, statfs = fs.statfs } = {}) {

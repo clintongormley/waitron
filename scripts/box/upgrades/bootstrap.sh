@@ -25,7 +25,7 @@ trap 'rm -rf -- "$work"' EXIT
 curl -fsSL --retry 3 --connect-timeout 10 --max-time 300 \
   "https://nodejs.org/dist/v26.7.0/node-v26.7.0-linux-${arch}.tar.xz" -o "$work/node.tar.xz"
 printf '%s  %s\n' "$checksum" "$work/node.tar.xz" | sha256sum -c - >/dev/null || refuse "checksum mismatch"
-tar -xJf "$work/node.tar.xz" -C "$work"
+tar --no-same-owner -xJf "$work/node.tar.xz" -C "$work"
 [ -x "$work/node-v26.7.0-linux-${arch}/bin/node" ] && [ -f "$work/node-v26.7.0-linux-${arch}/LICENSE" ] || refuse "archive is incomplete"
 sync -f "$work"
 mv "$work/node-v26.7.0-linux-${arch}" "$host_dir/node-v26.7.0"

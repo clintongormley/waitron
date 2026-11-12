@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { URL } from "node:url";
 import { stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
@@ -82,7 +83,17 @@ it.each([
   expect(f.calls.some((args) => args.includes("--profile"))).toBe(false);
 });
 
-async function imageFixture({ activeTunnel = false, noEnv = false } = {}) {
+async function imageFixture({
+  activeTunnel = false,
+  noEnv = false,
+  realCompose = false,
+  stage = true,
+  prepare = true,
+  pullFailure = false,
+  inUse = false,
+  reopenFailure = false,
+  serviceChange = false,
+} = {}) {
   const fs = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -94,7 +105,7 @@ async function imageFixture({ activeTunnel = false, noEnv = false } = {}) {
     await fs.rm(`${root}.upgrades`, { recursive: true, force: true });
   });
   const directory = join(`${root}.upgrades`, "attempt");
-  await fs.mkdir(directory, { recursive: true });
+  await fs.mkdir(prepare ? directory : `${root}.upgrades`, { recursive: true });
   const calls = [];
   const config = {
     name: "waitron",
@@ -110,11 +121,24 @@ async function imageFixture({ activeTunnel = false, noEnv = false } = {}) {
     config.volumes[key] = { name: `waitron_${key}` };
     await fs.mkdir(join(root, key));
   }
-  await fs.writeFile(join(root, "compose.yml"), "old compose");
-  if (!noEnv) await fs.writeFile(join(root, ".env"), "old env");
+  const shipped = await fs.readFile(
+    new URL("../../../deploy/compose.yml", import.meta.url),
+    "utf8",
+  );
+  await fs.writeFile(join(root, "compose.yml"), realCompose ? shipped : JSON.stringify(config));
+  if (!noEnv) await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/first\n");
   const created = new Set();
-  const run = async (file, args) => {
+  const run = async (file, args, input) => {
     calls.push([file, ...args]);
+    if (pullFailure && args[0] === "pull" && args[1] === "agent:old")
+      throw new Error("registry offline");
+    if (reopenFailure && args.includes("up") && args.includes("--wait"))
+      throw new Error("app exited before healthy");
+    if (inUse && args[0] === "image" && args[1] === "rm" && args[2].includes("old-app"))
+      throw Object.assign(new Error("image in use"), {
+        code: 1,
+        stderr: "container selected is using its referenced image",
+      });
     if (args[0] === "volume" && args[1] === "create") {
       created.add(args.at(-1));
       return { stdout: args.at(-1) + "\n" };
@@ -128,16 +152,30 @@ async function imageFixture({ activeTunnel = false, noEnv = false } = {}) {
       throw new Error("no such volume");
     }
     if (file === "du") return { stdout: "4 /fixture\n" };
-    if (args.includes("--format") && args.includes("json"))
-      return { stdout: JSON.stringify(config) };
+    if (args.includes("--format") && args.includes("json")) {
+      if (realCompose) {
+        const { execFile } = await import("node:child_process");
+        const { promisify } = await import("node:util");
+        const result = promisify(execFile)(file, args, { maxBuffer: 1024 * 1024 });
+        if (input !== undefined) result.child.stdin.end(input);
+        return result;
+      }
+      return { stdout: input ?? (await fs.readFile(join(root, "compose.yml"), "utf8")) };
+    }
     if (args[0] === "volume" && args[1] === "inspect")
       return { stdout: JSON.stringify([{ Mountpoint: join(root, args[2].slice(8)) }]) };
     if (args.includes("ps"))
       return { stdout: activeTunnel && args.at(-1) === "tunnel" ? "tunnel-id\n" : "" };
-    if (args[0] === "inspect") return { stdout: "sha256:running-tunnel\n" };
+    if (args[0] === "inspect")
+      return {
+        stdout:
+          args.at(-1) === "{{.Image}}"
+            ? "sha256:running-tunnel\n"
+            : join(root, "compose.yml") + "\n",
+      };
     if (args[0] === "image" && args[1] === "inspect") {
       if (args[2] === "tunnel:dev") throw new Error("tunnel is not installed");
-      return { stdout: `sha256:${args[2]}\n` };
+      return { stdout: realCompose ? `sha256:${"1".repeat(64)}\n` : `sha256:${args[2]}\n` };
     }
     if (args[0] === "image" || args[0] === "pull" || args.includes("up") || args.includes("stop"))
       return { stdout: "" };
@@ -150,14 +188,23 @@ async function imageFixture({ activeTunnel = false, noEnv = false } = {}) {
       app: { image: "app:new", environment: { UPGRADE_SETTING: "new" } },
     },
   };
+  if (serviceChange) {
+    delete candidate.services.mailpit;
+    candidate.services.sidecar = { image: "sidecar:new" };
+  }
   const f = await createUpgradeHost({
     boxDirectory: root,
     directory,
-    candidate,
+    candidate: realCompose ? shipped : candidate,
     run,
     checkCandidate: async () => [{ name: "sale", ok: true }],
   });
-  const images = await f.host.prepareImages();
+  const images = prepare ? await f.host.prepareImages() : undefined;
+  if (stage && prepare)
+    await fs.writeFile(
+      join(directory, "candidate-compose.json"),
+      JSON.stringify({ compose: realCompose ? shipped : JSON.stringify(candidate) }),
+    );
   return { f, root, directory, fs, join, config, candidate, calls, run, images };
 }
 
@@ -213,6 +260,9 @@ it("pins all old images before pulling any candidate, and resumes only recorded 
     "--pull",
     "never",
     "--remove-orphans",
+    "--wait",
+    "--wait-timeout",
+    "60",
   ]);
   expect(f.paths).toEqual(
     ["state", "print_agent", "mailpit", "tunnel_control", "tunnel_keys", "compose.yml", ".env"].map(
@@ -313,6 +363,21 @@ it("holds the existing state and venue lock files and refuses a paired venue bef
   paired.exec("insert into nodes values ('two')");
   paired.close();
   await expect(holdUpgradeState(root)).rejects.toThrow("paired upgrades are not available");
+  const history = new DatabaseSync(join(root, "venue", "venue.db"));
+  history.exec("create table node_membership (id integer, document text)");
+  history
+    .prepare("insert into node_membership values (1, ?)")
+    .run(JSON.stringify({ body: { nodes: [{ nodeId: "one", standing: "serving-primary" }] } }));
+  history.close();
+  await fs.writeFile(join(root, "trading.env"), "WAITRON_NODE_ID=one\n");
+  const sole = await holdUpgradeState(root);
+  sole();
+  const local = new DatabaseSync(join(root, "venue", "node.db"));
+  local.exec(
+    "create table node_mode (node_id text, mode text, singleton_role text); insert into node_mode values ('one', 'mirror', 'secondary')",
+  );
+  local.close();
+  await expect(holdUpgradeState(root)).rejects.toThrow("paired upgrades are not available");
   const released = new DatabaseSync(join(root, "recovery.lock"));
   try {
     expect(() => released.exec("begin immediate")).not.toThrow();
@@ -366,7 +431,9 @@ it("requires measured copy size plus a reserve in the attempt filesystem", async
 });
 
 it("retains the active tunnel's exact running image without trying its local-only tag in a registry", async () => {
-  const { images, calls } = await imageFixture({ activeTunnel: true });
+  const { f, images, calls } = await imageFixture({ activeTunnel: true });
+  await f.host.resume(images.old);
+  expect(calls.find((args) => args.includes("up"))).toContain("staff-tunnel");
   expect(images.old.tunnel).toBe("sha256:running-tunnel");
   expect(images.candidate.tunnel).toBe("sha256:running-tunnel");
   expect(calls.some((args) => args[1] === "pull" && args[2] === "tunnel:dev")).toBe(false);
@@ -406,3 +473,96 @@ it.each(["missing", "unreadable"])(
     );
   },
 );
+
+it("construction and image preparation leave installed Compose unchanged and stage nothing before the marker", async () => {
+  const { root, directory, fs, join, config } = await imageFixture({ stage: false });
+  expect(await fs.readFile(join(root, "compose.yml"), "utf8")).toBe(JSON.stringify(config));
+  await expect(fs.access(join(directory, "candidate-compose.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("accepts the real shipped Compose, retains tunnel inventory and keeps socket interpolation on install", async () => {
+  const { f, root, fs, join, images, run } = await imageFixture({
+    realCompose: true,
+    stage: false,
+  });
+  await f.host.stop();
+  await f.host.installCandidate(images.candidate);
+  await f.host.resume(images.candidate);
+  await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/second\n");
+  const { stdout } = await run("docker", [
+    "compose",
+    "--profile",
+    "staff-tunnel",
+    "--project-directory",
+    root,
+    "-f",
+    join(root, "compose.yml"),
+    "config",
+    "--format",
+    "json",
+  ]);
+  const config = JSON.parse(stdout);
+  expect(config.services.app.volumes).toContainEqual(
+    expect.objectContaining({ type: "bind", source: "/run/second", target: "/run/waitron-box" }),
+  );
+  expect(config.services.tunnel).toBeDefined();
+  expect(config.volumes.tunnel_keys.name).toBe("waitron_tunnel_keys");
+});
+
+it("pulls and pins the candidate service set when a release adds or removes a service", async () => {
+  const { images, calls } = await imageFixture({ serviceChange: true });
+  expect(images.old.mailpit).toBe("sha256:mail:old");
+  expect(images.candidate).not.toHaveProperty("mailpit");
+  expect(images.candidate.sidecar).toBe("sha256:sidecar:new");
+  expect(calls).toContainEqual(["docker", "pull", "sidecar:new"]);
+});
+
+it("cleans preparation tags and preserves the registry error before a marker is published", async () => {
+  const { applyUpgrade } = await import("./transaction.mjs");
+  const { f, directory, fs, calls } = await imageFixture({ prepare: false, pullFailure: true });
+  await expect(
+    applyUpgrade({ directory, paths: f.paths, host: f.host, mode: "manual" }),
+  ).rejects.toThrow("registry offline");
+  await expect(fs.access(directory)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(calls.filter((args) => args[1] === "image" && args[2] === "rm")).toHaveLength(4);
+});
+
+it("finishes cleanup while retaining the selected image's last in-use tag", async () => {
+  const { f, directory, fs, images } = await imageFixture({ inUse: true });
+  await f.host.cleanup(images);
+  await expect(fs.access(directory)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("retains the committed attempt and copies when the selected app exits before becoming healthy", async () => {
+  const { recoverInstalledUpgrade } = await import("./host.mjs");
+  const { root, directory, fs, join, run, images, f } = await imageFixture({ reopenFailure: true });
+  await fs.mkdir(join(directory, "copies"));
+  await fs.writeFile(join(directory, "copies", "old"), "retained state");
+  await fs.writeFile(
+    join(directory, "attempt.json"),
+    JSON.stringify({
+      mode: "manual",
+      phase: "committed",
+      target: "candidate",
+      copied: true,
+      paths: f.paths,
+      images,
+    }),
+  );
+  await expect(recoverInstalledUpgrade({ boxDirectory: root, run })).rejects.toThrow(
+    "app exited before healthy",
+  );
+  expect(await fs.readFile(join(directory, "copies", "old"), "utf8")).toBe("retained state");
+  expect(JSON.parse(await fs.readFile(join(directory, "attempt.json"), "utf8")).phase).toBe(
+    "committed",
+  );
+});
+
+it("allows a source already stopped before a manual repair, after stopping the other writers", async () => {
+  const f = dockerFixture({ running: false });
+  await stopUpgradeWriters({ run: f.run, compose: ["compose"] });
+  expect(f.calls.some((args) => args.includes("--profile"))).toBe(true);
+  expect(f.calls.some((args) => args[1] === "stop")).toBe(false);
+});

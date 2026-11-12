@@ -19,7 +19,7 @@ export async function writeFileDurable(path, value) {
   const temporary = `${path}.tmp`;
   const handle = await fs.open(temporary, "w", 0o600);
   try {
-    await handle.writeFile(JSON.stringify(value) + "\n");
+    await handle.writeFile(typeof value === "string" ? value : JSON.stringify(value) + "\n");
     await handle.sync();
   } finally {
     await handle.close();

@@ -335,6 +335,8 @@ handles, trusted revision/index hash and `credentialScopeClosed: true`.
 
 ## Dormant host foundations
 
-A950's host adapter is `scripts/box/upgrades/host.mjs`. Its caller holds the host upgrade lock and supplies a fresh attempt directory to the controller. Image preparation saves the resolved candidate Compose in that directory before writers stop. Recovery before Docker runs retains copies and image pins until online reopening finishes.
+A950's host adapter is `scripts/box/upgrades/host.mjs`. Its caller holds `${box_dir}.upgrade.lock` and supplies a fresh attempt directory to the controller. After the initial marker, stopping first saves the raw candidate Compose durably, before any writer stops. Recovery before Docker runs retains copies and image pins until online reopening finishes.
 
 Run its focused checks with `pnpm exec vitest run scripts/box/upgrades/{host,bootstrap,transaction}.test.mjs`. The bootstrap tests use executable stand-ins; full venue readiness, copy-sale and power-loss qualification belong to the later runtime slices. No installed command or service uses these foundations yet.
+
+The adapter accepts the shipped single-file Compose layout; it refuses a running project launched with additional override files. Construction leaves the installed file unchanged. Installation pins image IDs while retaining other `.env` interpolation: choosing images belongs to the upgrade command, rather than later edits to `WAITRON_IMAGE`. Online reopening waits for Compose health checks before copies are deleted; Docker may require the selected image’s last temporary tag to stay while its container uses it.
