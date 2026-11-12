@@ -58,7 +58,8 @@ issues the invoice; recording an unpaid departure also issues it, leaving the am
 bill's name; both open the same form for the bill on screen. Neither is offered once the bill is
 paid or an invoice has been issued for it. Turning a paid bill into a full invoice would correct an
 invoice already issued, and Waitron does not offer that correction yet. Once a customer is chosen,
-their name and identifier show under the payment area's **Full invoice**.
+their name and identifier show under the payment area's **Full invoice**. Merging bills asks
+before a full invoice's customer would change.
 
 Choose **Spanish tax ID** for a NIF, NIE or CIF. For a passport or another accepted document,
 choose its actual **Identifier type**, **Issuing country** and **Document number**. Enter the
@@ -373,8 +374,10 @@ with, opens beside the order, and **Back** closes it.
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the
 other and choose **Merge bills**. The receiving bill can have taken a part payment; the bill you
-add must have no payments. If you move the table's last bill away, the till stays at the table
-with a fresh empty bill.
+add must have no payments. If the bill you add is set for a full invoice to a customer the
+receiving bill does not name, the till asks first: choose the customer the merged bill is invoiced
+to, or **Do not merge**. If you move the table's last bill away, the till stays at the table with a
+fresh empty bill.
 
 If another till merges the bill on your screen into another bill, or moves it to another table,
 your screen switches to another of the table's bills and says so,

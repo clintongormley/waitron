@@ -77,6 +77,12 @@ export function billLabel(bill: Pick<PartyBill, "billNumber" | "billName">): str
   return bill.billName === null ? label : `${label} · ${bill.billName}`;
 }
 
+/** A bill's label as a catalogue that writes it lowercase inside a sentence reads it: Spanish's
+ * "la cuenta 2". */
+export function billLabelInText(label: string): string {
+  return label.charAt(0).toLocaleLowerCase() + label.slice(1);
+}
+
 /** A bill's name under the party's display name: its stored number, and its own name if it has one. */
 export function billName(
   partyName: string,

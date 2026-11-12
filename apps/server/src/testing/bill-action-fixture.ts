@@ -173,7 +173,11 @@ export async function mergeBills(
   cfg: TradingContext,
   into: string,
   from: string,
-  command: BillCommand & { expectedEdits?: BillEditExpected[]; admission?: TradingAdmission },
+  command: BillCommand & {
+    expectedEdits?: BillEditExpected[];
+    admission?: TradingAdmission;
+    invoiceChoice?: unknown;
+  },
   attendance?: OrderAttendance,
 ) {
   return merge(

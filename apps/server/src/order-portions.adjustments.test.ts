@@ -2088,6 +2088,7 @@ describe("A803 portions: approval differences no single line can show", () => {
         await mergeCheckedBills(tx, venue.cfg, bill.billId, other.billId, {
           operatorId: venue.managerId,
           expectedEdits,
+          invoiceChoice: undefined,
         });
       });
     }

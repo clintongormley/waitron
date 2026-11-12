@@ -1330,6 +1330,15 @@ export const en = {
   "table.confirm_different_people":
     "Confirm that the resulting bills belong to different people. A bill over {amount} needs a full invoice unless it is genuinely shared between people.",
   "table.confirm_different_people_action": "Confirm different people",
+  "table.merge_invoice_title": "{from} has a full invoice",
+  "table.merge_invoice_text":
+    "{from} is set for a full invoice to {name}. Merging puts every dish on {into}, invoiced to {name}.",
+  "table.merge_invoice_action": "Merge and invoice {name}",
+  "table.merge_invoice_both_title": "Each bill has a full invoice",
+  "table.merge_invoice_both_text":
+    "{into} is invoiced to {intoName} and {from} to {fromName}. The merged bill can have only one.",
+  "table.merge_invoice_keep": "Invoice {name}",
+  "table.merge_invoice_cancel": "Do not merge",
   "table.split_quantity": "Quantity",
   "line.quantity_invalid": "Enter a positive quantity that fits this dish’s unit.",
   "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
@@ -3271,6 +3280,15 @@ export const es: Record<StringKey, string> = {
   "table.confirm_different_people":
     "Confirma que las cuentas resultantes pertenecen a personas distintas. Una cuenta superior a {amount} necesita una factura completa salvo que se comparta realmente entre varias personas.",
   "table.confirm_different_people_action": "Confirmar personas distintas",
+  "table.merge_invoice_title": "La {fromInText} tiene factura completa",
+  "table.merge_invoice_text":
+    "La {fromInText} está a nombre de {name} para factura completa. Al juntarlas, todos los platos pasan a la {intoInText}, facturada a {name}.",
+  "table.merge_invoice_action": "Juntar y facturar a {name}",
+  "table.merge_invoice_both_title": "Cada cuenta tiene factura completa",
+  "table.merge_invoice_both_text":
+    "La {intoInText} se factura a {intoName} y la {fromInText} a {fromName}. La cuenta juntada solo puede tener una.",
+  "table.merge_invoice_keep": "Facturar a {name}",
+  "table.merge_invoice_cancel": "No juntar",
   "table.split_quantity": "Cantidad",
   "line.quantity_invalid": "Introduce una cantidad positiva válida para la unidad de este plato.",
   "table.split_quantity_whole_error": "Elige una cantidad entera entre 1 y la cantidad pedida",

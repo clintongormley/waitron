@@ -264,6 +264,7 @@ describe("A803 portion lifecycle: moves", () => {
       mergeCheckedBills(tx, venue.cfg, p.otherId, p.billId, {
         operatorId: venue.adminId,
         expectedEdits,
+        invoiceChoice: undefined,
       }),
     );
     expect(eventsOf(p.portions)).toEqual(

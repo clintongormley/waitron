@@ -62,7 +62,8 @@ bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en
 aparece cuando la cuenta ya está pagada o ya se ha emitido su factura. Convertir una cuenta pagada
 en factura completa sería corregir una factura ya emitida, y Waitron todavía no ofrece esa
 corrección. Cuando ya has elegido un cliente, su nombre y su identificador aparecen debajo de
-**Factura completa**, en la zona de cobro.
+**Factura completa**, en la zona de cobro. Al juntar cuentas, la caja pregunta antes de cambiar
+el cliente de una factura completa.
 
 El cobro de mostrador todavía no puede emitir una factura completa. Mantén el pedido del cliente
 en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
@@ -397,8 +398,10 @@ elección, como con qué cuenta juntar, se abre junto al pedido, y **Atrás** la
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe
 recibir la otra y elige **Juntar cuentas**. La cuenta que recibe puede tener un pago parcial;
-la que añades no puede tener pagos. Si mueves la última cuenta de la mesa, la caja sigue en la mesa
-con una cuenta nueva y vacía.
+la que añades no puede tener pagos. Si la cuenta que añades tiene factura completa a nombre de un
+cliente que no figura en la cuenta que recibe, la caja pregunta antes: elige a qué cliente se
+factura la cuenta juntada, o **No juntar**. Si mueves la última cuenta de la mesa, la caja sigue en
+la mesa con una cuenta nueva y vacía.
 
 Si otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla
 pasa a otra de las cuentas de la mesa y lo indica, por

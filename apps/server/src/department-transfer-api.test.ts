@@ -1399,7 +1399,10 @@ describe("department transfer tab lifecycle", () => {
     });
     const id = await pendingPartyFixture(f);
     await withTransaction(suite.db, (tx) =>
-      mergeCheckedBills(tx, v.cfg, target.tab, f.tab, { operatorId: personId }),
+      mergeCheckedBills(tx, v.cfg, target.tab, f.tab, {
+        operatorId: personId,
+        invoiceChoice: undefined,
+      }),
     );
     expect((await state(f.tab)).tab!.status).toBe("abandoned");
     await withdrawn(f, id);

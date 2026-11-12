@@ -341,6 +341,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has taken payments, so it cannot be merged into another bill.",
     es: "Esta cuenta ya ha recibido pagos, por lo que no se puede añadir a otra cuenta.",
   },
+  "bill.merge_invoice_choice_required": {
+    en: "The bills' invoice details have changed. Check them and merge again.",
+    es: "Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a juntarlas.",
+  },
   "working_order.not_placed": {
     en: "This bill is no longer waiting for payment",
     es: "Esta cuenta ya no está pendiente de cobro",

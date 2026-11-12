@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PartyBill } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { billLabel, billName, billToShow, shownBills, stillToPay } from "./bill-state.js";
+import {
+  billLabel,
+  billLabelInText,
+  billName,
+  billToShow,
+  shownBills,
+  stillToPay,
+} from "./bill-state.js";
 
 afterEach(() => setLocale("en"));
 
@@ -107,6 +114,16 @@ describe("A803 billLabel", () => {
       expect(billLabel(bill({ billNumber: null, billName: "Clint" }))).toBe(unnumberedNamed);
     },
   );
+});
+
+describe("billLabelInText", () => {
+  it.each([
+    ["Cuenta 2 · Clint", "cuenta 2 · Clint"],
+    ["Bill · Ana", "bill · Ana"],
+    ["", ""],
+  ])("lower-cases only the first letter of %j", (label, inText) => {
+    expect(billLabelInText(label)).toBe(inText);
+  });
 });
 
 describe("billToShow", () => {
