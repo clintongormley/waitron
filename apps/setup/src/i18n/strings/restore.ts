@@ -38,6 +38,7 @@ export const restoreEn = {
   "restore.preview_file_error": "Check the backup file.",
   "restore.preview_failed": "Couldn't review this backup.",
   "restore.heading": "Restore from backup",
+  "restore.replace_warning": "Restoring replaces the database already on this box.",
   "restore.cloud_restore": "Restore from Waitron Cloud",
   "restore.intro":
     "Use cold recovery only when no other server is still running with newer restaurant data.",
@@ -216,6 +217,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_file_error": "Revisa el archivo de copia.",
   "restore.preview_failed": "No se ha podido revisar esta copia.",
   "restore.heading": "Restaurar desde una copia de seguridad",
+  "restore.replace_warning":
+    "La restauración sustituye la base de datos que ya está en este equipo.",
   "restore.cloud_restore": "Restaurar desde Waitron Cloud",
   "restore.intro":
     "Usa la recuperación en frío solo cuando no quede ningún otro servidor funcionando con datos más recientes del restaurante.",

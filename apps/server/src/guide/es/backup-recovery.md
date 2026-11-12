@@ -168,6 +168,8 @@ disponible. Las observaciones permanecen en este navegador y no se envían con l
 recuperación. El informe lee el almacenamiento disponible en esta dirección de Waitron; no busca
 observaciones en otros dispositivos.
 
+La restauración sustituye la base de datos que ya está en este equipo.
+
 Elige **Comparar relojes**. Sigue las instrucciones sobre relojes y esperas; no hay ningún código de
 instalación que escribir. Elige **Crear las series** cuando la página lo permita; después muestra el
 nombre de las nuevas series. Marca la confirmación que muestra la página —«Confirmo que ningún otro

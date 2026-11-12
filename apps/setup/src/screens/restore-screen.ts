@@ -269,6 +269,7 @@ export class SetupRestoreScreen extends LitElement {
         >
       </p>
       <p>${t("restore.intro")}</p>
+      <p>${t("restore.replace_warning")}</p>
       <label class="field">
         ${t("restore.backup_file")} <span aria-hidden="true">*</span>
         <wt-help-tooltip aria-label=${t("restore.backup_file_help_label")}

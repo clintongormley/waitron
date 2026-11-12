@@ -6172,3 +6172,22 @@ describe("a recovery request refused because another setup holds the server", ()
     },
   );
 });
+
+it.each(["setup-restore-screen", "setup-restore-bucket-screen", "setup-cloud-restore-screen"])(
+  "%s warns that restoring replaces the box's existing database",
+  async (tag) => {
+    setLocale("en-GB");
+    const screen = document.createElement(tag) as LitElement;
+    const host = document.createElement("div");
+    applyTokens(host);
+    mounted.push(host);
+    document.body.appendChild(host);
+    host.appendChild(screen);
+    await screen.updateComplete;
+    expect(
+      [...screen.shadowRoot!.querySelectorAll("p")].some(
+        (p) => p.textContent?.trim() === "Restoring replaces the database already on this box.",
+      ),
+    ).toBe(true);
+  },
+);
