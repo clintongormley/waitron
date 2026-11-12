@@ -1469,7 +1469,7 @@ skipped); GitHub names a job by its `name:` when one is set (on 2026-10-06,
 `LICENSE is unmodified Elastic License 2.0`), so the guard below fails if a needed job sets one.
 A completed entry with any other conclusion fails at once. It tries again at thirty-second
 intervals, twenty-one tries in all, when the API call fails, the number of jobs read differs from
-its `total_count`, a needed job other than the skipped `server-probe` has no entry, or an entry
+its `total_count`, a needed job not saved as `skipped` has no entry, or an entry
 is not yet completed and lacks the combined evidence below, and fails when the
 tries run out, so an API it cannot read fails the check rather than passing it. The step has a
 twelve-minute limit (`timeout-minutes: 12`) inside a fifteen-minute job, so a call that hangs fails
@@ -1501,14 +1501,14 @@ second step only when its own `needs` result is `success` and its API record sup
 - A successful `Set up job` first and exactly one successful `Complete job` last. Every step has
   a nonblank name, an increasing positive integer number, and a `success` or `skipped` conclusion.
 
-An absent `server-probe` passes on the first complete inventory when its saved `needs` result is
-exactly `skipped`. Its condition selects only an explicit manual probe, so ordinary runs skip it.
-On a requested manual probe, the first gate step requires `server-probe` to succeed.
-Every other missing job still waits and fails, including one saved as skipped; a present
-`server-probe` record still receives the ordinary API checks. Run `43229439512`, job
-`131230224765`, exhausted 21 polls on 12 November 2026 because GitHub omitted that skipped
-probe. The executable shell cases in `scripts/ci-workflow.test.mjs` cover the omission, the
-job-name/result limits and an incomplete inventory.
+An absent needed job passes on the first complete inventory only when its saved `needs` result
+is exactly `skipped`. A present record still receives every ordinary API check. On a requested
+manual probe, the first gate step still requires `server-probe` to succeed.
+Run `43229439512` exhausted 21 polls on 12 November 2026 because GitHub omitted the skipped
+probe; main run `43273070512` later omitted six other skipped jobs. The watcher cleared the
+general exception on 12 November at 19:33 with this limit: "If GitHub ever both saves a never-acquired job as skipped and leaves it out of the API, the gate will pass".
+The executable shell cases in `scripts/ci-workflow.test.mjs` cover omitted skipped jobs,
+missing success or failure, present failure and an incomplete inventory.
 
 The check still reads every API page and every matching physical job, including each matrix shard
 and reusable-workflow child. Any other missing job, incomplete page count or unfinished evidence waits

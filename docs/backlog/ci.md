@@ -689,6 +689,11 @@ A1424's live qualification was added on 7 November 2026.
 
 ## Decisions and deliberate limits
 
+- **CI-gate-skipped: trust an omitted record only for exact saved `skipped` (watcher, 2026-11-12 19:33).**
+  A complete jobs inventory and the saved result together allow the omission; present records
+  remain checked. The accepted limit and observed runs are in
+  [the final gate's API check](../developers/ci-and-gates.md#the-ci-check-passes-only-when-every-needed-job-succeeded-or-was-skipped).
+
 - **A1454: keep six CI slots per host (owner, 2026-11-11).**
   The 11 November measurements show about 125 GiB per host. The simplest fixed split
   is two large and five small guests, seven jobs against six today, but large-job
