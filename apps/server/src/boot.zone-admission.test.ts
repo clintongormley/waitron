@@ -43,6 +43,7 @@ import { generateSync } from "otplib";
 import { accountPurposeKey } from "./account-key.js";
 import { enrolAuthenticator } from "./testing/authenticator.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { establishNodeIdentity } from "./node-identity.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
 import { startMailSender } from "./mail-sender.js";
@@ -549,7 +550,12 @@ describe("startup zone admission", () => {
           boxCaPem: "unused",
           originNodeId: NODE,
         });
-      } else
+      } else {
+        // A box its chart lists holds its signing key.
+        await establishNodeIdentity(
+          { ownerDb: suite.db, node: suite.node, ring: loadKeyRing(env) },
+          NODE,
+        );
         await writeNodeMembership(
           suite.db,
           signedMembershipDoc(1, {
@@ -557,6 +563,7 @@ describe("startup zone admission", () => {
             nodes: [{ nodeId: NODE, contactUrl: "https://box.test", standing: "sell-only" }],
           }),
         );
+      }
       await boot();
       expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
       await refusal(

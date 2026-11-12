@@ -26,6 +26,8 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { loadKeyRing } from "@waitron/credentials";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -61,7 +63,19 @@ describe("hours boot with permanent workforce", () => {
             boxCaPem: "unused",
             originNodeId: venue.cfg.nodeId,
           });
-        } else if (mode === "fenced")
+        } else if (mode === "fenced") {
+          // A box its chart lists holds its signing key.
+          await establishNodeIdentity(
+            {
+              ownerDb: suite.db,
+              node: suite.node,
+              ring: loadKeyRing({
+                WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+                WAITRON_CREDENTIALS_KEY_VERSION: "1",
+              }),
+            },
+            venue.cfg.nodeId,
+          );
           await writeNodeMembership(
             suite.db,
             signedMembershipDoc(1, {
@@ -71,7 +85,7 @@ describe("hours boot with permanent workforce", () => {
               ],
             }),
           );
-        else if (mode === "secondary")
+        } else if (mode === "secondary")
           await withNodeTransaction(suite.node, (tx) =>
             setSingletonRoleTx(tx, venue.cfg.nodeId, "secondary"),
           );

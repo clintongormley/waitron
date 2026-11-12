@@ -32,6 +32,8 @@ import { createClockVenue } from "./testing/clock-venue.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { loadKeyRing } from "@waitron/credentials";
 import { mountTillApi } from "./till-api.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { serveRecovery } from "./node-entry.js";
@@ -253,6 +255,18 @@ describe("read-only real boot clocking", () => {
           originNodeId: venue.cfg.nodeId,
         });
       } else {
+        // A box its chart lists holds its signing key.
+        await establishNodeIdentity(
+          {
+            ownerDb: suite.db,
+            node: suite.node,
+            ring: loadKeyRing({
+              WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+              WAITRON_CREDENTIALS_KEY_VERSION: "1",
+            }),
+          },
+          venue.cfg.nodeId,
+        );
         await writeNodeMembership(
           suite.db,
           signedMembershipDoc(1, {
