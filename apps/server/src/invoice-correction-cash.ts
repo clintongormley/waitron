@@ -147,7 +147,16 @@ export async function giveCorrectionCash(
   }
 
   if ((await readCorrectionMoney(tx, correctionId)).completed === correction.gross)
-    await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId);
+    await fileCorrectionIn(
+      tx,
+      deps,
+      cfg,
+      correctionId,
+      actor.authz,
+      actor.personId,
+      undefined,
+      cfg,
+    );
   return {
     correction: await readInvoiceCorrection(tx, deps.backend, cfg, correctionId),
     refunds,

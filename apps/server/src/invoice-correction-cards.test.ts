@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sales, tenderRefunds, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { createPrinter } from "@waitron/printing";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { previewCorrectionAmounts } from "@waitron/core";
 import { endDeviceSessions, endSession, loginWithPin, sessions } from "@waitron/identity";
@@ -190,6 +191,10 @@ describe("a correction's connected card legs", () => {
   });
 
   it("files when the background pass confirms a card leg, with nobody signed in", async () => {
+    const printer = await inTx(v, (tx) =>
+      createPrinter(tx, { name: "Receipts", transport: "cloud_poll", pollId: randomUUID() }),
+    );
+    v.db.run(sql`update devices set receipt_printer_id = ${printer.id} where id = ${v.deviceId}`);
     const t = await cashAndReader();
     const { correction } = await open(t.saleId, "24.20");
     const session = await inTx(v, (tx) =>
@@ -237,7 +242,12 @@ describe("a correction's connected card legs", () => {
         total: -2420,
         authorizedBy: v.adminId,
       });
+      // Filed with nobody asking at the till, so nothing prints.
+      expect(v.db.all(sql`select id from print_jobs where sale_id = ${corrective!.id}`)).toEqual(
+        [],
+      );
     } finally {
+      v.db.run(sql`update devices set receipt_printer_id = null where id = ${v.deviceId}`);
       // Later cases sign in through the venue's operator session.
       v.operator.sessionId = (
         await inTx(v, (tx) =>

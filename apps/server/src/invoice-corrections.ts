@@ -37,12 +37,15 @@ import {
   refuseWhileCorrectionOpen,
   type InvoiceCorrectionRow,
 } from "./invoice-correction-legs.js";
+import { optionalDocument } from "./optional-document.js";
 import { fingerprint } from "./parties.js";
+import { enqueueOriginalReceipt } from "./receipt-print.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
 import { canonicaliseUuid } from "./till-session.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
@@ -276,7 +279,7 @@ export async function listOpenInvoiceCorrections(
 /**
  * Files the R5 of the open correction `correctionId` for the money its refunds have given back,
  * after the filing checks run again, and marks the correction filed. The one place a correction's
- * R5 is filed.
+ * R5 is filed. With `paper`, the device a person asked from, its receipt printer prints the R5.
  */
 export async function fileCorrectionIn(
   tx: Transaction,
@@ -287,6 +290,7 @@ export async function fileCorrectionIn(
   /** Null when filed automatically, with nobody asking. */
   endedBy: string | null,
   expectedSplit?: readonly SplitLine[],
+  paper?: DeviceRequestConfig,
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
   const { completed } = await readSettledMoney(tx, correction);
@@ -331,6 +335,15 @@ export async function fileCorrectionIn(
     .returning({ id: invoiceCorrections.id });
   if (filed.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  if (paper !== undefined)
+    await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () =>
+      enqueueOriginalReceipt(
+        tx,
+        paper,
+        await readTransactionReceipt(deps.backend, tx, paper, correctiveSaleId),
+        correctiveSaleId,
+      ),
+    );
   return correctiveSaleId;
 }
 
@@ -354,6 +367,7 @@ export async function fileInvoiceCorrectionNow(
     actor.authz,
     actor.personId,
     request.expectedSplit,
+    cfg,
   );
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }

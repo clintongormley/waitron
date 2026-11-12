@@ -2,7 +2,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 
 export interface OptionalDocumentDiagnostic {
-  operation: "enqueueSaleReceipt" | "reserveStagedInvoiceDelivery";
+  operation: "enqueueSaleReceipt" | "enqueueCorrectiveReceipt" | "reserveStagedInvoiceDelivery";
   saleId: string;
   code: AppError["code"] | "receipt.document_failed";
   field?: "operatorId";
