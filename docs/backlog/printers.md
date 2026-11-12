@@ -530,11 +530,6 @@ dish to zero as one «Descuento 100%» row, where the ticket prints them as two 
 And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
 only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
-## Loose ends left by A331 batch 3b (#1415)
-
-- A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
-  2026-10-08, for the owner to confirm.
-
 ## A department's receipt logo save re-checks only the image's revision, not its id
 
 - **A department's receipt logo save re-checks only the image's revision, not its id** — found in
@@ -671,13 +666,6 @@ Hardware and inbox checks to complete in the owner session.
   [Detail](printers.md#an-unpair-outcome-that-reaches-the-server-after-it-dropped-the-command-leaves-the-printer-on)
 - **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
   port is on another channel fails each job with the connection error.
-
-## Bundle: Printers screen leftovers
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **Loose ends left by A331 batch 3b (#1415).**
-  [Detail](printers.md#loose-ends-left-by-a331-batch-3b-1415)
 
 ## Bundle: Receipt layout pass
 
