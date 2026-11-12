@@ -10,6 +10,22 @@ import { AppError, centsToDecimal } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import "./errors.js";
 
+export type InvoiceCorrectionRow = typeof invoiceCorrections.$inferSelect;
+
+/** The correction `correctionId`; refused `invoice_correction.not_found` when there is none. */
+export async function readCorrectionRow(
+  tx: Transaction,
+  correctionId: string,
+): Promise<InvoiceCorrectionRow> {
+  const [correction] = await tx
+    .select()
+    .from(invoiceCorrections)
+    .where(eq(invoiceCorrections.id, correctionId));
+  if (correction === undefined)
+    throw new AppError("invoice_correction.not_found", { correctionId });
+  return correction;
+}
+
 export interface CorrectionMoney {
   completed: number;
   pending: number;
@@ -18,26 +34,29 @@ export interface CorrectionMoney {
 }
 
 /** A correction's refunds, oldest link first and, among links made at one time, oldest payment
- * first; and the money they have given back and still hold pending, in cents; failed refunds count
- * nothing. */
+ * first, each with the request that made it; and the money they have given back and still hold
+ * pending, in cents; failed refunds count nothing. */
 export async function readCorrectionLegs(
   tx: Transaction,
   correctionId: string,
-): Promise<{ refunds: (typeof tenderRefunds.$inferSelect)[]; money: CorrectionMoney }> {
-  const refunds = (
-    await tx
-      .select({ refund: tenderRefunds })
-      .from(invoiceCorrectionRefunds)
-      .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
-      .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
-      .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
-      .orderBy(
-        asc(invoiceCorrectionRefunds.createdAt),
-        asc(tenders.settledAt),
-        asc(tenders.id),
-        asc(invoiceCorrectionRefunds.id),
-      )
-  ).map(({ refund }) => refund);
+): Promise<{
+  refunds: (typeof tenderRefunds.$inferSelect)[];
+  requestIds: string[];
+  money: CorrectionMoney;
+}> {
+  const links = await tx
+    .select({ refund: tenderRefunds, requestId: invoiceCorrectionRefunds.requestId })
+    .from(invoiceCorrectionRefunds)
+    .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
+    .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
+    .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
+    .orderBy(
+      asc(invoiceCorrectionRefunds.createdAt),
+      asc(tenders.settledAt),
+      asc(tenders.id),
+      asc(invoiceCorrectionRefunds.id),
+    );
+  const refunds = links.map(({ refund }) => refund);
   const money: CorrectionMoney = {
     completed: 0,
     pending: 0,
@@ -57,7 +76,7 @@ export async function readCorrectionLegs(
       money.pendingRefundId ??= leg.id;
     }
   }
-  return { refunds, money };
+  return { refunds, requestIds: links.map(({ requestId }) => requestId), money };
 }
 
 /** The money a correction's refunds have given back and still hold pending, in cents. */
@@ -72,25 +91,21 @@ export async function readCorrectionMoney(
  * Refuses unless the correction is this sale's and open (`invoice_correction.not_open`
  * { correctionId, state }), the tip is zero (`invalid("tipAmount")`), no cancellation ids are named
  * (`invalid("cancellationIds")`), and the leg fits what is left (`invoice_correction.leg_too_large`
- * { correctionId, left }). Answers the correction.
+ * { correctionId, left }). Answers the correction. Reads the correction and its money unless
+ * `link.read` hands them in.
  */
 export async function checkCorrectionLeg(
   tx: Transaction,
   saleId: string,
-  link: { id: string; cashRoute?: true },
+  link: { id: string; cashRoute?: true; read?: CorrectionRead },
   leg: {
     method: "cash" | "card";
     appliedCents: number;
     tipCents: number;
     cancellationIds: readonly string[] | undefined;
   },
-): Promise<typeof invoiceCorrections.$inferSelect> {
-  const [correction] = await tx
-    .select()
-    .from(invoiceCorrections)
-    .where(eq(invoiceCorrections.id, link.id));
-  if (correction === undefined)
-    throw new AppError("invoice_correction.not_found", { correctionId: link.id });
+): Promise<InvoiceCorrectionRow> {
+  const correction = link.read?.correction ?? (await readCorrectionRow(tx, link.id));
   if (correction.originalSaleId !== saleId || correction.state !== "open")
     throw new AppError("invoice_correction.not_open", {
       correctionId: correction.id,
@@ -98,14 +113,29 @@ export async function checkCorrectionLeg(
     });
   if (leg.tipCents !== 0) throw invalid("tipAmount");
   if (leg.cancellationIds !== undefined) throw invalid("cancellationIds");
-  const money = await readCorrectionMoney(tx, correction.id);
-  const left = correction.gross - money.completed - money.pending;
+  const left =
+    link.read?.left ?? correctionLeft(correction, await readCorrectionMoney(tx, correction.id));
   if (leg.appliedCents > left)
     throw new AppError("invoice_correction.leg_too_large", {
       correctionId: correction.id,
       left: centsToDecimal(left),
     });
   return correction;
+}
+
+/** The correction as its caller read it in this transaction, and the cents it had left before this
+ * leg. */
+export interface CorrectionRead {
+  correction: InvoiceCorrectionRow;
+  left: number;
+}
+
+/** The cents of `correction` neither given back nor pending. */
+export function correctionLeft(
+  correction: Pick<InvoiceCorrectionRow, "gross">,
+  money: CorrectionMoney,
+): number {
+  return correction.gross - money.completed - money.pending;
 }
 
 /** Refuses `invoice_correction.already_open` while the sale has an open correction. */

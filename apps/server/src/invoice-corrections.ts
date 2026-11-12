@@ -34,6 +34,7 @@ import { invalid, MONEY } from "./bill-allocation.js";
 import {
   readCorrectionLegs,
   readCorrectionMoney,
+  readCorrectionRow,
   refuseWhileCorrectionOpen,
 } from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
@@ -220,11 +221,7 @@ export async function readInvoiceCorrection(
   cfg: Pick<DeviceRequestConfig, "nodeId">,
   correctionId: string,
 ): Promise<InvoiceCorrectionView> {
-  const [row] = await tx
-    .select()
-    .from(invoiceCorrections)
-    .where(eq(invoiceCorrections.id, correctionId));
-  if (row === undefined) throw new AppError("invoice_correction.not_found", { correctionId });
+  const row = await readCorrectionRow(tx, correctionId);
   const {
     refunds,
     money: { completed: back, pending },
@@ -384,12 +381,7 @@ export async function closeInvoiceCorrection(
 
 /** The correction `correctionId`, refused unless it exists and is open. */
 async function openCorrection(tx: Transaction, correctionId: string) {
-  const [correction] = await tx
-    .select()
-    .from(invoiceCorrections)
-    .where(eq(invoiceCorrections.id, correctionId));
-  if (correction === undefined)
-    throw new AppError("invoice_correction.not_found", { correctionId });
+  const correction = await readCorrectionRow(tx, correctionId);
   if (correction.state !== "open")
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
   return correction;

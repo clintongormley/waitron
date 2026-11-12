@@ -1,12 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
-import {
-  invoiceCorrectionRefunds,
-  invoiceCorrections,
-  tenderRefunds,
-  tenders,
-  type Transaction,
-} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import type { Authorization, AuthzInput } from "@waitron/identity";
 import {
   AppError,
@@ -17,7 +10,12 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
-import { readCorrectionMoney } from "./invoice-correction-legs.js";
+import {
+  correctionLeft,
+  readCorrectionLegs,
+  readCorrectionMoney,
+  readCorrectionRow,
+} from "./invoice-correction-legs.js";
 import {
   appliedRemainingOf,
   fileCorrectionIn,
@@ -71,32 +69,17 @@ export async function giveCorrectionCash(
   ask: { submissionId: string; amount: Decimal },
   actor: { personId: string; authz: AuthzInput; authorization: Authorization },
 ): Promise<{ correction: InvoiceCorrectionView; refunds: TenderRefundView[]; replayed: boolean }> {
-  const [correction] = await tx
-    .select()
-    .from(invoiceCorrections)
-    .where(eq(invoiceCorrections.id, correctionId));
-  if (correction === undefined)
-    throw new AppError("invoice_correction.not_found", { correctionId });
-
-  const earlier = await tx
-    .select({ refund: tenderRefunds })
-    .from(invoiceCorrectionRefunds)
-    .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
-    .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
-    .where(
-      and(
-        eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId),
-        eq(invoiceCorrectionRefunds.requestId, ask.submissionId),
-      ),
-    )
-    .orderBy(asc(tenders.settledAt), asc(tenders.id));
+  const correction = await readCorrectionRow(tx, correctionId);
+  const legs = await readCorrectionLegs(tx, correctionId);
+  // One request's links share one time, so these stay in payment order.
+  const earlier = legs.refunds.filter((_, i) => legs.requestIds[i] === ask.submissionId);
   if (earlier.length > 0) {
-    const given = earlier.reduce((sum, { refund }) => sum + refund.appliedAmount, 0);
+    const given = earlier.reduce((sum, refund) => sum + refund.appliedAmount, 0);
     if (given !== decimalToCents(ask.amount))
       throw new AppError("submission.id_reused", { submissionId: ask.submissionId });
     return {
       correction: await readInvoiceCorrection(tx, deps.backend, cfg, correctionId),
-      refunds: earlier.map(({ refund }) => toTenderRefundView(refund)),
+      refunds: earlier.map(toTenderRefundView),
       replayed: true,
     };
   }
@@ -112,12 +95,11 @@ export async function giveCorrectionCash(
       cashLeft: centsToDecimal(cashLeft),
       amount: ask.amount,
     });
-  const before = await readCorrectionMoney(tx, correctionId);
-  const correctionLeft = correction.gross - before.completed - before.pending;
-  if (amount > correctionLeft)
+  let unclaimed = correctionLeft(correction, legs.money);
+  if (amount > unclaimed)
     throw new AppError("invoice_correction.leg_too_large", {
       correctionId,
-      left: centsToDecimal(correctionLeft),
+      left: centsToDecimal(unclaimed),
     });
 
   const reading = deps.clock.now();
@@ -138,7 +120,12 @@ export async function giveCorrectionCash(
         appliedAmount: centsToDecimal(leg),
         tipAmount: "0.00",
         reason: correction.reason,
-        invoiceCorrection: { id: correctionId, requestId: ask.submissionId, cashRoute: true },
+        invoiceCorrection: {
+          id: correctionId,
+          requestId: ask.submissionId,
+          cashRoute: true,
+          read: { correction, left: unclaimed },
+        },
       },
       {
         requestedBy: actor.personId,
@@ -147,6 +134,7 @@ export async function giveCorrectionCash(
       },
       createdAt,
     );
+    unclaimed -= leg;
     const refund = await carryNewTenderRefund(
       tx,
       deps,

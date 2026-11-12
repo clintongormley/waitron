@@ -1,11 +1,12 @@
 import type { Hono } from "hono";
 import { and, asc, eq } from "drizzle-orm";
-import { invoiceCorrections, tenders, withTransaction, type Transaction } from "@waitron/db";
+import { tenders, withTransaction, type Transaction } from "@waitron/db";
 import type { AuthzInput, PinThrottle } from "@waitron/identity";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid, saleId as brandSaleId } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { withCorrectionAuthorization } from "./invoice-correction-authorization.js";
+import { readCorrectionRow } from "./invoice-correction-legs.js";
 import {
   giveCorrectionCash,
   parseCorrectionCash,
@@ -241,12 +242,7 @@ export function mountInvoiceCorrectionApi(
 
 /** The invoice the correction `correctionId` corrects; refused `invoice_correction.not_found`. */
 async function saleOfCorrection(tx: Transaction, correctionId: string): Promise<string> {
-  const [row] = await tx
-    .select({ saleId: invoiceCorrections.originalSaleId })
-    .from(invoiceCorrections)
-    .where(eq(invoiceCorrections.id, correctionId));
-  if (row === undefined) throw new AppError("invoice_correction.not_found", { correctionId });
-  return row.saleId;
+  return (await readCorrectionRow(tx, correctionId)).originalSaleId;
 }
 
 function correctionIdOf(raw: string): string {

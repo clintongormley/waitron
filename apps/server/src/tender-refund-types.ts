@@ -1,6 +1,7 @@
 import type { TillSaleResult } from "./till-sale.js";
 import type { TenderMethod } from "./find-bill-types.js";
 import type { Override } from "@waitron/identity";
+import type { CorrectionRead } from "./invoice-correction-legs.js";
 
 export interface TenderRefundRequest {
   submissionId: string;
@@ -14,7 +15,7 @@ export interface TenderRefundRequest {
   override?: Override;
   /** The correction this refund gives money back for; `requestId` groups the refunds one request
    * makes. */
-  invoiceCorrection?: { id: string; requestId: string; cashRoute?: true };
+  invoiceCorrection?: { id: string; requestId: string; cashRoute?: true; read?: CorrectionRead };
 }
 
 export interface RefundableTender {
