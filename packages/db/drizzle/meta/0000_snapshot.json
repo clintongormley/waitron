@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7cc10c8b-73c5-4a08-8491-13cbf93546e4",
+  "id": "31a5945a-e071-4d6d-b2af-f967ecff97f1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8994,7 +8994,7 @@
         },
         "tenders_method_ck": {
           "name": "tenders_method_ck",
-          "value": "\"tenders\".\"method\" in ('cash', 'card', 'voucher', 'transfer', 'other')"
+          "value": "\"tenders\".\"method\" in ('cash', 'card', 'voucher', 'deferred', 'other')"
         }
       }
     },
@@ -9233,8 +9233,8 @@
         }
       }
     },
-    "transfer_closures": {
-      "name": "transfer_closures",
+    "deferred_closures": {
+      "name": "deferred_closures",
       "columns": {
         "id": {
           "name": "id",
@@ -9315,8 +9315,8 @@
         }
       },
       "indexes": {
-        "transfer_closures_node_day_idx": {
-          "name": "transfer_closures_node_day_idx",
+        "deferred_closures_node_day_idx": {
+          "name": "deferred_closures_node_day_idx",
           "columns": [
             "node_id",
             "business_day",
@@ -9325,15 +9325,15 @@
           ],
           "isUnique": false
         },
-        "transfer_closures_working_order_key": {
-          "name": "transfer_closures_working_order_key",
+        "deferred_closures_working_order_key": {
+          "name": "deferred_closures_working_order_key",
           "columns": [
             "working_order_id"
           ],
           "isUnique": true
         },
-        "transfer_closures_sale_key": {
-          "name": "transfer_closures_sale_key",
+        "deferred_closures_sale_key": {
+          "name": "deferred_closures_sale_key",
           "columns": [
             "sale_id"
           ],
@@ -9341,9 +9341,9 @@
         }
       },
       "foreignKeys": {
-        "transfer_closures_actor_id_persons_id_fk": {
-          "name": "transfer_closures_actor_id_persons_id_fk",
-          "tableFrom": "transfer_closures",
+        "deferred_closures_actor_id_persons_id_fk": {
+          "name": "deferred_closures_actor_id_persons_id_fk",
+          "tableFrom": "deferred_closures",
           "tableTo": "persons",
           "columnsFrom": [
             "actor_id"
@@ -9354,9 +9354,9 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "transfer_closures_device_id_devices_id_fk": {
-          "name": "transfer_closures_device_id_devices_id_fk",
-          "tableFrom": "transfer_closures",
+        "deferred_closures_device_id_devices_id_fk": {
+          "name": "deferred_closures_device_id_devices_id_fk",
+          "tableFrom": "deferred_closures",
           "tableTo": "devices",
           "columnsFrom": [
             "device_id"
@@ -9367,9 +9367,9 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "transfer_closures_working_order_fk": {
-          "name": "transfer_closures_working_order_fk",
-          "tableFrom": "transfer_closures",
+        "deferred_closures_working_order_fk": {
+          "name": "deferred_closures_working_order_fk",
+          "tableFrom": "deferred_closures",
           "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
@@ -9380,9 +9380,9 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "transfer_closures_sale_fk": {
-          "name": "transfer_closures_sale_fk",
-          "tableFrom": "transfer_closures",
+        "deferred_closures_sale_fk": {
+          "name": "deferred_closures_sale_fk",
+          "tableFrom": "deferred_closures",
           "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
@@ -9393,9 +9393,9 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "transfer_closures_node_fk": {
-          "name": "transfer_closures_node_fk",
-          "tableFrom": "transfer_closures",
+        "deferred_closures_node_fk": {
+          "name": "deferred_closures_node_fk",
+          "tableFrom": "deferred_closures",
           "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
@@ -9410,17 +9410,17 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "transfer_closures_business_day_ck": {
-          "name": "transfer_closures_business_day_ck",
-          "value": "length(\"transfer_closures\".\"business_day\") = 10 and \"transfer_closures\".\"business_day\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+        "deferred_closures_business_day_ck": {
+          "name": "deferred_closures_business_day_ck",
+          "value": "length(\"deferred_closures\".\"business_day\") = 10 and \"deferred_closures\".\"business_day\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
         },
-        "transfer_closures_source_ck": {
-          "name": "transfer_closures_source_ck",
-          "value": "\"transfer_closures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+        "deferred_closures_source_ck": {
+          "name": "deferred_closures_source_ck",
+          "value": "\"deferred_closures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
         },
-        "transfer_closures_source_device_ck": {
-          "name": "transfer_closures_source_device_ck",
-          "value": "(\"transfer_closures\".\"source\" = 'device') = (\"transfer_closures\".\"device_id\" is not null)"
+        "deferred_closures_source_device_ck": {
+          "name": "deferred_closures_source_device_ck",
+          "value": "(\"deferred_closures\".\"source\" = 'device') = (\"deferred_closures\".\"device_id\" is not null)"
         }
       }
     },
