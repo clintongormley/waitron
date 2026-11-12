@@ -72,8 +72,8 @@ For example, a French address can be **2 Main Street**, **Paris**, **France**, w
 or province. Do not add the country name to the street. The printed invoice and till ticket name
 it in the receipt language. Order details name it in your screen language.
 
-Counter payment cannot issue a full invoice yet. Keep the customer's order on a table bill and
-use that bill's payments. Placing a counter order alone does not issue an invoice.
+At the counter, choose **Full invoice** before **Pay**. Paying the order in full issues the
+invoice. Placing a counter order alone does not issue an invoice.
 
 ## Choose a document and printer {#invoice-printer}
 

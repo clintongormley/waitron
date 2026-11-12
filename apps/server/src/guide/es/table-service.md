@@ -64,9 +64,8 @@ en factura completa sería corregir una factura ya emitida, y Waitron todavía n
 corrección. Cuando ya has elegido un cliente, su nombre y su identificador aparecen debajo de
 **Factura completa**, en la zona de cobro.
 
-El cobro de mostrador todavía no puede emitir una factura completa. Mantén el pedido del cliente
-en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
-no emite una factura.
+En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo el pedido se
+emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
 
 Elige **NIF español** para un NIF, NIE o CIF. Para un pasaporte u otro documento aceptado,
 elige su **Tipo de identificador**, **País emisor** y **Número de documento**. Introduce el número
