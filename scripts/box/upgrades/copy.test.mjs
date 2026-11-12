@@ -126,3 +126,64 @@ it("refuses a destination inside the source, including through a parent link", a
   );
   expect(await fs.readdir(source)).toEqual(["venue.db"]);
 });
+
+it("restores a stopped volume in place, removes candidate-only files and can repeat", async () => {
+  const { root, source, destination } = await fixture();
+  await copyStoppedTree(source, destination);
+  const volumeInode = (await fs.stat(source)).ino;
+  await fs.writeFile(join(source, "venue.db"), "partly upgraded bytes");
+  await fs.writeFile(join(source, "new-file"), "candidate only");
+  const outside = join(root, "outside");
+  await fs.mkdir(outside);
+  await fs.writeFile(join(outside, "kept"), "outside volume");
+  await fs.symlink(outside, join(source, "new-link"));
+  const { restoreStoppedTree } = await import("./copy.mjs");
+
+  await restoreStoppedTree(destination, source);
+
+  expect((await fs.stat(source)).ino).toBe(volumeInode);
+  expect(await fs.readdir(source)).toEqual(["venue.db"]);
+  expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
+  expect(await fs.readFile(join(outside, "kept"), "utf8")).toBe("outside volume");
+  await fs.writeFile(join(source, "venue.db"), "interrupted restore bytes");
+  await restoreStoppedTree(destination, source);
+  expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
+  expect(await fs.readFile(join(destination, "venue.db"), "utf8")).toBe("original venue bytes");
+});
+
+it("restores a stopped configuration file with its private permissions", async () => {
+  const { root } = await fixture();
+  const saved = join(root, "saved.env");
+  const live = join(root, ".env");
+  await fs.writeFile(saved, "WAITRON_IMAGE=old\n", { mode: 0o600 });
+  await fs.writeFile(live, "WAITRON_IMAGE=candidate\n", { mode: 0o644 });
+  const { restoreStoppedTree } = await import("./copy.mjs");
+
+  await restoreStoppedTree(saved, live);
+
+  expect(await fs.readFile(live, "utf8")).toBe("WAITRON_IMAGE=old\n");
+  expect((await fs.stat(live)).mode & 0o777).toBe(0o600);
+  expect(await fs.readFile(saved, "utf8")).toBe("WAITRON_IMAGE=old\n");
+});
+
+it("refuses to clear a volume that holds its only recovery copy", async () => {
+  const { source } = await fixture();
+  const savedInside = join(source, "saved");
+  await fs.mkdir(savedInside);
+  await fs.writeFile(join(savedInside, "venue.db"), "only recovery copy");
+  const { restoreStoppedTree } = await import("./copy.mjs");
+
+  await expect(restoreStoppedTree(savedInside, source)).rejects.toThrow("overlap");
+  expect(await fs.readFile(join(savedInside, "venue.db"), "utf8")).toBe("only recovery copy");
+  expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
+});
+
+it("leaves the live volume intact when the recovery copy cannot be read", async () => {
+  const { root, source } = await fixture();
+  const { restoreStoppedTree } = await import("./copy.mjs");
+
+  await expect(restoreStoppedTree(join(root, "missing"), source)).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
+});

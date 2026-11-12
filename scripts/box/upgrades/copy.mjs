@@ -1,10 +1,15 @@
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
+
+function contains(root, path) {
+  const child = relative(root, path);
+  return child === "" || (child !== ".." && !child.startsWith("../"));
+}
 
 async function flush(path) {
   const handle = await fs.open(
@@ -34,8 +39,7 @@ export async function copyStoppedTree(source, destination) {
   const target = join(parent, basename(destination));
   const sourceStat = await fs.lstat(sourcePath);
   if (sourceStat.isDirectory()) {
-    const child = relative(await fs.realpath(sourcePath), target);
-    if (child === "" || (!isAbsolute(child) && child !== ".." && !child.startsWith("../"))) {
+    if (contains(await fs.realpath(sourcePath), target)) {
       throw new Error("upgrade copy destination is inside source");
     }
   }
@@ -49,4 +53,28 @@ export async function copyStoppedTree(source, destination) {
     return;
   }
   throw new Error("upgrade copy destination exists");
+}
+
+/** Keep the snapshot intact so a restore interrupted before completion can repeat. */
+export async function restoreStoppedTree(snapshot, destination) {
+  const source = resolve(snapshot);
+  const sourceStat = await fs.lstat(source);
+  const parent = await fs.realpath(dirname(resolve(destination)));
+  const target = join(parent, basename(destination));
+  const sourceRoot = await fs.realpath(source);
+  if (contains(sourceRoot, target) || contains(target, sourceRoot)) {
+    throw new Error("upgrade recovery copy and destination overlap");
+  }
+  if (sourceStat.isDirectory()) {
+    await fs.mkdir(target, { recursive: true });
+    for (const child of await fs.readdir(target)) {
+      await fs.rm(join(target, child), { recursive: true, force: true });
+    }
+    await run("cp", ["-a", "--", source + "/.", target]);
+  } else {
+    await fs.rm(target, { force: true });
+    await run("cp", ["-a", "--", source, target]);
+  }
+  await flushTree(target);
+  await flush(parent);
 }
