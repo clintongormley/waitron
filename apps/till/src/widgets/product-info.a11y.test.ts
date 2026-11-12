@@ -24,6 +24,70 @@ const base: TillProduct = {
   allergens: null,
 };
 
+it.each(["light", "dark"] as Theme[])(
+  "can restore an option and explains the last-choice refusal in %s",
+  async (theme) => {
+    setLocale(theme === "dark" ? "es-ES" : "en-GB");
+    let reject!: (error: unknown) => void;
+    const change = vi.fn(
+      () =>
+        new Promise<void>((_yes, no) => {
+          reject = no;
+        }),
+    );
+    const product: TillProduct = {
+      ...base,
+      productId: "soup",
+      modifierAvailability: [
+        {
+          kind: "options",
+          id: "cooked",
+          name: "Cooking",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: "rare",
+          publishedDefaultLabelId: "rare",
+          labels: [
+            { id: "rare", name: "Rare", customerName: null, kitchenName: null, available: true },
+            {
+              id: "medium",
+              name: "Medium",
+              customerName: null,
+              kitchenName: null,
+              available: false,
+            },
+          ],
+        },
+      ],
+    };
+    const { el, host } = await mountWidget<TillProductInfo>(
+      "till-product-info",
+      { product, changeAvailability: vi.fn(), changeOptionAvailability: change },
+      theme,
+    );
+    const restore = el.shadowRoot!.querySelector<HTMLElement>('[data-availability="medium"]')!;
+    expect(restore).not.toBeNull();
+    expect(restore.textContent).toBe(t("product_info.restore"));
+    await expectNoA11yViolations(host);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-availability="rare"]')!);
+    expect(change).toHaveBeenCalledExactlyOnceWith("cooked", "rare", false);
+    reject({ code: "options.invalid", field: "labels" });
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+      theme === "dark"
+        ? "Vuelve a poner otra opción a la venta antes de marcar esta como agotada."
+        : "Put another choice back on sale before marking this one sold out.",
+    );
+    await expectNoA11yViolations(host);
+    const closed: string[] = [];
+    el.addEventListener("close-info", () => closed.push("close"));
+    change.mockResolvedValueOnce(undefined);
+    await userEvent.click(restore);
+    expect(change).toHaveBeenLastCalledWith("cooked", "medium", true);
+    await vi.waitFor(() => expect(closed).toEqual(["close"]));
+  },
+);
+
 describe.each(["light", "dark"] as Theme[])("product information in %s", (theme) => {
   it.each([
     { state: "unreviewed", allergens: null, dietaryDeclarations: [] },

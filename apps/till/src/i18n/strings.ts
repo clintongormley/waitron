@@ -929,6 +929,7 @@ export const en = {
   "product_info.sold_out": "Mark sold out",
   "product_info.restore": "Back on sale",
   "product_info.all_menus": "Changes every menu in this venue.",
+  "product_info.last_choice": "Put another choice back on sale before marking this one sold out.",
   "product_info.add": "Add to order",
   "product_info.dietary": "Dietary",
   "product_info.not_reviewed": "Allergens not yet reviewed",
@@ -2906,6 +2907,8 @@ export const es: Record<StringKey, string> = {
   "product_info.sold_out": "Marcar como agotado",
   "product_info.restore": "Volver a poner a la venta",
   "product_info.all_menus": "Cambia todas las cartas de este local.",
+  "product_info.last_choice":
+    "Vuelve a poner otra opción a la venta antes de marcar esta como agotada.",
   "product_info.add": "Añadir al pedido",
   "product_info.dietary": "Dieta",
   "product_info.not_reviewed": "Alérgenos pendientes de revisión",
