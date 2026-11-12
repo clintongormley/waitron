@@ -403,12 +403,34 @@ export interface AuthorityTimeSample {
   readonly at: { readonly wallMs: number; readonly monoMs: number };
 }
 
+export interface ReturnedInvoiceRecord {
+  recordId: string;
+  saleId: string;
+  sourceNodeId: string;
+  sourceName: string;
+  generationId: string;
+  installation: string;
+  sequence: number;
+  invoiceNumber: string;
+  issueDate: string;
+  kind: string;
+  correctsRecordId: string | null;
+  taxable: string | null;
+  gross: string | null;
+  tax: string | null;
+  receivedAt: string;
+}
+
 /**
  * The sale-path boundary between the POS and a fiscal regime. It names no regime mechanism; the
  * guard is ./no-regime-vocabulary.test.ts. The submission pass (`drain`) is not on it: that runs
  * outside the sale path, through `FiscalContribution`.
  */
 export interface FiscalBackend {
+  returnedInvoices?(
+    tx: Transaction,
+    page: { offset: number; limit: number },
+  ): Promise<ReturnedInvoiceRecord[]>;
   /**
    * What `sales.fiscal_backend` records, and the `backend` field of every
    * `NodeRegistration`/`FiscalRecordRef` it returns.

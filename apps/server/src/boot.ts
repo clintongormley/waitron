@@ -3134,7 +3134,16 @@ async function bootServer(
   );
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
-  mountReportApi(app, { db, cfg: { nodeId: dataNodeId }, venueLocale }, log);
+  mountReportApi(
+    app,
+    {
+      db,
+      cfg: { nodeId: dataNodeId },
+      venueLocale,
+      returnedInvoices: nodeBackend.returnedInvoices?.bind(nodeBackend),
+    },
+    log,
+  );
   mountOrdersApi(
     app,
     {

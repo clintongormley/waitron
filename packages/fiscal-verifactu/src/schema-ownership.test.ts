@@ -27,6 +27,7 @@ const OWNED = [
   "fiscal_reservations",
   "registro_sif",
   "registros_facturacion",
+  "returned_invoice_records",
 ];
 
 /** Every table `packages/db` owns. None of these may ever appear in this package's output. */

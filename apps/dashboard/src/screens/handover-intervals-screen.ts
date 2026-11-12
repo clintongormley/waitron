@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { guideHref } from "../help-guide.js";
-import type { DashboardApi, HandoverInterval } from "../api/client.js";
+import type { DashboardApi, HandoverInterval, ReturnedInvoiceRecord } from "../api/client.js";
 
 @customElement("dashboard-handover-intervals-screen")
 export class HandoverIntervalsScreen extends LitElement {
@@ -20,6 +20,9 @@ export class HandoverIntervalsScreen extends LitElement {
       h2 {
         font-size: var(--wt-font-size-lg);
         margin: 0 0 var(--wt-space-4);
+      }
+      .returned-invoices {
+        margin-top: var(--wt-space-5);
       }
       p {
         margin: 0 0 var(--wt-space-3);
@@ -46,9 +49,17 @@ export class HandoverIntervalsScreen extends LitElement {
   @state() private loading = true;
   @state() private error: string | null = null;
 
+  @state() private invoiceRows: ReturnedInvoiceRecord[] = [];
+  @state() private invoiceLoading = true;
+  @state() private invoiceError: string | null = null;
+  @state() private invoiceOffset = 0;
+  @state() private invoiceNext: number | null = null;
+  @state() private invoiceZone = "";
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+    void this.#loadInvoices(0);
   }
   async #load(): Promise<void> {
     this.loading = true;
@@ -63,12 +74,70 @@ export class HandoverIntervalsScreen extends LitElement {
       this.loading = false;
     }
   }
-  #time(value: number | string | null): string {
+  async #loadInvoices(offset: number): Promise<void> {
+    this.invoiceLoading = true;
+    this.invoiceError = null;
+    try {
+      const result = await this.api.listReturnedInvoices(offset);
+      this.invoiceRows = result.records;
+      this.invoiceOffset = offset;
+      this.invoiceNext = result.nextOffset;
+      this.invoiceZone = result.timeZone;
+    } catch (error) {
+      this.invoiceError = codeOf(error);
+    } finally {
+      this.invoiceLoading = false;
+    }
+  }
+  #invoiceColumns(): DataTableColumn<ReturnedInvoiceRecord>[] {
+    return [
+      {
+        key: "source",
+        label: t("handover_intervals.source"),
+        cell: (row) => html`<span part="value">${row.sourceName}<br />${row.sourceNodeId}</span>`,
+      },
+      {
+        key: "chain",
+        label: t("returned_invoices.chain"),
+        cell: (row) =>
+          html`<span part="value"
+            >${row.installation}<br />${row.generationId}<br />${fill("returned_invoices.position", { sequence: row.sequence })}</span
+          >`,
+      },
+      {
+        key: "invoice",
+        label: t("returned_invoices.invoice"),
+        cell: (row) =>
+          html`<span part="value"
+            >${row.invoiceNumber}<br />${row.issueDate}<br />${row.kind === "cancellation" ? t("returned_invoices.cancellation") : row.kind}</span
+          >`,
+      },
+      {
+        key: "record",
+        label: t("returned_invoices.record"),
+        cell: (row) =>
+          html`<span part="value"
+            >${row.recordId}<br />${fill("returned_invoices.sale", { id: row.saleId })}${row.correctsRecordId ? html`<br />${fill("returned_invoices.corrects", { id: row.correctsRecordId })}` : ""}</span
+          >`,
+      },
+      ...(["taxable", "gross", "tax"] as const).map((key) => ({
+        key,
+        label: t(`returned_invoices.${key}`),
+        cell: (row: ReturnedInvoiceRecord) => row[key] ?? t("returned_invoices.not_recorded"),
+      })),
+      {
+        key: "receivedAt",
+        label: t("returned_invoices.received"),
+        cell: (row) => this.#time(row.receivedAt, this.invoiceZone),
+      },
+    ];
+  }
+  #time(value: number | string | null, timeZone = this.timeZone): string {
     if (value === null) return t("handover_intervals.unknown");
     return new Intl.DateTimeFormat(currentLocale(), {
       dateStyle: "medium",
       timeStyle: "short",
-      timeZone: this.timeZone,
+      timeZone,
     }).format(new Date(value));
   }
   #columns(): DataTableColumn<HandoverInterval>[] {
@@ -134,7 +203,44 @@ export class HandoverIntervalsScreen extends LitElement {
         .loadingMessage=${t("handover_intervals.loading")}
         .emptyMessage=${this.error === null ? t("handover_intervals.empty") : ""}
         .errorMessage=${this.error === null ? "" : codeMessage(this.error)}
-      ></wt-data-table>`;
+      ></wt-data-table>
+      <section class="returned-invoices">
+        <h2 id="returned-invoices-title">${t("returned_invoices.title")}</h2>
+        <p>${t("returned_invoices.tracking")}</p>
+        <p>
+          ${this.invoiceZone ? fill("handover_intervals.zone", { zone: this.invoiceZone }) : ""}
+        </p>
+        <div class="controls">
+          <wt-button
+            data-invoices="refresh"
+            .disabled=${this.invoiceLoading}
+            @click=${() => void this.#loadInvoices(0)}
+            >${t("returned_invoices.refresh")}</wt-button
+          >
+          <wt-button
+            data-invoices="previous"
+            .disabled=${this.invoiceLoading || this.invoiceOffset === 0}
+            @click=${() => void this.#loadInvoices(Math.max(0, this.invoiceOffset - 100))}
+            >${t("returned_invoices.previous")}</wt-button
+          >
+          <wt-button
+            data-invoices="next"
+            .disabled=${this.invoiceLoading || this.invoiceNext === null}
+            @click=${() => void this.#loadInvoices(this.invoiceNext!)}
+            >${t("returned_invoices.next")}</wt-button
+          >
+        </div>
+        <wt-data-table
+          aria-label=${t("returned_invoices.title")}
+          .rows=${this.invoiceRows}
+          .columns=${this.#invoiceColumns()}
+          .rowKey=${(row: ReturnedInvoiceRecord) => row.recordId}
+          .loading=${this.invoiceLoading}
+          .loadingMessage=${t("returned_invoices.loading")}
+          .emptyMessage=${this.invoiceError === null ? t("returned_invoices.empty") : ""}
+          .errorMessage=${this.invoiceError === null ? "" : codeMessage(this.invoiceError)}
+        ></wt-data-table>
+      </section>`;
   }
 }
 declare global {

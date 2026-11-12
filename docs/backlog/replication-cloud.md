@@ -48,7 +48,7 @@ as the watcher cleared at 03:59. Real-box and Cloud qualification remain open. T
 the last checked address it needs is kept across restarts since A947 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898)), so it no longer waits on that.
 
 The read-only interval list shows both current box names, the copy’s latest sale/order time or Unknown, labelled
-venue-zone declaration and activation times, and the entered reason. **12a follow-up PR 1** adds a [warning beside sales/cash-up/category reports and VAT](../superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md), linking report viewers to the handover dates. It does not identify affected report periods. The interval read remains passive. The [durable receiver completion work](../superpowers/plans/2026-11-12-a1018-return-completion.md) records accounted batch digests against the matched emergency takeover in venue.db; a complete advertised inventory confirms receipt across restart and later venue copies. Report warnings remain general date reminders; receipt does not reconstruct cash-ups or confirm missing activity and amounts. Already stopped senders need a restricted restart to resend; no backfill is performed. Acknowledgement, assignment, resolution and returned-invoice detail remain outside this cut.
+venue-zone declaration and activation times, and the entered reason. **12a follow-up PR 1** adds a [warning beside sales/cash-up/category reports and VAT](../superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md), linking report viewers to the handover dates. It does not identify affected report periods. The interval read remains passive. The [durable receiver completion work](../superpowers/plans/2026-11-12-a1018-return-completion.md) records accounted batch digests against the matched emergency takeover in venue.db; a complete advertised inventory confirms receipt across restart and later venue copies. Report warnings remain general date reminders; receipt does not reconstruct cash-ups or confirm missing activity and amounts. Already stopped senders need a restricted restart to resend; no backfill is performed. Acknowledgement, assignment and resolution remain outside this cut. The read-only returned-invoice list now shows newly received originals and their recorded amounts, with separate corrections and cancellations. A1342’s marker is now stored and returned invoices are listed; reports still do not mark them; duplicates are not identified.
 
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
@@ -530,8 +530,9 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A1342: return a stopped box's records before reset
 
-Payment-clash acceptance is an internal API without a screen. Sale lines, reprints, the
-returned-invoices reporting marker and real-box qualification remain open.
+Payment-clash acceptance is an internal API without a screen. Sale lines, reprints and real-box
+qualification remain open. A1342’s marker is now stored and returned invoices are listed; reports
+still do not mark them; duplicates are not identified.
 
 Normal return preserves original identities and chains and uses the main box’s outbox.
 Completed and pending tender refunds travel with their payments. Pending card refunds carry
@@ -539,8 +540,7 @@ their original capture and its settled-order anchor, without order lines; the ne
 existing recovery worker to check the provider outcome without sending another refund. Reset deletes the old box's venue data, including the sale lines
 and local backups that this return does not carry. Correction
 is an internal authenticated API; it appends a corrective record on the main box’s own chain.
-Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain
-outside this cut. Reset-to-clean-setup is qualified; completed current-contract rejoin remains
+Sale lines, reprints and real-box qualification remain outside this cut. Reset-to-clean-setup is qualified; completed current-contract rejoin remains
 with A947 3b-6. The return compares stored row shapes without negotiating software versions;
 complete the return before upgrading either box to a different table layout.
 

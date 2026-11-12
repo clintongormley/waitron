@@ -139,6 +139,14 @@ recepción sin confirmar necesita una devolución completa; si el equipo anterio
 reinícialo mientras sigue restringido para que reenvíe los datos. Si vuelve el equipo anterior,
 comprueba el estado de la devolución en su página antes de decidir si lo restableces.
 
+Debajo de los intervalos, **Facturas devueltas** muestra cada factura recibida por primera vez
+con el equipo de origen, la instalación que la generó, la fecha de expedición original y los
+importes registrados. Las correcciones y anulaciones aparecen por separado. **No consta** indica
+que ese importe no figura en el registro. Usa **Siguiente** y **Anterior** para seguir leyendo;
+**Actualizar facturas** vuelve a la primera página. La lista empieza a registrar las recepciones
+al instalar esta función: una lista vacía no demuestra que antes no se devolviera ninguna factura.
+La lista no identifica duplicados ni marca las facturas en otros informes.
+
 ## Cuando un equipo espera a otro equipo {#waiting}
 
 Cuando un equipo se inicia y no consigue contactar con el otro equipo del local, espera en lugar de

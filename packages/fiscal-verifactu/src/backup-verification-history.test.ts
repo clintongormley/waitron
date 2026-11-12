@@ -1126,3 +1126,27 @@ it("a stored version 2 relinquished approval on an emergency row is refused", as
   );
   expect(await verify()).toEqual(result("invalid"));
 });
+
+it("refuses orphaned returned-invoice markers even when both copies match", async () => {
+  await capture();
+  both((db) =>
+    db.exec(
+      "insert into returned_invoice_records values ('absent-original', '2026-11-12T12:00:00.000Z')",
+    ),
+  );
+  expect(await verify()).toMatchObject({ status: "invalid" });
+});
+
+it("preserves the first returned-invoice receipt through backup", async () => {
+  await capture();
+  both((db) =>
+    db.exec(
+      "insert into returned_invoice_records select id, '2026-11-12T12:00:00.000Z' from registros_facturacion limit 1",
+    ),
+  );
+  expect(await verify()).toMatchObject({ status: "passed" });
+  edit("after", (db) =>
+    db.exec("update returned_invoice_records set received_at = '2026-11-13T12:00:00.000Z'"),
+  );
+  expect(await verify()).toMatchObject({ status: "invalid" });
+});

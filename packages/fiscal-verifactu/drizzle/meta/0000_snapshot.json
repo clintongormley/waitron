@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5684c62a-c954-488a-95ed-f3a54cfd37fd",
+  "id": "b6daa0da-845b-48af-bb70-9b26a7f0e24b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -2223,6 +2223,44 @@
           "value": "(\"registros_facturacion\".\"primer_registro\"\n             and \"registros_facturacion\".\"anterior_id_emisor_factura\" is null\n             and \"registros_facturacion\".\"anterior_num_serie_factura\" is null\n             and \"registros_facturacion\".\"anterior_fecha_expedicion_factura\" is null\n             and \"registros_facturacion\".\"anterior_huella\" is null)\n           or (not \"registros_facturacion\".\"primer_registro\"\n             and \"registros_facturacion\".\"anterior_id_emisor_factura\" is not null\n             and \"registros_facturacion\".\"anterior_num_serie_factura\" is not null\n             and \"registros_facturacion\".\"anterior_fecha_expedicion_factura\" is not null\n             and \"registros_facturacion\".\"anterior_huella\" is not null)"
         }
       }
+    },
+    "returned_invoice_records": {
+      "name": "returned_invoice_records",
+      "columns": {
+        "record_id": {
+          "name": "record_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "returned_invoice_records_record_id_registros_facturacion_id_fk": {
+          "name": "returned_invoice_records_record_id_registros_facturacion_id_fk",
+          "tableFrom": "returned_invoice_records",
+          "tableTo": "registros_facturacion",
+          "columnsFrom": [
+            "record_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     }
   },
   "views": {},

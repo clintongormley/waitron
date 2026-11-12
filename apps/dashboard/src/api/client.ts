@@ -1,3 +1,5 @@
+import type { ReturnedInvoiceRecord } from "@waitron/fiscal";
+export type { ReturnedInvoiceRecord };
 import type { RecipientIdentifier } from "@waitron/country-packs";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-types.js";
@@ -24,6 +26,12 @@ export interface HandoverInterval {
   activatedAt: string;
   reason: string;
 }
+export interface ReturnedInvoices {
+  records: ReturnedInvoiceRecord[];
+  nextOffset: number | null;
+  timeZone: string;
+}
+
 export interface HandoverIntervals {
   intervals: HandoverInterval[];
   timeZone: string;
@@ -4508,6 +4516,15 @@ export class DashboardApi {
   getHandoverWarning(): Promise<{ hasEmergencyHandover: boolean }> {
     return this.#request<{ hasEmergencyHandover: boolean }>(
       "/management-api/reports/handover-warning",
+      "GET",
+      undefined,
+      { passive: true },
+    );
+  }
+
+  listReturnedInvoices(offset = 0): Promise<ReturnedInvoices> {
+    return this.#request<ReturnedInvoices>(
+      `/management-api/reports/returned-invoices?offset=${encodeURIComponent(offset)}`,
       "GET",
       undefined,
       { passive: true },

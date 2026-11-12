@@ -427,6 +427,7 @@ async function reservationRow(query: BackupQuery, row: BackupRow): Promise<Backu
     : "invalid";
 }
 const LINKS = [
+  ["returned_invoice_records", "record_id", "registros_facturacion", "id"],
   ["registro_sif", "node_id", "nodes", "id"],
   ["fiscal_allocations", "node_id", "nodes", "id"],
   ["filing_cases", "registro_id", "registros_facturacion", "id"],

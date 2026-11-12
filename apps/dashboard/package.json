@@ -19,6 +19,7 @@
     "@waitron/catalogue": "workspace:^",
     "@waitron/country-packs": "workspace:^",
     "@waitron/dashboard-kit": "workspace:*",
+    "@waitron/fiscal": "workspace:*",
     "@waitron/dashboard-modules": "workspace:*",
     "@waitron/diagnostics": "workspace:*",
     "@waitron/printing": "workspace:*",
