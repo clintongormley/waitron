@@ -529,7 +529,7 @@ describe("till-app: an adjustment someone must approve", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
-      "Someone who can approve Complaint must enter their PIN.",
+      "To use Complaint, ask the approver to enter their PIN.",
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));

@@ -193,6 +193,7 @@ interface Carve {
 interface Plan {
   reason: AdjustmentReason;
   reasonName: string;
+  maxBillComp: Decimal | null;
   /** The dish or the extra the action names; null on a bill-level discount. */
   line: Row | null;
   /** The part of the line covered, in thousandths; null on a bill-level discount. */
@@ -967,6 +968,8 @@ export async function planAdjustment(
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
   const actorPermissions = new Set(permissionsForRole(actor.role as PersonRoleValue));
   const stage = line === null ? null : stageOf(dishOf(line, view));
+  const maxBillComp =
+    ask.action === "cancel" ? null : (await readAdjustmentSettings(tx)).maxBillComp;
   const verdict =
     ask.action === "cancel"
       ? evaluateCancel(reason, { actorPermissions, note: ask.note, stage: stage! })
@@ -979,12 +982,14 @@ export async function planAdjustment(
           reduction,
           before,
           actorPermissions,
+          maxBillComp,
           note: ask.note,
         });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
   return {
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
+    maxBillComp,
     line,
     covered,
     removed,
@@ -1023,6 +1028,7 @@ async function judgeComp(
     /** What the request's subject cost before it. */
     before: Decimal;
     actorPermissions: ReadonlySet<string>;
+    maxBillComp: Decimal | null;
     note: string | null;
   },
 ): Promise<AdjustmentVerdict> {
@@ -1036,7 +1042,6 @@ async function judgeComp(
       return compareDecimal(off, ZERO) > 0 ? off : ZERO;
     }),
   );
-  const { maxBillComp } = await readAdjustmentSettings(tx);
   return evaluateComp(reason, {
     action: ask.action,
     reduction: ask.reduction,
@@ -1046,7 +1051,7 @@ async function judgeComp(
     standingOnBill,
     dishes: dishPrices(ask.writes, rows, ask.carve),
     billComped,
-    billLimit: { maxAmount: maxBillComp },
+    billLimit: { maxAmount: ask.maxBillComp },
   });
 }
 
@@ -1382,7 +1387,7 @@ export async function applyAdjustment(
         reason: {
           id: plan.reason.id,
           name: plan.reasonName,
-          policy: policySnapshotOf(plan.reason, await readAdjustmentSettings(tx)),
+          policy: policySnapshotOf(plan.reason, { maxBillComp: plan.maxBillComp }),
         },
         action: args.action,
         percentBp: args.action === "discount_percent" ? args.percentBp! : null,

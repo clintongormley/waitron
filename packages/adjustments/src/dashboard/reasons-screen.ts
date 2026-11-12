@@ -1202,8 +1202,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       : nothing;
   }
 
-  /** `current` names the chosen roles on the closed field: the combobox hands `countLabel` only the
-   * count, and a closing editor's list still draws after its draft is gone. */
   #compFields(errors: FieldErrors) {
     const draft = this.draft!;
     const editor = this.editor!;

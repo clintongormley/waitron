@@ -11,7 +11,8 @@ contribution, and confirms. This ends the practice attempt without recording a c
 Choose a reason when you make an item free or give a discount. With **Apply comps**, you can
 apply it up to the reason's limits and the bill's comp limit. If you need approval, choose someone
 with **Approve comps** and ask them to enter their PIN. They approve past those limits and can
-apply their own comps without a second person's PIN.
+apply their own comps without a second person's PIN. By default, all staff can apply within the
+limits; supervisors, managers and administrators can approve.
 
 In the dashboard's **Voids and comps**, set a limit to **0** when each comp needs approval.
 **Complaint**, **On the house** and **Discount** start at 0; **Staff meal** allows up to 50% off

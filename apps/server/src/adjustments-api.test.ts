@@ -1254,7 +1254,7 @@ describe("the route's own rules", () => {
       ["POST", `/api/working-orders/${billId}/adjustments`],
       ["POST", `/api/working-orders/${billId}/adjustments/preview`],
       ["GET", "/api/adjustment-reasons"],
-      ["GET", "/api/adjustment-approvers?roles=manager"],
+      ["GET", "/api/adjustment-approvers?permission=adjustment.approve"],
     ] as const) {
       const answer = await send(venue.app, "", method, path, method === "POST" ? {} : undefined);
       expect([path, answer.status]).toEqual([path, 401]);

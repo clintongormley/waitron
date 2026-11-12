@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   refusalField,
@@ -541,7 +542,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      "Someone who can approve Complaint must enter their PIN.",
+      "To use Complaint, ask the approver to enter their PIN.",
     );
     expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
@@ -561,7 +562,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      "Alguien que pueda autorizar «Complaint» debe introducir su PIN.",
+      es["adjust.approval_reason"].replace("{reason}", "Complaint"),
     );
   });
 
@@ -584,7 +585,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       },
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `This takes the bill's comps past ${money("50.00")}. Someone holding Approve comps must enter their PIN.`,
+      `The bill's comp limit is ${money("50.00")}. Ask the approver to enter their PIN.`,
     );
     expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
@@ -604,7 +605,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `Con esto, los descuentos de la cuenta pasan de ${money("50.00")}. Alguien con Autorizar invitaciones debe introducir su PIN.`,
+      es["adjust.approval_bill_limit"].replace("{limit}", money("50.00")),
     );
   });
 

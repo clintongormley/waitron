@@ -29,6 +29,7 @@ import {
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
   nodes: ["location_id"],
+  adjustment_reasons: ["apply_roles", "approver_roles"],
   devices: ["location_id"],
   working_orders: ["location_id"],
   tender_refunds: ["location_id"],
@@ -663,6 +664,10 @@ for (const locale of ["en", "es"] as const) {
       expected[phase].tables.convenio_config!.columns.find((column) => column.name === "id")!.type =
         "INTEGER";
       if (phase !== "before") {
+        for (const row of Object.values(expected[phase].tables.adjustment_reasons!.rows)) {
+          const names = row.names as Record<string, string>;
+          if (["Complaint", "On the house", "Discount"].includes(names.en!)) row.max_amount = 0;
+        }
         const courses = expected[phase].tables.kitchen_courses!;
         expect(courses.rows).toEqual({});
         expect(phases[phase]!.kitchen_courses).toBe(0);

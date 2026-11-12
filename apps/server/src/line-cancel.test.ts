@@ -4,7 +4,13 @@ import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { adjustments, createAdjustmentReason, deleteAdjustmentReason } from "@waitron/adjustments";
+import {
+  adjustments,
+  createAdjustmentReason,
+  deleteAdjustmentReason,
+  readAdjustmentSettings,
+  saveAdjustmentSettings,
+} from "@waitron/adjustments";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -50,7 +56,7 @@ import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
-import { cancelRefundShare } from "@waitron/shared";
+import { cancelRefundShare, decimal } from "@waitron/shared";
 import {
   billWith,
   inTx,
@@ -538,53 +544,77 @@ describe("Cancel item service command", () => {
   );
 
   it("records one zero-off cancellation with its reason, note and original dish value without asking approval", async () => {
-    const order = await fixture();
-    await startExtra(order);
-    const reason = await inTx(venue, (tx) =>
-      createAdjustmentReason(tx, {
-        name: `Charged cancellation ${randomUUID()}`,
-        names: { en: "Guest declined", es: "Rechazado" },
-        kind: "void",
-        actions: ["cancel"],
-        maxPercentBp: null,
-        maxAmount: null,
-
-        noteRequired: true,
-      }),
+    const saved = await inTx(venue, (tx) => readAdjustmentSettings(tx));
+    await inTx(venue, (tx) =>
+      saveAdjustmentSettings(
+        tx,
+        { maxBillComp: decimal("40.00") },
+        { expectedRevision: saved.revision, personId: null },
+      ),
     );
-    const ask = { ...(await askFor(order)), reasonId: reason.id, note: "Guest changed their mind" };
-    const before = await snapshot(order);
-    await cancel(order, ask);
-    const after = await snapshot(order);
-    expect(after.lines).toEqual(before.lines);
-    expect(after.adjustments).toHaveLength(1);
-    expect(after.adjustments[0]).toMatchObject({
-      workingOrderId: order.billId,
-      lineId: order.parent.id,
-      lineName: "Pizza",
-      lineQuantity: 3000,
-      lineListUnitPrice: 900,
-      quantity: 2000,
-      reasonId: reason.id,
-      reasonName: "Rechazado",
-      action: "cancel",
-      stage: "fired",
-      beforeAmount: 2400,
-      afterAmount: 2400,
-      reduction: 0,
-      nominalValue: 2400,
-      requestedBy: venue.staffId,
-      approvedBy: null,
-      note: ask.note,
-      policySnapshot: { kind: "void", maxBillComp: null, noteRequired: true },
-    });
-    expect(after.cancellations).toMatchObject([{ quantity: 2000, wasStarted: true }]);
-    await cancel(order, ask);
-    expect(await snapshot(order)).toEqual(after);
-    await expect(cancel(order, { ...ask, note: "Different reason detail" })).rejects.toMatchObject({
-      code: "submission.id_reused",
-    });
-    expect(await snapshot(order)).toEqual(after);
+    try {
+      const order = await fixture();
+      await startExtra(order);
+      const reason = await inTx(venue, (tx) =>
+        createAdjustmentReason(tx, {
+          name: `Charged cancellation ${randomUUID()}`,
+          names: { en: "Guest declined", es: "Rechazado" },
+          kind: "void",
+          actions: ["cancel"],
+          maxPercentBp: null,
+          maxAmount: null,
+
+          noteRequired: true,
+        }),
+      );
+      const ask = {
+        ...(await askFor(order)),
+        reasonId: reason.id,
+        note: "Guest changed their mind",
+      };
+      const before = await snapshot(order);
+      await cancel(order, ask);
+      const after = await snapshot(order);
+      expect(after.lines).toEqual(before.lines);
+      expect(after.adjustments).toHaveLength(1);
+      expect(after.adjustments[0]).toMatchObject({
+        workingOrderId: order.billId,
+        lineId: order.parent.id,
+        lineName: "Pizza",
+        lineQuantity: 3000,
+        lineListUnitPrice: 900,
+        quantity: 2000,
+        reasonId: reason.id,
+        reasonName: "Rechazado",
+        action: "cancel",
+        stage: "fired",
+        beforeAmount: 2400,
+        afterAmount: 2400,
+        reduction: 0,
+        nominalValue: 2400,
+        requestedBy: venue.staffId,
+        approvedBy: null,
+        note: ask.note,
+        policySnapshot: { kind: "void", maxBillComp: null, noteRequired: true },
+      });
+      expect(after.cancellations).toMatchObject([{ quantity: 2000, wasStarted: true }]);
+      await cancel(order, ask);
+      expect(await snapshot(order)).toEqual(after);
+      await expect(
+        cancel(order, { ...ask, note: "Different reason detail" }),
+      ).rejects.toMatchObject({
+        code: "submission.id_reused",
+      });
+      expect(await snapshot(order)).toEqual(after);
+    } finally {
+      await inTx(venue, async (tx) =>
+        saveAdjustmentSettings(
+          tx,
+          { maxBillComp: saved.maxBillComp },
+          { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
+        ),
+      );
+    }
   });
 
   it("keeps discounted money and records the original list value for a charged cancellation", async () => {

@@ -2537,6 +2537,9 @@ describe("the bill's comp limit (A758 §3.5)", () => {
 
     expect(await preview(billId, cancel)).toMatchObject({ needsApproval: null });
     await adjust(billId, cancel);
+    expect(
+      (await recordedOn(billId)).find((row) => row.action === "cancel")!.policySnapshot.maxBillComp,
+    ).toBeNull();
     expect((await recordedOn(billId)).map((row) => [row.action, row.approvedBy])).toEqual([
       ["discount_amount", null],
       ["cancel", null],

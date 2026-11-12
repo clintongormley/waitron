@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   TillSupervisorOverrideDialog,
@@ -245,7 +246,7 @@ it("hands a refusal to the footer row while Authorize remains usable for retry",
 
 it.each([
   ["en", "Approval needed", "Choose who approves", "Enter their PIN"],
-  ["es", "Hace falta aprobación", "Elige quién aprueba", "Introduce su PIN"],
+  ["es", es["override.title"], es["override.pick_supervisor"], es["override.enter_pin"]],
 ])(
   "asks for an approver without naming a role in %s",
   async (locale, heading, pickText, pinText) => {

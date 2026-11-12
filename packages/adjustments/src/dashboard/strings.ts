@@ -49,10 +49,11 @@ const en = {
   "adjustments.field.max_percent": "Most off one item",
   "adjustments.field.max_percent_help_label": "About most off one item",
   "adjustments.field.max_percent_hint":
-    "Counts every discount on the item. 0 means every comp with this reason needs approval.",
+    "Leave blank for no limit. Counts every discount on the item. 0 means every comp with this reason needs approval.",
   "adjustments.field.max_amount": "Most off one bill",
   "adjustments.field.max_amount_help_label": "About most off one bill",
-  "adjustments.field.max_amount_hint": "0 means every comp with this reason needs approval.",
+  "adjustments.field.max_amount_hint":
+    "Leave blank for no limit. 0 means every comp with this reason needs approval.",
   "adjustments.field.note_required": "Note required",
   "adjustments.field.note_required_void_hint": "The till asks for the note with “Say why”.",
   "adjustments.void_rule": "Who may cancel is set by the refund permission, not by the reason.",
@@ -91,7 +92,7 @@ const en = {
   "adjustments.limit.field": "Most comped on one bill",
   "adjustments.limit.help_label": "About most comped on one bill",
   "adjustments.limit.hint":
-    "Every comp on the bill counts. 0 means every comp on a bill needs approval.",
+    "Leave blank for no limit. Every comp on the bill counts. 0 means every comp on a bill needs approval.",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
   "adjustments.limit.load_error": "The bill's comp limit could not be loaded.",
@@ -212,11 +213,11 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.field.max_percent": "Máximo por artículo",
   "adjustments.field.max_percent_help_label": "Acerca del máximo por artículo",
   "adjustments.field.max_percent_hint":
-    "Cuenta todos los descuentos del artículo. 0 significa que cada invitación con este motivo necesita aprobación.",
+    "Deja el campo vacío para no fijar límite. Cuenta todos los descuentos del artículo. 0 significa que cada invitación con este motivo necesita aprobación.",
   "adjustments.field.max_amount": "Máximo por cuenta",
   "adjustments.field.max_amount_help_label": "Acerca del máximo por cuenta",
   "adjustments.field.max_amount_hint":
-    "0 significa que cada invitación con este motivo necesita aprobación.",
+    "Deja el campo vacío para no fijar límite. 0 significa que cada invitación con este motivo necesita aprobación.",
   "adjustments.field.note_required": "Pide una nota",
   "adjustments.field.note_required_void_hint": "La caja pide la nota con «Indica el motivo».",
   "adjustments.void_rule": "Quién puede cancelar lo decide el permiso de devolución, no el motivo.",
@@ -256,7 +257,8 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.limit.heading": "Límite de descuentos por cuenta",
   "adjustments.limit.field": "Máximo descontado en una cuenta",
   "adjustments.limit.help_label": "Acerca del máximo descontado en una cuenta",
-  "adjustments.limit.hint": "0 significa que cada invitación de una cuenta necesita aprobación.",
+  "adjustments.limit.hint":
+    "Deja el campo vacío para no fijar límite. Cuenta todas las invitaciones de la cuenta. 0 significa que cada invitación de una cuenta necesita aprobación.",
   "adjustments.limit.save": "Guardar límite",
   "adjustments.limit.saved": "Límite guardado.",
   "adjustments.limit.load_error": "No se pudo cargar el límite de descuento por cuenta.",
