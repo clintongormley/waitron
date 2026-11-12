@@ -649,15 +649,14 @@ describe("the till's money routes behind the start clock gate", () => {
     async (name) => {
       const route = await moneyRoutes[name]!();
       const state = startClockState();
+      const holds = startClockGateHolds(
+        state,
+        () => true,
+        () => false,
+      );
       const app = venue.appWith({
-        backend: gateSeatOnStartClock(
-          venue.backend,
-          startClockGateHolds(
-            state,
-            () => true,
-            () => false,
-          ),
-        ),
+        backend: gateSeatOnStartClock(venue.backend, holds),
+        clockUnconfirmed: holds,
       });
       const before = moneyState();
 
@@ -871,16 +870,12 @@ describe("the dashboard's payment resolutions behind the start clock gate", () =
     async (name) => {
       const route = await dashboardResolutions[name]!();
       const state = startClockState();
-      const app = paymentsApp(
-        gateSeatOnStartClock(
-          venue.backend,
-          startClockGateHolds(
-            state,
-            () => true,
-            () => false,
-          ),
-        ),
+      const holds = startClockGateHolds(
+        state,
+        () => true,
+        () => false,
       );
+      const app = paymentsApp(gateSeatOnStartClock(venue.backend, holds), holds);
       const before = moneyState();
 
       const refused = await route.send(app);

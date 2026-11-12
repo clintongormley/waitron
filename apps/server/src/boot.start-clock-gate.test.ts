@@ -58,6 +58,32 @@ vi.mock("./clock-correction.js", async (original) => {
   };
 });
 
+/** The `clockUnconfirmed` each money mount was last handed by boot. */
+const mounted = vi.hoisted(() => ({
+  till: undefined as (() => boolean) | undefined,
+  payments: undefined as (() => boolean) | undefined,
+}));
+vi.mock("./till-api.js", async (original) => {
+  const actual = await original<typeof import("./till-api.js")>();
+  return {
+    ...actual,
+    mountTillApi: (...args: Parameters<typeof actual.mountTillApi>) => {
+      mounted.till = args[1].clockUnconfirmed;
+      actual.mountTillApi(...args);
+    },
+  };
+});
+vi.mock("./payments-api.js", async (original) => {
+  const actual = await original<typeof import("./payments-api.js")>();
+  return {
+    ...actual,
+    mountPaymentsApi: (...args: Parameters<typeof actual.mountPaymentsApi>) => {
+      mounted.payments = args[1].clockUnconfirmed;
+      actual.mountPaymentsApi(...args);
+    },
+  };
+});
+
 const { startServer, httpPort } = ephemeralServerFixture();
 const migrations = migrationOptionsFor(manifestSets(), null);
 let venue: BillVenue;
@@ -189,6 +215,17 @@ describe("the start clock gate as boot wires it", () => {
       error: { code: "clock.unconfirmed", params: {} },
     });
     expect(fiscalRecordCount(venue)).toBe(records);
+  });
+
+  it("hands the till and payments mounts a clockUnconfirmed that holds while the start waits and lets go once it is confirmed", async () => {
+    mounted.till = mounted.payments = undefined;
+    const seen = await serving(unsynchronisedHost().host, async () => {
+      const waiting = [mounted.till?.(), mounted.payments?.()];
+      built.start!.confirm("by_devices", {});
+      return { waiting, confirmed: [mounted.till?.(), mounted.payments?.()] };
+    });
+
+    expect(seen).toEqual({ waiting: [true, true], confirmed: [false, false] });
   });
 
   it("sells and writes one record when the host's time service is synchronised", async () => {
