@@ -346,7 +346,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "21.00",
-        vatClass: "reduced",
+        vatClass: "super_reduced",
         image: "manchego-curado.png",
       },
       {
@@ -373,7 +373,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "28.50",
-        vatClass: "reduced",
+        vatClass: "super_reduced",
         image: "cabrales.png",
       },
       {
@@ -400,7 +400,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "26.00",
-        vatClass: "reduced",
+        vatClass: "super_reduced",
         image: "idiazabal.png",
       },
       {
@@ -427,7 +427,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "34.00",
-        vatClass: "reduced",
+        vatClass: "super_reduced",
         image: "torta-del-casar.png",
       },
       {
@@ -448,7 +448,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "weight",
         unitPrice: "19.50",
-        vatClass: "reduced",
+        vatClass: "super_reduced",
         image: "mahon.png",
       },
     ],
@@ -705,7 +705,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
         },
         pricingUnit: "each",
         unitPrice: "2.20",
-        vatClass: "super_reduced",
+        vatClass: "reduced",
         image: "pan-de-la-casa.png",
       },
       {
